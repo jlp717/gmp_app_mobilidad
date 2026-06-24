@@ -1023,6 +1023,7 @@ const invoiceTools = {
             status: 'Facturada',
             issueDate: formatDbDate(header.ANO, header.MES, header.DIA),
             dueDate: null,
+            pdfPath: `/api/facturas/${serie}/${numero}/${ejercicio}/pdf`,
             lineCount: lines.length,
             lines: lines.map((line) => ({
                 productCode: line.CODIGO,

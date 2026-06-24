@@ -61,16 +61,20 @@ class ChatMessage {
 class ChatbotState {
   const ChatbotState({
     this.messages = const [],
+    this.sessions = const [],
     this.isLoading = false,
     this.error,
     this.currentClientCode,
     this.vendedorCodes = const [],
     this.pinnedMessageId,
     this.sessionUserCode,
+    this.activeSessionId,
     this.lastFailedUserMessage,
   });
 
   final List<ChatMessage> messages;
+
+  final List<ChatbotSessionSummary> sessions;
 
   final bool isLoading;
 
@@ -84,7 +88,18 @@ class ChatbotState {
 
   final String? sessionUserCode;
 
+  final String? activeSessionId;
+
   final String? lastFailedUserMessage;
+
+  ChatbotSessionSummary? get activeSession {
+    final activeId = activeSessionId;
+    if (activeId == null) return null;
+    for (final session in sessions) {
+      if (session.id == activeId) return session;
+    }
+    return null;
+  }
 
   ChatMessage? get pinnedMessage {
     if (pinnedMessageId == null) return null;
@@ -98,16 +113,19 @@ class ChatbotState {
 
   ChatbotState copyWith({
     List<ChatMessage>? messages,
+    List<ChatbotSessionSummary>? sessions,
     bool? isLoading,
     Object? error = _sentinel,
     Object? currentClientCode = _sentinel,
     List<String>? vendedorCodes,
     Object? pinnedMessageId = _sentinel,
     Object? sessionUserCode = _sentinel,
+    Object? activeSessionId = _sentinel,
     Object? lastFailedUserMessage = _sentinel,
   }) {
     return ChatbotState(
       messages: messages ?? this.messages,
+      sessions: sessions ?? this.sessions,
       isLoading: isLoading ?? this.isLoading,
       error: error == _sentinel ? this.error : error as String?,
       currentClientCode: currentClientCode == _sentinel
@@ -120,6 +138,9 @@ class ChatbotState {
       sessionUserCode: sessionUserCode == _sentinel
           ? this.sessionUserCode
           : sessionUserCode as String?,
+      activeSessionId: activeSessionId == _sentinel
+          ? this.activeSessionId
+          : activeSessionId as String?,
       lastFailedUserMessage: lastFailedUserMessage == _sentinel
           ? this.lastFailedUserMessage
           : lastFailedUserMessage as String?,
@@ -147,21 +168,34 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
   Future<void> restoreSession(String userCode) async {
     if (userCode.trim().isEmpty) return;
 
-    if (state.sessionUserCode == userCode && state.messages.isNotEmpty) {
+    if (state.sessionUserCode == userCode && state.activeSessionId != null) {
       return;
     }
 
-    final saved = await ChatbotPersistence.load(userCode);
+    final sessions = await ChatbotPersistence.loadSessions(userCode);
+    final savedActiveId = await ChatbotPersistence.getActiveSessionId(userCode);
+    final activeSessionId = savedActiveId ??
+        (sessions.isNotEmpty
+            ? sessions.first.id
+            : ChatbotPersistence.createSessionId());
 
-    if (saved.isEmpty) {
-      state = state.copyWith(sessionUserCode: userCode);
-
+    if (sessions.isEmpty) {
+      await ChatbotPersistence.setActiveSession(userCode, activeSessionId);
+      state = state.copyWith(
+        sessionUserCode: userCode,
+        activeSessionId: activeSessionId,
+        sessions: const [],
+      );
       return;
     }
 
+    final saved =
+        await ChatbotPersistence.loadSession(userCode, activeSessionId);
     state = state.copyWith(
       messages: saved,
+      sessions: sessions,
       sessionUserCode: userCode,
+      activeSessionId: activeSessionId,
       pinnedMessageId: _findPinnedIndex(saved),
     );
   }
@@ -174,12 +208,40 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
     return null;
   }
 
+  String _buildSessionTitle(List<ChatMessage> messages) {
+    for (final message in messages) {
+      if (!message.isUser || message.content.trim().isEmpty) continue;
+      final firstLine = message.content.trim().split('\n').first;
+      if (firstLine.length <= 54) return firstLine;
+      return '${firstLine.substring(0, 51)}...';
+    }
+    return 'Conversacion comercial';
+  }
+
   Future<void> _persist() async {
     final userCode = state.sessionUserCode;
 
     if (userCode == null || userCode.isEmpty) return;
 
-    await ChatbotPersistence.save(userCode, state.messages);
+    final sessionId =
+        state.activeSessionId ?? ChatbotPersistence.createSessionId();
+    if (state.activeSessionId == null) {
+      state = state.copyWith(activeSessionId: sessionId);
+    }
+
+    if (state.messages.isEmpty) {
+      await ChatbotPersistence.setActiveSession(userCode, sessionId);
+      return;
+    }
+
+    await ChatbotPersistence.saveSession(
+      userCode: userCode,
+      sessionId: sessionId,
+      messages: state.messages,
+      title: _buildSessionTitle(state.messages),
+    );
+    final sessions = await ChatbotPersistence.loadSessions(userCode);
+    state = state.copyWith(sessions: sessions, activeSessionId: sessionId);
   }
 
   void setClientContext(String? clientCode) {
@@ -225,8 +287,12 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
+    final activeSessionId =
+        state.activeSessionId ?? ChatbotPersistence.createSessionId();
+
     state = state.copyWith(
       messages: [...state.messages, ChatMessage(content: text, isUser: true)],
+      activeSessionId: activeSessionId,
       isLoading: true,
       error: null,
       lastFailedUserMessage: null,
@@ -326,20 +392,87 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
   }
 
   Future<void> clearChat() async {
+    await startNewSession();
+  }
+
+  Future<void> startNewSession() async {
     final userCode = state.sessionUserCode;
+    final sessionId = ChatbotPersistence.createSessionId();
 
     state = state.copyWith(
       messages: [],
       error: null,
       pinnedMessageId: null,
+      activeSessionId: sessionId,
       lastFailedUserMessage: null,
     );
 
     _welcomeBackShown = false;
 
     if (userCode != null) {
-      await ChatbotPersistence.clear(userCode);
+      await ChatbotPersistence.setActiveSession(userCode, sessionId);
     }
+  }
+
+  Future<void> loadSession(String sessionId) async {
+    final userCode = state.sessionUserCode;
+    if (userCode == null || userCode.isEmpty || sessionId.trim().isEmpty) {
+      return;
+    }
+
+    final messages = await ChatbotPersistence.loadSession(userCode, sessionId);
+    await ChatbotPersistence.setActiveSession(userCode, sessionId);
+    state = state.copyWith(
+      messages: messages,
+      activeSessionId: sessionId,
+      error: null,
+      pinnedMessageId: _findPinnedIndex(messages),
+      lastFailedUserMessage: null,
+    );
+    _welcomeBackShown = false;
+  }
+
+  Future<void> deleteSession(String sessionId) async {
+    final userCode = state.sessionUserCode;
+    if (userCode == null || userCode.isEmpty || sessionId.trim().isEmpty) {
+      return;
+    }
+
+    await ChatbotPersistence.deleteSession(userCode, sessionId);
+    final sessions = await ChatbotPersistence.loadSessions(userCode);
+    final deletedActive = state.activeSessionId == sessionId;
+
+    if (!deletedActive) {
+      state = state.copyWith(sessions: sessions);
+      return;
+    }
+
+    if (sessions.isEmpty) {
+      final nextSessionId = ChatbotPersistence.createSessionId();
+      await ChatbotPersistence.setActiveSession(userCode, nextSessionId);
+      state = state.copyWith(
+        messages: [],
+        sessions: sessions,
+        activeSessionId: nextSessionId,
+        pinnedMessageId: null,
+        lastFailedUserMessage: null,
+      );
+      return;
+    }
+
+    final nextSession = sessions.first;
+    final messages = await ChatbotPersistence.loadSession(
+      userCode,
+      nextSession.id,
+    );
+    await ChatbotPersistence.setActiveSession(userCode, nextSession.id);
+    state = state.copyWith(
+      messages: messages,
+      sessions: sessions,
+      activeSessionId: nextSession.id,
+      pinnedMessageId: _findPinnedIndex(messages),
+      lastFailedUserMessage: null,
+    );
   }
 
   void dismissError() {

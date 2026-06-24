@@ -2,8 +2,45 @@
 
 const { getPool } = require('../../config/db');
 const { handleChatMessage } = require('./chatbot_handler');
+const {
+  createChatbotUserContext,
+  getAllowedVendorCodes,
+  normalizeCode,
+} = require('./chatbot_authorization');
 
-async function processMessage({ message, user = {}, clientCode = null } = {}) {
+function normalizeVendorScope(value) {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : String(value).split(',');
+  return [...new Set(raw.map(normalizeCode).filter(Boolean))];
+}
+
+function buildChatbotContext(user = {}, conversationHistory = []) {
+  const base = createChatbotUserContext(user);
+  const tokenScope = normalizeVendorScope(user.vendorCodes || user.vendedorCodes);
+  const contextForScope = {
+    ...base,
+    vendorScope: tokenScope,
+  };
+  const vendorScope = base.isJefeVentas
+    ? ['ALL']
+    : getAllowedVendorCodes(contextForScope).filter(Boolean);
+
+  return {
+    ...base,
+    vendorScope: vendorScope.length ? vendorScope : normalizeVendorScope(base.userCode),
+    conversationHistory: Array.isArray(conversationHistory)
+      ? conversationHistory.slice(-12)
+      : [],
+    richResponses: true,
+  };
+}
+
+async function processMessage({
+  message,
+  user = {},
+  clientCode = null,
+  conversationHistory = [],
+} = {}) {
   const text = String(message || '').trim();
   if (!text) {
     return { success: false, error: 'message is required' };
@@ -16,8 +53,21 @@ async function processMessage({ message, user = {}, clientCode = null } = {}) {
   }
 
   try {
-    const vendedorCodes = user.vendorCodes || user.vendedorCodes || user.code || user.codigoVendedor || user.id;
-    const response = await handleChatMessage(conn, text, vendedorCodes, clientCode, { user });
+    const context = buildChatbotContext(user, conversationHistory);
+    const response = await handleChatMessage(
+      conn,
+      text,
+      context.vendorScope,
+      clientCode,
+      context
+    );
+    if (response && typeof response === 'object') {
+      return {
+        success: true,
+        response: response.text || '',
+        metadata: response.metadata || {},
+      };
+    }
     return { success: true, response };
   } finally {
     if (conn && typeof conn.close === 'function') {

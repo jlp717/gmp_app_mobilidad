@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -37,7 +39,8 @@ class ClientEvolutionPage extends ConsumerStatefulWidget {
 }
 
 class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
-  bool _isLoading = true;
+  bool _isLoading = false;
+  bool _isLoadingClients = false;
   String? _error;
   List<Map<String, dynamic>> _monthlySales = [];
   List<Map<String, dynamic>> _topProducts = [];
@@ -45,9 +48,12 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   List<Map<String, dynamic>> _allClients = [];
   String? _selectedClientCode;
   String? _selectedClientName;
+  final _clientSearchController = TextEditingController();
+  Timer? _clientSearchDebounce;
 
   ProviderSubscription<String?>? _vendorSubscription;
-  int _loadGeneration = 0;
+  int _clientSearchGeneration = 0;
+  int _evolutionGeneration = 0;
 
   @override
   void initState() {
@@ -57,6 +63,15 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (previous != next) {
+        _clientSearchController.clear();
+        setState(() {
+          _selectedClientCode = null;
+          _selectedClientName = null;
+          _monthlySales = [];
+          _topProducts = [];
+          _returns = [];
+          _error = null;
+        });
         _loadClients();
       }
     });
@@ -65,6 +80,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   @override
   void dispose() {
     _vendorSubscription?.close();
+    _clientSearchDebounce?.cancel();
+    _clientSearchController.dispose();
     super.dispose();
   }
 
@@ -104,34 +121,36 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     return widget.employeeCode;
   }
 
-  Future<void> _loadClients() async {
+  Future<void> _loadClients({String? search}) async {
+    final generation = ++_clientSearchGeneration;
     try {
-      final generation = ++_loadGeneration;
       setState(() {
-        _isLoading = true;
+        _isLoadingClients = true;
         _error = null;
       });
 
       final queryCode = _resolvedVendorCodes();
+      final normalizedSearch = search?.trim();
 
       final response = await ClientsService.getClientsList(
         vendedorCodes: queryCode,
-        limit: 100, // Reasonable limit for dropdown
+        search: normalizedSearch,
+        limit: normalizedSearch == null || normalizedSearch.isEmpty ? 80 : 120,
       );
       final clients = (response as List<dynamic>).cast<Map<String, dynamic>>();
 
-      if (mounted && generation == _loadGeneration) {
+      if (mounted && generation == _clientSearchGeneration) {
         setState(() {
           _allClients = clients;
-          _isLoading = false;
+          _isLoadingClients = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _clientSearchGeneration) {
         setState(() {
           _allClients = [];
           _error = 'Error cargando clientes: $e';
-          _isLoading = false;
+          _isLoadingClients = false;
         });
       }
     }
@@ -139,6 +158,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
 
   Future<void> _loadEvolutionData(String clientCode) async {
     try {
+      final generation = ++_evolutionGeneration;
       setState(() {
         _isLoading = true;
         _error = null;
@@ -150,6 +170,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
       final response = await ApiClient.dio.get(
         '${ApiConfig.baseUrl}/api/pedidos/client-evolution/$clientCode?vendedorCodes=$vendorCodes',
       );
+
+      if (!mounted || generation != _evolutionGeneration) return;
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -198,11 +220,54 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error de conexión: $e';
         _isLoading = false;
       });
     }
+  }
+
+  void _onClientSearchChanged(String value) {
+    _clientSearchDebounce?.cancel();
+    _clientSearchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _loadClients(search: value);
+    });
+  }
+
+  String _clientField(Map<String, dynamic> client, List<String> keys) {
+    for (final key in keys) {
+      final value = client[key] ?? client[key.toLowerCase()];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
+    }
+    return '';
+  }
+
+  String _clientCode(Map<String, dynamic> client) => _clientField(
+      client, ['code', 'CODIGO', 'codigoCliente', 'CODIGOCLIENTE']);
+
+  String _clientName(Map<String, dynamic> client) =>
+      _clientField(client, ['name', 'NOMBRE', 'nombre', 'clienteNombre']);
+
+  String _clientTown(Map<String, dynamic> client) =>
+      _clientField(client, ['town', 'POBLACION', 'poblacion', 'city']);
+
+  void _selectClient(Map<String, dynamic> client) {
+    final code = _clientCode(client);
+    if (code.isEmpty) return;
+    final name = _clientName(client);
+    setState(() {
+      _selectedClientCode = code;
+      _selectedClientName = name.isEmpty ? code : name;
+      _clientSearchController.text = _selectedClientName!;
+      _clientSearchController.selection = TextSelection.collapsed(
+        offset: _clientSearchController.text.length,
+      );
+    });
+    _loadEvolutionData(code);
   }
 
   String _formatCurrency(double value) {
@@ -235,70 +300,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               forceShow: widget.forceShowVendorSelector,
             ),
 
-          // Client selection dropdown
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Card(
-              color: AppTheme.darkSurface,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Seleccionar Cliente',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedClientCode,
-                      hint: const Text('Seleccione un cliente'),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar cliente...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      items: _allClients.map((client) {
-                        return DropdownMenuItem<String>(
-                          value: client['CODIGO'],
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${client['NOMBRE']} (${client['CODIGO']})',
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                              if (client['POBLACION'] != null &&
-                                  client['POBLACION'].toString().isNotEmpty)
-                                Text(
-                                  client['POBLACION'],
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textSecondary),
-                                ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          final selected = _allClients
-                              .firstWhere((c) => c['CODIGO'] == value);
-                          setState(() {
-                            _selectedClientCode = value;
-                            _selectedClientName = selected['NOMBRE'];
-                          });
-                          _loadEvolutionData(value);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          _buildClientSearchPanel(),
 
           // Evolution data display
           Expanded(
@@ -342,6 +344,114 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildClientSearchPanel() {
+    final visibleClients = _allClients
+        .where((client) => _clientCode(client).isNotEmpty)
+        .take(8)
+        .toList(growable: false);
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Card(
+        color: AppTheme.darkSurface,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Seleccionar Cliente',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _clientSearchController,
+                onChanged: _onClientSearchChanged,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Buscar cliente, código, NIF o población...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _isLoadingClients
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : _clientSearchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _clientSearchDebounce?.cancel();
+                                _clientSearchController.clear();
+                                _loadClients();
+                                setState(() {});
+                              },
+                            ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              if (_selectedClientCode != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '$_selectedClientName ($_selectedClientCode)',
+                  style: const TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (visibleClients.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 230),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: visibleClients.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: Colors.white12),
+                    itemBuilder: (context, index) {
+                      final client = visibleClients[index];
+                      final code = _clientCode(client);
+                      final name = _clientName(client);
+                      final town = _clientTown(client);
+                      final selected = code == _selectedClientCode;
+                      return ListTile(
+                        dense: true,
+                        selected: selected,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          name.isEmpty ? code : name,
+                          style: const TextStyle(color: Colors.white),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          town.isEmpty ? code : '$code · $town',
+                          style: const TextStyle(color: AppTheme.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: selected
+                            ? const Icon(Icons.check, color: AppTheme.neonBlue)
+                            : null,
+                        onTap: () => _selectClient(client),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

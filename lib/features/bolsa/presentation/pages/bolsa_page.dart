@@ -142,7 +142,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: provider.refresh,
-                child: _buildBody(provider),
+                child: _buildBody(provider, canEdit: canEdit),
               ),
             ),
           ],
@@ -151,7 +151,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     );
   }
 
-  Widget _buildBody(BolsaProvider provider) {
+  Widget _buildBody(BolsaProvider provider, {required bool canEdit}) {
     if (provider.isLoading && provider.status == null) {
       return const Center(child: ModernLoading(message: 'Cargando bolsa…'));
     }
@@ -884,6 +884,8 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
   late final TextEditingController _searchCtrl;
   late final TextEditingController _documentCtrl;
   late final TextEditingController _clientCtrl;
+  Timer? _documentDebounce;
+  Timer? _clientDebounce;
 
   @override
   void initState() {
@@ -895,10 +897,46 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
 
   @override
   void dispose() {
+    _documentDebounce?.cancel();
+    _clientDebounce?.cancel();
     _searchCtrl.dispose();
     _documentCtrl.dispose();
     _clientCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MovimientosFilters oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncText(_searchCtrl, widget.provider.searchQuery);
+    _syncText(_documentCtrl, widget.provider.documentFilter);
+    _syncText(_clientCtrl, widget.provider.clientFilter);
+  }
+
+  void _syncText(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  void _debouncedDocumentFilter(String value) {
+    _documentDebounce?.cancel();
+    setState(() {});
+    _documentDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      unawaited(widget.provider.setDocumentFilter(value));
+    });
+  }
+
+  void _debouncedClientFilter(String value) {
+    _clientDebounce?.cancel();
+    setState(() {});
+    _clientDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      unawaited(widget.provider.setClientFilter(value));
+    });
   }
 
   @override
@@ -977,7 +1015,10 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
         const SizedBox(height: 8),
         TextField(
           controller: _searchCtrl,
-          onChanged: p.setSearchQuery,
+          onChanged: (value) {
+            setState(() {});
+            p.setSearchQuery(value);
+          },
           style: const TextStyle(color: Colors.white, fontSize: 13),
           decoration: InputDecoration(
             isDense: true,
@@ -1043,7 +1084,11 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
                 controller: _documentCtrl,
                 icon: Icons.receipt_long,
                 hint: 'Pedido o factura',
-                onSubmitted: p.setDocumentFilter,
+                onChanged: _debouncedDocumentFilter,
+                onSubmitted: (value) {
+                  _documentDebounce?.cancel();
+                  return p.setDocumentFilter(value);
+                },
               ),
             ),
             SizedBox(
@@ -1052,7 +1097,11 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
                 controller: _clientCtrl,
                 icon: Icons.storefront,
                 hint: 'Cliente',
-                onSubmitted: p.setClientFilter,
+                onChanged: _debouncedClientFilter,
+                onSubmitted: (value) {
+                  _clientDebounce?.cancel();
+                  return p.setClientFilter(value);
+                },
               ),
             ),
           ],
@@ -1128,18 +1177,21 @@ class _FilterTextField extends StatelessWidget {
     required this.controller,
     required this.icon,
     required this.hint,
+    required this.onChanged,
     required this.onSubmitted,
   });
 
   final TextEditingController controller;
   final IconData icon;
   final String hint;
+  final ValueChanged<String> onChanged;
   final Future<void> Function(String) onSubmitted;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      onChanged: onChanged,
       onSubmitted: onSubmitted,
       style: const TextStyle(color: Colors.white, fontSize: 12),
       decoration: InputDecoration(
@@ -1152,7 +1204,7 @@ class _FilterTextField extends StatelessWidget {
                 color: Colors.white54,
                 onPressed: () {
                   controller.clear();
-                  onSubmitted('');
+                  onChanged('');
                 },
               ),
         hintText: hint,

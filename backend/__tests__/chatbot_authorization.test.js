@@ -73,6 +73,20 @@ describe('chatbot client RBAC policy contract', () => {
     });
   });
 
+  test('allows JEFE_VENTAS even when owner cannot be resolved', () => {
+    const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
+
+    const result = authorizeChatbotClientScope(
+      { userCode: '01', role: 'JEFE_VENTAS', isJefeVentas: true },
+      { clientCode: 'C-SIN-OWNER' }
+    );
+
+    expect(result).toMatchObject({
+      allowed: true,
+      code: 'ALLOWED_SUPERVISOR',
+    });
+  });
+
   test('resolveChatbotClientOwner uses CLP/LAC/LACLAE columns not LAC.LCCDVD', async () => {
     const { resolveChatbotClientOwner } = require('../src/chatbot/chatbot_authorization');
     let capturedSql = '';

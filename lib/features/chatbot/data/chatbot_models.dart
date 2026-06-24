@@ -77,6 +77,32 @@ class ChatDeepLink {
   final String? clientCode;
 }
 
+class ChatDocumentReference {
+  const ChatDocumentReference({
+    required this.title,
+    required this.url,
+    this.type = 'pdf',
+    this.fileName,
+    this.clientCode,
+  });
+
+  factory ChatDocumentReference.fromJson(Map<String, dynamic> json) {
+    return ChatDocumentReference(
+      title: json['title']?.toString() ?? 'Documento',
+      url: (json['url'] ?? json['path'])?.toString() ?? '',
+      type: json['type']?.toString() ?? 'pdf',
+      fileName: json['fileName']?.toString(),
+      clientCode: json['clientCode']?.toString(),
+    );
+  }
+
+  final String title;
+  final String url;
+  final String type;
+  final String? fileName;
+  final String? clientCode;
+}
+
 class ChatResponseMetadata {
   const ChatResponseMetadata({
     this.exportable,
@@ -84,6 +110,7 @@ class ChatResponseMetadata {
     this.suggestedFollowUps = const [],
     this.deepLink,
     this.chartData = const [],
+    this.documents = const [],
   });
 
   factory ChatResponseMetadata.fromJson(Map<String, dynamic>? json) {
@@ -106,6 +133,10 @@ class ChatResponseMetadata {
       chartData: (json['chartData'] as List<dynamic>? ?? [])
           .map((e) => ChatChartPoint.fromJson(e as Map<String, dynamic>))
           .toList(),
+      documents: (json['documents'] as List<dynamic>? ?? [])
+          .map((e) => ChatDocumentReference.fromJson(e as Map<String, dynamic>))
+          .where((doc) => doc.url.isNotEmpty)
+          .toList(),
     );
   }
 
@@ -114,4 +145,5 @@ class ChatResponseMetadata {
   final List<String> suggestedFollowUps;
   final ChatDeepLink? deepLink;
   final List<ChatChartPoint> chartData;
+  final List<ChatDocumentReference> documents;
 }

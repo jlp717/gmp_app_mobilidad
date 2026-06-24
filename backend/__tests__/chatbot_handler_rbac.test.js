@@ -15,19 +15,42 @@ jest.mock('../src/chatbot/chatbot_tools', () => {
     ...actual,
     riskTools: {
       ...actual.riskTools,
-      getClientDebt: jest.fn(async () => ({ totalDebt: 9999 })),
+      getClientDebt: jest.fn(async () => ({
+        totalDebt: 9999,
+        overdueDebt: 120,
+        riskLevel: 'BAJO',
+        aging: {
+          days_1_30: 120,
+          days_31_60: 0,
+          days_61_90: 0,
+          days_over_90: 0,
+        },
+      })),
     },
     invoiceTools: {
       ...actual.invoiceTools,
       resolveInvoiceClientCode: jest.fn(async () => 'CLI-AJENO'),
       getInvoiceDetails: jest.fn(async () => ({ invoiceNumber: 'INV-1' })),
+      getClientInvoices: jest.fn(async (conn, clientCode) => ({
+        clientCode,
+        invoices: [
+          { number: 'F/100/2026', amount: 250.75, status: 'Pendiente' },
+        ],
+        totalAmount: 250.75,
+      })),
+    },
+    dbDiscoveryTools: {
+      ...actual.dbDiscoveryTools,
+      searchClients: jest.fn(async () => [
+        { CODIGO: '32258', NOMBRE: 'EL CENTRAL HOTELES', POBLACION: 'Madrid' },
+      ]),
     },
   };
 });
 
 const { handleChatMessage } = require('../src/chatbot/chatbot_handler');
 const { authorizeResolvedClient } = require('../src/chatbot/chatbot_authorization');
-const { riskTools, invoiceTools } = require('../src/chatbot/chatbot_tools');
+const { dbDiscoveryTools, riskTools, invoiceTools } = require('../src/chatbot/chatbot_tools');
 
 describe('chatbot fallback handler RBAC', () => {
   const conn = { query: jest.fn(async () => []) };
@@ -91,5 +114,32 @@ describe('chatbot fallback handler RBAC', () => {
     expect(response).toMatch(/Evoluci[oó]n/i);
     expect(authorizeResolvedClient).not.toHaveBeenCalled();
     expect(conn.query).not.toHaveBeenCalled();
+  });
+
+  test('resolves natural client name for supervisor invoice list', async () => {
+    authorizeResolvedClient.mockResolvedValue({
+      owner: { clientCode: '32258', vendorCode: null, verified: false },
+      authorization: { allowed: true, code: 'ALLOWED_SUPERVISOR' },
+    });
+
+    const response = await handleChatMessage(
+      conn,
+      'dime las facturas de central hoteles',
+      ['ALL'],
+      null,
+      {
+        userCode: '01',
+        role: 'JEFE_VENTAS',
+        isJefeVentas: true,
+        vendorScope: ['ALL'],
+        richResponses: true,
+      }
+    );
+
+    expect(dbDiscoveryTools.searchClients).toHaveBeenCalledWith(conn, 'central hoteles');
+    expect(invoiceTools.getClientInvoices).toHaveBeenCalledWith(conn, '32258');
+    expect(response.text).toMatch(/Facturas pendientes cliente 32258/);
+    expect(response.metadata.deepLink.tab).toBe('Facturas');
+    expect(response.metadata.exportable.rows).toHaveLength(1);
   });
 });

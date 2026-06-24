@@ -7,6 +7,8 @@
 /// Fuente backend: GET /api/pedidos/purchase-history-global
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -45,6 +47,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
 
   String _clientCode = '';
   String _productCode = '';
+  Timer? _filterDebounce;
 
   Map<String, dynamic>? _summary;
   List<Map<String, dynamic>> _topProducts = [];
@@ -57,6 +60,17 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
     final now = DateTime.now().year;
     _selectedYears = {now, now - 1, now - 2};
     _load();
+  }
+
+  @override
+  void dispose() {
+    _filterDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleLoad() {
+    _filterDebounce?.cancel();
+    _filterDebounce = Timer(const Duration(milliseconds: 250), _load);
   }
 
   Future<void> _load() async {
@@ -282,6 +296,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                       labelText: 'Filtrar cliente (código)',
                       isDense: true,
                     ),
+                    onChanged: (v) {
+                      setState(() => _clientCode = v.trim());
+                      _scheduleLoad();
+                    },
                     onSubmitted: (v) {
                       setState(() => _clientCode = v.trim());
                       _load();
@@ -295,6 +313,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                       labelText: 'Filtrar producto (código)',
                       isDense: true,
                     ),
+                    onChanged: (v) {
+                      setState(() => _productCode = v.trim());
+                      _scheduleLoad();
+                    },
                     onSubmitted: (v) {
                       setState(() => _productCode = v.trim());
                       _load();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -69,6 +70,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
+  Timer? _filterDebounce;
+  int _loadGeneration = 0;
 
   // Expansion state for legacy hierarchy
   final Set<String> _expandedFamilies = {};
@@ -103,6 +106,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _filterDebounce?.cancel();
+    _codeCtrl.dispose();
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
   int get _startMonth => _selectedMonths.isEmpty
       ? 1
       : _selectedMonths.reduce((a, b) => a < b ? a : b);
@@ -119,6 +130,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       : DateTime.now().year.toString();
 
   Future<void> _loadData() async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -158,6 +170,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ].join(':'),
         cacheTTL: CacheService.defaultTTL,
       );
+
+      if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
         // Legacy family/subfamily hierarchy
@@ -204,6 +218,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         }
       });
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -288,6 +303,24 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   String _formatCurrency(double value) {
     // Always show full number with proper formatting (2.900 € not 2.9K)
     return CurrencyFormatter.format(value);
+  }
+
+  void _scheduleFilterLoad() {
+    _filterDebounce?.cancel();
+    _filterDebounce = Timer(const Duration(milliseconds: 250), _applyFilters);
+  }
+
+  void _applyFilters() {
+    _filterDebounce?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _selectedYears = Set.from(_pendingYears);
+      _selectedMonths = Set.from(_pendingMonths);
+      _productCodeSearch = _codeCtrl.text.trim();
+      _productNameSearch = _nameCtrl.text.trim();
+      _filtersDirty = false;
+    });
+    unawaited(_loadData());
   }
 
   Future<void> _openNotesDialog() async {
@@ -516,13 +549,17 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         style: const TextStyle(fontSize: 10),
                       ),
                       selected: _pendingYears.contains(_years[i]),
-                      onSelected: (s) => setState(() {
-                        if (s) {
-                          _pendingYears.add(_years[i]);
-                        } else if (_pendingYears.length > 1)
-                          _pendingYears.remove(_years[i]);
-                        _filtersDirty = true;
-                      }),
+                      onSelected: (s) {
+                        setState(() {
+                          if (s) {
+                            _pendingYears.add(_years[i]);
+                          } else if (_pendingYears.length > 1) {
+                            _pendingYears.remove(_years[i]);
+                          }
+                          _filtersDirty = true;
+                        });
+                        _scheduleFilterLoad();
+                      },
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       labelPadding: const EdgeInsets.symmetric(horizontal: 6),
@@ -541,10 +578,26 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 ),
                 GestureDetector(
-                  onTap: () => setState(() {
-                    _pendingMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-                    _filtersDirty = true;
-                  }),
+                  onTap: () {
+                    setState(() {
+                      _pendingMonths = {
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                      };
+                      _filtersDirty = true;
+                    });
+                    _scheduleFilterLoad();
+                  },
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -557,10 +610,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 ),
                 const SizedBox(width: 4),
                 GestureDetector(
-                  onTap: () => setState(() {
-                    _pendingMonths = {DateTime.now().month};
-                    _filtersDirty = true;
-                  }), // Keep at least current month
+                  onTap: () {
+                    setState(() {
+                      _pendingMonths = {DateTime.now().month};
+                      _filtersDirty = true;
+                    });
+                    _scheduleFilterLoad();
+                  }, // Keep at least current month
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -587,13 +643,17 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               style: const TextStyle(fontSize: 8),
                             ),
                             selected: _pendingMonths.contains(i + 1),
-                            onSelected: (s) => setState(() {
-                              if (s) {
-                                _pendingMonths.add(i + 1);
-                              } else if (_pendingMonths.length > 1)
-                                _pendingMonths.remove(i + 1);
-                              _filtersDirty = true;
-                            }),
+                            onSelected: (s) {
+                              setState(() {
+                                if (s) {
+                                  _pendingMonths.add(i + 1);
+                                } else if (_pendingMonths.length > 1) {
+                                  _pendingMonths.remove(i + 1);
+                                }
+                                _filtersDirty = true;
+                              });
+                              _scheduleFilterLoad();
+                            },
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                             labelPadding:
@@ -614,17 +674,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               children: [
                 Expanded(
                   child: _buildTextField(_codeCtrl, 'Código', (v) {
-                    _productCodeSearch = v;
-                    _filtersDirty = true;
-                    setState(() {});
+                    setState(() {
+                      _productCodeSearch = v.trim();
+                      _filtersDirty = true;
+                    });
+                    _scheduleFilterLoad();
                   }),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: _buildTextField(_nameCtrl, 'Descripción', (v) {
-                    _productNameSearch = v;
-                    _filtersDirty = true;
-                    setState(() {});
+                    setState(() {
+                      _productNameSearch = v.trim();
+                      _filtersDirty = true;
+                    });
+                    _scheduleFilterLoad();
                   }),
                 ),
               ],
@@ -668,6 +732,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         _fiFilters = newFilters;
                         _filtersDirty = true;
                       });
+                      _scheduleFilterLoad();
                     },
                   ),
                 ],
@@ -678,16 +743,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             // APPLY BUTTON
             Center(
               child: ElevatedButton.icon(
-                onPressed: _filtersDirty
-                    ? () {
-                        setState(() {
-                          _selectedYears = Set.from(_pendingYears);
-                          _selectedMonths = Set.from(_pendingMonths);
-                          _filtersDirty = false;
-                        });
-                        _loadData();
-                      }
-                    : null,
+                onPressed: _filtersDirty ? _applyFilters : null,
                 icon: const Icon(Icons.check, size: 16),
                 label: Text(
                   _filtersDirty ? 'Aplicar Filtros' : 'Filtros Aplicados',
@@ -740,6 +796,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   )
                 : null,
           ),
+          onChanged: onSubmit,
           onSubmitted: onSubmit,
         ),
       ),

@@ -335,7 +335,9 @@ exports.verifyToken = (req, res, next) => {
             code: payload.user,
             name: payload.name, // INCLUDE name from token
             role: payload.role || 'COMERCIAL',
-            isJefeVentas: payload.isJefeVentas || false
+            isJefeVentas: payload.isJefeVentas || false,
+            vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
+            vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
         };
 
         req.tokenPayload = payload;
@@ -362,7 +364,9 @@ exports.optionalAuth = (req, res, next) => {
             code: payload.user,
             name: payload.name, // INCLUDE name from token
             role: payload.role || 'COMERCIAL',
-            isJefeVentas: payload.isJefeVentas || false
+            isJefeVentas: payload.isJefeVentas || false,
+            vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
+            vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
         };
         req.tokenPayload = payload;
     }
@@ -427,14 +431,18 @@ exports.handleRefreshToken = async (req, res) => {
             id: userId,
             user: userCode,
             role: payload.role,
-            isJefeVentas: payload.isJefeVentas
+            isJefeVentas: payload.isJefeVentas,
+            vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
+            vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
         });
         
         const newRefreshToken = exports.signRefreshToken({
             id: userId,
             user: userCode,
             role: payload.role,
-            isJefeVentas: payload.isJefeVentas
+            isJefeVentas: payload.isJefeVentas,
+            vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
+            vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
         });
         
         registerSession(userId, newRefreshToken, req.get('user-agent') || 'unknown', req.ip || 'unknown');

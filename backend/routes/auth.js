@@ -340,6 +340,8 @@ router.post('/login',
                 name: vendedorName, // ADD NAME to token for PDF and other services
                 role: finalRole,
                 isJefeVentas,
+                vendorCodes: vendedorCodes,
+                vendedorCodes: vendedorCodes,
                 timestamp: Date.now()
             });
 
@@ -348,7 +350,9 @@ router.post('/login',
                 user: vendedorCode,
                 name: vendedorName,
                 role: finalRole,
-                isJefeVentas
+                isJefeVentas,
+                vendorCodes: vendedorCodes,
+                vendedorCodes: vendedorCodes
             });
             registerSession(
                 `V${vendedorCode}`,
@@ -429,8 +433,28 @@ router.post('/switch-role', verifyToken, async (req, res) => {
         }
 
         const isJefeVentas = req.user?.isJefeVentas === true;
-        const accessToken = signAccessToken({ id: userId, user: userId, code: userId, role: newRole, isJefeVentas, timestamp: Date.now() });
-        const refreshToken = signRefreshToken({ id: userId, user: userId, code: userId, role: newRole, isJefeVentas });
+        const vendorCodes = Array.isArray(req.user?.vendorCodes)
+            ? req.user.vendorCodes
+            : (Array.isArray(req.user?.vendedorCodes) ? req.user.vendedorCodes : []);
+        const accessToken = signAccessToken({
+            id: userId,
+            user: userId,
+            code: userId,
+            role: newRole,
+            isJefeVentas,
+            vendorCodes,
+            vendedorCodes: vendorCodes,
+            timestamp: Date.now()
+        });
+        const refreshToken = signRefreshToken({
+            id: userId,
+            user: userId,
+            code: userId,
+            role: newRole,
+            isJefeVentas,
+            vendorCodes,
+            vendedorCodes: vendorCodes
+        });
         registerSession(userId, refreshToken, req.get('user-agent') || 'unknown', getClientIP(req) || req.ip || 'unknown');
 
         res.json({ success: true, role: newRole, token: accessToken, refreshToken, tokenExpiresIn: 3600 });

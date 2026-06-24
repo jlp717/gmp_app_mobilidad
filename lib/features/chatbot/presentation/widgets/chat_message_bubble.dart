@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_models.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_data_card.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_export_table.dart';
@@ -144,6 +148,7 @@ class ChatMessageBubble extends ConsumerWidget {
                                 ],
                               ),
                             ),
+                          if (!isUser) _buildAssistantHeader(),
                           _buildFormattedMessage(message, isUser),
                           if (!isUser) ...[
                             ChatDataCard(
@@ -152,6 +157,8 @@ class ChatMessageBubble extends ConsumerWidget {
                             ),
                             if (metadata.exportable != null)
                               ChatExportTable(data: metadata.exportable!),
+                            if (metadata.documents.isNotEmpty)
+                              _buildDocumentCards(context),
                             _buildActionRow(context, ref),
                             if (metadata.suggestedFollowUps.isNotEmpty)
                               _buildFollowUpChips(),
@@ -190,6 +197,177 @@ class ChatMessageBubble extends ConsumerWidget {
                   const Icon(Icons.person, color: AppTheme.neonBlue, size: 18),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentCards(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        children: metadata.documents.asMap().entries.map((entry) {
+          final index = entry.key;
+          final document = entry.value;
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(milliseconds: 220 + index * 60),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) => Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 8 * (1 - value)),
+                child: child,
+              ),
+            ),
+            child: Container(
+              margin: EdgeInsets.only(top: index == 0 ? 0 : 8),
+              decoration: BoxDecoration(
+                color: AppColors.neonPurple.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.neonPurple.withValues(alpha: 0.24),
+                ),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _openDocument(context, document),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.neonPurple.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.picture_as_pdf_outlined,
+                          color: AppColors.neonPurple,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              document.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              document.fileName ?? document.url,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Abrir PDF',
+                        child: TextButton.icon(
+                          onPressed: () => _openDocument(context, document),
+                          icon: const Icon(Icons.open_in_new, size: 14),
+                          label: const Text('Abrir'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.neonPurple,
+                            minimumSize: const Size(70, 40),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildAssistantHeader() {
+    final chips = <(IconData, String, Color)>[
+      if (metadata.kpis.isNotEmpty)
+        (
+          Icons.speed_outlined,
+          '${metadata.kpis.length} KPI',
+          AppColors.neonBlue
+        ),
+      if (metadata.exportable != null)
+        (Icons.table_chart_outlined, 'CSV', AppColors.neonGreen),
+      if (metadata.chartData.isNotEmpty)
+        (Icons.show_chart, 'Grafico', Colors.amberAccent),
+      if (metadata.documents.isNotEmpty)
+        (
+          Icons.picture_as_pdf_outlined,
+          '${metadata.documents.length} PDF',
+          AppColors.neonPurple,
+        ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          const Text(
+            'IA Comercial',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: chips.map((chip) {
+                final (icon, label, color) = chip;
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.09),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withValues(alpha: 0.20)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 11, color: color),
+                      const SizedBox(width: 4),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ],
       ),
     );
@@ -257,6 +435,16 @@ class ChatMessageBubble extends ConsumerWidget {
                 }
               },
             ),
+          if (metadata.documents.isNotEmpty)
+            _ActionChip(
+              icon: Icons.picture_as_pdf_outlined,
+              label: metadata.documents.length == 1 ? 'Ver PDF' : 'PDFs',
+              accent: AppColors.neonPurple,
+              semanticsLabel: 'Abrir documento PDF',
+              tooltip:
+                  'Abrir el PDF asociado sin salir de la respuesta del asistente',
+              onTap: () => _openDocuments(context, metadata.documents),
+            ),
           if (hasData)
             _ActionChip(
               icon: Icons.share_outlined,
@@ -279,6 +467,136 @@ class ChatMessageBubble extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openDocuments(
+    BuildContext context,
+    List<ChatDocumentReference> documents,
+  ) async {
+    if (documents.length == 1) {
+      await _openDocument(context, documents.first);
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.darkSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Documentos',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...documents.map(
+                (doc) => ListTile(
+                  leading: const Icon(
+                    Icons.picture_as_pdf_outlined,
+                    color: AppColors.neonPurple,
+                  ),
+                  title: Text(
+                    doc.title,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: Text(
+                    doc.fileName ?? doc.url,
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openDocument(context, doc);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openDocument(
+    BuildContext context,
+    ChatDocumentReference document,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Cargando PDF...'),
+        duration: Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    try {
+      final bytes = await ApiClient.getBytes(
+        _normalizeDocumentEndpoint(document.url),
+        queryParameters: {
+          'preview': 'true',
+          '_t': DateTime.now().millisecondsSinceEpoch.toString(),
+        },
+      );
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      if (bytes.length < 100) {
+        throw Exception('El documento recibido no parece un PDF valido.');
+      }
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: Uint8List.fromList(bytes),
+            title: document.title,
+            fileName: _documentFileName(document),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('No se pudo abrir el PDF: $e'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String _normalizeDocumentEndpoint(String rawUrl) {
+    var endpoint = rawUrl.trim();
+    final baseUrl = ApiClient.dio.options.baseUrl;
+    if (endpoint.startsWith(baseUrl)) {
+      endpoint = endpoint.substring(baseUrl.length);
+    }
+    if (endpoint.startsWith('/api/')) {
+      endpoint = endpoint.substring(4);
+    }
+    if (!endpoint.startsWith('/')) {
+      endpoint = '/$endpoint';
+    }
+    return endpoint;
+  }
+
+  String _documentFileName(ChatDocumentReference document) {
+    final raw = (document.fileName?.trim().isNotEmpty ?? false)
+        ? document.fileName!.trim()
+        : document.title.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
+    return raw.toLowerCase().endsWith('.pdf') ? raw : '$raw.pdf';
   }
 
   void _showShareSheet(BuildContext context, ChatExportableData? exportable) {
@@ -469,6 +787,13 @@ class ChatMessageBubble extends ConsumerWidget {
   }
 
   Widget _buildTypingIndicator() {
+    const steps = [
+      (Icons.manage_search, 'Interpretando'),
+      (Icons.verified_user_outlined, 'Permisos'),
+      (Icons.storage_outlined, 'DB2'),
+      (Icons.auto_awesome_motion_outlined, 'Respuesta'),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -481,7 +806,7 @@ class ChatMessageBubble extends ConsumerWidget {
               const ChatTypingDots(),
               const SizedBox(width: 12),
               Text(
-                'Consultando datos...',
+                'Analizando consulta...',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppTheme.neonBlue.withValues(alpha: 0.9),
@@ -489,6 +814,24 @@ class ChatMessageBubble extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+        ),
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 1300),
+          curve: Curves.easeOutCubic,
+          builder: (context, progress, _) => Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: steps.asMap().entries.map((entry) {
+              final active = progress >= (entry.key / steps.length);
+              final (icon, label) = entry.value;
+              return _AnalysisStep(
+                icon: icon,
+                label: label,
+                active: active,
+              );
+            }).toList(),
           ),
         ),
         const SizedBox(height: 8),
@@ -512,6 +855,48 @@ class ChatMessageBubble extends ConsumerWidget {
   }
 }
 
+class _AnalysisStep extends StatelessWidget {
+  const _AnalysisStep({
+    required this.icon,
+    required this.label,
+    required this.active,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.neonBlue : Colors.grey.shade700;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: active ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border:
+            Border.all(color: color.withValues(alpha: active ? 0.28 : 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ActionChip extends StatelessWidget {
   const _ActionChip({
     required this.icon,
@@ -519,6 +904,7 @@ class _ActionChip extends StatelessWidget {
     required this.onTap,
     this.accent,
     this.semanticsLabel,
+    this.tooltip,
   });
 
   final IconData icon;
@@ -526,11 +912,12 @@ class _ActionChip extends StatelessWidget {
   final VoidCallback onTap;
   final Color? accent;
   final String? semanticsLabel;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final color = accent ?? AppColors.neonBlue;
-    return Semantics(
+    final child = Semantics(
       button: true,
       label: semanticsLabel ?? label,
       child: InkWell(
@@ -559,6 +946,8 @@ class _ActionChip extends StatelessWidget {
         ),
       ),
     );
+    if (tooltip == null || tooltip!.isEmpty) return child;
+    return Tooltip(message: tooltip!, child: child);
   }
 }
 

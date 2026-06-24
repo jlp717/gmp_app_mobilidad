@@ -38,6 +38,8 @@ function getAllowedVendorCodes(userContext = {}) {
 function authorizeChatbotClientScope(userContext = {}, clientContext = {}) {
   const clientCode = normalizeCode(clientContext.clientCode);
   if (!clientCode) return { allowed: true, code: "NO_CLIENT_SCOPE" };
+  if (isSupervisor(userContext))
+    return { allowed: true, code: "ALLOWED_SUPERVISOR" };
   const vendorCode = normalizeCode(
     clientContext.vendorCode ||
       clientContext.ownerVendorCode ||
@@ -50,8 +52,6 @@ function authorizeChatbotClientScope(userContext = {}, clientContext = {}) {
       code: "CLIENT_SCOPE_UNVERIFIED",
       response: SAFE_SCOPE_UNVERIFIED_RESPONSE,
     };
-  if (isSupervisor(userContext))
-    return { allowed: true, code: "ALLOWED_SUPERVISOR" };
   const allowedVendors = getAllowedVendorCodes(userContext);
   const allowed = numericVariants(vendorCode).some((code) =>
     allowedVendors.includes(code),

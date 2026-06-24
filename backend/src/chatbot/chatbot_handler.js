@@ -26,12 +26,17 @@ const {
     repartidorTools,
     warehouseTools,
     summaryTools,
-    crossQueryTools
+    crossQueryTools,
+    genericAnalyticsTools
 } = require('./chatbot_tools');
 const {
     authorizeResolvedClient,
     buildAuthorizationSafeResponse,
 } = require('./chatbot_authorization');
+const {
+    buildToolMetadata,
+    mergeMetadata,
+} = require('./chatbot_export');
 
 // ── Intent Detection Patterns (expanded for misspellings, synonyms, natural language) ──
 
@@ -100,10 +105,15 @@ const intentPatterns = {
 
     // Daily Summary
     resumen: /resumen.*dia|resumen.*hoy|como.*fue.*hoy|que.*pas[oó].*hoy|resumen|balance.*dia/i,
+    glacius: /glacius|nestle|kpi|alertas?|frio|congelad/i,
 
     // Search
     buscarCliente: /buscar.*cliente|buscar.*client|cliente.*llama|nombre.*cliente|cliente.*nombre|como\s*se\s*llama.*cliente|cliente.*cual/i,
     buscarProducto: /buscar.*producto|buscar.*art[ií]culo|producto.*llama|nombre.*producto|articulo.*nombre|producto.*cual/i,
+
+    // Session / permissions
+    permisos: /permiso|permisos|rol|jefe\s*de\s*ventas|supervisor|acceso|restricci[oó]n|autorizad/i,
+    cobertura: /cobertura|pesta[ñn]as|qu[eé]\s*puedes|que\s*puedes|capacidades|todo\s*lo\s*que|funciones/i,
 
     // Cross-queries (producto + cliente combinados)
     precioCliente: /precio.*cliente|vend[ií].*cliente|a\s*cuanto.*vend[ií].*cliente|precio\s*le\s*vend[ií]|factur[aé].*cliente/i,
@@ -112,6 +122,26 @@ const intentPatterns = {
 };
 
 // ── Entity Extraction ────────────────────────────────────────────────────────
+
+const MONTH_ALIASES = {
+    enero: 1, ene: 1,
+    febrero: 2, feb: 2,
+    marzo: 3, mar: 3,
+    abril: 4, abr: 4,
+    mayo: 5, may: 5,
+    junio: 6, jun: 6,
+    julio: 7, jul: 7,
+    agosto: 8, ago: 8,
+    septiembre: 9, setiembre: 9, sep: 9, set: 9,
+    octubre: 10, oct: 10,
+    noviembre: 11, nov: 11,
+    diciembre: 12, dic: 12,
+};
+
+const MONTH_LABELS = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
 
 function extractCodes(message) {
     // Client codes: 4-10 digits, possibly preceded by "cliente", "client", "cli"
@@ -136,6 +166,9 @@ function extractCodes(message) {
     // Vehicle codes
     const vehicleMatch = message.match(/(?:camion|vehiculo|vehicle)\s*[:#]?\s*([A-Z0-9\-]+)/i);
 
+    // Order codes. Require a digit so "pedidos hoy" is not treated as an id.
+    const orderMatch = message.match(/\b(?:pedido|orden|opp)\s*[:#]?\s*([A-Z0-9\-]{2,20})\b/i);
+
     const monthMap = {
         enero: 1, ene: 1, febrero: 2, feb: 2, marzo: 3, mar: 3, abril: 4, abr: 4,
         mayo: 5, junio: 6, jun: 6, julio: 7, jul: 7, agosto: 8, ago: 8,
@@ -146,6 +179,8 @@ function extractCodes(message) {
     const invoiceNumber = rawInvoice && rawInvoice.length >= 2 && /\d/.test(rawInvoice)
         ? rawInvoice
         : null;
+    const rawOrder = orderMatch ? orderMatch[1] : null;
+    const orderNumber = rawOrder && /\d/.test(rawOrder) ? rawOrder : null;
 
     return {
         clientCode: clientMatch ? clientMatch[1] : null,
@@ -153,11 +188,245 @@ function extractCodes(message) {
         percent: percentMatch ? parseFloat(percentMatch[1]) : null,
         month: monthMatch ? monthMap[monthMatch[1].toLowerCase()] : null,
         invoiceNumber,
-        vehicleCode: vehicleMatch ? vehicleMatch[1] : null
+        vehicleCode: vehicleMatch ? vehicleMatch[1] : null,
+        orderNumber
     };
 }
 
+function normalizeSearchText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s/-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeNaturalQuery(value) {
+    let text = normalizeSearchText(value);
+    const replacements = [
+        [/\b(fra|fras|factu|fact|fac)\b/g, 'factura'],
+        [/\b(cte|clte|cli)\b/g, 'cliente'],
+        [/\b(obj|objet|objs)\b/g, 'objetivo'],
+        [/\b(comis|comi|com)\b/g, 'comision'],
+        [/\b(acum|acumul)\b/g, 'acumulado'],
+        [/\b(ult|ultim)\b/g, 'ultimos'],
+        [/\b(pte|ptes|pend)\b/g, 'pendiente'],
+        [/\b(vtas|vta)\b/g, 'ventas'],
+        [/\b(imp)\b/g, 'importe'],
+        [/\b(alm)\b/g, 'almacen'],
+        [/\b(rep)\b/g, 'repartidor'],
+        [/\b(glac|glasius|glasiu)\b/g, 'glacius'],
+        [/\b(pdf factura|factura pdf)\b/g, 'leer factura pdf'],
+    ];
+    for (const [pattern, replacement] of replacements) {
+        text = text.replace(pattern, replacement);
+    }
+    return text.replace(/\s+/g, ' ').trim();
+}
+
+function extractHistoryEntities(conversationHistory = []) {
+    const result = {};
+    const entries = Array.isArray(conversationHistory) ? conversationHistory.slice().reverse() : [];
+    for (const entry of entries) {
+        const content = typeof entry === 'string' ? entry : entry?.content;
+        if (!content) continue;
+        const codes = extractCodes(String(content));
+        result.clientCode = result.clientCode || codes.clientCode;
+        result.productCode = result.productCode || codes.productCode;
+        result.invoiceNumber = result.invoiceNumber || codes.invoiceNumber;
+        result.orderNumber = result.orderNumber || codes.orderNumber;
+        if (result.clientCode && result.productCode && result.invoiceNumber && result.orderNumber) break;
+    }
+    return result;
+}
+
+function extractClientNameQuery(message) {
+    const text = String(message || '')
+        .replace(/\bfacturas?\b/gi, ' ')
+        .replace(/\bdeuda\b/gi, ' ')
+        .replace(/\bcobros?\b/gi, ' ')
+        .replace(/\bpedidos?\b/gi, ' ')
+        .replace(/\bmargen\b/gi, ' ')
+        .replace(/\briesgo\b/gi, ' ')
+        .replace(/\bhistorial\b/gi, ' ')
+        .replace(/\bcliente\b/gi, ' ')
+        .replace(/\b(del|de|la|las|el|los|un|una|dime|dame|consulta|consultar|ver|quiero|por|favor|pendientes?|hoy|dia|mes|recientes?|ultimos?)\b/gi, ' ')
+        .replace(/\b(pdf|leer|lee|extraer|extrae|documento)\b/gi, ' ')
+        .replace(/\d{4,10}/g, ' ')
+        .replace(/[,:;#?¿!¡()[\]{}]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return text.length >= 3 ? text : null;
+}
+
+function pickClientCandidate(query, clients) {
+    if (!query || !Array.isArray(clients) || clients.length === 0) return null;
+    if (clients.length === 1) return clients[0];
+    const normalizedQuery = normalizeSearchText(query);
+    const tokens = normalizedQuery.split(' ').filter((token) => token.length > 1);
+    const scored = clients.map((client) => {
+        const name = normalizeSearchText(client.NOMBRE || client.name || '');
+        const code = normalizeSearchText(client.CODIGO || client.code || '');
+        const exact = name === normalizedQuery || code === normalizedQuery;
+        const contains = name.includes(normalizedQuery);
+        const tokenMatches = tokens.filter((token) => name.includes(token) || code.includes(token)).length;
+        return { client, score: (exact ? 100 : 0) + (contains ? 40 : 0) + tokenMatches };
+    }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score);
+    if (scored.length === 0) return null;
+    if (scored.length === 1 || scored[0].score > scored[1].score) return scored[0].client;
+    return null;
+}
+
+function formatClientAmbiguity(query, clients) {
+    const list = clients.slice(0, 8).map((client) =>
+        `- ${client.NOMBRE || client.name || 'Sin nombre'} (${client.CODIGO || client.code || 'sin codigo'}) ${client.POBLACION || ''}`.trim()
+    ).join('\n');
+    return `He encontrado varios clientes para "${query}". Dime el codigo o elige uno:\n${list}`;
+}
+
 // ── Safe Query Helper ────────────────────────────────────────────────────────
+
+function extractRequestedYear(message, fallbackYear = new Date().getFullYear()) {
+    const match = String(message || '').match(/\b(20\d{2}|19\d{2})\b/);
+    return match ? parseInt(match[1], 10) : fallbackYear;
+}
+
+function monthLabel(period) {
+    return `${MONTH_LABELS[period.month - 1] || period.month} ${period.year}`;
+}
+
+function addMonths(year, month, delta) {
+    const d = new Date(year, month - 1 + delta, 1);
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+function buildMonthSpan(startYear, startMonth, endYear, endMonth) {
+    const span = [];
+    let cursor = { year: startYear, month: startMonth };
+    let guard = 0;
+    while (guard < 12) {
+        span.push({ ...cursor, label: monthLabel(cursor) });
+        if (cursor.year === endYear && cursor.month === endMonth) break;
+        cursor = addMonths(cursor.year, cursor.month, 1);
+        guard += 1;
+    }
+    return span;
+}
+
+function parseMonthRange(message, now = new Date()) {
+    const normalized = normalizeSearchText(message);
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const requestedYear = extractRequestedYear(message, currentYear);
+
+    const quarterMatch = normalized.match(/\b(?:q|t)([1-4])\b/)
+        || normalized.match(/\b(primer|primero|segundo|tercer|tercero|cuarto)\s+trimestre\b/);
+    if (quarterMatch) {
+        const qText = quarterMatch[1];
+        const q = /^\d$/.test(qText)
+            ? parseInt(qText, 10)
+            : ({ primer: 1, primero: 1, segundo: 2, tercer: 3, tercero: 3, cuarto: 4 }[qText] || 1);
+        const start = (q - 1) * 3 + 1;
+        return {
+            months: buildMonthSpan(requestedYear, start, requestedYear, start + 2),
+            isRange: true,
+        };
+    }
+
+    const recentMatch = normalized.match(/ultim[oa]s?\s+(\d{1,2})\s+meses/)
+        || normalized.match(/\b(\d{1,2})\s+meses\b/);
+    if (recentMatch) {
+        const count = Math.min(Math.max(parseInt(recentMatch[1], 10) || 1, 1), 12);
+        const start = addMonths(currentYear, currentMonth, -(count - 1));
+        return {
+            months: buildMonthSpan(start.year, start.month, currentYear, currentMonth),
+            isRange: count > 1,
+        };
+    }
+
+    const monthRegex = /\b(enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|set|octubre|oct|noviembre|nov|diciembre|dic)\b/g;
+    const found = [];
+    let match;
+    while ((match = monthRegex.exec(normalized)) !== null) {
+        const month = MONTH_ALIASES[match[1]];
+        if (month) found.push(month);
+    }
+
+    if (found.length >= 2) {
+        const startMonth = found[0];
+        const endMonth = found[found.length - 1];
+        const endYear = endMonth < startMonth ? requestedYear + 1 : requestedYear;
+        return {
+            months: buildMonthSpan(requestedYear, startMonth, endYear, endMonth),
+            isRange: true,
+        };
+    }
+
+    if (found.length === 1) {
+        return {
+            months: [{ year: requestedYear, month: found[0], label: monthLabel({ year: requestedYear, month: found[0] }) }],
+            isRange: false,
+        };
+    }
+
+    return null;
+}
+
+function isAccumulatedQuery(message) {
+    return /acumulad|rango|trimestre|ultim[oa]s?\s+\d+\s+meses|\b\d+\s+meses\b|desde|hasta|entre|a\s+marzo|a\s+abril|a\s+mayo|a\s+junio|a\s+julio|a\s+agosto|a\s+septiembre|a\s+octubre|a\s+noviembre|a\s+diciembre/i.test(message);
+}
+
+function extractFamilyCode(message) {
+    const match = String(message || '').match(/\bfamilia\s*[:#]?\s*([A-Z0-9_-]{2,12})\b/i);
+    return match ? match[1].toUpperCase() : null;
+}
+
+function sumNumeric(items, field) {
+    return items.reduce((sum, item) => sum + (Number(item[field]) || 0), 0);
+}
+
+async function aggregateCommissionsByMonths(conn, userCode, isJefeVentas, vendorScope, months) {
+    // Bounded aggregation: max 12 tool calls, avoiding unbounded DB loops.
+    const rows = [];
+    for (const period of months.slice(0, 12)) {
+        const result = await commissionTools.getCommissions(
+            conn, userCode, isJefeVentas, period.month, period.year, vendorScope
+        );
+        rows.push({ ...result, label: period.label });
+    }
+    const sales = sumNumeric(rows, 'sales');
+    const commission = sumNumeric(rows, 'commission');
+    return {
+        months: rows,
+        totalSales: Math.round(sales * 100) / 100,
+        totalCommission: Math.round(commission * 100) / 100,
+        averageCommissionPercent: sales > 0 ? Math.round((commission / sales) * 10000) / 100 : 0,
+        activeClients: Math.max(...rows.map((row) => Number(row.activeClients) || 0), 0),
+        operations: rows.reduce((sum, row) => sum + (Number(row.operations) || 0), 0),
+    };
+}
+
+async function aggregateObjectivesByMonths(conn, userCode, isJefeVentas, vendorScope, months) {
+    // Bounded aggregation: max 12 tool calls, using the same objective rules per month.
+    const rows = [];
+    for (const period of months.slice(0, 12)) {
+        const result = await objectivesTools.getObjectives(
+            conn, userCode, isJefeVentas, period.month, period.year, vendorScope
+        );
+        rows.push({ ...result, label: period.label });
+    }
+    const target = sumNumeric(rows, 'target');
+    const achieved = sumNumeric(rows, 'achieved');
+    return {
+        months: rows,
+        totalTarget: Math.round(target * 100) / 100,
+        totalAchieved: Math.round(achieved * 100) / 100,
+        totalRemaining: Math.round((target - achieved) * 100) / 100,
+        achievementPercent: target > 0 ? Math.round((achieved / target) * 1000) / 10 : 0,
+    };
+}
 
 async function safeQuery(conn, sql, params = []) {
     try {
@@ -174,13 +443,23 @@ async function safeQuery(conn, sql, params = []) {
 // ── Main Message Handler ─────────────────────────────────────────────────────
 
 async function handleChatMessage(conn, message, vendedorCodes, providedClientCode, context = {}) {
-    const msg = message.toLowerCase();
+    const msg = normalizeNaturalQuery(message);
     const vendorScope = Array.isArray(context.vendorScope) && context.vendorScope.length
         ? context.vendorScope
         : (Array.isArray(vendedorCodes) ? vendedorCodes : []);
     const userCode = context.userCode || vendorScope[0] || '';
     const isJefeVentas = Boolean(context.isJefeVentas) || context.role === 'JEFE_VENTAS';
     const authContext = { ...context, userCode, isJefeVentas, vendorScope, conn };
+    const richResponses = context.richResponses === true;
+
+    function reply(text, toolName, result, extraMetadata = null) {
+        if (!richResponses) return text;
+        const metadata = mergeMetadata([
+            toolName ? buildToolMetadata(toolName, result) : null,
+            extraMetadata,
+        ]);
+        return { text, metadata };
+    }
 
     async function denyIfForbiddenClient(code) {
         if (!code) return null;
@@ -196,9 +475,65 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
         return denyIfForbiddenClient(ownerClient);
     }
     const codes = extractCodes(message);
-    const clientCode = codes.clientCode || providedClientCode;
-    const productCode = codes.productCode;
-    const invoiceNumber = codes.invoiceNumber;
+    const historyEntities = extractHistoryEntities(context.conversationHistory);
+    let clientCode = codes.clientCode || providedClientCode || historyEntities.clientCode;
+    const productCode = codes.productCode || historyEntities.productCode;
+    const invoiceNumber = codes.invoiceNumber || historyEntities.invoiceNumber;
+    const orderNumber = codes.orderNumber || historyEntities.orderNumber;
+
+    async function resolveClientFromNaturalName() {
+        if (clientCode || invoiceNumber) return null;
+        if (intentPatterns.saludo.test(msg) || intentPatterns.ayuda.test(msg) || intentPatterns.permisos.test(msg) || intentPatterns.cobertura.test(msg)) {
+            return null;
+        }
+        if (/d[oÃ³]nde|abrir|ir a|navega|pantalla|secci[oÃ³]n|pesta[Ã±n]a/.test(msg)) {
+            return null;
+        }
+        const clientIntent = intentPatterns.deuda.test(msg)
+            || intentPatterns.factura.test(msg)
+            || intentPatterns.cobro.test(msg)
+            || intentPatterns.pedido.test(msg)
+            || intentPatterns.margen.test(msg)
+            || intentPatterns.riesgo.test(msg)
+            || intentPatterns.bloqueo.test(msg)
+            || intentPatterns.credito.test(msg)
+            || intentPatterns.churn.test(msg)
+            || intentPatterns.comparar.test(msg)
+            || intentPatterns.historial.test(msg)
+            || intentPatterns.productosCliente.test(msg)
+            || intentPatterns.ventasCliente.test(msg);
+        if (!clientIntent) return null;
+        const query = extractClientNameQuery(message);
+        if (!query) return null;
+        const clients = await dbDiscoveryTools.searchClients(conn, query);
+        if (!clients.length) {
+            return {
+                response: reply(`No he encontrado ningun cliente que coincida con "${query}".`, null, null),
+            };
+        }
+        const authorized = [];
+        for (const candidate of clients.slice(0, 12)) {
+            const code = String(candidate.CODIGO || candidate.code || '').trim();
+            if (!code) continue;
+            const denied = await denyIfForbiddenClient(code);
+            if (!denied) authorized.push(candidate);
+            if (authorized.length >= 8) break;
+        }
+        if (authorized.length === 0) {
+            return {
+                response: reply('No tengo clientes autorizados que coincidan con esa busqueda.', null, null),
+            };
+        }
+        const candidate = pickClientCandidate(query, authorized);
+        if (!candidate) {
+            return { response: reply(formatClientAmbiguity(query, authorized), null, null) };
+        }
+        return { clientCode: String(candidate.CODIGO || candidate.code).trim() };
+    }
+
+    const resolvedClient = await resolveClientFromNaturalName();
+    if (resolvedClient?.response) return resolvedClient.response;
+    if (resolvedClient?.clientCode) clientCode = resolvedClient.clientCode;
 
     // ── GREETING ──
     if (intentPatterns.saludo.test(msg)) {
@@ -226,6 +561,7 @@ Escribe "ayuda" para detalle de comandos.`;
 
     // ── NAVIGATION ──
     if (/d[oó]nde|abrir|ir a|navega|pantalla|secci[oó]n|pesta[ñn]a/.test(msg)
+        && !intentPatterns.cobertura.test(msg)
         && !clientCode && !productCode && !invoiceNumber) {
         return `Secciones en la app GMP:
 - **Chat IA**: Asistente GMP
@@ -240,6 +576,31 @@ Solo consultas de la app GMP.`;
     }
 
     // ── HELP ──
+    if (intentPatterns.cobertura.test(msg) && !clientCode && !productCode && !invoiceNumber) {
+        return reply(`**Cobertura del asistente GMP**
+
+- **Clientes**: ficha, deuda, riesgo, credito, historial, productos comprados, ventas mensuales y evaluacion comercial.
+- **Ruta / Rutero**: entregas del dia, cobros del repartidor, liquidacion y comision de reparto.
+- **Comisiones**: comision del mes, acumulados por rango, desglose por cliente y configuracion de tramos.
+- **Objetivos**: objetivo mensual, acumulados por meses, cumplimiento y objetivos por familia.
+- **Facturas**: pendientes por cliente, detalle de factura, albaranes y lectura del PDF cuando existe documento asociado.
+- **Glacius / Panel**: resumen comercial, pedidos, clientes, ventas y senales KPI del dia.
+- **Cobros**: pendientes por cliente, vencimientos y resumen mensual.
+- **Bolsa**: saldo, movimientos e historial.
+- **Pedidos**: pedidos del dia, pedidos por cliente y detalle de pedido.
+- **Almacen**: vehiculos, camiones y carga del dia.
+
+Puedes escribir normal: "mi comision acumulada de enero a marzo", "objetivo ultimos 3 meses", "lee la factura F/100/2026" o "top productos del cliente 32258".`, null, null, {
+            deepLink: { tab: 'Chat IA' },
+            suggestedFollowUps: [
+                'Mi comision acumulada ultimos 3 meses',
+                'Objetivo acumulado enero a marzo',
+                'Facturas de un cliente',
+                'Resumen Glacius hoy',
+            ],
+        });
+    }
+
     if (intentPatterns.ayuda.test(msg)) {
         return `**Comandos Asistente GMP**
 
@@ -280,14 +641,86 @@ Incluye codigo de cliente o producto cuando sea posible.`;
     }
 
     // ── COMMISSIONS ──
+    if (intentPatterns.permisos.test(msg) && !clientCode && !invoiceNumber) {
+        const scopeText = isJefeVentas
+            ? 'acceso supervisor a todos los clientes y vendedores'
+            : `cartera autorizada: ${vendorScope.join(', ') || userCode || 'sin vendedor cargado'}`;
+        return reply(`Sesion actual:
+- Rol: **${context.role || 'SIN_ROL'}**
+- Codigo vendedor: **${userCode || 'N/A'}**
+- Modo supervisor: **${isJefeVentas ? 'SI' : 'NO'}**
+- Ambito: **${scopeText}**
+
+Puedes preguntar en lenguaje natural, por ejemplo: "facturas de Central Hoteles", "deuda del cliente 32258" o "lee la factura F/100/2026".`, null, null);
+    }
+
+    if (intentPatterns.repartidor.test(msg) && intentPatterns.comision.test(msg)) {
+        try {
+            const result = await repartidorTools.getRepartidorCommissions(conn, userCode, codes.month, undefined);
+            const text = `**Comision repartidor ${result.month}/${result.year}**
+- Cobrado: **${result.collected.toLocaleString('es-ES')} EUR**
+- A cobrar: ${result.collectable.toLocaleString('es-ES')} EUR
+- Porcentaje: **${result.percentage}%**
+- Comision: **${result.commission.toLocaleString('es-ES')} EUR**
+- Umbral: ${result.thresholdMet ? 'cumplido' : 'pendiente'}`;
+            return reply(text, 'get_repartidor_commissions', result);
+        } catch (err) {
+            logger.error('[CHATBOT] Repartidor commission error:', err.message);
+            return 'Error consultando comision del repartidor.';
+        }
+    }
+
+    if (intentPatterns.comisionConfig.test(msg)) {
+        try {
+            const config = await commissionTools.getCommissionConfig(conn);
+            const tiers = (config.tiers || []).map((tier) =>
+                `- ${tier.min}% a ${tier.max}%: ${tier.pct}%`
+            ).join('\n');
+            return reply(`**Configuracion de comisiones**
+- IPC/base: **${config.ipc}%**
+- Tramos:
+${tiers || '- Sin tramos configurados'}`, 'get_commission_config', config);
+        } catch (e) {
+            return `Error obteniendo configuracion de comisiones: ${e.message}`;
+        }
+    }
+
+    if (intentPatterns.comision.test(msg)
+        && !intentPatterns.comisionDetalle.test(msg)
+        && (isAccumulatedQuery(msg) || (parseMonthRange(message)?.months?.length || 0) > 1)) {
+        try {
+            const range = parseMonthRange(message);
+            if (!range?.months?.length || range.months.length < 2) {
+                return 'Dime el rango de meses. Ejemplo: "comision acumulada de enero a marzo" o "ultimos 3 meses".';
+            }
+            const result = await aggregateCommissionsByMonths(
+                conn, userCode, isJefeVentas, vendorScope, range.months
+            );
+            const list = result.months.map((row) =>
+                `- ${row.label}: ${row.commission.toLocaleString('es-ES')} EUR sobre ${row.sales.toLocaleString('es-ES')} EUR`
+            ).join('\n');
+            const text = `**Comision acumulada (${result.months[0].label} - ${result.months[result.months.length - 1].label})**
+- Comision total: **${result.totalCommission.toLocaleString('es-ES')} EUR**
+- Ventas: **${result.totalSales.toLocaleString('es-ES')} EUR**
+- Porcentaje medio: **${result.averageCommissionPercent}%**
+- Operaciones: **${result.operations}**
+
+${list}`;
+            return reply(text, 'get_commissions_range', result);
+        } catch (e) {
+            return `Error obteniendo comisiones acumuladas: ${e.message}`;
+        }
+    }
+
     if (intentPatterns.comision.test(msg) && !intentPatterns.comisionDetalle.test(msg) && !intentPatterns.comisionConfig.test(msg)) {
         try {
             const result = await commissionTools.getCommissions(
                 conn, userCode, isJefeVentas, codes.month, undefined, vendorScope
             );
-            return `Comision ${result.month}/${result.year}:
+            const text = `Comision ${result.month}/${result.year}:
 **${result.commission.toLocaleString('es-ES')}€** sobre ventas de **${result.sales.toLocaleString('es-ES')}€** (${result.commissionPercent}%)
 Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
+            return reply(text, 'get_commissions', result);
         } catch (e) {
             return `Error obteniendo comisiones: ${e.message}`;
         }
@@ -306,22 +739,66 @@ Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
             );
             if (result.details.length === 0) return 'Sin detalles de comision para este cliente.';
             const list = result.details.slice(0, 10).map(d => `- ${d.clientCode}: **${d.sales.toLocaleString('es-ES')}€** → Comision ${d.commission.toLocaleString('es-ES')}€`).join('\n');
-            return `Detalle de comisiones:\n${list}`;
+            return reply(`Detalle de comisiones:\n${list}`, 'get_commission_details', result);
         } catch (e) {
             return `Error: ${e.message}`;
         }
     }
 
     // ── OBJECTIVES ──
+    if (intentPatterns.objetivoFamilia.test(msg)) {
+        try {
+            const familyCode = extractFamilyCode(message);
+            const result = await objectivesTools.getObjectivesByFamily(
+                conn, userCode, isJefeVentas, familyCode, codes.month, undefined, vendorScope
+            );
+            const families = result.families || [];
+            if (families.length === 0) return 'Sin objetivos por familia para ese periodo.';
+            const list = families.slice(0, 12).map((family) =>
+                `- ${family.family}: ${family.achieved.toLocaleString('es-ES')} EUR de ${family.target.toLocaleString('es-ES')} EUR (${family.achievementPercent}%)`
+            ).join('\n');
+            return reply(`**Objetivos por familia ${result.month}/${result.year}**\n${list}`, 'get_objectives_by_family', result);
+        } catch (e) {
+            return `Error obteniendo objetivos por familia: ${e.message}`;
+        }
+    }
+
+    if (intentPatterns.objetivo.test(msg)
+        && (isAccumulatedQuery(msg) || (parseMonthRange(message)?.months?.length || 0) > 1)) {
+        try {
+            const range = parseMonthRange(message);
+            if (!range?.months?.length || range.months.length < 2) {
+                return 'Dime el rango de meses. Ejemplo: "objetivo acumulado de enero a marzo" o "objetivo ultimos 3 meses".';
+            }
+            const result = await aggregateObjectivesByMonths(
+                conn, userCode, isJefeVentas, vendorScope, range.months
+            );
+            const list = result.months.map((row) =>
+                `- ${row.label}: ${row.achieved.toLocaleString('es-ES')} EUR de ${row.target.toLocaleString('es-ES')} EUR (${row.achievementPercent}%)`
+            ).join('\n');
+            const text = `**Objetivo acumulado (${result.months[0].label} - ${result.months[result.months.length - 1].label})**
+- Alcanzado: **${result.totalAchieved.toLocaleString('es-ES')} EUR**
+- Objetivo: **${result.totalTarget.toLocaleString('es-ES')} EUR**
+- Cumplimiento: **${result.achievementPercent}%**
+- Pendiente: **${result.totalRemaining.toLocaleString('es-ES')} EUR**
+
+${list}`;
+            return reply(text, 'get_objectives_range', result);
+        } catch (e) {
+            return `Error obteniendo objetivos acumulados: ${e.message}`;
+        }
+    }
+
     if (intentPatterns.objetivo.test(msg) && !intentPatterns.objetivoFamilia.test(msg)) {
         try {
             const result = await objectivesTools.getObjectives(
                 conn, userCode, isJefeVentas, codes.month, undefined, vendorScope
             );
             const status = result.achievementPercent >= 100 ? 'OBJETIVO CUMPLIDO' : `Faltan ${(result.target - result.achieved).toLocaleString('es-ES')}€`;
-            return `Objetivo ${result.month}/${result.year}:
+            const text = `Objetivo ${result.month}/${result.year}:
 Alcanzado: **${result.achieved.toLocaleString('es-ES')}€** de ${result.target.toLocaleString('es-ES')}€ (**${result.achievementPercent}%**)
 ${status}`;
+            return reply(text, 'get_objectives', result);
         } catch (e) {
             return `Error obteniendo objetivos: ${e.message}`;
         }
@@ -333,9 +810,10 @@ ${status}`;
             const result = await commercialTools.getMarginGlobal(
                 conn, userCode, isJefeVentas, codes.month, undefined, vendorScope
             );
-            return `Margen ${result.month}/${result.year}:
+            const text = `Margen ${result.month}/${result.year}:
 Ventas: **${result.sales.toLocaleString('es-ES')}€** | Coste: ${result.cost.toLocaleString('es-ES')}€ | Beneficio: **${result.profit.toLocaleString('es-ES')}€**
 Margen: **${result.marginPercent}%** | Clientes: ${result.clients} | Operaciones: ${result.operations}`;
+            return reply(text, 'get_margin_global', result);
         } catch (e) {
             return `Error calculando margen: ${e.message}`;
         }
@@ -349,9 +827,15 @@ Margen: **${result.marginPercent}%** | Clientes: ${result.clients} | Operaciones
             const result = await commercialTools.getMarginByClient(
                 conn, clientCode, userCode, isJefeVentas, vendorScope
             );
-            return `Margen cliente ${clientCode}:
+            const text = `Margen cliente ${clientCode}:
 Ventas: **${result.sales.toLocaleString('es-ES')}€** | Coste: ${result.cost.toLocaleString('es-ES')}€ | Beneficio: **${result.profit.toLocaleString('es-ES')}€**
 Margen: **${result.marginPercent}%** | Operaciones: ${result.operations}`;
+            return reply(text, 'query_client_profit', {
+                ...result,
+                clientCode,
+                totals: { sales: result.sales },
+                groups: [],
+            });
         } catch (e) {
             return `Error calculando margen: ${e.message}`;
         }
@@ -366,12 +850,16 @@ Margen: **${result.marginPercent}%** | Operaciones: ${result.operations}`;
         if (deniedDeuda) return deniedDeuda;
         try {
             const debt = await riskTools.getClientDebt(conn, clientCode);
+            const aging = debt.aging || {};
+            const totalDebt = Number(debt.totalDebt) || 0;
+            const overdueDebt = Number(debt.overdueDebt) || 0;
             const status = debt.riskLevel === 'ALTO' ? 'ALTO RIESGO' : debt.riskLevel === 'MEDIO' ? 'RIESGO MEDIO' : 'BAJO RIESGO';
-            const action = debt.overdueDebt > 1000 ? 'No ampliar credito sin cobrar primero' : 'Estado de pago correcto';
-            return `Deuda cliente ${clientCode} [${status}]
-Pendiente: **${debt.totalDebt.toLocaleString('es-ES')}€** | Vencido: **${debt.overdueDebt.toLocaleString('es-ES')}€**
-1-30d: ${debt.aging.days_1_30.toLocaleString('es-ES')}€ | 31-60d: ${debt.aging.days_31_60.toLocaleString('es-ES')}€ | 61-90d: ${debt.aging.days_61_90.toLocaleString('es-ES')}€ | +90d: **${debt.aging.days_over_90.toLocaleString('es-ES')}€**
+            const action = overdueDebt > 1000 ? 'No ampliar credito sin cobrar primero' : 'Estado de pago correcto';
+            const text = `Deuda cliente ${clientCode} [${status}]
+Pendiente: **${totalDebt.toLocaleString('es-ES')}€** | Vencido: **${overdueDebt.toLocaleString('es-ES')}€**
+1-30d: ${(aging.days_1_30 || 0).toLocaleString('es-ES')}€ | 31-60d: ${(aging.days_31_60 || 0).toLocaleString('es-ES')}€ | 61-90d: ${(aging.days_61_90 || 0).toLocaleString('es-ES')}€ | +90d: **${(aging.days_over_90 || 0).toLocaleString('es-ES')}€**
 ${action}`;
+            return reply(text, 'get_client_debt', { ...debt, clientCode });
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -443,6 +931,21 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
     }
 
     // ── PRICE ──
+    if (intentPatterns.precioCliente.test(msg) && clientCode && productCode) {
+        const deniedPriceClient = await denyIfForbiddenClient(clientCode);
+        if (deniedPriceClient) return deniedPriceClient;
+        try {
+            const result = await crossQueryTools.getPriceSoldToClient(conn, productCode, clientCode, 5);
+            if (result.error) return result.error;
+            const list = (result.sales || []).map((sale) =>
+                `- ${sale.date}: ${sale.price.toLocaleString('es-ES')} EUR (${sale.quantity} uds, pedido ${sale.orderNumber || 'N/A'})`
+            ).join('\n');
+            return reply(`**Precio vendido al cliente ${clientCode} - producto ${productCode}**\n${list}`, 'get_price_sold_to_client', result);
+        } catch (e) {
+            return `Error consultando precio vendido al cliente: ${e.message}`;
+        }
+    }
+
     if (intentPatterns.precio.test(msg) && !intentPatterns.descuento.test(msg) && !intentPatterns.minimo.test(msg)) {
         if (!productCode) {
             return 'Necesito codigo de producto. Ejemplo: "Precio producto ABC123"';
@@ -520,6 +1023,22 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
     }
 
     // ── COMPARE YoY ──
+    if ((intentPatterns.yoy.test(msg) || intentPatterns.comparar.test(msg)) && !clientCode) {
+        try {
+            const result = await analyticsTools.getYoYComparison(
+                conn, userCode, isJefeVentas, extractRequestedYear(message), codes.month, vendorScope
+            );
+            const text = `**Comparativa anual**
+- ${result.currentYear.year}: **${result.currentYear.sales}** | Margen: ${result.currentYear.margin} | Clientes: ${result.currentYear.clients}
+- ${result.lastYear.year}: **${result.lastYear.sales}** | Margen: ${result.lastYear.margin} | Clientes: ${result.lastYear.clients}
+- Crecimiento ventas: **${result.growth.salesPercent}%**
+- Crecimiento margen: **${result.growth.marginPercent}%**`;
+            return reply(text, 'get_yoy_comparison', result);
+        } catch (e) {
+            return `Error consultando comparativa anual: ${e.message}`;
+        }
+    }
+
     if (intentPatterns.comparar.test(msg)) {
         if (!clientCode) {
             return 'Necesito un codigo de cliente para comparar. Ejemplo: "Comparar ventas del cliente 12345"';
@@ -542,6 +1061,30 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
     }
 
     // ── STOCK ──
+    if (intentPatterns.almacen.test(msg) && !productCode) {
+        try {
+            if (/veh[ií]culo|vehiculo|camiones|camion|matricula|flota/i.test(msg)) {
+                const result = await warehouseTools.getVehicles(conn);
+                const list = (result.vehicles || []).slice(0, 12).map((vehicle) =>
+                    `- ${vehicle.code}: ${vehicle.description || 'Sin descripcion'} (${vehicle.matricula || 'sin matricula'})`
+                ).join('\n');
+                return reply(`**Vehiculos de almacen**\n${list || 'Sin vehiculos registrados.'}`, 'get_vehicles', result);
+            }
+            const result = await warehouseTools.getWarehouseDashboard(
+                conn, extractRequestedYear(message), codes.month, undefined
+            );
+            const list = (result.trucks || []).slice(0, 12).map((truck) =>
+                `- ${truck.vehicleCode}: ${truck.driverName || truck.driverCode || 'sin repartidor'} (${truck.orderCount} ordenes, ${truck.lineCount} lineas)`
+            ).join('\n');
+            return reply(`**Carga almacen ${result.date.day}/${result.date.month}/${result.date.year}**
+- Camiones: **${result.totalTrucks}**
+
+${list || 'Sin camiones planificados.'}`, 'get_warehouse_dashboard', result);
+        } catch (e) {
+            return `Error consultando almacen: ${e.message}`;
+        }
+    }
+
     if (intentPatterns.stock.test(msg)) {
         if (!productCode) {
             return 'Necesito codigo de producto. Ejemplo: "Stock producto ABC123"';
@@ -565,6 +1108,24 @@ ${list}`;
             const deniedInv = await denyIfForbiddenInvoice(invoiceNumber);
             if (deniedInv) return deniedInv;
             try {
+                if (/\b(pdf|leer|lee|extrae|extraer|documento|archivo)\b/i.test(msg)) {
+                    const pdf = await genericAnalyticsTools.extractPdfContent(conn, 'factura', invoiceNumber);
+                    if (pdf.error) return pdf.error;
+                    const lineList = (pdf.structured?.lines || []).slice(0, 8).map((l) =>
+                        `- ${l.description || l.productCode || 'Linea'}: ${l.quantity || 0} x ${l.unitPrice || 0}€ = ${l.amount || 0}€`
+                    ).join('\n');
+                    const detectedText = pdf.pdfText
+                        ? `\n\nTexto detectado del PDF:\n${pdf.pdfText.slice(0, 900)}${pdf.pdfText.length > 900 ? '...' : ''}`
+                        : '';
+                    const text = `**Lectura de factura ${pdf.reference || invoiceNumber}**
+- Cliente: ${pdf.clientCode || 'N/A'}
+- Importe: **${(pdf.amount || 0).toLocaleString('es-ES')}€**
+- Fecha: ${pdf.issueDate || 'N/A'}
+- Fuente: ${pdf.hint || pdf.extractionMethod || 'DB2/PDF'}
+- Lineas:
+${lineList || '- Sin lineas estructuradas'}${detectedText}`;
+                    return reply(text, 'extract_pdf_content', pdf);
+                }
                 const inv = await invoiceTools.getInvoiceDetails(
                     conn, invoiceNumber, userCode, isJefeVentas, vendorScope
                 );
@@ -572,12 +1133,13 @@ ${list}`;
                 const lineList = (inv.lines || []).slice(0, 10).map((l) =>
                     `- ${l.description}: ${l.quantity} x ${l.unitPrice}€ = ${l.amount}€ (alb. ${l.albaranNumber || 'N/A'})`
                 ).join('\n');
-                return `**Factura ${inv.invoiceNumber}**
+                const text = `**Factura ${inv.invoiceNumber}**
 - Cliente: ${inv.clientCode}
 - Importe: **${inv.amount.toLocaleString('es-ES')}€** | Pendiente: ${(inv.pendingAmount || 0).toLocaleString('es-ES')}€
 - Estado: ${inv.status} | Emisión: ${inv.issueDate || 'N/A'} | Vencimiento: ${inv.dueDate || 'N/A'}
 - Líneas (${inv.lineCount || 0}):
 ${lineList || '- Sin líneas'}`;
+                return reply(text, 'get_invoice_details', inv);
             } catch (e) {
                 return `Error: ${e.message}`;
             }
@@ -593,7 +1155,8 @@ ${lineList || '- Sin líneas'}`;
                 const list = invs.invoices.slice(0, 10).map(i =>
                     `- ${i.number}: **${i.amount.toLocaleString('es-ES')}€** | ${i.status}`
                 ).join('\n');
-                return `Facturas pendientes cliente ${clientCode} (total: **${invs.totalAmount.toLocaleString('es-ES')}€**):\n${list}`;
+                const text = `Facturas pendientes cliente ${clientCode} (total: **${invs.totalAmount.toLocaleString('es-ES')}€**):\n${list}`;
+                return reply(text, 'get_client_invoices', invs);
             } catch (e) {
                 return `Error: ${e.message}`;
             }
@@ -663,6 +1226,43 @@ ${lineList || '- Sin líneas'}`;
     }
 
     // ── EVALUACIÓN / EVOLUCIÓN PEDIDOS (productos por mes) ──
+    if (intentPatterns.top.test(msg)) {
+        try {
+            if (clientCode && /producto|articulo|referencia/i.test(msg)) {
+                const deniedTopClient = await denyIfForbiddenClient(clientCode);
+                if (deniedTopClient) return deniedTopClient;
+                const result = await crossQueryTools.getTopProductsByClient(
+                    conn, clientCode, codes.month, undefined, 10
+                );
+                const list = (result.products || []).map((product, index) =>
+                    `${index + 1}. ${product.name || product.code}: ${product.totalSales.toLocaleString('es-ES')} EUR (${product.totalUnits || 0} uds)`
+                ).join('\n');
+                return reply(`**Top productos cliente ${clientCode} ${result.month}/${result.year}**\n${list || 'Sin productos para ese periodo.'}`, 'get_top_products_by_client', result);
+            }
+
+            if (/producto|articulo|referencia/i.test(msg)) {
+                const result = await analyticsTools.getTopProducts(
+                    conn, userCode, isJefeVentas, codes.month, undefined, 10, vendorScope
+                );
+                const list = (result.products || []).map((product, index) =>
+                    `${index + 1}. ${product.name || product.productCode}: ${product.sales.toLocaleString('es-ES')} EUR (${product.quantity || 0} uds)`
+                ).join('\n');
+                return reply(`**Top productos ${result.month}/${result.year}**\n${list || 'Sin productos para ese periodo.'}`, 'get_top_products', result);
+            }
+
+            const result = await analyticsTools.getTopClients(
+                conn, userCode, isJefeVentas, codes.month, undefined, 10, vendorScope
+            );
+            const list = (result.clients || []).map((client, index) =>
+                `${index + 1}. ${client.name || client.clientCode}: ${client.sales.toLocaleString('es-ES')} EUR (${client.numProducts || 0} productos)`
+            ).join('\n');
+            return reply(`**Top clientes ${result.month}/${result.year}**\n${list || 'Sin clientes para ese periodo.'}`, 'get_top_clients', result);
+        } catch (err) {
+            logger.error('[CHATBOT] Top analytics error:', err.message);
+            return 'Error consultando ranking.';
+        }
+    }
+
     if ((intentPatterns.productosCliente.test(msg) || intentPatterns.ventasCliente.test(msg)
         || intentPatterns.historial.test(msg)) && clientCode) {
         const deniedEval = await denyIfForbiddenClient(clientCode);
@@ -695,6 +1295,75 @@ ${lineList || '- Sin líneas'}`;
     }
 
     // ── PEDIDOS ──
+    if (intentPatterns.repartidor.test(msg)) {
+        try {
+            if (intentPatterns.comision.test(msg)) {
+                const result = await repartidorTools.getRepartidorCommissions(conn, userCode, codes.month, undefined);
+                const text = `**Comision repartidor ${result.month}/${result.year}**
+- Cobrado: **${result.collected.toLocaleString('es-ES')} EUR**
+- A cobrar: ${result.collectable.toLocaleString('es-ES')} EUR
+- Porcentaje: **${result.percentage}%**
+- Comision: **${result.commission.toLocaleString('es-ES')} EUR**
+- Umbral: ${result.thresholdMet ? 'cumplido' : 'pendiente'}`;
+                return reply(text, 'get_repartidor_commissions', result);
+            }
+
+            if (/cobro|liquidacion|liquidaci[oó]n|recaud/i.test(msg)) {
+                const result = await repartidorTools.getRepartidorCollections(conn, userCode, codes.month, undefined);
+                const list = (result.clients || []).slice(0, 10).map((client) =>
+                    `- ${client.clientName || client.clientCode}: ${client.collected.toLocaleString('es-ES')} EUR de ${client.collectable.toLocaleString('es-ES')} EUR (${client.percentage}%)`
+                ).join('\n');
+                const text = `**Cobros repartidor ${result.month}/${result.year}**
+- Cobrado: **${result.summary.totalCollected.toLocaleString('es-ES')} EUR**
+- A cobrar: ${result.summary.totalCollectable.toLocaleString('es-ES')} EUR
+- Avance: **${result.summary.overallPercentage}%**
+
+${list}`;
+                return reply(text, 'get_repartidor_collections', result);
+            }
+
+            const result = await repartidorTools.getRepartidorDeliveries(
+                conn, userCode, extractRequestedYear(message), codes.month, undefined
+            );
+            const text = `**Ruta repartidor ${result.day}/${result.month}/${result.year}**
+- Entregas: **${result.totalDeliveries}**
+- Lineas: **${result.totalLines}**
+- Completadas: ${result.completed}
+- Pendientes: ${result.pending}`;
+            return reply(text, 'get_repartidor_deliveries', result);
+        } catch (err) {
+            logger.error('[CHATBOT] Repartidor error:', err.message);
+            return 'Error consultando rutero.';
+        }
+    }
+
+    if (intentPatterns.pedido.test(msg) && orderNumber) {
+        const ownerClient = await pedidosTools.resolveOrderClientCode(conn, orderNumber);
+        if (!ownerClient) return `Pedido ${orderNumber} no encontrado.`;
+        const deniedOrder = await denyIfForbiddenClient(ownerClient);
+        if (deniedOrder) return deniedOrder;
+        try {
+            const order = await pedidosTools.getOrderDetails(
+                conn, orderNumber, userCode, isJefeVentas, vendorScope
+            );
+            if (order.error) return order.error;
+            const lines = (order.lines || []).slice(0, 10).map((line) =>
+                `- ${line.description || line.productCode}: ${line.quantity} x ${line.unitPrice} EUR = ${line.amount} EUR`
+            ).join('\n');
+            const text = `**Pedido ${order.orderNumber}**
+- Cliente: ${order.clientCode}
+- Fecha: ${order.date || 'N/A'}
+- Estado: ${order.status}
+- Importe: **${order.amount.toLocaleString('es-ES')} EUR**
+- Lineas (${order.lineCount || 0}):
+${lines || '- Sin lineas'}`;
+            return reply(text, 'get_order_details', order);
+        } catch (err) {
+            logger.error('[CHATBOT] Order details error:', err.message);
+            return 'Error consultando pedido.';
+        }
+    }
+
     if (intentPatterns.pedido.test(msg) && clientCode) {
         const deniedPed = await denyIfForbiddenClient(clientCode);
         if (deniedPed) return deniedPed;
@@ -715,6 +1384,22 @@ ${lineList || '- Sin líneas'}`;
     }
 
     // ── COBROS ──
+    if (intentPatterns.pedido.test(msg) && !clientCode) {
+        try {
+            const result = await pedidosTools.getDailyOrders(
+                conn, userCode, isJefeVentas, undefined, codes.month, undefined, vendorScope
+            );
+            const text = `**Pedidos ${result.day}/${result.month}/${result.year}**
+- Pedidos: **${result.totalOrders}**
+- Clientes: **${result.totalClients}**
+- Importe: **${result.totalAmount.toLocaleString('es-ES')}€**`;
+            return reply(text, 'get_daily_orders', result);
+        } catch (err) {
+            logger.error('[CHATBOT] Daily orders error:', err.message);
+            return 'Error consultando pedidos del dia.';
+        }
+    }
+
     if (intentPatterns.cobro.test(msg) && clientCode) {
         const deniedCob = await denyIfForbiddenClient(clientCode);
         if (deniedCob) return deniedCob;
@@ -735,12 +1420,95 @@ ${lineList || '- Sin líneas'}`;
     }
 
     // ── BOLSA ──
+    if (intentPatterns.cobro.test(msg) && !clientCode) {
+        try {
+            const result = await cobrosTools.getCobrosSummary(
+                conn, userCode, isJefeVentas, codes.month, undefined, vendorScope
+            );
+            const text = `**Resumen cobros ${result.month}/${result.year}**
+- A cobrar: **${result.totalCollectable.toLocaleString('es-ES')}€**
+- Cobrado: **${result.totalCollected.toLocaleString('es-ES')}€**
+- Pendiente: **${result.totalPending.toLocaleString('es-ES')}€**
+- Avance: **${result.collectionPercent}%**`;
+            return reply(text, 'get_cobros_summary', result);
+        } catch (err) {
+            logger.error('[CHATBOT] Cobros summary error:', err.message);
+            return 'Error consultando resumen de cobros.';
+        }
+    }
+
+    if (intentPatterns.glacius.test(msg)) {
+        try {
+            const result = await summaryTools.getDailySummary(
+                conn, userCode, isJefeVentas, undefined, codes.month, undefined, vendorScope
+            );
+            const text = `**Glacius / Panel comercial ${result.day}/${result.month}/${result.year}**
+- Ventas: **${result.totalSales.toLocaleString('es-ES')} EUR**
+- Pedidos: **${result.totalOrders}**
+- Clientes: **${result.totalClients}**
+- Operaciones: **${result.totalOperations}**
+
+Desde aqui puedo ampliar con top clientes, pedidos, cobros, facturas o evolucion.`;
+            return reply(text, 'get_daily_summary', result, {
+                suggestedFollowUps: [
+                    'Top clientes del mes',
+                    'Pedidos hoy',
+                    'Cobros pendientes',
+                    'Evolucion ventas',
+                ],
+            });
+        } catch (err) {
+            logger.error('[CHATBOT] Glacius summary error:', err.message);
+            return 'Error consultando Glacius.';
+        }
+    }
+
+    if (intentPatterns.resumen.test(msg)) {
+        try {
+            const result = await summaryTools.getDailySummary(
+                conn, userCode, isJefeVentas, undefined, codes.month, undefined, vendorScope
+            );
+            const text = `**Resumen comercial ${result.day}/${result.month}/${result.year}**
+- Ventas: **${result.totalSales.toLocaleString('es-ES')}€**
+- Pedidos: **${result.totalOrders}**
+- Clientes: **${result.totalClients}**
+- Operaciones: **${result.totalOperations}**`;
+            return reply(text, 'get_daily_summary', result);
+        } catch (err) {
+            logger.error('[CHATBOT] Daily summary error:', err.message);
+            return 'Error consultando resumen comercial.';
+        }
+    }
+
     if (intentPatterns.bolsa.test(msg)) {
         try {
+            if (/movimientos?|detalle|uso|usos|operaciones/i.test(msg)) {
+                const result = await bolsaTools.getBolsaMovements(conn, userCode, codes.month, undefined, 20);
+                const list = (result.movements || []).slice(0, 12).map((movement) =>
+                    `- ${movement.fecha || 'sin fecha'}: ${movement.tipo} ${movement.importe.toLocaleString('es-ES')} EUR (${movement.descripcion || movement.codigoArticulo || 'sin descripcion'})`
+                ).join('\n');
+                return reply(`**Movimientos bolsa ${result.month}/${result.year}**\n${list || 'Sin movimientos de bolsa.'}`, 'get_bolsa_movements', result);
+            }
+
+            if (/historial|evolucion|evoluci[oó]n|ultim|meses/i.test(msg)) {
+                const months = Math.min(Math.max(parseInt((msg.match(/\b(\d{1,2})\s+meses\b/) || [])[1], 10) || 12, 1), 12);
+                const result = await bolsaTools.getBolsaHistory(conn, userCode, months);
+                const list = (result.points || []).map((point) =>
+                    `- ${point.mes}/${point.ejercicio}: acumulado ${point.acumulado.toLocaleString('es-ES')} EUR, consumido ${point.consumido.toLocaleString('es-ES')} EUR`
+                ).join('\n');
+                return reply(`**Historial bolsa ${months} meses**
+- Acumulado: **${result.totals.acumulado.toLocaleString('es-ES')} EUR**
+- Consumido: **${result.totals.consumido.toLocaleString('es-ES')} EUR**
+- Saldo neto: **${result.totals.saldoNeto.toLocaleString('es-ES')} EUR**
+
+${list}`, 'get_bolsa_history', result);
+            }
+
             const bolsa = await bolsaTools.getBolsaStatus(conn, userCode, codes.month, undefined);
             if (!bolsa) return 'Sin datos de bolsa comercial.';
-            return `**Bolsa comercial ${bolsa.month}/${bolsa.year}**
-Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')}€** | Consumido: ${bolsa.consumido.toLocaleString('es-ES')}€ | Acumulado: ${bolsa.acumulado.toLocaleString('es-ES')}€`;
+            const text = `**Bolsa comercial ${bolsa.month}/${bolsa.year}**
+Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')} EUR** | Consumido: ${bolsa.consumido.toLocaleString('es-ES')} EUR | Acumulado: ${bolsa.acumulado.toLocaleString('es-ES')} EUR`;
+            return reply(text, 'get_bolsa_status', bolsa);
         } catch (err) {
             logger.error('[CHATBOT] Bolsa error:', err.message);
             return 'Error consultando bolsa.';
@@ -758,7 +1526,7 @@ Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')}€** | Cons
             const list = monthly.slice(-12).map((e) =>
                 `- ${e.period}: ${e.totalVentas.toLocaleString('es-ES')}€ (margen ${e.margenPct}%)`
             ).join('\n');
-            return `**Evolución ventas (12 meses):**\n${list}`;
+            return reply(`**Evolución ventas (12 meses):**\n${list}`, 'get_sales_evolution', evo);
         } catch (err) {
             logger.error('[CHATBOT] Evolution error:', err.message);
             return 'Error consultando evolución.';
@@ -766,15 +1534,31 @@ Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')}€** | Cons
     }
 
     // ── DEFAULT ──
-    return `Consulta no reconocida.
+    return reply(`No he podido encajar la consulta con seguridad, pero puedo seguir si me das una pista mas concreta.
 
-Ejemplos validos:
-- "Mis comisiones" | "Deuda cliente 12345"
-- "Precio producto ABC" | "Stock producto XYZ"
-- "Margen global" | "Objetivo mes"
-- "Cobros pendientes" | "Facturas cliente 12345"
+Puedes preguntarme de forma natural por:
+- Clientes: deuda, facturas, pedidos, riesgo, ventas, productos comprados.
+- Rutero/repartidor: ruta de hoy, entregas, cobros y comision de reparto.
+- Comisiones: mes, acumulado entre meses, detalle y reglas de calculo.
+- Objetivos: objetivo del mes, acumulado, familias y cuanto falta.
+- Facturas/PDF: busca una factura, abre el PDF y extrae lineas, importes o vencimientos.
+- Glacius/bolsa/almacen: resumen diario, movimientos, camiones, carga y KPIs.
 
-Escribe "ayuda" para lista completa.`;
+Ejemplos:
+- "comision acumulada de enero a marzo"
+- "objetivo ultimos 3 meses"
+- "facturas del cliente Central Hoteles"
+- "lee la factura F/100/2026"
+- "mi ruta hoy y cobros pendientes"`, null, null, {
+        deepLink: { tab: 'Chat IA' },
+        suggestedFollowUps: [
+            'Que puedes hacer por pestanas',
+            'Comision acumulada ultimos 3 meses',
+            'Objetivo acumulado enero a marzo',
+            'Resumen Glacius hoy',
+            'Mi ruta hoy y cobros del repartidor',
+        ],
+    });
 }
 
 module.exports = { handleChatMessage };

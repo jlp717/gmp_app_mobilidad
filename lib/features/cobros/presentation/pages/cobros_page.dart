@@ -218,7 +218,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   void _onSearchChanged(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     _debounceTimer =
-        Timer(const Duration(milliseconds: 500), () => _loadClients(query));
+        Timer(const Duration(milliseconds: 250), () => _loadClients(query));
   }
 
   Future<void> _onRefresh() async {

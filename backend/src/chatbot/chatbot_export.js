@@ -12,6 +12,16 @@ function euro(n) {
     return v.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function moneyNumber(value) {
+    if (typeof value === 'number') return value;
+    const raw = String(value ?? '')
+        .replace(/[^\d,.-]+/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function pct(n) {
     const v = Number(n);
     if (!Number.isFinite(v)) return 'N/A';
@@ -24,6 +34,34 @@ function trendFromDelta(n) {
     return v > 0 ? 'up' : 'down';
 }
 
+function safeFileName(value) {
+    return String(value || 'documento')
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, '-')
+        .slice(0, 80);
+}
+
+function buildInvoicePdfDocument(result) {
+    if (!result) return null;
+    const invoiceNumber = result.invoiceNumber || [
+        result.serie,
+        result.numero,
+        result.ejercicio,
+    ].filter((part) => part !== undefined && part !== null && String(part).trim() !== '').join('/');
+    let url = result.pdfPath;
+    if (!url && result.serie && result.numero && result.ejercicio) {
+        url = `/api/facturas/${result.serie}/${result.numero}/${result.ejercicio}/pdf`;
+    }
+    if (!url) return null;
+    return {
+        title: `Factura ${invoiceNumber}`,
+        url,
+        type: 'pdf',
+        fileName: `factura-${safeFileName(invoiceNumber)}.pdf`,
+        clientCode: result.clientCode,
+    };
+}
+
 function mergeMetadata(parts) {
     const merged = {
         exportable: null,
@@ -31,6 +69,7 @@ function mergeMetadata(parts) {
         suggestedFollowUps: [],
         deepLink: null,
         chartData: null,
+        documents: [],
     };
 
     for (const part of parts) {
@@ -42,10 +81,18 @@ function mergeMetadata(parts) {
         }
         if (part.deepLink) merged.deepLink = part.deepLink;
         if (part.chartData?.length) merged.chartData = part.chartData;
+        if (part.documents?.length) merged.documents.push(...part.documents);
     }
 
     merged.kpis = merged.kpis.slice(0, 6);
     merged.suggestedFollowUps = [...new Set(merged.suggestedFollowUps)].slice(0, 5);
+    const seenDocs = new Set();
+    merged.documents = merged.documents.filter((doc) => {
+        const key = doc?.url || doc?.path || doc?.title;
+        if (!key || seenDocs.has(key)) return false;
+        seenDocs.add(key);
+        return true;
+    }).slice(0, 5);
     return merged;
 }
 
@@ -79,6 +126,56 @@ function buildToolMetadata(toolName, result) {
                 deepLink: { tab: 'Comisiones' },
             };
 
+        case 'get_commissions_range':
+            if (!result.months?.length) return null;
+            return {
+                exportable: {
+                    headers: ['Mes', 'Ventas', 'Comision', '% medio', 'Operaciones'],
+                    rows: result.months.map((row) => [
+                        row.label || `${row.month}/${row.year}`,
+                        `${euro(row.sales)} EUR`,
+                        `${euro(row.commission)} EUR`,
+                        `${row.commissionPercent ?? ''}%`,
+                        String(row.operations ?? ''),
+                    ]),
+                    filename: 'comisiones-acumuladas.csv',
+                },
+                kpis: [
+                    { label: 'Comision total', value: `${euro(result.totalCommission)} EUR`, trend: 'neutral' },
+                    { label: 'Ventas', value: `${euro(result.totalSales)} EUR`, trend: 'neutral' },
+                    { label: '% medio', value: `${result.averageCommissionPercent}%`, trend: 'neutral' },
+                ],
+                chartData: result.months.map((row) => ({
+                    label: row.label || `${row.month}/${row.year}`,
+                    value: Number(row.commission) || 0,
+                })),
+                suggestedFollowUps: [
+                    'Objetivo acumulado mismo periodo',
+                    'Desglose comision por cliente',
+                    'Exportar CSV',
+                ],
+                deepLink: { tab: 'Comisiones' },
+            };
+
+        case 'get_commission_config':
+            return {
+                exportable: {
+                    headers: ['Tramo minimo', 'Tramo maximo', 'Porcentaje'],
+                    rows: (result.tiers || []).map((tier) => [
+                        `${tier.min}%`,
+                        `${tier.max}%`,
+                        `${tier.pct}%`,
+                    ]),
+                    filename: 'configuracion-comisiones.csv',
+                },
+                kpis: [
+                    { label: 'IPC/base', value: `${result.ipc}%`, trend: 'neutral' },
+                    { label: 'Tramos', value: String((result.tiers || []).length), trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Mi comision del mes', 'Comision acumulada ultimos 3 meses'],
+                deepLink: { tab: 'Comisiones' },
+            };
+
         case 'get_objectives':
             return {
                 exportable: {
@@ -99,6 +196,37 @@ function buildToolMetadata(toolName, result) {
                     'Objetivos por familia',
                     'Top clientes del mes',
                     'Comparar con ano anterior',
+                ],
+                deepLink: { tab: 'Objetivos' },
+            };
+
+        case 'get_objectives_range':
+            if (!result.months?.length) return null;
+            return {
+                exportable: {
+                    headers: ['Mes', 'Objetivo', 'Alcanzado', 'Pendiente', 'Cumplimiento %'],
+                    rows: result.months.map((row) => [
+                        row.label || `${row.month}/${row.year}`,
+                        `${euro(row.target)} EUR`,
+                        `${euro(row.achieved)} EUR`,
+                        `${euro(row.remaining)} EUR`,
+                        `${row.achievementPercent}%`,
+                    ]),
+                    filename: 'objetivos-acumulados.csv',
+                },
+                kpis: [
+                    { label: 'Cumplimiento', value: `${result.achievementPercent}%`, trend: result.achievementPercent >= 100 ? 'up' : 'down' },
+                    { label: 'Alcanzado', value: `${euro(result.totalAchieved)} EUR`, trend: 'neutral' },
+                    { label: 'Objetivo', value: `${euro(result.totalTarget)} EUR`, trend: 'neutral' },
+                ],
+                chartData: result.months.map((row) => ({
+                    label: row.label || `${row.month}/${row.year}`,
+                    value: Number(row.achieved) || 0,
+                })),
+                suggestedFollowUps: [
+                    'Comision acumulada mismo periodo',
+                    'Objetivos por familia',
+                    'Top clientes del periodo',
                 ],
                 deepLink: { tab: 'Objetivos' },
             };
@@ -255,8 +383,9 @@ function buildToolMetadata(toolName, result) {
             };
         }
 
-        case 'get_invoice_details':
+        case 'get_invoice_details': {
             if (!result.invoiceNumber) return null;
+            const document = buildInvoicePdfDocument(result);
             return {
                 exportable: {
                     headers: ['Producto', 'Descripcion', 'Cantidad', 'Importe'],
@@ -278,7 +407,112 @@ function buildToolMetadata(toolName, result) {
                     'Deuda del cliente',
                     'Exportar CSV',
                 ],
+                documents: document ? [document] : [],
                 deepLink: { tab: 'Facturas', clientCode: result.clientCode },
+            };
+        }
+
+        case 'extract_pdf_content': {
+            const document = buildInvoicePdfDocument(result);
+            return {
+                exportable: result.structured?.lines?.length ? {
+                    headers: ['Producto', 'Descripcion', 'Cantidad', 'Precio', 'Importe'],
+                    rows: result.structured.lines.map((line) => [
+                        line.productCode || '',
+                        line.description || '',
+                        String(line.quantity ?? ''),
+                        `${euro(line.unitPrice)}€`,
+                        `${euro(line.amount)}€`,
+                    ]),
+                    filename: `${safeFileName(result.documentType)}-${safeFileName(result.reference)}.csv`,
+                } : null,
+                kpis: [
+                    { label: 'Importe', value: `${euro(result.amount)}€`, trend: 'neutral' },
+                    { label: 'Lineas', value: String(result.structured?.lineCount ?? result.structured?.lines?.length ?? 0), trend: 'neutral' },
+                    { label: 'PDF', value: result.extractionMethod || 'DB2', trend: 'neutral' },
+                ],
+                suggestedFollowUps: [
+                    'Deuda del cliente',
+                    'Albaranes de esta factura',
+                    'Exportar CSV',
+                ],
+                documents: document ? [document] : [],
+                deepLink: { tab: 'Facturas', clientCode: result.clientCode },
+            };
+        }
+
+        case 'get_client_invoices':
+            if (!result.invoices?.length) return null;
+            return {
+                exportable: {
+                    headers: ['Factura', 'Importe', 'Vencimiento', 'Estado'],
+                    rows: result.invoices.map((inv) => [
+                        inv.number,
+                        `${euro(inv.amount)}€`,
+                        inv.dueDate || '',
+                        inv.status || '',
+                    ]),
+                    filename: `facturas-cliente-${safeFileName(result.clientCode)}.csv`,
+                },
+                kpis: [
+                    { label: 'Pendiente', value: `${euro(result.totalAmount)}€`, trend: result.totalAmount > 0 ? 'down' : 'up' },
+                    { label: 'Facturas', value: String(result.invoices.length), trend: 'neutral' },
+                ],
+                suggestedFollowUps: [
+                    'Deuda del cliente',
+                    'Leer una factura concreta',
+                    'Cobros pendientes del cliente',
+                ],
+                deepLink: { tab: 'Facturas', clientCode: result.clientCode },
+            };
+
+        case 'get_cobros_summary':
+            return {
+                exportable: {
+                    headers: ['Concepto', 'Valor'],
+                    rows: [
+                        ['A cobrar', `${euro(result.totalCollectable)}€`],
+                        ['Cobrado', `${euro(result.totalCollected)}€`],
+                        ['Pendiente', `${euro(result.totalPending)}€`],
+                        ['% cobro', `${result.collectionPercent}%`],
+                    ],
+                    filename: `cobros-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Cobrado', value: `${euro(result.totalCollected)}€`, trend: 'up' },
+                    { label: 'Pendiente', value: `${euro(result.totalPending)}€`, trend: result.totalPending > 0 ? 'down' : 'up' },
+                    { label: '% cobro', value: `${result.collectionPercent}%`, trend: result.collectionPercent >= 80 ? 'up' : 'down' },
+                ],
+                suggestedFollowUps: [
+                    'Clientes con deuda vencida',
+                    'Facturas pendientes',
+                    'Resumen del dia',
+                ],
+                deepLink: { tab: 'Cobros' },
+            };
+
+        case 'get_daily_orders':
+            return {
+                exportable: {
+                    headers: ['Concepto', 'Valor'],
+                    rows: [
+                        ['Pedidos', String(result.totalOrders ?? 0)],
+                        ['Clientes', String(result.totalClients ?? 0)],
+                        ['Importe', `${euro(result.totalAmount)}€`],
+                    ],
+                    filename: `pedidos-${result.day}-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Pedidos', value: String(result.totalOrders ?? 0), trend: 'neutral' },
+                    { label: 'Clientes', value: String(result.totalClients ?? 0), trend: 'neutral' },
+                    { label: 'Importe', value: `${euro(result.totalAmount)}€`, trend: 'neutral' },
+                ],
+                suggestedFollowUps: [
+                    'Resumen comercial del dia',
+                    'Pedidos de un cliente',
+                    'Stock producto',
+                ],
+                deepLink: { tab: 'Pedidos' },
             };
 
         case 'compare_sales_yoy': {
@@ -361,6 +595,58 @@ function buildToolMetadata(toolName, result) {
                 deepLink: { tab: 'Clientes' },
             };
 
+        case 'get_top_products':
+            if (!result.products?.length) return null;
+            return {
+                exportable: {
+                    headers: ['#', 'Producto', 'Ventas', 'Unidades'],
+                    rows: result.products.map((p, i) => [
+                        String(i + 1),
+                        p.name || p.productCode,
+                        `${euro(p.sales)} EUR`,
+                        String(p.quantity ?? ''),
+                    ]),
+                    filename: 'top-productos.csv',
+                },
+                kpis: [
+                    { label: 'Top producto', value: `${euro(result.products[0]?.sales)} EUR`, trend: 'up' },
+                    { label: 'Productos', value: String(result.products.length), trend: 'neutral' },
+                ],
+                chartData: result.products.slice(0, 8).map((p) => ({
+                    label: p.name || p.productCode,
+                    value: Number(p.sales) || 0,
+                })),
+                suggestedFollowUps: ['Buscar producto', 'Stock producto', 'Top clientes'],
+                deepLink: { tab: 'Clientes' },
+            };
+
+        case 'get_top_products_by_client':
+            if (!result.products?.length) return null;
+            return {
+                exportable: {
+                    headers: ['#', 'Producto', 'Familia', 'Ventas', 'Unidades', 'Precio medio'],
+                    rows: result.products.map((p, i) => [
+                        String(i + 1),
+                        p.name || p.code,
+                        p.family || '',
+                        `${euro(p.totalSales)} EUR`,
+                        String(p.totalUnits ?? ''),
+                        `${euro(p.avgPrice)} EUR`,
+                    ]),
+                    filename: `top-productos-cliente-${safeFileName(result.clientCode)}.csv`,
+                },
+                kpis: [
+                    { label: 'Top producto', value: `${euro(result.products[0]?.totalSales)} EUR`, trend: 'up' },
+                    { label: 'Productos', value: String(result.products.length), trend: 'neutral' },
+                ],
+                chartData: result.products.slice(0, 8).map((p) => ({
+                    label: p.name || p.code,
+                    value: Number(p.totalSales) || 0,
+                })),
+                suggestedFollowUps: ['Ventas mensuales del cliente', 'Deuda del cliente', 'Facturas del cliente'],
+                deepLink: { tab: 'Clientes', clientCode: result.clientCode },
+            };
+
         case 'get_commission_details':
             if (!result.details?.length) return null;
             return {
@@ -381,8 +667,8 @@ function buildToolMetadata(toolName, result) {
                 exportable: {
                     headers: ['Ano', 'Ventas', 'Margen'],
                     rows: [
-                        [String(result.currentYear?.year), `${euro(result.currentYear?.sales)}€`, `${result.currentYear?.margin}%`],
-                        [String(result.lastYear?.year), `${euro(result.lastYear?.sales)}€`, `${result.lastYear?.margin}%`],
+                        [String(result.currentYear?.year), `${euro(moneyNumber(result.currentYear?.sales))} EUR`, String(result.currentYear?.margin || '')],
+                        [String(result.lastYear?.year), `${euro(moneyNumber(result.lastYear?.sales))} EUR`, String(result.lastYear?.margin || '')],
                         ['Crecimiento', pct(result.growth?.salesPercent), ''],
                     ],
                     filename: 'comparativa-yoy.csv',
@@ -391,8 +677,8 @@ function buildToolMetadata(toolName, result) {
                     { label: 'Crecimiento', value: pct(result.growth?.salesPercent), delta: pct(result.growth?.salesPercent), trend: trendFromDelta(result.growth?.salesPercent) },
                 ],
                 chartData: [
-                    { label: String(result.lastYear?.year), value: Number(result.lastYear?.sales) || 0 },
-                    { label: String(result.currentYear?.year), value: Number(result.currentYear?.sales) || 0 },
+                    { label: String(result.lastYear?.year), value: moneyNumber(result.lastYear?.sales) },
+                    { label: String(result.currentYear?.year), value: moneyNumber(result.currentYear?.sales) },
                 ],
                 suggestedFollowUps: ['Comparar por cliente', 'Ver evolucion mensual'],
                 deepLink: { tab: 'Clientes' },
@@ -420,6 +706,245 @@ function buildToolMetadata(toolName, result) {
                     'Evaluar cliente completo',
                 ],
                 deepLink: { tab: 'Clientes', clientCode: result.clientCode },
+            };
+
+        case 'get_price_sold_to_client':
+            if (!result.sales?.length) return null;
+            return {
+                exportable: {
+                    headers: ['Fecha', 'Precio', 'Cantidad', 'Importe', 'Pedido'],
+                    rows: result.sales.map((sale) => [
+                        sale.date || '',
+                        `${euro(sale.price)} EUR`,
+                        String(sale.quantity ?? ''),
+                        `${euro(sale.amount)} EUR`,
+                        sale.orderNumber || '',
+                    ]),
+                    filename: `precio-cliente-${safeFileName(result.clientCode)}-${safeFileName(result.productCode)}.csv`,
+                },
+                kpis: [
+                    { label: 'Ultimo precio', value: `${euro(result.sales[0]?.price)} EUR`, trend: 'neutral' },
+                    { label: 'Ventas encontradas', value: String(result.sales.length), trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Stock producto', 'Margen cliente', 'Compras del cliente'],
+                deepLink: { tab: 'Clientes', clientCode: result.clientCode },
+            };
+
+        case 'get_order_details':
+            return {
+                exportable: {
+                    headers: ['Producto', 'Descripcion', 'Cantidad', 'Precio', 'Importe'],
+                    rows: (result.lines || []).map((line) => [
+                        line.productCode || '',
+                        line.description || '',
+                        String(line.quantity ?? ''),
+                        `${euro(line.unitPrice)} EUR`,
+                        `${euro(line.amount)} EUR`,
+                    ]),
+                    filename: `pedido-${safeFileName(result.orderNumber)}.csv`,
+                },
+                kpis: [
+                    { label: 'Importe', value: `${euro(result.amount)} EUR`, trend: 'neutral' },
+                    { label: 'Lineas', value: String(result.lineCount ?? (result.lines || []).length), trend: 'neutral' },
+                    { label: 'Estado', value: result.status || 'N/A', trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Facturas del cliente', 'Deuda del cliente', 'Top productos del cliente'],
+                deepLink: { tab: 'Pedidos', clientCode: result.clientCode },
+            };
+
+        case 'get_bolsa_status':
+            return {
+                exportable: {
+                    headers: ['Concepto', 'Valor'],
+                    rows: [
+                        ['Saldo disponible', `${euro(result.saldoDisponible)} EUR`],
+                        ['Consumido', `${euro(result.consumido)} EUR`],
+                        ['Acumulado', `${euro(result.acumulado)} EUR`],
+                        ['Limite %', `${result.limitePct ?? ''}%`],
+                    ],
+                    filename: `bolsa-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Disponible', value: `${euro(result.saldoDisponible)} EUR`, trend: result.saldoDisponible >= 0 ? 'up' : 'down' },
+                    { label: 'Consumido', value: `${euro(result.consumido)} EUR`, trend: 'neutral' },
+                    { label: 'Acumulado', value: `${euro(result.acumulado)} EUR`, trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Movimientos bolsa', 'Historial bolsa 6 meses'],
+                deepLink: { tab: 'Bolsa' },
+            };
+
+        case 'get_bolsa_movements':
+            return {
+                exportable: {
+                    headers: ['Fecha', 'Tipo', 'Importe', 'Saldo anterior', 'Saldo posterior', 'Descripcion'],
+                    rows: (result.movements || []).map((m) => [
+                        String(m.fecha || ''),
+                        m.tipo || '',
+                        `${euro(m.importe)} EUR`,
+                        `${euro(m.saldoAnterior)} EUR`,
+                        `${euro(m.saldoPosterior)} EUR`,
+                        m.descripcion || m.codigoArticulo || '',
+                    ]),
+                    filename: `movimientos-bolsa-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Movimientos', value: String((result.movements || []).length), trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Saldo bolsa', 'Historial bolsa'],
+                deepLink: { tab: 'Bolsa' },
+            };
+
+        case 'get_bolsa_history':
+            return {
+                exportable: {
+                    headers: ['Mes', 'Acumulado', 'Consumido', 'Disponible'],
+                    rows: (result.points || []).map((p) => [
+                        `${p.mes}/${p.ejercicio}`,
+                        `${euro(p.acumulado)} EUR`,
+                        `${euro(p.consumido)} EUR`,
+                        `${euro(p.saldoDisponible)} EUR`,
+                    ]),
+                    filename: 'historial-bolsa.csv',
+                },
+                kpis: [
+                    { label: 'Acumulado', value: `${euro(result.totals?.acumulado)} EUR`, trend: 'neutral' },
+                    { label: 'Consumido', value: `${euro(result.totals?.consumido)} EUR`, trend: 'neutral' },
+                    { label: 'Saldo neto', value: `${euro(result.totals?.saldoNeto)} EUR`, trend: result.totals?.saldoNeto >= 0 ? 'up' : 'down' },
+                ],
+                chartData: (result.points || []).map((p) => ({
+                    label: `${p.mes}/${p.ejercicio}`,
+                    value: Number(p.acumulado) || 0,
+                })),
+                suggestedFollowUps: ['Movimientos bolsa', 'Saldo bolsa'],
+                deepLink: { tab: 'Bolsa' },
+            };
+
+        case 'get_repartidor_deliveries':
+            return {
+                exportable: {
+                    headers: ['Concepto', 'Valor'],
+                    rows: [
+                        ['Entregas', String(result.totalDeliveries ?? 0)],
+                        ['Lineas', String(result.totalLines ?? 0)],
+                        ['Completadas', String(result.completed ?? 0)],
+                        ['Pendientes', String(result.pending ?? 0)],
+                    ],
+                    filename: `ruta-${result.day}-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Entregas', value: String(result.totalDeliveries ?? 0), trend: 'neutral' },
+                    { label: 'Lineas', value: String(result.totalLines ?? 0), trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Cobros repartidor', 'Comision repartidor'],
+                deepLink: { tab: 'Ruta' },
+            };
+
+        case 'get_repartidor_collections':
+            return {
+                exportable: {
+                    headers: ['Cliente', 'A cobrar', 'Cobrado', '%', 'Documentos'],
+                    rows: (result.clients || []).map((c) => [
+                        c.clientName || c.clientCode,
+                        `${euro(c.collectable)} EUR`,
+                        `${euro(c.collected)} EUR`,
+                        `${c.percentage}%`,
+                        String(c.numDocuments ?? ''),
+                    ]),
+                    filename: `cobros-repartidor-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Cobrado', value: `${euro(result.summary?.totalCollected)} EUR`, trend: 'up' },
+                    { label: 'Avance', value: `${result.summary?.overallPercentage ?? 0}%`, trend: (result.summary?.overallPercentage ?? 0) >= 80 ? 'up' : 'down' },
+                ],
+                suggestedFollowUps: ['Comision repartidor', 'Ruta hoy'],
+                deepLink: { tab: 'Rutero' },
+            };
+
+        case 'get_repartidor_commissions':
+            return {
+                exportable: {
+                    headers: ['Concepto', 'Valor'],
+                    rows: [
+                        ['Cobrado', `${euro(result.collected)} EUR`],
+                        ['A cobrar', `${euro(result.collectable)} EUR`],
+                        ['Porcentaje', `${result.percentage}%`],
+                        ['Comision', `${euro(result.commission)} EUR`],
+                        ['Umbral cumplido', result.thresholdMet ? 'SI' : 'NO'],
+                    ],
+                    filename: `comision-repartidor-${result.month}-${result.year}.csv`,
+                },
+                kpis: [
+                    { label: 'Comision', value: `${euro(result.commission)} EUR`, trend: result.thresholdMet ? 'up' : 'down' },
+                    { label: 'Avance', value: `${result.percentage}%`, trend: result.thresholdMet ? 'up' : 'down' },
+                ],
+                suggestedFollowUps: ['Cobros repartidor', 'Ruta hoy'],
+                deepLink: { tab: 'Comisiones' },
+            };
+
+        case 'get_warehouse_dashboard':
+            return {
+                exportable: {
+                    headers: ['Vehiculo', 'Matricula', 'Repartidor', 'Ordenes', 'Lineas'],
+                    rows: (result.trucks || []).map((truck) => [
+                        truck.vehicleCode,
+                        truck.matricula || '',
+                        truck.driverName || truck.driverCode || '',
+                        String(truck.orderCount ?? 0),
+                        String(truck.lineCount ?? 0),
+                    ]),
+                    filename: 'almacen-carga.csv',
+                },
+                kpis: [
+                    { label: 'Camiones', value: String(result.totalTrucks ?? 0), trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Vehiculos almacen', 'Ruta hoy'],
+                deepLink: { tab: 'Expediciones' },
+            };
+
+        case 'get_vehicles':
+            return {
+                exportable: {
+                    headers: ['Codigo', 'Descripcion', 'Matricula', 'Carga kg', 'Palets'],
+                    rows: (result.vehicles || []).map((vehicle) => [
+                        vehicle.code,
+                        vehicle.description || '',
+                        vehicle.matricula || '',
+                        String(vehicle.maxPayloadKg ?? ''),
+                        String(vehicle.numPalets ?? ''),
+                    ]),
+                    filename: 'vehiculos.csv',
+                },
+                kpis: [
+                    { label: 'Vehiculos', value: String((result.vehicles || []).length), trend: 'neutral' },
+                ],
+                suggestedFollowUps: ['Carga almacen hoy'],
+                deepLink: { tab: 'Vehiculos' },
+            };
+
+        case 'get_sales_evolution':
+            if (!result.monthly?.length) return null;
+            return {
+                exportable: {
+                    headers: ['Periodo', 'Ventas', 'Coste', 'Margen', '% margen'],
+                    rows: result.monthly.map((row) => [
+                        row.period,
+                        `${euro(row.totalVentas)} EUR`,
+                        `${euro(row.totalCosto)} EUR`,
+                        `${euro(row.totalMargen)} EUR`,
+                        `${row.margenPct}%`,
+                    ]),
+                    filename: 'evolucion-ventas.csv',
+                },
+                kpis: [
+                    { label: 'YTD ventas', value: `${euro(result.summary?.ytdVentas)} EUR`, trend: 'neutral' },
+                    { label: 'YoY', value: pct(result.summary?.yoyChange), trend: trendFromDelta(result.summary?.yoyChange) },
+                ],
+                chartData: result.monthly.slice(-12).map((row) => ({
+                    label: row.period,
+                    value: Number(row.totalVentas) || 0,
+                })),
+                suggestedFollowUps: ['Top clientes', 'Top productos', 'Comparativa anual'],
+                deepLink: { tab: 'Objetivos' },
             };
 
         default:

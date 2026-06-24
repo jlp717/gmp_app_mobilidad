@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
@@ -22,9 +24,11 @@ class _FilterBarState extends State<FilterBar> {
   String? _activeProductCode;
   String? _activeProductName;
   String? _activeClientName;
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _productCodeController.dispose();
     _productNameController.dispose();
     _clientNameController.dispose();
@@ -42,26 +46,31 @@ class _FilterBarState extends State<FilterBar> {
         ? null
         : _clientNameController.text.trim();
 
-    if (productCode != _activeProductCode ||
-        productName != _activeProductName ||
-        clientName != _activeClientName) {
-      setState(() {
-        _activeProductCode = productCode;
-        _activeProductName = productName;
-        _activeClientName = clientName;
-      });
-
-      // Debounce: wait 500ms before applying
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (productCode == _productCodeController.text.trim() ||
-            _productCodeController.text.trim().isEmpty) {
-          widget.onFiltersChanged(productCode, productName, clientName);
-        }
-      });
+    if (productCode == _activeProductCode &&
+        productName == _activeProductName &&
+        clientName == _activeClientName) {
+      return;
     }
+
+    setState(() {
+      _activeProductCode = productCode;
+      _activeProductName = productName;
+      _activeClientName = clientName;
+    });
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      widget.onFiltersChanged(
+        _activeProductCode,
+        _activeProductName,
+        _activeClientName,
+      );
+    });
   }
 
   void _clearAll() {
+    _debounce?.cancel();
     _productCodeController.clear();
     _productNameController.clear();
     _clientNameController.clear();

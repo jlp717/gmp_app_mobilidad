@@ -27,6 +27,9 @@ router.post('/message', verifyToken, async (req, res) => {
       message,
       user: req.user || {},
       clientCode: req.body?.clientCode,
+      conversationHistory: Array.isArray(req.body?.conversationHistory)
+        ? req.body.conversationHistory
+        : [],
     });
 
     res.json(result);

@@ -2313,12 +2313,30 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             provider.setOrderStatusFilter(status);
             unawaited(_loadOrdersWithFilters(provider));
           },
-          onDateFromChanged: (d) => setState(() => _orderDateFrom = d),
-          onDateToChanged: (d) => setState(() => _orderDateTo = d),
-          onMinAmountChanged: (v) => setState(() => _orderMinAmount = v),
-          onMaxAmountChanged: (v) => setState(() => _orderMaxAmount = v),
-          onSortByChanged: (v) => setState(() => _orderSortBy = v),
-          onSortOrderChanged: (v) => setState(() => _orderSortOrder = v),
+          onDateFromChanged: (d) {
+            setState(() => _orderDateFrom = d);
+            _debouncedLoadOrders(provider);
+          },
+          onDateToChanged: (d) {
+            setState(() => _orderDateTo = d);
+            _debouncedLoadOrders(provider);
+          },
+          onMinAmountChanged: (v) {
+            setState(() => _orderMinAmount = v);
+            _debouncedLoadOrders(provider);
+          },
+          onMaxAmountChanged: (v) {
+            setState(() => _orderMaxAmount = v);
+            _debouncedLoadOrders(provider);
+          },
+          onSortByChanged: (v) {
+            setState(() => _orderSortBy = v);
+            _debouncedLoadOrders(provider);
+          },
+          onSortOrderChanged: (v) {
+            setState(() => _orderSortOrder = v);
+            _debouncedLoadOrders(provider);
+          },
           onApplyAdvanced: () => unawaited(_loadOrdersWithFilters(provider)),
           onClearAll: () {
             setState(() {

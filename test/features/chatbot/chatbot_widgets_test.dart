@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_models.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_data_card.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_export_table.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_message_bubble.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_share_actions.dart';
 
 void main() {
@@ -107,12 +109,76 @@ void main() {
         ],
         'suggestedFollowUps': ['Exportar'],
         'deepLink': {'tab': 'Facturas', 'clientCode': 'C1'},
+        'documents': [
+          {
+            'title': 'Factura F/100/2026',
+            'url': '/api/facturas/F/100/2026/pdf',
+            'type': 'pdf',
+            'fileName': 'factura-F-100-2026.pdf',
+          },
+        ],
       });
 
       expect(meta.exportable?.filename, 'x.csv');
       expect(meta.kpis, hasLength(1));
       expect(meta.suggestedFollowUps, ['Exportar']);
       expect(meta.deepLink?.tab, 'Facturas');
+      expect(meta.documents, hasLength(1));
+      expect(meta.documents.first.url, '/api/facturas/F/100/2026/pdf');
+    });
+  });
+
+  group('ChatMessageBubble documents', () {
+    testWidgets('renders PDF action when metadata has documents',
+        (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatMessageBubble(
+                message: 'Factura lista',
+                isUser: false,
+                metadata: ChatResponseMetadata(
+                  documents: [
+                    ChatDocumentReference(
+                      title: 'Factura F/100/2026',
+                      url: '/api/facturas/F/100/2026/pdf',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('IA Comercial'), findsOneWidget);
+      expect(find.text('Ver PDF'), findsOneWidget);
+      expect(find.text('Factura F/100/2026'), findsOneWidget);
+      expect(find.text('Abrir'), findsOneWidget);
+      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsWidgets);
+    });
+
+    testWidgets('loading bubble renders analysis steps', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatMessageBubble(
+                message: '',
+                isUser: false,
+                isLoading: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Analizando consulta...'), findsOneWidget);
+      expect(find.text('Interpretando'), findsOneWidget);
+      expect(find.text('Permisos'), findsOneWidget);
+      expect(find.text('DB2'), findsOneWidget);
+      expect(find.text('Respuesta'), findsOneWidget);
     });
   });
 }
