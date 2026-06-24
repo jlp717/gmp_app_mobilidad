@@ -106,7 +106,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   void _onSearchChanged() {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 600), _refreshData);
+    _debounceTimer = Timer(const Duration(milliseconds: 250), _refreshData);
   }
 
   Future<void> _loadInitialData([bool showLoading = true]) async {
@@ -166,8 +166,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
-          clientSearch: _clientSearchController.text,
-          docSearch: _facturaSearchController.text,
+          clientSearch: _clientSearchController.text.trim(),
+          docSearch: _facturaSearchController.text.trim(),
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
         ),
@@ -175,8 +175,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
-          clientSearch: _clientSearchController.text,
-          docSearch: _facturaSearchController.text,
+          clientSearch: _clientSearchController.text.trim(),
+          docSearch: _facturaSearchController.text.trim(),
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
         ),
@@ -568,7 +568,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     if (_isLoading) return;
 
     try {
+      final generation = ++_loadGeneration;
       final codes = _vendedorCodes;
+      final clientSearch = _clientSearchController.text.trim();
+      final docSearch = _facturaSearchController.text.trim();
 
       debugPrint(
         '[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}',
@@ -579,8 +582,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
-          clientSearch: _clientSearchController.text,
-          docSearch: _facturaSearchController.text,
+          clientSearch: clientSearch,
+          docSearch: docSearch,
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
         ),
@@ -588,8 +591,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
-          clientSearch: _clientSearchController.text,
-          docSearch: _facturaSearchController.text,
+          clientSearch: clientSearch,
+          docSearch: docSearch,
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
         ),
@@ -599,7 +602,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         '[FACTURAS] Refresh complete. Found ${(results[0]! as List).length} facturas.',
       );
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
         _facturas = (results[0]! as List<Factura>)!;

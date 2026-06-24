@@ -45,6 +45,79 @@ function sortInvoiceRowsDesc(a, b) {
     return (parseInt(b.NUMERO, 10) || 0) - (parseInt(a.NUMERO, 10) || 0);
 }
 
+function normalizeSearchValue(value) {
+    return String(value || '')
+        .trim()
+        .replace(/[%_]/g, '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .slice(0, 80)
+        .toUpperCase();
+}
+
+function buildInvoiceClientSearchFilter(value) {
+    const term = normalizeSearchValue(value);
+    if (!term) return { clause: '', params: [] };
+
+    const prefix = `${term}%`;
+    if (/^\d+$/.test(term)) {
+        return {
+            clause: `AND (TRIM(CFC.CODIGOCLIENTE) LIKE ? OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?)`,
+            params: [prefix, prefix],
+        };
+    }
+
+    const textPattern = term.length < 3 ? prefix : `%${term}%`;
+    return {
+        clause: `AND (UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE ?
+                  OR UPPER(COALESCE(CLI.NOMBREALTERNATIVO, '')) LIKE ?
+                  OR UPPER(COALESCE(CLI.POBLACION, '')) LIKE ?
+                  OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?
+                  OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`,
+        params: [textPattern, textPattern, textPattern, prefix, prefix],
+    };
+}
+
+function buildInvoiceDocSearchFilter(value) {
+    const term = normalizeSearchValue(value);
+    if (!term) return { clause: '', params: [] };
+
+    const prefix = `${term}%`;
+    if (/^\d+$/.test(term)) {
+        return {
+            clause: `AND (CFC.NUMEROFACTURA = ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ? OR UPPER(TRIM(CFC.SERIEFACTURA)) LIKE ?)`,
+            params: [Number.parseInt(term, 10), prefix, prefix],
+        };
+    }
+
+    return {
+        clause: `AND (UPPER(TRIM(CFC.SERIEFACTURA)) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`,
+        params: [prefix, prefix],
+    };
+}
+
+function buildInvoiceSearchFilter(value) {
+    const term = normalizeSearchValue(value);
+    if (!term) return { clause: '', params: [] };
+
+    const prefix = `${term}%`;
+    if (/^\d+$/.test(term)) {
+        return {
+            clause: `AND (CFC.NUMEROFACTURA = ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ? OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?)`,
+            params: [Number.parseInt(term, 10), prefix, prefix],
+        };
+    }
+
+    const textPattern = term.length < 3 ? prefix : `%${term}%`;
+    return {
+        clause: `AND (UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE ?
+                  OR UPPER(COALESCE(CLI.NOMBREALTERNATIVO, '')) LIKE ?
+                  OR UPPER(COALESCE(CLI.POBLACION, '')) LIKE ?
+                  OR UPPER(TRIM(CFC.SERIEFACTURA)) LIKE ?
+                  OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`,
+        params: [textPattern, textPattern, textPattern, prefix, prefix],
+    };
+}
+
 async function mapWithConcurrency(items, concurrency, mapper) {
     const results = new Array(items.length);
     let next = 0;
@@ -174,37 +247,17 @@ class FacturasService {
                 queryParams.push(clientId.trim());
             }
 
-            if (clientSearch) {
-                const safeClientSearch = `%${clientSearch.toUpperCase()}%`;
-                sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ?)`;
-                queryParams.push(safeClientSearch, safeClientSearch);
-            }
+            const clientFilter = buildInvoiceClientSearchFilter(clientSearch);
+            sql += ` ${clientFilter.clause}`;
+            queryParams.push(...clientFilter.params);
 
-            if (docSearch) {
-                const safeDocSearch = `%${docSearch.toUpperCase()}%`;
-                const searchNum = parseFloat(docSearch);
-                const isNum = !isNaN(searchNum);
-                if (isNum) {
-                    sql += ` AND (TRIM(CFC.SERIEFACTURA) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ? OR CFC.NUMEROFACTURA = ?)`;
-                    queryParams.push(safeDocSearch, safeDocSearch, searchNum);
-                } else {
-                    sql += ` AND (TRIM(CFC.SERIEFACTURA) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`;
-                    queryParams.push(safeDocSearch, safeDocSearch);
-                }
-            }
+            const docFilter = buildInvoiceDocSearchFilter(docSearch);
+            sql += ` ${docFilter.clause}`;
+            queryParams.push(...docFilter.params);
 
-            if (search) {
-                const safeSearch = `%${search.toUpperCase()}%`;
-                const searchNum = parseFloat(search);
-                const isNum = !isNaN(searchNum);
-                if (isNum) {
-                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR CFC.NUMEROFACTURA = ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`;
-                    queryParams.push(safeSearch, safeSearch, searchNum, safeSearch);
-                } else {
-                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`;
-                    queryParams.push(safeSearch, safeSearch, safeSearch);
-                }
-            }
+            const genericFilter = buildInvoiceSearchFilter(search);
+            sql += ` ${genericFilter.clause}`;
+            queryParams.push(...genericFilter.params);
 
             sql += ` ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC
                      OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
@@ -330,13 +383,13 @@ class FacturasService {
     }
 
     async getSummary(params) {
-        const { vendedorCodes, year, month, dateFrom, dateTo } = params;
+        const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
         }
 
-        const cacheKey = `facturas:summary:${FACTURA_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}`;
+        const cacheKey = `facturas:summary:${FACTURA_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}:${normalizeSearchValue(search)}:${normalizeSearchValue(clientId)}:${normalizeSearchValue(clientSearch)}:${normalizeSearchValue(docSearch)}`;
         const cached = await redisCache.get('route', cacheKey);
         if (cached !== null) return cached;
 
@@ -346,7 +399,7 @@ class FacturasService {
     }
 
     async _getSummaryInternal(params) {
-        const { vendedorCodes, year, month, dateFrom, dateTo } = params;
+        const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
@@ -369,6 +422,7 @@ class FacturasService {
         SUM(CFC.IMPORTEBASEIMPONIBLE) as BASE,
         SUM(CFC.IMPORTEIVA) as IVA
       FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
       WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             const queryParams = [];
@@ -390,6 +444,23 @@ class FacturasService {
                     queryParams.push(month);
                 }
             }
+
+            if (clientId) {
+                sql += ` AND TRIM(CFC.CODIGOCLIENTE) = ?`;
+                queryParams.push(clientId.trim());
+            }
+
+            const clientFilter = buildInvoiceClientSearchFilter(clientSearch);
+            sql += ` ${clientFilter.clause}`;
+            queryParams.push(...clientFilter.params);
+
+            const docFilter = buildInvoiceDocSearchFilter(docSearch);
+            sql += ` ${docFilter.clause}`;
+            queryParams.push(...docFilter.params);
+
+            const genericFilter = buildInvoiceSearchFilter(search);
+            sql += ` ${genericFilter.clause}`;
+            queryParams.push(...genericFilter.params);
 
             return queryWithParams(sql, queryParams);
         }

@@ -214,4 +214,40 @@ describe('facturas service fiscal totals', () => {
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
     expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v2:/);
   });
+
+  test('getSummary applies the same search filters as the invoice list', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([
+      {
+        NUM_FACTURAS: 1,
+        TOTAL: 70.30,
+        BASE: 63.91,
+        IVA: 6.39,
+      },
+    ]);
+
+    const summary = await facturasService.getSummary({
+      vendedorCodes: 'ALL',
+      year: 2026,
+      clientSearch: 'chiringuito',
+      docSearch: '4306',
+    });
+
+    expect(summary.totalFacturas).toBe(1);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLI\s+CLI/i);
+    expect(sql).toMatch(/UPPER\(COALESCE\(CLI\.NOMBRECLIENTE/i);
+    expect(sql).toMatch(/CFC\.NUMEROFACTURA\s+=\s+\?/i);
+    expect(params).toEqual([
+      2026,
+      '%CHIRINGUITO%',
+      '%CHIRINGUITO%',
+      '%CHIRINGUITO%',
+      'CHIRINGUITO%',
+      'CHIRINGUITO%',
+      4306,
+      '4306%',
+      '4306%',
+    ]);
+    expect(mockRedisSet.mock.calls[0][1]).toContain(':CHIRINGUITO:4306');
+  });
 });

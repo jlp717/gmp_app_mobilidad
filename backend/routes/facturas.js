@@ -142,6 +142,10 @@ router.get('/summary', verifyToken, async (req, res, next) => {
             vendedorCodes: req.query.vendedorCodes,
             year: req.query.year ? parseInt(req.query.year) : undefined,
             month: req.query.month ? parseInt(req.query.month) : undefined,
+            search: req.query.search,
+            clientId: req.query.clientId,
+            clientSearch: req.query.clientSearch,
+            docSearch: req.query.docSearch,
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo
         };

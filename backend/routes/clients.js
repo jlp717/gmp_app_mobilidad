@@ -76,6 +76,32 @@ function normalizeClientSearch(value) {
     .toUpperCase();
 }
 
+function buildClientSearchFilter(safeSearch, alias = 'C') {
+  if (!safeSearch) return { clause: '', params: [] };
+
+  const prefix = `${safeSearch}%`;
+  if (/^\d+$/.test(safeSearch)) {
+    return {
+      clause: `AND(TRIM(${alias}.CODIGOCLIENTE) LIKE ?
+                  OR UPPER(COALESCE(${alias}.NIF, '')) LIKE ?
+                  OR TRIM(COALESCE(${alias}.TELEFONO1, '')) LIKE ?
+                  OR TRIM(COALESCE(${alias}.TELEFONO2, '')) LIKE ?)`,
+      params: [prefix, prefix, prefix, prefix],
+    };
+  }
+
+  const textPattern = safeSearch.length < 3 ? prefix : `%${safeSearch}%`;
+  return {
+    clause: `AND(UPPER(COALESCE(${alias}.NOMBRECLIENTE, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.NOMBREALTERNATIVO, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.POBLACION, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.NIF, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.CODIGORUTA, '')) LIKE ?
+                OR TRIM(${alias}.CODIGOCLIENTE) LIKE ?)`,
+    params: [textPattern, textPattern, textPattern, prefix, prefix, prefix],
+  };
+}
+
 function normalizeClientCodes(value, max = 20) {
   return String(value || '')
     .split(',')
@@ -140,18 +166,8 @@ const getClientsHandler = async (req, res) => {
     const safeOffset = boundedInt(offset, 0, 100000, 0);
     const safeSearch = normalizeClientSearch(search);
     const isSearchQuery = safeSearch.length > 0;
-    const queryParams = [];
-
-    let searchFilter = '';
-    if (safeSearch) {
-      const likeSearch = `%${safeSearch}%`;
-      searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE ?
-                      OR UPPER(C.NOMBREALTERNATIVO) LIKE ?
-                      OR UPPER(C.CODIGOCLIENTE) LIKE ?
-                      OR UPPER(C.POBLACION) LIKE ?
-                      OR UPPER(C.NIF) LIKE ?)`;
-      queryParams.push(likeSearch, likeSearch, likeSearch, likeSearch, likeSearch);
-    }
+    const searchClause = buildClientSearchFilter(safeSearch, 'C');
+    const queryParams = searchClause.params;
 
     // OPTIMIZATION v3: Pre-compute allowed client codes from in-memory cache
     // This eliminates expensive NOT EXISTS and subquery route filters
@@ -175,7 +191,7 @@ const getClientsHandler = async (req, res) => {
         : buildLaclaeBoundedClientCodesSql(vendedorCodes);
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
-    const cacheKey = `clients:list:v7:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
+    const cacheKey = `clients:list:v8:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
     // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS default)
     const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
     const cacheTTL = isSearchQuery ? TTL.MEDIUM : (isAllVendors ? TTL.LONG : TTL.MEDIUM);
@@ -241,7 +257,7 @@ const getClientsHandler = async (req, res) => {
       LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
         ${clientCodesFilter || vendorScopedCliFilter}
-        ${searchFilter}
+        ${searchClause.clause}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${safeOffset} ROWS
       FETCH FIRST ${safeLimit} ROWS ONLY

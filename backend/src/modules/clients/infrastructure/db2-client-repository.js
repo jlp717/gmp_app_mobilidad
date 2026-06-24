@@ -35,6 +35,41 @@ const CLIENT_VENDOR_SELECT_SQL = `
             WHERE RN = 1)
         ) AS VENDEDOR`;
 
+function normalizeClientSearch(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[%_]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .slice(0, 80)
+    .toUpperCase();
+}
+
+function buildClientSearchFilter(value) {
+  const term = normalizeClientSearch(value);
+  if (!term) return { clause: '', params: [] };
+
+  const prefix = `${term}%`;
+  if (/^\d+$/.test(term)) {
+    return {
+      clause: `AND (TRIM(CLI.CODIGOCLIENTE) LIKE ?
+                   OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?
+                   OR TRIM(COALESCE(CLI.TELEFONO1, '')) LIKE ?
+                   OR TRIM(COALESCE(CLI.TELEFONO2, '')) LIKE ?)`,
+      params: [prefix, prefix, prefix, prefix],
+    };
+  }
+
+  const textPattern = term.length < 3 ? prefix : `%${term}%`;
+  return {
+    clause: `AND (UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE ?
+                 OR UPPER(COALESCE(CLI.POBLACION, '')) LIKE ?
+                 OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?
+                 OR UPPER(COALESCE(CLI.CODIGORUTA, '')) LIKE ?
+                 OR TRIM(CLI.CODIGOCLIENTE) LIKE ?)`,
+    params: [textPattern, textPattern, prefix, prefix, prefix],
+  };
+}
+
 class Db2ClientRepository extends ClientRepository {
   constructor(dbPool) {
     super();
@@ -43,11 +78,8 @@ class Db2ClientRepository extends ClientRepository {
 
   async findAll({ vendedorCodes, search = '', limit = 100, offset = 0 }) {
     const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
-    const searchFilter = search
-      ? `AND (CLI.NOMBRECLIENTE LIKE ? OR CLI.CODIGOCLIENTE LIKE ?)`
-      : '';
-    const params = [];
-    if (search) { params.push(`%${search.toUpperCase()}%`, `%${search.toUpperCase()}%`); }
+    const searchFilter = buildClientSearchFilter(search);
+    const params = [...searchFilter.params];
     params.push(limit, offset);
 
     const sql = `
@@ -60,12 +92,13 @@ class Db2ClientRepository extends ClientRepository {
         CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
         CLI.CODCLI AS TARIFA,
+        CLI.CODIGORUTA,
         ${CLIENT_VENDOR_SELECT_SQL},
         CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
       FROM DSEDAC.CLI CLI
       WHERE (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
         ${vendorFilter}
-        ${searchFilter}
+        ${searchFilter.clause}
       ORDER BY CLI.NOMBRECLIENTE
       FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
     `;

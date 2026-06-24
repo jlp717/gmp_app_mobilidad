@@ -56,6 +56,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
   List<Map<String, dynamic>> _clients = [];
   bool _isLoading = false;
   String? _error;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -71,32 +72,37 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
   }
 
   void _onSearchChanged(String query) {
+    setState(() {});
+    final normalizedQuery = query.trim();
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () {
-      _loadClients(search: query);
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      _loadClients(search: normalizedQuery);
     });
   }
 
   Future<void> _loadClients({String? search}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
+      final normalizedSearch = search?.trim();
       final clients = await ClientsService.getClientsList(
         vendedorCodes: widget.vendedorCodes,
-        search: search,
-        limit: 100,
+        search: normalizedSearch,
+        limit:
+            normalizedSearch != null && normalizedSearch.isNotEmpty ? 80 : 100,
       );
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _clients = clients;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _error = e.toString();
           _isLoading = false;

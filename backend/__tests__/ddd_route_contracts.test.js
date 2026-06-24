@@ -809,7 +809,7 @@ describe('DDD clients/commissions cache scope contracts', () => {
 
     const cacheKeys = performanceCache.getOrFetch.mock.calls.map(function (call) { return call[0]; });
     expect(cacheKeys).toEqual(expect.arrayContaining([
-      expect.stringContaining('ddd:clients:v3:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
+      expect.stringContaining('ddd:clients:v4:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
       expect.stringContaining('ddd:commissions:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
     ]));
   });

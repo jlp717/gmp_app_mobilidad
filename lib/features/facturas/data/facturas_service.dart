@@ -322,6 +322,7 @@ class FacturasService {
         month ?? 'all',
         dateFrom ?? '',
         dateTo ?? '',
+        search ?? '',
         clientSearch ?? '',
         docSearch ?? '',
         limit,
@@ -446,8 +447,17 @@ class FacturasService {
         url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
       // Cache summary with same key pattern as list
-      final cacheKey =
-          'facturas_summary_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+      final cacheKey = [
+        'facturas_summary',
+        vendedorCodes,
+        year ?? 'all',
+        month ?? 'all',
+        dateFrom ?? '',
+        dateTo ?? '',
+        search ?? '',
+        clientSearch ?? '',
+        docSearch ?? '',
+      ].join('_');
 
       final response = await ApiClient.get(
         url,

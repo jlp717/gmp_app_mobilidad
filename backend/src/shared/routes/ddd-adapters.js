@@ -114,6 +114,32 @@ function normalizeSearchTerm(value) {
     .toUpperCase();
 }
 
+function buildClientSearchFilter(safeSearch, alias = 'C') {
+  if (!safeSearch) return { clause: '', params: [] };
+
+  const prefix = `${safeSearch}%`;
+  if (/^\d+$/.test(safeSearch)) {
+    return {
+      clause: `AND(TRIM(${alias}.CODIGOCLIENTE) LIKE ?
+                  OR UPPER(COALESCE(${alias}.NIF, '')) LIKE ?
+                  OR TRIM(COALESCE(${alias}.TELEFONO1, '')) LIKE ?
+                  OR TRIM(COALESCE(${alias}.TELEFONO2, '')) LIKE ?)`,
+      params: [prefix, prefix, prefix, prefix],
+    };
+  }
+
+  const textPattern = safeSearch.length < 3 ? prefix : `%${safeSearch}%`;
+  return {
+    clause: `AND(UPPER(COALESCE(${alias}.NOMBRECLIENTE, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.NOMBREALTERNATIVO, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.POBLACION, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.NIF, '')) LIKE ?
+                OR UPPER(COALESCE(${alias}.CODIGORUTA, '')) LIKE ?
+                OR TRIM(${alias}.CODIGOCLIENTE) LIKE ?)`,
+    params: [textPattern, textPattern, textPattern, prefix, prefix, prefix],
+  };
+}
+
 function buildChunkedClientCodeFilter(column, codes) {
   const cleanCodes = (Array.isArray(codes) ? codes : [])
     .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
@@ -2522,7 +2548,7 @@ function createClientsRoutes() {
       const safeOffset = boundedInt(offset, 0, 100000, 0);
       const safeSearch = normalizeSearchTerm(search);
       const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
-      const cacheKey = `ddd:clients:v3:${cacheScope}:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
+      const cacheKey = `ddd:clients:v4:${cacheScope}:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
       const role = req?.user?.role || 'COMERCIAL';
       const ttlSec = performanceCache.getTTL(role, isAllQuery);
 
@@ -2536,16 +2562,8 @@ function createClientsRoutes() {
           }
         }
 
-        let searchFilter = '';
-        const queryParams = [];
-        if (safeSearch) {
-          const likeSearch = `%${safeSearch}%`;
-          searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE ?
-                          OR UPPER(C.NOMBREALTERNATIVO) LIKE ?
-                          OR UPPER(C.CODIGOCLIENTE) LIKE ?
-                          OR UPPER(C.POBLACION) LIKE ?)`;
-          queryParams.push(likeSearch, likeSearch, likeSearch, likeSearch);
-        }
+        const searchClause = buildClientSearchFilter(safeSearch, 'C');
+        const queryParams = searchClause.params;
 
         const vendorScopedCliFilter = clientCodesFilter
           ? ''
@@ -2598,7 +2616,7 @@ function createClientsRoutes() {
           LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
           LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
           LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
-          WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchFilter}
+          WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchClause.clause}
           ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
           OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
         `, {

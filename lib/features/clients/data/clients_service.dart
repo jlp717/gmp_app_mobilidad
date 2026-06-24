@@ -12,17 +12,18 @@ class ClientsService {
   static Future<List<Map<String, dynamic>>> getClientsList({
     String? vendedorCodes,
     String? search,
-    int limit = 1000,
+    int limit = 200,
     bool forceRefresh = false,
   }) async {
+    final normalizedSearch = search?.trim();
     final params = <String, dynamic>{
       'limit': limit.toString(),
     };
     if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
       params['vendedorCodes'] = vendedorCodes;
     }
-    if (search != null && search.isNotEmpty) {
-      params['search'] = search;
+    if (normalizedSearch != null && normalizedSearch.isNotEmpty) {
+      params['search'] = normalizedSearch;
     }
 
     final scopeKey = (vendedorCodes == null || vendedorCodes.isEmpty)
@@ -32,7 +33,9 @@ class ClientsService {
             .map((code) => code.trim())
             .where((code) => code.isNotEmpty)
             .join('_');
-    final searchKey = (search == null || search.isEmpty) ? 'none' : search;
+    final searchKey = (normalizedSearch == null || normalizedSearch.isEmpty)
+        ? 'none'
+        : normalizedSearch.toUpperCase();
 
     final result = await OfflineAwareApi.get(
       ApiConfig.clientsList,

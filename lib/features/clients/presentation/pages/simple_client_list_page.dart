@@ -104,12 +104,11 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   }
 
   void _onSearchChanged(String value) {
-    _searchQuery = value;
+    final query = value.trim();
+    _searchQuery = query;
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
-      if (value.length > 2 || value.isEmpty) {
-        _loadClients(query: value);
-      }
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      _loadClients(query: query);
     });
   }
 
@@ -153,25 +152,35 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         codesToPass = widget.employeeCode;
       }
 
+      final normalizedQuery = query?.trim();
+      final isSearchLoad =
+          normalizedQuery != null && normalizedQuery.isNotEmpty;
+      final needsAlertPrefetch =
+          !isSearchLoad || _onlyWithAlerts || _selectedAlertType != 'ALL';
+
       final results = await ClientsService.getClientsList(
         vendedorCodes: codesToPass,
-        search: query,
+        search: normalizedQuery,
+        limit: isSearchLoad ? 80 : 200,
       );
 
       // Batch-compatible KPI prefetch: one request per list load, never one
       // request per client row. Compact row badges consume this set only.
-      Set<String> alertCodesSet = const <String>{};
-      var alertsPrefetchLoaded = false;
-      try {
-        final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
-          vendedorCodes: codesToPass,
-          type: _selectedAlertType,
-        );
-        alertCodesSet = alertCodes.toSet();
-        alertsPrefetchLoaded = true;
-      } catch (_) {
-        alertCodesSet = const <String>{};
-        alertsPrefetchLoaded = false;
+      var alertCodesSet = _clientsWithAlertsCodes;
+      var alertsPrefetchLoaded = _alertsPrefetchLoaded;
+      if (needsAlertPrefetch) {
+        try {
+          final alertCodes =
+              await KpiAlertsService.instance.getClientsWithAlerts(
+            vendedorCodes: codesToPass,
+            type: _selectedAlertType,
+          );
+          alertCodesSet = alertCodes.toSet();
+          alertsPrefetchLoaded = true;
+        } catch (_) {
+          alertCodesSet = const <String>{};
+          alertsPrefetchLoaded = false;
+        }
       }
 
       var filteredResults = results;
