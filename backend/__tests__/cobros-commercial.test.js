@@ -411,6 +411,52 @@ describe('commercial cobros hardening', () => {
     expect(params).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
+  test('getPendingSummary for large manager scope avoids ODBC bind limit', async () => {
+    mockRepoPendingSummaryDb();
+    const repo = new Db2CobrosRepository();
+    const vendorCodes = [
+      '95', '02', '03', '27', '05', '18', '25', '10', '97', '13',
+      '43', '16', '56', '19', '59', '44', '49', '22', '98', '33',
+      '34', '26', '21', 'A3', '93', '94', '47', '01', '15', '36',
+      '64', '48', '81', 'V1', '41', '37', '70', '75', '72', '65',
+      '62', '80', '73', '83', '84', '85', '89', '66', '46', '74',
+      'CD', '86', '79', '38', '87', '57', '67', '09', '00', '53',
+      'V2', '51', '42', 'A2', '90', 'A4', '68', '50', '23', '08',
+      '14', '17', '30', '31', '32', '92', '24', '28', '35', '39',
+      'ZD', 'ZB', 'ZE', 'Z7', '88', '96', 'A5', 'A6', 'A7', '82',
+      '20', 'UNK',
+    ];
+
+    await repo.getPendingSummary(vendorCodes.join(','), {
+      userId: '98',
+      userRole: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      vendorCodes,
+    });
+
+    const sql = findRepoSqlCall((candidate) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
+    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\('[^']+'/i);
+    expect(sql).toMatch(/'UNK'/);
+    expect(sql).not.toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\([^)]*\?/i);
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('getPendingSummary embeds three-character vendor sentinels to avoid DB2 truncation', async () => {
+    mockRepoPendingSummaryDb();
+    const repo = new Db2CobrosRepository();
+
+    await repo.getPendingSummary('UNK', {
+      userId: '98',
+      userRole: 'JEFE_VENTAS',
+      isJefeVentas: true,
+    });
+
+    const sql = findRepoSqlCall((candidate) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
+    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\('UNK'\)/i);
+    expect(sql).not.toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\([^)]*\?/i);
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
   test('getPendingSummary forbids COMERCIAL from ALL and another vendor', async () => {
     const repo = new Db2CobrosRepository();
     const context = { userId: '01', userRole: 'COMERCIAL' };

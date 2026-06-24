@@ -464,7 +464,8 @@ function buildAppOrderVendorAccessClause(context = {}, alias = 'PC') {
     : (manager && visibleCodes.length > 0 ? visibleCodes : []);
   const safeCodes = expandVendorCodesForQuery(vendorCodes);
   if (safeCodes.length === 0) return { clause: '', params: [] };
-  if (safeCodes.length <= 90) {
+  const canBindSafely = safeCodes.length <= 90 && safeCodes.every((code) => String(code).length <= 2);
+  if (canBindSafely) {
     return {
       clause: ` AND TRIM(${alias}.CODIGOVENDEDOR) IN (${safeCodes.map(() => '?').join(',')})`,
       params: safeCodes,

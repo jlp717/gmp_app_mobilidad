@@ -114,6 +114,8 @@ function getCommissionActualVendorColumnExprForMonth(year, month, tableAlias = '
 const SNAPSHOT_UNTIL_MONTH = parseInt(process.env.SNAPSHOT_UNTIL_MONTH || '2', 10);
 logger.info(`[CONFIG] SNAPSHOT_UNTIL_MONTH = ${SNAPSHOT_UNTIL_MONTH}`);
 
+const MAX_CVC_VENDOR_SCOPE_BIND_CODES = 50;
+
 // =============================================================================
 // SALES FILTER CONSTANTS
 // =============================================================================
@@ -276,6 +278,21 @@ function expandVendorCodesForSql(vendorCodes) {
     return Array.from(set);
 }
 
+function buildSafeAlnumInList(codes) {
+    const canBindSafely = codes.length <= MAX_CVC_VENDOR_SCOPE_BIND_CODES &&
+        codes.every((code) => String(code).length <= 2);
+    if (canBindSafely) {
+        return {
+            inList: codes.map(() => '?').join(','),
+            params: codes,
+        };
+    }
+    return {
+        inList: codes.map((code) => `'${code}'`).join(','),
+        params: [],
+    };
+}
+
 /**
  * Vendor scope for CVC debt queries — aligned with clients list (CLP + LACLAE).
  * Fixes summary=0 when CLP.VENDEDORCOMERCIAL is empty but LACLAE has sales history.
@@ -315,12 +332,12 @@ function buildCvcVendorScopeFilter(vendorCodes) {
     // every CVC row. This keeps the same scope while avoiding expensive
     // correlated EXISTS checks on production-sized pending-debt portfolios.
     const laclaeVendorCol = getVendorColumnExpr('LAC');
-    const placeholders = codes.map(() => '?').join(',');
+    const scoped = buildSafeAlnumInList(codes);
     return {
         clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
             SELECT TRIM(CLP.CODIGOCLIENTE)
               FROM DSEDAC.CLP CLP
-             WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})
+             WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${scoped.inList})
             UNION
             SELECT DISTINCT TRIM(LAC.LCCDCL)
               FROM DSED.LACLAE LAC
@@ -329,9 +346,9 @@ function buildCvcVendorScopeFilter(vendorCodes) {
                AND LAC.LCTPVT IN ('CC', 'VC')
                AND LAC.LCCLLN IN ('AB', 'VT')
                AND LAC.LCSRAB NOT IN ('N', 'Z')
-               AND TRIM(${laclaeVendorCol}) IN (${placeholders})
+               AND TRIM(${laclaeVendorCol}) IN (${scoped.inList})
         )`,
-        params: [...codes, ...codes],
+        params: [...scoped.params, ...scoped.params],
     };
 }
 
