@@ -392,7 +392,10 @@ describe('pedidos reparto confirmation contract', () => {
       }),
     };
 
-    await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+    await pedidosService.confirmOrder(42, 'CC', {
+      deliveryDate: '2026-05-05',
+      userId: '98',
+    });
 
     const cpcInsert = mockConnQuery.mock.calls.find(([sql]) =>
       /INSERT\s+INTO\s+DSEDAC\.CPC/i.test(sql),

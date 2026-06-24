@@ -1238,7 +1238,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
     const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
-    const actor = resolvePedidoActorCodes(header, userId);
+    const actor = resolvePedidoActorCodes(header);
     const cliente = truncate(header.CODIGOCLIENTE, 10);
     const observaciones = splitFixedText(header.OBSERVACIONES, 50, 2);
     const total = roundMoney(header.IMPORTETOTAL || header.IMPORTEBASE);
@@ -1287,7 +1287,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
     const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
-    const actor = resolvePedidoActorCodes(header, userId);
+    const actor = resolvePedidoActorCodes(header);
     const cliente = truncate(header.CODIGOCLIENTE, 10);
     const effectiveSaleType = truncate(saleType || line.TIPOVENTA || header.TIPOVENTA || 'CC', 2) || 'CC';
     const iva = resolveIvaFromLine(line);
@@ -1343,6 +1343,7 @@ function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
     const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
+    const actor = resolvePedidoActorCodes(header);
     const columns = [
         'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'SERIEPEDIDO', 'TERMINALPEDIDO', 'NUMEROPEDIDO',
         'DIAOBSERVACION', 'MESOBSERVACION', 'ANOOBSERVACION', 'SECUENCIA',
@@ -1354,7 +1355,7 @@ function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
         systemRef.subempresa, systemRef.ejercicio, systemRef.serie, systemRef.terminal, systemRef.numero,
         docDay, docMonth, docYear, 1,
         ...chunks,
-        truncate(userId || target.codigoUsuario, 10),
+        truncate(actor.codigoUsuario || target.codigoUsuario, 10),
     ];
     return {
         sql: db2InsertSql(target.tables.obs, columns),
