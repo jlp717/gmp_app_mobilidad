@@ -1322,7 +1322,7 @@ router.post('/create', async (req, res) => {
     try {
         const {
             clientCode, clientName, vendedorCode,
-            tipoventa, almacen, tarifa, observaciones,
+            tipoventa, almacen, tarifa, formaPago, observaciones,
             descuentoGlobal, lines
         } = req.body;
 
@@ -1362,6 +1362,7 @@ router.post('/create', async (req, res) => {
                 tipoventa: tipoventa ? String(tipoventa).trim() : undefined,
                 almacen: almacen ? String(almacen).trim() : undefined,
                 tarifa: tarifa ? String(tarifa).trim() : undefined,
+                formaPago: formaPago ? String(formaPago).trim() : undefined,
                 descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
                 observaciones: observaciones ? String(observaciones).trim() : '',
                 lines,

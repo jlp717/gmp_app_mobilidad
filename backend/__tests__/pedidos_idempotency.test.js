@@ -78,10 +78,20 @@ function cabRow(id = 77) {
   };
 }
 
-function setupCreateMocks({ existingIdempotency = null } = {}) {
+function setupCreateMocks({ existingIdempotency = null, clientDefaults = null } = {}) {
   let nextOrderNumber = 100;
   mockQueryWithParams.mockImplementation(async (sql, params) => {
     const normalized = String(sql).replace(/\s+/g, ' ').trim();
+
+    if (/FROM\s+DSEDAC\.CLI\s+CLI\s+LEFT JOIN\s+DSEDAC\.CLC\s+CLC/i.test(normalized)) {
+      if (!clientDefaults) return [];
+      return [{
+        NOMBRECLIENTE: clientDefaults.clientName || 'Cliente Maestro',
+        CODIGORUTA: clientDefaults.routeCode || '',
+        CODIGOFORMAPAGO: clientDefaults.formaPago || '',
+        CODIGOTARIFA: clientDefaults.tarifa || 1,
+      }];
+    }
 
     if (/FROM\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(normalized)) {
       if (!existingIdempotency) return [];
@@ -387,5 +397,66 @@ describe('pedidos create idempotency', () => {
     expect(result.header).toMatchObject({ id: 77, estado: 'BORRADOR' });
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(true);
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql))).toBe(false);
+  });
+
+  test('createOrder uses client master payment and tariff when request omits them', async () => {
+    setupCreateMocks({
+      clientDefaults: {
+        clientName: 'CHIRINGUITO MARINERO PURIAS',
+        routeCode: 'L101',
+        formaPago: 'D6',
+        tarifa: 87,
+      },
+    });
+
+    await pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientCode: '4300007781',
+      clientName: '',
+      vendedorCode: '02',
+      tarifa: undefined,
+      formaPago: undefined,
+      clientRequestId: 'offlinesynckey004',
+    });
+
+    const cabInsert = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql));
+    expect(cabInsert).toBeTruthy();
+    expect(cabInsert[1]).toEqual(expect.arrayContaining(['D6', 87, 'CHIRINGUITO MARINERO PURIAS']));
+  });
+
+  test('getDefaultTruckAssignment falls back to client master route when history has no route', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim();
+      if (/FROM\s+DSEDAC\.OPP\s+OPP/i.test(normalized)) {
+        return [{
+          CODIGOVEHICULO: '11',
+          CODIGOREPARTIDOR: '57',
+          RUTA: '',
+          MATRICULA: '1234ABC',
+          DESC_VEHICULO: 'Camion 11',
+        }];
+      }
+      if (/FROM\s+DSEDAC\.CLI\s+CLI\s+LEFT JOIN\s+DSEDAC\.CLC\s+CLC/i.test(normalized)) {
+        return [{
+          NOMBRECLIENTE: 'CHIRINGUITO MARINERO PURIAS',
+          CODIGORUTA: 'L101',
+          CODIGOFORMAPAGO: 'D6',
+          CODIGOTARIFA: 87,
+        }];
+      }
+      return [];
+    });
+
+    const assignment = await pedidosService._private.getDefaultTruckAssignment({
+      clientCode: '4300007781',
+      vendedorCode: '02',
+    });
+
+    expect(assignment).toMatchObject({
+      vehicleCode: '11',
+      driverCode: '57',
+      routeCode: 'L101',
+      source: 'DSEDAC.OPP',
+    });
   });
 });

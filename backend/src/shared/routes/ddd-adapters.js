@@ -1657,7 +1657,7 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa } = req.body;
+      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa, formaPago } = req.body;
       // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
       const actualVendedor = vendedorCode || userId;
 
@@ -1681,8 +1681,9 @@ function createPedidosRoutes() {
         clientName: clientName ? String(clientName).trim() : '',
         vendedorCode: vendorAccess.vendedorCode,
         tipoventa: tipoventa || 'CC',
-        almacen: parseInt(almacen) || 1,
-        tarifa: parseInt(tarifa) || 1,
+        almacen: almacen == null || String(almacen || '').trim() === '' ? undefined : parseInt(almacen, 10),
+        tarifa: tarifa == null || String(tarifa || '').trim() === '' ? undefined : parseInt(tarifa, 10),
+        formaPago: formaPago == null ? undefined : String(formaPago).trim(),
         observaciones: observations || observaciones || '',
         lines: lines,
         origen: 'A',

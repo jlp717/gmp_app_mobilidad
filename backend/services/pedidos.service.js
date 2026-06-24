@@ -995,9 +995,42 @@ function normalizeAssignmentRow(row) {
     };
 }
 
+async function getClientOrderDefaults(clientCode) {
+    const cleanClient = trimString(clientCode).substring(0, 10);
+    if (!cleanClient) return {};
+
+    try {
+        const rows = await queryWithParams(`
+            SELECT TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) AS NOMBRECLIENTE,
+                   TRIM(COALESCE(CLI.CODIGORUTA, '')) AS CODIGORUTA,
+                   COALESCE(CLC.CODIGOTARIFA, 1) AS CODIGOTARIFA,
+                   TRIM(COALESCE(NULLIF(TRIM(CLC.CODIGOFORMAPAGO1), ''), NULLIF(TRIM(CLC.CODIGOFORMAPAGO2), ''), '')) AS CODIGOFORMAPAGO
+              FROM DSEDAC.CLI CLI
+              LEFT JOIN DSEDAC.CLC CLC
+                ON TRIM(CLC.CODIGOCLIENTE) = TRIM(CLI.CODIGOCLIENTE)
+             WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+             FETCH FIRST 1 ROW ONLY`,
+            [cleanClient],
+            false
+        );
+        const row = rows?.[0];
+        if (!row) return {};
+        return {
+            clientName: truncate(row.NOMBRECLIENTE, 60),
+            routeCode: truncate(row.CODIGORUTA, 10),
+            formaPago: truncate(row.CODIGOFORMAPAGO, 2),
+            tarifa: integerValue(row.CODIGOTARIFA) || 1,
+        };
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Client order defaults lookup failed for ${cleanClient}: ${error.message}`);
+        return {};
+    }
+}
+
 async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDate, routeCode }) {
     const cleanClient = trimString(clientCode);
     const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
+    const explicitRouteCode = trimString(routeCode).substring(0, 10);
 
     try {
         const params = [cleanClient];
@@ -1031,9 +1064,10 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
         );
         const assignment = normalizeAssignmentRow(rows?.[0]);
         if (assignment.vehicleCode || assignment.driverCode) {
+            const defaults = explicitRouteCode || assignment.routeCode ? {} : await getClientOrderDefaults(cleanClient);
             return {
                 ...assignment,
-                routeCode: routeCode || assignment.routeCode,
+                routeCode: explicitRouteCode || assignment.routeCode || defaults.routeCode || '',
                 confidence: 'media',
                 source: 'DSEDAC.OPP',
             };
@@ -1042,14 +1076,15 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
         logger.warn(`[PEDIDOS] Default truck lookup failed for ${cleanClient}/${cleanVendor}: ${error.message}`);
     }
 
+    const defaults = explicitRouteCode ? {} : await getClientOrderDefaults(cleanClient);
     return {
         vehicleCode: '',
         driverCode: '',
         vehicleMatricula: '',
         vehicleDescription: '',
-        routeCode: routeCode || '',
+        routeCode: explicitRouteCode || defaults.routeCode || '',
         confidence: 'sin-datos',
-        source: 'none',
+        source: defaults.routeCode ? 'DSEDAC.CLI' : 'none',
     };
 }
 
@@ -2490,8 +2525,8 @@ async function createOrder({
     vendedorCode,
     tipoventa = 'CC',
     almacen = 1,
-    tarifa = 1,
-    formaPago = '02',
+    tarifa,
+    formaPago,
     observaciones = '',
     descuentoGlobal = 0,
     lines = [],
@@ -2512,6 +2547,12 @@ async function createOrder({
     if (lines.length > MAX_ORDER_LINES) {
         throw new Error(`Un pedido no puede tener mas de ${MAX_ORDER_LINES} lineas`);
     }
+
+    const clientDefaults = await getClientOrderDefaults(clientCode);
+    const effectiveClientName = trimString(clientName) || clientDefaults.clientName || '';
+    const effectiveFormaPago = truncate(trimString(formaPago) || clientDefaults.formaPago || '02', 2);
+    const effectiveTarifa = integerValue(tarifa) || clientDefaults.tarifa || 1;
+    const effectiveAlmacen = integerValue(almacen) || 1;
 
     const normalizedIdempotencyKey = idempotencyKey
         ? normalizePedidoIdempotencyKey(idempotencyKey)
@@ -2562,11 +2603,11 @@ async function createOrder({
             ano,
             hora,
             clientCode,
-            clientName,
+            clientName: effectiveClientName,
             vendedorCode,
-            formaPago,
-            tarifa,
-            almacen,
+            formaPago: effectiveFormaPago,
+            tarifa: effectiveTarifa,
+            almacen: effectiveAlmacen,
             tipoventa,
             observaciones,
             descuentoGlobal,
@@ -2586,11 +2627,11 @@ async function createOrder({
                 ano,
                 hora,
                 clientCode,
-                clientName,
+                clientName: effectiveClientName,
                 vendedorCode,
-                formaPago,
-                tarifa,
-                almacen,
+                formaPago: effectiveFormaPago,
+                tarifa: effectiveTarifa,
+                almacen: effectiveAlmacen,
                 tipoventa,
                 observaciones,
                 descuentoGlobal,
@@ -2693,9 +2734,9 @@ async function createOrder({
                 hora,
                 clientCode,
                 vendedorCode,
-                formaPago,
-                tarifa,
-                almacen,
+                formaPago: effectiveFormaPago,
+                tarifa: effectiveTarifa,
+                almacen: effectiveAlmacen,
                 tipoventa,
                 line,
                 amounts,
@@ -5854,6 +5895,8 @@ module.exports = {
     pedidosBreaker,
     _private: {
         getNextOrderNumber,
+        getClientOrderDefaults,
+        getDefaultTruckAssignment,
         exportCommercialOrderToSystem,
         withSystemExportLock,
     },
