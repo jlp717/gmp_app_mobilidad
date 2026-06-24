@@ -200,11 +200,35 @@ function isDuplicateKeyError(err) {
 
 let orderSequenceTail = Promise.resolve();
 let atomicSequenceUpdateSupported = null;
+const systemExportTails = new Map();
 
 function withOrderSequenceLock(callback) {
     const run = orderSequenceTail.then(callback, callback);
     orderSequenceTail = run.catch(() => {});
     return run;
+}
+
+function withSystemExportLock(key, callback) {
+    const tail = systemExportTails.get(key) || Promise.resolve();
+    const run = tail.then(callback, callback);
+    const nextTail = run.catch(() => {});
+    systemExportTails.set(key, nextTail);
+    nextTail.finally(() => {
+        if (systemExportTails.get(key) === nextTail) {
+            systemExportTails.delete(key);
+        }
+    }).catch(() => {});
+    return run;
+}
+
+function systemExportLockKey(target, ejercicio) {
+    return [
+        target.exportSchema || 'DSEDAC',
+        target.subempresa,
+        target.serie,
+        target.terminal,
+        ejercicio,
+    ].map((part) => String(part ?? '').trim()).join(':');
 }
 
 function isUnsupportedAtomicSequenceUpdate(err) {
@@ -1384,52 +1408,54 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
     }
 
     const ejercicio = integerValue(header.EJERCICIO) || deliveryPlan.date.year || new Date().getFullYear();
-    let systemRef = null;
-    let cab = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-        const numero = await nextSystemPedidoNumber(conn, target, ejercicio);
-        systemRef = {
-            subempresa: target.subempresa,
-            ejercicio,
-            serie: target.serie,
-            terminal: target.terminal,
-            numero,
-        };
-        cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode });
-        try {
-            await conn.query(cab.sql, cab.params);
-            break;
-        } catch (e) {
-            if (isRetriableCpcExportError(e) && attempt < 2) {
-                logger.warn(`[PEDIDOS] CPC insert retriable error numero=${systemRef?.numero}, retry ${attempt + 1}: ${e.message}`);
-                continue;
+    return withSystemExportLock(systemExportLockKey(target, ejercicio), async () => {
+        let systemRef = null;
+        let cab = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            const numero = await nextSystemPedidoNumber(conn, target, ejercicio);
+            systemRef = {
+                subempresa: target.subempresa,
+                ejercicio,
+                serie: target.serie,
+                terminal: target.terminal,
+                numero,
+            };
+            cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode });
+            try {
+                await conn.query(cab.sql, cab.params);
+                break;
+            } catch (e) {
+                if (isRetriableCpcExportError(e) && attempt < 2) {
+                    logger.warn(`[PEDIDOS] CPC insert retriable error numero=${systemRef?.numero}, retry ${attempt + 1}: ${e.message}`);
+                    continue;
+                }
+                logger.error(`[PEDIDOS] CPC insert failed cols=${cab.params?.length} sql=${cab.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
+                throw e;
             }
-            logger.error(`[PEDIDOS] CPC insert failed cols=${cab.params?.length} sql=${cab.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
-            throw e;
         }
-    }
 
-    for (const line of lines || []) {
-        const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId });
-        try {
-            await conn.query(lin.sql, lin.params);
-        } catch (e) {
-            logger.error(`[PEDIDOS] LPC insert failed cols=${lin.params?.length} sql=${lin.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
-            throw e;
+        for (const line of lines || []) {
+            const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId });
+            try {
+                await conn.query(lin.sql, lin.params);
+            } catch (e) {
+                logger.error(`[PEDIDOS] LPC insert failed cols=${lin.params?.length} sql=${lin.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
+                throw e;
+            }
         }
-    }
 
-    const obs = buildDsedacOcpcInsert({ target, header, systemRef, userId });
-    if (obs) {
-        await conn.query(obs.sql, obs.params);
-    }
+        const obs = buildDsedacOcpcInsert({ target, header, systemRef, userId });
+        if (obs) {
+            await conn.query(obs.sql, obs.params);
+        }
 
-    return {
-        targetSchema: target.exportSchema || 'DSEDAC',
-        syncStatus: 'SYNCED',
-        synced: true,
-        systemRef,
-    };
+        return {
+            targetSchema: target.exportSchema || 'DSEDAC',
+            syncStatus: 'SYNCED',
+            synced: true,
+            systemRef,
+        };
+    });
 }
 
 function buildConfirmOrderUpdate({ id, deliveryPlan, vehicleCode, driverCode, routeCode, saleType, syncResult }) {
@@ -5828,5 +5854,7 @@ module.exports = {
     pedidosBreaker,
     _private: {
         getNextOrderNumber,
+        exportCommercialOrderToSystem,
+        withSystemExportLock,
     },
 };

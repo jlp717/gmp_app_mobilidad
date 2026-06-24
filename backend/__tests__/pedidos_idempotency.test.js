@@ -199,6 +199,103 @@ describe('pedidos create idempotency', () => {
     expect(maxActiveAllocations).toBe(1);
   });
 
+  test('exportCommercialOrderToSystem serializes DSEDAC system number allocation', async () => {
+    const previousEnv = {
+      PEDIDOS_DSEDAC_STORAGE_APPROVED: process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED,
+      PEDIDOS_EXPORT_TO_SYSTEM: process.env.PEDIDOS_EXPORT_TO_SYSTEM,
+      PEDIDOS_DSEDAC_EXPORT_APPROVED: process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED,
+    };
+    process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
+
+    let activeAllocations = 0;
+    let maxActiveAllocations = 0;
+    let nextSystemNumber = 3664;
+    const conn = {
+      query: jest.fn(async (sql) => {
+        const normalized = String(sql).replace(/\s+/g, ' ').trim();
+        if (/SELECT COALESCE\(MAX\(NUMEROPEDIDO\), 0\) \+ 1 AS NEXT_NUMERO FROM DSEDAC\.CPC/i.test(normalized)) {
+          activeAllocations += 1;
+          maxActiveAllocations = Math.max(maxActiveAllocations, activeAllocations);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            nextSystemNumber += 1;
+            return [{ NEXT_NUMERO: nextSystemNumber }];
+          } finally {
+            activeAllocations -= 1;
+          }
+        }
+        if (/INSERT INTO\s+DSEDAC\.CPC/i.test(normalized)) return [];
+        if (/INSERT INTO\s+DSEDAC\.LPC/i.test(normalized)) return [];
+        if (/INSERT INTO\s+DSEDAC\.OCPC/i.test(normalized)) return [];
+        throw new Error(`Unexpected export SQL: ${normalized}`);
+      }),
+    };
+
+    const header = {
+      EJERCICIO: 2026,
+      DIADOCUMENTO: 24,
+      MESDOCUMENTO: 6,
+      ANODOCUMENTO: 2026,
+      HORADOCUMENTO: 121224,
+      CODIGOCLIENTE: '4300007781',
+      CODIGOVENDEDOR: '02',
+      CODIGOFORMAPAGO: '02',
+      CODIGOTARIFA: 87,
+      CODIGOALMACEN: 1,
+      IMPORTETOTAL: 16.78,
+      IMPORTEBASE: 15.25,
+      IMPORTECOSTO: 10.41,
+      IMPORTEMARGEN: 4.84,
+      OBSERVACIONES: '',
+    };
+    const line = {
+      SECUENCIA: 1,
+      CODIGOARTICULO: '1273',
+      DESCRIPCION: 'CALAMAR NAC.P',
+      CANTIDADENVASES: 1,
+      CANTIDADUNIDADES: 0,
+      UNIDADMEDIDA: 'CAJAS',
+      PRECIOVENTA: 15.248,
+      IMPORTEVENTA: 15.25,
+      PRECIOCOSTO: 10.412,
+      IMPORTECOSTO: 10.41,
+      PRECIOTARIFACLIENTE: 15.248,
+      PRECIOTARIFA: 16.3,
+      CODIGOIVA: '1',
+      TIPOLINEA: 'R',
+      TIPOVENTA: 'CC',
+      CLASELINEA: 'VT',
+    };
+    const deliveryPlan = {
+      date: { day: 26, month: 6, year: 2026 },
+    };
+
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => pedidosService._private.exportCommercialOrderToSystem(conn, {
+          header,
+          lines: [line],
+          deliveryPlan,
+          routeCode: '',
+          saleType: 'CC',
+          userId: '98',
+        })),
+      );
+
+      expect(results.map((result) => result.systemRef.numero)).toEqual([3665, 3666, 3667, 3668, 3669]);
+      expect(maxActiveAllocations).toBe(1);
+    } finally {
+      if (previousEnv.PEDIDOS_DSEDAC_STORAGE_APPROVED === undefined) delete process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED;
+      else process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = previousEnv.PEDIDOS_DSEDAC_STORAGE_APPROVED;
+      if (previousEnv.PEDIDOS_EXPORT_TO_SYSTEM === undefined) delete process.env.PEDIDOS_EXPORT_TO_SYSTEM;
+      else process.env.PEDIDOS_EXPORT_TO_SYSTEM = previousEnv.PEDIDOS_EXPORT_TO_SYSTEM;
+      if (previousEnv.PEDIDOS_DSEDAC_EXPORT_APPROVED === undefined) delete process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED;
+      else process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = previousEnv.PEDIDOS_DSEDAC_EXPORT_APPROVED;
+    }
+  });
+
   test('createOrder replays same clientRequestId without creating a duplicate order', async () => {
     const payloadHash = pedidosService.buildCreateOrderPayloadHash(baseCreatePayload);
     setupCreateMocks({
