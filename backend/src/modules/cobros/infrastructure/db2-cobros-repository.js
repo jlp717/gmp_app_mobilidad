@@ -241,40 +241,6 @@ function db2StringLiteral(value) {
   return '\'' + escaped + '\'';
 }
 
-function buildPendingSummaryPageDocsCte(rows) {
-  const docs = [];
-  const seen = new Set();
-  for (const row of rows || []) {
-    if (docs.length >= 100) break;
-    const client = trim(row.CLIENTE);
-    const serie = trim(row.SERIE_DOCUMENTO);
-    const numero = trim(row.NUMERO_DOCUMENTO);
-    if (!client || !serie || !numero) continue;
-    const key = [client, serie, numero].join('|');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    docs.push({ client, serie, numero, docKey: formatRepartidorDocKey(serie, numero) });
-  }
-  if (docs.length === 0) return '';
-  const values = docs
-    .map((doc) => '(' + [doc.client, doc.serie, doc.numero, doc.docKey].map(db2StringLiteral).join(', ') + ')')
-    .join(',\n          ');
-  return 'WITH PAGE_DOCS (CLIENTE, SERIE, NUMERO, DOC_KEY) AS (VALUES\n          ' + values + '\n        )';
-}
-
-function applyPendingSummaryDocTotals(row, appAdjustments) {
-  const code = trim(row.CLIENTE);
-  if (!code) return null;
-  const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
-  const appPaid = appAdjustments.get(code + '|' + docKey) || 0;
-  const rawTotal = parseFloat(row.TOTAL_PENDIENTE) || 0;
-  const rawVencido = parseFloat(row.TOTAL_VENCIDO) || 0;
-  const total = Math.max(0, rawTotal - appPaid);
-  if (toCents(total) <= 0) return null;
-  const vencido = rawVencido > 0 ? Math.min(total, Math.max(0, rawVencido - appPaid)) : 0;
-  return { code, total, vencido };
-}
-
 function resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
   const scopedKey = trim(clientCode) + '|' + docKey;
   const portfolioPaid = portfolioAdjustments?.get(scopedKey) || 0;
@@ -956,23 +922,85 @@ class Db2CobrosRepository extends CobrosRepository {
     `;
 
     const pageSql = `
-      SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-             COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), '') AS NOMBRE,
-             TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
-             CVC.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
-             SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
-             SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                 <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                  THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-       FROM DSEDAC.CVC CVC
-       LEFT JOIN DSEDAC.CLI CLI
-         ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-       WHERE CVC.IMPORTEPENDIENTE > 0.01
-         AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-         ${emptyClientFilter}
-         ${vendorClause}
-       GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
-       ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC, SERIE_DOCUMENTO ASC, NUMERO_DOCUMENTO ASC
+      WITH CVC_DOCS AS (
+        SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+               TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+               TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO_DOCUMENTO,
+               SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+               SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                   <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                    THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+         FROM DSEDAC.CVC CVC
+         WHERE CVC.IMPORTEPENDIENTE > 0.01
+           AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+           ${emptyClientFilter}
+           ${vendorClause}
+         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20)))
+      ), APP_COBROS AS (
+        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
+               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
+          FROM CVC_DOCS D
+          JOIN ${APP_SCHEMA}.COBROS C
+            ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
+           AND (TRIM(C.REFERENCIA) = D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO
+                OR TRIM(C.REFERENCIA) LIKE ${db2StringLiteral('%:')} || D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO)
+         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
+      ), REP_COBROS AS (
+        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
+               COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+          FROM CVC_DOCS D
+          JOIN ${APP_SCHEMA}.REPARTIDOR_COBROS R
+            ON TRIM(R.CODIGOCLIENTEALBARAN) = D.CLIENTE
+           AND TRIM(R.SERIEDOCUMENTO) = D.SERIE_DOCUMENTO
+           AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
+         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
+      ), DOC_NET AS (
+        SELECT D.CLIENTE,
+               D.TOTAL_PENDIENTE,
+               D.TOTAL_VENCIDO,
+               COALESCE(A.TOTAL_APP, 0) + COALESCE(R.TOTAL_REP, 0) AS PAID,
+               CASE
+                 WHEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) > 0
+                 THEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
+                 ELSE 0
+               END AS NET_TOTAL,
+               CASE
+                 WHEN D.TOTAL_VENCIDO <= 0
+                   OR D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) <= 0
+                   OR D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) <= 0 THEN 0
+                 WHEN D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
+                   < D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
+                   THEN D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
+                 ELSE D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
+               END AS NET_VENCIDO
+          FROM CVC_DOCS D
+          LEFT JOIN APP_COBROS A
+            ON A.CLIENTE = D.CLIENTE
+           AND A.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
+           AND A.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
+          LEFT JOIN REP_COBROS R
+            ON R.CLIENTE = D.CLIENTE
+           AND R.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
+           AND R.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
+      ), CLIENT_NET AS (
+        SELECT CLIENTE,
+               COUNT(*) AS DOC_COUNT,
+               COALESCE(SUM(NET_TOTAL), 0) AS TOTAL_PENDIENTE,
+               COALESCE(SUM(NET_VENCIDO), 0) AS TOTAL_VENCIDO
+          FROM DOC_NET
+         WHERE NET_TOTAL > 0
+         GROUP BY CLIENTE
+      )
+      SELECT C.CLIENTE,
+             COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), C.CLIENTE) AS NOMBRE,
+             C.DOC_COUNT,
+             C.TOTAL_PENDIENTE,
+             C.TOTAL_VENCIDO
+        FROM CLIENT_NET C
+        LEFT JOIN DSEDAC.CLI CLI
+          ON TRIM(CLI.CODIGOCLIENTE) = C.CLIENTE
+       GROUP BY C.CLIENTE, C.DOC_COUNT, C.TOTAL_PENDIENTE, C.TOTAL_VENCIDO
+       ORDER BY C.TOTAL_PENDIENTE DESC, C.CLIENTE ASC
        OFFSET ${pageOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
     `;
 
@@ -985,34 +1013,20 @@ class Db2CobrosRepository extends CobrosRepository {
       runQuery(totalsSql),
     ]);
 
-    const pageAdjustments = await this.getAppSideCobrosByDocForSummary(rows || []);
-
-    const nameHints = new Map();
-    for (const r of rows || []) {
-      const code = trim(r.CLIENTE);
-      if (code && trim(r.NOMBRE) && !nameHints.has(code)) {
-        nameHints.set(code, trim(r.NOMBRE));
-      }
-    }
-
     const summary = {};
     for (const r of rows || []) {
-      const applied = applyPendingSummaryDocTotals(r, pageAdjustments);
-      if (!applied) continue;
-      const code = applied.code;
-      if (!summary[code]) {
-        summary[code] = {
-          nombre: nameHints.get(code) || code,
-          total: 0,
-          vencido: 0,
-          count: 0,
-          estado: 'AL_DIA',
-        };
-      }
-      summary[code].total += applied.total;
-      summary[code].vencido += applied.vencido;
-      summary[code].count += 1;
-      summary[code].estado = summary[code].vencido > 0 ? 'VENCIDO' : 'PENDIENTE';
+      const code = trim(r.CLIENTE);
+      if (!code) continue;
+      const total = fromCents(toCents(r.TOTAL_PENDIENTE));
+      if (toCents(total) <= 0) continue;
+      const vencido = fromCents(toCents(r.TOTAL_VENCIDO));
+      summary[code] = {
+        nombre: trim(r.NOMBRE) || code,
+        total,
+        vencido,
+        count: parseInt(r.DOC_COUNT, 10) || 0,
+        estado: vencido > 0 ? 'VENCIDO' : 'PENDIENTE',
+      };
     }
 
     const appOrderSummary = await this.getAppOrderPendingSummary({
@@ -1070,63 +1084,6 @@ class Db2CobrosRepository extends CobrosRepository {
         returnedDocuments: (rows || []).length,
       },
     };
-  }
-
-  async getAppSideCobrosByDocForSummary(pageRows = []) {
-    const adjustments = new Map();
-    const add = (clientCode, docKey, amount) => {
-      const client = trim(clientCode);
-      const doc = trim(docKey);
-      if (!client || !doc) return;
-      const key = client + '|' + doc;
-      adjustments.set(key, (adjustments.get(key) || 0) + (parseFloat(amount) || 0));
-    };
-
-    const pageDocsCte = buildPendingSummaryPageDocsCte(pageRows);
-    if (!pageDocsCte) return adjustments;
-
-    try {
-      const comercialSql = [
-        pageDocsCte,
-        'SELECT P.CLIENTE AS CLIENTE,',
-        '       P.DOC_KEY AS REF,',
-        '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
-        '  FROM PAGE_DOCS P',
-        '  JOIN ' + APP_SCHEMA + '.COBROS C',
-        '    ON TRIM(C.CODIGO_CLIENTE) = P.CLIENTE',
-        '   AND (TRIM(C.REFERENCIA) = P.DOC_KEY OR TRIM(C.REFERENCIA) LIKE ' + db2StringLiteral('%:') + ' || P.DOC_KEY)',
-        ' GROUP BY P.CLIENTE, P.DOC_KEY',
-      ].join('\n');
-      const rows = await query(comercialSql, false);
-      for (const row of rows || []) {
-        const reference = trim(row.REF);
-        const match = reference.match(/([^:]+-\d+)$/);
-        add(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
-      }
-    } catch (error) {
-      logger.warn('[COBROS_REPO] App-side COBROS doc summary subtract skipped: ' + error.message);
-    }
-
-    try {
-      const repartidorSql = [
-        pageDocsCte,
-        'SELECT P.CLIENTE AS CLIENTE,',
-        '       P.DOC_KEY AS DOC_KEY,',
-        '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP',
-        '  FROM PAGE_DOCS P',
-        '  JOIN ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
-        '    ON TRIM(R.CODIGOCLIENTEALBARAN) = P.CLIENTE',
-        '   AND TRIM(R.SERIEDOCUMENTO) = P.SERIE',
-        '   AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = P.NUMERO',
-        ' GROUP BY P.CLIENTE, P.DOC_KEY',
-      ].join('\n');
-      const rows = await query(repartidorSql, false);
-      for (const row of rows || []) add(row.CLIENTE, row.DOC_KEY, row.TOTAL_APP);
-    } catch (error) {
-      logger.warn('[COBROS_REPO] App-side REPARTIDOR_COBROS doc summary subtract skipped: ' + error.message);
-    }
-
-    return adjustments;
   }
 
   async getAppSideCobrosByDocForVendorScope(vendorClause, queryParams) {

@@ -878,7 +878,11 @@ async function getGroupedStatus(vendedorCodes, year, month) {
     sql += ' ORDER BY TRIM(CODIGOVENDEDOR) ASC';
 
     const rows = await queryWithParams(sql, params);
-    const vendedores = (rows || []).map(mapBolsaStatusRow);
+    const existing = (rows || []).map(mapBolsaStatusRow);
+    const byCode = new Map(existing.map((row) => [row.vendedor, row]));
+    const vendedores = codes.length > 0
+        ? codes.map((code) => byCode.get(code) || defaultBolsaStatus(code, y, m))
+        : existing;
     const totals = vendedores.reduce((acc, item) => {
         acc.saldoDisponible += item.saldoDisponible;
         acc.consumido += item.consumido;

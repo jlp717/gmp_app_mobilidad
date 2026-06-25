@@ -42,7 +42,7 @@ class FullscreenImageViewer extends StatelessWidget {
     required String productName,
     String? productCode,
     Map<String, String>? headers,
-    bool rootNavigator = false,
+    bool rootNavigator = true,
   }) {
     Navigator.of(context, rootNavigator: rootNavigator).push(
       PageRouteBuilder<void>(
@@ -95,16 +95,28 @@ class FullscreenImageViewer extends StatelessWidget {
             child: InteractiveViewer(
               minScale: 0.5,
               maxScale: 5,
-              child: Center(
-                child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: productCode ?? '',
-                  productName: productName,
-                  headers: _effectiveHeaders,
-                  fit: BoxFit.contain,
-                  borderRadius: BorderRadius.zero,
-                  forceRetry: true,
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth.isFinite
+                      ? constraints.maxWidth
+                      : MediaQuery.sizeOf(context).width;
+                  final height = constraints.maxHeight.isFinite
+                      ? constraints.maxHeight
+                      : MediaQuery.sizeOf(context).height;
+                  return Center(
+                    child: SmartProductImage(
+                      imageUrl: imageUrl,
+                      productCode: productCode ?? '',
+                      productName: productName,
+                      width: width,
+                      height: height,
+                      headers: _effectiveHeaders,
+                      fit: BoxFit.contain,
+                      borderRadius: BorderRadius.zero,
+                      forceRetry: true,
+                    ),
+                  );
+                },
               ),
             ),
           ),

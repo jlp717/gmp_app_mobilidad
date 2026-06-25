@@ -309,15 +309,21 @@ class OrderCard extends StatelessWidget {
       );
     }
     final generada = order.bolsaGenerada;
-    if (generada == true) {
+    if (generada ?? false) {
       final neto = order.bolsaNeto;
-      final netoLabel = neto != 0
-          ? ' (${neto > 0 ? '+' : ''}${PedidosFormatters.money(neto)})'
-          : '';
+      final netoLabel = neto == 0
+          ? ''
+          : ' (${neto > 0 ? '+' : ''}${PedidosFormatters.money(neto)})';
+      final label = neto > 0
+          ? 'Bolsa generada$netoLabel'
+          : neto < 0
+              ? 'Bolsa usada$netoLabel'
+              : 'Bolsa compensada';
+      final color = neto >= 0 ? AppTheme.neonGreen : AppTheme.warning;
       return _bolsaStatusChip(
         Icons.account_balance_wallet,
-        'Bolsa generada$netoLabel',
-        AppTheme.neonGreen,
+        label,
+        color,
       );
     }
     if (generada == false) {

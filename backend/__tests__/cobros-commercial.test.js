@@ -89,10 +89,51 @@ function mockRepoPendingSummaryDb({
   pageCobros = [],
   pageRepartidor = [],
 } = {}) {
+  const docKey = (row) => `${String(row.SERIE_DOCUMENTO || '').trim()}-${String(row.NUMERO_DOCUMENTO || '').trim()}`;
+  const paymentByDoc = new Map();
+  const addPayment = (client, reference, amount) => {
+    const code = String(client || '').trim();
+    const ref = String(reference || '').trim();
+    if (!code || !ref) return;
+    const match = ref.match(/([^:]+-\d+)$/);
+    const key = `${code}|${match ? match[1] : ref}`;
+    paymentByDoc.set(key, (paymentByDoc.get(key) || 0) + (parseFloat(amount) || 0));
+  };
+  pageCobros.forEach((row) => addPayment(row.CLIENTE, row.REF, row.TOTAL_APP));
+  pageRepartidor.forEach((row) => addPayment(row.CLIENTE, row.DOC_KEY, row.TOTAL_REP ?? row.TOTAL_APP));
+  const clientPageRows = () => {
+    const byClient = new Map();
+    for (const row of pageRows) {
+      const client = String(row.CLIENTE || '').trim();
+      if (!client) continue;
+      const rawTotal = parseFloat(row.TOTAL_PENDIENTE) || 0;
+      const rawVencido = parseFloat(row.TOTAL_VENCIDO) || 0;
+      const paid = paymentByDoc.get(`${client}|${docKey(row)}`) || 0;
+      const netTotal = Math.max(0, rawTotal - paid);
+      if (netTotal <= 0) continue;
+      const netVencido = rawVencido > 0 ? Math.min(netTotal, Math.max(0, rawVencido - paid)) : 0;
+      const current = byClient.get(client) || {
+        CLIENTE: client,
+        NOMBRE: row.NOMBRE,
+        DOC_COUNT: 0,
+        TOTAL_PENDIENTE: 0,
+        TOTAL_VENCIDO: 0,
+      };
+      current.DOC_COUNT += 1;
+      current.TOTAL_PENDIENTE += netTotal;
+      current.TOTAL_VENCIDO += netVencido;
+      byClient.set(client, current);
+    }
+    return [...byClient.values()].sort((a, b) =>
+      (parseFloat(b.TOTAL_PENDIENTE) || 0) - (parseFloat(a.TOTAL_PENDIENTE) || 0) ||
+      String(a.CLIENTE || '').localeCompare(String(b.CLIENTE || ''))
+    );
+  };
   const aggregate = aggregateRows == null
     ? [{ GRAND_TOTAL: pageRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_PENDIENTE) || 0), 0), GRAND_TOTAL_VENCIDO: pageRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_VENCIDO) || 0), 0), CLIENT_COUNT: new Set(pageRows.map((row) => String(row.CLIENTE || '').trim()).filter(Boolean)).size, VENCIDO_CLIENT_COUNT: new Set(pageRows.filter((row) => (parseFloat(row.TOTAL_VENCIDO) || 0) > 0).map((row) => String(row.CLIENTE || '').trim()).filter(Boolean)).size }]
     : aggregateRows;
   const routeSql = async (sql) => {
+    if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return clientPageRows();
     if (/WITH\s+PAGE_DOCS/i.test(sql)) {
       if (/\.COBROS/i.test(sql)) return pageCobros;
       if (/REPARTIDOR_COBROS/i.test(sql)) return pageRepartidor;
@@ -113,7 +154,6 @@ function mockRepoPendingSummaryDb({
         CVC_GRAND_TOTAL_VENCIDO: row.GRAND_TOTAL_VENCIDO ?? row.CVC_GRAND_TOTAL_VENCIDO ?? 0,
       }];
     }
-    if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return pageRows;
     return [];
   };
   mockQuery.mockImplementation(routeSql);
@@ -173,11 +213,11 @@ describe('commercial cobros hardening', () => {
       clientCount: 1,
       vencidoClientCount: 1,
       source: 'CVC',
-      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 1 },
     });
   });
 
-  test('getPendingSummary applies bounded page/offset and page-doc adjustment scope for ALL', async () => {
+  test('getPendingSummary applies bounded page/offset to full client totals for ALL', async () => {
     mockRepoPendingSummaryDb({
       pageRows: [
         { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
@@ -195,11 +235,12 @@ describe('commercial cobros hardening', () => {
 
     expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
     const summarySql = findRepoSqlCall((candidate) => /OFFSET\s+50\s+ROWS/i.test(candidate));
-    expect(summarySql).toMatch(/ORDER BY\s+TOTAL_PENDIENTE\s+DESC,\s+CLIENTE\s+ASC,\s+SERIE_DOCUMENTO\s+ASC,\s+NUMERO_DOCUMENTO\s+ASC/i);
+    expect(summarySql).toMatch(/CLIENT_NET/i);
+    expect(summarySql).toMatch(/ORDER BY\s+C\.TOTAL_PENDIENTE\s+DESC,\s+C\.CLIENTE\s+ASC/i);
     expect(summarySql).toMatch(/OFFSET\s+50\s+ROWS\s+FETCH\s+FIRST\s+25\s+ROWS\s+ONLY/i);
     const pageAdjustmentSql = findRepoSqlCall((candidate) => /WITH\s+PAGE_DOCS/i.test(candidate));
-    expect(pageAdjustmentSql).toBeTruthy();
-    const totalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
+    expect(pageAdjustmentSql).toBe('');
+    const totalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate) && /AS\s+GRAND_TOTAL/i.test(candidate));
     expect(totalsSql).toBeTruthy();
     expect(totalsSql).toMatch(/COUNT\(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END\)\s+AS\s+CLIENT_COUNT/i);
     expect(totalsSql).toMatch(/VENCIDO_CLIENT_COUNT/i);
@@ -224,7 +265,7 @@ describe('commercial cobros hardening', () => {
       offset: 50,
     });
 
-    expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 2 });
+    expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
     expect(Object.keys(result.summary)).toEqual(['C001']);
     expect(result.summary.C001).toEqual({ nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
     expect(result.grandTotal).toBe(100);
@@ -278,7 +319,7 @@ describe('commercial cobros hardening', () => {
       clientCount: 1,
       vencidoClientCount: 1,
       source: 'CVC',
-      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 1 },
     });
   });
 
@@ -312,7 +353,7 @@ describe('commercial cobros hardening', () => {
     expect(result.appOrdersTotal).toBe(0);
     const cvcRawSql = findRepoSqlCall((candidate) => /CVC_GRAND_TOTAL/i.test(candidate));
     expect(cvcRawSql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
-    const portfolioTotalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
+    const portfolioTotalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate) && /AS\s+GRAND_TOTAL/i.test(candidate));
     expect(portfolioTotalsSql).toBeTruthy();
   });
 
@@ -336,7 +377,7 @@ describe('commercial cobros hardening', () => {
     expect(result.grandTotal).toBe(300);
     expect(result.grandTotalVencido).toBe(50);
     expect(result.clientCount).toBe(2);
-    const totalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
+    const totalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate) && /AS\s+GRAND_TOTAL/i.test(candidate));
     expect(totalsSql).toMatch(/SELECT\s+COALESCE\(SUM\(NET_TOTAL\),\s*0\)\s+AS\s+GRAND_TOTAL/i);
     expect(totalsSql).toMatch(/COUNT\(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END\)\s+AS\s+CLIENT_COUNT/i);
     expect(totalsSql).toMatch(/CVC_GRAND_TOTAL/i);

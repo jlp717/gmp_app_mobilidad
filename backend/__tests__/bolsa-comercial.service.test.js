@@ -300,6 +300,20 @@ describe('BolsaComercial Service', () => {
             expect(mockQuery.mock.calls[0][0]).toMatch(/TRIM\(CODIGOVENDEDOR\) IN \(\?, \?\)/);
             expect(mockQuery.mock.calls[0][1]).toEqual([2026, 6, '01', '02']);
         });
+
+        test('should include default 300 EUR status for requested vendors without row', async () => {
+            mockQuery.mockResolvedValueOnce([
+                { ID: 1, CODIGOVENDEDOR: '01 ', EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 100, CONSUMIDO: 20, ACUMULADO: 120 },
+            ]);
+
+            const result = await bolsaService.getGroupedStatus(['01', '02'], 2026, 6);
+
+            expect(result.vendedores).toEqual([
+                expect.objectContaining({ vendedor: '01', saldoDisponible: 100, consumido: 20, acumulado: 120 }),
+                expect.objectContaining({ vendedor: '02', saldoDisponible: 300, consumido: 0, acumulado: 0 }),
+            ]);
+            expect(result.totals).toMatchObject({ saldoDisponible: 400, consumido: 20, acumulado: 120, vendedores: 2 });
+        });
     });
 
     describe('updateBolsaConfig', () => {
