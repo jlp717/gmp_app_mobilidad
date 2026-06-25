@@ -862,7 +862,7 @@ describe('DDD cobros route contracts', () => {
       code: '98',
       role: 'JEFE_VENTAS',
       isJefeVentas: true,
-      vendorCodes: ['01', '02'],
+      vendorCodes: ['01', '02', 'UNK'],
     }))
       .get('/C001/pendientes')
       .query({
@@ -906,7 +906,7 @@ describe('DDD cobros route contracts', () => {
       code: '98',
       role: 'JEFE_VENTAS',
       isJefeVentas: true,
-      vendorCodes: ['01', '02'],
+      vendorCodes: ['01', '02', 'UNK'],
     }))
       .get('/4300032258/pendientes')
       .query({ vendedorCodes: 'ALL', forceRefresh: '1' });
@@ -917,7 +917,7 @@ describe('DDD cobros route contracts', () => {
       expect.objectContaining({
         userId: '98',
         userRole: 'JEFE_VENTAS',
-        vendedorCodes: ['01', '02'],
+        vendedorCodes: ['01', '02', 'UNK'],
       }),
     );
     expect(db.queryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CVC/i);

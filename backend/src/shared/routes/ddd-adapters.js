@@ -252,6 +252,14 @@ function normalizePedidoCodeList(value) {
   return sanitizeCodeListForParams(String(value || ''), 2);
 }
 
+function normalizeCobrosVendorCodeList(value) {
+  const values = Array.isArray(value) ? value : String(value || '').split(',');
+  return values
+    .map((code) => String(code || '').trim())
+    .filter((code) => code && code.toUpperCase() !== 'ALL' && /^[A-Za-z0-9]{1,10}$/.test(code))
+    .map((code) => code.substring(0, 10));
+}
+
 function getPedidoUserContext(req) {
   const user = req.user || {};
   return {
@@ -282,6 +290,34 @@ function resolvePedidoVendorScope(req, requestedVendorCodes) {
       codes = context.visibleVendorCodes;
     } else if (codes.some((code) => !context.visibleVendorCodes.some((visible) => salesCodesMatch(code, visible)))) {
       return { ok: false, error: 'JEFE_VENTAS no puede operar vendedores fuera de su alcance' };
+    }
+  }
+
+  return { ok: true, codes: [...new Set(codes)] };
+}
+
+function resolveCobrosVendorScope(req, requestedVendorCodes) {
+  const context = getPedidoUserContext(req);
+  const requestedRaw = normalizePedidoCode(requestedVendorCodes || 'ALL');
+  const requestedAll = !requestedRaw || requestedRaw.toUpperCase() === 'ALL';
+  let codes = requestedAll ? [] : normalizeCobrosVendorCodeList(requestedRaw);
+
+  if (!context.isManager) {
+    if (!context.code) return { ok: false, error: 'Usuario comercial sin vendedor asignado' };
+    const visibilityCodes = normalizeCobrosVendorCodeList(getVendorVisibilityScope(context.code));
+    if (requestedAll) {
+      codes = visibilityCodes;
+    } else if (codes.some((code) => !visibilityCodes.some((allowed) => salesCodesMatch(code, allowed)))) {
+      return { ok: false, error: 'COMERCIAL solo puede operar su vendedor' };
+    }
+  } else {
+    const visibleCodes = normalizeCobrosVendorCodeList(context.visibleVendorCodes);
+    if (visibleCodes.length > 0) {
+      if (requestedAll) {
+        codes = visibleCodes;
+      } else if (codes.some((code) => !visibleCodes.some((visible) => salesCodesMatch(code, visible)))) {
+        return { ok: false, error: 'JEFE_VENTAS no puede operar vendedores fuera de su alcance' };
+      }
     }
   }
 
@@ -419,7 +455,7 @@ async function authorizeCobrosClientScope(req, clientCode, vendedorCodes, action
   if (!client) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
 
   const context = getPedidoUserContext(req);
-  const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+  const vendorScope = resolveCobrosVendorScope(req, vendedorCodes);
   if (!vendorScope.ok) return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
 
   const cvcVendorFilter = buildCvcVendorScopeFilter(vendorScope.codes);
