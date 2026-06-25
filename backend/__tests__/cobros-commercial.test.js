@@ -367,10 +367,10 @@ describe('commercial cobros hardening', () => {
       vendorCodes: ['01', '02'],
     });
 
-    const [sql, params] = mockQueryWithParams.mock.calls.find(([candidate]) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
     expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
+    expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
-    expect(params).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
   test('getPendingSummary rejects manager selected vendor outside visible scope', async () => {
@@ -401,14 +401,14 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const [sql, params] = mockQueryWithParams.mock.calls.find(([candidate]) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
     expect(sql).toMatch(/SELECT\s+TRIM\(CLP\.CODIGOCLIENTE\)\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
     expect(sql).toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
     expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
+    expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
-    expect(params).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
   test('getPendingSummary for large manager scope avoids ODBC bind limit', async () => {
@@ -560,7 +560,8 @@ describe('commercial cobros hardening', () => {
     );
     expect(cvcSql).toMatch(/DSEDAC\.CLP/);
     expect(cvcSql).toMatch(/DSED\.LACLAE/);
-    expect(params).toEqual(['C001', '01', '1', '01', '1']);
+    expect(cvcSql).toMatch(/IN\s*\('01','1'\)/i);
+    expect(params).toEqual(['C001']);
   });
 
   test('getPendientes merges CVC debt with provisional app orders', async () => {

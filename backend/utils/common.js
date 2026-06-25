@@ -279,16 +279,12 @@ function expandVendorCodesForSql(vendorCodes) {
 }
 
 function buildSafeAlnumInList(codes) {
-    const canBindSafely = codes.length <= MAX_CVC_VENDOR_SCOPE_BIND_CODES &&
-        codes.every((code) => String(code).length <= 2);
-    if (canBindSafely) {
-        return {
-            inList: codes.map(() => '?').join(','),
-            params: codes,
-        };
-    }
+    // IBM i/ODBC produced very slow plans for CVC vendor scopes when the
+    // CLP+LACLAE IN lists were bound as parameters, even for a single vendor.
+    // Values arrive from expandVendorCodesForSql(), which only keeps
+    // alphanumeric codes, so literals are safe here and match the fast plan.
     return {
-        inList: codes.map((code) => `'${code}'`).join(','),
+        inList: codes.map((code) => `'${String(code).replace(/'/g, "''")}'`).join(','),
         params: [],
     };
 }
