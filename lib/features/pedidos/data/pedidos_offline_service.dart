@@ -8,6 +8,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
+import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -18,9 +20,11 @@ class PedidosOfflineService {
   static const _maxBatchSize = 50;
   static const _maxConcurrentSyncs = 1;
   static const _defaultYieldEvery = 5;
+  static const String _anonymousScope = 'anon';
 
   static Box<dynamic>? _draftsBox;
   static Box<dynamic>? _syncQueueBox;
+  static String _scope = _anonymousScope;
 
   static Future Function(
       {required String clientCode,
@@ -28,20 +32,81 @@ class PedidosOfflineService {
       required String vendedorCode,
       required String tipoVenta,
       required List lines,
+      required String observaciones,
       required String? clientRequestId}) _createOrder = _defaultCreateOrder;
+  static Future<Map<String, dynamic>> Function(
+    int orderId,
+    String saleType, {
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
+  }) _confirmOrder = PedidosService.confirmOrder;
 
   /// Initialize Hive boxes
   static Future<void> init() async {
-    final key = _generateEncryptionKey();
-    final cipher = HiveAesCipher(key);
-    _draftsBox = await Hive.openBox(_draftsBoxName, encryptionCipher: cipher);
-    _syncQueueBox =
-        await Hive.openBox(_syncQueueBoxName, encryptionCipher: cipher);
+    _draftsBox = await _openDraftsBox();
+    _syncQueueBox = await _openSyncQueueBox();
   }
 
   static List<int> _generateEncryptionKey() {
     const seed = 'gmp_app_pedidos_offline_key_v1';
     return sha256.convert(utf8.encode(seed)).bytes;
+  }
+
+  static void setScope(String rawScope) {
+    final normalized = rawScope.trim();
+    if (normalized.isEmpty) {
+      clearScope();
+      return;
+    }
+    _scope =
+        sha256.convert(utf8.encode(normalized)).toString().substring(0, 16);
+    debugPrint('[PedidosOffline] Scope changed');
+  }
+
+  static void clearScope() {
+    _scope = _anonymousScope;
+  }
+
+  static String _scopedKey(String key) => '$_scope::$key';
+
+  static String _ensureScopedKey(String key) {
+    if (_isCurrentScopeKey(key)) return key;
+    final unscoped = key.contains('::') ? key.split('::').last : key;
+    return _scopedKey(unscoped);
+  }
+
+  static bool _isCurrentScopeKey(dynamic key) {
+    return key.toString().startsWith('$_scope::');
+  }
+
+  static Future<Box<dynamic>> _openDraftsBox() {
+    return HiveSecureBox.open<dynamic>(
+      _draftsBoxName,
+      legacyKey: _generateEncryptionKey(),
+    );
+  }
+
+  static Future<Box<dynamic>> _drafts() async {
+    final box = _draftsBox;
+    if (box != null && box.isOpen) return box;
+    _draftsBox = await _openDraftsBox();
+    return _draftsBox!;
+  }
+
+  static Future<Box<dynamic>> _openSyncQueueBox() {
+    return HiveSecureBox.open<dynamic>(
+      _syncQueueBoxName,
+      legacyKey: _generateEncryptionKey(),
+    );
+  }
+
+  static Future<Box<dynamic>> _syncQueue() async {
+    final box = _syncQueueBox;
+    if (box != null && box.isOpen) return box;
+    _syncQueueBox = await _openSyncQueueBox();
+    return _syncQueueBox!;
   }
 
   static bool _isValidClientRequestId(String? value) {
@@ -65,10 +130,13 @@ class PedidosOfflineService {
     required List<OrderLine> lines,
     String? draftKey,
   }) async {
-    final box = _draftsBox ?? await Hive.openBox(_draftsBoxName);
-    final key = draftKey ??
-        'draft_${clientCode}_${DateTime.now().millisecondsSinceEpoch}';
+    final box = await _drafts();
+    final key = draftKey != null
+        ? _ensureScopedKey(draftKey)
+        : _scopedKey(
+            'draft_${clientCode}_${DateTime.now().millisecondsSinceEpoch}');
     final data = {
+      'scope': _scope,
       'clientCode': clientCode,
       'clientName': clientName,
       'saleType': saleType,
@@ -77,7 +145,7 @@ class PedidosOfflineService {
       'savedAt': DateTime.now().toIso8601String(),
     };
     await box.put(key, jsonEncode(data));
-    debugPrint('[PedidosOffline] Draft saved: $key');
+    debugPrint('[PedidosOffline] Draft saved');
     return key;
   }
 
@@ -90,7 +158,7 @@ class PedidosOfflineService {
     required List<OrderLine> lines,
   }) async {
     await saveDraft(
-      draftKey: 'draft_auto_$clientCode',
+      draftKey: _scopedKey('draft_auto_$clientCode'),
       clientCode: clientCode,
       clientName: clientName,
       saleType: saleType,
@@ -105,7 +173,7 @@ class PedidosOfflineService {
     if (box == null || box.isEmpty) return [];
 
     final drafts = <Map<String, dynamic>>[];
-    for (final key in box.keys) {
+    for (final key in box.keys.where(_isCurrentScopeKey)) {
       try {
         final raw = box.get(key);
         if (raw is String) {
@@ -114,7 +182,7 @@ class PedidosOfflineService {
           drafts.add(data);
         }
       } catch (e) {
-        debugPrint('[PedidosOffline] Error reading draft $key: $e');
+        debugPrint('[PedidosOffline] Error reading draft: $e');
       }
     }
     // Sort by savedAt descending
@@ -127,42 +195,77 @@ class PedidosOfflineService {
 
   /// Delete a draft
   static Future<void> deleteDraft(String key) async {
-    final box = _draftsBox ?? await Hive.openBox(_draftsBoxName);
+    final box = await _drafts();
     await box.delete(key);
   }
 
   /// Get draft count
-  static int get draftCount => _draftsBox?.length ?? 0;
+  static int get draftCount =>
+      _draftsBox?.keys.where(_isCurrentScopeKey).length ?? 0;
 
   // ── Sync Queue (offline order confirmations) ──
 
   /// Queue a confirmed order for sync when back online
-  static Future queueOrderForSync({
+  static Future<String> queueOrderForSync({
     required String clientCode,
     required String clientName,
     required String vendedorCode,
     required String saleType,
     required List lines,
+    String observaciones = '',
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
+    String? clientRequestId,
+    bool notifyQueued = true,
   }) async {
-    final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
+    final box = await _syncQueue();
     final key = await _nextSyncKey(box);
     final lineJson = [];
     for (final line in lines) {
       lineJson.add((line as OrderLine).toJson());
     }
     final data = {
+      "scope": _scope,
       "clientCode": clientCode,
       "clientName": clientName,
       "vendedorCode": vendedorCode,
       "saleType": saleType,
+      "observaciones": observaciones,
       "lines": lineJson,
-      "clientRequestId": _clientRequestIdForSyncKey(key),
+      "deliveryDate": deliveryDate,
+      "vehicleCode": vehicleCode,
+      "driverCode": driverCode,
+      "routeCode": routeCode,
+      "clientRequestId": _isValidClientRequestId(clientRequestId)
+          ? clientRequestId!.trim()
+          : _clientRequestIdForSyncKey(key),
       "queuedAt": DateTime.now().toIso8601String(),
       "status": "pending",
       "attempts": 0,
     };
     await box.put(key, jsonEncode(data));
-    debugPrint("[PedidosOffline] Order queued for sync: $key");
+    debugPrint("[PedidosOffline] Order queued for sync");
+    if (notifyQueued) {
+      OfflineSyncNotifier.orderQueued(clientName: clientName);
+    }
+    return key;
+  }
+
+  static Future<void> deleteQueuedOrder(String syncKey) async {
+    final box = await _syncQueue();
+    await box.delete(syncKey);
+  }
+
+  static void notifyQueuedOrder(String syncKey) {
+    final box = _syncQueueBox;
+    if (box == null || !box.containsKey(syncKey)) return;
+    final data = _decodeSyncItem(box, syncKey);
+    if (data == null) return;
+    OfflineSyncNotifier.orderQueued(
+      clientName: data["clientName"]?.toString() ?? "cliente",
+    );
   }
 
   /// Get all pending sync items in stable queue order.
@@ -177,7 +280,7 @@ class PedidosOfflineService {
 
   /// Mark a failed queued order as pending for the next bounded retry.
   static Future retryFailedSync(String syncKey) async {
-    final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
+    final box = await _syncQueue();
     final data = _decodeSyncItem(box, syncKey);
     if (data == null) return false;
     if (data["status"] == "failed") {
@@ -197,7 +300,7 @@ class PedidosOfflineService {
     int maxConcurrency = _maxConcurrentSyncs,
     int yieldEvery = _defaultYieldEvery,
   }) async {
-    final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
+    final box = await _syncQueue();
     final pending = getPendingSyncs();
     final batchLimit = maxBatchSize.clamp(1, _maxBatchSize).toInt();
     final effectiveConcurrency =
@@ -211,19 +314,43 @@ class PedidosOfflineService {
       final syncKey = item["syncKey"].toString();
       try {
         final prepared = await _prepareSyncItem(box, syncKey, item);
-        final response = await _createOrder(
-          clientCode: prepared["clientCode"].toString(),
-          clientName: prepared["clientName"].toString(),
-          vendedorCode: prepared["vendedorCode"].toString(),
-          tipoVenta: prepared["saleType"] as String? ?? "CC",
-          lines: _decodeOrderLines(prepared["lines"]),
-          clientRequestId: prepared["clientRequestId"] as String?,
-        );
-        if (response is Map) {
-          if (response["queued"] == true) {
+        var orderId = _asIntOrNull(prepared["serverOrderId"]);
+        final saleType = prepared["saleType"] as String? ?? "CC";
+
+        if (orderId == null) {
+          final response = await _createOrder(
+            clientCode: prepared["clientCode"].toString(),
+            clientName: prepared["clientName"].toString(),
+            vendedorCode: prepared["vendedorCode"].toString(),
+            tipoVenta: saleType,
+            lines: _decodeOrderLines(prepared["lines"]),
+            observaciones: prepared["observaciones"]?.toString() ?? "",
+            clientRequestId: prepared["clientRequestId"] as String?,
+          );
+          if (response is Map && response["queued"] == true) {
             throw StateError(
                 "Pedido no confirmado por servidor; conservado para revision.");
           }
+          orderId =
+              _asIntOrNull((response as Map)["id"] ?? response["orderId"]);
+          if (orderId == null) {
+            throw StateError("Pedido sincronizado sin id de servidor.");
+          }
+          prepared["serverOrderId"] = orderId;
+          await box.put(syncKey, jsonEncode(prepared));
+        }
+
+        final confirmResult = await _confirmOrder(
+          orderId,
+          saleType,
+          deliveryDate: prepared["deliveryDate"] as String?,
+          vehicleCode: prepared["vehicleCode"] as String?,
+          driverCode: prepared["driverCode"] as String?,
+          routeCode: prepared["routeCode"] as String?,
+        );
+        if (confirmResult["queued"] == true) {
+          throw StateError(
+              "Confirmacion no completada; pedido conservado para retry.");
         }
         await box.delete(syncKey);
         synced++;
@@ -279,6 +406,7 @@ class PedidosOfflineService {
               required String vendedorCode,
               required String tipoVenta,
               required List lines,
+              required String observaciones,
               required String? clientRequestId})
           createOrder) {
     _createOrder = createOrder;
@@ -289,12 +417,32 @@ class PedidosOfflineService {
     _createOrder = _defaultCreateOrder;
   }
 
+  @visibleForTesting
+  static void debugSetConfirmOrderForTesting(
+    Future<Map<String, dynamic>> Function(
+      int orderId,
+      String saleType, {
+      String? deliveryDate,
+      String? vehicleCode,
+      String? driverCode,
+      String? routeCode,
+    }) confirmOrder,
+  ) {
+    _confirmOrder = confirmOrder;
+  }
+
+  @visibleForTesting
+  static void debugResetConfirmOrderForTesting() {
+    _confirmOrder = PedidosService.confirmOrder;
+  }
+
   static Future _defaultCreateOrder({
     required String clientCode,
     required String clientName,
     required String vendedorCode,
     required String tipoVenta,
     required List lines,
+    required String observaciones,
     required String? clientRequestId,
   }) {
     return PedidosService.createOrder(
@@ -303,15 +451,16 @@ class PedidosOfflineService {
       vendedorCode: vendedorCode,
       tipoVenta: tipoVenta,
       lines: lines.cast(),
+      observaciones: observaciones,
       clientRequestId: clientRequestId,
     );
   }
 
   static Future _nextSyncKey(Box box) async {
-    var key = "sync_${DateTime.now().microsecondsSinceEpoch}";
+    var key = _scopedKey("sync_${DateTime.now().microsecondsSinceEpoch}");
     while (box.containsKey(key)) {
       await Future.delayed(Duration.zero);
-      key = "sync_${DateTime.now().microsecondsSinceEpoch}";
+      key = _scopedKey("sync_${DateTime.now().microsecondsSinceEpoch}");
     }
     return key;
   }
@@ -322,16 +471,16 @@ class PedidosOfflineService {
     if (box.isEmpty) return [];
 
     final items = [];
-    for (final key in box.keys) {
+    for (final key in box.keys.where(_isCurrentScopeKey)) {
       try {
         final data = _decodeSyncItem(box, key.toString());
         if (data == null) {
-        } else if (data["status"] == status) {
+        } else if (data["scope"] == _scope && data["status"] == status) {
           data["syncKey"] = key;
           items.add(data);
         }
       } catch (e) {
-        debugPrint("[PedidosOffline] Error reading sync item $key: $e");
+        debugPrint("[PedidosOffline] Error reading sync item: $e");
       }
     }
     items.sort((a, b) {
@@ -389,7 +538,7 @@ class PedidosOfflineService {
       data["clientRequestId"] = _clientRequestIdForSyncKey(syncKey);
     }
     await box.put(syncKey, jsonEncode(data));
-    debugPrint("[PedidosOffline] Sync failed for $syncKey: $error");
+    debugPrint("[PedidosOffline] Sync failed: $error");
     return {
       "syncKey": syncKey,
       "clientRequestId": data["clientRequestId"],
@@ -401,5 +550,10 @@ class PedidosOfflineService {
   static int _asInt(Object? value) {
     if (value is int) return value;
     return int.tryParse(value?.toString() ?? "") ?? 0;
+  }
+
+  static int? _asIntOrNull(Object? value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? "");
   }
 }

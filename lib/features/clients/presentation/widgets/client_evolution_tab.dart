@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_config.dart';
+import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/modern_loading.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
 class ClientEvolutionTab extends StatefulWidget {
   final String clientCode;
@@ -29,6 +26,8 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
   List<Map<String, dynamic>> _monthlySales = [];
   List<Map<String, dynamic>> _topProducts = [];
   List<Map<String, dynamic>> _returns = [];
+  int _loadGeneration = 0;
+  CancelToken? _cancelToken;
 
   @override
   void initState() {
@@ -36,80 +35,76 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
     _loadEvolutionData();
   }
 
+  @override
+  void didUpdateWidget(covariant ClientEvolutionTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.clientCode != widget.clientCode ||
+        oldWidget.vendedorCodes != widget.vendedorCodes) {
+      _loadEvolutionData();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelToken?.cancel('client evolution disposed');
+    super.dispose();
+  }
+
   Future<void> _loadEvolutionData() async {
+    final generation = ++_loadGeneration;
+    _cancelToken?.cancel('client evolution superseded');
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      final baseUrl = ApiConfig.baseUrl;
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
-
-      // Req #12: usar el endpoint específico /api/pedidos/client-evolution/{code}
-      // que devuelve {monthlySales, topProducts, returns}. Se hace un fallback
-      // al endpoint legacy /api/evolution/monthly si el nuevo no responde, para
-      // mantener compatibilidad durante el rollout.
-      Uri uri = Uri.parse(
-        '$baseUrl/api/pedidos/client-evolution/${widget.clientCode}',
+      final data = await ApiClient.get(
+        '/pedidos/client-evolution/${Uri.encodeComponent(widget.clientCode)}',
+        queryParameters: {'vendedorCodes': widget.vendedorCodes},
+        cacheKey:
+            'clients:evolution:${widget.clientCode}:${widget.vendedorCodes}',
+        cacheTTL: const Duration(minutes: 15),
+        cancelToken: cancelToken,
       );
-      var response = await http.get(
-        uri,
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode != 200) {
-        uri = Uri.parse(
-          '$baseUrl/api/evolution/monthly?clientCode=${widget.clientCode}&vendedorCodes=${widget.vendedorCodes}',
-        );
-        response = await http.get(
-          uri,
-          headers: {'Authorization': 'Bearer $token'},
-        );
-      }
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          // The monthly endpoint returns: { monthly, summary }
-          // The client-evolution endpoint returns: { monthlySales, topProducts, returns }
-          // Map fields flexibly to support both response shapes
-          final monthlyData =
-              (data['monthly'] ?? data['monthlySales'] ?? []) is List
-                  ? ((data['monthly'] ?? data['monthlySales'] ?? []) as List)
-                      .map((e) => Map<String, dynamic>.from(e as Map))
-                      .toList()
-                  : [];
-          final topProductsData =
-              (data['products'] ?? data['topProducts'] ?? []) is List
-                  ? ((data['products'] ?? data['topProducts'] ?? []) as List)
-                      .map((e) => Map<String, dynamic>.from(e as Map))
-                      .toList()
-                  : [];
-          final returnsData = (data['returns'] is List)
-              ? (data['returns'] as List)
-                  .map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList()
-              : [];
-
-          setState(() {
-            _monthlySales = monthlyData;
-            _topProducts = topProductsData;
-            _returns = returnsData;
-            _isLoading = false;
-          });
-          return;
-        }
+      if (!mounted || generation != _loadGeneration) return;
+      if (data['success'] == true) {
+        final evolutionData = data['data'] is Map
+            ? Map<String, dynamic>.from(data['data'] as Map)
+            : data;
+        setState(() {
+          _monthlySales = _mapList(
+            evolutionData['monthly'] ?? evolutionData['monthlySales'],
+          );
+          _topProducts = _mapList(
+            evolutionData['products'] ?? evolutionData['topProducts'],
+          );
+          _returns = _mapList(evolutionData['returns']);
+          _isLoading = false;
+        });
+        return;
       }
       throw Exception('Failed to load evolution data');
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
         });
       }
     }
+  }
+
+  List<Map<String, dynamic>> _mapList(Object? value) {
+    if (value is! List) return <Map<String, dynamic>>[];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   @override

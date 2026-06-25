@@ -58,9 +58,11 @@ class PerformanceCache {
   constructor() {
     this._l1Cache = new Map();
     this._l1AccessOrder = [];
+    this._pendingFetches = new Map();
     this._stats = {
       l1Hits: 0,
       l2Hits: 0,
+      coalesced: 0,
       misses: 0,
       totalRequests: 0
     };
@@ -184,20 +186,41 @@ class PerformanceCache {
     }
 
     // Fetch fresh data
-    this._stats.misses++;
-    const data = await fetchFn();
-
-    // Populate both caches
-    this.setL1(key, data, ttlConfig.l1);
-    if (redisCache?.set) {
-      try {
-        await redisCache.set(key, ttlConfig.l2, JSON.stringify(data));
-      } catch (err) {
-        // Redis unavailable, L1 only
+    const pendingFetch = this._pendingFetches.get(key);
+    if (pendingFetch) {
+      this._stats.coalesced++;
+      const data = await pendingFetch;
+      if (this._pendingFetches.get(key) === pendingFetch) {
+        this.setL1(key, data, ttlConfig.l1);
       }
+      return { data, source: 'COALESCED', cached: true };
     }
 
-    return { data, source: 'FETCH', cached: false };
+    this._stats.misses++;
+    const fetchPromise = Promise.resolve().then(fetchFn);
+    this._pendingFetches.set(key, fetchPromise);
+
+    try {
+      const data = await fetchPromise;
+
+      if (this._pendingFetches.get(key) === fetchPromise) {
+        // Populate both caches
+        this.setL1(key, data, ttlConfig.l1);
+        if (redisCache?.set) {
+          try {
+            await redisCache.set(key, ttlConfig.l2, JSON.stringify(data));
+          } catch (err) {
+            // Redis unavailable, L1 only
+          }
+        }
+      }
+
+      return { data, source: 'FETCH', cached: false };
+    } finally {
+      if (this._pendingFetches.get(key) === fetchPromise) {
+        this._pendingFetches.delete(key);
+      }
+    }
   }
 
   /**
@@ -210,6 +233,11 @@ class PerformanceCache {
         this._l1Cache.delete(key);
         const idx = this._l1AccessOrder.indexOf(key);
         if (idx > -1) this._l1AccessOrder.splice(idx, 1);
+      }
+    }
+    for (const key of this._pendingFetches.keys()) {
+      if (key.includes(pattern)) {
+        this._pendingFetches.delete(key);
       }
     }
 
@@ -226,6 +254,7 @@ class PerformanceCache {
   invalidateAll() {
     this._l1Cache.clear();
     this._l1AccessOrder = [];
+    this._pendingFetches.clear();
     const redisCache = getRedisCacheAdapter();
     if (redisCache?.del) {
       ['ALL:*', 'JEFE_VENTAS:*', 'ADMIN:*', 'COMERCIAL:*', 'REPARTIDOR:*'].forEach((safePattern) => {
@@ -245,6 +274,7 @@ class PerformanceCache {
       l2HitRate: ((this._stats.l2Hits / total) * 100).toFixed(1) + '%',
       missRate: ((this._stats.misses / total) * 100).toFixed(1) + '%',
       l1Size: this._l1Cache.size,
+      pendingFetches: this._pendingFetches.size,
       l1MaxEntries: MAX_L1_ENTRIES
     };
   }

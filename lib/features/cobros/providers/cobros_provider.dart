@@ -426,6 +426,7 @@ class CobrosProvider extends ChangeNotifier {
             'cobros:pending-summary:$baseEndpoint:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 2),
         forceRefresh: forceRefresh,
+        allowStale: false,
       );
       if (response['success'] == true) {
         final raw = response['summary'] as Map<String, dynamic>? ?? {};
@@ -513,6 +514,7 @@ class CobrosProvider extends ChangeNotifier {
         cacheKey: 'cobros:pendientes:$codigoCliente:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 1),
         forceRefresh: forceRefresh,
+        allowStale: false,
       );
       if (response['success'] == true) {
         final payload = response['pendientes'] is Map
@@ -605,6 +607,7 @@ class CobrosProvider extends ChangeNotifier {
         cacheKey: 'cobros:historico:$codigoCliente:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 5),
         forceRefresh: forceRefresh,
+        maxStale: const Duration(minutes: 10),
       );
       if (response['success'] == true) {
         final list = response['historico'] as List? ?? [];
@@ -639,6 +642,7 @@ class CobrosProvider extends ChangeNotifier {
         cacheKey: 'cobros:estado:$codigoCliente:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 1),
         forceRefresh: forceRefresh,
+        allowStale: false,
       );
       if (response['success'] == true && response['estadoCliente'] != null) {
         _estadoClienteActual = EstadoCliente.fromJson(

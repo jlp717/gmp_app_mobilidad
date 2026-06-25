@@ -32,11 +32,18 @@ const {
 const {
     authorizeResolvedClient,
     buildAuthorizationSafeResponse,
+    isSupervisor,
 } = require('./chatbot_authorization');
 const {
     buildToolMetadata,
     mergeMetadata,
 } = require('./chatbot_export');
+const {
+    analyzeCommercialQuery,
+    buildCapabilityText,
+    buildClarifyingResponse,
+    buildFollowUps,
+} = require('./chatbot_nlu');
 
 // ── Intent Detection Patterns (expanded for misspellings, synonyms, natural language) ──
 
@@ -59,12 +66,12 @@ const intentPatterns = {
     margenGlobal: /margen\s*(global|total|general|mi\s*margen|del\s*mes)/i,
 
     // Pricing (precio, coste, tarifa, cuanto cuesta, cuanto vale, cuanto cobro)
-    precio: /precio|cost[eo]|tarifa|cu[aá]nto|cuanto\s*cuesta|cuanto\s*vale|vender|vendo|cobro|cu[aá]nto\s*cobra|a\s*cuanto|precio\s*venta|pvp/i,
+    precio: /precio|cost[eo]|tarifa|cu[aá]nto\s*(?:cuesta|vale|cobra|cobro\s+(?:por|el|la|este|esta)|debo\s*cobrar)|cuanto\s*(?:cuesta|vale|cobra|cobro\s+(?:por|el|la|este|esta)|debo\s*cobrar)|a\s*cuanto|precio\s*venta|pvp/i,
     minimo: /m[ií]nimo|minimo|suelo|floor|breakeven|break-even|precio\s*suelo|no\s*perder|precio\s*minimo|bajar\s*de/i,
     descuento: /descuento|rebaja|bajar|negociar|simul|si\s*le\s*hago|si\s*bajo|le\s*hago\s*un|aplicar\s*descuento/i,
 
     // Client Risk & Debt (deuda, debe, pendiente, vencido, me deben)
-    deuda: /deuda|debe|adeuda|pendiente|vencid|pagar|cobr|deben|me\s*deben|deuda.*cliente|impagad|moroso/i,
+    deuda: /deuda|debe|adeuda|pendiente|vencid|pagar|deben|me\s*deben|deuda.*cliente|impagad|moroso/i,
     bloqueo: /bloqueado|bloqueo|no\s*puedo\s*vender|impedido|restringid|bloque|no\s*venta/i,
     riesgo: /riesgo|score|evaluaci[oó]n|evaluar|peligro|fiabilidad|solvencia|riesgo\s*cliente|puntuaci[oó]n/i,
     credito: /cr[eé]dito|l[ií]mite|limite.*cr[eé]dito|disponible.*cr[eé]dito|linea.*cr[eé]dito|credito\s*cliente/i,
@@ -143,15 +150,25 @@ const MONTH_LABELS = [
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ];
 
+const PRODUCT_CODE_STOP_WORDS = new Set([
+    'a', 'al', 'articulo', 'articulos', 'con', 'de', 'del', 'el', 'la',
+    'las', 'los', 'para', 'por', 'producto', 'productos', 'que', 'un', 'una',
+]);
+
 function extractCodes(message) {
     // Client codes: 4-10 digits, possibly preceded by "cliente", "client", "cli"
     const clientMatch = message.match(/client[e]?\s*[:#]?\s*(\d{4,10})/i) ||
         message.match(/(\d{5,10})/);
 
-    // Product codes: alphanumeric, possibly preceded by "producto", "articulo", "prod", "art"
-    const productMatch = message.match(/producto?\s*[:#]?\s*([A-Z0-9\-]+)/i) ||
-        message.match(/art[ií]culo?\s*[:#]?\s*([A-Z0-9\-]+)/i) ||
-        message.match(/(?:prod|art|ref|codigo)\s*[:#]?\s*([A-Z0-9\-]+)/i);
+    // Product codes. Natural phrases like "producto de migas" must not
+    // capture "de" as a code; lower-case names are resolved later by search.
+    const explicitProductMatch = message.match(/\b(?:prod|art|ref|codigo|cod)\b\s*[:#]?\s*([A-Za-z0-9\-]{2,30})\b/i);
+    const naturalProductMatch = message.match(/\b(?:producto|productos|articulo|articulos)\s*[:#]?\s*([A-Za-z0-9\-]{2,30})\b/i);
+    const rawProduct = explicitProductMatch ? explicitProductMatch[1] : (naturalProductMatch ? naturalProductMatch[1] : null);
+    const productLower = rawProduct ? rawProduct.toLowerCase() : '';
+    const productLooksLikeCode = rawProduct
+        && !PRODUCT_CODE_STOP_WORDS.has(productLower)
+        && (Boolean(explicitProductMatch) || /\d|-/.test(rawProduct) || rawProduct === rawProduct.toUpperCase());
 
     // Percentages
     const percentMatch = message.match(/(\d+)\s*%/);
@@ -160,8 +177,8 @@ function extractCodes(message) {
     const monthMatch = message.match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/i);
 
     // Invoice numbers (\bfactura\b avoids matching plural "facturas" as code "s")
-    const invoiceMatch = message.match(/\bfactura\s*[:#]?\s*([A-Z0-9\-]+)/i) ||
-        message.match(/\binvoice\s*[:#]?\s*([A-Z0-9\-]+)/i);
+    const invoiceMatch = message.match(/\bfactura\s*[:#]?\s*([A-Z0-9\-\/]+)/i) ||
+        message.match(/\binvoice\s*[:#]?\s*([A-Z0-9\-\/]+)/i);
 
     // Vehicle codes
     const vehicleMatch = message.match(/(?:camion|vehiculo|vehicle)\s*[:#]?\s*([A-Z0-9\-]+)/i);
@@ -184,7 +201,7 @@ function extractCodes(message) {
 
     return {
         clientCode: clientMatch ? clientMatch[1] : null,
-        productCode: productMatch ? productMatch[1] : null,
+        productCode: productLooksLikeCode ? rawProduct : null,
         percent: percentMatch ? parseFloat(percentMatch[1]) : null,
         month: monthMatch ? monthMap[monthMatch[1].toLowerCase()] : null,
         invoiceNumber,
@@ -279,11 +296,120 @@ function pickClientCandidate(query, clients) {
     return null;
 }
 
+const GENERIC_CLIENT_QUERY_TOKENS = new Set([
+    'actual', 'cobra', 'cobrado', 'cobrar', 'cobre', 'cobros', 'cuanta',
+    'cuantas', 'cuanto', 'cuantos', 'dia', 'este', 'esta', 'hoy', 'mes',
+    'mi', 'mis', 'pendiente', 'pendientes', 'pedido', 'pedidos', 'semana',
+    'ultimo', 'ultimos',
+]);
+
+function isGenericClientNameQuery(query) {
+    const tokens = normalizeSearchText(query)
+        .split(' ')
+        .filter((token) => token.length > 1);
+    if (tokens.length === 0) return true;
+    return tokens.every((token) => GENERIC_CLIENT_QUERY_TOKENS.has(token));
+}
+
 function formatClientAmbiguity(query, clients) {
     const list = clients.slice(0, 8).map((client) =>
         `- ${client.NOMBRE || client.name || 'Sin nombre'} (${client.CODIGO || client.code || 'sin codigo'}) ${client.POBLACION || ''}`.trim()
     ).join('\n');
     return `He encontrado varios clientes para "${query}". Dime el codigo o elige uno:\n${list}`;
+}
+
+function extractProductNameQuery(message) {
+    const text = String(message || '')
+        .replace(/\b(precio|stock|existencias|inventario|minimo|m[ií]nimo|descuento|simula|simular|producto|productos|art[ií]culo|articulos|referencia|codigo|cod|buscar|busca|dime|dame|ver|quiero|cuanto|cu[aá]nto|vale|cuesta|de|del|la|las|el|los|un|una|por|favor|sobre)\b/gi, ' ')
+        .replace(/\b\d{5,10}\b/g, ' ')
+        .replace(/[,:;#?¿!¡()[\]{}]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const cleaned = text
+        .replace(/\b(a|al|le|les|lo|la|vendi|vendido|vendio|vendiste|vendo|ventas?|comprado|compro|importe|total|cliente|clientes|este|esta|ese|esa|actual|seleccionado|seleccionada|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|jun|jul|ago|sep|oct|nov|dic)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return cleaned.length >= 3 ? cleaned : null;
+}
+
+function referencesCurrentClient(message) {
+    const text = normalizeSearchText(message);
+    return /\b(este|esta|ese|esa|actual)\s+cliente\b/.test(text)
+        || /\bcliente\s+(actual|seleccionado|seleccionada)\b/.test(text);
+}
+
+function isClientProductSalesAmountQuery(message) {
+    const text = normalizeSearchText(message);
+    if (/\b(a cuanto|precio|tarifa|pvp)\b/.test(text)) return false;
+    return /(?:cuanto|importe|total|ventas?).*(?:vendi|vendido|vendio|vendiste|comprado|compro)/.test(text)
+        || /(?:vendi|vendido|vendio|vendiste|ventas?).*(?:cliente|producto|de|del)/.test(text)
+        || /(?:ha|he|hemos)\s+(?:comprado|vendido).*(?:cliente|producto|de|del)/.test(text);
+}
+
+function productIntentNeedsResolution(message) {
+    if (isClientProductSalesAmountQuery(message)) {
+        return !intentPatterns.top.test(message);
+    }
+    if (/\b(a cuanto|precio)\b.*\b(vendi|vendido|vendio|vendiste|cliente)\b/.test(normalizeSearchText(message))) {
+        return !intentPatterns.top.test(message);
+    }
+    return /producto|productos|articulo|articulos|referencia|precio|stock|existencias|inventario|descuento|minimo|m[ií]nimo|cuanto\s+vale|cuanto\s+cuesta/i.test(message)
+        && !intentPatterns.top.test(message);
+}
+
+function plainProductSearchIntent(message) {
+    return intentPatterns.buscarProducto.test(message)
+        || (/producto|productos|articulo|articulos|referencia/i.test(message)
+            && !intentPatterns.precio.test(message)
+            && !intentPatterns.stock.test(message)
+            && !intentPatterns.descuento.test(message)
+            && !intentPatterns.minimo.test(message)
+            && !intentPatterns.top.test(message));
+}
+
+function formatProductResults(query, products) {
+    const list = products.slice(0, 10).map((p, index) =>
+        `${index + 1}. ${p.NOMBRE || p.name || 'Sin nombre'} (${p.CODIGO || p.code || 'sin codigo'})${p.FAMILIA ? ` - ${p.FAMILIA}` : ''}`
+    ).join('\n');
+    return `**Productos encontrados para "${query}"**\n${list}`;
+}
+
+function productSearchMetadata(products) {
+    return {
+        deepLink: { tab: 'Pedidos' },
+        exportable: {
+            headers: ['Producto', 'Codigo', 'Familia'],
+            rows: products.slice(0, 20).map((p) => [
+                p.NOMBRE || p.name || '',
+                p.CODIGO || p.code || '',
+                p.FAMILIA || p.family || '',
+            ]),
+            filename: 'productos-busqueda.csv',
+        },
+        suggestedFollowUps: [
+            'Stock producto',
+            'Precio producto',
+            'Top productos del mes',
+        ],
+    };
+}
+
+function pickProductCandidate(query, products) {
+    if (!query || !Array.isArray(products) || products.length === 0) return null;
+    if (products.length === 1) return products[0];
+    const normalizedQuery = normalizeSearchText(query);
+    const tokens = normalizedQuery.split(' ').filter((token) => token.length > 1);
+    const scored = products.map((product) => {
+        const name = normalizeSearchText(product.NOMBRE || product.name || '');
+        const code = normalizeSearchText(product.CODIGO || product.code || '');
+        const exact = name === normalizedQuery || code === normalizedQuery;
+        const contains = name.includes(normalizedQuery) || code.includes(normalizedQuery);
+        const tokenMatches = tokens.filter((token) => name.includes(token) || code.includes(token)).length;
+        return { product, score: (exact ? 100 : 0) + (contains ? 45 : 0) + tokenMatches };
+    }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score);
+    if (scored.length === 0) return products[0];
+    if (scored.length === 1 || scored[0].score > scored[1].score) return scored[0].product;
+    return null;
 }
 
 // ── Safe Query Helper ────────────────────────────────────────────────────────
@@ -443,12 +569,13 @@ async function safeQuery(conn, sql, params = []) {
 // ── Main Message Handler ─────────────────────────────────────────────────────
 
 async function handleChatMessage(conn, message, vendedorCodes, providedClientCode, context = {}) {
-    const msg = normalizeNaturalQuery(message);
+    const queryAnalysis = analyzeCommercialQuery(message);
+    const msg = normalizeNaturalQuery(queryAnalysis.normalized || message);
     const vendorScope = Array.isArray(context.vendorScope) && context.vendorScope.length
         ? context.vendorScope
         : (Array.isArray(vendedorCodes) ? vendedorCodes : []);
     const userCode = context.userCode || vendorScope[0] || '';
-    const isJefeVentas = Boolean(context.isJefeVentas) || context.role === 'JEFE_VENTAS';
+    const isJefeVentas = isSupervisor(context);
     const authContext = { ...context, userCode, isJefeVentas, vendorScope, conn };
     const richResponses = context.richResponses === true;
 
@@ -477,9 +604,21 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
     const codes = extractCodes(message);
     const historyEntities = extractHistoryEntities(context.conversationHistory);
     let clientCode = codes.clientCode || providedClientCode || historyEntities.clientCode;
-    const productCode = codes.productCode || historyEntities.productCode;
+    let productCode = codes.productCode || historyEntities.productCode;
     const invoiceNumber = codes.invoiceNumber || historyEntities.invoiceNumber;
     const orderNumber = codes.orderNumber || historyEntities.orderNumber;
+
+    if (referencesCurrentClient(message) && !clientCode) {
+        return reply('Necesito saber a que cliente te refieres. Abre un cliente, escribe su codigo o dime el nombre para poder consultar sus ventas, deuda, facturas o pedidos.', null, null, {
+            deepLink: { tab: 'Clientes' },
+            suggestedFollowUps: [
+                'Evalua el cliente Central Hoteles',
+                'Ventas del cliente 32258',
+                'Deuda del cliente 32258',
+                'Facturas del cliente 32258',
+            ],
+        });
+    }
 
     async function resolveClientFromNaturalName() {
         if (clientCode || invoiceNumber) return null;
@@ -503,9 +642,10 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
             || intentPatterns.productosCliente.test(msg)
             || intentPatterns.ventasCliente.test(msg);
         if (!clientIntent) return null;
-        const query = extractClientNameQuery(message);
-        if (!query) return null;
-        const clients = await dbDiscoveryTools.searchClients(conn, query);
+        const query = extractClientNameQuery(message) || queryAnalysis.entityHints.clientName;
+        if (!query || isGenericClientNameQuery(query)) return null;
+        const clientSearch = dbDiscoveryTools.searchClientsFlexible || dbDiscoveryTools.searchClients;
+        const clients = await clientSearch.call(dbDiscoveryTools, conn, query, 12);
         if (!clients.length) {
             return {
                 response: reply(`No he encontrado ningun cliente que coincida con "${query}".`, null, null),
@@ -531,9 +671,69 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
         return { clientCode: String(candidate.CODIGO || candidate.code).trim() };
     }
 
+    async function searchProductsByNaturalQuery(query, limit = 10) {
+        if (!query) return [];
+        const search = dbDiscoveryTools.searchProductsFlexible || dbDiscoveryTools.searchProducts;
+        return search.call(dbDiscoveryTools, conn, query, limit);
+    }
+
+    async function resolveProductFromNaturalName() {
+        if (productCode || invoiceNumber) return null;
+        if (intentPatterns.saludo.test(msg) || intentPatterns.ayuda.test(msg) || intentPatterns.permisos.test(msg) || intentPatterns.cobertura.test(msg)) {
+            return null;
+        }
+        if (!productIntentNeedsResolution(msg)) return null;
+
+        const query = extractProductNameQuery(message) || queryAnalysis.entityHints.productName;
+        if (!query) return null;
+
+        const products = await searchProductsByNaturalQuery(query, 10);
+        if (!products.length) {
+            return {
+                response: reply(`No he encontrado productos que coincidan con "${query}". Prueba con otra palabra del nombre, familia o codigo.`, null, null, {
+                    deepLink: { tab: 'Pedidos' },
+                    suggestedFollowUps: ['Buscar producto pollo', 'Buscar producto migas', 'Top productos del mes'],
+                }),
+            };
+        }
+
+        if (plainProductSearchIntent(msg)) {
+            return {
+                response: reply(formatProductResults(query, products), null, null, productSearchMetadata(products)),
+            };
+        }
+
+        const candidate = pickProductCandidate(query, products);
+        if (!candidate) {
+            return {
+                response: reply(`He encontrado varios productos posibles. Elige el codigo:\n${formatProductResults(query, products)}`, null, null, productSearchMetadata(products)),
+            };
+        }
+
+        const code = String(candidate.CODIGO || candidate.code || '').trim();
+        return code ? { productCode: code, product: candidate } : null;
+    }
+
     const resolvedClient = await resolveClientFromNaturalName();
     if (resolvedClient?.response) return resolvedClient.response;
     if (resolvedClient?.clientCode) clientCode = resolvedClient.clientCode;
+
+    const resolvedProduct = await resolveProductFromNaturalName();
+    if (resolvedProduct?.response) return resolvedProduct.response;
+    if (resolvedProduct?.productCode) productCode = resolvedProduct.productCode;
+
+    if (intentPatterns.cobertura.test(msg) && !clientCode && !productCode && !invoiceNumber) {
+        return reply(buildCapabilityText(), null, null, {
+            deepLink: { tab: 'Chat IA' },
+            suggestedFollowUps: [
+                'Mi comision acumulada ultimos 3 meses',
+                'Objetivo acumulado enero a marzo',
+                'Dime el producto de migas',
+                'Evalua el cliente Central Hoteles',
+                'Lee la factura F/100/2026',
+            ],
+        });
+    }
 
     // ── GREETING ──
     if (intentPatterns.saludo.test(msg)) {
@@ -931,6 +1131,78 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
     }
 
     // ── PRICE ──
+    if (isClientProductSalesAmountQuery(msg)) {
+        if (!clientCode) {
+            return reply('Necesito el cliente para calcular cuanto se le vendio de ese producto. Puedes escribir el codigo, el nombre o abrir la ficha del cliente.', null, null, {
+                deepLink: { tab: 'Clientes' },
+                suggestedFollowUps: [
+                    'Evalua el cliente Central Hoteles',
+                    'Ventas del cliente 32258',
+                    'Facturas del cliente 32258',
+                ],
+            });
+        }
+        if (!productCode) {
+            return reply('Necesito el producto para calcular la venta al cliente. Puedes escribir parte del nombre, por ejemplo "calamar", "migas" o el codigo.', null, null, {
+                deepLink: { tab: 'Pedidos' },
+                suggestedFollowUps: [
+                    'Dime el producto de calamar',
+                    'Dime el producto de migas',
+                    'Top productos del cliente',
+                ],
+            });
+        }
+        const deniedSalesClient = await denyIfForbiddenClient(clientCode);
+        if (deniedSalesClient) return deniedSalesClient;
+        try {
+            const result = await genericAnalyticsTools.queryClientPurchases(
+                conn,
+                clientCode,
+                null,
+                null,
+                null,
+                productCode,
+                20,
+                userCode,
+                isJefeVentas,
+                vendorScope
+            );
+            if (result.error) return result.error;
+            const purchases = result.purchases || [];
+            if (purchases.length === 0) {
+                return reply(`No encuentro ventas del producto ${productCode} al cliente ${clientCode}.`, 'query_client_purchases', result, {
+                    deepLink: { tab: 'Clientes', clientCode },
+                    suggestedFollowUps: [
+                        `Productos comprados cliente ${clientCode}`,
+                        `Precio producto ${productCode}`,
+                    ],
+                });
+            }
+            const totalUnits = purchases.reduce((sum, item) => sum + (Number(item.units) || 0), 0);
+            const lines = purchases.slice(0, 8).map((item) =>
+                `- ${item.period || 'sin periodo'}: ${Number(item.sales || 0).toLocaleString('es-ES')} EUR (${Number(item.units || 0).toLocaleString('es-ES')} uds)`
+            ).join('\n');
+            const productName = purchases[0]?.productName || productCode;
+            const text = `**Ventas producto ${productCode} al cliente ${clientCode}**
+- Producto: ${productName}
+- Importe total: **${Number(result.totalSales || 0).toLocaleString('es-ES')} EUR**
+- Unidades: **${totalUnits.toLocaleString('es-ES')}**
+- Lineas/periodos: ${purchases.length}
+
+${lines}`;
+            return reply(text, 'query_client_purchases', result, {
+                deepLink: { tab: 'Clientes', clientCode },
+                suggestedFollowUps: [
+                    `A cuanto le vendi ${productCode} al cliente ${clientCode}`,
+                    `Productos comprados cliente ${clientCode}`,
+                    `Precio producto ${productCode}`,
+                ],
+            });
+        } catch (e) {
+            return `Error consultando ventas del producto al cliente: ${e.message}`;
+        }
+    }
+
     if (intentPatterns.precioCliente.test(msg) && clientCode && productCode) {
         const deniedPriceClient = await denyIfForbiddenClient(clientCode);
         if (deniedPriceClient) return deniedPriceClient;
@@ -1102,6 +1374,26 @@ ${list}`;
         }
     }
 
+    // ── ALBARANES ──
+    if (intentPatterns.albaran.test(msg)) {
+        if (invoiceNumber) {
+            const deniedAlb = await denyIfForbiddenInvoice(invoiceNumber);
+            if (deniedAlb) return deniedAlb;
+            try {
+                const albs = await invoiceTools.getAlbaranesByInvoice(
+                    conn, invoiceNumber, userCode, isJefeVentas, vendorScope
+                );
+                if (albs.error) return albs.error;
+                if (albs.albaranes.length === 0) return `Sin albaranes para factura ${invoiceNumber}.`;
+                const list = albs.albaranes.map(a => `- ${a.number}: ${a.amount?.toLocaleString('es-ES')}€`).join('\n');
+                return reply(`Albaranes de factura ${invoiceNumber}:\n${list}`, 'get_albaranes_by_invoice', albs);
+            } catch (e) {
+                return `Error: ${e.message}`;
+            }
+        }
+        return 'Necesito el numero de factura. Ejemplo: "Albaranes de la factura F/100/2026"';
+    }
+
     // ── INVOICES ──
     if (intentPatterns.factura.test(msg)) {
         if (invoiceNumber) {
@@ -1189,7 +1481,8 @@ ${lineList || '- Sin líneas'}`;
         const searchTerm = msg.replace(/buscar\s*(cliente|client)?\s*/i, '').trim();
         if (!searchTerm) return 'Que cliente buscas? Ejemplo: "Buscar cliente Garcia"';
         try {
-            const clients = await dbDiscoveryTools.searchClients(conn, searchTerm);
+            const clientSearch = dbDiscoveryTools.searchClientsFlexible || dbDiscoveryTools.searchClients;
+            const clients = await clientSearch.call(dbDiscoveryTools, conn, searchTerm, 15);
             if (clients.length === 0) return `No se encontraron clientes con "${searchTerm}".`;
             const authorized = [];
             for (const c of clients.slice(0, 15)) {
@@ -1213,13 +1506,12 @@ ${lineList || '- Sin líneas'}`;
 
     // ── SEARCH PRODUCT ──
     if (intentPatterns.buscarProducto.test(msg)) {
-        const searchTerm = msg.replace(/buscar\s*(producto|articulo)?\s*/i, '').trim();
+        const searchTerm = extractProductNameQuery(message);
         if (!searchTerm) return 'Que producto buscas? Ejemplo: "Buscar producto leche"';
         try {
-            const products = await dbDiscoveryTools.searchProducts(conn, searchTerm);
+            const products = await searchProductsByNaturalQuery(searchTerm, 10);
             if (products.length === 0) return `No se encontraron productos con "${searchTerm}".`;
-            const list = products.slice(0, 10).map(p => `- ${p.NOMBRE} (${p.CODIGO})`).join('\n');
-            return `Productos encontrados:\n${list}`;
+            return reply(formatProductResults(searchTerm, products), null, null, productSearchMetadata(products));
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -1533,31 +1825,22 @@ Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')} EUR** | Con
         }
     }
 
+    const looseProductQuery = extractProductNameQuery(message) || normalizeSearchText(message);
+    if (looseProductQuery && looseProductQuery.length <= 60) {
+        try {
+            const products = await searchProductsByNaturalQuery(looseProductQuery, 5);
+            if (products.length > 0) {
+                return reply(`No he detectado una accion concreta, pero he encontrado estos productos.\n\n${formatProductResults(looseProductQuery, products)}`, null, null, productSearchMetadata(products));
+            }
+        } catch (err) {
+            logger.warn('[CHATBOT] Loose product fallback skipped:', err.message);
+        }
+    }
+
     // ── DEFAULT ──
-    return reply(`No he podido encajar la consulta con seguridad, pero puedo seguir si me das una pista mas concreta.
-
-Puedes preguntarme de forma natural por:
-- Clientes: deuda, facturas, pedidos, riesgo, ventas, productos comprados.
-- Rutero/repartidor: ruta de hoy, entregas, cobros y comision de reparto.
-- Comisiones: mes, acumulado entre meses, detalle y reglas de calculo.
-- Objetivos: objetivo del mes, acumulado, familias y cuanto falta.
-- Facturas/PDF: busca una factura, abre el PDF y extrae lineas, importes o vencimientos.
-- Glacius/bolsa/almacen: resumen diario, movimientos, camiones, carga y KPIs.
-
-Ejemplos:
-- "comision acumulada de enero a marzo"
-- "objetivo ultimos 3 meses"
-- "facturas del cliente Central Hoteles"
-- "lee la factura F/100/2026"
-- "mi ruta hoy y cobros pendientes"`, null, null, {
+    return reply(buildClarifyingResponse(queryAnalysis), null, null, {
         deepLink: { tab: 'Chat IA' },
-        suggestedFollowUps: [
-            'Que puedes hacer por pestanas',
-            'Comision acumulada ultimos 3 meses',
-            'Objetivo acumulado enero a marzo',
-            'Resumen Glacius hoy',
-            'Mi ruta hoy y cobros del repartidor',
-        ],
+        suggestedFollowUps: buildFollowUps(queryAnalysis),
     });
 }
 

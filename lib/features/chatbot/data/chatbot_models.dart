@@ -7,16 +7,31 @@ class ChatExportableData {
   });
 
   factory ChatExportableData.fromJson(Map<String, dynamic> json) {
+    final rows = (json['rows'] as List<dynamic>? ?? [])
+        .whereType<List<dynamic>>()
+        .map((row) => row.map((cell) => cell.toString()).toList())
+        .toList();
+    final rawHeaders = (json['headers'] as List<dynamic>? ?? [])
+        .map((e) => e.toString())
+        .toList();
+    final columnCount = rawHeaders.isNotEmpty
+        ? rawHeaders.length
+        : rows.fold<int>(
+            0,
+            (maxColumns, row) =>
+                row.length > maxColumns ? row.length : maxColumns,
+          );
+    final headers = rawHeaders.isNotEmpty
+        ? rawHeaders
+        : List.generate(columnCount, (index) => 'Columna ${index + 1}');
+
     return ChatExportableData(
-      headers: (json['headers'] as List<dynamic>? ?? [])
-          .map((e) => e.toString())
-          .toList(),
-      rows: (json['rows'] as List<dynamic>? ?? [])
-          .map(
-            (row) =>
-                (row as List<dynamic>).map((cell) => cell.toString()).toList(),
-          )
-          .toList(),
+      headers: headers,
+      rows: rows.map((row) {
+        if (row.length == columnCount) return row;
+        if (row.length > columnCount) return row.take(columnCount).toList();
+        return [...row, ...List.filled(columnCount - row.length, '')];
+      }).toList(),
       filename: json['filename']?.toString() ?? 'asistente-gmp.csv',
     );
   }

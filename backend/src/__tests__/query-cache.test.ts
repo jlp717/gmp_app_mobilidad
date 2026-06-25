@@ -130,6 +130,24 @@ describe('L1 Cache (in-memory, no Redis)', () => {
     expect(stats.misses).toBe(1);
   });
 
+  test('concurrent misses coalesce into a single fetcher call', async () => {
+    const fetcher = jest.fn().mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { data: 'single-flight' };
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => cache.getOrSet('test:coalesce', fetcher, 60)),
+    );
+
+    expect(results).toEqual(Array.from({ length: 5 }, () => ({ data: 'single-flight' })));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    const stats = cache.getStats();
+    expect(stats.misses).toBe(1);
+    expect(stats.coalesced).toBe(4);
+  });
+
   test('cache hit returns stored value without calling fetcher', async () => {
     const fetcher = jest.fn().mockResolvedValue({ data: 'hello' });
 

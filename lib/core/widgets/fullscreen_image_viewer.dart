@@ -42,8 +42,9 @@ class FullscreenImageViewer extends StatelessWidget {
     required String productName,
     String? productCode,
     Map<String, String>? headers,
+    bool rootNavigator = false,
   }) {
-    Navigator.of(context).push(
+    Navigator.of(context, rootNavigator: rootNavigator).push(
       PageRouteBuilder<void>(
         opaque: false,
         barrierColor: Colors.black54,
@@ -95,28 +96,16 @@ class FullscreenImageViewer extends StatelessWidget {
               minScale: 0.5,
               maxScale: 5,
               child: Center(
-                child: Image.network(
-                  imageUrl,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: productCode ?? '',
+                  productName: productName,
+                  width: double.infinity,
+                  height: double.infinity,
                   headers: _effectiveHeaders,
                   fit: BoxFit.contain,
-                  filterQuality: FilterQuality.high,
-                  errorBuilder: (ctx, _, __) => SmartProductImage(
-                    imageUrl: imageUrl,
-                    productCode: productCode ?? '',
-                    productName: productName,
-                    fit: BoxFit.contain,
-                    borderRadius: BorderRadius.zero,
-                    headers: _effectiveHeaders,
-                    forceRetry: true,
-                  ),
-                  loadingBuilder: (ctx, child, event) {
-                    if (event == null) return child;
-                    return const SizedBox(
-                      width: 36,
-                      height: 36,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    );
-                  },
+                  borderRadius: BorderRadius.zero,
+                  forceRetry: true,
                 ),
               ),
             ),

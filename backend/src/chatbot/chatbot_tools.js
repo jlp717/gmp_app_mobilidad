@@ -123,39 +123,202 @@ function resolveVendorCodesForScope(vendorScope, userCode, isJefeVentas) {
 // DATABASE DISCOVERY TOOLS
 // ============================================================================
 
-const dbDiscoveryTools = {
-    async searchClients(conn, query) {
-        const searchTerm = `%${query}%`;
-        const rows = await safeQuery(conn, `
+const DISCOVERY_STOP_WORDS = new Set([
+    'a', 'al', 'algo', 'articulo', 'articulos', 'busca', 'buscar', 'codigo',
+    'con', 'dame', 'de', 'del', 'dime', 'el', 'en', 'la', 'las', 'le',
+    'los', 'me', 'para', 'por', 'producto', 'productos', 'que', 'quiero',
+    'referencia', 'sobre', 'un', 'una',
+]);
+
+function normalizeDiscoveryText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildProductSearchVariants(query) {
+    const normalized = normalizeDiscoveryText(query);
+    if (!normalized) return [];
+
+    const tokens = normalized
+        .split(' ')
+        .filter((token) => token.length >= 2 && !DISCOVERY_STOP_WORDS.has(token));
+    if (tokens.length === 0) return [];
+
+    const compact = tokens.join(' ');
+    const variants = [compact];
+
+    const singularTokens = tokens.map((token) =>
+        token.length > 4 && token.endsWith('s') ? token.slice(0, -1) : token
+    );
+    variants.push(singularTokens.join(' '));
+
+    for (const token of tokens) {
+        variants.push(token);
+        if (token.length > 4 && token.endsWith('s')) variants.push(token.slice(0, -1));
+        if (token.length >= 5) variants.push(token.slice(0, 3));
+    }
+
+    return [...new Set(variants.filter((variant) => variant.length >= 3))].slice(0, 6);
+}
+
+function buildClientSearchVariants(query) {
+    const normalized = normalizeDiscoveryText(query);
+    if (!normalized) return [];
+    const tokens = normalized
+        .split(' ')
+        .filter((token) => token.length >= 2 && !DISCOVERY_STOP_WORDS.has(token));
+    if (tokens.length === 0) return [];
+    const variants = [tokens.join(' ')];
+    for (const token of tokens) {
+        variants.push(token);
+        if (token.length >= 5) variants.push(token.slice(0, 4));
+    }
+    return [...new Set(variants.filter((variant) => variant.length >= 3))].slice(0, 6);
+}
+
+function scoreClientCandidate(query, client) {
+    const normalizedQuery = normalizeDiscoveryText(query);
+    const normalizedName = normalizeDiscoveryText(client.NOMBRE || client.name || '');
+    const normalizedCode = normalizeDiscoveryText(client.CODIGO || client.code || '');
+    const normalizedTown = normalizeDiscoveryText(client.POBLACION || client.town || '');
+    const tokens = normalizedQuery
+        .split(' ')
+        .filter((token) => token.length >= 2 && !DISCOVERY_STOP_WORDS.has(token));
+    let score = 0;
+    if (normalizedCode === normalizedQuery) score += 120;
+    if (normalizedName === normalizedQuery) score += 100;
+    if (normalizedName.includes(normalizedQuery)) score += 60;
+    if (normalizedCode.includes(normalizedQuery)) score += 45;
+    for (const token of tokens) {
+        if (normalizedName.includes(token)) score += 18;
+        if (normalizedTown.includes(token)) score += 6;
+        if (normalizedCode.includes(token)) score += 12;
+    }
+    return score;
+}
+
+async function searchClientsFlexibleRows(conn, query, limit = 20) {
+    const variants = buildClientSearchVariants(query);
+    if (variants.length === 0) return [];
+
+    const rowLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 30);
+    const clauses = variants
+        .map(() => '(UPPER(TRIM(NOMBRECLIENTE)) LIKE ? OR UPPER(TRIM(CODIGOCLIENTE)) LIKE ? OR UPPER(TRIM(POBLACION)) LIKE ?)')
+        .join(' OR ');
+    const params = variants.flatMap((variant) => {
+        const term = `%${variant.toUpperCase()}%`;
+        return [term, term, term];
+    });
+
+    const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
                    TRIM(POBLACION) as POBLACION, TRIM(PROVINCIA) as PROVINCIA
             FROM DSEDAC.CLI
-            WHERE TRIM(NOMBRECLIENTE) LIKE ? OR TRIM(CODIGOCLIENTE) LIKE ?
+            WHERE ${clauses}
             ORDER BY NOMBRECLIENTE
-            FETCH FIRST 20 ROWS ONLY
-        `, [searchTerm, searchTerm]);
-        return rows.map(r => ({
+            FETCH FIRST ${rowLimit} ROWS ONLY
+        `, params);
+
+    const seen = new Set();
+    return rows
+        .map((r) => ({
             CODIGO: r.CODIGO,
             NOMBRE: r.NOMBRE,
-            POBLACION: r.POBLACION
-        }));
-    },
+            POBLACION: r.POBLACION,
+            PROVINCIA: r.PROVINCIA,
+            score: scoreClientCandidate(query, r),
+        }))
+        .filter((client) => {
+            const code = String(client.CODIGO || '').trim();
+            if (!code || seen.has(code)) return false;
+            seen.add(code);
+            return true;
+        })
+        .sort((a, b) => b.score - a.score || String(a.NOMBRE).localeCompare(String(b.NOMBRE)))
+        .slice(0, rowLimit);
+}
 
-    async searchProducts(conn, query) {
-        const searchTerm = `%${query}%`;
-        const rows = await safeQuery(conn, `
+function scoreProductCandidate(query, product) {
+    const normalizedQuery = normalizeDiscoveryText(query);
+    const normalizedName = normalizeDiscoveryText(product.NOMBRE || product.name || '');
+    const normalizedCode = normalizeDiscoveryText(product.CODIGO || product.code || '');
+    const tokens = normalizedQuery
+        .split(' ')
+        .filter((token) => token.length >= 2 && !DISCOVERY_STOP_WORDS.has(token));
+
+    let score = 0;
+    if (normalizedCode === normalizedQuery) score += 120;
+    if (normalizedName === normalizedQuery) score += 100;
+    if (normalizedName.includes(normalizedQuery)) score += 60;
+    if (normalizedCode.includes(normalizedQuery)) score += 45;
+    for (const token of tokens) {
+        if (normalizedName.includes(token)) score += 18;
+        if (normalizedCode.includes(token)) score += 12;
+        if (token.length > 4 && normalizedName.includes(token.slice(0, -1))) score += 8;
+    }
+    return score;
+}
+
+async function searchProductsFlexibleRows(conn, query, limit = 20) {
+    const variants = buildProductSearchVariants(query);
+    if (variants.length === 0) return [];
+
+    const rowLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 30);
+    const clauses = variants
+        .map(() => '(UPPER(TRIM(DESCRIPCIONARTICULO)) LIKE ? OR UPPER(TRIM(CODIGOARTICULO)) LIKE ?)')
+        .join(' OR ');
+    const params = variants.flatMap((variant) => {
+        const term = `%${variant.toUpperCase()}%`;
+        return [term, term];
+    });
+
+    const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
                    TRIM(CODIGOFAMILIA) as FAMILIA
             FROM DSEDAC.ART
-            WHERE TRIM(DESCRIPCIONARTICULO) LIKE ? OR TRIM(CODIGOARTICULO) LIKE ?
+            WHERE ${clauses}
             ORDER BY DESCRIPCIONARTICULO
-            FETCH FIRST 20 ROWS ONLY
-        `, [searchTerm, searchTerm]);
-        return rows.map(r => ({
+            FETCH FIRST ${rowLimit} ROWS ONLY
+        `, params);
+
+    const seen = new Set();
+    return rows
+        .map((r) => ({
             CODIGO: r.CODIGO,
             NOMBRE: r.NOMBRE,
-            FAMILIA: r.FAMILIA
-        }));
+            FAMILIA: r.FAMILIA,
+            score: scoreProductCandidate(query, r),
+        }))
+        .filter((product) => {
+            const code = String(product.CODIGO || '').trim();
+            if (!code || seen.has(code)) return false;
+            seen.add(code);
+            return true;
+        })
+        .sort((a, b) => b.score - a.score || String(a.NOMBRE).localeCompare(String(b.NOMBRE)))
+        .slice(0, rowLimit);
+}
+
+const dbDiscoveryTools = {
+    async searchClients(conn, query) {
+        return searchClientsFlexibleRows(conn, query, 20);
+    },
+
+    async searchClientsFlexible(conn, query, limit = 20) {
+        return searchClientsFlexibleRows(conn, query, limit);
+    },
+
+    async searchProducts(conn, query) {
+        return searchProductsFlexibleRows(conn, query, 20);
+    },
+
+    async searchProductsFlexible(conn, query, limit = 20) {
+        return searchProductsFlexibleRows(conn, query, limit);
     },
 
     async lookupClient(conn, clientCode) {

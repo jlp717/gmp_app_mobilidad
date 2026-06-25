@@ -1448,6 +1448,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       final resultMap = result is Map<String, dynamic> ? result : null;
       final isRealSuccess =
           resultMap != null && isConfirmedOrderResultForProvider(resultMap);
+      final isPendingSync = resultMap != null &&
+          (resultMap['pendingConfirmation'] == true ||
+              resultMap['queued'] == true);
       if (isRealSuccess) {
         HapticFeedback.mediumImpact();
         final number = resultMap['numeroPedido']?.toString();
@@ -1457,6 +1460,19 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           _confirmStatusMessage = number == null || number.isEmpty
               ? 'Pedido confirmado correctamente'
               : 'Pedido #$number confirmado correctamente';
+        });
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+        Navigator.of(context).pop(result);
+      } else if (isPendingSync) {
+        HapticFeedback.mediumImpact();
+        final message = resultMap['message']?.toString().trim();
+        setState(() {
+          _isConfirming = false;
+          _confirmSucceeded = true;
+          _confirmStatusMessage = message != null && message.isNotEmpty
+              ? message
+              : 'Pedido guardado localmente. Se enviara al recuperar conexion.';
         });
         await Future<void>.delayed(const Duration(seconds: 2));
         if (!mounted) return;

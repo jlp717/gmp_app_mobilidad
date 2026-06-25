@@ -230,9 +230,8 @@ function buildAccumulatedTeamMetrics(leaderMetric, memberMetrics, config) {
 /**
  * @param {Function} calculateVendorData - (code, year, config) => vendor data
  */
-async function calculateTeamMonth(leaderCode, year, month, config, calculateVendorData, vendorDataCache) {
+async function calculateTeamMonth(leaderCode, year, month, config, calculateVendorData, vendorDataCache, teamConfig) {
     const leader = normalizeVendorCode(leaderCode);
-    const teamConfig = await loadTeamCommissionConfig(leader, year);
     const members = [];
 
     if (!vendorDataCache.has(leader)) {
@@ -335,6 +334,7 @@ async function getTeamCommission(leaderCode, year, calculateVendorData, config) 
             config,
             calculateVendorData,
             vendorDataCache,
+            teamConfig,
         );
         months.push(result);
         annualTeamAggregateCommission += result.teamAggregateCommission;

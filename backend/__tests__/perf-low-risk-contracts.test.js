@@ -40,14 +40,14 @@ describe('perf low-risk contracts', () => {
             repo = new Db2WarehouseRepository(mockDb);
         });
 
-        test('passes clamped limit/offset and deterministic ORDER BY + FETCH/OFFSET', async () => {
+        test('passes clamped limit/offset and deterministic ORDER BY + OFFSET/FETCH', async () => {
             await repo.getLowStock(8, 9999, -5);
 
             expect(mockDb.executeParams).toHaveBeenCalledTimes(1);
             const [sql, params] = mockDb.executeParams.mock.calls[0];
-            expect(sql).toMatch(/FETCH FIRST \? ROWS ONLY OFFSET \? ROWS/);
+            expect(sql).toMatch(/OFFSET \? ROWS FETCH FIRST \? ROWS ONLY/);
             expect(sql).toMatch(/ORDER BY STOCK ASC, ART\.DESCRIPCIONARTICULO ASC, ARO\.CODIGOARTICULO ASC, ARO\.CODIGOALMACEN ASC/);
-            expect(params).toEqual([8, 500, 0]);
+            expect(params).toEqual([8, 0, 500]);
         });
     });
 
@@ -178,7 +178,7 @@ describe('perf low-risk contracts', () => {
             await repo.getMetrics('93', 2026, null);
 
             const [sql] = mockDb.executeParams.mock.calls[0];
-            expect(sql).toMatch(/AND LCAADC = \?/);
+            expect(sql).toMatch(/AND L\.LCAADC = \?/);
             expect(sql).not.toMatch(/year.*LCMMDC/i);
             expect(sql).not.toMatch(/AND LCMMDC = \?.*year/i);
         });

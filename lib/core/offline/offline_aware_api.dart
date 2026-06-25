@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
@@ -51,6 +52,7 @@ class OfflineAwareApi {
     required String cacheKey,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    CancelToken? cancelToken,
   }) async {
     // 1. Try fresh cache first (unless force refreshing)
     if (!forceRefresh) {
@@ -73,6 +75,7 @@ class OfflineAwareApi {
           cacheKey: cacheKey,
           cacheTTL: cacheTTL,
           forceRefresh: forceRefresh,
+          cancelToken: cancelToken,
         );
         return OfflineResult(data: response, source: DataSource.network);
       } catch (e) {
@@ -115,6 +118,7 @@ class OfflineAwareApi {
     required String cacheKey,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    CancelToken? cancelToken,
   }) async {
     if (!forceRefresh) {
       try {
@@ -133,6 +137,7 @@ class OfflineAwareApi {
           cacheKey: cacheKey,
           cacheTTL: cacheTTL,
           forceRefresh: forceRefresh,
+          cancelToken: cancelToken,
         );
         return OfflineResult(data: response, source: DataSource.network);
       } catch (e) {

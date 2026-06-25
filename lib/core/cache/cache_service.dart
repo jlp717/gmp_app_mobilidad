@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 /// Cache service using Hive for persistent local storage
@@ -13,6 +14,9 @@ class CacheService {
 
   static Box<dynamic>? _cacheBox;
   static Box<dynamic>? _metadataBox;
+
+  static const String _anonymousScope = 'anon::';
+  static String _scopePrefix = _anonymousScope;
 
   // ============================================================
   // In-Memory Cache Layer (for hot data)
@@ -48,22 +52,48 @@ class CacheService {
     return 'hashed_${prefix}_$hash';
   }
 
+  static String _scopedKey(String key) => '$_scopePrefix$key';
+
+  static String _safeScopedKey(String key) => _sanitizeKey(_scopedKey(key));
+
+  static String _keyFingerprint(String key) =>
+      sha256.convert(utf8.encode(key)).toString().substring(0, 12);
+
+  /// Scope cache entries to the authenticated session/role/vendor set.
+  /// This prevents cached responses from leaking across role switches or users
+  /// on shared devices while keeping the public cache API unchanged.
+  static void setScope(String rawScope) {
+    final normalized = rawScope.trim();
+    if (normalized.isEmpty) {
+      clearScope();
+      return;
+    }
+
+    final hash = sha256.convert(utf8.encode(normalized)).toString();
+    _scopePrefix = 'scope_${hash.substring(0, 16)}::';
+    clearMemoryCache();
+    debugPrint('[CacheService] Cache scope changed');
+  }
+
+  static void clearScope() {
+    _scopePrefix = _anonymousScope;
+    clearMemoryCache();
+    debugPrint('[CacheService] Cache scope cleared');
+  }
+
   /// Initialize Hive and open cache boxes
   /// Call this before runApp()
   static Future<void> init() async {
     await Hive.initFlutter();
 
-    // Generate encryption key
-    final key = _generateEncryptionKey();
-    final encryptionCipher = HiveAesCipher(key);
-
-    _cacheBox = await Hive.openBox<dynamic>(
+    final legacyKey = _generateEncryptionKey();
+    _cacheBox = await HiveSecureBox.open<dynamic>(
       _cacheBoxName,
-      encryptionCipher: encryptionCipher,
+      legacyKey: legacyKey,
     );
-    _metadataBox = await Hive.openBox<dynamic>(
+    _metadataBox = await HiveSecureBox.open<dynamic>(
       _metadataBoxName,
-      encryptionCipher: encryptionCipher,
+      legacyKey: legacyKey,
     );
     debugPrint(
       '[CacheService] Initialized with ${_cacheBox?.length ?? 0} '
@@ -81,10 +111,10 @@ class CacheService {
   static T? get<T>(String key) {
     if (_cacheBox == null) return null;
 
-    final safeKey = _sanitizeKey(key);
+    final safeKey = _safeScopedKey(key);
     final memEntry = _memoryCache[safeKey];
     if (memEntry != null && DateTime.now().isBefore(memEntry.expiry)) {
-      debugPrint('[CacheService] Memory cache HIT for key: $key');
+      debugPrint('[CacheService] Memory cache HIT: ${_keyFingerprint(key)}');
       return memEntry.value as T?;
     }
     if (memEntry != null) {
@@ -97,14 +127,14 @@ class CacheService {
     if (expiryTimestamp != null) {
       final expiryDate = DateTime.fromMillisecondsSinceEpoch(expiryTimestamp);
       if (DateTime.now().isAfter(expiryDate)) {
-        debugPrint('[CacheService] Cache expired for key: $key');
+        debugPrint('[CacheService] Cache expired: ${_keyFingerprint(key)}');
         return null;
       }
     }
 
     final value = _cacheBox?.get(safeKey);
     if (value != null) {
-      debugPrint('[CacheService] Cache HIT for key: $key');
+      debugPrint('[CacheService] Cache HIT: ${_keyFingerprint(key)}');
       // Limitar la vida en memoria al TTL restante de la entrada: sin esto
       // un dato con realtimeTTL (1 min) podía servirse hasta 5 min desde
       // la capa en memoria.
@@ -127,7 +157,7 @@ class CacheService {
   }) {
     if (_cacheBox == null) return null;
 
-    final safeKey = _sanitizeKey(key);
+    final safeKey = _safeScopedKey(key);
     final expiryTimestamp = _metadataBox?.get('${safeKey}_expiry') as int?;
     if (expiryTimestamp == null) return null;
 
@@ -139,7 +169,7 @@ class CacheService {
 
     final value = _cacheBox?.get(safeKey);
     if (value != null) {
-      debugPrint('[CacheService] Cache STALE HIT for key: $key');
+      debugPrint('[CacheService] Cache STALE HIT: ${_keyFingerprint(key)}');
     }
     return value as T?;
   }
@@ -152,7 +182,7 @@ class CacheService {
   }) async {
     if (_cacheBox == null) return;
 
-    final safeKey = _sanitizeKey(key);
+    final safeKey = _safeScopedKey(key);
     final effectiveTTL = ttl ?? defaultTTL;
     final expiryTimestamp =
         DateTime.now().add(effectiveTTL).millisecondsSinceEpoch;
@@ -160,9 +190,10 @@ class CacheService {
     try {
       await _cacheBox?.put(safeKey, value);
       await _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
+      await _metadataBox?.put('${safeKey}_original', _scopedKey(key));
       _setMemoryCache(safeKey, value, ttl: effectiveTTL);
       debugPrint(
-        '[CacheService] Cache SET for key: $key '
+        '[CacheService] Cache SET: ${_keyFingerprint(key)} '
         '(TTL: ${effectiveTTL.inMinutes}min)',
       );
     } catch (e) {
@@ -172,39 +203,49 @@ class CacheService {
 
   /// Invalidate specific cache entry
   static Future<void> invalidate(String key) async {
-    final safeKey = _sanitizeKey(key);
+    final safeKey = _safeScopedKey(key);
     await _cacheBox?.delete(safeKey);
     await _metadataBox?.delete('${safeKey}_expiry');
+    await _metadataBox?.delete('${safeKey}_original');
     _memoryCache.remove(safeKey);
-    debugPrint('[CacheService] Cache INVALIDATED for key: $key');
+    debugPrint('[CacheService] Cache INVALIDATED: ${_keyFingerprint(key)}');
   }
 
   /// Invalidate all cache entries matching a prefix
-  /// Note: This performs a scan, so it might be slow for massive caches
+  /// Note: This performs a scan, so it is intended for mutation boundaries.
   static Future<void> invalidateByPrefix(String prefix) async {
     if (_cacheBox == null) return;
 
-    // We can only reliably match unhashed keys or keys that are short enough
-    // For hashed keys, we can't easily reverse logic unless we store
-    // original keys.
-    // For now, this best-effort implementation scans all keys.
+    final scopedPrefix = _scopedKey(prefix);
+    final keysToDelete = <String>{};
 
-    final keysToDelete = _cacheBox!.keys
-        .where(
-          (k) =>
-              k.toString().startsWith(prefix) ||
-              k.toString().startsWith('hashed_$prefix'),
-        )
-        .toList();
+    for (final key in _cacheBox!.keys) {
+      final cacheKey = key.toString();
+      if (cacheKey.startsWith(scopedPrefix)) {
+        keysToDelete.add(cacheKey);
+      }
+    }
+
+    for (final key in _metadataBox?.keys ?? const <dynamic>[]) {
+      final metadataKey = key.toString();
+      if (!metadataKey.endsWith('_original')) continue;
+      final originalKey = _metadataBox?.get(metadataKey)?.toString();
+      if (originalKey != null && originalKey.startsWith(scopedPrefix)) {
+        keysToDelete.add(
+          metadataKey.substring(0, metadataKey.length - '_original'.length),
+        );
+      }
+    }
 
     for (final key in keysToDelete) {
       await _cacheBox?.delete(key);
       await _metadataBox?.delete('${key}_expiry');
-      _memoryCache.remove(key.toString());
+      await _metadataBox?.delete('${key}_original');
+      _memoryCache.remove(key);
     }
 
     _memoryCache.removeWhere(
-      (key, _) => key.startsWith(prefix) || key.startsWith('hashed_$prefix'),
+      (key, _) => key.startsWith(scopedPrefix) || keysToDelete.contains(key),
     );
 
     debugPrint(
@@ -226,6 +267,7 @@ class CacheService {
     return {
       'totalEntries': _cacheBox?.length ?? 0,
       'metadataEntries': _metadataBox?.length ?? 0,
+      'scope': _scopePrefix == _anonymousScope ? 'anonymous' : 'session',
     };
   }
 
@@ -241,7 +283,7 @@ class CacheService {
   /// Get from memory cache first, then fall back to Hive
   /// Use this for frequently accessed data within a session
   static T? getWithMemory<T>(String key) {
-    final safeKey = _sanitizeKey(key);
+    final safeKey = _safeScopedKey(key);
     // Check in-memory cache first
     final memEntry = _memoryCache[safeKey];
     if (memEntry != null && DateTime.now().isBefore(memEntry.expiry)) {
@@ -280,7 +322,7 @@ class CacheService {
           .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
           .key;
       _memoryCache.remove(oldestKey);
-      debugPrint('[CacheService] Memory cache evicted: $oldestKey');
+      debugPrint('[CacheService] Memory cache evicted');
     }
 
     _memoryCache[key] = _MemoryCacheEntry(

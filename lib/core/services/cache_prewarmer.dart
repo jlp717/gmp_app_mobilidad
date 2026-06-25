@@ -90,7 +90,7 @@ class CachePreWarmer {
           'vendedorCode': vendorCodes,
           'year': year.toString(),
         },
-        cacheKey: 'commissions_v2_${vendorCodes}_$year',
+        cacheKey: 'commissions_v14_final_sources_${vendorCodes}_$year',
         cacheTTL: const Duration(minutes: 15),
       );
       debugPrint('[CachePreWarmer] Commissions pre-warmed');

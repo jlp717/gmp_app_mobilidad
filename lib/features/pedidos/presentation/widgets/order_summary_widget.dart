@@ -1263,6 +1263,21 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       return true;
     }
 
+    if (result['pendingConfirmation'] == true || result['queued'] == true) {
+      final message = result['message']?.toString().trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message != null && message.isNotEmpty
+                ? message
+                : 'Pedido guardado localmente. Se enviara al recuperar conexion.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return true;
+    }
+
     if (!isConfirmedOrderResultForProvider(result)) {
       final status = orderConfirmationStatusForProvider(result);
       ScaffoldMessenger.of(context).showSnackBar(

@@ -17,15 +17,17 @@ function numericVariants(value) {
     : unpadded;
   return [...new Set([raw, unpadded, padded])];
 }
+const SUPERVISOR_ROLES = new Set(["JEFE_VENTAS", "JEFE", "GERENTE", "ADMIN"]);
+const EXPLICIT_NON_SUPERVISOR_ROLES = new Set([
+  "COMERCIAL",
+  "REPARTIDOR",
+  "ALMACEN",
+]);
 function isSupervisor(userContext = {}) {
   const role = normalizeCode(userContext.role);
-  return (
-    Boolean(userContext.isJefeVentas) ||
-    role === "JEFE_VENTAS" ||
-    role === "JEFE" ||
-    role === "GERENTE" ||
-    role === "ADMIN"
-  );
+  if (SUPERVISOR_ROLES.has(role)) return true;
+  if (EXPLICIT_NON_SUPERVISOR_ROLES.has(role)) return false;
+  return Boolean(userContext.isJefeVentas);
 }
 function getAllowedVendorCodes(userContext = {}) {
   if (isSupervisor(userContext)) return ["ALL"];
@@ -135,17 +137,15 @@ function buildAuthorizationSafeResponse(code) {
 }
 function createChatbotUserContext(user = {}) {
   const role = normalizeCode(user.role || user.rol);
-  const supervisorRole =
-    role === "JEFE_VENTAS" ||
-    role === "JEFE" ||
-    role === "GERENTE" ||
-    role === "ADMIN";
+  const supervisorRole = SUPERVISOR_ROLES.has(role);
+  const explicitNonSupervisor = EXPLICIT_NON_SUPERVISOR_ROLES.has(role);
   return {
     userCode: normalizeCode(
       user.code || user.userCode || user.vendedor || user.CODIGOVENDEDOR,
     ),
     role,
-    isJefeVentas: Boolean(user.isJefeVentas) || supervisorRole,
+    isJefeVentas:
+      supervisorRole || (Boolean(user.isJefeVentas) && !explicitNonSupervisor),
   };
 }
 module.exports = {

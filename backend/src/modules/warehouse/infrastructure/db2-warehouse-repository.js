@@ -18,6 +18,8 @@ class Db2WarehouseRepository extends WarehouseRepository {
   }
 
   async getStock({ productCode, warehouse, search = '', limit = 100, offset = 0 }) {
+    const safeLimit = clampInt(limit, 100, 1, 500);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const productFilter = productCode ? `AND ARO.CODIGOARTICULO = ?` : '';
     const warehouseFilter = warehouse ? `AND ARO.CODIGOALMACEN = ?` : '';
     const searchFilter = search ? `AND (ART.DESCRIPCIONARTICULO LIKE ? OR ART.CODIGOARTICULO LIKE ?)` : '';
@@ -25,7 +27,7 @@ class Db2WarehouseRepository extends WarehouseRepository {
     if (productCode) params.push(productCode);
     if (warehouse) params.push(warehouse);
     if (search) params.push(`%${search}%`, `%${search}%`);
-    params.push(limit, offset);
+    params.push(safeOffset, safeLimit);
 
     const sql = `
       SELECT 
@@ -43,7 +45,7 @@ class Db2WarehouseRepository extends WarehouseRepository {
         AND ART.ANOBAJA IS NULL
         AND ART.BLOQUEADOSN = 'N'
       ORDER BY ART.DESCRIPCIONARTICULO
-      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -51,6 +53,8 @@ class Db2WarehouseRepository extends WarehouseRepository {
   }
 
   async getMovements({ productCode, type, dateFrom, dateTo, limit = 50, offset = 0 }) {
+    const safeLimit = clampInt(limit, 50, 1, 500);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     let whereClause = 'WHERE 1=1';
     const params = [];
 
@@ -71,7 +75,7 @@ class Db2WarehouseRepository extends WarehouseRepository {
       params.push(dateTo);
     }
 
-    params.push(limit, offset);
+    params.push(safeOffset, safeLimit);
 
     const sql = `
       SELECT 
@@ -85,7 +89,7 @@ class Db2WarehouseRepository extends WarehouseRepository {
       FROM JAVIER.STOCK_MOVIMIENTOS M
       ${whereClause}
       ORDER BY M.FECHA DESC
-      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -116,10 +120,10 @@ class Db2WarehouseRepository extends WarehouseRepository {
         AND ART.ANOBAJA IS NULL
         AND ART.BLOQUEADOSN = 'N'
       ORDER BY STOCK ASC, ART.DESCRIPCIONARTICULO ASC, ARO.CODIGOARTICULO ASC, ARO.CODIGOALMACEN ASC
-      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
-    const result = await this._db.executeParams(sql, [threshold, safeLimit, safeOffset]);
+    const result = await this._db.executeParams(sql, [threshold, safeOffset, safeLimit]);
     return (result || []).map(row => WarehouseStock.fromDbRow(row));
   }
 

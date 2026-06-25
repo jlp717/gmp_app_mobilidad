@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
 
 /// Represents an offline mutation (write operation) that needs to be
 /// synced when connectivity is restored.
@@ -79,7 +80,10 @@ class SyncQueueService {
   }
 
   Future<void> initialize() async {
-    _box = await Hive.openBox<String>(_boxName);
+    _box = await HiveSecureBox.open<String>(
+      _boxName,
+      migrateUnencryptedLegacy: true,
+    );
     _purgeStale(); // Clean up expired operations on startup
     debugPrint(
         '[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations');
@@ -96,7 +100,7 @@ class SyncQueueService {
     if (_box == null) return;
     operation.createdAt ??= DateTime.now();
     await _box!.put(operation.id, jsonEncode(operation.toJson()));
-    debugPrint('[SyncQueue] Enqueued: ${operation.type} (${operation.id})');
+    debugPrint('[SyncQueue] Enqueued: ${operation.type}');
   }
 
   /// Remove an operation after successful sync.
@@ -129,7 +133,7 @@ class SyncQueueService {
     int successCount = 0;
     for (final op in ops) {
       if (op.isFailed) {
-        debugPrint('[SyncQueue] ${op.id} is failed; manual review required');
+        debugPrint('[SyncQueue] Operation is failed; manual review required');
         continue;
       }
 
@@ -138,7 +142,7 @@ class SyncQueueService {
       final nextRetry = (op.createdAt ?? DateTime.now()).add(backoff);
       if (DateTime.now().isBefore(nextRetry) && op.attempts > 0) {
         debugPrint(
-            '[SyncQueue] ${op.id} in backoff, retry at ${nextRetry.toIso8601String()}');
+            '[SyncQueue] Operation in backoff, retry at ${nextRetry.toIso8601String()}');
         continue;
       }
 
@@ -146,7 +150,7 @@ class SyncQueueService {
         await _processOperation(op);
         await dequeue(op.id);
         successCount++;
-        debugPrint('[SyncQueue] Synced: ${op.type} (${op.id})');
+        debugPrint('[SyncQueue] Synced: ${op.type}');
       } catch (e) {
         op.attempts++;
         op.lastError = e.toString();
@@ -154,13 +158,13 @@ class SyncQueueService {
           op.failedAt ??= DateTime.now();
           await _box?.put(op.id, jsonEncode(op.toJson()));
           debugPrint(
-              '[SyncQueue] Max attempts reached for ${op.id}, preserving failed operation');
+              '[SyncQueue] Max attempts reached, preserving failed operation');
         } else {
           // Update with incremented attempts
           await _box?.put(op.id, jsonEncode(op.toJson()));
           final delay = _calculateBackoff(op.attempts);
           debugPrint(
-              '[SyncQueue] ${op.id} failed (${op.attempts}/$_maxAttempts), retry in ${delay.inSeconds}s: ${e.toString().substring(0, 100)}');
+              '[SyncQueue] Operation failed (${op.attempts}/$_maxAttempts), retry in ${delay.inSeconds}s: ${_shortError(e)}');
         }
       }
     }
@@ -171,6 +175,11 @@ class SyncQueueService {
   Duration _calculateBackoff(int attempts) {
     final seconds = _baseDelay.inSeconds * (1 << attempts); // 2, 4, 8, 16, 32
     return Duration(seconds: seconds.clamp(2, 300)); // Cap at 5 min
+  }
+
+  String _shortError(Object error) {
+    final text = error.toString();
+    return text.length <= 100 ? text : text.substring(0, 100);
   }
 
   /// Remove operations older than _maxAge.

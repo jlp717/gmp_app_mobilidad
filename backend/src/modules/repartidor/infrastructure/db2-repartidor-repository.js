@@ -179,6 +179,8 @@ class Db2RepartidorRepository extends RepartidorRepository {
 
   async getHistorico(repartidorCode, filters = {}) {
     const { year, month, limit = 50, offset = 0 } = filters;
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     let whereClause = 'WHERE OP.CODIGOREPARTIDOR = ?';
     const params = [repartidorCode];
 
@@ -191,7 +193,7 @@ class Db2RepartidorRepository extends RepartidorRepository {
       params.push(month);
     }
 
-    params.push(limit, offset);
+    params.push(safeOffset, safeLimit);
 
     const sql = `
       SELECT 
@@ -209,7 +211,7 @@ class Db2RepartidorRepository extends RepartidorRepository {
       LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = OPC.NUMEROORDENPREPARACION
       ${whereClause}
       ORDER BY OPC.ANODOCUMENTO DESC, OPC.MESDOCUMENTO DESC, OPC.DIADOCUMENTO DESC
-      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
     return await this._db.executeParams(sql, params);

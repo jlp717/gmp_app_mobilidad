@@ -2,6 +2,7 @@
 /// Used by client_detail_page and simple_client_list_page
 library;
 
+import 'package:dio/dio.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -14,6 +15,7 @@ class ClientsService {
     String? search,
     int limit = 200,
     bool forceRefresh = false,
+    CancelToken? cancelToken,
   }) async {
     final normalizedSearch = search?.trim();
     final params = <String, dynamic>{
@@ -43,6 +45,7 @@ class ClientsService {
       cacheKey: 'clients_list_v2_${scopeKey}_${limit}_$searchKey',
       cacheTTL: const Duration(minutes: 5),
       forceRefresh: forceRefresh,
+      cancelToken: cancelToken,
     );
 
     final rawList = result.data['clients'] ?? [];

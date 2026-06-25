@@ -22,14 +22,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(ChatbotPage), findsOneWidget);
-    expect(find.text('Asistente'), findsWidgets);
-    expect(find.text('Asistente Comercial Inteligente'), findsOneWidget);
+    expect(find.textContaining('Copiloto GMP'), findsWidgets);
+    expect(
+      find.text('Datos comerciales, documentos y decisiones'),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
     expect(find.text('Comercial'), findsWidgets);
-    expect(find.text('Historial'), findsOneWidget);
+    expect(find.text('Historial'), findsWidgets);
     expect(find.text('Respuestas'), findsOneWidget);
-    expect(find.text('Briefing'), findsOneWidget);
-    expect(find.text('Centro Comercial IA'), findsOneWidget);
+    expect(find.text('Briefing'), findsWidgets);
+    expect(find.text('Mesa comercial'), findsOneWidget);
+    expect(find.text('Cobertura'), findsWidgets);
+    expect(find.text('COBERTURA POR PESTANAS'), findsOneWidget);
+    expect(find.text('Copiloto Comercial GMP'), findsOneWidget);
+    expect(find.text('Producto'), findsWidgets);
+    expect(find.text('Cliente'), findsWidgets);
+    expect(find.text('Factura PDF'), findsWidgets);
     expect(find.text('Factura'), findsWidgets);
     expect(find.text('Comisiones'), findsWidgets);
     expect(find.text('Objetivos'), findsWidgets);

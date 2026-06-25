@@ -37,6 +37,22 @@ class ApiClient {
   /// Prevents stale 401 responses from clearing the new token mid-login.
   static bool _isLoggingIn = false;
 
+  static const Set<String> _debugCertificateBypassHosts = {
+    '127.0.0.1',
+    '10.0.2.2',
+    '192.168.1.52',
+    '172.31.192.1',
+    'localhost',
+  };
+
+  @visibleForTesting
+  static bool shouldBypassInvalidCertificateForHost(
+    String host, {
+    bool debugMode = kDebugMode,
+  }) {
+    return debugMode && _debugCertificateBypassHosts.contains(host);
+  }
+
   // ── Connectivity Monitoring ──────────────────────────────────────────
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static ConnectivityResult _lastConnectivity = ConnectivityResult.wifi;
@@ -221,14 +237,7 @@ class ApiClient {
 
         // Allow development/local hosts without pinning
         // These IPs are for local development servers (emulator, local backend)
-        const devHosts = {
-          '127.0.0.1',
-          '10.0.2.2', // Android emulator host
-          '192.168.1.52', // Local dev server
-          '172.31.192.1', // AWS/local network
-          'localhost',
-        };
-        if (devHosts.contains(host)) {
+        if (shouldBypassInvalidCertificateForHost(host)) {
           if (kDebugMode) {
             debugPrint(
               '[ApiClient]   ✅ Dev host bypass - no pinning required',
@@ -254,28 +263,16 @@ class ApiClient {
           return isPinned;
         }
 
-        // Pinning disabled: trust platform's default certificate validation
-        // Platform validation includes:
-        //   - Certificate chain verification
-        //   - Expiration check
-        //   - Revocation status (on supported platforms)
-        //   - Root CA trust verification
-        //
-        // WARNING: When PINNED_CERT_ENABLED=false, the app trusts any
-        // certificate validated by the platform. This is less secure but
-        // necessary when:
-        //   - Using custom/internal CAs
-        //   - During development before production cert is available
-        //   - When server certificate rotation is frequent
-        //
-        // RECOMMENDATION: Enable pinning for production builds
+        // This callback only runs for certificates rejected by the platform.
+        // If pinning is not configured, fail closed instead of accepting an
+        // invalid production certificate.
 
         if (kDebugMode) {
           debugPrint(
-            '[ApiClient]   ⚠️ Pinning disabled - trusting platform validation',
+            '[ApiClient]   Invalid certificate rejected for $host',
           );
         }
-        return true;
+        return false;
       };
 
       // Configure security context options
@@ -406,6 +403,10 @@ class ApiClient {
     dio.options.headers.remove('Authorization');
   }
 
+  static void clearPendingRequests() {
+    _pendingRequests.clear();
+  }
+
   static Future<void> storeRefreshToken(String token) async {
     await SecureStorage.writeSecureData('refresh_token', token);
   }
@@ -503,11 +504,15 @@ class ApiClient {
     String? cacheKey,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    bool allowStale = true,
+    Duration maxStale = const Duration(hours: 24),
     Duration? receiveTimeout,
+    CancelToken? cancelToken,
   }) async {
     final requestKey = _buildRequestKey('GET_MAP', endpoint, queryParameters);
+    final canDeduplicate = !forceRefresh && cancelToken == null;
 
-    if (!forceRefresh) {
+    if (canDeduplicate) {
       final pending = _pendingRequests[requestKey];
       if (pending != null) {
         debugPrint('[ApiClient] Deduping request: $endpoint');
@@ -532,6 +537,7 @@ class ApiClient {
         final response = await dio.get(
           endpoint,
           queryParameters: queryParameters,
+          cancelToken: cancelToken,
           options: receiveTimeout != null
               ? Options(receiveTimeout: receiveTimeout)
               : null,
@@ -554,9 +560,9 @@ class ApiClient {
 
         return data;
       } on DioException catch (e) {
-        if (cacheKey != null && _isNetworkError(e)) {
+        if (cacheKey != null && allowStale && _isNetworkError(e)) {
           try {
-            final cached = CacheService.getStale(cacheKey);
+            final cached = CacheService.getStale(cacheKey, maxStale: maxStale);
             if (cached != null && cached is Map) {
               return _deepCastMap(cached);
             }
@@ -566,14 +572,14 @@ class ApiClient {
       }
     }();
 
-    if (!forceRefresh) {
+    if (canDeduplicate) {
       _pendingRequests[requestKey] = future;
     }
 
     try {
       return await future;
     } finally {
-      if (!forceRefresh) {
+      if (canDeduplicate) {
         _pendingRequests.remove(requestKey);
       }
     }
@@ -586,10 +592,14 @@ class ApiClient {
     String? cacheKey,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    bool allowStale = true,
+    Duration maxStale = const Duration(hours: 24),
+    CancelToken? cancelToken,
   }) async {
     final requestKey = _buildRequestKey('GET_LIST', endpoint, queryParameters);
+    final canDeduplicate = !forceRefresh && cancelToken == null;
 
-    if (!forceRefresh) {
+    if (canDeduplicate) {
       final pending = _pendingRequests[requestKey];
       if (pending != null) {
         debugPrint('[ApiClient] Deduping list request: $endpoint');
@@ -614,6 +624,7 @@ class ApiClient {
         final response = await dio.get(
           endpoint,
           queryParameters: queryParameters,
+          cancelToken: cancelToken,
         );
 
         final data = response.data;
@@ -634,8 +645,9 @@ class ApiClient {
 
         return result;
       } on DioException catch (e) {
-        if (cacheKey != null && _isNetworkError(e)) {
-          final cached = CacheService.getStale<List<dynamic>>(cacheKey);
+        if (cacheKey != null && allowStale && _isNetworkError(e)) {
+          final cached = CacheService.getStale<List<dynamic>>(cacheKey,
+              maxStale: maxStale);
           if (cached != null) {
             return cached;
           }
@@ -644,14 +656,14 @@ class ApiClient {
       }
     }();
 
-    if (!forceRefresh) {
+    if (canDeduplicate) {
       _pendingRequests[requestKey] = future;
     }
 
     try {
       return await future;
     } finally {
-      if (!forceRefresh) {
+      if (canDeduplicate) {
         _pendingRequests.remove(requestKey);
       }
     }
@@ -888,6 +900,9 @@ class ApiClient {
     String? cacheKey,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    bool allowStale = true,
+    Duration maxStale = const Duration(hours: 24),
+    CancelToken? cancelToken,
   }) async {
     return get(
       endpoint,
@@ -895,6 +910,9 @@ class ApiClient {
       cacheKey: cacheKey,
       cacheTTL: cacheTTL,
       forceRefresh: forceRefresh,
+      allowStale: allowStale,
+      maxStale: maxStale,
+      cancelToken: cancelToken,
     );
   }
 

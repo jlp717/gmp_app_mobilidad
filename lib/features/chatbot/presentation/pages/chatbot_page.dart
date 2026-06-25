@@ -26,6 +26,15 @@ class ChatbotPage extends ConsumerStatefulWidget {
 
 class _ChatbotPageState extends ConsumerState<ChatbotPage>
     with SingleTickerProviderStateMixin {
+  static const _background = Color(0xFF10130F);
+  static const _surface = Color(0xFF171B17);
+  static const _surfaceRaised = Color(0xFF20251F);
+  static const _line = Color(0xFF334034);
+  static const _mint = Color(0xFF7DDFA6);
+  static const _cyan = Color(0xFF68D8E6);
+  static const _amber = Color(0xFFF4C95D);
+  static const _rose = Color(0xFFFF8A9A);
+
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late AnimationController _pulseController;
@@ -340,28 +349,25 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     final chatbotState = ref.watch(chatbotProvider);
 
     return Scaffold(
-      // Wrapped in Scaffold for safety
-      backgroundColor: const Color(0xFF0A0E21),
+      backgroundColor: _background,
       body: Column(
         children: [
           SmartSyncHeader(
-            title: isJefe ? 'Asistente (Supervisor)' : 'Asistente',
-            subtitle: 'Asistente Comercial Inteligente',
+            title: isJefe ? 'Copiloto GMP (Supervisor)' : 'Copiloto GMP',
+            subtitle: 'Datos comerciales, documentos y decisiones',
             lastSync: DateTime.now(),
             isLoading: chatbotState.isLoading,
-            onSync: () => ref
-                .read(chatbotProvider.notifier)
-                .clearChat(), // Clear as sync/reset action
+            onSync: () => ref.read(chatbotProvider.notifier).clearChat(),
           ),
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF0E1426),
-                    Color(0xFF070A14),
+                    Color(0xFF151A14),
+                    Color(0xFF0C0F0C),
                   ],
                 ),
               ),
@@ -491,12 +497,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     final answerCount = chatState.messages.where((m) => !m.isUser).length;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF11182A).withValues(alpha: 0.82),
+        color: _surface.withValues(alpha: 0.96),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withValues(alpha: 0.12),
+            color: _line.withValues(alpha: 0.7),
           ),
         ),
       ),
@@ -504,35 +510,33 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _StatusPill(
-                      icon: Icons.verified_user_outlined,
-                      label: isJefe ? 'Supervisor' : 'Comercial',
-                      value: isJefe ? 'todo' : 'cartera',
-                      accent: AppTheme.neonBlue,
+                    Text(
+                      isJefe ? 'Mesa comercial completa' : 'Mesa comercial',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
                     ),
-                    _StatusPill(
-                      icon: Icons.history,
-                      label: 'Historial',
-                      value: '${chatState.sessions.length}',
-                      accent: Colors.greenAccent,
-                    ),
-                    _StatusPill(
-                      icon: Icons.picture_as_pdf_outlined,
-                      label: 'PDF',
-                      value: '$documentCount',
-                      accent: Colors.pinkAccent,
-                    ),
-                    _StatusPill(
-                      icon: Icons.analytics_outlined,
-                      label: 'Respuestas',
-                      value: '$answerCount',
-                      accent: Colors.amberAccent,
+                    const SizedBox(height: 3),
+                    Text(
+                      isJefe
+                          ? 'Supervisor: clientes, rutas, PDFs y objetivos'
+                          : 'Cartera, ruta, cobros, pedidos y documentos',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 11.5,
+                        height: 1.2,
+                      ),
                     ),
                   ],
                 ),
@@ -543,9 +547,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 child: IconButton(
                   onPressed: _showHistorySheet,
                   icon: const Icon(Icons.history_rounded),
-                  color: Colors.greenAccent,
+                  color: _mint,
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.greenAccent.withValues(alpha: 0.08),
+                    backgroundColor: _mint.withValues(alpha: 0.1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -558,9 +562,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 child: IconButton(
                   onPressed: () => _sendQuery('que puedes hacer por pestanas'),
                   icon: const Icon(Icons.radar_outlined),
-                  color: AppTheme.neonBlue,
+                  color: _cyan,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.08),
+                    backgroundColor: _cyan.withValues(alpha: 0.1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -569,8 +573,40 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _StatusPill(
+                icon: Icons.verified_user_outlined,
+                label: isJefe ? 'Supervisor' : 'Comercial',
+                value: isJefe ? 'todo' : 'cartera',
+                accent: _mint,
+              ),
+              _StatusPill(
+                icon: Icons.history,
+                label: 'Historial',
+                value: '${chatState.sessions.length}',
+                accent: _cyan,
+              ),
+              _StatusPill(
+                icon: Icons.picture_as_pdf_outlined,
+                label: 'PDF',
+                value: '$documentCount',
+                accent: _rose,
+              ),
+              _StatusPill(
+                icon: Icons.analytics_outlined,
+                label: 'Respuestas',
+                value: '$answerCount',
+                accent: _amber,
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           _buildPlaybookStrip(),
+          const SizedBox(height: 10),
           _buildCoverageRail(),
         ],
       ),
@@ -582,12 +618,17 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       (
         Icons.bolt_outlined,
         'Briefing',
-        'Resumen Glacius hoy y top clientes',
+        'Resumen Glacius hoy, top clientes y cobros',
+      ),
+      (
+        Icons.manage_search_outlined,
+        'Producto',
+        'Dime el producto de migas y opciones parecidas',
       ),
       (
         Icons.receipt_long_outlined,
         'Factura',
-        'Lee la factura F/100/2026',
+        'Lee la factura F/100/2026 y ensename el PDF',
       ),
       (
         Icons.flag_outlined,
@@ -607,7 +648,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     ];
 
     return SizedBox(
-      height: 42,
+      height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: playbooks.length,
@@ -626,16 +667,16 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: selected
-                      ? AppTheme.neonBlue.withValues(alpha: 0.16)
-                      : Colors.white.withValues(alpha: 0.035),
+                      ? _mint.withValues(alpha: 0.14)
+                      : Colors.white.withValues(alpha: 0.045),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: selected
-                        ? AppTheme.neonBlue.withValues(alpha: 0.42)
-                        : Colors.white.withValues(alpha: 0.08),
+                        ? _mint.withValues(alpha: 0.44)
+                        : _line.withValues(alpha: 0.8),
                   ),
                 ),
                 child: Row(
@@ -644,7 +685,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     Icon(
                       icon,
                       size: 16,
-                      color: selected ? AppTheme.neonBlue : Colors.white70,
+                      color: selected ? _mint : Colors.white70,
                     ),
                     const SizedBox(width: 7),
                     Text(
@@ -668,60 +709,66 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
   Widget _buildCoverageRail() {
     final modules = [
       (
+        Icons.manage_search_outlined,
+        'Producto',
+        'Busca producto migas y dime opciones',
+        _cyan,
+      ),
+      (
         Icons.groups_2_outlined,
         'Clientes',
         'Deuda, ventas, riesgo y compras de un cliente',
-        Colors.cyanAccent,
+        _mint,
       ),
       (
         Icons.route_outlined,
         'Ruta',
         'Mi ruta hoy y cobros del repartidor',
-        Colors.greenAccent,
+        const Color(0xFFA6E36F),
       ),
       (
         Icons.payments_outlined,
         'Comisiones',
         'Comision acumulada ultimos 3 meses',
-        Colors.amberAccent,
+        _amber,
       ),
       (
         Icons.flag_outlined,
         'Objetivos',
         'Objetivo acumulado enero a marzo',
-        Colors.lightBlueAccent,
+        const Color(0xFF9EA7FF),
       ),
       (
         Icons.picture_as_pdf_outlined,
         'PDF',
         'Lee la factura F/100/2026',
-        Colors.pinkAccent,
+        _rose,
       ),
       (
         Icons.ac_unit_outlined,
         'Glacius',
         'Resumen Glacius hoy',
-        Colors.tealAccent,
+        const Color(0xFF70E2C8),
       ),
       (
         Icons.account_balance_wallet_outlined,
         'Bolsa',
         'Movimientos bolsa',
-        Colors.deepPurpleAccent,
+        const Color(0xFFD7A8FF),
       ),
       (
         Icons.local_shipping_outlined,
         'Almacen',
         'Camiones y vehiculos hoy',
-        Colors.orangeAccent,
+        const Color(0xFFFFB26B),
       ),
     ];
 
     return SizedBox(
-      height: 86,
+      height: 74,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        padding: EdgeInsets.zero,
         itemCount: modules.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
@@ -743,27 +790,44 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 _sendQuery(query);
               },
               child: Container(
-                width: 138,
+                width: 150,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.035),
+                  color: accent.withValues(alpha: 0.075),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: accent.withValues(alpha: 0.32)),
+                  border: Border.all(color: accent.withValues(alpha: 0.34)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(icon, size: 18, color: accent),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                    Row(
+                      children: [
+                        Icon(icon, size: 17, color: accent),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      query,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 10,
+                        height: 1.1,
                       ),
                     ),
                   ],
@@ -863,62 +927,173 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.035),
+              color: _surfaceRaised.withValues(alpha: 0.88),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: AppTheme.neonBlue.withValues(alpha: 0.16),
+                color: _line.withValues(alpha: 0.9),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (context, child) => Transform.scale(
-                    scale: 0.96 + (_pulseAnimation.value * 0.04),
-                    child: child,
-                  ),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.28),
+                Row(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _pulseAnimation,
+                      builder: (context, child) => Transform.scale(
+                        scale: 0.96 + (_pulseAnimation.value * 0.04),
+                        child: child,
+                      ),
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: _mint.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _mint.withValues(alpha: 0.36),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.psychology_alt_outlined,
+                          color: _mint,
+                          size: 24,
+                        ),
                       ),
                     ),
-                    child: const Icon(
-                      Icons.psychology,
-                      color: AppTheme.neonBlue,
-                      size: 24,
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Copiloto Comercial GMP',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Consulta clientes, rutas, facturas, objetivos y PDFs desde una sola conversacion.',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Centro Comercial IA',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0,
+                    Tooltip(
+                      message: 'Lanzar briefing comercial',
+                      child: IconButton(
+                        onPressed: () => _sendQuery(
+                          'Resumen Glacius hoy con top clientes, pedidos y cobros',
+                        ),
+                        icon: const Icon(Icons.bolt_outlined),
+                        color: _amber,
+                        style: IconButton.styleFrom(
+                          backgroundColor: _amber.withValues(alpha: 0.1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Briefing',
-                  onPressed: () => _sendQuery(
-                    'Resumen Glacius hoy con top clientes, pedidos y cobros',
-                  ),
-                  icon: const Icon(Icons.bolt_outlined),
-                  color: AppTheme.neonBlue,
+                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 520;
+                    final cards = [
+                      (
+                        Icons.manage_search_outlined,
+                        'Producto',
+                        'Migas, precios, stock',
+                        _cyan,
+                      ),
+                      (
+                        Icons.groups_2_outlined,
+                        'Cliente',
+                        'Riesgo, deuda, compras',
+                        _mint,
+                      ),
+                      (
+                        Icons.picture_as_pdf_outlined,
+                        'Factura PDF',
+                        'Lineas, importes, archivo',
+                        _rose,
+                      ),
+                    ];
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: cards.map((card) {
+                        final (icon, title, detail, accent) = card;
+                        return SizedBox(
+                          width: compact
+                              ? (constraints.maxWidth - 8) / 2
+                              : (constraints.maxWidth - 16) / 3,
+                          child: _WelcomeMetric(
+                            icon: icon,
+                            title: title,
+                            detail: detail,
+                            accent: accent,
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _sendQuery(
+                          'Que puedes hacer por pestanas',
+                        ),
+                        icon: const Icon(Icons.radar_outlined, size: 17),
+                        label: const Text('Cobertura'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _mint,
+                          foregroundColor: const Color(0xFF07110B),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _showHistorySheet,
+                        icon: const Icon(Icons.history_rounded, size: 17),
+                        label: const Text('Historial'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: _line),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 14),
+          _buildPriorityActions(),
           const SizedBox(height: 14),
           _buildCapabilityGrid(),
           const SizedBox(height: 18),
@@ -928,133 +1103,289 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     );
   }
 
-  Widget _buildCapabilityGrid() {
-    final capabilities = [
-      (Icons.groups_2_outlined, 'Clientes', 'Ficha, deuda y compras'),
-      (Icons.route_outlined, 'Rutero', 'Entregas y cobros'),
-      (Icons.euro_outlined, 'Comisiones', 'Mes y acumulados'),
-      (Icons.flag_outlined, 'Objetivos', 'Cumplimiento y familias'),
-      (Icons.picture_as_pdf_outlined, 'Facturas', 'Detalle y PDF'),
-      (Icons.ac_unit_outlined, 'Glacius', 'Panel y KPIs'),
-      (Icons.account_balance_wallet_outlined, 'Bolsa', 'Saldo y movimientos'),
-      (Icons.local_shipping_outlined, 'Almacen', 'Vehiculos y carga'),
+  Widget _buildPriorityActions() {
+    final actions = [
+      (
+        Icons.manage_search_outlined,
+        'Producto',
+        'Dime el producto de migas y opciones parecidas',
+        'Catalogo, stock, precios',
+        _cyan,
+      ),
+      (
+        Icons.groups_2_outlined,
+        'Cliente',
+        'Evalua el cliente Central Hoteles',
+        'Deuda, pedidos y riesgo',
+        _mint,
+      ),
+      (
+        Icons.picture_as_pdf_outlined,
+        'Factura PDF',
+        'Lee la factura F/100/2026 y ensename el PDF',
+        'Lineas, importes, archivo',
+        _rose,
+      ),
+      (
+        Icons.bolt_outlined,
+        'Briefing',
+        'Resumen Glacius hoy con top clientes',
+        'Ventas, cobros y pedidos',
+        _amber,
+      ),
+      (
+        Icons.flag_outlined,
+        'Objetivos',
+        'Objetivo acumulado de enero a marzo 2026',
+        'Cumplimiento y familias',
+        const Color(0xFF9EA7FF),
+      ),
+      (
+        Icons.route_outlined,
+        'Rutero',
+        'Mi ruta hoy y cobros del repartidor',
+        'Entregas y cobros',
+        const Color(0xFFA6E36F),
+      ),
     ];
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      alignment: WrapAlignment.center,
-      children: capabilities.map((cap) {
-        final (icon, title, desc) = cap;
-        return Container(
-          width: 160,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: actions.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 240,
+        mainAxisExtent: 104,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemBuilder: (context, index) {
+        final (icon, title, query, detail, accent) = actions[index];
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: Duration(milliseconds: 220 + index * 55),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) => Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, 12 * (1 - value)),
+              child: child,
+            ),
           ),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: AppTheme.neonBlue, size: 24),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => _sendQuery(query),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _surfaceRaised.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: accent.withValues(alpha: 0.34)),
               ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(icon, color: accent, size: 19),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 11,
+                      height: 1.15,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          query,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_rounded,
+                          size: 15, color: accent),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                desc,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
+            ),
           ),
         );
-      }).toList(),
+      },
+    );
+  }
+
+  Widget _buildCapabilityGrid() {
+    final capabilities = [
+      (
+        Icons.groups_2_outlined,
+        'Clientes',
+        'Ficha, deuda, compras, facturas y riesgo',
+        _mint,
+      ),
+      (
+        Icons.route_outlined,
+        'Rutero',
+        'Rutas, entregas, albaranes y cobros',
+        const Color(0xFFA6E36F),
+      ),
+      (
+        Icons.euro_outlined,
+        'Comisiones',
+        'Generado, acumulado, meses y detalle',
+        _amber,
+      ),
+      (
+        Icons.flag_outlined,
+        'Objetivos',
+        'Mes, acumulado, familias y desviaciones',
+        const Color(0xFF9EA7FF),
+      ),
+      (
+        Icons.picture_as_pdf_outlined,
+        'Facturas',
+        'Cabecera, lineas, importes y PDF',
+        _rose,
+      ),
+      (
+        Icons.ac_unit_outlined,
+        'Glacius',
+        'Ventas, actividad, pedidos y cobros',
+        const Color(0xFF70E2C8),
+      ),
+      (
+        Icons.account_balance_wallet_outlined,
+        'Bolsa',
+        'Saldo, movimientos y contexto comercial',
+        const Color(0xFFD7A8FF),
+      ),
+      (
+        Icons.local_shipping_outlined,
+        'Almacen',
+        'Camiones, carga, stock y vehiculos',
+        const Color(0xFFFFB26B),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel(
+          icon: Icons.dashboard_customize_outlined,
+          label: 'Cobertura por pestanas',
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: capabilities.map((cap) {
+            final (icon, title, desc, accent) = cap;
+            return SizedBox(
+              width: 168,
+              child: _CapabilityCard(
+                icon: icon,
+                title: title,
+                description: desc,
+                accent: accent,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
   Widget _buildExampleQueries() {
     final currentClientCode = ref.watch(chatbotProvider).currentClientCode;
     final examples = [
-      'Mi comision acumulada de enero a marzo.',
-      'Objetivo acumulado ultimos 3 meses.',
-      'Lee la factura F/100/2026 y dime lineas e importe.',
-      'Resumen Glacius hoy y top clientes.',
-      'Mi ruta hoy y cobros del repartidor.',
+      (
+        Icons.payments_outlined,
+        'Comisiones',
+        'Mi comision acumulada de enero a marzo.',
+      ),
+      (
+        Icons.flag_outlined,
+        'Objetivos',
+        'Objetivo acumulado ultimos 3 meses.',
+      ),
+      (
+        Icons.picture_as_pdf_outlined,
+        'Factura',
+        'Lee la factura F/100/2026 y dime lineas e importe.',
+      ),
+      (
+        Icons.ac_unit_outlined,
+        'Glacius',
+        'Resumen Glacius hoy y top clientes.',
+      ),
+      (
+        Icons.route_outlined,
+        'Rutero',
+        'Mi ruta hoy y cobros del repartidor.',
+      ),
       if (currentClientCode != null)
-        'Evalua el cliente $currentClientCode con deuda, facturas y pedidos.',
+        (
+          Icons.groups_2_outlined,
+          'Cliente',
+          'Evalua el cliente $currentClientCode con deuda, facturas y pedidos.',
+        ),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4),
-          child: Text(
-            'PRUEBA PREGUNTAR',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
-              letterSpacing: 1.5,
-            ),
-          ),
+        const _SectionLabel(
+          icon: Icons.auto_awesome_motion_outlined,
+          label: 'Preguntas listas para lanzar',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         ...examples.map(
-          (q) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: GestureDetector(
-              onTap: () {
-                _sendQuery(q);
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.02),
-                  borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 12,
-                      color: AppTheme.neonBlue,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        q,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade400,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          (item) {
+            final (icon, label, query) = item;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _PromptTile(
+                icon: icon,
+                label: label,
+                query: query,
+                onTap: () => _sendQuery(query),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ],
     );
@@ -1066,9 +1397,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF060914).withValues(alpha: 0.94),
+        color: _surface.withValues(alpha: 0.98),
         border: Border(
-          top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
+          top: BorderSide(color: _line.withValues(alpha: 0.85)),
         ),
       ),
       child: SafeArea(
@@ -1077,6 +1408,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: SingleChildScrollView(
@@ -1084,9 +1416,27 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     child: Row(
                       children: [
                         _ComposerTool(
+                          icon: Icons.manage_search_outlined,
+                          label: 'Producto',
+                          onTap: () => _sendQuery(
+                            'Dime el producto de migas y opciones parecidas',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _ComposerTool(
                           icon: Icons.receipt_long_outlined,
                           label: 'Factura',
-                          onTap: () => _sendQuery('lee la factura F/100/2026'),
+                          onTap: () => _sendQuery(
+                            'Lee la factura F/100/2026 y ensename el PDF',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _ComposerTool(
+                          icon: Icons.groups_2_outlined,
+                          label: 'Cliente',
+                          onTap: () => _sendQuery(
+                            'Evalua el cliente Central Hoteles',
+                          ),
                         ),
                         const SizedBox(width: 8),
                         _ComposerTool(
@@ -1114,9 +1464,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                   child: IconButton(
                     onPressed: _showHistorySheet,
                     icon: const Icon(Icons.history_rounded),
-                    color: Colors.white70,
+                    color: _mint,
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.05),
+                      backgroundColor: _mint.withValues(alpha: 0.08),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1133,9 +1483,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                             .read(chatbotProvider.notifier)
                             .startNewSession(),
                     icon: const Icon(Icons.add_comment_outlined),
-                    color: Colors.white70,
+                    color: _cyan,
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.05),
+                      backgroundColor: _cyan.withValues(alpha: 0.08),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1152,9 +1502,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                             .read(chatbotProvider.notifier)
                             .retryLastMessage(),
                     icon: const Icon(Icons.refresh_rounded),
-                    color: Colors.white70,
+                    color: _amber,
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.05),
+                      backgroundColor: _amber.withValues(alpha: 0.08),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1171,10 +1521,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                   child: Container(
                     constraints: const BoxConstraints(minHeight: 54),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.045),
+                      color: _background.withValues(alpha: 0.72),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.22),
+                        color: chatState.isLoading
+                            ? _amber.withValues(alpha: 0.42)
+                            : _mint.withValues(alpha: 0.28),
                       ),
                     ),
                     child: TextField(
@@ -1182,12 +1534,14 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       style: const TextStyle(color: Colors.white, fontSize: 15),
                       decoration: InputDecoration(
                         hintText:
-                            'Pregunta por cliente, factura, objetivo, ruta...',
-                        hintStyle: TextStyle(color: Colors.grey.shade600),
+                            'Pregunta por cliente, producto, factura, ruta, objetivo...',
+                        hintStyle: TextStyle(color: Colors.grey.shade500),
                         border: InputBorder.none,
                         prefixIcon: Icon(
-                          Icons.manage_search,
-                          color: AppTheme.neonBlue.withValues(alpha: 0.78),
+                          chatState.isLoading
+                              ? Icons.hourglass_top_rounded
+                              : Icons.manage_search,
+                          color: chatState.isLoading ? _amber : _mint,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -1209,9 +1563,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     onPressed: chatState.isLoading ? null : _sendMessage,
                     style: FilledButton.styleFrom(
                       padding: EdgeInsets.zero,
-                      backgroundColor: chatState.isLoading
-                          ? Colors.grey.shade800
-                          : AppTheme.neonBlue,
+                      backgroundColor:
+                          chatState.isLoading ? Colors.grey.shade800 : _mint,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1220,11 +1573,241 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       chatState.isLoading
                           ? Icons.hourglass_top
                           : Icons.send_rounded,
-                      color: Colors.white,
+                      color: chatState.isLoading
+                          ? Colors.white70
+                          : const Color(0xFF07110B),
                     ),
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WelcomeMetric extends StatelessWidget {
+  const _WelcomeMetric({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 72),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: accent, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 10.5,
+                    height: 1.15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: const Color(0xFF7DDFA6), size: 16),
+        const SizedBox(width: 7),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: Colors.grey.shade400,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CapabilityCard extends StatelessWidget {
+  const _CapabilityCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 106),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20251F).withValues(alpha: 0.74),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            description,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.grey.shade400,
+              fontSize: 11,
+              height: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromptTile extends StatelessWidget {
+  const _PromptTile({
+    required this.icon,
+    required this.label,
+    required this.query,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String query;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFF171B17).withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF334034)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF7DDFA6).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: const Color(0xFF7DDFA6), size: 17),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 88,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                query,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.grey.shade400,
+                  fontSize: 12,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.arrow_forward_rounded,
+              color: Color(0xFF7DDFA6),
+              size: 17,
             ),
           ],
         ),

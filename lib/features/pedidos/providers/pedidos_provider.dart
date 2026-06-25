@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
@@ -1245,6 +1246,19 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void _clearSubmittedCart() {
+    _lines.clear();
+    _clientCode = null;
+    _clientName = null;
+    _saleType = 'CC';
+    _globalDiscountPct = 0;
+    _complementaryProducts = [];
+    _clientBalance = {};
+    _clientBalanceLoadGeneration++;
+    _productMetadataByCode.clear();
+    _isDirty = false;
+  }
+
   // ── Order Persistence ──
 
   Future<Map<String, dynamic>?> confirmOrder(
@@ -1267,6 +1281,7 @@ class PedidosProvider with ChangeNotifier {
 
     _isSaving = true;
     _error = null;
+    String? queuedSyncKey;
     notifyListeners();
 
     try {
@@ -1280,6 +1295,20 @@ class PedidosProvider with ChangeNotifier {
           [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
       final clientRequestId = _activeCheckoutClientRequestId ??=
           _newCheckoutClientRequestId(vendedorCode);
+      queuedSyncKey = await PedidosOfflineService.queueOrderForSync(
+        clientCode: _clientCode!,
+        clientName: _clientName ?? '',
+        vendedorCode: vendedorCode,
+        saleType: _saleType,
+        lines: _lines,
+        observaciones: fullObservaciones,
+        deliveryDate: deliveryDate,
+        vehicleCode: vehicleCode,
+        driverCode: driverCode,
+        routeCode: routeCode,
+        clientRequestId: clientRequestId,
+        notifyQueued: false,
+      );
 
       // Step 1: Create the order
       _debugLog(
@@ -1301,6 +1330,9 @@ class PedidosProvider with ChangeNotifier {
         pending['estado'] ??= 'PENDIENTE_SINCRONIZACION';
         pending['message'] ??=
             'Pedido guardado para sincronizar. No esta confirmado todavia.';
+        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey!);
+        _clearSubmittedCart();
+        _activeCheckoutClientRequestId = null;
         return pending;
       }
 
@@ -1334,15 +1366,7 @@ class PedidosProvider with ChangeNotifier {
         // Clear cart only after a real confirmation. Stock-blocked confirmations
         // keep the cart intact so the user can fix quantities instead of seeing
         // an intermediate BORRADOR reported as confirmed.
-        _lines.clear();
-        _clientCode = null;
-        _clientName = null;
-        _saleType = 'CC';
-        _globalDiscountPct = 0;
-        _complementaryProducts = [];
-        _clientBalance = {};
-        _clientBalanceLoadGeneration++;
-        _productMetadataByCode.clear();
+        _clearSubmittedCart();
       }
 
       // Always refresh orders list + stats after any confirmation attempt
@@ -1356,9 +1380,23 @@ class PedidosProvider with ChangeNotifier {
 
       _debugLog(
           '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
+      await PedidosOfflineService.deleteQueuedOrder(queuedSyncKey!);
       _activeCheckoutClientRequestId = null;
       return result;
     } catch (e, st) {
+      if (queuedSyncKey != null && e is ApiException && e.statusCode == 0) {
+        _debugLog('[confirmOrder] network error; order kept in offline queue');
+        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
+        _clearSubmittedCart();
+        _activeCheckoutClientRequestId = null;
+        return {
+          'queued': true,
+          'pendingConfirmation': true,
+          'estado': 'PENDIENTE_SINCRONIZACION',
+          'message':
+              'Pedido guardado localmente. Se enviara al recuperar conexion.',
+        };
+      }
       _debugLog('[confirmOrder] ERROR: $e');
       _debugLog('[confirmOrder] STACK: $st');
       _error = e.toString();
@@ -1409,7 +1447,10 @@ class PedidosProvider with ChangeNotifier {
     _isLoadingOrders = true;
     _orderStatusFilter = status;
     _error = null;
-    if (forceRefresh) {
+    final canRefreshFromNetwork =
+        ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
+    final effectiveForceRefresh = forceRefresh && canRefreshFromNetwork;
+    if (effectiveForceRefresh) {
       await PedidosService.invalidateOrderCaches();
       _orders = const <OrderSummary>[];
     }
@@ -1423,7 +1464,7 @@ class PedidosProvider with ChangeNotifier {
         status: apiStatus,
         limit: 20,
         page: 1,
-        forceRefresh: forceRefresh,
+        forceRefresh: effectiveForceRefresh,
         dateFrom: dateFrom,
         dateTo: dateTo,
         search: search,
@@ -1473,7 +1514,10 @@ class PedidosProvider with ChangeNotifier {
     bool forceRefresh = false,
   }) async {
     _isLoadingStats = true;
-    if (forceRefresh) {
+    final canRefreshFromNetwork =
+        ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
+    final effectiveForceRefresh = forceRefresh && canRefreshFromNetwork;
+    if (effectiveForceRefresh) {
       await CacheService.invalidateByPrefix('pedidos:stats:');
       _orderStats = OrderStats(
         totalOrders: 0,
@@ -1493,7 +1537,7 @@ class PedidosProvider with ChangeNotifier {
         vendedorCodes: vendedorCodes,
         dateFrom: dateFrom,
         dateTo: dateTo,
-        forceRefresh: forceRefresh,
+        forceRefresh: effectiveForceRefresh,
       );
     } catch (e) {
       _debugLog('[PedidosProvider] loadOrderStats error: $e');

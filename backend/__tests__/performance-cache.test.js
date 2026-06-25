@@ -17,6 +17,28 @@ describe("PerformanceCache Redis adapter hardening", () => {
     expect(setex).toHaveBeenCalledWith("cache-key", 10, JSON.stringify({ ok: true }));
   });
 
+  test("coalesces concurrent misses for the same key", async () => {
+    const { performanceCache } = require("../src/core/infrastructure/cache/performance-cache");
+    const fetcher = jest.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { ok: "single-flight" };
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => performanceCache.get("same-key", fetcher, { l1: 1, l2: 10 })),
+    );
+
+    expect(results).toEqual(
+      Array.from({ length: 5 }, (_, index) => ({
+        data: { ok: "single-flight" },
+        source: index === 0 ? "FETCH" : "COALESCED",
+        cached: index !== 0,
+      })),
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(performanceCache.getStats().coalesced).toBe(4);
+  });
+
   test("invalidateAll clears L1 and never calls flushdb on global redis cache", () => {
     const del = jest.fn().mockResolvedValue(1);
     const flushdb = jest.fn().mockResolvedValue("OK");

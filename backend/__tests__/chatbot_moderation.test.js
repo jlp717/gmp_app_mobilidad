@@ -69,4 +69,17 @@ describe('chatbot moderation output contracts', () => {
 
     expect(result).toContain('No tengo acceso');
   });
+
+  test('blocks internal DB2 and schema details in public output', () => {
+    const result = validateOutput(
+      'Error DB2 SQL0204N DSEDAC.CLI no existe en SELECT * FROM JAVIER.CLI',
+      {
+        userCode: '80',
+        isJefeVentas: false,
+      },
+    );
+
+    expect(result).toMatch(/contenido no permitido|consulta de forma segura/i);
+    expect(result).not.toMatch(/DSEDAC|JAVIER|SELECT/i);
+  });
 });

@@ -130,6 +130,7 @@ class _ProductCardState extends State<ProductCard> {
               Stack(
                 children: [
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () =>
                         _showFullscreenImage(context, widget.product.code),
                     child: _buildThumbnail(widget.product.code),
@@ -667,6 +668,7 @@ class _ProductCardState extends State<ProductCard> {
       productName: widget.product.name,
       productCode: code,
       headers: ApiClient.authHeaders,
+      rootNavigator: true,
     );
   }
 

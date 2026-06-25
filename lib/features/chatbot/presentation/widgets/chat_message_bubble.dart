@@ -40,22 +40,31 @@ class ChatMessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: isUser ? 60 : 0,
-        right: isUser ? 0 : 60,
-        bottom: 12,
-      ),
-      child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact =
+            constraints.maxWidth.isFinite && constraints.maxWidth < 380;
+        final sideGutter = compact ? 12.0 : 60.0;
+        final avatarSize = compact ? 30.0 : 34.0;
+        final avatarGap = compact ? 8.0 : 10.0;
+        final bubbleHorizontalPadding = compact ? 12.0 : 16.0;
+
+        return Padding(
+          padding: EdgeInsets.only(
+            left: isUser ? sideGutter : 0,
+            right: isUser ? 0 : sideGutter,
+            bottom: 12,
+          ),
+          child: Row(
         mainAxisAlignment:
             isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
             Container(
-              width: 34,
-              height: 34,
-              margin: const EdgeInsets.only(right: 10),
+              width: avatarSize,
+              height: avatarSize,
+              margin: EdgeInsets.only(right: avatarGap),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [AppTheme.neonBlue, AppTheme.neonPurple],
@@ -83,8 +92,10 @@ class ChatMessageBubble extends ConsumerWidget {
                 child: child,
               ),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: EdgeInsets.symmetric(
+                  horizontal: bubbleHorizontalPadding,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   gradient: isUser
                       ? LinearGradient(
@@ -183,9 +194,9 @@ class ChatMessageBubble extends ConsumerWidget {
           ),
           if (isUser) ...[
             Container(
-              width: 34,
-              height: 34,
-              margin: const EdgeInsets.only(left: 10),
+              width: avatarSize,
+              height: avatarSize,
+              margin: EdgeInsets.only(left: avatarGap),
               decoration: BoxDecoration(
                 color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
@@ -198,7 +209,9 @@ class ChatMessageBubble extends ConsumerWidget {
             ),
           ],
         ],
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -283,11 +296,11 @@ class ChatMessageBubble extends ConsumerWidget {
                         child: TextButton.icon(
                           onPressed: () => _openDocument(context, document),
                           icon: const Icon(Icons.open_in_new, size: 14),
-                          label: const Text('Abrir'),
+                          label: const FittedBox(child: Text('Abrir')),
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.neonPurple,
-                            minimumSize: const Size(70, 40),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: const Size(58, 40),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                           ),
                         ),
                       ),
@@ -686,20 +699,34 @@ class ChatMessageBubble extends ConsumerWidget {
   Widget _buildFollowUpChips() {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: metadata.suggestedFollowUps.map((q) {
-          return ActionChip(
-            label: Text(
-              q,
-              style: const TextStyle(fontSize: 11, color: Colors.white70),
-            ),
-            backgroundColor: AppColors.neonBlue.withValues(alpha: 0.12),
-            side: BorderSide(color: AppColors.neonBlue.withValues(alpha: 0.25)),
-            onPressed: onFollowUpTap == null ? null : () => onFollowUpTap!(q),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxChipWidth =
+              constraints.maxWidth.isFinite ? constraints.maxWidth : 260.0;
+          return Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: metadata.suggestedFollowUps.map((q) {
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxChipWidth),
+                child: ActionChip(
+                  label: Text(
+                    q,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.white70),
+                  ),
+                  backgroundColor: AppColors.neonBlue.withValues(alpha: 0.12),
+                  side: BorderSide(
+                    color: AppColors.neonBlue.withValues(alpha: 0.25),
+                  ),
+                  onPressed:
+                      onFollowUpTap == null ? null : () => onFollowUpTap!(q),
+                ),
+              );
+            }).toList(),
           );
-        }).toList(),
+        },
       ),
     );
   }

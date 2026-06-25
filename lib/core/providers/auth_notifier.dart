@@ -24,6 +24,8 @@ import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ============================================================
@@ -125,6 +127,39 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return _tryAutoLogin();
   }
 
+  void _applyCacheScope(UserModel user, List<String> vendedorCodes) {
+    final normalizedCodes = vendedorCodes
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final scope = [
+      'user=${user.code.trim()}',
+      'role=${user.role.trim().toUpperCase()}',
+      'jefe=${user.isJefeVentas}',
+      'vendors=${normalizedCodes.join(',')}',
+    ].join('|');
+    CacheService.setScope(scope);
+    PedidosOfflineService.setScope(scope);
+    PedidosFavoritesService.setScope(scope);
+  }
+
+  Future<void> _clearLocalSessionCache() async {
+    try {
+      await CacheService.clearAll();
+      CacheService.clearScope();
+      ApiClient.clearPendingRequests();
+      PedidosOfflineService.clearScope();
+      PedidosFavoritesService.clearScope();
+      CachePreWarmer.reset();
+      debugPrint('[AuthNotifier] Local session caches cleared');
+    } catch (e) {
+      debugPrint('[AuthNotifier] Cache clear error: $e');
+    }
+  }
+
   /// Returns true if the stored token is expired.
   /// The server uses a custom 2-part HMAC format: base64(JSON).hmacHex
   /// The payload contains a 'timestamp' (ms epoch) and the TTL is 1 hour.
@@ -183,6 +218,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             await SecureStorage.deleteSecureData('refresh_token');
             await SecureStorage.deleteSecureData('user_data');
             await prefs.remove('vendedor_codes');
+            await _clearLocalSessionCache();
             return const AuthState(isInitialized: true);
           }
         }
@@ -204,6 +240,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             await SecureStorage.deleteSecureData('refresh_token');
             await SecureStorage.deleteSecureData('user_data');
             await prefs.remove('vendedor_codes');
+            await _clearLocalSessionCache();
             return const AuthState(isInitialized: true);
           }
         } catch (_) {
@@ -217,6 +254,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           jsonDecode(userDataStr) as Map<String, dynamic>,
         );
         final vendedorCodes = codes ?? [];
+        _applyCacheScope(user, vendedorCodes);
 
         // Pre-warm cache in background
         unawaited(
@@ -319,6 +357,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setStringList('vendedor_codes', vendedorCodes);
+        _applyCacheScope(user, vendedorCodes);
 
         // Re-apply token immediately before state update to guard against
         // stale 401 responses clearing it during the storage writes above
@@ -410,6 +449,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('vendedor_codes', vendedorCodes);
+      _applyCacheScope(user, vendedorCodes);
 
       // Re-apply token immediately before state update to guard against
       // stale 401 responses clearing it during the storage writes above
@@ -460,14 +500,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     await prefs.remove('global_filter_vendor');
 
     // Clear ALL caches (defense-in-depth for shared devices)
-    try {
-      await CacheService.clearAll();
-      CacheService.clearMemoryCache();
-      CachePreWarmer.reset();
-      debugPrint('[AuthNotifier] All caches cleared on logout');
-    } catch (e) {
-      debugPrint('[AuthNotifier] Cache clear error: $e');
-    }
+    await _clearLocalSessionCache();
 
     // Clear filters
     try {
@@ -505,8 +538,24 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           }
 
           final updatedUser = currentState.user!.copyWith(role: newRole);
+          final nextVendedorCodes = response['vendedorCodes'] != null
+              ? List<String>.from(response['vendedorCodes'] as Iterable)
+              : currentState.vendedorCodes;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setStringList('vendedor_codes', nextVendedorCodes);
+          await SecureStorage.writeSecureData(
+            'user_data',
+            jsonEncode(updatedUser.toJson()),
+          );
+          await _clearLocalSessionCache();
+          _applyCacheScope(updatedUser, nextVendedorCodes);
           state = AsyncValue.data(
-              currentState.copyWith(user: updatedUser, isLoading: false));
+            currentState.copyWith(
+              user: updatedUser,
+              vendedorCodes: nextVendedorCodes,
+              isLoading: false,
+            ),
+          );
         }
         return true;
       }

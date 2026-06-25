@@ -157,6 +157,7 @@ void main() {
   tearDown(() async {
     await PedidosOfflineService.clearAll();
     PedidosOfflineService.debugResetCreateOrderForTesting();
+    PedidosOfflineService.debugResetConfirmOrderForTesting();
   });
 
   tearDownAll(() async {
@@ -786,7 +787,7 @@ void main() {
       expect(api.confirmOrderCalls, 0);
       expect(
           api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
-      expect(provider.lines, hasLength(1));
+      expect(provider.lines, isEmpty);
     });
 
     test('guards reentrant confirmation while a save is already in progress',
@@ -811,6 +812,7 @@ void main() {
       );
 
       final first = provider.confirmOrder('57');
+      await Future<void>.delayed(Duration.zero);
       expect(api.createOrderCalls, 1);
 
       final second = provider.confirmOrder('57');
@@ -845,10 +847,23 @@ void main() {
           required String vendedorCode,
           required String tipoVenta,
           required List lines,
+          required String observaciones,
           required String? clientRequestId}) async {
         calls++;
         requestIds.add(clientRequestId);
         return {"id": calls, "estado": "BORRADOR"};
+      });
+      var confirmCalls = 0;
+      PedidosOfflineService.debugSetConfirmOrderForTesting((
+        int orderId,
+        String saleType, {
+        String? deliveryDate,
+        String? vehicleCode,
+        String? driverCode,
+        String? routeCode,
+      }) async {
+        confirmCalls++;
+        return {"id": orderId, "estado": "CONFIRMADO"};
       });
 
       for (final i in [0, 1, 2, 3, 4]) {
@@ -880,6 +895,7 @@ void main() {
       expect(result["remainingPending"], 3);
       expect(result["isBackpressured"], isTrue);
       expect(calls, 2);
+      expect(confirmCalls, 2);
       expect(requestIds, hasLength(2));
       expect(allRequestIdsPreserved, isTrue);
     });
@@ -892,8 +908,19 @@ void main() {
           required String vendedorCode,
           required String tipoVenta,
           required List lines,
+          required String observaciones,
           required String? clientRequestId}) async {
         return {"queued": true, "syncId": "transport_queue_1"};
+      });
+      PedidosOfflineService.debugSetConfirmOrderForTesting((
+        int orderId,
+        String saleType, {
+        String? deliveryDate,
+        String? vehicleCode,
+        String? driverCode,
+        String? routeCode,
+      }) async {
+        return {"id": orderId, "estado": "CONFIRMADO"};
       });
 
       await PedidosOfflineService.queueOrderForSync(

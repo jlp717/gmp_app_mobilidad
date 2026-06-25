@@ -6,11 +6,11 @@ const { ClientRepository } = require('../domain/client-repository');
 const { Client, ClientDetail } = require('../domain/client');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const {
-  VENDOR_COLUMN,
   sanitizeCodeList,
   buildClientListVendorSqlFilter,
   getVendorColumnExpr,
   MIN_YEAR,
+  LACLAE_SALES_FILTER,
 } = require('../../../../utils/common');
 
 const CLIENT_VENDOR_SELECT_SQL = `
@@ -80,7 +80,7 @@ class Db2ClientRepository extends ClientRepository {
     const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
     const searchFilter = buildClientSearchFilter(search);
     const params = [...searchFilter.params];
-    params.push(limit, offset);
+    params.push(offset, limit);
 
     const sql = `
       SELECT 
@@ -100,7 +100,7 @@ class Db2ClientRepository extends ClientRepository {
         ${vendorFilter}
         ${searchFilter.clause}
       ORDER BY CLI.NOMBRECLIENTE
-      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -132,27 +132,28 @@ class Db2ClientRepository extends ClientRepository {
     const client = await this.findByCode(code);
     if (!client) return null;
 
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND LCAADC = ?` : '';
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND L.LCAADC = ?` : `AND L.LCAADC >= ${MIN_YEAR}`;
     const params = [code];
     if (year) params.push(year);
 
     // Sales by month using DSED.LACLAE
     const salesSql = `
       SELECT 
-        LCAADC AS ANIO,
-        LCMMDC AS MES,
-        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
-        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
-        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS
       FROM DSED.LACLAE L
-      WHERE TRIM(LCCDCL) = ?
+      WHERE TRIM(L.LCCDCL) = ?
         AND ${vendorFilter}
+        AND ${LACLAE_SALES_FILTER}
         ${yearFilter}
-      GROUP BY LCAADC, LCMMDC
+      GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY ANIO, MES
     `;
 
@@ -167,6 +168,7 @@ class Db2ClientRepository extends ClientRepository {
       LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE TRIM(L.LCCDCL) = ?
         AND ${vendorFilter}
+        AND ${LACLAE_SALES_FILTER}
         ${yearFilter}
       GROUP BY L.LCCDRF, ART.DESCRIPCIONARTICULO
       ORDER BY VENTAS DESC
@@ -200,11 +202,11 @@ class Db2ClientRepository extends ClientRepository {
   }
 
   async compare(clientCodes, vendedorCodes, year) {
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND LCAADC = ?` : '';
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND L.LCAADC = ?` : `AND L.LCAADC >= ${MIN_YEAR}`;
     const placeholders = clientCodes.map(() => '?').join(',');
     const params = [...clientCodes];
     if (year) params.push(year);
@@ -221,6 +223,7 @@ class Db2ClientRepository extends ClientRepository {
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE TRIM(L.LCCDCL) IN (${placeholders})
         AND ${vendorFilter}
+        AND ${LACLAE_SALES_FILTER}
         ${yearFilter}
       GROUP BY L.LCCDCL, CLI.NOMBRECLIENTE
       ORDER BY VENTAS DESC
@@ -232,20 +235,21 @@ class Db2ClientRepository extends ClientRepository {
   async findSalesHistory(code, year, limit = 12) {
     const sql = `
       SELECT 
-        LCAADC AS ANIO,
-        LCMMDC AS MES,
-        LCDDDC AS DIA,
-        LCSRAB || LCNRAB AS DOCUMENTO,
-        LCCDRF AS PRODUCTO,
-        COALESCE(ART.DESCRIPCIONARTICULO, LCCDRF) AS NOMBRE_PRODUCTO,
-        LCCTUD AS CANTIDAD,
-        LCIMVT AS VENTAS,
-        LCIMVT - LCIMCT AS MARGEN
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        L.LCDDDC AS DIA,
+        L.LCSRAB || L.LCNRAB AS DOCUMENTO,
+        L.LCCDRF AS PRODUCTO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE_PRODUCTO,
+        L.LCCTUD AS CANTIDAD,
+        L.LCIMVT AS VENTAS,
+        L.LCIMVT - L.LCIMCT AS MARGEN
       FROM DSED.LACLAE L
       LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
-      WHERE TRIM(LCCDCL) = ?
-        ${year ? `AND LCAADC = ?` : ''}
-      ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+      WHERE TRIM(L.LCCDCL) = ?
+        AND ${LACLAE_SALES_FILTER}
+        ${year ? `AND L.LCAADC = ?` : `AND L.LCAADC >= ${MIN_YEAR}`}
+      ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       FETCH FIRST ? ROWS ONLY
     `;
 
@@ -267,6 +271,8 @@ class Db2ClientRepository extends ClientRepository {
       FROM DSED.LACLAE L
       LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE TRIM(L.LCCDCL) = ?
+        AND ${LACLAE_SALES_FILTER}
+        AND L.LCAADC >= ${MIN_YEAR}
       GROUP BY L.LCCDRF, ART.DESCRIPCIONARTICULO
       ORDER BY VENTAS DESC
       FETCH FIRST ? ROWS ONLY

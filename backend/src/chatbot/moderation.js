@@ -157,6 +157,11 @@ function validateOutput(response, context) {
         return 'Se ha detectado contenido no permitido en la respuesta. Reformula tu consulta.';
     }
 
+    if (/\b(SQLSTATE|SQL\d{4,5}[A-Z]?|ODBC|CLI Driver|DSEDAC\.|DSED\.|JAVIER\.)\b/i.test(response)) {
+        logger.warn(`[CHATBOT-MODERATION] Internal database detail detected in output`);
+        return 'No se pudo completar la consulta de forma segura. Reformula la pregunta o intentalo de nuevo.';
+    }
+
     // Check for credential/secret leakage
     if (/gsk_[a-zA-Z0-9]{20,}/i.test(response) || /jwt.*secret|token.*secret|password.*=/i.test(response)) {
         logger.warn(`[CHATBOT-MODERATION] Potential credential leak in output`);

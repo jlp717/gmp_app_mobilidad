@@ -5,7 +5,7 @@
 const { DashboardRepository } = require('../domain/dashboard-repository');
 const { DashboardMetrics, SalesEvolutionPoint, TopClient, TopProduct } = require('../domain/dashboard-metrics');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
-const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList, buildClientListVendorSqlFilter } = require('../../../../utils/common');
+const { LACLAE_SALES_FILTER, sanitizeCodeList, buildClientListVendorSqlFilter, getVendorColumnExpr } = require('../../../../utils/common');
 
 function clampInt(value, defaultValue, min, max) {
   const n = parseInt(value, 10);
@@ -20,25 +20,25 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getMetrics(vendedorCodes, year, month) {
-    const vendorCol = VENDOR_COLUMN; // R1_T8CDVD or LCCDVD depending on date
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
-    const yearFilter = year ? `AND LCAADC = ?` : '';
-    const monthFilter = month ? `AND LCMMDC = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
 
     const sql = `
       SELECT 
-        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
-        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
-        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS,
-        COALESCE(SUM(LCCTEV), 0) AS CAJAS
-      FROM DSED.LACLAE
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS,
+        COALESCE(SUM(L.LCCTEV), 0) AS CAJAS
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -51,27 +51,27 @@ class Db2DashboardRepository extends DashboardRepository {
 
   async getSalesEvolution(vendedorCodes, year, months = 12) {
     const safeMonths = clampInt(months, 12, 1, 36);
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND LCAADC = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        LCAADC AS ANIO,
-        LCMMDC AS MES,
-        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
-        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
-        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
-      GROUP BY LCAADC, LCMMDC
+      GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY ANIO, MES
       FETCH FIRST ${safeMonths} ROWS ONLY
     `;
@@ -87,13 +87,13 @@ class Db2DashboardRepository extends DashboardRepository {
 
   async getTopClients(vendedorCodes, year, month, limit = 10) {
     const safeLimit = clampInt(limit, 10, 1, 100);
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND LCAADC = ?` : '';
-    const monthFilter = month ? `AND LCMMDC = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
@@ -129,13 +129,13 @@ class Db2DashboardRepository extends DashboardRepository {
 
   async getTopProducts(vendedorCodes, year, month, limit = 10) {
     const safeLimit = clampInt(limit, 10, 1, 100);
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND LCAADC = ?` : '';
-    const monthFilter = month ? `AND LCMMDC = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
@@ -171,10 +171,10 @@ class Db2DashboardRepository extends DashboardRepository {
 
   async getRecentSales(vendedorCodes, limit = 10) {
     const safeLimit = clampInt(limit, 10, 1, 100);
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
     const sql = `
@@ -201,23 +201,23 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getYoYComparison(vendedorCodes) {
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
     const sql = `
       SELECT 
-        LCAADC AS ANIO,
-        LCMMDC AS MES,
-        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
-        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN
-      FROM DSED.LACLAE
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
-        AND LCAADC >= YEAR(CURRENT DATE) - 1
-      GROUP BY LCAADC, LCMMDC
+        AND L.LCAADC >= YEAR(CURRENT DATE) - 1
+      GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY ANIO, MES
     `;
 
@@ -225,34 +225,36 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getHierarchyData(vendedorCodes, year) {
-    const vendorCol = VENDOR_COLUMN;
+    const vendorExpr = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND LCAADC = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        ${vendorCol} AS VENDEDOR,
-        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
-        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
-        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS,
-        COUNT(DISTINCT LCCDCL) AS CLIENTES
-      FROM DSED.LACLAE
+        ${vendorExpr} AS VENDEDOR,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS,
+        COUNT(DISTINCT L.LCCDCL) AS CLIENTES
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
-      GROUP BY ${vendorCol}
+      GROUP BY ${vendorExpr}
       ORDER BY VENTAS DESC
     `;
 
     return await this._db.executeParams(sql, params);
   }
 
-  async getClientConditions(vendedorCodes) {
+  async getClientConditions(vendedorCodes, { limit = 500, offset = 0 } = {}) {
+    const safeLimit = clampInt(limit, 500, 1, 500);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
 
     const sql = `
@@ -269,9 +271,10 @@ class Db2DashboardRepository extends DashboardRepository {
       WHERE (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
         ${vendorFilter}
       ORDER BY CLI.NOMBRECLIENTE
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
-    return await this._db.executeParams(sql, []);
+    return await this._db.executeParams(sql, [safeOffset, safeLimit]);
   }
 }
 

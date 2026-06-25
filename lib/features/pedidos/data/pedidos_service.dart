@@ -1677,6 +1677,7 @@ class PedidosService {
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 5),
         forceRefresh: forceRefresh,
+        maxStale: const Duration(minutes: 5),
       );
       final list = response['products'] as List? ?? [];
       return list
@@ -1708,6 +1709,7 @@ class PedidosService {
         cacheKey:
             'pedidos:detail:$trimmedCode:${clientCode ?? ''}:${includeIva ? 'iva' : 'base'}',
         cacheTTL: const Duration(minutes: 10),
+        maxStale: const Duration(minutes: 5),
       );
       final detail = ProductDetail.fromJson(response);
       // Debug: trace if critical fields arrive as zeros
@@ -1734,6 +1736,7 @@ class PedidosService {
         '$_base/products/$code/stock',
         cacheKey: 'pedidos:stock:$code',
         cacheTTL: CacheService.realtimeTTL,
+        allowStale: false,
       );
       final stock = response['stock'] as Map<String, dynamic>? ?? {};
       return {
@@ -1836,10 +1839,9 @@ class PedidosService {
       if (clientRequestId != null && clientRequestId.trim().isNotEmpty) {
         payload['clientRequestId'] = clientRequestId.trim();
       }
-      final response = await OfflineAwareApi.post(
+      final response = await ApiClient.post(
         '$_base/create',
         payload,
-        syncType: 'create_order',
       );
       await invalidateOrderMutationCaches();
       return _normalizeOrderResponse(response);
@@ -2235,6 +2237,7 @@ class PedidosService {
         '$_base/client-balance/$clientCode',
         cacheKey: 'pedidos:balance:$clientCode',
         cacheTTL: const Duration(minutes: 5),
+        allowStale: false,
       );
       return response['balance'] as Map<String, dynamic>? ?? {};
     } catch (e) {

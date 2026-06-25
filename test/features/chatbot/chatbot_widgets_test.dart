@@ -55,6 +55,30 @@ void main() {
 
       expect(find.text('R11'), findsOneWidget);
     });
+
+    testWidgets('normalizes ragged rows without DataTable assertion',
+        (tester) async {
+      const data = ChatExportableData(
+        headers: ['Cliente', 'Importe'],
+        rows: [
+          ['C001'],
+          ['C002', '200', 'columna extra descartada'],
+        ],
+        filename: 'ragged.csv',
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ChatExportTable(data: data)),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Cliente'), findsOneWidget);
+      expect(find.text('C001'), findsOneWidget);
+      expect(find.text('C002'), findsOneWidget);
+      expect(find.text('columna extra descartada'), findsNothing);
+    });
   });
 
   group('ChatDataCard', () {
@@ -179,6 +203,55 @@ void main() {
       expect(find.text('Permisos'), findsOneWidget);
       expect(find.text('DB2'), findsOneWidget);
       expect(find.text('Respuesta'), findsOneWidget);
+    });
+
+    testWidgets('does not overflow on narrow screens with long PDF metadata',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(1.6)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: ChatMessageBubble(
+                    message:
+                        'Respuesta extensa sobre una factura con muchos datos comerciales, importes, vencimientos y observaciones.',
+                    isUser: false,
+                    metadata: ChatResponseMetadata(
+                      documents: [
+                        ChatDocumentReference(
+                          title:
+                              'Factura F/100/2026 de Central Hoteles con nombre muy largo',
+                          url: '/api/facturas/F/100/2026/pdf',
+                          fileName:
+                              'factura-F-100-2026-central-hoteles-documento-largo.pdf',
+                        ),
+                      ],
+                      suggestedFollowUps: [
+                        'Ver facturas pendientes del cliente',
+                        'Abrir ficha completa del cliente',
+                        'Revisar cobros pendientes',
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Ver PDF'), findsOneWidget);
+      expect(find.text('Abrir'), findsOneWidget);
     });
   });
 }

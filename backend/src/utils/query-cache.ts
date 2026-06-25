@@ -102,9 +102,11 @@ class QueryCacheService {
   private l1 = new L1Cache();
   private redis: RedisClientType | null = null;
   private isRedisConnected = false;
+  private pending = new Map<string, Promise<unknown>>();
   private stats = {
     hits: { l1: 0, l2: 0 },
     misses: 0,
+    coalesced: 0,
     sets: 0,
     errors: 0,
     invalidations: 0,
@@ -184,24 +186,48 @@ class QueryCacheService {
       }
     }
 
-    // 3. Cache miss - fetch from source
-    this.stats.misses++;
-    const result = await fetcher();
-
-    // 4. Store in both tiers
-    const serialized = JSON.stringify(result);
-    this.l1.set(key, serialized);
-
-    if (this.isRedisConnected && this.redis) {
-      try {
-        await this.redis.setEx(key, ttlSeconds, serialized);
-        this.stats.sets++;
-      } catch {
-        this.stats.errors++;
-      }
+    // 3. Cache miss - coalesce concurrent identical fetches
+    const pendingFetch = this.pending.get(key);
+    if (pendingFetch) {
+      this.stats.coalesced++;
+      return pendingFetch as Promise<T>;
     }
 
-    return result;
+    this.stats.misses++;
+    const fetchPromise = (async (): Promise<T> => {
+      const result = await fetcher();
+
+      // If this key was invalidated while the fetch was running, return the
+      // result to the caller but do not re-populate stale cache entries.
+      if (this.pending.get(key) !== fetchPromise) {
+        return result;
+      }
+
+      // 4. Store in both tiers
+      const serialized = JSON.stringify(result);
+      this.l1.set(key, serialized);
+
+      if (this.isRedisConnected && this.redis) {
+        try {
+          await this.redis.setEx(key, ttlSeconds, serialized);
+          this.stats.sets++;
+        } catch {
+          this.stats.errors++;
+        }
+      }
+
+      return result;
+    })();
+
+    this.pending.set(key, fetchPromise);
+
+    try {
+      return await fetchPromise;
+    } finally {
+      if (this.pending.get(key) === fetchPromise) {
+        this.pending.delete(key);
+      }
+    }
   }
 
   /**
@@ -209,6 +235,7 @@ class QueryCacheService {
    */
   async invalidate(key: string): Promise<void> {
     this.l1.delete(key);
+    this.pending.delete(key);
 
     if (this.isRedisConnected && this.redis) {
       try {
@@ -226,6 +253,12 @@ class QueryCacheService {
    */
   async invalidatePattern(pattern: string): Promise<number> {
     let count = this.l1.invalidatePattern(pattern);
+    const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+    for (const key of this.pending.keys()) {
+      if (regex.test(key)) {
+        this.pending.delete(key);
+      }
+    }
 
     if (this.isRedisConnected && this.redis) {
       try {
@@ -249,6 +282,7 @@ class QueryCacheService {
   getStats(): {
     hits: { l1: number; l2: number; total: number };
     misses: number;
+    coalesced: number;
     hitRate: string;
     sets: number;
     errors: number;
@@ -266,6 +300,7 @@ class QueryCacheService {
         total: totalHits,
       },
       misses: this.stats.misses,
+      coalesced: this.stats.coalesced,
       hitRate: totalRequests > 0
         ? `${((totalHits / totalRequests) * 100).toFixed(1)}%`
         : '0.0%',
@@ -290,6 +325,7 @@ class QueryCacheService {
       }
     }
     this.l1.clear();
+    this.pending.clear();
   }
 
   /**

@@ -220,9 +220,22 @@ describe('pedidos stock performance contract', () => {
     const [sql, params] = mockQueryWithParams.mock.calls[0];
     expect(sql).toContain('TRIM(CODIGOARTICULO) IN (CAST(? AS VARCHAR(10)),CAST(? AS VARCHAR(10)))');
     expect(sql).toContain('TRIM(SR.CODIGOARTICULO) IN (CAST(? AS VARCHAR(10)),CAST(? AS VARCHAR(10)))');
+    expect(sql).toContain("TRIM(C.ESTADO) = 'CONFIRMADO'");
+    expect(sql).toContain("TRIM(C.ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION', 'CONFIRMANDO')");
+    expect(sql).toContain('SR.CREATED_AT >= CURRENT TIMESTAMP - 24 HOURS');
     expect(params).toEqual([1, 'ART001', 'ART002', 'ART001', 'ART002']);
     expect(result.get('ART001')).toEqual({ envases: 12, unidades: 24 });
     expect(result.get('ART002')).toEqual({ envases: 3, unidades: 6 });
+  });
+
+  test('getStockBatch can exclude the current draft reservation for confirmation checks', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{ CODE: 'ART001', ENVASES: '12', UNIDADES: '24' }]);
+
+    await pedidosService.getStockBatch(['ART001'], 1, { excludePedidoId: 42 });
+
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toContain('AND SR.PEDIDO_ID <> ?');
+    expect(params).toEqual([1, 'ART001', 'ART001', 42]);
   });
 
   test('getStockBatch truncates article codes to 10 before IN binds', async () => {
@@ -340,6 +353,27 @@ describe('pedidos create order persistence contract', () => {
     expect(updateCall).toBeDefined();
     expect(updateCall[0]).not.toMatch(/ROUND\(/i);
     expect(updateCall[1]).toEqual([27, 12, 32.67, 15, 5.67, 42]);
+  });
+
+  test('createOrder reserves draft stock after persisting complete order lines', async () => {
+    mockCreateOrderFlow();
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
+    });
+
+    const deleteReserveIndex = mockQueryWithParams.mock.calls.findIndex(([sql]) =>
+      /DELETE\s+FROM\s+JAVIER\.PEDIDOS_STOCK_RESERVE\s+WHERE\s+PEDIDO_ID/i.test(sql),
+    );
+    const reserveIndex = mockQueryWithParams.mock.calls.findIndex(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.PEDIDOS_STOCK_RESERVE/i.test(sql),
+    );
+    expect(deleteReserveIndex).toBeGreaterThan(-1);
+    expect(reserveIndex).toBeGreaterThan(deleteReserveIndex);
+    expect(mockQueryWithParams.mock.calls[reserveIndex][1]).toEqual([42, 'ART001', 3, 0]);
   });
 
   test('createOrder attempts ERP-compatible header columns in JAVIER test schema', async () => {
@@ -579,10 +613,9 @@ describe('pedidos create order persistence contract', () => {
     )).toBe(true);
   });
 
-  test('createOrder inserts order lines with bounded parallel DB writes', async () => {
+  test('createOrder inserts order lines with a chunked bulk DB write', async () => {
     const rows = mockCreatedOrderReads();
-    let inFlightLineInserts = 0;
-    let maxConcurrentLineInserts = 0;
+    const lineInsertSql = [];
 
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM\s+DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
@@ -597,10 +630,7 @@ describe('pedidos create order persistence contract', () => {
       if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [];
       if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [{ ID: 42 }];
       if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql)) {
-        inFlightLineInserts += 1;
-        maxConcurrentLineInserts = Math.max(maxConcurrentLineInserts, inFlightLineInserts);
-        await new Promise((resolve) => setTimeout(resolve, 15));
-        inFlightLineInserts -= 1;
+        lineInsertSql.push(sql);
         return [];
       }
       if (/SELECT\s+COALESCE\(SUM\(L\.IMPORTEVENTA\)/i.test(sql)) {
@@ -623,7 +653,8 @@ describe('pedidos create order persistence contract', () => {
       ],
     });
 
-    expect(maxConcurrentLineInserts).toBeGreaterThan(1);
+    expect(lineInsertSql).toHaveLength(1);
+    expect((lineInsertSql[0].match(/\),\s*\(/g) || [])).toHaveLength(2);
   });
 
   test('createOrder prefetches client tariff prices in one batch query for multiple lines', async () => {

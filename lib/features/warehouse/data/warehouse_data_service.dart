@@ -2,6 +2,7 @@
 /// API client for warehouse/expedition endpoints (3D Load Planner)
 library;
 
+import 'package:dio/dio.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
@@ -700,6 +701,7 @@ class WarehouseDataService {
     String? search,
     bool? onlyWithDimensions,
     int limit = 200,
+    CancelToken? cancelToken,
   }) async {
     final qp = <String, String>{'limit': limit.toString()};
     if (search != null && search.isNotEmpty) qp['search'] = search;
@@ -709,6 +711,7 @@ class WarehouseDataService {
       '/warehouse/articles',
       queryParameters: qp,
       cacheKey: 'warehouse_articles_${search ?? 'all'}',
+      cancelToken: cancelToken,
     );
 
     return ((result.data['articles'] as List?) ?? [])

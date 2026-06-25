@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -57,6 +58,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
   bool _isLoading = false;
   String? _error;
   int _loadGeneration = 0;
+  CancelToken? _cancelToken;
 
   @override
   void initState() {
@@ -66,6 +68,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
 
   @override
   void dispose() {
+    _cancelToken?.cancel('client search dialog disposed');
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
@@ -82,6 +85,9 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
 
   Future<void> _loadClients({String? search}) async {
     final generation = ++_loadGeneration;
+    _cancelToken?.cancel('client search superseded');
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -94,6 +100,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
         search: normalizedSearch,
         limit:
             normalizedSearch != null && normalizedSearch.isNotEmpty ? 80 : 100,
+        cancelToken: cancelToken,
       );
       if (mounted && generation == _loadGeneration) {
         setState(() {
@@ -162,8 +169,9 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                       icon: const Icon(Icons.clear,
                           color: Colors.white54, size: 18),
                       onPressed: () {
+                        _debounce?.cancel();
                         _searchController.clear();
-                        _loadClients();
+                        _loadClients(search: '');
                       },
                     )
                   : null,

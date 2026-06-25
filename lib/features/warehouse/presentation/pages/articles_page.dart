@@ -3,6 +3,7 @@
 library;
 
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -23,6 +24,8 @@ class _ArticlesPageState extends State<ArticlesPage> {
   String? _error;
   final _searchC = TextEditingController();
   Timer? _debounce;
+  int _searchGeneration = 0;
+  CancelToken? _searchCancelToken;
   bool _bulkEstimating = false;
   bool _bulkResetting = false;
 
@@ -38,12 +41,17 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
   @override
   void dispose() {
+    _searchCancelToken?.cancel('articles page disposed');
     _searchC.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
   Future<void> _search(String q) async {
+    final generation = ++_searchGeneration;
+    _searchCancelToken?.cancel('articles search superseded');
+    final cancelToken = CancelToken();
+    _searchCancelToken = cancelToken;
     setState(() {
       _loading = true;
       _error = null;
@@ -52,8 +60,9 @@ class _ArticlesPageState extends State<ArticlesPage> {
       final arts = await WarehouseDataService.getArticles(
         search: q.isEmpty ? null : q,
         onlyWithDimensions: _onlyWithDims ? true : null,
+        cancelToken: cancelToken,
       );
-      if (mounted) {
+      if (mounted && generation == _searchGeneration) {
         final filtered =
             _onlyRecent ? arts.where((a) => a.inRecentOrders).toList() : arts;
         setState(() {
@@ -65,11 +74,12 @@ class _ArticlesPageState extends State<ArticlesPage> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted && generation == _searchGeneration) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 
@@ -191,7 +201,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
           _buildStatsRow(),
           _buildSearchBar(),
           Expanded(
-            child: _loading
+            child: _loading && _articles.isEmpty
                 ? const Center(
                     child: CircularProgressIndicator(color: AppTheme.neonBlue))
                 : _error != null
@@ -361,6 +371,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                       icon: const Icon(Icons.clear_rounded,
                           size: 18, color: Colors.white30),
                       onPressed: () {
+                        _debounce?.cancel();
                         _searchC.clear();
                         _search('');
                       },

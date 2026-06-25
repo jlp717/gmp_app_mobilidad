@@ -22,17 +22,23 @@ class _ChatExportTableState extends State<ChatExportTable> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.data.headers.isEmpty && widget.data.rows.isEmpty) {
+    final headers = _safeHeaders(widget.data);
+    final rows = widget.data.rows
+        .map((row) => _safeRow(row, headers.length))
+        .where((row) => row.isNotEmpty)
+        .toList();
+
+    if (headers.isEmpty && rows.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final totalRows = widget.data.rows.length;
+    final totalRows = rows.length;
 
     final showToggle = totalRows > ChatExportTable._collapsedRows;
 
     final visibleRows = (!_expanded && showToggle)
-        ? widget.data.rows.take(ChatExportTable._collapsedRows).toList()
-        : widget.data.rows;
+        ? rows.take(ChatExportTable._collapsedRows).toList()
+        : rows;
 
     return Container(
       margin: const EdgeInsets.only(top: 10),
@@ -64,7 +70,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
                   color: Colors.grey.shade300,
                   fontSize: 12,
                 ),
-                columns: widget.data.headers
+                columns: headers
                     .map((h) => DataColumn(label: Text(h)))
                     .toList(),
                 rows: visibleRows
@@ -130,5 +136,21 @@ class _ChatExportTableState extends State<ChatExportTable> {
         ),
       ),
     );
+  }
+
+  List<String> _safeHeaders(ChatExportableData data) {
+    if (data.headers.isNotEmpty) return data.headers;
+    final columnCount = data.rows.fold<int>(
+      0,
+      (maxColumns, row) => row.length > maxColumns ? row.length : maxColumns,
+    );
+    return List.generate(columnCount, (index) => 'Columna ${index + 1}');
+  }
+
+  List<String> _safeRow(List<String> row, int columnCount) {
+    if (columnCount == 0) return const [];
+    if (row.length == columnCount) return row;
+    if (row.length > columnCount) return row.take(columnCount).toList();
+    return [...row, ...List.filled(columnCount - row.length, '')];
   }
 }

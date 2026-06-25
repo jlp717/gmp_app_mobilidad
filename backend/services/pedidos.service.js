@@ -7,7 +7,14 @@
 
 const crypto = require('crypto');
 const { query, queryWithParams, getPool, initDb } = require('../config/db');
-const { db2Schema, db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
+const {
+    db2Schema,
+    db2QualifiedTable,
+    db2QualifiedTableName,
+    db2ColumnList,
+    db2Placeholders,
+    db2InsertSql,
+} = require('../utils/db2-identifiers');
 const {
     getDb2WriteSchema,
     getDb2WriteSchemaRequested,
@@ -22,6 +29,16 @@ const PROMOTION_SOURCE_TABLES = new Set(['PRD', 'PMR']);
 const DELETE_STOCK_RESERVE_BY_PEDIDO_SQL = ERP_SCHEMA === 'DSEDAC'
     ? 'DELETE FROM DSEDAC.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?'
     : 'DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?';
+const DRAFT_STOCK_RESERVATION_HOURS = 24;
+const DRAFT_STOCK_RESERVATION_STATES_SQL = "'BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION', 'CONFIRMANDO'";
+const ACTIVE_STOCK_RESERVATION_CONDITION = `
+(
+    TRIM(C.ESTADO) = 'CONFIRMADO'
+    OR (
+        TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
+        AND SR.CREATED_AT >= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
+    )
+)`;
 const SELECT_ORDER_VENDOR_FOR_AUTH_SQL = ERP_SCHEMA === 'DSEDAC'
     ? 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE FROM DSEDAC.PEDIDOS_CAB WHERE ID = ?'
     : "SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(COALESCE(NULLIF(CODIGOCLIENTE, ''), CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE FROM JAVIER.PEDIDOS_CAB WHERE ID = ?";
@@ -523,7 +540,8 @@ class OrderStateError extends Error {
 
 const VALID_ORDER_STATES = ['BORRADOR', 'CONFIRMANDO', 'CONFIRMADO'];
 const MAX_ORDER_LINES = 200;
-const CREATE_ORDER_LINE_CONCURRENCY = 4;
+const DB2_BULK_INSERT_CHUNK_SIZE = 25;
+const STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE = 100;
 const PEDIDOS_ERP_TERMINAL = 93;
 
 const ORDER_TRANSITIONS = {
@@ -1027,6 +1045,16 @@ async function getClientOrderDefaults(clientCode) {
     }
 }
 
+async function invalidatePedidosStockCache(reasonTag = '') {
+    try {
+        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
+            await redisCache.invalidatePattern('query:query:pedidos:*');
+        }
+    } catch (err) {
+        logger.warn(`[PEDIDOS] Stock cache invalidation skipped${reasonTag ? ` (${reasonTag})` : ''}: ${err.message}`);
+    }
+}
+
 async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDate, routeCode }) {
     const cleanClient = trimString(clientCode);
     const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
@@ -1203,25 +1231,6 @@ function clampInt(value, min, max, fallback) {
     return Math.min(max, Math.max(min, parsed));
 }
 
-async function mapWithConcurrency(items, limit, mapper) {
-    const results = new Array(items.length);
-    let next = 0;
-    let firstError;
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-        while (next < items.length && !firstError) {
-            const index = next++;
-            try {
-                results[index] = await mapper(items[index], index);
-            } catch (error) {
-                firstError = firstError || error;
-            }
-        }
-    });
-    await Promise.all(workers);
-    if (firstError) throw firstError;
-    return results;
-}
-
 function splitFixedText(value, width, count) {
     const text = trimString(value);
     const chunks = [];
@@ -1271,6 +1280,39 @@ async function withPedidosTransaction(callback) {
             // ignore close errors
         }
     }
+}
+
+function db2BulkInsertSql(qualifiedTable, columns, rowCount) {
+    const count = Math.max(1, Number(rowCount) || 1);
+    const placeholders = `(${db2Placeholders(columns)})`;
+    return `INSERT INTO ${db2QualifiedTableName(qualifiedTable)} (${db2ColumnList(columns)}) VALUES ${Array.from({ length: count }, () => placeholders).join(', ')}`;
+}
+
+function assertCompatibleInsertSpecs(specs, label) {
+    if (!Array.isArray(specs) || specs.length === 0) return null;
+    const first = specs[0];
+    const firstColumns = JSON.stringify(first.columns || []);
+    for (const spec of specs) {
+        if (spec.table !== first.table || JSON.stringify(spec.columns || []) !== firstColumns) {
+            throw new Error(`${label} bulk insert specs are not compatible`);
+        }
+    }
+    return first;
+}
+
+async function executeBulkInsert(executor, specs, { chunkSize = DB2_BULK_INSERT_CHUNK_SIZE, label = 'bulk_insert' } = {}) {
+    if (!Array.isArray(specs) || specs.length === 0) return 0;
+    const first = assertCompatibleInsertSpecs(specs, label);
+    const size = Math.max(1, Number(chunkSize) || DB2_BULK_INSERT_CHUNK_SIZE);
+    let count = 0;
+    for (let i = 0; i < specs.length; i += size) {
+        const chunk = specs.slice(i, i + size);
+        const sql = db2BulkInsertSql(first.table, first.columns, chunk.length);
+        const params = chunk.flatMap((spec) => spec.params);
+        await executor(sql, params);
+        count += chunk.length;
+    }
+    return count;
 }
 
 async function nextSystemPedidoNumber(conn, target, ejercicio) {
@@ -1390,6 +1432,8 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
     ];
 
     return {
+        table: target.tables.lin,
+        columns,
         sql: db2InsertSql(target.tables.lin, columns),
         params,
     };
@@ -1469,14 +1513,15 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
             }
         }
 
-        for (const line of lines || []) {
-            const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId });
-            try {
-                await conn.query(lin.sql, lin.params);
-            } catch (e) {
-                logger.error(`[PEDIDOS] LPC insert failed cols=${lin.params?.length} sql=${lin.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
-                throw e;
-            }
+        const lpcRows = (lines || []).map(line => buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId }));
+        try {
+            await executeBulkInsert((sql, params) => conn.query(sql, params), lpcRows, {
+                chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
+                label: 'DSEDAC.LPC',
+            });
+        } catch (e) {
+            logger.error(`[PEDIDOS] LPC bulk insert failed rows=${lpcRows.length} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
+            throw e;
         }
 
         const obs = buildDsedacOcpcInsert({ target, header, systemRef, userId });
@@ -1549,18 +1594,62 @@ function buildConfirmOrderUpdate({ id, deliveryPlan, vehicleCode, driverCode, ro
 }
 
 async function reserveStockLines(executor, lines, orderId) {
+    const byCode = new Map();
     for (const line of lines) {
         const code = trimString(line.CODIGOARTICULO);
         if (!code) continue;
         const resEnv = parseFloat(line.CANTIDADENVASES) || 0;
         const resUni = parseFloat(line.CANTIDADUNIDADES) || 0;
-        if (resEnv > 0 || resUni > 0) {
-            await executor(
-                `INSERT INTO ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE (PEDIDO_ID, CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES) VALUES (?, ?, ?, ?)`,
-                [orderId, code, resEnv, resUni]
-            );
-        }
+        if (resEnv <= 0 && resUni <= 0) continue;
+        const current = byCode.get(code) || { envases: 0, unidades: 0 };
+        current.envases += resEnv;
+        current.unidades += resUni;
+        byCode.set(code, current);
     }
+
+    const columns = ['PEDIDO_ID', 'CODIGOARTICULO', 'CANTIDADENVASES', 'CANTIDADUNIDADES'];
+    const specs = [...byCode.entries()].map(([code, qty]) => ({
+        table: `${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE`,
+        columns,
+        params: [orderId, code, qty.envases, qty.unidades],
+    }));
+    await executeBulkInsert(executor, specs, {
+        chunkSize: STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE,
+        label: 'PEDIDOS_STOCK_RESERVE',
+    });
+}
+
+async function replaceStockReservationLines(executor, lines, orderId) {
+    await executor(
+        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`,
+        [orderId]
+    );
+    await reserveStockLines(executor, lines, orderId);
+}
+
+function buildReservationLinesFromCreateContexts(lineContexts) {
+    return (lineContexts || []).map(({ line, amounts }) => ({
+        CODIGOARTICULO: truncate(line.codigoArticulo || line.CODIGOARTICULO, 10),
+        CANTIDADENVASES: amounts.cantidadEnvases,
+        CANTIDADUNIDADES: amounts.cantidadUnidades,
+    }));
+}
+
+async function refreshDraftStockReservation(orderId, executor = (sql, params) => queryWithParams(sql, params, false)) {
+    const id = parseInt(orderId);
+    if (isNaN(id)) throw new Error('Invalid orderId');
+    const lines = await executor(
+        `SELECT TRIM(L.CODIGOARTICULO) AS CODIGOARTICULO,
+                SUM(L.CANTIDADENVASES) AS CANTIDADENVASES,
+                SUM(L.CANTIDADUNIDADES) AS CANTIDADUNIDADES
+           FROM ${ERP_SCHEMA}.PEDIDOS_LIN L
+           JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON C.ID = L.PEDIDO_ID
+          WHERE L.PEDIDO_ID = ?
+            AND TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
+          GROUP BY TRIM(L.CODIGOARTICULO)`,
+        [id]
+    );
+    await replaceStockReservationLines(executor, lines || [], id);
 }
 
 // ============================================================================
@@ -1766,7 +1855,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 SUM(SR.CANTIDADENVASES) AS RES_ENV,
                 SUM(SR.CANTIDADUNIDADES) AS RES_UNI
             FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-            JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+            JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
             GROUP BY SR.CODIGOARTICULO
         ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
         LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
@@ -2103,8 +2192,12 @@ async function getProductDetailRaw(code, clientCode) {
 // STOCK
 // ============================================================================
 
-async function getStock(code, almacen = 1) {
-    // Real stock minus reserved stock from confirmed orders
+async function getStock(code, almacen = 1, options = {}) {
+    // Real stock minus confirmed reservations and live draft reservations.
+    const excludedPedidoId = parseInt(options.excludePedidoId);
+    const excludeCurrentPedidoSql = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
+        ? 'AND SR.PEDIDO_ID <> ?'
+        : '';
     const sql = `
         SELECT
             COALESCE(S.ENVASES, 0) - COALESCE(R.RES_ENVASES, 0) AS envases,
@@ -2121,15 +2214,21 @@ async function getStock(code, almacen = 1) {
             FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
             JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID
             WHERE TRIM(SR.CODIGOARTICULO) = ?
-              AND C.ESTADO = 'CONFIRMADO'
+              AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
+              ${excludeCurrentPedidoSql}
         ) R`;
 
     const trimCode = code.trim();
-    const cacheKey = `pedidos:stock:${trimCode}:${almacen}`;
+    const params = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
+        ? [trimCode, almacen, trimCode, excludedPedidoId]
+        : [trimCode, almacen, trimCode];
+    const cacheKey = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
+        ? `pedidos:stock:${trimCode}:${almacen}:exclude:${excludedPedidoId}`
+        : `pedidos:stock:${trimCode}:${almacen}`;
 
     try {
         const rows = await cachedQuery(
-            (sql) => queryWithParams(sql, [trimCode, almacen, trimCode]),
+            (sql) => queryWithParams(sql, params),
             sql,
             cacheKey,
             30 // 30s TTL - more frequent for real-time stock
@@ -2145,10 +2244,14 @@ async function getStock(code, almacen = 1) {
     }
 }
 
-async function getStockBatch(codes, almacen = 1) {
+async function getStockBatch(codes, almacen = 1, options = {}) {
     const uniqueCodes = [...new Set((codes || []).map(code => truncate(code, 10)).filter(Boolean))];
     const stockByCode = new Map(uniqueCodes.map(code => [code, { envases: 0, unidades: 0 }]));
     if (uniqueCodes.length === 0) return stockByCode;
+    const excludedPedidoId = parseInt(options.excludePedidoId);
+    const excludeCurrentPedidoSql = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
+        ? 'AND SR.PEDIDO_ID <> ?'
+        : '';
 
     const CHUNK_SIZE = 50;
     for (let i = 0; i < uniqueCodes.length; i += CHUNK_SIZE) {
@@ -2171,13 +2274,17 @@ async function getStockBatch(codes, almacen = 1) {
                     SELECT TRIM(SR.CODIGOARTICULO) AS CODE,
                            COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RES_ENVASES,
                            COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RES_UNIDADES
-                      FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+                     FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
                       JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID
-                     WHERE C.ESTADO = 'CONFIRMADO'
+                     WHERE ${ACTIVE_STOCK_RESERVATION_CONDITION}
                        AND TRIM(SR.CODIGOARTICULO) IN (${placeholders})
+                       ${excludeCurrentPedidoSql}
                      GROUP BY TRIM(SR.CODIGOARTICULO)
               ) R ON S.CODE = R.CODE`;
-        const rows = await queryWithParams(sql, [almacen, ...chunk, ...chunk], false);
+        const params = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
+            ? [almacen, ...chunk, ...chunk, excludedPedidoId]
+            : [almacen, ...chunk, ...chunk];
+        const rows = await queryWithParams(sql, params, false);
         for (const row of rows || []) {
             const code = trimString(row.CODE);
             if (!code) continue;
@@ -2424,6 +2531,8 @@ function buildLocalPedidoLineInsert({
     ];
 
     return {
+        table: `${ERP_SCHEMA}.PEDIDOS_LIN`,
+        columns,
         sql: db2InsertSql(`${ERP_SCHEMA}.PEDIDOS_LIN`, columns),
         params,
     };
@@ -2460,6 +2569,8 @@ function buildLegacyPedidoLineInsert({
     ];
 
     return {
+        table: `${ERP_SCHEMA}.PEDIDOS_LIN`,
+        columns,
         sql: db2InsertSql(`${ERP_SCHEMA}.PEDIDOS_LIN`, columns),
         params,
     };
@@ -2722,43 +2833,47 @@ async function createOrder({
     // Insert lines with compensation pattern: if any line fails, delete the header
     const lineInsertT0 = Date.now();
     try {
-        await mapWithConcurrency(lineContexts, CREATE_ORDER_LINE_CONCURRENCY, async ({ line, amounts, sequence }) => {
-            let lineInsert = buildLocalPedidoLineInsert({
+        const lineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLocalPedidoLineInsert({
+            pedidoId,
+            sequence,
+            ejercicio,
+            numeroPedido,
+            dia,
+            mes,
+            ano,
+            hora,
+            clientCode,
+            vendedorCode,
+            formaPago: effectiveFormaPago,
+            tarifa: effectiveTarifa,
+            almacen: effectiveAlmacen,
+            tipoventa,
+            line,
+            amounts,
+            terminal,
+            userId,
+        }));
+
+        try {
+            await executeBulkInsert((sql, params) => queryWithParams(sql, params, false), lineInserts, {
+                chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
+                label: `${ERP_SCHEMA}.PEDIDOS_LIN`,
+            });
+        } catch (lineInsertErr) {
+            if (!isColumnNotFound(lineInsertErr)) throw lineInsertErr;
+            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${ERP_SCHEMA}.PEDIDOS_LIN, using legacy line bulk insert`);
+            const legacyLineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLegacyPedidoLineInsert({
                 pedidoId,
                 sequence,
-                ejercicio,
-                numeroPedido,
-                dia,
-                mes,
-                ano,
-                hora,
-                clientCode,
-                vendedorCode,
-                formaPago: effectiveFormaPago,
-                tarifa: effectiveTarifa,
-                almacen: effectiveAlmacen,
                 tipoventa,
                 line,
                 amounts,
-                terminal,
-                userId,
+            }));
+            await executeBulkInsert((sql, params) => queryWithParams(sql, params, false), legacyLineInserts, {
+                chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
+                label: `${ERP_SCHEMA}.PEDIDOS_LIN_LEGACY`,
             });
-
-            try {
-                await queryWithParams(lineInsert.sql, lineInsert.params, false);
-            } catch (lineInsertErr) {
-                if (!isColumnNotFound(lineInsertErr)) throw lineInsertErr;
-                logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${ERP_SCHEMA}.PEDIDOS_LIN, using legacy line insert`);
-                lineInsert = buildLegacyPedidoLineInsert({
-                    pedidoId,
-                    sequence,
-                    tipoventa,
-                    line,
-                    amounts,
-                });
-                await queryWithParams(lineInsert.sql, lineInsert.params, false);
-            }
-        });
+        }
         logger.info(`[PEDIDOS] createOrder stage=line_inserts pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - lineInsertT0}`);
     } catch (linErr) {
         // COMPENSATION: If lines fail, delete the header to avoid orphaned orders
@@ -2791,7 +2906,30 @@ async function createOrder({
         throw totalErr;
     }
 
-    logger.info(`[PEDIDOS] createOrder stage=stock_validation pedidoId=${pedidoId} lineCount=${lineCount} durationMs=0 stock_ms=0 stock=not_applicable statusPath=not_applicable`);
+    const reserveT0 = Date.now();
+    try {
+        const reservationLines = buildReservationLinesFromCreateContexts(lineContexts);
+        await replaceStockReservationLines(
+            (sql, params) => queryWithParams(sql, params, false),
+            reservationLines,
+            pedidoId
+        );
+        await invalidatePedidosStockCache('draft_create');
+        logger.info(`[PEDIDOS] createOrder stage=stock_reservation pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - reserveT0} statusPath=draft_reserved`);
+    } catch (reserveErr) {
+        logger.error(`[PEDIDOS] Failed to reserve stock for draft ${pedidoId}, rolling back draft: ${reserveErr.message}`);
+        try {
+            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+            logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after stock reservation failure`);
+        } catch (rollbackErr) {
+            logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after stock reservation failure: ${rollbackErr.message}`);
+        }
+        throw reserveErr;
+    }
+
+    logger.info(`[PEDIDOS] createOrder stage=stock_validation pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - reserveT0} stock_ms=${Date.now() - reserveT0} stock=draft_reserved statusPath=created`);
 
     // Invalida cache de listados de pedidos para reflejar el nuevo borrador.
     invalidatePedidosCache(pedidoId);
@@ -3448,6 +3586,8 @@ async function addOrderLine(pedidoId, lineData) {
 
     await queryWithParams(sql, params, false);
     await recalculateOrderTotals(id);
+    await refreshDraftStockReservation(id);
+    await invalidatePedidosStockCache('draft_line_add');
 
     return getOrderDetail(id);
 }
@@ -3517,6 +3657,8 @@ async function updateOrderLine(lineId, {
     );
 
     await recalculateOrderTotals(pedidoId);
+    await refreshDraftStockReservation(pedidoId);
+    await invalidatePedidosStockCache('draft_line_update');
     invalidatePedidosCache(pedidoId);
     return getOrderDetail(pedidoId);
 }
@@ -3542,6 +3684,8 @@ async function deleteOrderLine(lineId, pedidoId) {
     );
 
     await recalculateOrderTotals(pid);
+    await refreshDraftStockReservation(pid);
+    await invalidatePedidosStockCache('draft_line_delete');
     invalidatePedidosCache(pid);
     return getOrderDetail(pid);
 }
@@ -3772,7 +3916,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         throw err;
     }
 
-    const stockByCode = await getStockBatch(lines.map(line => line.CODIGOARTICULO));
+    const stockByCode = await getStockBatch(lines.map(line => line.CODIGOARTICULO), 1, { excludePedidoId: id });
     for (const line of lines) {
         const code = (line.CODIGOARTICULO || '').trim();
         if (!code) continue;
@@ -3865,7 +4009,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     syncResult,
                 });
                 await conn.query(update.sql, update.params);
-                await reserveStockLines((sql, params) => conn.query(sql, params), lines, id);
+                await replaceStockReservationLines((sql, params) => conn.query(sql, params), lines, id);
             });
             logger.info(`[PEDIDOS] Order #${id} exported to ${syncResult.targetSchema}.CPC and confirmed`);
         } catch (systemErr) {
@@ -3888,7 +4032,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         await queryWithParams(update.sql, update.params, false);
 
         try {
-            await reserveStockLines((sql, params) => queryWithParams(sql, params, false), lines, id);
+            await replaceStockReservationLines((sql, params) => queryWithParams(sql, params, false), lines, id);
             logger.info(`[PEDIDOS] Stock reserved for order #${id}`);
         } catch (resErr) {
         logger.error(`[PEDIDOS] CRITICAL: Stock reservation failed for order #${id}, rolling back: ${resErr.message}`);
@@ -3907,15 +4051,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     }
 
     // P4-A: Invalidate stock and product cache to ensure real-time updates for all sales reps
-    try {
-        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
-            // Las claves de cachedQuery viven bajo "gmp:query:query:pedidos:..."
-            // (namespace "query" + prefijo "query" del CacheKeyGenerator).
-            await redisCache.invalidatePattern('query:query:pedidos:*');
-        }
-    } catch (e) {
-        logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
-    }
+    await invalidatePedidosStockCache('confirm');
 
     let order = await getOrderDetail(id);
 
@@ -4067,6 +4203,7 @@ async function cancelOrder(orderId, options = {}) {
             [id], false
         );
         if (!conflictRows || conflictRows.length === 0) {
+            await invalidatePedidosStockCache('draft_cancel_race');
             return { id, deleted: true, estado: 'BORRADOR' };
         }
         const conflictState = canonicalOrderStatus(conflictRows[0].ESTADO);
@@ -4077,13 +4214,7 @@ async function cancelOrder(orderId, options = {}) {
         );
     }
 
-    try {
-        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
-            await redisCache.invalidatePattern('query:query:pedidos:*');
-        }
-    } catch (e) {
-        logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
-    }
+    await invalidatePedidosStockCache('draft_cancel');
 
     try {
         logger.info(`[AUDIT] ORDER_DRAFT_DELETED #${id} | Client:${currentRows[0].CODIGOCLIENTE || '?'} | Total:${currentRows[0].IMPORTETOTAL || 0} | By:${options.userId || 'SYSTEM'}`);
@@ -5484,7 +5615,7 @@ async function getSimilarProducts(productCode) {
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
                 FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
@@ -5527,7 +5658,7 @@ async function getSimilarProducts(productCode) {
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
                 FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
@@ -5793,7 +5924,7 @@ async function searchProductsWithStock(searchTerm, limit = 20) {
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
                 FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1

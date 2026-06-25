@@ -32,6 +32,10 @@ router.post('/message', verifyToken, async (req, res) => {
         : [],
     });
 
+    if (result && result.success === false && result.statusCode) {
+      return res.status(result.statusCode).json(result);
+    }
+
     res.json(result);
   } catch (error) {
     logger.error(`[CHATBOT] message error: ${error.message}`);

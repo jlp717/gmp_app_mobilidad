@@ -1,13 +1,17 @@
 'use strict';
 
-jest.mock('../src/chatbot/chatbot_authorization', () => ({
-  authorizeResolvedClient: jest.fn(),
-  buildAuthorizationSafeResponse: jest.fn((code) =>
-    code === 'CLIENT_SCOPE_UNVERIFIED'
-      ? 'No puedo verificar que ese cliente pertenezca a tu ambito autorizado.'
-      : 'No tengo acceso a esa informacion.'
-  ),
-}));
+jest.mock('../src/chatbot/chatbot_authorization', () => {
+  const actual = jest.requireActual('../src/chatbot/chatbot_authorization');
+  return {
+    ...actual,
+    authorizeResolvedClient: jest.fn(),
+    buildAuthorizationSafeResponse: jest.fn((code) =>
+      code === 'CLIENT_SCOPE_UNVERIFIED'
+        ? 'No puedo verificar que ese cliente pertenezca a tu ambito autorizado.'
+        : 'No tengo acceso a esa informacion.'
+    ),
+  };
+});
 
 jest.mock('../src/chatbot/chatbot_tools', () => {
   const actual = jest.requireActual('../src/chatbot/chatbot_tools');
@@ -31,6 +35,11 @@ jest.mock('../src/chatbot/chatbot_tools', () => {
       ...actual.invoiceTools,
       resolveInvoiceClientCode: jest.fn(async () => 'CLI-AJENO'),
       getInvoiceDetails: jest.fn(async () => ({ invoiceNumber: 'INV-1' })),
+      getAlbaranesByInvoice: jest.fn(async () => ({
+        albaranes: [
+          { number: 'A/100/2026', amount: 125.5 },
+        ],
+      })),
       getClientInvoices: jest.fn(async (conn, clientCode) => ({
         clientCode,
         invoices: [
@@ -42,6 +51,9 @@ jest.mock('../src/chatbot/chatbot_tools', () => {
     dbDiscoveryTools: {
       ...actual.dbDiscoveryTools,
       searchClients: jest.fn(async () => [
+        { CODIGO: '32258', NOMBRE: 'EL CENTRAL HOTELES', POBLACION: 'Madrid' },
+      ]),
+      searchClientsFlexible: jest.fn(async () => [
         { CODIGO: '32258', NOMBRE: 'EL CENTRAL HOTELES', POBLACION: 'Madrid' },
       ]),
     },
@@ -136,10 +148,49 @@ describe('chatbot fallback handler RBAC', () => {
       }
     );
 
-    expect(dbDiscoveryTools.searchClients).toHaveBeenCalledWith(conn, 'central hoteles');
+    expect(dbDiscoveryTools.searchClientsFlexible).toHaveBeenCalledWith(
+      conn,
+      'central hoteles',
+      12
+    );
     expect(invoiceTools.getClientInvoices).toHaveBeenCalledWith(conn, '32258');
     expect(response.text).toMatch(/Facturas pendientes cliente 32258/);
     expect(response.metadata.deepLink.tab).toBe('Facturas');
     expect(response.metadata.exportable.rows).toHaveLength(1);
+  });
+
+  test('routes albaranes de factura before invoice detail', async () => {
+    authorizeResolvedClient.mockResolvedValue({
+      owner: { clientCode: 'CLI-AJENO', vendorCode: '81', verified: true },
+      authorization: { allowed: true, code: 'ALLOWED_SUPERVISOR' },
+    });
+
+    const response = await handleChatMessage(
+      conn,
+      'albaranes de la factura F/100/2026',
+      ['ALL'],
+      null,
+      {
+        userCode: '01',
+        role: 'ADMIN',
+        isJefeVentas: true,
+        vendorScope: ['ALL'],
+        richResponses: true,
+      }
+    );
+
+    expect(invoiceTools.resolveInvoiceClientCode).toHaveBeenCalledWith(
+      conn,
+      'F/100/2026'
+    );
+    expect(invoiceTools.getAlbaranesByInvoice).toHaveBeenCalledWith(
+      conn,
+      'F/100/2026',
+      '01',
+      true,
+      ['ALL']
+    );
+    expect(invoiceTools.getInvoiceDetails).not.toHaveBeenCalled();
+    expect(response.text).toMatch(/Albaranes de factura F\/100\/2026/);
   });
 });

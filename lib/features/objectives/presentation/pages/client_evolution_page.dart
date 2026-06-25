@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -54,6 +54,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   ProviderSubscription<String?>? _vendorSubscription;
   int _clientSearchGeneration = 0;
   int _evolutionGeneration = 0;
+  CancelToken? _evolutionCancelToken;
 
   @override
   void initState() {
@@ -81,6 +82,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   void dispose() {
     _vendorSubscription?.close();
     _clientSearchDebounce?.cancel();
+    _evolutionCancelToken?.cancel('client evolution page disposed');
     _clientSearchController.dispose();
     super.dispose();
   }
@@ -157,75 +159,61 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   }
 
   Future<void> _loadEvolutionData(String clientCode) async {
+    final generation = ++_evolutionGeneration;
+    _evolutionCancelToken?.cancel('client evolution superseded');
+    final cancelToken = CancelToken();
+    _evolutionCancelToken = cancelToken;
+
     try {
-      final generation = ++_evolutionGeneration;
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      // Get vendor codes from provider
       final vendorCodes = _resolvedVendorCodes();
-
-      final response = await ApiClient.dio.get(
-        '${ApiConfig.baseUrl}/api/pedidos/client-evolution/$clientCode?vendedorCodes=$vendorCodes',
+      final data = await ApiClient.get(
+        '/pedidos/client-evolution/${Uri.encodeComponent(clientCode)}',
+        queryParameters: {'vendedorCodes': vendorCodes},
+        cacheKey: 'clients:evolution:$clientCode:$vendorCodes',
+        cacheTTL: const Duration(minutes: 15),
+        cancelToken: cancelToken,
       );
 
       if (!mounted || generation != _evolutionGeneration) return;
-
-      if (response.statusCode == 200) {
-        final data = response.data;
-        if (data['success'] == true) {
-          final evolutionData = data['data'] ?? data;
-
-          final monthlyData = (evolutionData['monthlySales'] ?? []) is List
-              ? (evolutionData['monthlySales'] as List)
-                  .map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList()
-              : <Map<String, dynamic>>[];
-          final topProductsData = (evolutionData['topProducts'] ?? []) is List
-              ? (evolutionData['topProducts'] as List)
-                  .map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList()
-              : <Map<String, dynamic>>[];
-          final returnsData = (evolutionData['returns'] ?? []) is List
-              ? (evolutionData['returns'] as List)
-                  .map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList()
-              : <Map<String, dynamic>>[];
-
-          setState(() {
-            _monthlySales = monthlyData;
-            _topProducts = topProductsData;
-            _returns = returnsData;
-            _isLoading = false;
-          });
-        } else {
-          setState(() {
-            _monthlySales = [];
-            _topProducts = [];
-            _returns = [];
-            _error = data['message'] ?? 'Error desconocido';
-            _isLoading = false;
-          });
-        }
+      if (data['success'] == true) {
+        final evolutionData = data['data'] is Map
+            ? Map<String, dynamic>.from(data['data'] as Map)
+            : data;
+        setState(() {
+          _monthlySales = _mapList(evolutionData['monthlySales']);
+          _topProducts = _mapList(evolutionData['topProducts']);
+          _returns = _mapList(evolutionData['returns']);
+          _isLoading = false;
+        });
       } else {
         setState(() {
           _monthlySales = [];
           _topProducts = [];
           _returns = [];
-          _error =
-              'Error ${response.statusCode}: ${response.data['message'] ?? 'Falló la carga de datos'}';
+          _error = data['message']?.toString() ?? 'Error desconocido';
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _evolutionGeneration) return;
       setState(() {
-        _error = 'Error de conexión: $e';
+        _error = 'Error de conexion: $e';
         _isLoading = false;
       });
     }
+  }
+
+  List<Map<String, dynamic>> _mapList(Object? value) {
+    if (value is! List) return <Map<String, dynamic>>[];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   void _onClientSearchChanged(String value) {

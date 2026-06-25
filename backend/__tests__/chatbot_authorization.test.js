@@ -59,6 +59,34 @@ describe('chatbot client RBAC policy contract', () => {
     expect(result).toMatchObject({ allowed: true });
   });
 
+  test('allows ADMIN to query any resolved client even without isJefeVentas flag', () => {
+    const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
+
+    const result = authorizeChatbotClientScope(
+      { userCode: '01', role: 'ADMIN', isJefeVentas: false },
+      { clientCode: 'C-OTRO', vendorCode: '03' }
+    );
+
+    expect(result).toMatchObject({
+      allowed: true,
+      code: 'ALLOWED_SUPERVISOR',
+    });
+  });
+
+  test('does not elevate explicit COMERCIAL role with inconsistent isJefeVentas flag', () => {
+    const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
+
+    const result = authorizeChatbotClientScope(
+      { userCode: '80', role: 'COMERCIAL', isJefeVentas: true },
+      { clientCode: 'C-AJENO', vendorCode: '03' }
+    );
+
+    expect(result).toMatchObject({
+      allowed: false,
+      code: 'FORBIDDEN_CLIENT_SCOPE',
+    });
+  });
+
   test('rejects direct clientCode when client owner has not been resolved', () => {
     const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
 

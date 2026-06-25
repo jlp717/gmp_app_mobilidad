@@ -4,7 +4,13 @@
 const { ObjectiveRepository } = require('../domain/objective-repository');
 const { Objective, ObjectiveProgress } = require('../domain/objective');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
-const { sanitizeCodeList } = require('../../../../utils/common');
+const { LACLAE_SALES_FILTER, sanitizeCodeList, getVendorColumnExpr } = require('../../../../utils/common');
+
+function clampInt(value, defaultValue, min, max) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return defaultValue;
+  return Math.min(Math.max(n, min), max);
+}
 
 class Db2ObjectiveRepository extends ObjectiveRepository {
   constructor(dbPool) {
@@ -13,12 +19,18 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
   }
 
   async findByVendor(vendedorCodes, year) {
-    const vendorFilter = vendedorCodes === 'ALL'
+    const vendorExpr = getVendorColumnExpr('L');
+    const cmvVendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
       : `CMV.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND CT.ANIO = ?` : '';
+    const lacVendorFilter = vendedorCodes === 'ALL'
+      ? '1=1'
+      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
     const params = [];
-    if (year) params.push(year);
+    if (year) {
+      params.push(year);
+      params.push(year);
+    }
 
     const sql = `
       SELECT 
@@ -35,19 +47,19 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
         ${year ? 'AND CT.ANIO = ?' : ''}
       LEFT JOIN (
         SELECT 
-          L.${require('../../../../utils/common').VENDOR_COLUMN} AS VENDEDOR,
+          ${vendorExpr} AS VENDEDOR,
           L.LCAADC AS ANIO,
           L.LCMMDC AS MES,
           COALESCE(SUM(L.LCIMVT), 0) AS VENTAS
         FROM DSED.LACLAE L
-        WHERE ${require('../../../../utils/common').LACLAE_SALES_FILTER}
-          ${vendorFilter}
+        WHERE ${LACLAE_SALES_FILTER}
+          AND ${lacVendorFilter}
           ${year ? 'AND L.LCAADC = ?' : ''}
-        GROUP BY L.${require('../../../../utils/common').VENDOR_COLUMN}, L.LCAADC, L.LCMMDC
+        GROUP BY ${vendorExpr}, L.LCAADC, L.LCMMDC
       ) L ON L.VENDEDOR = CMV.CODIGOVENDEDOR 
         AND L.ANIO = CT.ANIO 
         AND L.MES = CT.MES
-      WHERE ${vendorFilter}
+      WHERE ${cmvVendorFilter}
       ORDER BY CMV.CODIGOVENDEDOR, CT.ANIO, CT.MES
     `;
 
@@ -86,16 +98,18 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
 
   async getClientMatrix(vendedorCodes, year, filters = {}) {
     const { limit = 50, offset = 0, family = null } = filters;
-    const vendorCol = require('../../../../utils/common').VENDOR_COLUMN;
+    const safeLimit = clampInt(limit, 50, 1, 500);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+    const vendorCol = getVendorColumnExpr('L');
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const yearFilter = year ? `AND L.LCAADC = ?` : '';
     const familyFilter = family ? `AND TRIM(ART.CODIGOFAMILIA) = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (family) params.push(family);
-    params.push(limit, offset);
+    params.push(safeOffset, safeLimit);
 
     const sql = `
       SELECT 
@@ -111,12 +125,12 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
-        AND ${require('../../../../utils/common').LACLAE_SALES_FILTER}
+        AND ${LACLAE_SALES_FILTER}
         ${yearFilter}
         ${familyFilter}
       GROUP BY L.LCCDCL, CLI.NOMBRECLIENTE, L.LCCDRF, ART.DESCRIPCIONARTICULO, ART.CODIGOFAMILIA
       ORDER BY VENTAS DESC
-      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
+      OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
     return await this._db.executeParams(sql, params);

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
@@ -15,6 +16,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -140,20 +142,19 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   static const premiumRoutes = <String>[];
   late final GoRouter _router;
   final ValueNotifier<int> _authChangeSignal = ValueNotifier<int>(0);
+  StreamSubscription<ConnectivityStatus>? _connectivitySubscription;
+  bool _autoSyncInProgress = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _router = _createRouter();
-    // Auto-sync pending operations when connectivity is restored
-    ConnectivityService.instance.stream.listen((status) {
+    // Auto-sync pending operations when connectivity is restored.
+    _connectivitySubscription =
+        ConnectivityService.instance.stream.listen((status) {
       if (status == ConnectivityStatus.online) {
-        SyncQueueService.instance.processAll().then((count) {
-          if (count > 0) {
-            debugPrint('[AutoSync] $count operations synced');
-          }
-        });
+        _runAutoSync();
       }
     });
   }
@@ -161,6 +162,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _connectivitySubscription?.cancel();
     _router.dispose();
     _authChangeSignal.dispose();
     super.dispose();
@@ -174,6 +176,42 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     if (state == AppLifecycleState.resumed) {
       // User returned to the app - verify session is still valid
       _validateSessionOnResume();
+      _runAutoSync();
+    }
+  }
+
+  Future<void> _runAutoSync() async {
+    if (_autoSyncInProgress) return;
+    if (ConnectivityService.instance.currentStatus !=
+        ConnectivityStatus.online) {
+      return;
+    }
+
+    _autoSyncInProgress = true;
+    try {
+      final genericCount = await SyncQueueService.instance.processAll();
+      if (genericCount > 0) {
+        debugPrint('[AutoSync] $genericCount generic operations synced');
+        OfflineSyncNotifier.genericSyncSucceeded(genericCount);
+      }
+
+      await PedidosOfflineService.init();
+      final result = await PedidosOfflineService.syncPendingOrdersWithResult();
+      final synced = result['synced'] as int? ?? 0;
+      final failed = result['failed'] as int? ?? 0;
+      if (synced > 0) {
+        debugPrint('[AutoSync] $synced offline orders synced');
+        OfflineSyncNotifier.orderSyncSucceeded(synced);
+      }
+      if (failed > 0) {
+        debugPrint('[AutoSync] $failed offline orders preserved as failed');
+        OfflineSyncNotifier.orderSyncFailed(failed);
+      }
+    } catch (e, stack) {
+      debugPrint('[AutoSync] Error syncing pending operations: $e');
+      await Sentry.captureException(e, stackTrace: stack);
+    } finally {
+      _autoSyncInProgress = false;
     }
   }
 
@@ -245,10 +283,14 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   Widget build(BuildContext context) {
     ref.listen(authProvider, (previous, next) {
       _authChangeSignal.value++;
+      if (next.value?.isAuthenticated ?? false) {
+        _runAutoSync();
+      }
     });
 
     return MaterialApp.router(
       title: 'GMP App Movilidad',
+      scaffoldMessengerKey: OfflineSyncNotifier.scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
