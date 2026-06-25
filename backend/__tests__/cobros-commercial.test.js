@@ -605,6 +605,70 @@ describe('commercial cobros hardening', () => {
     expect(params).toEqual(['C001']);
   });
 
+  test('getPendientes groups duplicate CVC rows by document reference', async () => {
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+        return [
+          {
+            SERIE_DOCUMENTO: 'M',
+            NUMERO_DOCUMENTO: 123,
+            XDE: 1,
+            CODIGO_CLIENTE: 'C001',
+            IMPORTE_TOTAL: 60,
+            IMPORTE_COBRADO: 0,
+            IMPORTE_PENDIENTE: 60,
+            ANO_DOCUMENTO: 2026,
+            MES_DOCUMENTO: 6,
+            DIA_DOCUMENTO: 1,
+            ANO_VENCIMIENTO: 2026,
+            MES_VENCIMIENTO: 6,
+            DIA_VENCIMIENTO: 1,
+            SUBEMPRESA: 'GMP',
+            TIPO_DOCUMENTO: 'FAC',
+            FORMA_PAGO: '02',
+          },
+          {
+            SERIE_DOCUMENTO: 'M',
+            NUMERO_DOCUMENTO: 123,
+            XDE: 1,
+            CODIGO_CLIENTE: 'C001',
+            IMPORTE_TOTAL: 40,
+            IMPORTE_COBRADO: 0,
+            IMPORTE_PENDIENTE: 40,
+            ANO_DOCUMENTO: 2026,
+            MES_DOCUMENTO: 6,
+            DIA_DOCUMENTO: 1,
+            ANO_VENCIMIENTO: 2026,
+            MES_VENCIMIENTO: 7,
+            DIA_VENCIMIENTO: 1,
+            SUBEMPRESA: 'GMP',
+            TIPO_DOCUMENTO: 'FAC',
+            FORMA_PAGO: '02',
+          },
+        ];
+      }
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [];
+      if (/FROM JAVIER\.COBROS/i.test(sql)) return [];
+      return [];
+    });
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendientes('C001', {
+      userId: '01',
+      userRole: 'COMERCIAL',
+    });
+
+    expect(result.resumen.totalPendiente).toBe(100);
+    expect(result.cobros).toHaveLength(1);
+    expect(result.cobros[0]).toMatchObject({
+      referencia: 'M-123',
+      importeTotal: 100,
+      importePendiente: 100,
+      estado: 'VENCIDO',
+    });
+  });
+
   test('getPendientes merges CVC debt with provisional app orders', async () => {
     mockQuery.mockImplementation(async (sql) => {
       if (/QSYS2\.SYSCOLUMNS2/i.test(sql)) return [{ COLUMN_NAME: 'ORIGEN' }];

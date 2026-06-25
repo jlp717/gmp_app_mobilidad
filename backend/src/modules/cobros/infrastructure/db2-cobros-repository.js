@@ -248,6 +248,47 @@ function resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosBy
   return Math.max(portfolioPaid, localPaid);
 }
 
+function groupCvcRowsByDocument(rows) {
+  const grouped = new Map();
+  for (const row of rows || []) {
+    const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+    if (!docKey || docKey === '-') continue;
+    let current = grouped.get(docKey);
+    if (!current) {
+      current = {
+        ...row,
+        IMPORTE_TOTAL: 0,
+        IMPORTE_COBRADO: 0,
+        IMPORTE_PENDIENTE: 0,
+        IMPORTE_VENCIDO: 0,
+        _dueKey: Number.MAX_SAFE_INTEGER,
+      };
+      grouped.set(docKey, current);
+    }
+
+    current.IMPORTE_TOTAL = fromCents(toCents(current.IMPORTE_TOTAL) + toCents(row.IMPORTE_TOTAL));
+    current.IMPORTE_COBRADO = fromCents(toCents(current.IMPORTE_COBRADO) + toCents(row.IMPORTE_COBRADO));
+    current.IMPORTE_PENDIENTE = fromCents(toCents(current.IMPORTE_PENDIENTE) + toCents(row.IMPORTE_PENDIENTE));
+
+    const dueIso = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
+    if (computeEstadoVencimiento(dueIso) === 'VENCIDO') {
+      current.IMPORTE_VENCIDO = fromCents(toCents(current.IMPORTE_VENCIDO) + toCents(row.IMPORTE_PENDIENTE));
+    }
+
+    const dueKey =
+      (parseInt(row.ANO_VENCIMIENTO, 10) || 9999) * 10000 +
+      (parseInt(row.MES_VENCIMIENTO, 10) || 12) * 100 +
+      (parseInt(row.DIA_VENCIMIENTO, 10) || 31);
+    if (dueKey < current._dueKey) {
+      current._dueKey = dueKey;
+      current.ANO_VENCIMIENTO = row.ANO_VENCIMIENTO;
+      current.MES_VENCIMIENTO = row.MES_VENCIMIENTO;
+      current.DIA_VENCIMIENTO = row.DIA_VENCIMIENTO;
+    }
+  }
+  return [...grouped.values()].map(({ _dueKey, ...row }) => row);
+}
+
 function computeClientPendingTotalGrouped(rows, clientCode, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
   const rawByDoc = new Map();
   for (const row of rows || []) {
@@ -461,7 +502,14 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
   const erpPendienteCents = toCents(row.IMPORTE_PENDIENTE);
   const appPaidCents = toCents(appPaid);
   const pendingCents = Math.max(0, erpPendienteCents - appPaidCents);
-  const estado = pendingCents <= 1 ? 'COBRADO' : computeEstadoVencimiento(fechaVencimiento);
+  const vencidoCents = row.IMPORTE_VENCIDO == null
+    ? null
+    : Math.max(0, toCents(row.IMPORTE_VENCIDO) - appPaidCents);
+  const estado = pendingCents <= 1
+    ? 'COBRADO'
+    : (vencidoCents == null
+      ? computeEstadoVencimiento(fechaVencimiento)
+      : (vencidoCents > 0 ? 'VENCIDO' : 'PENDIENTE'));
   return {
     id: `cvc_${serie}_${numero}_${xde}`,
     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
@@ -539,15 +587,16 @@ class Db2CobrosRepository extends CobrosRepository {
         const scoped = buildCvcVendorScopeFilter(adjustmentVendorCodes);
         portfolioAdjustments = await this.getAppSideCobrosByDocForVendorScope(scoped.clause, scoped.params);
       }
+      const groupedRows = groupCvcRowsByDocument(rows);
       const cobros = mapCvcRowsToPendientes(
-        rows,
+        groupedRows,
         clientCode,
         appCobrosByDoc,
         repartidorByDoc,
         portfolioAdjustments,
       );
       const cvcTotalPendiente = computeClientPendingTotalGrouped(
-        rows,
+        groupedRows,
         clientCode,
         portfolioAdjustments,
         appCobrosByDoc,
