@@ -100,8 +100,6 @@ class FullscreenImageViewer extends StatelessWidget {
                   imageUrl: imageUrl,
                   productCode: productCode ?? '',
                   productName: productName,
-                  width: double.infinity,
-                  height: double.infinity,
                   headers: _effectiveHeaders,
                   fit: BoxFit.contain,
                   borderRadius: BorderRadius.zero,
