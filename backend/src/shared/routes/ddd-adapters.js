@@ -35,6 +35,7 @@ const {
 } = require('../../../middleware/security');
 const {
   buildClientVendorParamFilter,
+  buildCvcVendorScopeFilter,
   buildVendedorFilterLACLAE,
   sanitizeForSQL,
   MIN_YEAR,
@@ -411,6 +412,36 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`) };
   }
   return { ok: true, clientCode: client, vendorCodes: effectiveVendorCodes };
+}
+
+async function authorizeCobrosClientScope(req, clientCode, vendedorCodes, action = 'consultar cobros de') {
+  const client = normalizePedidoCode(clientCode).substring(0, 10);
+  if (!client) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
+
+  const context = getPedidoUserContext(req);
+  const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+  if (!vendorScope.ok) return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
+
+  const cvcVendorFilter = buildCvcVendorScopeFilter(vendorScope.codes);
+  const cvcRows = await queryWithParams(
+    `SELECT 1
+       FROM DSEDAC.CVC CVC
+      WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
+        AND CVC.IMPORTEPENDIENTE > 0.01
+        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+        ${cvcVendorFilter.clause}
+      FETCH FIRST 1 ROW ONLY`,
+    [client, ...cvcVendorFilter.params],
+  );
+  if (cvcRows && cvcRows.length > 0) {
+    return { ok: true, clientCode: client, vendorCodes: vendorScope.codes };
+  }
+
+  if (context.isManager && context.visibleVendorCodes.length === 0 && vendorScope.codes.length === 0) {
+    return { ok: true, clientCode: client, vendorCodes: vendorScope.codes };
+  }
+
+  return authorizePedidoClientScope(req, client, vendedorCodes, action);
 }
 
 async function authorizePedidoMutation(req, orderId, action = 'mutar') {
@@ -2097,7 +2128,7 @@ function createCobrosRoutes() {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
       const selectedVendorScope = selectedCobrosVendorScope(req);
-      const clientAccess = await authorizePedidoClientScope(
+      const clientAccess = await authorizeCobrosClientScope(
         req,
         codigoCliente,
         selectedVendorScope,
@@ -2137,7 +2168,7 @@ function createCobrosRoutes() {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
       const selectedVendorScope = selectedCobrosVendorScope(req);
-      const clientAccess = await authorizePedidoClientScope(
+      const clientAccess = await authorizeCobrosClientScope(
         req,
         codigoCliente,
         selectedVendorScope,
@@ -2190,7 +2221,7 @@ function createCobrosRoutes() {
       if (!codigoCliente || importe == null || !formaPago) {
         return res.status(400).json({ success: false, error: 'codigoCliente, importe, and formaPago required' });
       }
-      const clientAccess = await authorizePedidoClientScope(
+      const clientAccess = await authorizeCobrosClientScope(
         req,
         codigoCliente,
         req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
@@ -2233,7 +2264,7 @@ function createCobrosRoutes() {
       if (!clientCode || !amount || !paymentMethod) {
         return res.status(400).json({ success: false, error: 'clientCode, amount, and paymentMethod required' });
       }
-      const clientAccess = await authorizePedidoClientScope(
+      const clientAccess = await authorizeCobrosClientScope(
         req,
         clientCode,
         req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
@@ -2296,7 +2327,7 @@ function createCobrosRoutes() {
       const safeLimit = Math.max(1, Math.min(100, parseInt(limit) || 20));
       const safeOffset = Math.max(0, parseInt(offset) || 0);
       const selectedVendorScope = selectedCobrosVendorScope(req);
-      const clientAccess = await authorizePedidoClientScope(
+      const clientAccess = await authorizeCobrosClientScope(
         req,
         codigoCliente,
         selectedVendorScope,

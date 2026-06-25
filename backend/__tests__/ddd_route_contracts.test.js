@@ -889,6 +889,41 @@ describe('DDD cobros route contracts', () => {
     expect(res.headers['cache-control']).toBe('no-store');
   });
 
+  test('GET /:codigoCliente/pendientes allows JEFE_VENTAS when client is visible by CVC debt scope', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CVC/i.test(sql)) return [{ OK: 1 }];
+      if (/DSEDAC\.CLI/i.test(sql)) return [];
+      return [{ OK: 1 }];
+    });
+    mockCobrosRepo.getPendientes.mockResolvedValue({
+      cobros: [{ id: 'cvc-1', referencia: 'M-1' }],
+      resumen: { totalPendiente: 100 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      vendorCodes: ['01', '02'],
+    }))
+      .get('/4300032258/pendientes')
+      .query({ vendedorCodes: 'ALL', forceRefresh: '1' });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendientes).toHaveBeenCalledWith(
+      '4300032258',
+      expect.objectContaining({
+        userId: '98',
+        userRole: 'JEFE_VENTAS',
+        vendedorCodes: ['01', '02'],
+      }),
+    );
+    expect(db.queryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CVC/i);
+    expect(db.queryWithParams.mock.calls.some(([sql]) => /DSEDAC\.CLI/i.test(sql))).toBe(false);
+  });
+
   test('GET /:codigoCliente/pendientes masks generic repository SQL and ODBC errors', async () => {
     const repositoryError = new Error('SQL0802 ODBC raw conversion detail');
     repositoryError.odbcErrors = [{ state: '22003', code: -802, message: 'Numeric conversion failed' }];
@@ -1108,7 +1143,12 @@ describe('DDD cobros route contracts', () => {
 
   test('GET /:codigoCliente/historico rejects client outside vendor scope', async () => {
     const db = require('../config/db');
-    db.queryWithParams.mockResolvedValueOnce([]);
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CVC/i.test(sql) || /DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [{ OK: 1 }];
+    });
 
     const res = await request(makeApp(createCobrosRoutes())).get('/C999/historico');
 
