@@ -526,6 +526,7 @@ class WarehouseDataService {
     int? year,
     int? month,
     int? day,
+    bool forceRefresh = false,
   }) async {
     final qp = <String, String>{};
     if (year != null) qp['year'] = year.toString();
@@ -538,6 +539,7 @@ class WarehouseDataService {
       '/warehouse/dashboard',
       queryParameters: qp,
       cacheKey: cacheKey,
+      forceRefresh: forceRefresh,
     );
 
     return ((result.data['trucks'] as List?) ?? [])
@@ -546,10 +548,13 @@ class WarehouseDataService {
   }
 
   /// Lista todos los vehículos
-  static Future<List<VehicleConfig>> getVehicles() async {
+  static Future<List<VehicleConfig>> getVehicles({
+    bool forceRefresh = false,
+  }) async {
     final result = await OfflineAwareApi.get(
       '/warehouse/vehicles',
       cacheKey: 'warehouse_vehicles',
+      forceRefresh: forceRefresh,
     );
 
     return ((result.data['vehicles'] as List?) ?? [])
@@ -605,6 +610,7 @@ class WarehouseDataService {
     int? year,
     int? month,
     int? day,
+    bool forceRefresh = false,
   }) async {
     final qp = <String, String>{};
     if (year != null) qp['year'] = year.toString();
@@ -616,6 +622,7 @@ class WarehouseDataService {
       queryParameters: qp,
       cacheKey:
           'warehouse_orders_${vehicleCode}_${year ?? ''}_${month ?? ''}_${day ?? ''}',
+      forceRefresh: forceRefresh,
     );
 
     return ((result.data['orders'] as List?) ?? [])
@@ -624,10 +631,13 @@ class WarehouseDataService {
   }
 
   /// Personal de almacén
-  static Future<List<WarehousePerson>> getPersonnel() async {
+  static Future<List<WarehousePerson>> getPersonnel({
+    bool forceRefresh = false,
+  }) async {
     final result = await OfflineAwareApi.get(
       '/warehouse/personnel',
       cacheKey: 'warehouse_personnel',
+      forceRefresh: forceRefresh,
     );
 
     return ((result.data['personnel'] as List?) ?? [])
@@ -701,16 +711,25 @@ class WarehouseDataService {
     String? search,
     bool? onlyWithDimensions,
     int limit = 200,
+    bool forceRefresh = false,
     CancelToken? cancelToken,
   }) async {
     final qp = <String, String>{'limit': limit.toString()};
-    if (search != null && search.isNotEmpty) qp['search'] = search;
+    final normalizedSearch = search?.trim();
+    if (normalizedSearch != null && normalizedSearch.isNotEmpty) {
+      qp['search'] = normalizedSearch;
+    }
     if (onlyWithDimensions ?? false) qp['onlyWithDimensions'] = 'true';
+    final searchKey = normalizedSearch == null || normalizedSearch.isEmpty
+        ? 'all'
+        : Uri.encodeComponent(normalizedSearch.toLowerCase());
 
     final result = await OfflineAwareApi.get(
       '/warehouse/articles',
       queryParameters: qp,
-      cacheKey: 'warehouse_articles_${search ?? 'all'}',
+      cacheKey:
+          'warehouse_articles_${searchKey}_${onlyWithDimensions == true ? 'dims' : 'all'}_$limit',
+      forceRefresh: forceRefresh,
       cancelToken: cancelToken,
     );
 
@@ -775,6 +794,7 @@ class WarehouseDataService {
     String? dateFrom,
     String? dateTo,
     int limit = 50,
+    bool forceRefresh = false,
   }) async {
     final qp = <String, String>{'limit': limit.toString()};
     if (vehicleCode != null) qp['vehicleCode'] = vehicleCode;
@@ -784,7 +804,9 @@ class WarehouseDataService {
     final result = await OfflineAwareApi.get(
       '/warehouse/load-history',
       queryParameters: qp,
-      cacheKey: 'warehouse_history_${vehicleCode ?? 'all'}',
+      cacheKey:
+          'warehouse_history_${vehicleCode ?? 'all'}_${dateFrom ?? 'from_any'}_${dateTo ?? 'to_any'}_$limit',
+      forceRefresh: forceRefresh,
     );
 
     return ((result.data['history'] as List?) ?? [])
@@ -800,10 +822,12 @@ class WarehouseDataService {
   static Future<Map<String, dynamic>?> getManualLayout({
     required String vehicleCode,
     required String date,
+    bool forceRefresh = false,
   }) async {
     final result = await OfflineAwareApi.get(
       '/warehouse/manual-layout/$vehicleCode/$date',
       cacheKey: 'warehouse_layout_${vehicleCode}_$date',
+      forceRefresh: forceRefresh,
     );
     if (result.data['found'] == true) {
       return result.data['layout'] as Map<String, dynamic>;
@@ -898,10 +922,13 @@ class WarehouseDataService {
   }
 
   /// Get global warehouse config
-  static Future<Map<String, String>> getConfig() async {
+  static Future<Map<String, String>> getConfig({
+    bool forceRefresh = false,
+  }) async {
     final result = await OfflineAwareApi.get(
       '/warehouse/config',
       cacheKey: 'warehouse_config',
+      forceRefresh: forceRefresh,
     );
     final items = (result.data['config'] as List?) ?? [];
     final map = <String, String>{};

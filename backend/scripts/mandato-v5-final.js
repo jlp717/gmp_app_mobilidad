@@ -1,8 +1,9 @@
-﻿require('dotenv').config({path:require('path').join(__dirname,'../.env')});
+require('dotenv').config({path:require('path').join(__dirname,'../.env')});
 const odbc=require('odbc');const http=require('http');const UA='GMP-Mandato-V5/1.0';
+const { getProbeCredentials } = require('./probe-credentials');
 function cs(){const p=process.env.ODBC_PWD||process.env.ODBC_PASSWORD;return `DSN=GMP;UID=JAVIER;PWD=${p};NAM=1;CCSID=1208;CMPTDM=1;CPTOUT=120;COMMTIMEOUT=180;DBQ=GMP`;}
 function call(method,path,body,token,extra={}){return new Promise((res,rej)=>{const d=body?JSON.stringify(body):null;const h={'User-Agent':UA,...extra};if(token)h.Authorization='Bearer '+token;if(d){h['Content-Type']='application/json';h['Content-Length']=Buffer.byteLength(d);}const r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method,headers:h},x=>{let b='';x.on('data',c=>b+=c);x.on('end',()=>res({status:x.statusCode,body:JSON.parse(b||'{}')}));});r.on('error',rej);if(d)r.write(d);r.end();});}
-(async()=>{const out={};const login=await call('POST','/auth/login',{username:'diego',password:'9322'});const t=login.body.token;
+(async()=>{const out={};const login=await call('POST','/auth/login',getProbeCredentials('mandato v5 final'));const t=login.body.token;
 const cob=await call('GET','/cobros/pending-summary/093',null,t);out.cobros={grandTotal:cob.body.grandTotal,clientCount:cob.body.clientCount};
 const conn=await odbc.connect(cs());
 for(const v of ['93','093']){const r=await conn.query(`SELECT COALESCE(SUM(CVC.IMPORTEPENDIENTE),0) GT FROM DSEDAC.CVC CVC WHERE CVC.IMPORTEPENDIENTE<>0 AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN<>'S') AND EXISTS (SELECT 1 FROM DSEDAC.CLP CLP WHERE TRIM(CLP.CODIGOCLIENTE)=TRIM(CVC.CODIGOCLIENTEALBARAN) AND TRIM(CLP.VENDEDORCOMERCIAL)=?)`,[v]);out['db2_'+v]=Number(r[0].GT);}

@@ -24,6 +24,7 @@ const warehouseBreaker = new CircuitBreaker({
     successThreshold: 2,
     timeout: 10000
 });
+const WAREHOUSE_BULK_INSERT_CHUNK_SIZE = Math.max(1, parseInt(process.env.WAREHOUSE_BULK_INSERT_CHUNK_SIZE, 10) || 50);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AUTO-CREATE JAVIER.* WAREHOUSE TABLES (safe, idempotent)
@@ -1150,20 +1151,50 @@ router.post('/articles/bulk-estimate', verifyToken, async (req, res) => {
               AND COALESCE(A.PESO, 0) > 0
             FETCH FIRST 500 ROWS ONLY
         `);
-        let saved = 0;
+        const estimates = [];
         for (const r of rows) {
             try {
                 const est = estimateFn(parseFloat(r.PESO) || 0, parseInt(r.UNIDADESCAJA) || 1, (r.NOMBRE || ''));
-                const code = sanitizeForSQL((r.CODE || '').trim());
+                const code = (r.CODE || '').trim();
+                if (!code) continue;
                 const pesoCaja = (parseFloat(r.PESO) || 0) * Math.max(parseInt(r.UNIDADESCAJA) || 1, 1);
-                try { await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]); } catch(e) {}
+                estimates.push([code, est.largo, est.ancho, est.alto, parseFloat(pesoCaja.toFixed(2))]);
+            } catch(e) { /* skip individual estimation errors */ }
+        }
+
+        let saved = 0;
+        for (let i = 0; i < estimates.length; i += WAREHOUSE_BULK_INSERT_CHUNK_SIZE) {
+            const chunk = estimates.slice(i, i + WAREHOUSE_BULK_INSERT_CHUNK_SIZE);
+            const codes = chunk.map(([code]) => code);
+            const deletePlaceholders = codes.map(() => '?').join(', ');
+            const valuesPlaceholders = chunk
+                .map(() => "(?, ?, ?, ?, ?, 'Auto-estimado por familia/peso', 'SYSTEM')")
+                .join(', ');
+            try {
+                await queryWithParams(
+                    `DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO IN (${deletePlaceholders})`,
+                    codes
+                );
                 await queryWithParams(`
                     INSERT INTO JAVIER.ALMACEN_ART_DIMENSIONES
                         (CODIGOARTICULO, LARGO_CM, ANCHO_CM, ALTO_CM, PESO_CAJA_KG, NOTAS, UPDATED_BY)
-                    VALUES (?, ?, ?, ?, ?, 'Auto-estimado por familia/peso', 'SYSTEM')
-                `, [code, est.largo, est.ancho, est.alto, parseFloat(pesoCaja.toFixed(2))]);
-                saved++;
-            } catch(e) { /* skip individual errors */ }
+                    VALUES ${valuesPlaceholders}
+                `, chunk.flat());
+                saved += chunk.length;
+            } catch (batchErr) {
+                logger.warn(`Bulk estimate batch failed, falling back to row inserts: ${batchErr.message}`);
+                for (const row of chunk) {
+                    try {
+                        await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [row[0]]);
+                        await queryWithParams(`
+                            INSERT INTO JAVIER.ALMACEN_ART_DIMENSIONES
+                                (CODIGOARTICULO, LARGO_CM, ANCHO_CM, ALTO_CM, PESO_CAJA_KG, NOTAS, UPDATED_BY)
+                            VALUES (?, ?, ?, ?, ?, 'Auto-estimado por familia/peso', 'SYSTEM')
+                        `, row);
+                        saved++;
+                    } catch(e) { /* skip individual errors */ }
+                }
+            }
         }
         res.json({ success: true, estimated: saved, total: rows.length });
     } catch (error) {

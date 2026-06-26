@@ -27,6 +27,8 @@ const repartidorBreaker = new RepartidorCircuitBreaker({
     successThreshold: 2,
     timeout: 10000
 });
+const REPARTIDOR_LINES_INSERT_CHUNK_SIZE = Math.max(1, parseInt(process.env.REPARTIDOR_LINES_INSERT_CHUNK_SIZE, 10) || 100);
+const REPARTIDOR_LINES_MAX_PER_REQUEST = Math.max(1, parseInt(process.env.REPARTIDOR_LINES_MAX_PER_REQUEST, 10) || 1000);
 const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
 const facturasService = require('../services/facturas.service');
 const pdfService = require('../services/pdf.service');
@@ -1683,30 +1685,52 @@ router.post('/entregas/:entregaId/lineas', verifyToken, async (req, res) => {
         if (!Array.isArray(lineas)) {
             return res.status(400).json({ success: false, error: 'Lineas array requerido' });
         }
+        if (lineas.length > REPARTIDOR_LINES_MAX_PER_REQUEST) {
+            return res.status(413).json({
+                success: false,
+                error: `Demasiadas lineas: maximo ${REPARTIDOR_LINES_MAX_PER_REQUEST}`,
+            });
+        }
 
         // Delete existing lines
         await queryWithParams(`DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ?`, [entregaId]);
 
         // Insert new lines
-        for (const linea of lineas) {
-            await queryWithParams(`
-                INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
-                    ENTREGA_ID, LINEAALBARAN, CODIGOARTICULO, DESCRIPCION,
-                    CANTIDADPEDIDA, CANTIDADENTREGADA, CANTIDADRECHAZADA,
-                    ESTADO, OBSERVACIONES, MOTIVONOENTREGA
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-                entregaId,
-                linea.lineaAlbaran || 0,
-                linea.codigoArticulo || '',
-                linea.descripcion ? linea.descripcion.substring(0, 200) : null,
-                linea.cantidadPedida || 0,
-                linea.cantidadEntregada || 0,
-                linea.cantidadRechazada || 0,
-                linea.estado || 'PENDIENTE',
-                linea.observaciones || null,
-                linea.motivoNoEntrega || null
-            ]);
+        const insertRows = lineas.map((linea) => [
+            entregaId,
+            linea.lineaAlbaran || 0,
+            linea.codigoArticulo || '',
+            linea.descripcion ? linea.descripcion.substring(0, 200) : null,
+            linea.cantidadPedida || 0,
+            linea.cantidadEntregada || 0,
+            linea.cantidadRechazada || 0,
+            linea.estado || 'PENDIENTE',
+            linea.observaciones || null,
+            linea.motivoNoEntrega || null
+        ]);
+        for (let i = 0; i < insertRows.length; i += REPARTIDOR_LINES_INSERT_CHUNK_SIZE) {
+            const chunk = insertRows.slice(i, i + REPARTIDOR_LINES_INSERT_CHUNK_SIZE);
+            const values = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+            try {
+                await queryWithParams(`
+                    INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
+                        ENTREGA_ID, LINEAALBARAN, CODIGOARTICULO, DESCRIPCION,
+                        CANTIDADPEDIDA, CANTIDADENTREGADA, CANTIDADRECHAZADA,
+                        ESTADO, OBSERVACIONES, MOTIVONOENTREGA
+                    ) VALUES ${values}
+                `, chunk.flat());
+            } catch (batchErr) {
+                logger.warn(`[REPARTIDOR] Batch line insert failed, falling back to row inserts: ${batchErr.message}`);
+                for (const row of chunk) {
+                    await queryWithParams(`
+                        INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
+                            ENTREGA_ID, LINEAALBARAN, CODIGOARTICULO, DESCRIPCION,
+                            CANTIDADPEDIDA, CANTIDADENTREGADA, CANTIDADRECHAZADA,
+                            ESTADO, OBSERVACIONES, MOTIVONOENTREGA
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, row);
+                }
+            }
         }
 
         // Determine overall delivery status

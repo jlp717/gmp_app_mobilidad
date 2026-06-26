@@ -81,8 +81,8 @@ dependencies:
 
   # Background Notifications
   flutter_local_notifications: ^19.5.0
-  workmanager: ^0.9.0+3
   timezone: ^0.10.0
+  workmanager: ^0.9.0+3
 
   # WebView (Three.js 3D visualization)
   webview_flutter: ^4.10.0

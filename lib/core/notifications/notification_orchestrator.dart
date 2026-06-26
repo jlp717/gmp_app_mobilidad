@@ -48,13 +48,18 @@ class NotificationOrchestrator {
   }) async {
     await initialize();
     if (user == null) {
-      _activeProfile = null;
-      await _local.cancelAllGmpNotifications();
+      _activeProfile = await NotificationSessionStore.loadLastKnownProfile();
+      if (_activeProfile == null) {
+        await _local.cancelAllGmpNotifications();
+        return;
+      }
+      await refreshAll(reason: '$reason:last_known_profile');
       return;
     }
 
     SessionScope.apply(user, vendedorCodes);
     _activeProfile = NotificationSessionStore.fromUser(user, vendedorCodes);
+    await NotificationSessionStore.rememberUserSession(user, vendedorCodes);
 
     final settings = await _preferences.load();
     if (settings.enabled && !settings.permissionPrompted) {
@@ -84,6 +89,7 @@ class NotificationOrchestrator {
       );
       final settings = await _preferences.load();
       await _scheduleOrderReminders(snapshot, settings, now: now);
+      await _scheduleSmartNotifications(snapshot, settings, now: now);
       await _showImmediateNotifications(snapshot, settings, now: now);
     } catch (e, stack) {
       debugPrint('[Notifications] refreshAll failed ($reason): $e\n$stack');
@@ -122,6 +128,7 @@ class NotificationOrchestrator {
       snapshot,
       now: effectiveNow,
     );
+    var shown = 0;
     for (final notification in notifications) {
       if (!settings.isCategoryAllowed(notification.category,
           now: effectiveNow)) {
@@ -130,6 +137,8 @@ class NotificationOrchestrator {
       if (await _preferences.hasSent(notification.dedupeKey)) continue;
       await _local.show(notification);
       await _preferences.markSent(notification.dedupeKey, sentAt: effectiveNow);
+      shown++;
+      if (shown >= 5) return;
     }
   }
 
@@ -157,5 +166,32 @@ class NotificationOrchestrator {
       scheduledAt = scheduledAt.add(plan.interval);
     }
     await _preferences.saveScheduledOrderIds(scheduledIds);
+  }
+
+  Future<void> _scheduleSmartNotifications(
+    NotificationSnapshot snapshot,
+    NotificationPreferences settings, {
+    DateTime? now,
+  }) async {
+    await _local.cancelScheduledSmartNotifications();
+    final effectiveNow = now ?? DateTime.now();
+    final notifications = _rules.buildScheduledNotifications(
+      snapshot,
+      settings,
+      now: effectiveNow,
+    );
+    final scheduledIds = <int>[];
+    for (final notification in notifications) {
+      if (notification.scheduledAt == null) continue;
+      if (!settings.isCategoryAllowed(
+        notification.category,
+        now: notification.scheduledAt,
+      )) {
+        continue;
+      }
+      await _local.schedule(notification);
+      scheduledIds.add(notification.id);
+    }
+    await _preferences.saveScheduledSmartIds(scheduledIds);
   }
 }

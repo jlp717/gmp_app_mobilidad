@@ -34,7 +34,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
     _loadDashboard();
   }
 
-  Future<void> _loadDashboard() async {
+  Future<void> _loadDashboard({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -44,6 +44,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
         year: _selectedDate.year,
         month: _selectedDate.month,
         day: _selectedDate.day,
+        forceRefresh: forceRefresh,
       );
       if (mounted) {
         setState(() {
@@ -84,7 +85,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                 : _error != null
                     ? ErrorStateWidget(
                         message: _error!,
-                        onRetry: _loadDashboard,
+                        onRetry: () => _loadDashboard(forceRefresh: true),
                       )
                     : _trucks.isEmpty
                         ? _buildEmpty()
@@ -151,7 +152,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
             ),
           ),
           IconButton(
-            onPressed: _loadDashboard,
+            onPressed: () => _loadDashboard(forceRefresh: true),
             icon: const Icon(
               Icons.refresh_rounded,
               color: AppTheme.success,
@@ -287,7 +288,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
 
   Widget _buildTruckGrid() {
     return RefreshIndicator(
-      onRefresh: _loadDashboard,
+      onRefresh: () => _loadDashboard(forceRefresh: true),
       color: AppTheme.info,
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
@@ -578,7 +579,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: _loadDashboard,
+            onPressed: () => _loadDashboard(forceRefresh: true),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Reintentar'),
             style: ElevatedButton.styleFrom(

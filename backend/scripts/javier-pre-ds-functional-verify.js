@@ -1,7 +1,8 @@
-﻿'use strict';
+'use strict';
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const http = require('http');
 const odbc = require('odbc');
+const { getProbeCredentials } = require('./probe-credentials');
 const UA = 'GMP-PreDS-Verify/1.0';
 const BASE = '/api';
 
@@ -172,7 +173,7 @@ async function main() {
     ),
   );
 
-  const login = await request('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await request('POST', '/auth/login', getProbeCredentials('pre DS functional verify'));
   const token = login.body?.token;
   if (!token) {
     report.tasks.push(pass('AUTH login', false, login));

@@ -161,6 +161,16 @@ class LocalNotificationService {
     await NotificationPreferencesService.instance.clearScheduledOrderIds();
   }
 
+  Future<void> cancelScheduledSmartNotifications() async {
+    await initialize();
+    final ids =
+        await NotificationPreferencesService.instance.loadScheduledSmartIds();
+    for (final id in ids) {
+      await _plugin.cancel(id);
+    }
+    await NotificationPreferencesService.instance.clearScheduledSmartIds();
+  }
+
   Future<void> cancelCategory(AppNotificationCategory category) async {
     await initialize();
     if (category == AppNotificationCategory.orders) {
@@ -174,6 +184,7 @@ class LocalNotificationService {
 
   Future<void> cancelAllGmpNotifications() async {
     await initialize();
+    await cancelScheduledSmartNotifications();
     for (final category in AppNotificationCategory.values) {
       await cancelCategory(category);
     }

@@ -2,6 +2,7 @@
 /** Stock race: concurrent confirm on same article — expect at most one success. */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const http = require('http');
+const { getProbeCredentials } = require('./probe-credentials');
 const UA = 'GMP-Mandato-V5/1.0';
 
 function call(method, path, body, token, extra = {}) {
@@ -27,7 +28,7 @@ function call(method, path, body, token, extra = {}) {
 
 (async () => {
   const out = { ts: new Date().toISOString() };
-  const login = await call('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await call('POST', '/auth/login', getProbeCredentials('mandato v5 stock race'));
   const token = login.body.token;
   const clientCode = '4300000354';
   const products = await call('GET', `/pedidos/products?vendedorCodes=93&clientCode=${clientCode}&limit=5`, null, token);

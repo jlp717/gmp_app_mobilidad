@@ -80,7 +80,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}'
       '-${d.day.toString().padLeft(2, '0')}';
 
-  Future<void> _loadAll() async {
+  Future<void> _loadAll({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -91,8 +91,9 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
           vehicleCode: _selectedVehicle,
           dateFrom: _dateFrom != null ? _dateToStr(_dateFrom!) : null,
           dateTo: _dateTo != null ? _dateToStr(_dateTo!) : null,
+          forceRefresh: forceRefresh,
         ),
-        WarehouseDataService.getVehicles(),
+        WarehouseDataService.getVehicles(forceRefresh: forceRefresh),
       ]);
       if (mounted) {
         setState(() {
@@ -111,7 +112,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
     }
   }
 
-  Future<void> _loadHistory() async {
+  Future<void> _loadHistory({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -121,6 +122,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
         vehicleCode: _selectedVehicle,
         dateFrom: _dateFrom != null ? _dateToStr(_dateFrom!) : null,
         dateTo: _dateTo != null ? _dateToStr(_dateTo!) : null,
+        forceRefresh: forceRefresh,
       );
       if (mounted)
         setState(() {
@@ -219,7 +221,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
       );
     }
     return RefreshIndicator(
-      onRefresh: _loadHistory,
+      onRefresh: () => _loadHistory(forceRefresh: true),
       color: AppTheme.info,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 12),

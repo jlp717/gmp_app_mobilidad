@@ -2,6 +2,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const http = require('http');
 const odbc = require('odbc');
+const { getProbeCredentials } = require('./probe-credentials');
 function req(method, path, body, token, extra = {}) {
   return new Promise((resolve, reject) => {
     const d = body ? JSON.stringify(body) : null;
@@ -27,7 +28,7 @@ function cs() {
 }
 (async () => {
   const out = {};
-  const login = await req('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await req('POST', '/auth/login', getProbeCredentials('server gap check'));
   out.login = { status: login.status, role: login.body?.user?.role, hasToken: !!login.body?.token };
   const token = login.body.token;
   if (!token) {

@@ -4,12 +4,16 @@ require('dotenv').config();
 
 const http = require('http');
 const { queryWithParams } = require('../config/db');
+const { getProbeCredentials } = require('./probe-credentials');
 
 const UA = 'GMP-App/CertProbe';
 const PORT = parseInt(process.env.API_PORT || '3335', 10);
 const HOST = process.env.API_HOST || '127.0.0.1';
-const USERNAME = process.env.CERT_USERNAME || 'diego';
-const PASSWORD = process.env.CERT_PASSWORD || '9322';
+const CERT_CREDS = process.env.CERT_USERNAME && process.env.CERT_PASSWORD
+  ? { username: process.env.CERT_USERNAME, password: process.env.CERT_PASSWORD }
+  : getProbeCredentials('cert mandate probe');
+const USERNAME = CERT_CREDS.username;
+const PASSWORD = CERT_CREDS.password;
 const TARGET = String(process.env.CERT_TARGET || 'JAVIER').trim().toUpperCase();
 const COUNT = Math.max(1, Math.min(parseInt(process.env.CERT_ORDER_COUNT || '1', 10) || 1, 50));
 const CONCURRENCY = Math.max(1, Math.min(parseInt(process.env.CERT_CONCURRENCY || String(COUNT), 10) || COUNT, COUNT));

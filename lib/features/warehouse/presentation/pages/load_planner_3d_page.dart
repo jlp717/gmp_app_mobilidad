@@ -83,7 +83,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
   // ─── Data loading ───────────────────────────────────────────────────────
 
-  Future<void> _loadPlan() async {
+  Future<void> _loadPlan({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -105,6 +105,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           year: widget.date.year,
           month: widget.date.month,
           day: widget.date.day,
+          forceRefresh: forceRefresh,
         ),
       ]);
       if (mounted) {
@@ -943,7 +944,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             tooltip: 'Guardar carga en BBDD',
           ),
           IconButton(
-            onPressed: _loadPlan,
+            onPressed: () => _loadPlan(forceRefresh: true),
             icon: const Icon(
               Icons.refresh_rounded,
               color: AppTheme.success,
@@ -1593,7 +1594,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: _loadPlan,
+              onPressed: () => _loadPlan(forceRefresh: true),
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Reintentar'),
               style: ElevatedButton.styleFrom(

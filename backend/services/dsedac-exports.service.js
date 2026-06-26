@@ -77,6 +77,7 @@ const LAC_INSERT_SQL = [
   'CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, IMPORTEVENTA',
   ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
 ].join(' ');
+const DSEDAC_EXPORT_BULK_INSERT_CHUNK_SIZE = Math.max(1, parseInt(process.env.DSEDAC_EXPORT_BULK_INSERT_CHUNK_SIZE, 10) || 50);
 
 // Mapeo importes JAVIER -> CODIGOCONCEPTO de DSEDAC.CLV.
 // Los codigos son tentativos y se sobreescriben si CLV usa otros. Confirma
@@ -118,6 +119,37 @@ function isEnabled() {
 
 function logSkip(tag, reason) {
   logger.info(`[DSEDAC-EXPORT] ${tag}: skip (${reason})`);
+}
+
+function toBulkInsertSql(singleRowInsertSql, rowCount) {
+  const marker = ' VALUES ';
+  const index = singleRowInsertSql.toUpperCase().lastIndexOf(marker);
+  if (index < 0 || rowCount <= 0) return singleRowInsertSql;
+  const prefix = singleRowInsertSql.slice(0, index + marker.length);
+  const rowValues = singleRowInsertSql.slice(index + marker.length).trim();
+  return `${prefix}${Array.from({ length: rowCount }, () => rowValues).join(', ')}`;
+}
+
+async function insertRowsBestEffort(insertSql, rows, tagForRow) {
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += DSEDAC_EXPORT_BULK_INSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + DSEDAC_EXPORT_BULK_INSERT_CHUNK_SIZE);
+    try {
+      await queryWithParams(toBulkInsertSql(insertSql, chunk.length), chunk.flat(), false);
+      inserted += chunk.length;
+    } catch (batchErr) {
+      logger.warn(`[DSEDAC-EXPORT] ${tagForRow(chunk[0], i)} batch fallo: ${batchErr.message}`);
+      for (let j = 0; j < chunk.length; j++) {
+        try {
+          await queryWithParams(insertSql, chunk[j], false);
+          inserted++;
+        } catch (lineErr) {
+          logger.warn(`[DSEDAC-EXPORT] ${tagForRow(chunk[j], i + j)} fallo: ${lineErr.message}`);
+        }
+      }
+    }
+  }
+  return inserted;
 }
 
 // ============================================================================
@@ -220,25 +252,25 @@ async function exportLiquidacionToSystem(liquidacionRow) {
     let numero = (parseInt(numRows?.[0]?.N) || 0) + 1;
 
     // Insertar N filas (una por concepto con importe > 0)
-    let inserted = 0;
+    const rowsToInsert = [];
     for (const concept of CLV_CONCEPT_MAP) {
       const importe = parseFloat(liquidacionRow[concept.javierField]) || 0;
       if (importe <= 0) continue;
-      try {
-        await queryWithParams(CLV_INSERT_SQL, [
-          codigoVendedor, numero, dia, mes, ano,
-          concept.codigo, concept.descripcion,
-          String(liquidacionRow.IDEMPOTENCY_TOKEN).slice(0, 40),
-          importe,
-          parseInt(process.env.PEDIDOS_SYSTEM_ALMACEN || '1'),
-          String(process.env.PEDIDOS_SYSTEM_DELEGACION || '01'),
-        ], false);
-        numero++;
-        inserted++;
-      } catch (lineErr) {
-        logger.warn(`[DSEDAC-EXPORT] CLV concept ${concept.codigo} fallo: ${lineErr.message}`);
-      }
+      rowsToInsert.push([
+        codigoVendedor, numero, dia, mes, ano,
+        concept.codigo, concept.descripcion,
+        String(liquidacionRow.IDEMPOTENCY_TOKEN).slice(0, 40),
+        importe,
+        parseInt(process.env.PEDIDOS_SYSTEM_ALMACEN || '1'),
+        String(process.env.PEDIDOS_SYSTEM_DELEGACION || '01'),
+      ]);
+      numero++;
     }
+    const inserted = await insertRowsBestEffort(
+      CLV_INSERT_SQL,
+      rowsToInsert,
+      (row) => `CLV concept ${row?.[5] || '?'}`,
+    );
 
     if (inserted === 0) {
       return { exported: false, reason: 'no_lines_to_export' };
@@ -299,27 +331,27 @@ async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
     ], false);
 
     // INSERT LAC (una por linea)
-    let linesInserted = 0;
+    const lacRows = [];
     for (let i = 0; i < entregaLineas.length; i++) {
       const line = entregaLineas[i];
-      try {
-        await queryWithParams(LAC_INSERT_SQL, [
-          subempresa, ano, serie, terminal, numeroAlbaran, (i + 1),
-          now.getDate(), now.getMonth() + 1, now.getFullYear(),
-          String(entregaHeader.CODIGOCLIENTEALBARAN || entregaHeader.CODIGOCLIENTE || '').padEnd(10).slice(0, 10),
-          String(entregaHeader.CODIGOVENDEDOR || '').padEnd(2).slice(0, 2),
-          String(line.CODIGOARTICULO || '').padEnd(10).slice(0, 10),
-          String(line.DESCRIPCION || '').slice(0, 40),
-          parseFloat(line.CANTIDADENVASES) || 0,
-          parseFloat(line.CANTIDADUNIDADES) || 0,
-          parseFloat(line.PRECIOVENTA) || 0,
-          parseFloat(line.IMPORTEVENTA) || 0,
-        ], false);
-        linesInserted++;
-      } catch (lineErr) {
-        logger.warn(`[DSEDAC-EXPORT] LAC linea ${i + 1} fallo: ${lineErr.message}`);
-      }
+      lacRows.push([
+        subempresa, ano, serie, terminal, numeroAlbaran, (i + 1),
+        now.getDate(), now.getMonth() + 1, now.getFullYear(),
+        String(entregaHeader.CODIGOCLIENTEALBARAN || entregaHeader.CODIGOCLIENTE || '').padEnd(10).slice(0, 10),
+        String(entregaHeader.CODIGOVENDEDOR || '').padEnd(2).slice(0, 2),
+        String(line.CODIGOARTICULO || '').padEnd(10).slice(0, 10),
+        String(line.DESCRIPCION || '').slice(0, 40),
+        parseFloat(line.CANTIDADENVASES) || 0,
+        parseFloat(line.CANTIDADUNIDADES) || 0,
+        parseFloat(line.PRECIOVENTA) || 0,
+        parseFloat(line.IMPORTEVENTA) || 0,
+      ]);
     }
+    const linesInserted = await insertRowsBestEffort(
+      LAC_INSERT_SQL,
+      lacRows,
+      (_row, index) => `LAC linea ${index + 1}`,
+    );
 
     logger.info(`[DSEDAC-EXPORT] exportEntregaToSystem: OK CAC#${numeroAlbaran} + ${linesInserted} LAC (dedupe key present)`);
     return { exported: true, numeroAlbaran, linesInserted };

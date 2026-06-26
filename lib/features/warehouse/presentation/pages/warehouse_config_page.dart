@@ -52,13 +52,15 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
     _loadConfig();
   }
 
-  Future<void> _loadConfig() async {
+  Future<void> _loadConfig({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final config = await WarehouseDataService.getConfig();
+      final config = await WarehouseDataService.getConfig(
+        forceRefresh: forceRefresh,
+      );
       if (mounted) {
         setState(() {
           _config = config;
@@ -79,7 +81,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
     setState(() => _seeding = true);
     try {
       await WarehouseDataService.seedConfig();
-      await _loadConfig();
+      await _loadConfig(forceRefresh: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -169,7 +171,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
           key: key,
           value: newValue,
         );
-        setState(() => _config[key] = newValue);
+        await _loadConfig(forceRefresh: true);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -219,7 +221,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         ),
         actions: [
           IconButton(
-            onPressed: _loadConfig,
+            onPressed: () => _loadConfig(forceRefresh: true),
             icon: const Icon(
               Icons.refresh_rounded,
               color: AppTheme.success,
@@ -386,7 +388,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: _loadConfig,
+            onPressed: () => _loadConfig(forceRefresh: true),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Reintentar'),
             style: ElevatedButton.styleFrom(

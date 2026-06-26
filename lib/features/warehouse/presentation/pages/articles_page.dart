@@ -48,7 +48,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
     super.dispose();
   }
 
-  Future<void> _search(String q) async {
+  Future<void> _search(String q, {bool forceRefresh = false}) async {
     final generation = ++_searchGeneration;
     _searchCancelToken?.cancel('articles search superseded');
     final cancelToken = CancelToken();
@@ -61,6 +61,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
       final arts = await WarehouseDataService.getArticles(
         search: q.isEmpty ? null : q,
         onlyWithDimensions: _onlyWithDims ? true : null,
+        forceRefresh: forceRefresh,
         cancelToken: cancelToken,
       );
       if (mounted && generation == _searchGeneration) {
@@ -101,7 +102,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
             backgroundColor: AppTheme.success,
           ),
         );
-        _search(_searchC.text);
+        _search(_searchC.text, forceRefresh: true);
       }
     } catch (e) {
       if (mounted) {
@@ -184,7 +185,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
             backgroundColor: AppTheme.warning,
           ),
         );
-        _search(_searchC.text);
+        _search(_searchC.text, forceRefresh: true);
       }
     } catch (e) {
       if (mounted) {
@@ -228,7 +229,8 @@ class _ArticlesPageState extends State<ArticlesPage> {
                             ),
                           )
                         : RefreshIndicator(
-                            onRefresh: () => _search(_searchC.text),
+                            onRefresh: () =>
+                                _search(_searchC.text, forceRefresh: true),
                             color: AppTheme.info,
                             child: ListView.builder(
                               padding:
@@ -408,7 +410,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     const Text('Con medidas', style: TextStyle(fontSize: 10)),
                 onSelected: (v) {
                   setState(() => _onlyWithDims = v);
-                  _search(_searchC.text);
+                  _search(_searchC.text, forceRefresh: true);
                 },
                 selectedColor: AppTheme.success.withValues(alpha: 0.2),
                 backgroundColor: AppTheme.raisedSurface,
@@ -881,7 +883,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                           pesoCajaKg: double.tryParse(pesoC.text),
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
-                        _search(_searchC.text);
+                        _search(_searchC.text, forceRefresh: true);
                       } catch (e) {
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
@@ -964,7 +966,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                           await WarehouseDataService.deleteArticleDimensions(
                               a.code);
                           if (ctx.mounted) Navigator.pop(ctx);
-                          _search(_searchC.text);
+                          _search(_searchC.text, forceRefresh: true);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(

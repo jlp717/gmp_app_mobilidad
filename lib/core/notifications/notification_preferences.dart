@@ -160,6 +160,9 @@ class NotificationPreferencesService {
   static const _sentHistoryKey = 'gmp_notifications_sent_history_v1';
   static const _scheduledOrderIdsKey =
       'gmp_notifications_scheduled_order_ids_v1';
+  static const _scheduledSmartIdsKey =
+      'gmp_notifications_scheduled_smart_ids_v1';
+  static const _sessionHistoryKey = 'gmp_notifications_session_history_v1';
 
   Future<NotificationPreferences> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -283,6 +286,69 @@ class NotificationPreferencesService {
   Future<void> clearScheduledOrderIds() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_scheduledOrderIdsKey);
+  }
+
+  Future<void> saveScheduledSmartIds(List<int> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _scheduledSmartIdsKey,
+      ids.map((id) => id.toString()).toList(growable: false),
+    );
+  }
+
+  Future<List<int>> loadScheduledSmartIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_scheduledSmartIdsKey) ?? const <String>[])
+        .map((id) => int.tryParse(id))
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  Future<void> clearScheduledSmartIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_scheduledSmartIdsKey);
+  }
+
+  Future<void> rememberSession(NotificationUserProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    final sessions = await loadSessionHistory();
+    final next = [
+      NotificationDeviceSession(
+        profile: profile,
+        lastSeenAt: DateTime.now(),
+      ),
+      ...sessions
+          .where((session) => session.profile.scopeKey != profile.scopeKey),
+    ].take(8).toList(growable: false);
+    await prefs.setString(
+      _sessionHistoryKey,
+      jsonEncode(next.map((session) => session.toJson()).toList()),
+    );
+  }
+
+  Future<List<NotificationDeviceSession>> loadSessionHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_sessionHistoryKey);
+    if (raw == null || raw.isEmpty) return const <NotificationDeviceSession>[];
+    try {
+      final decoded = jsonDecode(raw) as List;
+      final sessions = decoded
+          .whereType<Map>()
+          .map(
+            (item) => NotificationDeviceSession.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .whereType<NotificationDeviceSession>()
+          .toList()
+        ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+      final cutoff = DateTime.now().subtract(const Duration(days: 45));
+      return sessions
+          .where((session) => session.lastSeenAt.isAfter(cutoff))
+          .toList(growable: false);
+    } catch (_) {
+      return const <NotificationDeviceSession>[];
+    }
   }
 
   Future<Map<String, int>> _loadSentHistory({DateTime? now}) async {

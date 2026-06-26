@@ -43,7 +43,7 @@ void main() {
           AppNotificationCategory.orders.key: now.add(const Duration(hours: 1)),
         },
       );
-      final snapshot = const NotificationSnapshot(
+      const snapshot = NotificationSnapshot(
         scopeKey: 'user=12',
         orders: OrderReminderSnapshot(localDraftCount: 1),
       );
@@ -57,8 +57,8 @@ void main() {
       expect(plan, isNull);
     });
 
-    test('creates objective, pace, rutero and Glacius notifications', () {
-      final now = DateTime(2026, 6, 26, 9);
+    test('creates objective, pace and Glacius notifications', () {
+      final now = DateTime(2026, 6, 26, 12);
       final snapshot = NotificationSnapshot(
         scopeKey: 'user=12',
         orders: const OrderReminderSnapshot(),
@@ -94,13 +94,95 @@ void main() {
         containsAll([
           AppNotificationCategory.objectives,
           AppNotificationCategory.dailyPace,
-          AppNotificationCategory.rutero,
           AppNotificationCategory.glacius,
         ]),
       );
       expect(
         notifications.map((item) => item.dedupeKey),
         everyElement(contains('user=12')),
+      );
+    });
+
+    test('schedules morning route notification at 6', () {
+      final now = DateTime(2026, 6, 26, 5, 30);
+      final snapshot = NotificationSnapshot(
+        scopeKey: 'user=12',
+        orders: const OrderReminderSnapshot(),
+        rutero: RuteroNotificationSnapshot(
+          date: now,
+          dayName: 'viernes',
+          clientCount: 6,
+          clientNames: const ['Cliente Ruta'],
+          priorityClientNames: const ['Cliente A', 'Cliente B'],
+        ),
+      );
+
+      final notifications = engine.buildScheduledNotifications(
+        snapshot,
+        NotificationPreferences.defaults(),
+        now: now,
+      );
+
+      expect(notifications, hasLength(1));
+      expect(notifications.single.kind, 'rutero_0600');
+      expect(notifications.single.scheduledAt, DateTime(2026, 6, 26, 6));
+    });
+
+    test('creates daily summary only at end of day with sales', () {
+      final now = DateTime(2026, 6, 26, 18, 30);
+      final snapshot = NotificationSnapshot(
+        scopeKey: 'user=12',
+        orders: const OrderReminderSnapshot(),
+        salesDay: const SalesDayNotificationSnapshot(
+          sales: 1350,
+          orders: 4,
+          topClientNames: ['Cliente Top'],
+        ),
+        rutero: RuteroNotificationSnapshot(
+          date: now,
+          dayName: 'viernes',
+          clientCount: 8,
+        ),
+      );
+
+      final notifications = engine.buildImmediateNotifications(
+        snapshot,
+        now: now,
+      );
+
+      expect(
+        notifications.map((item) => item.category),
+        contains(AppNotificationCategory.dailySummary),
+      );
+      expect(
+        notifications
+            .firstWhere(
+              (item) => item.category == AppNotificationCategory.dailySummary,
+            )
+            .body,
+        contains('4 pedido'),
+      );
+    });
+
+    test('does not notify low-value invoice activity', () {
+      final now = DateTime(2026, 6, 26, 17);
+      const snapshot = NotificationSnapshot(
+        scopeKey: 'user=12',
+        orders: OrderReminderSnapshot(),
+        invoices: InvoicesNotificationSnapshot(
+          todayDocuments: 1,
+          todayAmount: 100,
+        ),
+      );
+
+      final notifications = engine.buildImmediateNotifications(
+        snapshot,
+        now: now,
+      );
+
+      expect(
+        notifications.map((item) => item.category),
+        isNot(contains(AppNotificationCategory.invoices)),
       );
     });
   });

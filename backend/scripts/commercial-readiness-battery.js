@@ -6,11 +6,19 @@ const crypto = require('crypto');
 const odbc = require('odbc');
 const db2ConnectionString = require('./db2-connection');
 const { queryWithParams, initDb, closePool } = require('../config/db');
+const { getProbeCredentials } = require('./probe-credentials');
 const UA = process.env.API_USER_AGENT || 'GMP-Commercial-Readiness-Battery/1.0';
 const HOST = process.env.API_HOST || '127.0.0.1';
 const PORT = parseInt(process.env.API_PORT || '3335', 10);
-const API_USER = process.env.API_USER || process.env.COMMERCIAL_BATTERY_USER || 'diego';
-const API_PASS = process.env.API_PASS || process.env.COMMERCIAL_BATTERY_PASS || '9322';
+const API_CREDS = (process.env.API_USER || process.env.COMMERCIAL_BATTERY_USER)
+  && (process.env.API_PASS || process.env.COMMERCIAL_BATTERY_PASS)
+  ? {
+      username: process.env.API_USER || process.env.COMMERCIAL_BATTERY_USER,
+      password: process.env.API_PASS || process.env.COMMERCIAL_BATTERY_PASS,
+    }
+  : getProbeCredentials('commercial readiness battery');
+const API_USER = API_CREDS.username;
+const API_PASS = API_CREDS.password;
 const VENDOR = String(process.env.VENDOR_CODE || process.env.COMMERCIAL_BATTERY_VENDOR || '93').replace(/^0+/, '') || '93';
 const VENDOR_COBRos = VENDOR.padStart(2, '0');
 const SAMPLES = parseInt(process.env.COMMERCIAL_BATTERY_SAMPLES || '5', 10);

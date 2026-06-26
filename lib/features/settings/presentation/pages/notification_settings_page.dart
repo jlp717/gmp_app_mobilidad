@@ -92,7 +92,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                       activeColor: AppTheme.info,
                       title: const Text('Notificaciones activas'),
                       subtitle: const Text(
-                        'Permite avisos fuera de la aplicacion para pedidos, objetivos, ruta y Glacius.',
+                        'Permite avisos fuera de la aplicacion solo cuando hay informacion comercial relevante.',
                       ),
                       onChanged: _saving
                           ? null
@@ -156,6 +156,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                 _section(
                   title: 'Alertas comerciales',
                   children: [
+                    _categorySwitch(settings, AppNotificationCategory.clients),
+                    _categorySwitch(settings, AppNotificationCategory.invoices),
+                    _categorySwitch(
+                      settings,
+                      AppNotificationCategory.commissions,
+                    ),
                     _categorySwitch(
                       settings,
                       AppNotificationCategory.objectives,
@@ -170,6 +176,21 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     ),
                     _categorySwitch(settings, AppNotificationCategory.glacius),
                     _categorySwitch(settings, AppNotificationCategory.rutero),
+                    _categorySwitch(settings, AppNotificationCategory.bolsa),
+                    _categorySwitch(
+                      settings,
+                      AppNotificationCategory.dailySummary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _section(
+                  title: 'Reparto',
+                  children: [
+                    _categorySwitch(
+                      settings,
+                      AppNotificationCategory.deliveries,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -300,6 +321,6 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       final hour = entry.value.hour.toString().padLeft(2, '0');
       final minute = entry.value.minute.toString().padLeft(2, '0');
       return '$label pausado hasta $hour:$minute';
-    }).join(' · ');
+    }).join(' - ');
   }
 }

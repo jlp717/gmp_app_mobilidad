@@ -30,13 +30,15 @@ class _VehiclesPageState extends State<VehiclesPage> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final v = await WarehouseDataService.getVehicles();
+      final v = await WarehouseDataService.getVehicles(
+        forceRefresh: forceRefresh,
+      );
       if (mounted)
         setState(() {
           _vehicles = v;
@@ -63,10 +65,10 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 : _error != null
                     ? ErrorStateWidget(
                         message: _error!,
-                        onRetry: _load,
+                        onRetry: () => _load(forceRefresh: true),
                       )
                     : RefreshIndicator(
-                        onRefresh: _load,
+                        onRefresh: () => _load(forceRefresh: true),
                         color: AppTheme.info,
                         child: OptimizedListView(
                           padding: const EdgeInsets.all(12),
@@ -343,7 +345,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                           toleranciaExceso: double.tryParse(toleranciaC.text),
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
-                        _load();
+                        _load(forceRefresh: true);
                       } catch (e) {
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(

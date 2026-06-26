@@ -99,6 +99,7 @@ class LoadPlannerProvider extends ChangeNotifier {
   Future<void> loadPlan({
     required String vehicleCode,
     required DateTime date,
+    bool forceRefresh = false,
   }) async {
     _vehicleCode = vehicleCode;
     _date = date;
@@ -118,6 +119,7 @@ class LoadPlannerProvider extends ChangeNotifier {
         savedLayout = await WarehouseDataService.getManualLayout(
           vehicleCode: vehicleCode,
           date: dateStr,
+          forceRefresh: forceRefresh,
         );
       } catch (e) {
         debugPrint('Manual layout fetch failed (non-fatal): $e');

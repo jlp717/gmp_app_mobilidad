@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const odbc = require('odbc');
+const { getProbeCredentials } = require('./probe-credentials');
 
 const UA = 'GMP-Mandato-V5/1.0';
 const BASE = '/api';
@@ -73,7 +74,7 @@ async function phaseAuth() {
   const bad = await request('POST', '/auth/login', { username: 'diego', password: 'wrong' });
   record('F1_auth_invalid', bad.status === 401 || bad.status === 400, { status: bad.status, ms: bad.ms });
 
-  const login = await request('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await request('POST', '/auth/login', getProbeCredentials('mandato v5 full audit'));
   token = login.body?.token;
   record('F1_auth_valid', login.status === 200 && !!token, { status: login.status, role: login.body?.user?.role, ms: login.ms });
   if (!token) throw new Error('Login failed');

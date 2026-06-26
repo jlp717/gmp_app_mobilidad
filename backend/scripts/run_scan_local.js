@@ -29,8 +29,8 @@ const IMAGES_BASE_URL = process.env.PRODUCT_IMAGES_URL
 
 const DB_DSN      = db2ConnectionString({ extras: '' });
 const API_BASE    = 'https://api.mari-pepa.com';
-const VENDOR      = '98';
-const PIN         = '9322';
+const VENDOR      = process.env.SCAN_API_USER || process.env.GMP_PROBE_USER || '98';
+const PIN         = process.env.SCAN_API_PASSWORD || process.env.GMP_PROBE_PASSWORD;
 const CONCURRENCY = 15;
 
 const MISSING_ONLY = process.argv.includes('--missing-only');
@@ -170,7 +170,11 @@ async function runPool(items, concurrency, fn) {
 // API HEALTH + DIAGNOSTICS
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function apiHealthCheck() {
-  process.stdout.write('â–º API login (api.mari-pepa.com, DIEGO/9322)... ');
+  if (!PIN) {
+    console.log('API login skipped: set SCAN_API_PASSWORD or GMP_PROBE_PASSWORD');
+    return;
+  }
+  process.stdout.write('â–º API login (api.mari-pepa.com, env credentials)... ');
   try {
     const res = await httpPost(API_BASE + '/api/auth/login', JSON.stringify({ username: VENDOR, password: PIN }));
     if (!res.body || !res.body.token) {

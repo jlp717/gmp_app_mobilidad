@@ -3,6 +3,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const odbc = require('odbc');
 const http = require('http');
+const { getProbeCredentials } = require('./probe-credentials');
 
 const UA = 'GMP-Mandato-V5/1.0';
 const VENDOR = '93';
@@ -41,7 +42,7 @@ function call(method, path, body, token, extra = {}) {
     schema: process.env.PEDIDOS_CONFIRMATION_SCHEMA,
   }};
 
-  const login = await call('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await call('POST', '/auth/login', getProbeCredentials('mandato v5 erp export'));
   const token = login.body.token;
   if (!token) { console.log(JSON.stringify({ error: 'login failed', login }, null, 2)); process.exit(1); }
 

@@ -6,6 +6,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const http = require('http');
 const odbc = require('odbc');
 const { buildCvcVendorScopeFilter } = require('../utils/common');
+const { getProbeCredentials } = require('./probe-credentials');
 
 const UA = 'GMP-Cert-Matrix/2.0';
 const PORT = parseInt(process.env.API_PORT || '3335', 10);
@@ -148,7 +149,7 @@ async function main() {
   const health = await api('GET', '/health');
   record('INFRAESTRUCTURA', 'I1', 'Health /api/health', health.status === 200 && health.body?.status === 'ok', { ms: health.ms, db: health.body?.database?.status });
 
-  const login = await api('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await api('POST', '/auth/login', getProbeCredentials('cert matrix audit'));
   const token = login.body?.token;
   record('SEGURIDAD', 'S1', 'Auth login válido', login.status === 200 && !!token, { role: login.body?.user?.role });
   record('SEGURIDAD', 'S2', 'Auth sin token bloqueado', (await api('GET', '/cobros/pending-summary/93')).status === 401, {});

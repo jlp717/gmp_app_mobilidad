@@ -119,4 +119,31 @@ describe('DSEDAC auxiliary export safety', () => {
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CRC/i);
     expect(service.exportGate().effectiveSchema).toBe('JAVIER');
   });
+
+  test('bulk inserts liquidacion concepts instead of one query per concept', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ N: 41 }])
+      .mockResolvedValueOnce([]);
+    const service = loadServiceWithEnv({
+      DB2_WRITE_SCHEMA: 'JAVIER',
+      PEDIDOS_EXPORT_TO_SYSTEM: 'true',
+      PEDIDOS_DSEDAC_EXPORT_APPROVED: 'true',
+      PEDIDOS_DSEDAC_STORAGE_APPROVED: 'true',
+    });
+
+    const result = await service.exportLiquidacionToSystem({
+      IDEMPOTENCY_TOKEN: 'liq-token-001',
+      CODIGOVENDEDOR: '93',
+      IMPORTEEFECTIVO: 10,
+      IMPORTETARJETA: 20,
+    });
+
+    expect(result).toEqual({ exported: true, rowsInserted: 2 });
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(3);
+    const [sql, params] = mockQueryWithParams.mock.calls[2];
+    expect(sql).toMatch(/INSERT\s+INTO\s+DSEDAC\.CLV/i);
+    expect(sql.match(/\(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?, \?\)/g)).toHaveLength(2);
+    expect(params).toHaveLength(22);
+  });
 });

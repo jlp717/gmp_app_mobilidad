@@ -1,7 +1,8 @@
-﻿require('dotenv').config({path:require('path').join(__dirname,'../.env')});
+require('dotenv').config({path:require('path').join(__dirname,'../.env')});
 const http=require('http');const UA='GMP-Mandato-V5/1.0';
+const { getProbeCredentials } = require('./probe-credentials');
 function call(method,path,body,token,extra={}){return new Promise((res,rej)=>{const d=body?JSON.stringify(body):null;const h={'User-Agent':UA,...extra};if(token)h.Authorization='Bearer '+token;if(d){h['Content-Type']='application/json';h['Content-Length']=Buffer.byteLength(d);}const r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method,headers:h},x=>{let b='';x.on('data',c=>b+=c);x.on('end',()=>res({status:x.statusCode,body:JSON.parse(b||'{}')}));});r.on('error',rej);if(d)r.write(d);r.end();});}
-(async()=>{const login=await call('POST','/auth/login',{username:'diego',password:'9322'});const t=login.body.token;const client='4300000354';
+(async()=>{const login=await call('POST','/auth/login',getProbeCredentials('mandato v5 pedido'));const t=login.body.token;const client='4300000354';
 const p=await call('GET','/pedidos/products?vendedorCodes=93&clientCode='+client+'&limit=2',null,t);
 console.log('products',p.status,(p.body.products||[]).length);
 const prod=(p.body.products||[])[0];if(!prod)process.exit(0);

@@ -1,6 +1,7 @@
-﻿require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const http = require('http');
 const odbc = require('odbc');
+const { getProbeCredentials } = require('./probe-credentials');
 function req(method, path, body, token) {
   return new Promise((resolve, reject) => {
     const d = body ? JSON.stringify(body) : null;
@@ -21,7 +22,7 @@ function cs() {
   return `DSN=${process.env.ODBC_DSN || 'GMP'};UID=${process.env.ODBC_UID || 'JAVIER'};PWD=${pwd};NAM=1;CCSID=1208;CMPTDM=1;CPTOUT=120;COMMTIMEOUT=180;DBQ=${process.env.ODBC_DSN || 'GMP'}`;
 }
 (async () => {
-  const login = await req('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await req('POST', '/auth/login', getProbeCredentials('repartidor flag probe'));
   const token = login.body.token;
   const conn = await odbc.connect(cs());
   const rows = await conn.query(`SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS C, TRIM(R.SERIEDOCUMENTO) AS S, R.NUMERODOCUMENTO AS N FROM JAVIER.REPARTIDOR_COBROS R FETCH FIRST 5 ROWS ONLY`);

@@ -555,6 +555,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                   ref.read(loadPlannerProvider.notifier).loadPlan(
                         vehicleCode: widget.vehicleCode,
                         date: widget.date,
+                        forceRefresh: true,
                       );
                 },
                 icon: const Icon(Icons.refresh_rounded),

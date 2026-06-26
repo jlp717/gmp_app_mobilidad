@@ -28,10 +28,12 @@ class _PersonnelPageState extends State<PersonnelPage> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() => _loading = true);
     try {
-      final data = await WarehouseDataService.getPersonnel();
+      final data = await WarehouseDataService.getPersonnel(
+        forceRefresh: forceRefresh,
+      );
       if (mounted)
         setState(() {
           _personnel = data;
@@ -131,7 +133,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         ? emailCtrl.text.trim()
                         : null,
                   );
-                  _load();
+                  _load(forceRefresh: true);
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -248,7 +250,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                               backgroundColor: AppTheme.warning,
                             ),
                           );
-                          _load();
+                          _load(forceRefresh: true);
                         }
                       } catch (e) {
                         if (mounted) {
@@ -296,7 +298,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         ),
                       )
                     : RefreshIndicator(
-                        onRefresh: _load,
+                        onRefresh: () => _load(forceRefresh: true),
                         color: AppTheme.accentIndigo,
                         child: OptimizedListView(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -552,7 +554,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                     telefono: phoneCtrl.text.trim(),
                     email: emailCtrl.text.trim(),
                   );
-                  _load();
+                  _load(forceRefresh: true);
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -602,7 +604,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
               Navigator.pop(ctx);
               try {
                 await WarehouseDataService.deletePerson(person.id);
-                _load();
+                _load(forceRefresh: true);
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
