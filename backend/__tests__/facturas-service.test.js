@@ -59,6 +59,45 @@ const f4306Header = {
   IMPORTEIVA5: 8.50,
 };
 
+const j1183AlbaranHeader = {
+  EJERCICIOALBARAN: 2026,
+  SERIEALBARAN: 'J',
+  NUMEROALBARAN: 1183,
+  TERMINALALBARAN: 93,
+  NUMEROFACTURA: 0,
+  SERIEFACTURA: '',
+  EJERCICIOFACTURA: 0,
+  DIAFACTURA: 26,
+  MESFACTURA: 6,
+  ANOFACTURA: 2026,
+  CODIGOCLIENTEFACTURA: '4300001183',
+  NOMBRECLIENTEFACTURA: 'CLIENTE ALBARAN',
+  NOMBRECOMERCIALFACTURA: 'CLIENTE ALBARAN',
+  NOMBREFISCALFACTURA: 'CLIENTE ALBARAN SL',
+  DIRECCIONCLIENTEFACTURA: 'CALLE TEST',
+  POBLACIONCLIENTEFACTURA: 'MURCIA',
+  PROVINCIACLIENTEFACTURA: 'MURCIA',
+  CPCLIENTEFACTURA: '30000',
+  CIFCLIENTEFACTURA: 'B00000000',
+  IMPORTETOTAL: 1172.49,
+  IMPORTEBRUTO: 1065.90,
+  IMPORTEBASEIMPONIBLE1: 1065.90,
+  PORCENTAJEIVA1: 10,
+  IMPORTEIVA1: 106.59,
+  IMPORTEBASEIMPONIBLE2: 0,
+  PORCENTAJEIVA2: 21,
+  IMPORTEIVA2: 0,
+  IMPORTEBASEIMPONIBLE3: 0,
+  PORCENTAJEIVA3: 4,
+  IMPORTEIVA3: 0,
+  IMPORTEBASEIMPONIBLE4: 0,
+  PORCENTAJEIVA4: 0,
+  IMPORTEIVA4: 0,
+  IMPORTEBASEIMPONIBLE5: 0,
+  PORCENTAJEIVA5: 10,
+  IMPORTEIVA5: 0,
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockRedisGet.mockResolvedValue(null);
@@ -298,6 +337,84 @@ describe('facturas service fiscal totals', () => {
     const sql = mockQueryWithParams.mock.calls[0][0];
     expect(sql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
     expect(sql).toMatch(/IMPORTEIVA5/i);
+  });
+
+  test('getAlbaranDetailForPdf resolves standalone albaran from CAC and LAC', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CAC\s+CAC/i.test(sql)) return [j1183AlbaranHeader];
+      if (/FROM\s+DSEDAC\.LAC\s+LAC/i.test(sql)) {
+        return [
+          {
+            CODIGOARTICULO: 'ART1',
+            DESCRIPCIONARTICULO: 'PRODUCTO UNICO',
+            LOTEARTICULO: '',
+            CANTIDADARTICULO: 10,
+            CAJASARTICULO: 1,
+            IMPORTENETOARTICULO: 1065.90,
+            CODIGOIVA: '1',
+            PORCENTAJERECARGOARTICULO: 0,
+            PORCENTAJEDESCUENTOARTICULO: 0,
+            PRECIOARTICULO: 106.59,
+          },
+        ];
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+
+    const albaran = await facturasService.getAlbaranDetailForPdf('J', 1183, 2026);
+
+    expect(albaran.documentType).toBe('albaran');
+    expect(albaran.header).toMatchObject({
+      SERIEALBARAN: 'J',
+      NUMEROALBARAN: 1183,
+      EJERCICIOALBARAN: 2026,
+      TERMINALALBARAN: 93,
+      total: 1172.49,
+      base: 1065.90,
+      iva: 106.59,
+    });
+    expect(albaran.header.bases).toEqual([
+      { base: 1065.90, pct: 10, iva: 106.59 },
+    ]);
+    expect(albaran.header.IVA_BREAKDOWN).toMatchObject({
+      BI1: 1065.90,
+      IVA1_PCT: 10,
+      IVA1_IMP: 106.59,
+      BI5: 0,
+      IVA5_IMP: 0,
+      IMPORTETOTAL: 1172.49,
+    });
+    expect(albaran.lines).toHaveLength(1);
+    expect(albaran.lines[0]).toMatchObject({
+      CODIGOARTICULO: 'ART1',
+      DESCRIPCIONARTICULO: 'PRODUCTO UNICO',
+      IMPORTENETOARTICULO: 1065.90,
+      CODIGOIVA: '1',
+    });
+
+    const [headerSql, headerParams] = mockQueryWithParams.mock.calls[0];
+    expect(headerSql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
+    expect(headerSql).toMatch(/NOT\s*\(\s*CAC\.NUMEROFACTURA\s+>\s+0/i);
+    expect(headerSql).toMatch(/IMPORTEBASEIMPONIBLE5/i);
+    expect(headerParams).toEqual([1183, 'J', 2026]);
+
+    const [linesSql, lineParams] = mockQueryWithParams.mock.calls[1];
+    expect(linesSql).toMatch(/FROM\s+DSEDAC\.LAC\s+LAC/i);
+    expect(lineParams).toEqual([2026, 'J', 93, 1183]);
+  });
+
+  test('getAlbaranDetailForPdf can constrain by terminal when caller provides it', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CAC\s+CAC/i.test(sql)) return [j1183AlbaranHeader];
+      if (/FROM\s+DSEDAC\.LAC\s+LAC/i.test(sql)) return [];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+
+    await facturasService.getAlbaranDetailForPdf('J', 1183, 2026, 93);
+
+    const [headerSql, headerParams] = mockQueryWithParams.mock.calls[0];
+    expect(headerSql).toMatch(/CAC\.TERMINALALBARAN\s+=\s+\?/i);
+    expect(headerParams).toEqual([1183, 'J', 2026, 93]);
   });
 
   test('getSummary applies the same search filters as the invoice list', async () => {

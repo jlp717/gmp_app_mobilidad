@@ -7,6 +7,11 @@ globalThis['process']['env'].FACTURA_EMAIL_SEND_TIMEOUT_MS = '5';
 
 const mockSendEmailWithPdf = jest.fn();
 const mockGetFacturaDetail = jest.fn();
+const mockGetAlbaranDetailForPdf = jest.fn();
+const mockGetCachedPdf = jest.fn();
+const mockCachePdf = jest.fn();
+const mockGeneratePdf = jest.fn();
+const mockGenerateDocumentPdf = jest.fn();
 
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
@@ -24,18 +29,24 @@ jest.mock('../middleware/logger', () => ({
 
 jest.mock('../services/facturas.service', () => ({
   getFacturaDetail: (...args) => mockGetFacturaDetail(...args),
+  getAlbaranDetailForPdf: (...args) => mockGetAlbaranDetailForPdf(...args),
   generateWhatsAppMessage: jest.fn(),
 }));
 
 jest.mock('../services/pdf.service', () => ({
-  generateInvoicePDF: jest.fn(),
+  generateInvoicePDF: (...args) => mockGeneratePdf(...args),
+}));
+
+jest.mock('../app/services/pdfService', () => ({
+  generateInvoicePDF: (...args) => mockGenerateDocumentPdf(...args),
 }));
 
 jest.mock('../services/emailPdfService', () => ({
   sendEmailWithPdf: (...args) => mockSendEmailWithPdf(...args),
   generateInvoiceEmailHtml: jest.fn(() => '<p>Factura</p>'),
-  cachePdf: jest.fn(),
-  getCachedPdf: jest.fn(() => Buffer.from('%PDF-1.4')),
+  generateDeliveryEmailHtml: jest.fn(() => '<p>Albaran</p>'),
+  cachePdf: (...args) => mockCachePdf(...args),
+  getCachedPdf: (...args) => mockGetCachedPdf(...args),
 }));
 
 const facturasRoutes = require('../routes/facturas');
@@ -49,8 +60,42 @@ function makeApp() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockGetCachedPdf.mockReturnValue(Buffer.from('%PDF-1.4'));
+  mockGeneratePdf.mockResolvedValue(Buffer.from('%PDF-1.4'));
+  mockGenerateDocumentPdf.mockResolvedValue(Buffer.from('%PDF-1.4'));
   mockGetFacturaDetail.mockResolvedValue({
     header: { fecha: '12/06/2026', total: 10, clienteNombre: 'Cliente' },
+  });
+  mockGetAlbaranDetailForPdf.mockResolvedValue({
+    documentType: 'albaran',
+    header: {
+      SERIEALBARAN: 'J',
+      NUMEROALBARAN: 1183,
+      EJERCICIOALBARAN: 2026,
+      TERMINALALBARAN: 93,
+      fecha: '26/06/2026',
+      total: 1172.49,
+      IMPORTETOTAL: 1172.49,
+      clienteNombre: 'Cliente Albaran',
+      NOMBRECLIENTEFACTURA: 'Cliente Albaran',
+    },
+    lines: [],
+  });
+});
+
+describe('GET /api/facturas/:serie/:numero/:ejercicio/pdf', () => {
+  test('falls back to albaran when legacy factura URL has no CFC row', async () => {
+    mockGetFacturaDetail.mockRejectedValueOnce(new Error('Factura no encontrada'));
+
+    const res = await request(makeApp())
+      .get('/api/facturas/J/1183/2026/pdf?preview=true');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toContain('inline');
+    expect(res.headers['content-disposition']).toContain('Albaran_2026_J_93_1183.pdf');
+    expect(mockGetFacturaDetail).toHaveBeenCalledWith('J', 1183, 2026);
+    expect(mockGetAlbaranDetailForPdf).toHaveBeenCalledWith('J', 1183, 2026, null);
   });
 });
 

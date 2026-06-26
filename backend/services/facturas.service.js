@@ -176,6 +176,34 @@ function buildTaxBases(header) {
     })).filter(b => b.base !== 0 || b.iva !== 0);
 }
 
+function normalizeSerieForLookup(value) {
+    const serie = String(value || '')
+        .trim()
+        .replace(/[^A-Z0-9]/gi, '')
+        .toUpperCase()
+        .slice(0, 3);
+    return serie;
+}
+
+function parseDocumentNumber(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed >= 900000) {
+        return null;
+    }
+    return parsed;
+}
+
+function buildIvaBreakdown(header) {
+    const breakdown = {};
+    for (const slot of TAX_SLOTS) {
+        breakdown[`BI${slot}`] = parseFloat(header[`IMPORTEBASEIMPONIBLE${slot}`]) || 0;
+        breakdown[`IVA${slot}_PCT`] = parseFloat(header[`PORCENTAJEIVA${slot}`]) || 0;
+        breakdown[`IVA${slot}_IMP`] = parseFloat(header[`IMPORTEIVA${slot}`]) || 0;
+    }
+    breakdown.IMPORTETOTAL = parseFloat(header.IMPORTETOTAL) || 0;
+    return breakdown;
+}
+
 async function batchedVendorQuery(baseSql, vendorColumn, vendors, queryFn) {
     if (!vendors || vendors.length === 0) {
         return [];
@@ -1144,7 +1172,173 @@ class FacturasService {
                 }))
             };
         } catch (error) {
-            logger.error(`Error fetching factura detail: ${error.message}`);
+            if (error.message === 'Factura no encontrada') {
+                logger.warn(`Factura detail not found for ${serie}-${numero}-${ejercicio}`);
+            } else {
+                logger.error(`Error fetching factura detail: ${error.message}`);
+            }
+            throw error;
+        }
+    }
+
+    async getAlbaranDetailForPdf(serie, numero, ejercicio, terminal = null) {
+        const cleanSerie = normalizeSerieForLookup(serie);
+        const cleanNumero = parseDocumentNumber(numero);
+        const cleanEjercicio = parseInt(ejercicio, 10);
+        const cleanTerminal = terminal === null || terminal === undefined || terminal === ''
+            ? null
+            : parseInt(terminal, 10);
+
+        if (!cleanSerie || !cleanNumero || !Number.isFinite(cleanEjercicio) || cleanEjercicio <= 0) {
+            throw new Error('Albaran no encontrado');
+        }
+
+        if (cleanTerminal !== null && (!Number.isFinite(cleanTerminal) || cleanTerminal < 0)) {
+            throw new Error('Albaran no encontrado');
+        }
+
+        const terminalClause = cleanTerminal === null ? '' : 'AND CAC.TERMINALALBARAN = ?';
+        const headerParams = [cleanNumero, cleanSerie, cleanEjercicio];
+        if (cleanTerminal !== null) headerParams.push(cleanTerminal);
+
+        const headerSql = `
+      SELECT
+        CAC.EJERCICIOALBARAN,
+        TRIM(CAC.SERIEALBARAN) as SERIEALBARAN,
+        CAC.NUMEROALBARAN,
+        CAC.TERMINALALBARAN,
+        CAC.NUMEROFACTURA,
+        TRIM(CAC.SERIEFACTURA) as SERIEFACTURA,
+        CAC.EJERCICIOFACTURA,
+        CAC.DIADOCUMENTO as DIAFACTURA,
+        CAC.MESDOCUMENTO as MESFACTURA,
+        CAC.ANODOCUMENTO as ANOFACTURA,
+        TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
+        TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+        TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
+        TRIM(CLI.NOMBRECLIENTE) as NOMBREFISCALFACTURA,
+        TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
+        TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
+        TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
+        TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
+        TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA,
+        CAC.IMPORTETOTAL,
+        COALESCE(CAC.IMPORTEBRUTO, 0) as IMPORTEBRUTO,
+        CAC.IMPORTEBASEIMPONIBLE1,
+        CAC.PORCENTAJEIVA1,
+        CAC.IMPORTEIVA1,
+        CAC.IMPORTEBASEIMPONIBLE2,
+        CAC.PORCENTAJEIVA2,
+        CAC.IMPORTEIVA2,
+        CAC.IMPORTEBASEIMPONIBLE3,
+        CAC.PORCENTAJEIVA3,
+        CAC.IMPORTEIVA3,
+        CAC.IMPORTEBASEIMPONIBLE4,
+        CAC.PORCENTAJEIVA4,
+        CAC.IMPORTEIVA4,
+        CAC.IMPORTEBASEIMPONIBLE5,
+        CAC.PORCENTAJEIVA5,
+        CAC.IMPORTEIVA5
+      FROM DSEDAC.CAC CAC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+      WHERE CAC.NUMEROALBARAN = ?
+        AND TRIM(CAC.SERIEALBARAN) = ?
+        AND CAC.EJERCICIOALBARAN = ?
+        ${terminalClause}
+        AND CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
+        AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
+      ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC, CAC.TERMINALALBARAN DESC
+      FETCH FIRST 2 ROWS ONLY
+    `;
+
+        try {
+            const headers = await queryWithParams(headerSql, headerParams);
+            if (!headers || headers.length === 0) {
+                throw new Error('Albaran no encontrado');
+            }
+
+            if (headers.length > 1) {
+                logger.warn(`[facturas] Multiple albaran headers for ${cleanSerie}-${cleanNumero}-${cleanEjercicio}; using most recent terminal ${headers[0].TERMINALALBARAN}`);
+            }
+
+            const header = headers[0];
+            const actualEjercicio = parseInt(header.EJERCICIOALBARAN, 10);
+            const actualSerie = (header.SERIEALBARAN || cleanSerie).toString().trim();
+            const actualTerminal = parseInt(header.TERMINALALBARAN, 10) || 0;
+            const actualNumero = parseInt(header.NUMEROALBARAN, 10);
+
+            const linesSql = `
+        SELECT
+          LAC.CODIGOARTICULO,
+          LAC.DESCRIPCION as DESCRIPCIONARTICULO,
+          '' as LOTEARTICULO,
+          LAC.CANTIDADUNIDADES as CANTIDADARTICULO,
+          LAC.CANTIDADENVASES as CAJASARTICULO,
+          LAC.IMPORTEVENTA as IMPORTENETOARTICULO,
+          TRIM(LAC.CODIGOIVA) as CODIGOIVA,
+          0 as PORCENTAJERECARGOARTICULO,
+          LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
+          LAC.PRECIOVENTA as PRECIOARTICULO
+        FROM DSEDAC.LAC LAC
+        WHERE LAC.EJERCICIOALBARAN = ?
+          AND TRIM(LAC.SERIEALBARAN) = ?
+          AND LAC.TERMINALALBARAN = ?
+          AND LAC.NUMEROALBARAN = ?
+        ORDER BY LAC.SECUENCIA
+      `;
+
+            const lines = await queryWithParams(linesSql, [actualEjercicio, actualSerie, actualTerminal, actualNumero]);
+            const fecha = `${String(header.DIAFACTURA).padStart(2, '0')}/${String(header.MESFACTURA).padStart(2, '0')}/${header.ANOFACTURA}`;
+            const bases = buildTaxBases(header);
+            const total = parseFloat(header.IMPORTETOTAL) || 0;
+
+            return {
+                documentType: 'albaran',
+                header: {
+                    ...header,
+                    SERIEALBARAN: actualSerie,
+                    NUMEROALBARAN: actualNumero,
+                    EJERCICIOALBARAN: actualEjercicio,
+                    TERMINALALBARAN: actualTerminal,
+                    NUMEROFACTURA: parseInt(header.NUMEROFACTURA, 10) || 0,
+                    SERIEFACTURA: header.SERIEFACTURA || '',
+                    EJERCICIOFACTURA: parseInt(header.EJERCICIOFACTURA, 10) || 0,
+                    IVA_BREAKDOWN: buildIvaBreakdown(header),
+                    serie: actualSerie,
+                    numero: actualNumero,
+                    ejercicio: actualEjercicio,
+                    terminal: actualTerminal,
+                    fecha,
+                    clienteId: header.CODIGOCLIENTEFACTURA,
+                    clienteNombre: header.NOMBRECLIENTEFACTURA,
+                    nombreComercial: header.NOMBRECOMERCIALFACTURA || header.NOMBRECLIENTEFACTURA,
+                    nombreFiscal: header.NOMBREFISCALFACTURA || header.NOMBRECLIENTEFACTURA,
+                    clienteDireccion: header.DIRECCIONCLIENTEFACTURA,
+                    clientePoblacion: header.POBLACIONCLIENTEFACTURA,
+                    clienteNif: header.CIFCLIENTEFACTURA,
+                    total,
+                    base: parseFloat(header.IMPORTEBRUTO) || bases.reduce((sum, b) => sum + b.base, 0),
+                    iva: TAX_SLOTS.reduce((sum, slot) => sum + (parseFloat(header[`IMPORTEIVA${slot}`]) || 0), 0),
+                    bases
+                },
+                lines: (lines || []).map(line => ({
+                    ...line,
+                    CODIGOARTICULO: line.CODIGOARTICULO && line.CODIGOARTICULO.trim ? line.CODIGOARTICULO.trim() : '',
+                    DESCRIPCIONARTICULO: line.DESCRIPCIONARTICULO && line.DESCRIPCIONARTICULO.trim ? line.DESCRIPCIONARTICULO.trim() : '',
+                    CODIGOIVA: line.CODIGOIVA && line.CODIGOIVA.trim ? line.CODIGOIVA.trim() : '',
+                    CANTIDADARTICULO: parseFloat(line.CANTIDADARTICULO) || 0,
+                    CAJASARTICULO: parseFloat(line.CAJASARTICULO) || 0,
+                    IMPORTENETOARTICULO: parseFloat(line.IMPORTENETOARTICULO) || 0,
+                    PORCENTAJEDESCUENTOARTICULO: parseFloat(line.PORCENTAJEDESCUENTOARTICULO) || 0,
+                    PRECIOARTICULO: parseFloat(line.PRECIOARTICULO) || 0
+                }))
+            };
+        } catch (error) {
+            if (error.message === 'Albaran no encontrado') {
+                logger.warn(`Albaran detail not found for ${cleanSerie}-${cleanNumero}-${cleanEjercicio}`);
+            } else {
+                logger.error(`Error fetching albaran detail: ${error.message}`);
+            }
             throw error;
         }
     }
