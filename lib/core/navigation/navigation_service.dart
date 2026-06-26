@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/navigation/tab_definition.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 final navigationServiceProvider = Provider<NavigationService>((ref) {
   return NavigationService(ref);
@@ -138,25 +139,13 @@ class NavigationService {
   }
 }
 
-// Color constants for tabs - using simple int values for const compatibility
-const _neonBlue = 0xFF00D4FF;
-const _neonGreen = 0xFF00FF88;
-const _neonPurple = 0xFF9C27B0;
-const _neonPink = 0xFFFF4081;
-const _orange = 0xFFFF9800;
-const _teal = 0xFF009688;
-const _deepOrange = 0xFFFF5722;
-const _lightBlue = 0xFF84FFFF;
-const _blue = 0xFF2196F3;
-const _amber = 0xFFFFC107;
-
 final _allTabsDefinition = <TabDefinition>[
   TabDefinition(
     id: 'panel',
     icon: Icons.dashboard_outlined,
     selectedIcon: Icons.dashboard,
     label: 'Panel',
-    color: const Color(0xFF00D4FF),
+    color: AppColors.info,
     allowedRoles: ['JEFE_VENTAS'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -165,7 +154,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.people_outline,
     selectedIcon: Icons.people,
     label: 'Clientes',
-    color: const Color(0xFF00FF88),
+    color: AppColors.success,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL', 'REPARTIDOR'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -174,7 +163,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.route_outlined,
     selectedIcon: Icons.route,
     label: 'Ruta',
-    color: const Color(0xFF9C27B0),
+    color: AppColors.accentIndigo,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL', 'REPARTIDOR'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -183,7 +172,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.track_changes_outlined,
     selectedIcon: Icons.track_changes,
     label: 'Objetivos',
-    color: const Color(0xFFFF9800),
+    color: AppColors.warning,
     allowedRoles: ['JEFE_VENTAS'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -192,7 +181,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.euro_outlined,
     selectedIcon: Icons.euro,
     label: 'Comisiones',
-    color: const Color(0xFF00FF88),
+    color: AppColors.success,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -201,7 +190,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.receipt_long_outlined,
     selectedIcon: Icons.receipt_long,
     label: 'Facturas',
-    color: const Color(0xFF009688),
+    color: AppColors.accentMint,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL', 'REPARTIDOR'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -210,7 +199,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.shopping_cart_outlined,
     selectedIcon: Icons.shopping_cart,
     label: 'Pedidos',
-    color: const Color(0xFFFF5722),
+    color: AppColors.accentRose,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL', 'REPARTIDOR'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -218,8 +207,8 @@ final _allTabsDefinition = <TabDefinition>[
     id: 'glacius',
     icon: Icons.ac_unit_outlined,
     selectedIcon: Icons.ac_unit,
-    label: 'Glacius',
-    color: const Color(0xFF84FFFF),
+    label: 'Alertas',
+    color: AppColors.info,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -228,7 +217,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.payments_outlined,
     selectedIcon: Icons.payments,
     label: 'Cobros',
-    color: const Color(0xFF2196F3),
+    color: AppColors.info,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -236,8 +225,8 @@ final _allTabsDefinition = <TabDefinition>[
     id: 'chat',
     icon: Icons.smart_toy_outlined,
     selectedIcon: Icons.smart_toy,
-    label: 'Chat IA',
-    color: const Color(0xFFFF4081),
+    label: 'Asistente',
+    color: AppColors.accentRose,
     allowedRoles: ['JEFE_VENTAS', 'COMERCIAL', 'REPARTIDOR'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -246,7 +235,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.warehouse_outlined,
     selectedIcon: Icons.warehouse_rounded,
     label: 'Expediciones',
-    color: const Color(0xFF00D4FF),
+    color: AppColors.info,
     allowedRoles: ['ALMACEN'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -255,7 +244,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.local_shipping_outlined,
     selectedIcon: Icons.local_shipping_rounded,
     label: 'Vehiculos',
-    color: const Color(0xFF9C27B0),
+    color: AppColors.accentIndigo,
     allowedRoles: ['ALMACEN'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -264,7 +253,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.inventory_2_outlined,
     selectedIcon: Icons.inventory_2_rounded,
     label: 'Articulos',
-    color: const Color(0xFF00FF88),
+    color: AppColors.success,
     allowedRoles: ['ALMACEN'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -273,7 +262,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.history_outlined,
     selectedIcon: Icons.history_rounded,
     label: 'Historial',
-    color: const Color(0xFFFFC107),
+    color: AppColors.accentAmber,
     allowedRoles: ['ALMACEN', 'REPARTIDOR'],
     pageBuilder: (context) => const SizedBox(),
   ),
@@ -282,7 +271,7 @@ final _allTabsDefinition = <TabDefinition>[
     icon: Icons.groups_outlined,
     selectedIcon: Icons.groups_rounded,
     label: 'Personal',
-    color: const Color(0xFF9C27B0),
+    color: AppColors.accentIndigo,
     allowedRoles: ['ALMACEN'],
     pageBuilder: (context) => const SizedBox(),
   ),

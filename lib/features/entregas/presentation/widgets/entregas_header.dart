@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
@@ -19,13 +20,11 @@ class EntregasHeader extends ConsumerWidget {
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).primaryColor,
-            Theme.of(context).primaryColor.withValues(alpha: 0.8),
-          ],
+        color: AppTheme.raisedSurface,
+        border: Border(
+          bottom: BorderSide(
+            color: AppTheme.borderColor.withValues(alpha: 0.75),
+          ),
         ),
       ),
       child: Column(
@@ -35,7 +34,7 @@ class EntregasHeader extends ConsumerWidget {
             children: [
               Icon(
                 Icons.local_shipping,
-                color: Colors.white,
+                color: AppTheme.info,
                 size: Responsive.iconSize(context, phone: 24, desktop: 28),
               ),
               const SizedBox(width: 12),
@@ -46,7 +45,7 @@ class EntregasHeader extends ConsumerWidget {
                     Text(
                       'Entregas del Día',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
+                            color: AppTheme.textPrimary,
                             fontWeight: FontWeight.bold,
                           ),
                     ),
@@ -80,15 +79,18 @@ class EntregasHeader extends ConsumerWidget {
                           Text(
                             _formatFecha(state.fechaSeleccionada),
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppTheme.textSecondary,
                               fontSize: 14,
                               decoration: TextDecoration.underline,
-                              decorationColor: Colors.white54,
+                              decorationColor: AppTheme.textSecondary,
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.calendar_today,
-                              color: Colors.white, size: 14),
+                          const Icon(
+                            Icons.calendar_today,
+                            color: AppTheme.textSecondary,
+                            size: 14,
+                          ),
                         ],
                       ),
                     ),
@@ -110,7 +112,7 @@ class EntregasHeader extends ConsumerWidget {
                   icon: Icons.pending_actions,
                   label: 'Pendientes',
                   value: '$pendientes',
-                  color: Colors.orange,
+                  color: AppTheme.warning,
                 ),
                 const SizedBox(width: 12),
                 _buildStatCard(
@@ -118,7 +120,7 @@ class EntregasHeader extends ConsumerWidget {
                   icon: Icons.check_circle,
                   label: 'Entregados',
                   value: '$entregados',
-                  color: Colors.green,
+                  color: AppTheme.success,
                 ),
                 const SizedBox(width: 12),
                 _buildStatCard(
@@ -126,7 +128,7 @@ class EntregasHeader extends ConsumerWidget {
                   icon: Icons.euro,
                   label: 'CTR',
                   value: '${importeCTR.toStringAsFixed(0)}€',
-                  color: Colors.amber,
+                  color: AppTheme.accentAmber,
                 ),
               ],
             ),
@@ -142,11 +144,17 @@ class EntregasHeader extends ConsumerWidget {
                   children: [
                     const Text(
                       'Progreso del día',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     Text(
                       '$entregados de $total completados',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -155,8 +163,8 @@ class EntregasHeader extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
                     value: state.progresoTotal,
-                    backgroundColor: Colors.white24,
-                    valueColor: const AlwaysStoppedAnimation(Colors.white),
+                    backgroundColor: AppTheme.softPanel,
+                    valueColor: const AlwaysStoppedAnimation(AppTheme.info),
                     minHeight: 8,
                   ),
                 ),
@@ -182,7 +190,7 @@ class EntregasHeader extends ConsumerWidget {
           horizontal: 8 * Responsive.landscapeScale(context),
         ),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: AppTheme.softPanel,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -192,7 +200,7 @@ class EntregasHeader extends ConsumerWidget {
             Text(
               value,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -200,7 +208,7 @@ class EntregasHeader extends ConsumerWidget {
             Text(
               label,
               style: const TextStyle(
-                color: Colors.white70,
+                color: AppTheme.textSecondary,
                 fontSize: 11,
               ),
             ),

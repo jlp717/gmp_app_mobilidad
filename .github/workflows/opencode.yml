@@ -86,12 +86,23 @@ jobs:
         with:
           flutter-version: '3.x'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
       - name: Run backend tests
         working-directory: backend
-        run: npx jest --ci
+        run: npm run test:ci
 
   notify:
     if: github.event_name == 'push' && (needs.lint.result == 'failure' || needs.test.result == 'failure')

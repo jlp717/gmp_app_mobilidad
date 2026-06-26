@@ -54,6 +54,10 @@ class OfflineAwareApi {
     bool forceRefresh = false,
     CancelToken? cancelToken,
   }) async {
+    if (forceRefresh) {
+      await CacheService.invalidate(cacheKey);
+    }
+
     // 1. Try fresh cache first (unless force refreshing)
     if (!forceRefresh) {
       try {
@@ -80,28 +84,31 @@ class OfflineAwareApi {
         return OfflineResult(data: response, source: DataSource.network);
       } catch (e) {
         // Network error — fall through to stale cache
+        if (forceRefresh) rethrow;
         debugPrint('[OfflineAware] Network error, trying stale: $e');
       }
     }
 
     // 3. Try stale cache (offline, limited, or network error)
-    try {
-      final stale = CacheService.getStale<Map<String, dynamic>>(cacheKey);
-      if (stale != null) {
-        final status = ConnectivityService.instance.currentStatus;
-        final errorLabel = status == ConnectivityStatus.limited
-            ? 'Conexión limitada. Mostrando datos guardados.'
-            : status == ConnectivityStatus.offline
-                ? 'Sin conexión. Mostrando datos guardados.'
-                : 'Error de red. Mostrando datos guardados.';
-        debugPrint('[OfflineAware] Stale cache HIT: $endpoint');
-        return OfflineResult(
-          data: _deepCastMap(stale),
-          source: DataSource.stale,
-          error: errorLabel,
-        );
-      }
-    } catch (_) {}
+    if (!forceRefresh) {
+      try {
+        final stale = CacheService.getStale<Map<String, dynamic>>(cacheKey);
+        if (stale != null) {
+          final status = ConnectivityService.instance.currentStatus;
+          final errorLabel = status == ConnectivityStatus.limited
+              ? 'Conexión limitada. Mostrando datos guardados.'
+              : status == ConnectivityStatus.offline
+                  ? 'Sin conexión. Mostrando datos guardados.'
+                  : 'Error de red. Mostrando datos guardados.';
+          debugPrint('[OfflineAware] Stale cache HIT: $endpoint');
+          return OfflineResult(
+            data: _deepCastMap(stale),
+            source: DataSource.stale,
+            error: errorLabel,
+          );
+        }
+      } catch (_) {}
+    }
 
     // 4. Nothing — throw
     final status = ConnectivityService.instance.currentStatus;
@@ -120,6 +127,10 @@ class OfflineAwareApi {
     bool forceRefresh = false,
     CancelToken? cancelToken,
   }) async {
+    if (forceRefresh) {
+      await CacheService.invalidate(cacheKey);
+    }
+
     if (!forceRefresh) {
       try {
         final cached = CacheService.get<List<dynamic>>(cacheKey);
@@ -141,26 +152,29 @@ class OfflineAwareApi {
         );
         return OfflineResult(data: response, source: DataSource.network);
       } catch (e) {
+        if (forceRefresh) rethrow;
         debugPrint('[OfflineAware] Network error, trying stale: $e');
       }
     }
 
-    try {
-      final stale = CacheService.getStale<List<dynamic>>(cacheKey);
-      if (stale != null) {
-        final status = ConnectivityService.instance.currentStatus;
-        final errorLabel = status == ConnectivityStatus.limited
-            ? 'Conexión limitada. Mostrando datos guardados.'
-            : status == ConnectivityStatus.offline
-                ? 'Sin conexión. Mostrando datos guardados.'
-                : 'Error de red. Mostrando datos guardados.';
-        return OfflineResult(
-          data: stale,
-          source: DataSource.stale,
-          error: errorLabel,
-        );
-      }
-    } catch (_) {}
+    if (!forceRefresh) {
+      try {
+        final stale = CacheService.getStale<List<dynamic>>(cacheKey);
+        if (stale != null) {
+          final status = ConnectivityService.instance.currentStatus;
+          final errorLabel = status == ConnectivityStatus.limited
+              ? 'Conexión limitada. Mostrando datos guardados.'
+              : status == ConnectivityStatus.offline
+                  ? 'Sin conexión. Mostrando datos guardados.'
+                  : 'Error de red. Mostrando datos guardados.';
+          return OfflineResult(
+            data: stale,
+            source: DataSource.stale,
+            error: errorLabel,
+          );
+        }
+      } catch (_) {}
+    }
 
     final status = ConnectivityService.instance.currentStatus;
     final msg = status == ConnectivityStatus.limited
@@ -234,12 +248,16 @@ class OfflineAwareApi {
       }
     }
 
+    final operationId =
+        '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}';
+    final queuedPayload = Map<String, dynamic>.from(data ?? {});
+    queuedPayload.putIfAbsent('clientRequestId', () => operationId);
     final operation = SyncOperation(
-      id: '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}',
+      id: operationId,
       type: syncType ?? 'mutation',
       endpoint: endpoint,
       method: 'PUT',
-      payload: data ?? {},
+      payload: queuedPayload,
     );
     await SyncQueueService.instance.enqueue(operation);
     return {'success': true, 'queued': true, 'syncId': operation.id};
@@ -265,12 +283,14 @@ class OfflineAwareApi {
       }
     }
 
+    final operationId =
+        '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}';
     final operation = SyncOperation(
-      id: '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}',
+      id: operationId,
       type: syncType ?? 'mutation',
       endpoint: endpoint,
       method: 'DELETE',
-      payload: {},
+      payload: {'clientRequestId': operationId},
     );
     await SyncQueueService.instance.enqueue(operation);
     debugPrint('[OfflineAware] Queued DELETE for sync: $endpoint');

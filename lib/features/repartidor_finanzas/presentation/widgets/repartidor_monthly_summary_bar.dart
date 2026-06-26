@@ -124,17 +124,10 @@ class _RepartidorMonthlySummaryBarState
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.neonBlue.withValues(alpha: 0.12),
-            AppTheme.darkSurface.withValues(alpha: 0.6),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(10),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppTheme.neonBlue.withValues(alpha: 0.25),
+          color: AppTheme.borderColor.withValues(alpha: 0.8),
         ),
       ),
       child: Column(
@@ -144,14 +137,14 @@ class _RepartidorMonthlySummaryBarState
             children: [
               const Icon(
                 Icons.calendar_month,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 14,
               ),
               const SizedBox(width: 6),
               Text(
                 'Acumulado de ${meses[now.month - 1]}',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.65),
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
@@ -164,13 +157,13 @@ class _RepartidorMonthlySummaryBarState
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                    color: AppTheme.softPanel,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     '$numLiq cierres',
                     style: const TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -185,31 +178,31 @@ class _RepartidorMonthlySummaryBarState
                 child: _kpi(
                   'Cobrado',
                   _fmtMoney(totalCobrado),
-                  AppTheme.neonGreen,
+                  AppTheme.success,
                 ),
               ),
               Container(
                 width: 1,
                 height: 28,
-                color: Colors.white.withValues(alpha: 0.1),
+                color: AppTheme.borderColor.withValues(alpha: 0.7),
               ),
               Expanded(
                 child: _kpi(
                   'Liquidado',
                   _fmtMoney(totalLiquidado),
-                  AppTheme.neonBlue,
+                  AppTheme.info,
                 ),
               ),
               Container(
                 width: 1,
                 height: 28,
-                color: Colors.white.withValues(alpha: 0.1),
+                color: AppTheme.borderColor.withValues(alpha: 0.7),
               ),
               Expanded(
                 child: _kpi(
                   'Pendiente',
                   _fmtMoney(saldoPendiente),
-                  saldoPendiente > 0 ? Colors.amber : AppTheme.neonGreen,
+                  saldoPendiente > 0 ? AppTheme.warning : AppTheme.success,
                 ),
               ),
             ],
@@ -227,8 +220,8 @@ class _RepartidorMonthlySummaryBarState
         children: [
           Text(
             label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
+            style: const TextStyle(
+              color: AppTheme.textTertiary,
               fontSize: 10,
             ),
           ),

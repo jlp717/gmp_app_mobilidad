@@ -23,6 +23,7 @@ android {
     // ndkVersion = flutter.ndkVersion // Commented out to let Gradle decide
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -75,6 +76,7 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 // Suppress obsolete source/target (Java 8) warnings coming from some plugins

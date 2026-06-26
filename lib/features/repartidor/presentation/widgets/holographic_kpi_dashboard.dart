@@ -96,26 +96,39 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 2, 12, 4), // Ultra compact margins
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 8), // Minimal padding
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.darkSurface,
-            AppTheme.darkCard.withValues(alpha: 0.8),
-          ],
+    final motionEnabled =
+        TickerMode.of(context) && !MediaQuery.of(context).disableAnimations;
+    _syncMotionPolicy(motionEnabled);
+
+    return TickerMode(
+      enabled: motionEnabled,
+      child: Container(
+        margin:
+            const EdgeInsets.fromLTRB(12, 2, 12, 4), // Ultra compact margins
+        padding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 8), // Minimal padding
+        decoration: BoxDecoration(
+          color: AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.borderColor),
         ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppTheme.neonBlue.withValues(alpha: 0.2),
-        ),
+        child: widget.isLoading ? _buildLoadingState() : _buildContent(),
       ),
-      child: widget.isLoading ? _buildLoadingState() : _buildContent(),
     );
+  }
+
+  void _syncMotionPolicy(bool motionEnabled) {
+    if (motionEnabled) {
+      if (!_scannerController.isAnimating) _scannerController.repeat();
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+      return;
+    }
+
+    if (_scannerController.isAnimating) _scannerController.stop();
+    if (_pulseController.isAnimating) _pulseController.stop();
+    if (!_progressController.isCompleted) {
+      _progressController.value = 1;
+    }
   }
 
   Widget _buildLoadingState() {
@@ -123,7 +136,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       height: 50,
       child: Center(
         child: CircularProgressIndicator(
-          color: AppTheme.neonBlue,
+          color: AppTheme.info,
           strokeWidth: 2,
         ),
       ),
@@ -139,7 +152,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         children: [
           _buildDeliveryProgress(isSmall: true),
           const SizedBox(height: 8),
-          const Divider(color: Colors.white10),
+          const Divider(color: AppTheme.borderColor),
           _buildMoneyMetrics(isSmall: true),
         ],
       );
@@ -192,8 +205,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                       progress: progress * _progressController.value,
                       scannerAngle: _scannerAnimation.value,
                       backgroundColor: AppTheme.borderColor,
-                      progressColor: AppTheme.neonBlue,
-                      glowColor: AppTheme.neonCyan,
+                      progressColor: AppTheme.info,
+                      glowColor: AppTheme.info,
                       strokeWidth: isSmall ? 4.0 : 6.0,
                     ),
                   ),
@@ -203,7 +216,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                     children: [
                       Icon(
                         Icons.local_shipping_outlined,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         size: isSmall ? 10 : 14,
                       ),
                       FittedBox(
@@ -232,13 +245,13 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                     color: AppTheme.textSecondary,
                     fontSize: isSmall ? 8 : 9,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
+                    letterSpacing: 0,
                   ),
                 ),
                 Text(
                   '${(progress * 100).toInt()}%',
                   style: TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontWeight: FontWeight.bold,
                     fontSize: isSmall ? 14 : 18,
                   ),
@@ -447,7 +460,7 @@ class _HoloRingPainter extends CustomPainter {
         endAngle: scannerAngle + 0.3,
         colors: [
           Colors.transparent,
-          glowColor.withValues(alpha: 0.6),
+          glowColor.withValues(alpha: 0.16),
           Colors.transparent,
         ],
         stops: const [0.0, 0.5, 1.0],
@@ -460,7 +473,7 @@ class _HoloRingPainter extends CustomPainter {
 
     // Outer glow
     final glowPaint = Paint()
-      ..color = progressColor.withValues(alpha: 0.2)
+      ..color = progressColor.withValues(alpha: 0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4);

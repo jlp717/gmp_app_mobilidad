@@ -15,16 +15,16 @@ class RuteroDetailTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(color: AppTheme.borderColor),
         ),
       ),
       child: TabBar(
         controller: tabController,
-        indicatorColor: AppTheme.neonBlue,
-        indicatorWeight: 3,
-        labelColor: AppTheme.neonBlue,
+        indicatorColor: AppTheme.info,
+        indicatorWeight: 2,
+        labelColor: AppTheme.info,
         unselectedLabelColor: AppTheme.textSecondary,
         labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
         tabs: [

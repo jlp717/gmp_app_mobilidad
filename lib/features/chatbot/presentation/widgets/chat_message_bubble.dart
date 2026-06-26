@@ -40,178 +40,188 @@ class ChatMessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact =
-            constraints.maxWidth.isFinite && constraints.maxWidth < 380;
-        final sideGutter = compact ? 12.0 : 60.0;
-        final avatarSize = compact ? 30.0 : 34.0;
-        final avatarGap = compact ? 8.0 : 10.0;
-        final bubbleHorizontalPadding = compact ? 12.0 : 16.0;
+    final rawTextScale = MediaQuery.textScalerOf(context).scale(1);
+    final safeTextScale = rawTextScale > 1.3 ? 1.3 : rawTextScale;
 
-        return Padding(
-          padding: EdgeInsets.only(
-            left: isUser ? sideGutter : 0,
-            right: isUser ? 0 : sideGutter,
-            bottom: 12,
-          ),
-          child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isUser) ...[
-            Container(
-              width: avatarSize,
-              height: avatarSize,
-              margin: EdgeInsets.only(right: avatarGap),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppTheme.neonBlue, AppTheme.neonPurple],
-                ),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(safeTextScale),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact =
+              constraints.maxWidth.isFinite && constraints.maxWidth < 380;
+          final showAvatar = !compact;
+          final sideGutter = compact ? 0.0 : 60.0;
+          final avatarSize = compact ? 30.0 : 34.0;
+          final avatarGap = compact ? 8.0 : 10.0;
+          final bubbleHorizontalPadding = compact ? 12.0 : 16.0;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: isUser ? sideGutter : 0,
+              right: isUser ? 0 : sideGutter,
+              bottom: 12,
+            ),
+            child: Row(
+              mainAxisAlignment:
+                  isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (!isUser && showAvatar) ...[
+                  Container(
+                    width: avatarSize,
+                    height: avatarSize,
+                    margin: EdgeInsets.only(right: avatarGap),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.info, AppTheme.accentIndigo],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.info.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.psychology,
+                        color: Colors.white, size: 20),
                   ),
                 ],
-              ),
-              child:
-                  const Icon(Icons.psychology, color: Colors.white, size: 20),
-            ),
-          ],
-          Flexible(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 1, end: isPinned ? 1.02 : 1),
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutBack,
-              builder: (context, scale, child) => Transform.scale(
-                scale: scale,
-                child: child,
-              ),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: bubbleHorizontalPadding,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  gradient: isUser
-                      ? LinearGradient(
-                          colors: [
-                            AppTheme.neonBlue,
-                            AppTheme.neonBlue.withValues(alpha: 0.85),
-                          ],
-                        )
-                      : null,
-                  color: isUser ? null : const Color(0xFF1A1F35),
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(18),
-                    topRight: const Radius.circular(18),
-                    bottomLeft: Radius.circular(isUser ? 18 : 4),
-                    bottomRight: Radius.circular(isUser ? 4 : 18),
-                  ),
-                  border: isUser
-                      ? null
-                      : Border.all(
-                          color: isPinned
-                              ? AppColors.neonPurple.withValues(alpha: 0.5)
-                              : AppTheme.neonBlue.withValues(alpha: 0.15),
-                          width: isPinned ? 1.5 : 1,
-                        ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isUser
-                          ? AppTheme.neonBlue.withValues(alpha: 0.3)
-                          : Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                Flexible(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 1, end: isPinned ? 1.02 : 1),
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutBack,
+                    builder: (context, scale, child) => Transform.scale(
+                      scale: scale,
+                      child: child,
                     ),
-                  ],
-                ),
-                child: isLoading
-                    ? _buildTypingIndicator()
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (isPinned && !isUser)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.push_pin,
-                                    size: 12,
-                                    color: AppColors.neonPurple
-                                        .withValues(alpha: 0.9),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: bubbleHorizontalPadding,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: isUser
+                            ? LinearGradient(
+                                colors: [
+                                  AppTheme.info,
+                                  AppTheme.info.withValues(alpha: 0.85),
+                                ],
+                              )
+                            : null,
+                        color: isUser ? null : const Color(0xFF1A1F35),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(18),
+                          topRight: const Radius.circular(18),
+                          bottomLeft: Radius.circular(isUser ? 18 : 4),
+                          bottomRight: Radius.circular(isUser ? 4 : 18),
+                        ),
+                        border: isUser
+                            ? null
+                            : Border.all(
+                                color: isPinned
+                                    ? AppColors.accentIndigo
+                                        .withValues(alpha: 0.5)
+                                    : AppTheme.info.withValues(alpha: 0.15),
+                                width: isPinned ? 1.5 : 1,
+                              ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isUser
+                                ? AppTheme.info.withValues(alpha: 0.3)
+                                : Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: isLoading
+                          ? _buildTypingIndicator()
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (isPinned && !isUser)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.push_pin,
+                                          size: 12,
+                                          color: AppColors.accentIndigo
+                                              .withValues(alpha: 0.9),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Respuesta fijada',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: AppColors.accentIndigo
+                                                .withValues(alpha: 0.9),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  const SizedBox(width: 4),
+                                if (!isUser) _buildAssistantHeader(),
+                                _buildFormattedMessage(message, isUser),
+                                if (!isUser) ...[
+                                  ChatDataCard(
+                                    kpis: metadata.kpis,
+                                    chartData: metadata.chartData,
+                                  ),
+                                  if (metadata.exportable != null)
+                                    ChatExportTable(data: metadata.exportable!),
+                                  if (metadata.documents.isNotEmpty)
+                                    _buildDocumentCards(context),
+                                  _buildActionRow(context, ref),
+                                  if (metadata.suggestedFollowUps.isNotEmpty)
+                                    _buildFollowUpChips(),
+                                ],
+                                if (timestamp != null) ...[
+                                  const SizedBox(height: 6),
                                   Text(
-                                    'Respuesta fijada',
+                                    _formatTime(timestamp!),
                                     style: TextStyle(
+                                      color: isUser
+                                          ? Colors.white.withValues(alpha: 0.6)
+                                          : Colors.grey.shade600,
                                       fontSize: 10,
-                                      color: AppColors.neonPurple
-                                          .withValues(alpha: 0.9),
-                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0,
                                     ),
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
-                          if (!isUser) _buildAssistantHeader(),
-                          _buildFormattedMessage(message, isUser),
-                          if (!isUser) ...[
-                            ChatDataCard(
-                              kpis: metadata.kpis,
-                              chartData: metadata.chartData,
-                            ),
-                            if (metadata.exportable != null)
-                              ChatExportTable(data: metadata.exportable!),
-                            if (metadata.documents.isNotEmpty)
-                              _buildDocumentCards(context),
-                            _buildActionRow(context, ref),
-                            if (metadata.suggestedFollowUps.isNotEmpty)
-                              _buildFollowUpChips(),
-                          ],
-                          if (timestamp != null) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _formatTime(timestamp!),
-                              style: TextStyle(
-                                color: isUser
-                                    ? Colors.white.withValues(alpha: 0.6)
-                                    : Colors.grey.shade600,
-                                fontSize: 10,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-              ),
-            ),
-          ),
-          if (isUser) ...[
-            Container(
-              width: avatarSize,
-              height: avatarSize,
-              margin: EdgeInsets.only(left: avatarGap),
-              decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                    ),
+                  ),
                 ),
-              ),
-              child:
-                  const Icon(Icons.person, color: AppTheme.neonBlue, size: 18),
+                if (isUser && showAvatar) ...[
+                  Container(
+                    width: avatarSize,
+                    height: avatarSize,
+                    margin: EdgeInsets.only(left: avatarGap),
+                    decoration: BoxDecoration(
+                      color: AppTheme.info.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.info.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Icon(Icons.person,
+                        color: AppTheme.info, size: 18),
+                  ),
+                ],
+              ],
             ),
-          ],
-        ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -236,10 +246,10 @@ class ChatMessageBubble extends ConsumerWidget {
             child: Container(
               margin: EdgeInsets.only(top: index == 0 ? 0 : 8),
               decoration: BoxDecoration(
-                color: AppColors.neonPurple.withValues(alpha: 0.08),
+                color: AppColors.accentIndigo.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: AppColors.neonPurple.withValues(alpha: 0.24),
+                  color: AppColors.accentIndigo.withValues(alpha: 0.24),
                 ),
               ),
               child: InkWell(
@@ -247,64 +257,95 @@ class ChatMessageBubble extends ConsumerWidget {
                 onTap: () => _openDocument(context, document),
                 child: Padding(
                   padding: const EdgeInsets.all(10),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.neonPurple.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.picture_as_pdf_outlined,
-                          color: AppColors.neonPurple,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              document.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                              ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compactCard = constraints.maxWidth < 290;
+                      final titleBlock = Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: AppColors.accentIndigo
+                                  .withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              document.fileName ?? document.url,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 10.5,
-                              ),
+                            child: const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              color: AppColors.accentIndigo,
+                              size: 20,
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Tooltip(
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  document.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  document.fileName ?? document.url,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                      final openButton = Tooltip(
                         message: 'Abrir PDF',
                         child: TextButton.icon(
                           onPressed: () => _openDocument(context, document),
                           icon: const Icon(Icons.open_in_new, size: 14),
-                          label: const FittedBox(child: Text('Abrir')),
+                          label: const Text(
+                            'Abrir',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           style: TextButton.styleFrom(
-                            foregroundColor: AppColors.neonPurple,
+                            foregroundColor: AppColors.accentIndigo,
                             minimumSize: const Size(58, 40),
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                           ),
                         ),
-                      ),
-                    ],
+                      );
+
+                      if (compactCard) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            titleBlock,
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: openButton,
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: titleBlock),
+                          const SizedBox(width: 8),
+                          openButton,
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -318,20 +359,16 @@ class ChatMessageBubble extends ConsumerWidget {
   Widget _buildAssistantHeader() {
     final chips = <(IconData, String, Color)>[
       if (metadata.kpis.isNotEmpty)
-        (
-          Icons.speed_outlined,
-          '${metadata.kpis.length} KPI',
-          AppColors.neonBlue
-        ),
+        (Icons.speed_outlined, '${metadata.kpis.length} KPI', AppColors.info),
       if (metadata.exportable != null)
-        (Icons.table_chart_outlined, 'CSV', AppColors.neonGreen),
+        (Icons.table_chart_outlined, 'CSV', AppColors.success),
       if (metadata.chartData.isNotEmpty)
-        (Icons.show_chart, 'Grafico', Colors.amberAccent),
+        (Icons.show_chart, 'Grafico', AppColors.accentAmber),
       if (metadata.documents.isNotEmpty)
         (
           Icons.picture_as_pdf_outlined,
           '${metadata.documents.length} PDF',
-          AppColors.neonPurple,
+          AppColors.accentIndigo,
         ),
     ];
 
@@ -425,7 +462,7 @@ class ChatMessageBubble extends ConsumerWidget {
             _ActionChip(
               icon: Icons.table_chart_outlined,
               label: 'Exportar CSV',
-              accent: AppColors.neonGreen,
+              accent: AppColors.success,
               semanticsLabel: 'Exportar datos a CSV',
               onTap: () async {
                 await ChatShareActions.exportAndShareCsv(exportable);
@@ -435,14 +472,14 @@ class ChatMessageBubble extends ConsumerWidget {
                       content: Row(
                         children: [
                           const Icon(Icons.check_circle,
-                              color: AppColors.neonGreen, size: 18),
+                              color: AppColors.success, size: 18),
                           const SizedBox(width: 8),
                           Text('CSV listo: ${exportable.filename}'),
                         ],
                       ),
                       duration: const Duration(seconds: 2),
                       behavior: SnackBarBehavior.floating,
-                      backgroundColor: AppColors.darkCard,
+                      backgroundColor: AppColors.raisedSurface,
                     ),
                   );
                 }
@@ -452,7 +489,7 @@ class ChatMessageBubble extends ConsumerWidget {
             _ActionChip(
               icon: Icons.picture_as_pdf_outlined,
               label: metadata.documents.length == 1 ? 'Ver PDF' : 'PDFs',
-              accent: AppColors.neonPurple,
+              accent: AppColors.accentIndigo,
               semanticsLabel: 'Abrir documento PDF',
               tooltip:
                   'Abrir el PDF asociado sin salir de la respuesta del asistente',
@@ -469,7 +506,7 @@ class ChatMessageBubble extends ConsumerWidget {
             _ActionChip(
               icon: Icons.open_in_new_rounded,
               label: 'Ver en app',
-              accent: AppColors.neonPurple,
+              accent: AppColors.accentIndigo,
               semanticsLabel: 'Abrir seccion en la app',
               onTap: () {
                 ref
@@ -493,7 +530,7 @@ class ChatMessageBubble extends ConsumerWidget {
 
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: AppColors.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -519,7 +556,7 @@ class ChatMessageBubble extends ConsumerWidget {
                 (doc) => ListTile(
                   leading: const Icon(
                     Icons.picture_as_pdf_outlined,
-                    color: AppColors.neonPurple,
+                    color: AppColors.accentIndigo,
                   ),
                   title: Text(
                     doc.title,
@@ -615,7 +652,7 @@ class ChatMessageBubble extends ConsumerWidget {
   void _showShareSheet(BuildContext context, ChatExportableData? exportable) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: AppColors.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -636,7 +673,7 @@ class ChatMessageBubble extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.chat, color: AppColors.neonGreen),
+                leading: const Icon(Icons.chat, color: AppColors.success),
                 title: const Text('WhatsApp',
                     style: TextStyle(color: Colors.white)),
                 onTap: () {
@@ -646,7 +683,7 @@ class ChatMessageBubble extends ConsumerWidget {
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.email_outlined, color: AppColors.neonBlue),
+                    const Icon(Icons.email_outlined, color: AppColors.info),
                 title:
                     const Text('Email', style: TextStyle(color: Colors.white)),
                 onTap: () {
@@ -656,7 +693,7 @@ class ChatMessageBubble extends ConsumerWidget {
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.ios_share, color: AppColors.neonPurple),
+                    const Icon(Icons.ios_share, color: AppColors.accentIndigo),
                 title: const Text(
                   'Más opciones',
                   style: TextStyle(color: Colors.white),
@@ -679,7 +716,7 @@ class ChatMessageBubble extends ConsumerWidget {
               if (exportable != null)
                 ListTile(
                   leading:
-                      const Icon(Icons.table_chart, color: AppColors.neonGreen),
+                      const Icon(Icons.table_chart, color: AppColors.success),
                   title: const Text(
                     'Compartir CSV',
                     style: TextStyle(color: Colors.white),
@@ -709,19 +746,39 @@ class ChatMessageBubble extends ConsumerWidget {
             children: metadata.suggestedFollowUps.map((q) {
               return ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxChipWidth),
-                child: ActionChip(
-                  label: Text(
-                    q,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.white70),
+                child: Semantics(
+                  button: true,
+                  label: q,
+                  child: Material(
+                    color: AppColors.info.withValues(alpha: 0.12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color: AppColors.info.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: onFollowUpTap == null
+                          ? null
+                          : () => onFollowUpTap!(q),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          q,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  backgroundColor: AppColors.neonBlue.withValues(alpha: 0.12),
-                  side: BorderSide(
-                    color: AppColors.neonBlue.withValues(alpha: 0.25),
-                  ),
-                  onPressed:
-                      onFollowUpTap == null ? null : () => onFollowUpTap!(q),
                 ),
               );
             }).toList(),
@@ -747,7 +804,7 @@ class ChatMessageBubble extends ConsumerWidget {
                   height: 4,
                   margin: const EdgeInsets.only(top: 8, right: 8),
                   decoration: BoxDecoration(
-                    color: isUser ? Colors.white70 : AppTheme.neonBlue,
+                    color: isUser ? Colors.white70 : AppTheme.info,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -836,7 +893,7 @@ class ChatMessageBubble extends ConsumerWidget {
                 'Analizando consulta...',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.neonBlue.withValues(alpha: 0.9),
+                  color: AppTheme.info.withValues(alpha: 0.9),
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -895,7 +952,7 @@ class _AnalysisStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.neonBlue : Colors.grey.shade700;
+    final color = active ? AppColors.info : Colors.grey.shade700;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -943,7 +1000,7 @@ class _ActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ?? AppColors.neonBlue;
+    final color = accent ?? AppColors.info;
     final child = Semantics(
       button: true,
       label: semanticsLabel ?? label,
@@ -989,7 +1046,7 @@ class _SkeletonLine extends StatelessWidget {
       child: Container(
         height: 8,
         decoration: BoxDecoration(
-          color: AppColors.neonBlue.withValues(alpha: 0.12),
+          color: AppColors.info.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(4),
         ),
       ),

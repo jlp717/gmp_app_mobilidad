@@ -146,7 +146,7 @@ class _ClientMapViewState extends State<ClientMapView> {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase.withValues(alpha: 0.9),
+              color: AppTheme.inkSurface.withValues(alpha: 0.9),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -180,7 +180,7 @@ class _ClientMapViewState extends State<ClientMapView> {
         },
         child: Container(
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.neonBlue : AppTheme.success,
+            color: isSelected ? AppTheme.info : AppTheme.success,
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 2),
             boxShadow: [
@@ -210,7 +210,7 @@ class _MapButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       borderRadius: BorderRadius.circular(8),
       elevation: 4,
       child: InkWell(
@@ -238,7 +238,7 @@ class _ClientInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -250,10 +250,10 @@ class _ClientInfoCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withValues(alpha: 0.2),
+                  color: AppTheme.success.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.store, color: AppTheme.neonGreen),
+                child: const Icon(Icons.store, color: AppTheme.success),
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -171,7 +171,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
     if (!mounted) return;
     final generation = ++_loadGeneration;
     setState(() {
@@ -186,6 +186,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         ObjectivesService.getEvolution(
           vendedorCodes: activeVendedorCode,
           years: _selectedYears.toList(),
+          forceRefresh: forceRefresh,
         ),
         ObjectivesService.getByClient(
           vendedorCodes: activeVendedorCode,
@@ -196,6 +197,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           nif: _nifFilter.isNotEmpty ? _nifFilter : null,
           name: _clientSearchQuery.isNotEmpty ? _clientSearchQuery : null,
           limit: 100,
+          forceRefresh: forceRefresh,
         ),
       ]);
 
@@ -550,10 +552,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     final paceProgress = (data['paceProgress'] as num?)?.toDouble() ?? 0;
 
     final progressColor = progress >= 100
-        ? AppTheme.neonGreen
-        : (progress >= 80 ? AppTheme.neonBlue : AppTheme.error);
-    final paceColor =
-        paceProgress >= 100 ? Colors.cyanAccent : Colors.orangeAccent;
+        ? AppTheme.success
+        : (progress >= 80 ? AppTheme.info : AppTheme.error);
+    final paceColor = paceProgress >= 100 ? AppTheme.info : AppTheme.warning;
 
     // Determine if we should show Pace Bar
     final isFinished = (paceTarget - target).abs() < 1;
@@ -561,7 +562,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
         boxShadow: [
@@ -599,7 +600,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   color: Colors.white)),
           Text('Objetivo Mensual: ${_formatCurrency(target)}',
               style: TextStyle(
-                  color: Colors.grey,
+                  color: AppTheme.textTertiary,
                   fontSize: Responsive.isSmall(context) ? 11 : 13)),
 
           const SizedBox(height: 16),
@@ -658,7 +659,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                         : 'Objetivo No Alcanzado',
                     style: TextStyle(
                         color: current >= target
-                            ? AppTheme.neonGreen
+                            ? AppTheme.success
                             : AppTheme.error,
                         fontSize: 12),
                   )
@@ -671,7 +672,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   ),
 
                 Text('Obj. Pace: ${_formatCurrency(paceTarget)}',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    style: const TextStyle(
+                        color: AppTheme.textTertiary, fontSize: 12)),
               ],
             ),
 
@@ -705,7 +707,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
       ),
@@ -736,7 +738,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           Text(
             'Obj: ${isCurrency ? _formatCurrency(target) : target.toInt()}',
             style: TextStyle(
-                color: Colors.grey,
+                color: AppTheme.textTertiary,
                 fontSize: Responsive.isSmall(context) ? 10 : 11),
           ),
           const SizedBox(height: 12),
@@ -769,7 +771,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   void _showFilterModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -822,8 +824,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                             });
                           },
                           selectedColor:
-                              AppTheme.neonPurple.withValues(alpha: 0.3),
-                          checkmarkColor: AppTheme.neonPurple,
+                              AppTheme.accentIndigo.withValues(alpha: 0.3),
+                          checkmarkColor: AppTheme.accentIndigo,
                         ),
                       )
                       .toList(),
@@ -883,8 +885,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           }
                         });
                       },
-                      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
-                      checkmarkColor: AppTheme.neonBlue,
+                      selectedColor: AppTheme.info.withValues(alpha: 0.3),
+                      checkmarkColor: AppTheme.info,
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
@@ -896,7 +898,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.neonPurple,
+                      backgroundColor: AppTheme.accentIndigo,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onPressed: () {
@@ -964,11 +966,11 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         // Header with filter button
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           child: Row(
             children: [
               const Icon(Icons.track_changes,
-                  color: AppTheme.neonPurple, size: 20),
+                  color: AppTheme.accentIndigo, size: 20),
               const SizedBox(width: 8),
               const Text('Objetivos',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -981,10 +983,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                    color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: AppTheme.neonPurple.withValues(alpha: 0.5)),
+                        color: AppTheme.accentIndigo.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1009,7 +1011,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               _periodLabel.isNotEmpty ? _periodLabel : 'Resumen de Ventas',
           lastSync: _lastFetchTime,
           isLoading: _isLoading,
-          onSync: _loadData,
+          onSync: () => _loadData(forceRefresh: true),
         ),
 
         // Selector de vendedor para jefe de ventas
@@ -1019,11 +1021,11 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         // Tab bar
         Container(
           height: 36,
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           child: TabBar(
             controller: _tabController,
-            indicatorColor: AppTheme.neonPurple,
-            labelColor: AppTheme.neonPurple,
+            indicatorColor: AppTheme.accentIndigo,
+            labelColor: AppTheme.accentIndigo,
             unselectedLabelColor: AppTheme.textSecondary,
             labelStyle:
                 const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
@@ -1058,14 +1060,14 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   Widget _buildError() {
     return ErrorStateWidget(
       message: 'Error: $_error',
-      onRetry: _loadData,
+      onRetry: () => _loadData(forceRefresh: true),
     );
   }
 
   Widget _buildClientFilters() {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      color: AppTheme.darkBase,
+      color: AppTheme.inkSurface,
       child: Column(
         children: [
           // Row 1: Search + Advanced Toggle
@@ -1079,7 +1081,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       hintText: 'Buscar (Enter para buscar en servidor)...',
                       prefixIcon: const Icon(Icons.search, size: 18),
                       filled: true,
-                      fillColor: AppTheme.surfaceColor,
+                      fillColor: AppTheme.raisedSurface,
                       contentPadding:
                           const EdgeInsets.symmetric(horizontal: 12),
                       border: OutlineInputBorder(
@@ -1098,13 +1100,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               const SizedBox(width: 8),
               Container(
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
+                  color: AppTheme.raisedSurface,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: (_selectedPopulation != null ||
                             _clientCodeFilter.isNotEmpty ||
                             _nifFilter.isNotEmpty)
-                        ? AppTheme.neonPurple
+                        ? AppTheme.accentIndigo
                         : Colors.transparent,
                   ),
                 ),
@@ -1113,7 +1115,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   color: (_selectedPopulation != null ||
                           _clientCodeFilter.isNotEmpty ||
                           _nifFilter.isNotEmpty)
-                      ? AppTheme.neonPurple
+                      ? AppTheme.accentIndigo
                       : AppTheme.textSecondary,
                   onPressed: () {
                     // Toggle visibility or show modal?
@@ -1149,17 +1151,17 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   color: (_selectedPopulation != null ||
                           _clientCodeFilter.isNotEmpty ||
                           _nifFilter.isNotEmpty)
-                      ? AppTheme.neonPurple
+                      ? AppTheme.accentIndigo
                       : AppTheme.textSecondary,
                 ),
               ),
-              iconColor: AppTheme.neonPurple,
+              iconColor: AppTheme.accentIndigo,
               collapsedIconColor: AppTheme.textSecondary,
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
+                    color: AppTheme.raisedSurface,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
@@ -1265,10 +1267,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           Expanded(
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.neonPurple,
+                                backgroundColor: AppTheme.accentIndigo,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: _loadData,
+                              onPressed: () => _loadData(),
                               child: const Text('Aplicar Filtros'),
                             ),
                           ),
@@ -1287,7 +1289,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
   Widget _buildSummaryTab() {
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: () => _loadData(forceRefresh: true),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(12),
@@ -1321,7 +1323,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     final isOnTrack = ytdProgress >= 100;
     final color = isOnTrack
         ? AppTheme.success
-        : (ytdProgress >= 90 ? Colors.orange : AppTheme.error);
+        : (ytdProgress >= 90 ? AppTheme.warning : AppTheme.error);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1394,9 +1396,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: AppTheme.neonPurple.withValues(alpha: 0.1),
+          color: AppTheme.accentIndigo.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+          border:
+              Border.all(color: AppTheme.accentIndigo.withValues(alpha: 0.3)),
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1404,8 +1407,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             tilePadding: const EdgeInsets.symmetric(horizontal: 10),
             childrenPadding: const EdgeInsets.only(bottom: 10),
             minTileHeight: 40,
-            iconColor: AppTheme.neonPurple,
-            collapsedIconColor: AppTheme.neonPurple,
+            iconColor: AppTheme.accentIndigo,
+            collapsedIconColor: AppTheme.accentIndigo,
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1418,7 +1421,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.neonPurple)),
+                        color: AppTheme.accentIndigo)),
               ],
             ),
             subtitle: Row(
@@ -1435,7 +1438,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             children: [
               Container(
                 height: 1,
-                color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               ),
               // List monthly objectives
@@ -1485,13 +1488,15 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                             else
                               const Text('-',
                                   style: TextStyle(
-                                      fontSize: 11, color: Colors.grey)),
+                                      fontSize: 11,
+                                      color: AppTheme.textTertiary)),
 
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 4),
                               child: Text('/',
                                   style: TextStyle(
-                                      fontSize: 10, color: Colors.grey)),
+                                      fontSize: 10,
+                                      color: AppTheme.textTertiary)),
                             ),
 
                             // Target
@@ -1513,7 +1518,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                         )
                       else
                         const Icon(Icons.circle_outlined,
-                            size: 12, color: Colors.grey),
+                            size: 12, color: AppTheme.textTertiary),
                     ],
                   ),
                 );
@@ -1540,7 +1545,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     final isAchieved = progress >= 100;
     final progressColor = progress >= 100
         ? AppTheme.success
-        : (progress >= 80 ? Colors.orange : AppTheme.error);
+        : (progress >= 80 ? AppTheme.warning : AppTheme.error);
 
     return Column(
       children: [
@@ -1548,7 +1553,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceColor,
+            color: AppTheme.raisedSurface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
                 color: isAchieved
@@ -1562,7 +1567,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               // Header
               Row(
                 children: [
-                  const Icon(Icons.euro, size: 20, color: AppTheme.neonBlue),
+                  const Icon(Icons.euro, size: 20, color: AppTheme.info),
                   const SizedBox(width: 6),
                   const Text('VENTAS',
                       style:
@@ -1584,10 +1589,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 Container(
                   margin: const EdgeInsets.symmetric(),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonPurple.withValues(alpha: 0.1),
+                    color: AppTheme.accentIndigo.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+                        color: AppTheme.accentIndigo.withValues(alpha: 0.3)),
                   ),
                   child: Theme(
                     data: Theme.of(context)
@@ -1596,8 +1601,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       tilePadding: const EdgeInsets.symmetric(horizontal: 10),
                       childrenPadding: const EdgeInsets.only(bottom: 10),
                       minTileHeight: 40,
-                      iconColor: AppTheme.neonPurple,
-                      collapsedIconColor: AppTheme.neonPurple,
+                      iconColor: AppTheme.accentIndigo,
+                      collapsedIconColor: AppTheme.accentIndigo,
                       title: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1610,13 +1615,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.neonPurple)),
+                                  color: AppTheme.accentIndigo)),
                         ],
                       ),
                       children: [
                         Container(
                           height: 1,
-                          color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                          color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                           margin: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
                         ),
@@ -1676,7 +1681,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                         const Text('-',
                                             style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.grey)),
+                                                color: AppTheme.textTertiary)),
 
                                       const Padding(
                                         padding:
@@ -1684,7 +1689,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                         child: Text('/',
                                             style: TextStyle(
                                                 fontSize: 10,
-                                                color: Colors.grey)),
+                                                color: AppTheme.textTertiary)),
                                       ),
 
                                       // Target
@@ -1709,7 +1714,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                   )
                                 else
                                   const Icon(Icons.circle_outlined,
-                                      size: 12, color: Colors.grey),
+                                      size: 12, color: AppTheme.textTertiary),
                               ],
                             ),
                           );
@@ -1739,14 +1744,14 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                  color: AppTheme.info.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Objetivo ${_selectedMonths.length} mes${_selectedMonths.length != 1 ? 'es' : ''}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
-                    Text(_formatCurrency(periodTarget), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                    Text(_formatCurrency(periodTarget), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.info)),
                   ],
                 ),
               ),
@@ -1823,7 +1828,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   final isOnTrack = dailyActual >= dailyTarget;
                   // Green when on track, orange when behind - clear visual feedback
                   final paceColor =
-                      isOnTrack ? AppTheme.success : Colors.orangeAccent;
+                      isOnTrack ? AppTheme.success : AppTheme.warning;
 
                   // Only show if there's a meaningful pace calculation context (working days exist)
                   // FIX: Do NOT hide if daysPassed is 0. Only hide if workingDays is 0 (invalid data).
@@ -2100,7 +2105,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       return Container(
         height: 200,
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -2128,10 +2133,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
     // Define a premium color palette
     final palette = <Color>[
-      AppTheme.neonPurple,
-      const Color(0xFF38B6FF), // Electric Blue
-      const Color(0xFFFF6584), // Vibrant Pink/Red
-      const Color(0xFFFFC107), // Amber
+      AppTheme.accentIndigo,
+      AppTheme.info, // Electric Blue
+      AppTheme.accentRose, // Vibrant Pink/Red
+      AppTheme.accentAmber, // Amber
     ];
 
     final sortedYears = _selectedYears.toList()..sort();
@@ -2289,7 +2294,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -2353,7 +2358,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   drawVerticalLine: false,
                   horizontalInterval: baseInterval.toDouble(),
                   getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: AppTheme.borderColor.withValues(alpha: 0.1),
                     strokeWidth: 1,
                     dashArray: [4, 4],
                   ),
@@ -2410,7 +2415,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 lineBarsData: lineBarsData,
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
-                    tooltipBgColor: const Color(0xFF1A1A2E)
+                    tooltipBgColor: AppTheme.raisedSurface
                         .withValues(alpha: 0.95), // Premium dark blue
                     tooltipRoundedRadius: 12,
                     tooltipPadding: const EdgeInsets.symmetric(
@@ -2500,8 +2505,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   AppTheme.success.withValues(alpha: 0.1)
                 ]
               : [
-                  AppTheme.neonPurple.withValues(alpha: 0.2),
-                  AppTheme.neonPurple.withValues(alpha: 0.1)
+                  AppTheme.accentIndigo.withValues(alpha: 0.2),
+                  AppTheme.accentIndigo.withValues(alpha: 0.1)
                 ],
         ),
         borderRadius: BorderRadius.circular(12),
@@ -2510,7 +2515,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         children: [
           Icon(isAchieved ? Icons.emoji_events : Icons.timeline,
               size: 32,
-              color: isAchieved ? AppTheme.success : AppTheme.neonPurple),
+              color: isAchieved ? AppTheme.success : AppTheme.accentIndigo),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -2532,7 +2537,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isAchieved ? AppTheme.success : AppTheme.neonPurple,
+              color: isAchieved ? AppTheme.success : AppTheme.accentIndigo,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text('${progress.toStringAsFixed(0)}%',
@@ -2626,7 +2631,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     Colors.blue, statusCounts['ontrack']!),
                 const SizedBox(width: 6),
                 _statusFilterChip('atrisk', 'En riesgo', Icons.warning,
-                    Colors.orange, statusCounts['atrisk']!),
+                    AppTheme.warning, statusCounts['atrisk']!),
                 const SizedBox(width: 6),
                 _statusFilterChip('critical', 'Crítico', Icons.error,
                     Colors.red, statusCounts['critical']!),
@@ -2683,7 +2688,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         decoration: BoxDecoration(
           color: isSelected
               ? color.withValues(alpha: 0.15)
-              : AppTheme.surfaceColor,
+              : AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: isSelected ? color : Colors.transparent, width: 1.5),
@@ -2738,7 +2743,7 @@ class _ObjectiveCard extends StatelessWidget {
     final isAchieved = progress >= 100;
     final progressColor = progress >= 100
         ? AppTheme.success
-        : (progress >= 80 ? Colors.orange : AppTheme.error);
+        : (progress >= 80 ? AppTheme.warning : AppTheme.error);
 
     String formatValue(double value) {
       if (isCount) return value.toInt().toString();
@@ -2748,7 +2753,7 @@ class _ObjectiveCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 10 : 14),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
             color: isAchieved
@@ -2789,7 +2794,7 @@ class _ObjectiveCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(subtitle!,
                 style:
-                    const TextStyle(fontSize: 9, color: AppTheme.neonPurple)),
+                    const TextStyle(fontSize: 9, color: AppTheme.accentIndigo)),
           ],
           SizedBox(height: compact ? 6 : 10),
           ClipRRect(
@@ -2949,10 +2954,10 @@ class _ClientCard extends StatelessWidget {
         statusColor = AppTheme.success;
         statusText = 'Conseguido';
       case 'ontrack':
-        statusColor = Colors.lightGreen;
+        statusColor = AppTheme.success;
         statusText = 'En camino';
       case 'atrisk':
-        statusColor = Colors.orange;
+        statusColor = AppTheme.warning;
         statusText = 'En riesgo';
       default:
         statusColor = AppTheme.error;
@@ -2961,7 +2966,7 @@ class _ClientCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: statusColor.withValues(alpha: 0.3))),
@@ -3011,12 +3016,12 @@ class _ClientCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                      color: AppTheme.darkBase.withValues(alpha: 0.5),
+                      color: AppTheme.inkSurface.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(6)),
                   child: Row(
                     children: [
                       const Icon(Icons.location_on,
-                          size: 14, color: AppTheme.neonBlue),
+                          size: 14, color: AppTheme.info),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Column(
@@ -3040,7 +3045,8 @@ class _ClientCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                              color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                              color:
+                                  AppTheme.accentIndigo.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4)),
                           child: Text('Ruta $route',
                               style: const TextStyle(
@@ -3049,7 +3055,7 @@ class _ClientCard extends StatelessWidget {
                       if (hasAddress)
                         IconButton(
                           icon: const Icon(Icons.map,
-                              size: 18, color: AppTheme.neonBlue),
+                              size: 18, color: AppTheme.info),
                           onPressed: () => _openInMaps(context),
                           padding: EdgeInsets.zero,
                           constraints:
@@ -3152,8 +3158,8 @@ class _ClientCard extends StatelessWidget {
               const SizedBox(height: 6),
               const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text('Ver historial de compras',
-                    style: TextStyle(fontSize: 9, color: AppTheme.neonBlue)),
-                Icon(Icons.chevron_right, size: 14, color: AppTheme.neonBlue)
+                    style: TextStyle(fontSize: 9, color: AppTheme.info)),
+                Icon(Icons.chevron_right, size: 14, color: AppTheme.info)
               ]),
             ],
           ),

@@ -4,6 +4,7 @@ library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -332,11 +333,10 @@ class CargoColors {
   static Color byWeight(double weight, double maxWeight) {
     final t = maxWeight > 0 ? (weight / maxWeight).clamp(0.0, 1.0) : 0.5;
     if (t < 0.33) {
-      return Color.lerp(
-          const Color(0xFF4D96FF), const Color(0xFF6BCB77), t / 0.33)!;
+      return Color.lerp(const Color(0xFF4D96FF), AppTheme.success, t / 0.33)!;
     } else if (t < 0.66) {
       return Color.lerp(
-          const Color(0xFF6BCB77), const Color(0xFFFFE66D), (t - 0.33) / 0.33)!;
+          AppTheme.success, const Color(0xFFFFE66D), (t - 0.33) / 0.33)!;
     } else {
       return Color.lerp(
           const Color(0xFFFFE66D), const Color(0xFFFF6B6B), (t - 0.66) / 0.34)!;
@@ -362,10 +362,10 @@ class CargoColors {
   }
 
   static Color sizeColor(double weight) {
-    if (weight <= 2) return Colors.lightBlue;
-    if (weight <= 10) return const Color(0xFF6BCB77);
-    if (weight <= 25) return Colors.amber;
-    return Colors.redAccent;
+    if (weight <= 2) return AppTheme.info;
+    if (weight <= 10) return AppTheme.success;
+    if (weight <= 25) return AppTheme.warning;
+    return AppTheme.error;
   }
 }
 

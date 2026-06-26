@@ -109,7 +109,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
         ),
@@ -145,15 +145,10 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.neonGreen.withValues(alpha: 0.2),
-                        AppTheme.neonBlue.withValues(alpha: 0.2),
-                      ],
-                    ),
+                    color: AppTheme.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppTheme.neonGreen.withValues(alpha: 0.4),
+                      color: AppTheme.success.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Row(
@@ -161,14 +156,14 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                     children: [
                       const Icon(
                         Icons.local_offer,
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'Ofertas activas (${_promotions.length})',
                         style: TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontWeight: FontWeight.w600,
                           fontSize: Responsive.fontSize(
                             context,
@@ -215,12 +210,12 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         margin: const EdgeInsets.only(right: 8, bottom: 4),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
+          color: AppTheme.softPanel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isGift
-                ? AppTheme.neonPurple.withValues(alpha: 0.4)
-                : AppTheme.neonGreen.withValues(alpha: 0.3),
+                ? AppTheme.accentIndigo.withValues(alpha: 0.4)
+                : AppTheme.success.withValues(alpha: 0.3),
           ),
         ),
         child: Column(
@@ -260,14 +255,14 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                       const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(
                     color: isGift
-                        ? AppTheme.neonPurple.withValues(alpha: 0.15)
-                        : AppTheme.neonGreen.withValues(alpha: 0.15),
+                        ? AppTheme.accentIndigo.withValues(alpha: 0.15)
+                        : AppTheme.success.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     isGift ? 'REGALO' : _buildDiscountLabel(promo),
                     style: TextStyle(
-                      color: isGift ? AppTheme.neonPurple : AppTheme.neonGreen,
+                      color: isGift ? AppTheme.accentIndigo : AppTheme.success,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
@@ -279,13 +274,13 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                      color: AppTheme.info.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
                       'ACUM.',
                       style: TextStyle(
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         fontSize: 8,
                         fontWeight: FontWeight.bold,
                       ),
@@ -306,7 +301,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                   Text(
                     '${promo.stockEnvases.toInt()} cj',
                     style: TextStyle(
-                      color: AppTheme.neonGreen.withValues(alpha: 0.7),
+                      color: AppTheme.success.withValues(alpha: 0.7),
                       fontSize:
                           Responsive.fontSize(context, small: 9, large: 10),
                     ),
@@ -325,7 +320,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         Text(
           PedidosFormatters.money(promo.promoPrice, decimals: 3),
           style: TextStyle(
-            color: AppTheme.neonGreen,
+            color: AppTheme.success,
             fontWeight: FontWeight.bold,
             fontSize: Responsive.fontSize(context, small: 13, large: 15),
           ),
@@ -347,7 +342,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   Widget _buildGiftRow(PromotionItem promo) {
     return Row(
       children: [
-        const Icon(Icons.card_giftcard, color: AppTheme.neonPurple, size: 16),
+        const Icon(Icons.card_giftcard, color: AppTheme.accentIndigo, size: 16),
         const SizedBox(width: 6),
         Expanded(
           child: Column(
@@ -356,7 +351,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
               Text(
                 promo.giftLabel,
                 style: TextStyle(
-                  color: AppTheme.neonPurple,
+                  color: AppTheme.accentIndigo,
                   fontWeight: FontWeight.bold,
                   fontSize: Responsive.fontSize(context, small: 11, large: 13),
                 ),
@@ -367,7 +362,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                 Text(
                   'Compra ${promo.minQty.toInt()}, lleva ${(promo.minQty + promo.giftQty).toInt()}',
                   style: TextStyle(
-                    color: AppTheme.neonPurple.withValues(alpha: 0.7),
+                    color: AppTheme.accentIndigo.withValues(alpha: 0.7),
                     fontSize: Responsive.fontSize(context, small: 9, large: 10),
                   ),
                 ),

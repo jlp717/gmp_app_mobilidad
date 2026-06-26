@@ -45,7 +45,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.neonBlue.withValues(alpha: 0.2)),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -61,18 +61,17 @@ class _ChatExportTableState extends State<ChatExportTable> {
                 horizontalMargin: 12,
                 columnSpacing: 20,
                 headingTextStyle: const TextStyle(
-                  color: AppColors.neonBlue,
+                  color: AppColors.info,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+                  letterSpacing: 0,
                 ),
                 dataTextStyle: TextStyle(
                   color: Colors.grey.shade300,
                   fontSize: 12,
                 ),
-                columns: headers
-                    .map((h) => DataColumn(label: Text(h)))
-                    .toList(),
+                columns:
+                    headers.map((h) => DataColumn(label: Text(h))).toList(),
                 rows: visibleRows
                     .asMap()
                     .entries
@@ -80,11 +79,11 @@ class _ChatExportTableState extends State<ChatExportTable> {
                       (entry) => DataRow(
                         color: WidgetStateProperty.resolveWith((states) {
                           if (states.contains(WidgetState.pressed)) {
-                            return AppColors.neonBlue.withValues(alpha: 0.12);
+                            return AppColors.info.withValues(alpha: 0.12);
                           }
 
                           if (states.contains(WidgetState.hovered)) {
-                            return AppColors.neonBlue.withValues(alpha: 0.06);
+                            return AppColors.info.withValues(alpha: 0.06);
                           }
 
                           return entry.key.isEven
@@ -114,7 +113,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
                         Icon(
                           _expanded ? Icons.expand_less : Icons.expand_more,
                           size: 18,
-                          color: AppColors.neonBlue,
+                          color: AppColors.info,
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -122,7 +121,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
                               ? 'Ver menos'
                               : 'Ver más (${totalRows - ChatExportTable._collapsedRows} filas)',
                           style: const TextStyle(
-                            color: AppColors.neonBlue,
+                            color: AppColors.info,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),

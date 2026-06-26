@@ -29,23 +29,26 @@ class DashboardHeader extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: AppTheme.glassMorphismPremium(
         borderRadius: AppTheme.radiusLg.toDouble(),
-        glowColor: AppTheme.neonBlue,
+        glowColor: AppTheme.info,
         glowBlur: 20,
       ),
       child: Row(
         children: [
-          // Avatar premium con gradiente
+          // Avatar operativo compacto.
           Container(
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              gradient: AppTheme.primaryGradient,
+              color: AppTheme.info,
               shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.textPrimary.withValues(alpha: 0.12),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  spreadRadius: 1,
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -53,7 +56,7 @@ class DashboardHeader extends StatelessWidget {
               child: Text(
                 initials,
                 style: const TextStyle(
-                  color: AppTheme.darkBase,
+                  color: AppTheme.inkSurface,
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                 ),
@@ -105,21 +108,16 @@ class DashboardHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppTheme.neonBlue, AppTheme.neonPurple],
-                ),
+                color: AppTheme.info.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.25),
-                    blurRadius: 8,
-                  ),
-                ],
+                border: Border.all(
+                  color: AppTheme.info.withValues(alpha: 0.36),
+                ),
               ),
               child: Text(
                 user!.zone!,
                 style: const TextStyle(
-                  color: AppTheme.darkBase,
+                  color: AppTheme.textPrimary,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),

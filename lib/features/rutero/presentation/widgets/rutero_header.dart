@@ -23,7 +23,7 @@ class RuteroHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppTheme.darkBase,
+      color: AppTheme.inkSurface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -55,14 +55,14 @@ class RuteroHeader extends StatelessWidget {
                 children: [
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
-                      colors: [AppTheme.neonPink, AppTheme.neonPurple],
+                      colors: [AppTheme.accentRose, AppTheme.accentIndigo],
                     ).createShader(bounds),
                     child: Text(
                       'RUTERO',
                       style: TextStyle(
                         fontSize: isSmallScreen ? 18 : 20,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
+                        letterSpacing: 0,
                         color: Colors.white,
                       ),
                     ),
@@ -75,14 +75,14 @@ class RuteroHeader extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: (selectedRole == 'comercial'
-                              ? AppTheme.neonPink
-                              : AppTheme.neonBlue)
+                              ? AppTheme.accentRose
+                              : AppTheme.info)
                           .withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: (selectedRole == 'comercial'
-                                ? AppTheme.neonPink
-                                : AppTheme.neonBlue)
+                                ? AppTheme.accentRose
+                                : AppTheme.info)
                             .withValues(alpha: 0.5),
                       ),
                     ),
@@ -95,8 +95,8 @@ class RuteroHeader extends StatelessWidget {
                               : Icons.local_shipping_outlined,
                           size: 12,
                           color: selectedRole == 'comercial'
-                              ? AppTheme.neonPink
-                              : AppTheme.neonBlue,
+                              ? AppTheme.accentRose
+                              : AppTheme.info,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -105,8 +105,8 @@ class RuteroHeader extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: selectedRole == 'comercial'
-                                ? AppTheme.neonPink
-                                : AppTheme.neonBlue,
+                                ? AppTheme.accentRose
+                                : AppTheme.info,
                           ),
                         ),
                       ],

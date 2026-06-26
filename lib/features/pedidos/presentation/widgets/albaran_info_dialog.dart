@@ -38,6 +38,7 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
   bool _isLoading = true;
   String? _error;
   bool _isOpeningFactura = false;
+  bool _isOpeningAlbaran = false;
 
   int _asInt(dynamic value) {
     if (value is num) return value.toInt();
@@ -86,6 +87,46 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
     }
   }
 
+  Future<void> _openAlbaran(Map<String, dynamic> albaran) async {
+    final serie = (albaran['serie'] ?? '').toString().trim();
+    final numero = _asInt(albaran['numeroAlbaran']);
+    final terminal = _asInt(albaran['terminal']);
+    final ejercicio = _asInt(albaran['ejercicio']);
+    if (serie.isEmpty || numero <= 0 || terminal <= 0 || ejercicio <= 0) {
+      return;
+    }
+
+    setState(() => _isOpeningAlbaran = true);
+    try {
+      final bytes = await PedidosService.downloadAlbaranPdfBytes(
+        ejercicio: ejercicio,
+        serie: serie,
+        terminal: terminal,
+        numero: numero,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: Uint8List.fromList(bytes),
+            title: 'Albaran $serie-$terminal-$numero',
+            fileName: 'Albaran_${serie}_${terminal}_${numero}_$ejercicio.pdf',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo abrir el albaran: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isOpeningAlbaran = false);
+    }
+  }
+
   Future<void> _loadAlbaranes() async {
     setState(() {
       _isLoading = true;
@@ -115,7 +156,7 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Text(
         'Albaranes vinculados',
@@ -125,7 +166,7 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
         width: double.maxFinite,
         child: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: AppTheme.neonBlue),
+                child: CircularProgressIndicator(color: AppTheme.info),
               )
             : _error != null
                 ? Center(
@@ -148,18 +189,32 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                           final facturaSerie =
                               (a['serieFactura'] ?? '').toString().trim();
                           final facturaYear = _asInt(a['ejercicioFactura']);
+                          final albaranRef = (a['albaranRef'] ?? '')
+                              .toString()
+                              .trim();
+                          final facturaRef = (a['facturaRef'] ?? '')
+                              .toString()
+                              .trim();
+                          final hasFactura = facturaNum > 0 &&
+                              facturaSerie.isNotEmpty &&
+                              facturaYear > 0;
+                          final facturaDisplay = facturaRef.isNotEmpty
+                              ? facturaRef
+                              : '$facturaSerie-$facturaNum';
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: AppTheme.darkCard,
+                              color: AppTheme.raisedSurface,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  "${a['serie'] ?? ''} ${a['numeroAlbaran'] ?? ''}",
+                                  albaranRef.isNotEmpty
+                                      ? 'Albaran $albaranRef'
+                                      : "${a['serie'] ?? ''} ${a['numeroAlbaran'] ?? ''}",
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -177,46 +232,50 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                                 Text(
                                   "Importe: ${PedidosFormatters.money((a['importe'] as num? ?? 0).toDouble())}",
                                   style: const TextStyle(
-                                    color: AppTheme.neonGreen,
+                                    color: AppTheme.success,
                                     fontSize: 12,
                                   ),
                                 ),
                                 Text(
-                                  "Estado: ${a['situacion'] ?? ''}",
+                                  hasFactura
+                                      ? 'Factura: $facturaDisplay'
+                                      : 'Pendiente de factura',
                                   style: const TextStyle(
                                     color: Colors.white54,
                                     fontSize: 11,
                                   ),
                                 ),
-                                if (facturaNum > 0 &&
-                                    facturaSerie.isNotEmpty &&
-                                    facturaYear > 0) ...[
-                                  const SizedBox(height: 8),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _isOpeningFactura
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.end,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: _isOpeningAlbaran
                                           ? null
-                                          : () => _openFactura(a),
+                                          : () => _openAlbaran(a),
                                       icon: const Icon(
-                                        Icons.picture_as_pdf_outlined,
+                                        Icons.local_shipping_outlined,
                                         size: 16,
                                       ),
-                                      label: Text(
-                                        'Ver factura $facturaSerie-$facturaNum',
+                                      label: const Text('Ver albaran'),
+                                    ),
+                                    if (hasFactura)
+                                      OutlinedButton.icon(
+                                        onPressed: _isOpeningFactura
+                                            ? null
+                                            : () => _openFactura(a),
+                                        icon: const Icon(
+                                          Icons.picture_as_pdf_outlined,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          'Ver factura $facturaDisplay',
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ] else ...[
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Factura pendiente de generar en ERP',
-                                    style: TextStyle(
-                                      color: Colors.white38,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ],
                             ),
                           );

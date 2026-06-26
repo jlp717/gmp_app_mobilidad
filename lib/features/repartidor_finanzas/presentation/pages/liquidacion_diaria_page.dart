@@ -76,11 +76,12 @@ class _RepartidorLiquidacionDiariaPageState
     final asyncSummary = ref.watch(repartidorDailySummaryProvider(args));
 
     return Scaffold(
-      backgroundColor: AppColors.darkBase,
+      backgroundColor: AppColors.inkSurface,
       body: asyncSummary.when(
         data: _buildForm,
         loading: () => const Center(
-            child: CircularProgressIndicator(color: AppColors.neonBlue)),
+          child: CircularProgressIndicator(color: AppColors.info),
+        ),
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
           return _ErrorState(
@@ -120,21 +121,21 @@ class _RepartidorLiquidacionDiariaPageState
                     icon: Icons.money,
                     label: 'Efectivo',
                     value: summary.totalEfectivo,
-                    color: AppColors.neonGreen,
+                    color: AppColors.success,
                   ),
                   const SizedBox(height: 8),
                   _PaymentMethodCard(
                     icon: Icons.receipt_long,
                     label: 'Cheques',
                     value: summary.totalCheques,
-                    color: AppColors.neonPurple,
+                    color: AppColors.accentIndigo,
                   ),
                   const SizedBox(height: 8),
                   _PaymentMethodCard(
                     icon: Icons.credit_card,
                     label: 'Tarjeta',
                     value: summary.totalTarjeta,
-                    color: AppColors.neonBlue,
+                    color: AppColors.info,
                   ),
                   const SizedBox(height: 8),
                   _PaymentMethodCard(
@@ -366,10 +367,9 @@ class _ModernHeader extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           16, MediaQuery.of(context).padding.top + 12, 16, 16),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.darkSurface, AppColors.darkBase],
+        color: AppColors.raisedSurface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.borderColor, width: 0.5),
         ),
       ),
       child: Row(
@@ -377,11 +377,14 @@ class _ModernHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.neonBlue.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.info.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.account_balance_wallet,
-                color: AppColors.neonBlue, size: 24),
+            child: const Icon(
+              Icons.account_balance_wallet,
+              color: AppColors.info,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -391,7 +394,7 @@ class _ModernHeader extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
                   ),
@@ -422,7 +425,7 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppColors.neonBlue),
+          Icon(icon, size: 18, color: AppColors.info),
           const SizedBox(width: 8),
           Text(
             label,
@@ -430,7 +433,7 @@ class _SectionTitle extends StatelessWidget {
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
-              letterSpacing: 1.2,
+              letterSpacing: 0,
             ),
           ),
         ],
@@ -457,9 +460,9 @@ class _PaymentMethodCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        color: AppColors.raisedSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.8)),
       ),
       child: Row(
         children: [
@@ -469,7 +472,7 @@ class _PaymentMethodCard extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
@@ -509,20 +512,12 @@ class _BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = highlight ? AppColors.warning : AppColors.neonBlue;
+    final accentColor = highlight ? AppColors.warning : AppColors.info;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        gradient: highlight
-            ? LinearGradient(
-                colors: [
-                  AppColors.warning.withValues(alpha: 0.15),
-                  AppColors.darkSurface,
-                ],
-              )
-            : null,
-        color: highlight ? null : AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(12),
+        color: highlight ? AppColors.mutedPanel : AppColors.raisedSurface,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: accentColor.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -540,7 +535,7 @@ class _BalanceCard extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
@@ -583,19 +578,19 @@ class _MoneyInputLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
+        color: AppColors.raisedSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.8)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.neonBlue, size: 20),
+          Icon(icon, color: AppColors.info, size: 20),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
@@ -614,7 +609,7 @@ class _MoneyInputLine extends StatelessWidget {
               validator: _RepartidorLiquidacionDiariaPageState._validateAmount,
               textAlign: TextAlign.right,
               style: const TextStyle(
-                color: AppColors.neonGreen,
+                color: AppColors.success,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -663,9 +658,9 @@ class _CobrosPreview extends ConsumerWidget {
     // Req #16: bottomSheet con detalle del cobro del día.
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: AppColors.raisedSurface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       builder: (sheetCtx) {
         return SafeArea(
@@ -680,12 +675,12 @@ class _CobrosPreview extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.neonGreen.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
+                        color: AppColors.success.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
                         Icons.receipt_long,
-                        color: AppColors.neonGreen,
+                        color: AppColors.success,
                         size: 22,
                       ),
                     ),
@@ -699,7 +694,7 @@ class _CobrosPreview extends ConsumerWidget {
                                 ? cobro.nombreCliente
                                 : cobro.codigoCliente,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.textPrimary,
                               fontWeight: FontWeight.w800,
                               fontSize: 16,
                             ),
@@ -721,7 +716,7 @@ class _CobrosPreview extends ConsumerWidget {
                   icon: Icons.payments,
                   label: 'Importe',
                   value: _money(cobro.importe),
-                  valueColor: AppColors.neonGreen,
+                  valueColor: AppColors.success,
                 ),
                 if (cobro.cobrado > 0)
                   _DetailRow(
@@ -806,10 +801,10 @@ class _CobrosPreview extends ConsumerWidget {
       context: context,
       builder: (dialogCtx) {
         return AlertDialog(
-          backgroundColor: AppColors.darkSurface,
+          backgroundColor: AppColors.raisedSurface,
           title: const Text(
             'Anular cobro',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: AppColors.textPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -819,14 +814,17 @@ class _CobrosPreview extends ConsumerWidget {
                 '¿Seguro que quieres anular el cobro de '
                 '${cobro.nombreCliente.isNotEmpty ? cobro.nombreCliente : cobro.codigoCliente}'
                 ' por ${cobro.importe.toStringAsFixed(2)} €?',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: reasonCtrl,
                 autofocus: true,
                 maxLength: 200,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
                 decoration: const InputDecoration(
                   labelText: 'Motivo (obligatorio)',
                   hintText: 'Ej.: Cobro duplicado / error de importe',
@@ -865,7 +863,7 @@ class _CobrosPreview extends ConsumerWidget {
       );
       messenger.showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.neonGreen,
+          backgroundColor: AppColors.success,
           content: Text(
             'Cobro de ${cobro.importe.toStringAsFixed(2)} € anulado correctamente',
           ),
@@ -889,9 +887,9 @@ class _CobrosPreview extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
+        color: AppColors.raisedSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.8)),
       ),
       child: Column(
         children: [
@@ -915,12 +913,12 @@ class _CobrosPreview extends ConsumerWidget {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: AppColors.neonGreen.withValues(alpha: 0.1),
+                          color: AppColors.success.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Icon(
                           Icons.person,
-                          color: AppColors.neonGreen,
+                          color: AppColors.success,
                           size: 16,
                         ),
                       ),
@@ -936,7 +934,7 @@ class _CobrosPreview extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -954,7 +952,7 @@ class _CobrosPreview extends ConsumerWidget {
                       Text(
                         _money(cobro.importe),
                         style: const TextStyle(
-                          color: AppColors.neonGreen,
+                          color: AppColors.success,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
                         ),
@@ -1010,7 +1008,7 @@ class _DetailRow extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: TextStyle(
-                color: valueColor ?? Colors.white,
+                color: valueColor ?? AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
@@ -1034,7 +1032,7 @@ class _ModernSaveBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
       decoration: const BoxDecoration(
-        color: AppColors.darkSurface,
+        color: AppColors.raisedSurface,
         border:
             Border(top: BorderSide(color: AppColors.borderColor, width: 0.5)),
       ),
@@ -1044,8 +1042,8 @@ class _ModernSaveBar extends StatelessWidget {
         child: ElevatedButton(
           onPressed: isSaving ? null : onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.neonGreen,
-            foregroundColor: AppColors.darkBase,
+            backgroundColor: AppColors.success,
+            foregroundColor: AppColors.inkSurface,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             elevation: 0,
@@ -1055,18 +1053,26 @@ class _ModernSaveBar extends StatelessWidget {
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: AppColors.darkBase),
+                      strokeWidth: 2.5, color: AppColors.inkSurface),
                 )
-              : const Row(
+              : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.lock_outline, size: 22),
-                    SizedBox(width: 8),
-                    Text(
-                      // Req #16: cierre explícito de la jornada del repartidor.
-                      'Cerrar día y grabar liquidación',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    const Icon(Icons.lock_outline, size: 22),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        // Req #16: cierre explicito de la jornada del repartidor.
+                        MediaQuery.of(context).size.width < 380
+                            ? 'Cerrar d?a'
+                            : 'Cerrar d?a y grabar liquidaci?n',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -1082,7 +1088,7 @@ class _SelectSingleRepartidor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: AppColors.darkBase,
+      backgroundColor: AppColors.inkSurface,
       body: Center(
         child: Text(
           'Selecciona un repartidor para liquidar',
@@ -1121,8 +1127,8 @@ class _ErrorState extends StatelessWidget {
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.neonBlue,
-                foregroundColor: AppColors.darkBase,
+                backgroundColor: AppColors.info,
+                foregroundColor: AppColors.inkSurface,
               ),
             ),
           ],

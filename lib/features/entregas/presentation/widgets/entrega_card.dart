@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
@@ -38,22 +39,22 @@ class EntregaCard extends StatelessWidget {
                           horizontal: 8, vertical: 4),
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade100,
+                        color: AppTheme.accentAmber.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.amber.shade700),
+                        border: Border.all(color: AppTheme.accentAmber),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.euro,
-                              size: 12, color: Colors.amber.shade900),
+                              size: 12, color: AppTheme.accentAmber),
                           const SizedBox(width: 4),
                           Text(
                             'CTR',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade900,
+                              color: AppTheme.accentAmber,
                             ),
                           ),
                         ],
@@ -113,7 +114,11 @@ class EntregaCard extends StatelessWidget {
               // Info cliente
               Row(
                 children: [
-                  const Icon(Icons.store, size: 18, color: Colors.grey),
+                  const Icon(
+                    Icons.store,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -133,13 +138,17 @@ class EntregaCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                    const Icon(
+                      Icons.location_on,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         albaran.direccion,
                         style: TextStyle(
-                          color: Colors.grey.shade700,
+                          color: AppTheme.textSecondary,
                           fontSize: 13,
                         ),
                         maxLines: 1,
@@ -161,20 +170,19 @@ class EntregaCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
+                        color: AppTheme.info.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.route,
-                              size: 12, color: Colors.blue.shade700),
+                          Icon(Icons.route, size: 12, color: AppTheme.info),
                           const SizedBox(width: 4),
                           Text(
                             albaran.ruta,
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.blue.shade700,
+                              color: AppTheme.info,
                             ),
                           ),
                         ],
@@ -188,20 +196,23 @@ class EntregaCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.purple.shade50,
+                        color: AppTheme.accentIndigo.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.person,
-                              size: 12, color: Colors.purple.shade700),
+                          Icon(
+                            Icons.person,
+                            size: 12,
+                            color: AppTheme.accentIndigo,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Com. ${albaran.codigoVendedor}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.purple.shade700,
+                              color: AppTheme.accentIndigo,
                             ),
                           ),
                         ],
@@ -218,8 +229,8 @@ class EntregaCard extends StatelessWidget {
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: albaran.esCTR
-                          ? Colors.amber.shade800
-                          : Colors.black87,
+                          ? AppTheme.accentAmber
+                          : AppTheme.textPrimary,
                     ),
                   ),
                 ],
@@ -234,14 +245,14 @@ class EntregaCard extends StatelessWidget {
                     'Toca para ver detalle',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey.shade500,
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                   const SizedBox(width: 4),
                   Icon(
                     Icons.chevron_right,
                     size: 16,
-                    color: Colors.grey.shade500,
+                    color: AppTheme.textSecondary,
                   ),
                 ],
               ),

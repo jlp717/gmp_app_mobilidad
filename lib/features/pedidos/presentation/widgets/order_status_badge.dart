@@ -9,12 +9,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 class OrderTheme {
   const OrderTheme({
     required this.primary,
-    required this.gradient,
     required this.icon,
     required this.label,
   });
   final Color primary;
-  final List<Color> gradient;
   final IconData icon;
   final String label;
 }
@@ -23,14 +21,12 @@ class OrderStatusConfig {
   /// Estados visibles para comerciales: Borrador y Confirmado.
   static const Map<String, OrderTheme> themes = {
     'BORRADOR': OrderTheme(
-      primary: Color(0xFFF97316),
-      gradient: [Color(0xFF1E293B), Color(0xFF2D1B00)],
+      primary: AppTheme.warning,
       icon: Icons.edit_note,
       label: 'Borrador',
     ),
     'CONFIRMADO': OrderTheme(
-      primary: Color(0xFF22C55E),
-      gradient: [Color(0xFF1E293B), Color(0xFF0A2E1A)],
+      primary: AppTheme.success,
       icon: Icons.check_circle,
       label: 'Confirmado',
     ),
@@ -59,8 +55,7 @@ class OrderStatusConfig {
     final key = canonicalDisplayStatus(estado);
     return themes[key] ??
         const OrderTheme(
-          primary: Color(0xFF9CA3AF),
-          gradient: [Color(0xFF1E293B), Color(0xFF1E293B)],
+          primary: AppTheme.textSecondary,
           icon: Icons.help_outline,
           label: 'Desconocido',
         );
@@ -88,14 +83,9 @@ class OrderStatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.primary.withValues(alpha: 0.2),
-            theme.primary.withValues(alpha: 0.1),
-          ],
-        ),
+        color: theme.primary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.primary.withValues(alpha: 0.4)),
+        border: Border.all(color: theme.primary.withValues(alpha: 0.32)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -123,7 +113,7 @@ class OrderStatusBadge extends StatelessWidget {
               color: theme.primary,
               fontSize: fontSize,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
+              letterSpacing: 0,
             ),
           ),
         ],

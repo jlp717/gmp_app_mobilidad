@@ -560,23 +560,23 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     final effectiveEnabled = enabled && !loading && widget.enabled;
     final hasOptions = options.isNotEmpty;
 
-    // Colores consistentes con el diseño de la app
     Color getBorderColor() {
-      if (!effectiveEnabled) return Colors.grey.shade700;
-      if (isActive) return AppTheme.neonBlue;
-      return Colors.grey.shade600;
+      if (!effectiveEnabled) return AppTheme.borderColor.withValues(alpha: 0.6);
+      if (isActive) return AppTheme.info;
+      return AppTheme.borderColor;
     }
 
     Color getFillColor() {
-      if (!effectiveEnabled)
-        return AppTheme.surfaceColor.withValues(alpha: 0.5);
-      if (isActive) return AppTheme.neonBlue.withValues(alpha: 0.15);
-      return AppTheme.surfaceColor;
+      if (!effectiveEnabled) {
+        return AppTheme.raisedSurface.withValues(alpha: 0.72);
+      }
+      if (isActive) return AppTheme.info.withValues(alpha: 0.10);
+      return AppTheme.raisedSurface;
     }
 
     Color getIconColor() {
-      if (!effectiveEnabled) return Colors.grey.shade600;
-      if (isActive) return AppTheme.neonBlue;
+      if (!effectiveEnabled) return AppTheme.textTertiary;
+      if (isActive) return AppTheme.info;
       return AppTheme.textSecondary;
     }
 
@@ -589,9 +589,9 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           labelStyle: TextStyle(
             fontSize: 10,
             color: effectiveEnabled
-                ? (isActive ? AppTheme.neonBlue : AppTheme.textSecondary)
-                : Colors.grey.shade600,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                ? (isActive ? AppTheme.info : AppTheme.textSecondary)
+                : AppTheme.textTertiary,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
           ),
           prefixIcon: loading
               ? const SizedBox(
@@ -601,7 +601,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
                     padding: EdgeInsets.all(8),
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                     ),
                   ),
                 )
@@ -624,25 +624,28 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppTheme.neonBlue, width: 2),
+            borderSide: const BorderSide(color: AppTheme.info, width: 2),
           ),
           disabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey.shade700),
+            borderSide: BorderSide(
+              color: AppTheme.borderColor.withValues(alpha: 0.6),
+            ),
           ),
           filled: true,
           fillColor: getFillColor(),
         ),
-        dropdownColor: AppTheme.surfaceColor,
+        dropdownColor: AppTheme.raisedSurface,
         style: TextStyle(
           fontSize: 11,
-          color: effectiveEnabled ? Colors.white : Colors.grey.shade500,
+          color:
+              effectiveEnabled ? AppTheme.textPrimary : AppTheme.textTertiary,
         ),
         icon: Icon(
           Icons.arrow_drop_down,
           color: effectiveEnabled
-              ? (isActive ? AppTheme.neonBlue : Colors.white54)
-              : Colors.grey.shade700,
+              ? (isActive ? AppTheme.info : AppTheme.textSecondary)
+              : AppTheme.textTertiary,
         ),
         items: [
           DropdownMenuItem<String?>(
@@ -650,7 +653,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
               hasOptions ? 'Todos' : (loading ? 'Cargando...' : 'Sin opciones'),
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey.shade400,
+                color: AppTheme.textTertiary,
                 fontStyle: FontStyle.italic,
               ),
             ),

@@ -265,10 +265,10 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
         title: const Text('Evolución de Cliente'),
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -345,7 +345,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Card(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -393,7 +393,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                 Text(
                   '$_selectedClientName ($_selectedClientCode)',
                   style: const TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -429,7 +429,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         trailing: selected
-                            ? const Icon(Icons.check, color: AppTheme.neonBlue)
+                            ? const Icon(Icons.check, color: AppTheme.info)
                             : null,
                         onTap: () => _selectClient(client),
                       );
@@ -489,7 +489,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         children: [
           // Header with client info
           Card(
-            color: AppTheme.darkSurface,
+            color: AppTheme.raisedSurface,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -497,7 +497,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.person, color: AppTheme.neonPurple),
+                      const Icon(Icons.person, color: AppTheme.accentIndigo),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -525,7 +525,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             ),
             const SizedBox(height: 12),
             Card(
-              color: AppTheme.darkSurface,
+              color: AppTheme.raisedSurface,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: SizedBox(
@@ -598,13 +598,13 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                                     0.0);
                           }).toList(),
                           isCurved: true,
-                          color: AppTheme.neonPurple,
+                          color: AppTheme.accentIndigo,
                           barWidth: 2,
                           isStrokeCapRound: true,
                           dotData: const FlDotData(show: true),
                           belowBarData: BarAreaData(
                             show: true,
-                            color: AppTheme.neonPurple.withOpacity(0.3),
+                            color: AppTheme.accentIndigo.withOpacity(0.3),
                           ),
                         ),
                       ],
@@ -627,7 +627,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             ),
             const SizedBox(height: 12),
             Card(
-              color: AppTheme.darkSurface,
+              color: AppTheme.raisedSurface,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(

@@ -109,7 +109,7 @@ class SalesSummaryHeader extends StatelessWidget {
                 width: 3,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -120,7 +120,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     color: Colors.white60,
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5),
+                    letterSpacing: 0),
               ),
             ],
           ),
@@ -206,7 +206,7 @@ class SalesSummaryHeader extends StatelessWidget {
                   }
                 } else {
                   // Annual default
-                  cardColor = AppTheme.darkCard.withValues(alpha: 0.8);
+                  cardColor = AppTheme.raisedSurface.withValues(alpha: 0.8);
                 }
 
                 // Border Color based on same logic to make it pop
@@ -228,7 +228,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     color: cardColor, // Use dynamic bg
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.surfaceColor.withValues(alpha: 0.5),
+                        AppTheme.raisedSurface.withValues(alpha: 0.5),
                         cardColor
                       ],
                       begin: Alignment.topLeft,
@@ -320,8 +320,8 @@ class SalesSummaryHeader extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [
-            AppTheme.surfaceColor,
-            AppTheme.darkCard,
+            AppTheme.raisedSurface,
+            AppTheme.raisedSurface,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -371,7 +371,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     child: _buildCompactMetricCard(
                       context,
                       icon: Icons.inventory_2_outlined,
-                      iconColor: AppTheme.neonBlue,
+                      iconColor: AppTheme.info,
                       label: 'UDS',
                       value: _formatCompact(units),
                       prevValue: prevUnits,
@@ -431,10 +431,10 @@ class SalesSummaryHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.neonGreen.withValues(alpha: 0.15),
+              color: AppTheme.success.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.euro, color: AppTheme.neonGreen, size: 16),
+            child: const Icon(Icons.euro, color: AppTheme.success, size: 16),
           ),
           const SizedBox(width: 8),
           // Main value
@@ -454,17 +454,17 @@ class SalesSummaryHeader extends StatelessWidget {
                 Text(
                   'VENTAS',
                   style: TextStyle(
-                      color: AppTheme.neonGreen.withValues(alpha: 0.7),
+                      color: AppTheme.success.withValues(alpha: 0.7),
                       fontWeight: FontWeight.w500,
                       fontSize: 9,
-                      letterSpacing: 1),
+                      letterSpacing: 0),
                 ),
               ],
             ),
           ),
           // Badge de estado o comparación
           if (isNewClient)
-            _buildStatusBadge('NUEVO', AppColors.neonBlue)
+            _buildStatusBadge('NUEVO', AppColors.info)
           else
             _buildPreviousYearComparison(prevSales, salesGrowth, isPositive),
         ],
@@ -568,7 +568,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     color: iconColor.withValues(alpha: 0.9),
                     fontWeight: FontWeight.w600,
                     fontSize: 9,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -587,7 +587,7 @@ class SalesSummaryHeader extends StatelessWidget {
 
           // Comparison
           if (isNew)
-            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
+            _buildMiniStatusBadge('NUEVO', AppColors.info)
           else if (prevValue > 0)
             _buildMetricComparison(prevText, growth, isPositive),
         ],
@@ -653,7 +653,7 @@ class SalesSummaryHeader extends StatelessWidget {
           const SizedBox(height: 4),
           // Comparison - siempre mostrar algo para altura uniforme
           if (showNuevo)
-            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
+            _buildMiniStatusBadge('NUEVO', AppColors.info)
           else if (prevValue > 0)
             _buildCompactComparison(prevText, growth, isPositive)
           else
@@ -698,11 +698,11 @@ class SalesSummaryHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.show_chart,
-                  color: AppTheme.neonPurple, size: 10),
+                  color: AppTheme.accentIndigo, size: 10),
               const SizedBox(width: 3),
               Text('MARGEN',
                   style: TextStyle(
-                      color: AppTheme.neonPurple.withValues(alpha: 0.8),
+                      color: AppTheme.accentIndigo.withValues(alpha: 0.8),
                       fontWeight: FontWeight.w500,
                       fontSize: 8)),
             ],
@@ -710,12 +710,12 @@ class SalesSummaryHeader extends StatelessWidget {
           const SizedBox(height: 4),
           // Comparison
           if (isClientNew)
-            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
+            _buildMiniStatusBadge('NUEVO', AppColors.info)
           else if (prevMargin > 0)
             _buildCompactComparison(
                 '${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive)
           else if (margin > 0)
-            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
+            _buildMiniStatusBadge('NUEVO', AppColors.info)
           else
             const SizedBox(height: 16),
         ],
@@ -763,15 +763,15 @@ class SalesSummaryHeader extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.show_chart,
-                  color: AppTheme.neonPurple, size: 14),
+                  color: AppTheme.accentIndigo, size: 14),
               const SizedBox(width: 6),
               Text(
                 'MARGEN',
                 style: TextStyle(
-                  color: AppTheme.neonPurple.withValues(alpha: 0.9),
+                  color: AppTheme.accentIndigo.withValues(alpha: 0.9),
                   fontWeight: FontWeight.w600,
                   fontSize: 9,
-                  letterSpacing: 0.5,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -792,7 +792,7 @@ class SalesSummaryHeader extends StatelessWidget {
                 '${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive,
                 isMargin: true)
           else if (margin > 0)
-            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue),
+            _buildMiniStatusBadge('NUEVO', AppColors.info),
         ],
       ),
     );
@@ -855,7 +855,7 @@ class SalesSummaryHeader extends StatelessWidget {
             color: color,
             fontWeight: FontWeight.bold,
             fontSize: 10,
-            letterSpacing: 0.5),
+            letterSpacing: 0),
       ),
     );
   }

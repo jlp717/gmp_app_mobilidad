@@ -111,7 +111,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(
-          child: ModernLoading(message: 'Cargando evoluci³n...'));
+          child: ModernLoading(message: 'Cargando evolución...'));
     }
 
     if (_error != null) {
@@ -135,7 +135,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Evoluci³n Mensual (3 A±os)',
+          Text('Evolución Mensual (3 Años)',
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -149,7 +149,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               child: _buildEvolutionChart(),
             )
           else
-            const Center(child: Text('No hay datos de evoluci³n mensual')),
+            const Center(child: Text('No hay datos de evolución mensual')),
           const SizedBox(height: 24),
           Text('Productos M¡s Comprados',
               style: Theme.of(context)
@@ -216,14 +216,14 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: AppTheme.neonBlue,
+            color: AppTheme.info,
             barWidth: 3,
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.3),
-                  AppTheme.neonBlue.withValues(alpha: 0)
+                  AppTheme.info.withValues(alpha: 0.3),
+                  AppTheme.info.withValues(alpha: 0)
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -249,19 +249,19 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
 
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           child: ListTile(
             dense: true,
             leading: CircleAvatar(
-              backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
+              backgroundColor: AppTheme.info.withValues(alpha: 0.2),
               child: Text('${index + 1}',
-                  style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                  style: TextStyle(color: AppTheme.info, fontSize: 12)),
             ),
             title: Text(name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 13)),
-            subtitle: Text('C³d: $code Å¡ $units uds',
+            subtitle: Text('Cód: $code · $units uds',
                 style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(sales),
                 style: TextStyle(

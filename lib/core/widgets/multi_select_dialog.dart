@@ -94,8 +94,8 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppTheme.darkCard.withValues(alpha: 0.95),
-              AppTheme.darkSurface.withValues(alpha: 0.9),
+              AppTheme.raisedSurface.withValues(alpha: 0.95),
+              AppTheme.raisedSurface.withValues(alpha: 0.9),
             ],
           ),
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -119,7 +119,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
-                letterSpacing: -0.3,
+                letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 16),
@@ -137,13 +137,13 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.neonBlue),
+                              strokeWidth: 2, color: AppTheme.info),
                         ),
                       )
                     : Icon(Icons.search_rounded,
                         color: Colors.white.withValues(alpha: 0.3)),
                 filled: true,
-                fillColor: AppTheme.darkSurface.withValues(alpha: 0.5),
+                fillColor: AppTheme.raisedSurface.withValues(alpha: 0.5),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   borderSide: BorderSide.none,
@@ -221,20 +221,19 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                         borderRadius: BorderRadius.circular(6),
                                         border: Border.all(
                                           color: isSelected
-                                              ? AppTheme.neonBlue
+                                              ? AppTheme.info
                                               : Colors.white
                                                   .withValues(alpha: 0.15),
                                           width: 1.5,
                                         ),
                                         color: isSelected
-                                            ? AppTheme.neonBlue
+                                            ? AppTheme.info
                                                 .withValues(alpha: 0.15)
                                             : Colors.transparent,
                                       ),
                                       child: isSelected
                                           ? const Icon(Icons.check_rounded,
-                                              color: AppTheme.neonBlue,
-                                              size: 16)
+                                              color: AppTheme.info, size: 16)
                                           : null,
                                     ),
                                     const SizedBox(width: 12),
@@ -280,7 +279,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                 const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonBlue,
+                    backgroundColor: AppTheme.info,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),

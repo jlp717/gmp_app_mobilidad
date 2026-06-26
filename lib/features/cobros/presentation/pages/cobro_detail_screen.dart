@@ -120,8 +120,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.dark(
-            primary: AppTheme.neonBlue,
-            surface: AppTheme.darkSurface,
+            primary: AppTheme.info,
+            surface: AppTheme.raisedSurface,
           ),
         ),
         child: child ?? const SizedBox.shrink(),
@@ -148,7 +148,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         children: [
           DropdownButton<String?>(
             value: _tipoDocumento,
-            dropdownColor: AppTheme.darkSurface,
+            dropdownColor: AppTheme.raisedSurface,
             style: const TextStyle(color: Colors.white, fontSize: 13),
             hint: const Text('Tipo documento',
                 style: TextStyle(color: Colors.white54)),
@@ -298,7 +298,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         title: const Text('Confirmar cobro'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -499,7 +499,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         (summaryPending - totalPendiente).abs() > 0.05;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,7 +514,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             ),
           ],
         ),
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         actions: [
@@ -561,7 +561,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   ),
                 ]);
               },
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               child: Column(
                 children: [
                   _buildCobrosFilters(),
@@ -628,12 +628,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.darkSurface.withValues(alpha: 0.5),
+                        color: AppTheme.raisedSurface.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: totalVencido > 0
                               ? AppTheme.error.withValues(alpha: 0.3)
-                              : AppTheme.neonBlue.withValues(alpha: 0.2),
+                              : AppTheme.info.withValues(alpha: 0.2),
                         ),
                       ),
                       child: Row(
@@ -673,7 +673,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                               'Documentos',
                               '$numDocs',
                               Icons.receipt_long,
-                              AppTheme.neonBlue,
+                              AppTheme.info,
                             ),
                           ),
                         ],
@@ -763,7 +763,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                                   'Historial de cobros',
                                   'Registros comerciales en DB2',
                                   Icons.history,
-                                  AppTheme.neonBlue,
+                                  AppTheme.info,
                                 ),
                                 const SizedBox(height: 8),
                                 ...historico.map(_buildHistoricoTile),
@@ -867,7 +867,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         cobro.isSettledByRepartidor ? 'Cobrado por repartidor' : 'No cobrable';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      color: AppTheme.surfaceColor.withValues(alpha: 0.55),
+      color: AppTheme.raisedSurface.withValues(alpha: 0.55),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: AppTheme.success.withValues(alpha: 0.22)),
@@ -904,7 +904,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               settledLabel,
               style: TextStyle(
                 color: cobro.isSettledByRepartidor
-                    ? AppTheme.neonBlue
+                    ? AppTheme.info
                     : AppTheme.textSecondary,
                 fontSize: 11,
                 fontWeight: cobro.isSettledByRepartidor
@@ -922,10 +922,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final fecha = DateFormat('dd/MM/yyyy').format(cobro.fecha);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: AppTheme.darkSurface.withValues(alpha: 0.7),
+      color: AppTheme.raisedSurface.withValues(alpha: 0.7),
       child: ListTile(
         dense: true,
-        leading: const Icon(Icons.payments, color: AppTheme.neonBlue, size: 20),
+        leading: const Icon(Icons.payments, color: AppTheme.info, size: 20),
         title: Text(
           cobro.referencia.isNotEmpty ? cobro.referencia : 'Cobro #${cobro.id}',
           style: const TextStyle(
@@ -948,7 +948,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         trailing: Text(
           _currencyFormat.format(cobro.importe),
           style: const TextStyle(
-            color: AppTheme.neonGreen,
+            color: AppTheme.success,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -968,7 +968,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: state != 'NONE'
@@ -1003,16 +1003,16 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                  color: AppTheme.info.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.35),
+                    color: AppTheme.info.withValues(alpha: 0.35),
                   ),
                 ),
                 child: const Text(
                   'APP',
                   style: TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1052,7 +1052,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         trailing: Text(
           _currencyFormat.format(cobro.importePendiente),
           style: const TextStyle(
-            color: AppTheme.neonBlue,
+            color: AppTheme.info,
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
@@ -1090,11 +1090,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       hintText: 'Importe a cobrar',
                       hintStyle: const TextStyle(color: Colors.white54),
                       filled: true,
-                      fillColor: AppTheme.darkBase,
+                      fillColor: AppTheme.inkSurface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                          color: AppTheme.info.withValues(alpha: 0.3),
                         ),
                       ),
                       errorText: _partialErrors[cobro.id],
@@ -1146,7 +1146,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         icon: Icon(icon, size: 18),
         label: Text(label, style: const TextStyle(fontSize: 11)),
         style: ElevatedButton.styleFrom(
-          backgroundColor: isSelected ? AppTheme.success : AppTheme.darkBase,
+          backgroundColor: isSelected ? AppTheme.success : AppTheme.inkSurface,
           foregroundColor: isSelected ? Colors.white : Colors.white70,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         ),
@@ -1158,9 +1158,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: Border(
-            top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+            top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2))),
       ),
       child: Row(
         children: [
@@ -1175,7 +1175,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                 ),
                 DropdownButton<String>(
                   value: _formaPago,
-                  dropdownColor: AppTheme.darkSurface,
+                  dropdownColor: AppTheme.raisedSurface,
                   style: const TextStyle(color: Colors.white),
                   items: ['CONTADO', 'CREDITO'].map((p) {
                     return DropdownMenuItem(value: p, child: Text(p));
@@ -1194,7 +1194,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             onPressed:
                 total > 0 && !_isSubmitting ? () => _submitCobro(total) : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
+              backgroundColor: AppTheme.info,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(

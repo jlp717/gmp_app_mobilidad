@@ -25,6 +25,7 @@ class ObjectivesService {
   static Future<Map<String, dynamic>> getEvolution({
     required String vendedorCodes,
     required List<int> years,
+    bool forceRefresh = false,
   }) async {
     final yearsKey = years.toList()..sort();
     final cacheKey = [
@@ -42,6 +43,7 @@ class ObjectivesService {
       },
       cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 10),
+      forceRefresh: forceRefresh,
     );
     return result.data;
   }
@@ -56,6 +58,7 @@ class ObjectivesService {
     String? nif,
     String? name,
     int? limit,
+    bool forceRefresh = false,
   }) async {
     final params = <String, dynamic>{
       'vendedorCodes': vendedorCodes,
@@ -98,6 +101,7 @@ class ObjectivesService {
       queryParameters: params,
       cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 5),
+      forceRefresh: forceRefresh,
     );
     return result.data;
   }

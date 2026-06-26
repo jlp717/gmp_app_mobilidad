@@ -82,8 +82,8 @@ class RuteroDetailFinalize extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(14),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(color: AppTheme.borderColor),
       ),
       child: Column(
@@ -91,15 +91,14 @@ class RuteroDetailFinalize extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+              Icon(Icons.person, color: AppTheme.info, size: 20),
               SizedBox(width: 8),
               Text(
                 'DATOS DEL RECEPTOR',
                 style: TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
-                  letterSpacing: 1,
                 ),
               ),
             ],
@@ -129,9 +128,9 @@ class RuteroDetailFinalize extends StatelessWidget {
                   labelText: 'Nombre y Apellidos *',
                   prefixIcon: const Icon(Icons.person_outline, size: 20),
                   filled: true,
-                  fillColor: AppTheme.darkBase,
+                  fillColor: AppTheme.softPanel,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                   errorText: nombreError,
                   errorStyle: const TextStyle(color: AppTheme.error),
@@ -143,7 +142,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                 alignment: Alignment.topLeft,
                 child: Material(
                   elevation: 4,
-                  color: AppTheme.darkCard,
+                  color: AppTheme.raisedSurface,
                   child: SizedBox(
                     height: 200,
                     width: MediaQuery.of(context).size.width -
@@ -154,7 +153,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                       itemBuilder: (BuildContext context, int index) {
                         final option = options.elementAt(index);
                         return ListTile(
-                          tileColor: AppTheme.darkBase,
+                          tileColor: AppTheme.softPanel,
                           title: Text(option,
                               style: const TextStyle(
                                 color: AppTheme.textPrimary,
@@ -195,9 +194,9 @@ class RuteroDetailFinalize extends StatelessWidget {
                   labelText: 'DNI / NIF *',
                   prefixIcon: const Icon(Icons.badge_outlined, size: 20),
                   filled: true,
-                  fillColor: AppTheme.darkBase,
+                  fillColor: AppTheme.softPanel,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                   errorText: dniError,
                   errorStyle: const TextStyle(color: AppTheme.error),
@@ -209,7 +208,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                 alignment: Alignment.topLeft,
                 child: Material(
                   elevation: 4,
-                  color: AppTheme.darkCard,
+                  color: AppTheme.raisedSurface,
                   child: SizedBox(
                     height: 200,
                     width: MediaQuery.of(context).size.width -
@@ -220,7 +219,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                       itemBuilder: (BuildContext context, int index) {
                         final option = options.elementAt(index);
                         return ListTile(
-                          tileColor: AppTheme.darkBase,
+                          tileColor: AppTheme.softPanel,
                           title: Text(option,
                               style: const TextStyle(
                                 color: AppTheme.textPrimary,
@@ -245,9 +244,9 @@ class RuteroDetailFinalize extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.15),
-        border: Border.all(color: Colors.orange),
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.warning.withValues(alpha: 0.14),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.36)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       ),
       child: const Text(
         'ATENCIÓN: Si marca en verde sin modificar cantidades, '
@@ -255,7 +254,7 @@ class RuteroDetailFinalize extends StatelessWidget {
         'entrega NO coincide – debe añadir observaciones en la '
         "pestaña 'Observaciones' antes de confirmar.",
         style: TextStyle(
-          color: Colors.orange,
+          color: AppTheme.warning,
           fontSize: 13,
         ),
       ),
@@ -273,65 +272,48 @@ class RuteroDetailFinalize extends StatelessWidget {
         alignLabelWithHint: true,
         errorText: observacionesError,
         filled: true,
-        fillColor: AppTheme.darkCard,
+        fillColor: AppTheme.softPanel,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),
       ),
     );
   }
 
   Widget _buildSubmitButton() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.neonBlue, AppTheme.neonCyan],
+    return ElevatedButton(
+      onPressed: isSubmitting ? null : onSubmit,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.success,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: ElevatedButton(
-        onPressed: isSubmitting ? null : onSubmit,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          foregroundColor: AppTheme.darkBase,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-        child: isSubmitting
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppTheme.darkBase,
-                ),
-              )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle, size: 24),
-                  SizedBox(width: 12),
-                  Text(
-                    'CONFIRMAR ENTREGA',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
+      child: isSubmitting
+          ? const SizedBox(
+              height: 24,
+              width: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
               ),
-      ),
+            )
+          : const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle, size: 24),
+                SizedBox(width: 12),
+                Text(
+                  'CONFIRMAR ENTREGA',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }

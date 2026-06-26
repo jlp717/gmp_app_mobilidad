@@ -40,7 +40,7 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
   void _initWebView() {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppTheme.darkBase)
+      ..setBackgroundColor(AppTheme.inkSurface)
       ..setOnConsoleMessage((message) {
         debugPrint('[WebView JS] ${message.level}: ${message.message}');
       })
@@ -300,12 +300,12 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
             // Loading overlay while Three.js initializes
             if (!_sceneReady || planner.truck == null)
               const ColoredBox(
-                color: AppTheme.darkBase,
+                color: AppTheme.inkSurface,
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: AppTheme.neonBlue),
+                      CircularProgressIndicator(color: AppTheme.info),
                       SizedBox(height: 16),
                       Text(
                         'Cargando escena 3D...',

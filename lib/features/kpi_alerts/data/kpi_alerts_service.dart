@@ -1,4 +1,4 @@
-// kpi_alerts_service.dart: Servicio de alertas KPI Glacius para Flutter
+// kpi_alerts_service.dart: Servicio de alertas KPI para Flutter
 // Usa ApiClient (Dio) para consistencia con el resto de la app
 
 import 'dart:async';
@@ -154,6 +154,7 @@ class KpiAlertsService {
         '${ApiConfig.kpiAlerts}/client/$clientId',
         cacheKey: 'kpi_alerts_client_$clientId',
         cacheTTL: _cacheTTL,
+        forceRefresh: forceRefresh,
       );
 
       if (data['success'] == true) {
@@ -205,6 +206,7 @@ class KpiAlertsService {
     String? vendedorCodes,
     String? type,
     String? severity,
+    bool forceRefresh = false,
   }) async {
     try {
       final params = <String, dynamic>{};
@@ -224,6 +226,7 @@ class KpiAlertsService {
         cacheKey:
             'kpi_alerts_clients_${vendedorCodes ?? "all"}_${type ?? "all"}_${severity ?? "all"}',
         cacheTTL: const Duration(minutes: 5),
+        forceRefresh: forceRefresh,
       );
 
       if (response['success'] == true) {

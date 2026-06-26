@@ -443,6 +443,27 @@ function resolveConfiguredMinFloor(line) {
     return Number.parseFloat(line.precioMinimo ?? line.PRECIOMINIMO) || 0;
 }
 
+function isTruthyFlag(value) {
+    if (value === true || value === 1) return true;
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'si', 's'].includes(normalized);
+}
+
+function isAuthorizedMinFloorException(line) {
+    const source = String(line.precioClienteSource ?? line.PRECIOCLIENTESOURCE ?? '').trim().toUpperCase();
+    const promotionCode = String(line.promotionCode ?? line.PROMOTIONCODE ?? line.promoCode ?? line.PROMOCODIGO ?? '').trim();
+    const tipoLinea = String(line.tipoLinea ?? line.TIPOLINEA ?? '').trim().toUpperCase();
+    const claseLinea = String(line.claseLinea ?? line.CLASELINEA ?? '').trim().toUpperCase();
+
+    if (isTruthyFlag(line.permiteBajoMinimo ?? line.PERMITEBAJOMINIMO)) return true;
+    if (isTruthyFlag(line.precioEspecialCliente ?? line.PRECIOESPECIALCLIENTE)) return true;
+    if (source.includes('DSEDAC.PES') || source.includes('DSEDAC.PPU')) return true;
+    if (source.includes('DSEDAC.PMR') || source.includes('DSEDAC.PRD')) return true;
+    if (source.includes('PROMO')) return true;
+    if (promotionCode) return true;
+    return tipoLinea === 'G' || claseLinea === 'SC';
+}
+
 function buildBolsaLineMovement(line, tipo, importe, referenceTariff) {
     const ref = referenceTariff ?? resolveBolsaReferencePrice(line);
     return {
@@ -477,7 +498,7 @@ async function validateOrderWithBolsa(vendedorCode, lines) {
         if (referenceTariff <= 0 || qty <= 0) continue;
 
         const belowClientTariff = referenceTariff > 0 && precioVenta + 0.0001 < referenceTariff;
-        if (configuredMin > 0 && precioVenta + 0.0001 < configuredMin && !belowClientTariff) {
+        if (configuredMin > 0 && precioVenta + 0.0001 < configuredMin && !belowClientTariff && !isAuthorizedMinFloorException(line)) {
             return {
                 valid: false,
                 reason: 'PRECIO_DEBAJO_MINIMO',
@@ -939,6 +960,7 @@ module.exports = {
     validateOrderWithBolsa,
     resolveBolsaReferencePrice,
     resolveConfiguredMinFloor,
+    isAuthorizedMinFloorException,
     toDb2Timestamp,
     getMovimientos,
     getHistorialMensual,

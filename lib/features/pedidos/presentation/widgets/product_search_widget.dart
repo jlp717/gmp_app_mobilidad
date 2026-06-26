@@ -63,7 +63,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     final pad = Responsive.contentPadding(context);
 
     return ColoredBox(
-      color: AppTheme.darkBase,
+      color: AppTheme.inkSurface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -83,8 +83,8 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
               decoration: InputDecoration(
                 hintText: 'Buscar producto...',
                 hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search,
-                    color: AppTheme.neonBlue, size: 20),
+                prefixIcon:
+                    const Icon(Icons.search, color: AppTheme.info, size: 20),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(
@@ -99,7 +99,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                       )
                     : null,
                 filled: true,
-                fillColor: AppTheme.darkCard,
+                fillColor: AppTheme.softPanel,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
@@ -112,7 +112,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.neonBlue),
+                  borderSide: const BorderSide(color: AppTheme.info),
                 ),
               ),
             ),
@@ -132,23 +132,23 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                       Icons.inventory_2_outlined,
                       size: 14,
                       color: provider.onlyWithStock
-                          ? AppTheme.neonGreen
+                          ? AppTheme.success
                           : Colors.white54,
                     ),
                     label: const Text('Solo con stock'),
                     selected: provider.onlyWithStock,
-                    selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
-                    backgroundColor: AppTheme.darkCard,
+                    selectedColor: AppTheme.success.withValues(alpha: 0.2),
+                    backgroundColor: AppTheme.softPanel,
                     labelStyle: TextStyle(
                       color: provider.onlyWithStock
-                          ? AppTheme.neonGreen
+                          ? AppTheme.success
                           : Colors.white70,
                       fontSize:
                           Responsive.fontSize(context, small: 11, large: 13),
                     ),
                     side: BorderSide(
                       color: provider.onlyWithStock
-                          ? AppTheme.neonGreen
+                          ? AppTheme.success
                           : AppTheme.borderColor,
                     ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -173,16 +173,16 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                       Icons.star,
                       size: 14,
                       color: provider.selectedPrefamily == 'NESTLE'
-                          ? Colors.amber
+                          ? AppTheme.accentAmber
                           : Colors.white54,
                     ),
                     label: const Text('Nestlé'),
                     selected: provider.selectedPrefamily == 'NESTLE',
-                    selectedColor: Colors.amber.withValues(alpha: 0.22),
-                    backgroundColor: AppTheme.darkCard,
+                    selectedColor: AppTheme.accentAmber.withValues(alpha: 0.22),
+                    backgroundColor: AppTheme.softPanel,
                     labelStyle: TextStyle(
                       color: provider.selectedPrefamily == 'NESTLE'
-                          ? Colors.amber
+                          ? AppTheme.accentAmber
                           : Colors.white70,
                       fontSize: Responsive.fontSize(
                         context,
@@ -193,7 +193,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     ),
                     side: BorderSide(
                       color: provider.selectedPrefamily == 'NESTLE'
-                          ? Colors.amber
+                          ? AppTheme.accentAmber
                           : AppTheme.borderColor,
                     ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -221,16 +221,15 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     child: FilterChip(
                       label: Text(family),
                       selected: selected,
-                      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-                      backgroundColor: AppTheme.darkCard,
+                      selectedColor: AppTheme.info.withValues(alpha: 0.2),
+                      backgroundColor: AppTheme.softPanel,
                       labelStyle: TextStyle(
-                        color: selected ? AppTheme.neonBlue : Colors.white70,
+                        color: selected ? AppTheme.info : Colors.white70,
                         fontSize:
                             Responsive.fontSize(context, small: 11, large: 13),
                       ),
                       side: BorderSide(
-                        color:
-                            selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                        color: selected ? AppTheme.info : AppTheme.borderColor,
                       ),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,

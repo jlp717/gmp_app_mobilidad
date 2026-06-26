@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-/// Premium animated FloatingActionButton with gradient, glow, and pulse.
+/// Shared floating action button.
 ///
-/// Features:
-/// - Gradient background (blue → cyan)
-/// - Glow shadow that responds to press
-/// - Subtle idle pulse animation
-/// - Smooth scale transition on press
-class PremiumFloatingActionButton extends StatefulWidget {
+/// The legacy class name is retained for compatibility with existing screens.
+class PremiumFloatingActionButton extends StatelessWidget {
   const PremiumFloatingActionButton({
     required this.onPressed,
     this.icon,
@@ -25,113 +21,63 @@ class PremiumFloatingActionButton extends StatefulWidget {
   final double size;
 
   @override
-  State<PremiumFloatingActionButton> createState() =>
-      _PremiumFloatingActionButtonState();
-}
-
-class _PremiumFloatingActionButtonState
-    extends State<PremiumFloatingActionButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final color = widget.accentColor ?? AppTheme.neonBlue;
-    final isExtended = widget.label != null;
+    final color = accentColor ?? AppTheme.info;
+    final isExtended = label != null;
 
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final pulseValue = 0.92 + (0.08 * _pulseController.value);
-        final glowOpacity = 0.15 + (0.15 * _pulseController.value);
-
-        return Transform.scale(
-          scale: pulseValue,
-          child: Container(
-            width: isExtended ? null : widget.size,
-            height: widget.size,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, AppTheme.neonCyan],
-              ),
-              shape: isExtended ? BoxShape.rectangle : BoxShape.circle,
-              borderRadius: isExtended
-                  ? BorderRadius.circular(AppTheme.radiusFull)
-                  : null,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: glowOpacity),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: widget.onPressed,
-                borderRadius: isExtended
-                    ? BorderRadius.circular(AppTheme.radiusFull)
-                    : BorderRadius.circular(widget.size / 2),
-                splashColor: Colors.white.withValues(alpha: 0.2),
-                highlightColor: Colors.transparent,
-                child: isExtended
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 14),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.icon != null) ...[
-                              Icon(widget.icon,
-                                  size: 20, color: AppTheme.darkBase),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              widget.label!,
-                              style: const TextStyle(
-                                color: AppTheme.darkBase,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Center(
-                        child: Icon(
-                          widget.icon ?? Icons.add,
-                          size: 24,
-                          color: AppTheme.darkBase,
-                        ),
+    final button = Material(
+      color: color,
+      elevation: 4,
+      shadowColor: Colors.black.withValues(alpha: 0.24),
+      shape: isExtended
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            )
+          : const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: isExtended
+            ? BorderRadius.circular(AppTheme.radiusFull)
+            : BorderRadius.circular(size / 2),
+        child: isExtended
+            ? Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (icon != null) ...[
+                      Icon(icon, size: 20, color: Colors.white),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      label!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        letterSpacing: 0,
                       ),
+                    ),
+                  ],
+                ),
+              )
+            : SizedBox(
+                width: size,
+                height: size,
+                child: Center(
+                  child: Icon(icon ?? Icons.add, size: 24, color: Colors.white),
+                ),
               ),
-            ),
-          ),
-        );
-      },
+      ),
+    );
+
+    return AnimatedScale(
+      scale: 1,
+      duration: AppTheme.animFast,
+      curve: Curves.easeOut,
+      child: button,
     );
   }
 }

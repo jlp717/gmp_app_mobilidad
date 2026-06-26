@@ -88,21 +88,13 @@ class CommissionsPdfService {
 
       debugPrint('[CommissionsPDF] Requesting: $uri');
 
-      // Use Dio for better error handling and timeout control
-      final dio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout:
-              const Duration(seconds: 60), // PDF generation can be slow
-          headers: ApiClient.authHeaders,
-        ),
-      );
-
-      final response = await dio.get<Uint8List>(
+      final response = await ApiClient.dio.get<Uint8List>(
         uri.toString(),
         options: Options(
           responseType: ResponseType.bytes,
           followRedirects: true,
+          receiveTimeout:
+              const Duration(seconds: 60), // PDF generation can be slow
         ),
       );
 

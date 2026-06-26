@@ -142,13 +142,13 @@ class RuteroWeekSummary extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.neonPink.withValues(alpha: 0.2),
+              color: AppTheme.accentRose.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               'Total: $totalUniqueClients',
               style: TextStyle(
-                color: AppTheme.neonPink,
+                color: AppTheme.accentRose,
                 fontSize: Responsive.isSmall(context) ? 10 : 11,
                 fontWeight: FontWeight.bold,
               ),
@@ -185,7 +185,7 @@ class _CompactDayChip extends StatelessWidget {
       child: Container(
         width: 50,
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.neonPink : AppTheme.surfaceColor,
+          color: isSelected ? AppTheme.accentRose : AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(8),
           border: isSelected ? null : Border.all(color: AppTheme.borderColor),
         ),

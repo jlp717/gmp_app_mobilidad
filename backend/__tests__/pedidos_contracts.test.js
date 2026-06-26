@@ -51,6 +51,20 @@ beforeEach(() => {
 });
 
 describe('pedidos IVA price view', () => {
+  test('effectiveMinPriceFromRow keeps locked floor above cost margin floor', () => {
+    expect(pedidosService.effectiveMinPriceFromRow({
+      PRECIO_MINIMO: 1,
+      COSTE_FABRICACION: 0.6,
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(1);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      PRECIO_MINIMO: 1,
+      COSTE_FABRICACION: 0.9,
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(1.08);
+  });
+
   test('applyProductPriceView returns base and IVA prices and switches display fields', () => {
     const base = {
       code: 'ART001',
@@ -83,10 +97,93 @@ describe('pedidos IVA price view', () => {
 });
 
 describe('pedidos product catalog contract', () => {
+  test('configured pricing reads client special prices from ERP PES table, not a custom table or view', async () => {
+    const seenSql = [];
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      seenSql.push(sql);
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql)) return [];
+      if (/DSEDAC\.PES/i.test(sql)) {
+        return [{
+          CODIGOARTICULO: 'ART001',
+          PRECIO_ESPECIAL: 9,
+          IS_SPECIAL_PRICE: 'S',
+          PERMITE_BAJO_MINIMO: 'S',
+          MOTIVO: 'Precio especial/promocion ERP',
+          SOURCE: 'DSEDAC.PES',
+        }];
+      }
+      return [];
+    });
+
+    const result = await pedidosService.applyConfiguredPricingToProducts([{
+      code: 'ART001',
+      precioTarifa1: 12,
+      precioTarifaCliente: 12,
+      precioCliente: 0,
+      precioMinimo: 10,
+    }], '4300001091');
+
+    expect(result[0]).toMatchObject({
+      precioCliente: 9,
+      precioTarifaCliente: 9,
+      precioEspecialCliente: true,
+      permiteBajoMinimo: true,
+      precioClienteSource: 'DSEDAC.PES',
+    });
+    expect(seenSql.join('\n')).toContain('DSEDAC.PES');
+    expect(seenSql.join('\n')).toContain('DSEDAC.CLP');
+    expect(seenSql.join('\n')).not.toContain('CLIENTE_PRECIO_ESPECIAL');
+    expect(seenSql.join('\n')).not.toContain('V_PROMO_PRECIOS_CLIENTE');
+  });
+
+  test('getComplementaryProducts applies client promo pricing to cross-sell items', async () => {
+    const seenSql = [];
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      seenSql.push(sql);
+      if (/JOIN\s+DSEDAC\.LINDTO\s+L2/i.test(sql)) {
+        return [{
+          CODE: 'ART002',
+          NAME: 'Complementario',
+          COOCCURRENCES: 4,
+          PRICE: 12,
+          UNITSPERBOX: 1,
+          STOCKENVASES: 8,
+          STOCKUNIDADES: 0,
+        }];
+      }
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql)) return [];
+      if (/DSEDAC\.PES/i.test(sql)) {
+        return [{
+          CODIGOARTICULO: 'ART002',
+          PRECIO_ESPECIAL: 7.5,
+          IS_SPECIAL_PRICE: 'S',
+          PERMITE_BAJO_MINIMO: 'S',
+          SOURCE: 'DSEDAC.PES',
+        }];
+      }
+      return [];
+    });
+
+    const result = await pedidosService.getComplementaryProducts(['ART001'], '4300001091');
+
+    expect(result[0]).toMatchObject({
+      code: 'ART002',
+      price: 7.5,
+      precioTarifaCliente: 7.5,
+      precioEspecialCliente: true,
+      precioClienteSource: 'DSEDAC.PES',
+    });
+    expect(seenSql.join('\n')).toContain('DSEDAC.CLP');
+    expect(seenSql.join('\n')).not.toContain('V_PROMO_PRECIOS_CLIENTE');
+  });
+
   test('getProducts uses LACLAE purchase history and orders least purchased first', async () => {
     let capturedSql = '';
     let capturedParams = [];
     mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+        return [];
+      }
       capturedSql = sql;
       capturedParams = params;
       return [
@@ -142,6 +239,9 @@ describe('pedidos product catalog contract', () => {
     let capturedSql = '';
     let capturedParams = [];
     mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+        return [];
+      }
       capturedSql = sql;
       capturedParams = params;
       return [];
@@ -163,6 +263,9 @@ describe('pedidos product catalog contract', () => {
   test('getProducts exposes client tariff code and price from CLC/ARA', async () => {
     let capturedSql = '';
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+        return [];
+      }
       capturedSql = sql;
       return [
         {
@@ -396,7 +499,8 @@ describe('pedidos create order persistence contract', () => {
     expect(headerCall[0]).toContain('CODIGOVENDEDORCOBRO');
     expect(headerCall[0]).toContain('IMPORTEBASEIMPONIBLEBRUTA1');
     expect(headerCall[1]).toContain('GMP');
-    expect(headerCall[1]).toEqual(expect.arrayContaining(['P', 93]));
+    expect(headerCall[1][3]).toBe('P');
+    expect(headerCall[1][4]).toBe(1);
     expect(headerCall[1]).toContain('C001');
     expect(headerCall[1]).toContain('01');
   });

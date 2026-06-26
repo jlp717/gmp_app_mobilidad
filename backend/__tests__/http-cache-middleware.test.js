@@ -72,6 +72,125 @@ describe('HTTP cache auth safety', () => {
     expect(secondRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'HIT');
     expect(secondRes.json).toHaveBeenCalledWith({ success: true, value: 1 });
   });
+
+  test('bypasses and refreshes cached data on explicit no-cache requests', () => {
+    const req = {
+      method: 'GET',
+      path: '/dashboard/metrics',
+      originalUrl: '/api/dashboard/metrics',
+      baseUrl: '/api',
+      query: {},
+      headers: {},
+      user: { id: '01', role: 'COMERCIAL' },
+    };
+
+    const firstRes = makeRes();
+    cacheMiddleware(req, firstRes, jest.fn());
+    firstRes.json({ success: true, value: 1 });
+
+    const refreshRes = makeRes();
+    const refreshNext = jest.fn();
+    cacheMiddleware(
+      {
+        ...req,
+        headers: { 'cache-control': 'no-cache', 'x-force-refresh': 'true' },
+      },
+      refreshRes,
+      refreshNext,
+    );
+
+    expect(refreshNext).toHaveBeenCalledTimes(1);
+    expect(refreshRes.setHeader).toHaveBeenCalledWith(
+      'X-Cache-Status',
+      'BYPASS',
+    );
+    refreshRes.json({ success: true, value: 2 });
+
+    const thirdRes = makeRes();
+    cacheMiddleware(req, thirdRes, jest.fn());
+
+    expect(thirdRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+    expect(thirdRes.json).toHaveBeenCalledWith({ success: true, value: 2 });
+  });
+
+  test('does not partition cache keys by transient refresh query params', () => {
+    const req = {
+      method: 'GET',
+      path: '/dashboard/metrics',
+      originalUrl: '/api/dashboard/metrics?year=2026',
+      baseUrl: '/api',
+      query: { year: '2026' },
+      headers: {},
+      user: { id: '01', role: 'COMERCIAL' },
+    };
+
+    const firstRes = makeRes();
+    cacheMiddleware(req, firstRes, jest.fn());
+    firstRes.json({ success: true, value: 1 });
+
+    const refreshRes = makeRes();
+    cacheMiddleware(
+      {
+        ...req,
+        originalUrl: '/api/dashboard/metrics?year=2026&forceRefresh=true',
+        query: { year: '2026', forceRefresh: 'true' },
+      },
+      refreshRes,
+      jest.fn(),
+    );
+    refreshRes.json({ success: true, value: 2 });
+
+    const thirdRes = makeRes();
+    cacheMiddleware(req, thirdRes, jest.fn());
+
+    expect(thirdRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+    expect(thirdRes.json).toHaveBeenCalledWith({ success: true, value: 2 });
+  });
+
+  test('separates cached responses by authorization role and vendor scope', () => {
+    const baseReq = {
+      method: 'GET',
+      path: '/clients/list',
+      originalUrl: '/api/clients/list?vendedorCodes=01',
+      baseUrl: '/api',
+      query: { vendedorCodes: '01' },
+      headers: {},
+    };
+
+    const commercialReq = {
+      ...baseReq,
+      user: {
+        id: '01',
+        code: '01',
+        role: 'COMERCIAL',
+        vendedorCodes: ['01'],
+      },
+    };
+    const managerReq = {
+      ...baseReq,
+      user: {
+        id: '01',
+        code: '01',
+        role: 'JEFE_VENTAS',
+        isJefeVentas: true,
+        vendedorCodes: ['01', '02'],
+      },
+    };
+
+    const commercialRes = makeRes();
+    cacheMiddleware(commercialReq, commercialRes, jest.fn());
+    commercialRes.json({ success: true, clients: [{ code: 'C01' }] });
+
+    const managerRes = makeRes();
+    const managerNext = jest.fn();
+    cacheMiddleware(managerReq, managerRes, managerNext);
+
+    expect(managerNext).toHaveBeenCalledTimes(1);
+    expect(managerRes.setHeader).toHaveBeenCalledWith(
+      'X-Cache-Status',
+      'MISS',
+    );
+  });
 });
 
 describe('network optimizer cache headers', () => {

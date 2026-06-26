@@ -30,22 +30,16 @@ class CobrosSummaryCard extends StatelessWidget {
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withValues(alpha: 0.7),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: AppTheme.borderColor.withValues(alpha: 0.7),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -58,12 +52,12 @@ class CobrosSummaryCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                  color: AppTheme.info.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
                   Icons.summarize,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   size: 18,
                 ),
               ),
@@ -96,7 +90,7 @@ class CobrosSummaryCard extends StatelessWidget {
                         strokeWidth: 8,
                         backgroundColor: Colors.white.withValues(alpha: 0.1),
                         valueColor: AlwaysStoppedAnimation(
-                          progreso >= 1 ? Colors.green : AppTheme.neonBlue,
+                          progreso >= 1 ? AppTheme.success : AppTheme.info,
                         ),
                       ),
                     ),
@@ -108,8 +102,8 @@ class CobrosSummaryCard extends StatelessWidget {
                             '${(progreso * 100).toInt()}%',
                             style: TextStyle(
                               color: progreso >= 1
-                                  ? Colors.green
-                                  : AppTheme.neonBlue,
+                                  ? AppTheme.success
+                                  : AppTheme.info,
                               fontWeight: FontWeight.bold,
                               fontSize: Responsive.fontSize(context,
                                   small: 16, large: 22),
@@ -141,7 +135,7 @@ class CobrosSummaryCard extends StatelessWidget {
                       icon: Icons.pending_actions,
                       label: 'Pendientes',
                       value: totalPendientes.toString(),
-                      color: Colors.orange,
+                      color: AppTheme.warning,
                     ),
                     const SizedBox(height: 8),
                     _buildStatRow(
@@ -149,7 +143,7 @@ class CobrosSummaryCard extends StatelessWidget {
                       icon: Icons.check_circle,
                       label: 'Completadas',
                       value: totalCompletadas.toString(),
-                      color: Colors.green,
+                      color: AppTheme.success,
                     ),
                   ],
                 ),
@@ -167,13 +161,15 @@ class CobrosSummaryCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber, color: Colors.red, size: 20),
+                  const Icon(Icons.warning_amber,
+                      color: AppTheme.error, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -182,7 +178,7 @@ class CobrosSummaryCard extends StatelessWidget {
                         const Text(
                           'Contra Reembolso Pendiente',
                           style: TextStyle(
-                            color: Colors.red,
+                            color: AppTheme.error,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -190,7 +186,7 @@ class CobrosSummaryCard extends StatelessWidget {
                         Text(
                           '$totalCTR entregas requieren cobro',
                           style: TextStyle(
-                            color: Colors.red.withValues(alpha: 0.7),
+                            color: AppTheme.error.withValues(alpha: 0.7),
                             fontSize: 10,
                           ),
                         ),
@@ -205,13 +201,9 @@ class CobrosSummaryCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.1),
-                  AppTheme.neonPurple.withValues(alpha: 0.1),
-                ],
-              ),
+              color: AppTheme.softPanel,
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.info.withValues(alpha: 0.18)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -9,9 +9,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// ðŸ“„ PDF PREVIEW SCREEN
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ---------------------------------------------------------------------------
+/// PDF preview screen
+/// ---------------------------------------------------------------------------
 ///
 /// Pantalla full-screen con visor PDF + acciones en barra inferior.
 ///
@@ -25,7 +25,7 @@ import 'package:share_plus/share_plus.dart';
 ///       onWhatsAppTap: () => showWhatsAppModal(...),
 ///     ),
 ///   ));
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ---------------------------------------------------------------------------
 
 class PdfPreviewScreen extends StatefulWidget {
   const PdfPreviewScreen({
@@ -182,9 +182,9 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         leading: IconButton(
           icon: const Icon(Icons.close, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
@@ -212,7 +212,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share, color: AppTheme.neonBlue),
+            icon: const Icon(Icons.share, color: AppTheme.info),
             tooltip: 'Compartir',
             onPressed: _sharePdf,
           ),
@@ -263,7 +263,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
               width: 48,
               height: 48,
               child: CircularProgressIndicator(
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 strokeWidth: 3,
               ),
             ),
@@ -315,7 +315,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: Border(
           top: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
         ),
@@ -327,13 +327,13 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             _buildActionButton(
               icon: Icons.download_rounded,
               label: 'Descargar',
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               onTap: _downloadPdf,
             ),
             _buildActionButton(
               icon: Icons.email_outlined,
               label: 'Email',
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               onTap: widget.onEmailTap,
             ),
             _buildActionButton(

@@ -120,18 +120,11 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
       ),
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.surfaceColor,
-              AppTheme.darkBase.withValues(alpha: 0.95),
-            ],
-          ),
+          color: AppTheme.raisedSurface,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -142,7 +135,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               decoration: BoxDecoration(
                 border: Border(
                     bottom: BorderSide(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+                        color: AppTheme.info.withValues(alpha: 0.2))),
                 color: Colors.white.withValues(alpha: 0.02),
               ),
               child: const Row(
@@ -151,37 +144,37 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                       flex: 5,
                       child: Text('ITEM',
                           style: TextStyle(
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 1))),
+                              letterSpacing: 0))),
                   Expanded(
                       flex: 3,
                       child: Text('VENTA',
                           textAlign: TextAlign.right,
                           style: TextStyle(
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 1))),
+                              letterSpacing: 0))),
                   Expanded(
                       flex: 2,
                       child: Text('MARG %',
                           textAlign: TextAlign.right,
                           style: TextStyle(
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 1))),
+                              letterSpacing: 0))),
                   Expanded(
                       flex: 2,
                       child: Text('PEDIDOS',
                           textAlign: TextAlign.right,
                           style: TextStyle(
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 1))),
+                              letterSpacing: 0))),
                 ],
               ),
             ),
@@ -219,10 +212,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.15),
+        color: AppTheme.warning.withValues(alpha: 0.15),
         border: Border(
             top: BorderSide(
-                color: Colors.orange.withValues(alpha: 0.5), width: 2)),
+                color: AppTheme.warning.withValues(alpha: 0.5), width: 2)),
       ),
       child: Row(
         children: [
@@ -230,11 +223,11 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             flex: 5,
             child: Row(
               children: [
-                Icon(Icons.summarize, color: Colors.orange, size: 16),
+                Icon(Icons.summarize, color: AppTheme.warning, size: 16),
                 SizedBox(width: 6),
                 Text('TOTAL',
                     style: TextStyle(
-                        color: Colors.orange,
+                        color: AppTheme.warning,
                         fontSize: 13,
                         fontWeight: FontWeight.bold)),
               ],
@@ -267,7 +260,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               totalOrders.toString(),
               textAlign: TextAlign.right,
               style: const TextStyle(
-                  color: Colors.orange,
+                  color: AppTheme.warning,
                   fontSize: 12,
                   fontWeight: FontWeight.bold),
             ),
@@ -298,14 +291,14 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     final marginPercent =
         node.sales > 0 ? (node.margin / node.sales) * 100 : 0.0;
     final marginColor = marginPercent > 20
-        ? AppTheme.neonGreen
-        : (marginPercent > 10 ? Colors.amber : AppTheme.error);
+        ? AppTheme.success
+        : (marginPercent > 10 ? AppTheme.accentAmber : AppTheme.error);
 
     // Level colors for visual hierarchy
     final levelColors = [
-      AppTheme.neonBlue,
-      AppTheme.neonPurple,
-      AppTheme.neonGreen,
+      AppTheme.info,
+      AppTheme.accentIndigo,
+      AppTheme.success,
       Colors.teal,
       Colors.pink
     ];

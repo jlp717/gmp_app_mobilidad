@@ -1,4 +1,4 @@
-// kpi_dashboard_page.dart: Panel resumen Glacius/Nestle
+// kpi_dashboard_page.dart: Panel resumen de alertas comerciales
 // JEFE_VENTAS ve todos los clientes, COMERCIAL solo los suyos
 
 import 'package:flutter/material.dart';
@@ -109,7 +109,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         });
       } else {
         setState(() {
-          _error = 'No se pudieron cargar los datos de Nestle';
+          _error = 'No se pudieron cargar los datos de Nestlé';
           _loading = false;
         });
       }
@@ -125,10 +125,10 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        title: const Text('Nestle / Glacius'),
-        backgroundColor: AppTheme.darkSurface,
+        title: const Text('Alertas comerciales'),
+        backgroundColor: AppTheme.raisedSurface,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -245,13 +245,13 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
     Color dotColor;
 
     if (lastLoad == null) {
-      label = 'Sin datos de Nestle cargados aun';
-      dotColor = Colors.orange;
+      label = 'Sin datos de Nestlé cargados aun';
+      dotColor = AppTheme.warning;
     } else {
       final completedAt = lastLoad['completedAt']?.toString() ?? '';
       final relativeTime = _formatRelativeTime(completedAt);
       label = 'Datos actualizados $relativeTime';
-      dotColor = Colors.greenAccent;
+      dotColor = AppTheme.success;
 
       if (totalAlerts > 0) {
         label +=
@@ -262,7 +262,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: dotColor.withValues(alpha: 0.3)),
       ),
@@ -280,7 +280,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(color: Colors.grey[300], fontSize: 13),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
           ),
         ],
@@ -318,28 +318,28 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         _buildCard(
           'Urgentes',
           totals['critical']?.toString() ?? '0',
-          Colors.redAccent,
+          AppTheme.error,
           Icons.error_rounded,
         ),
         const SizedBox(width: 8),
         _buildCard(
           'Atencion',
           totals['warning']?.toString() ?? '0',
-          Colors.orangeAccent,
+          AppTheme.warning,
           Icons.warning_amber_rounded,
         ),
         const SizedBox(width: 8),
         _buildCard(
           'Info',
           totals['info']?.toString() ?? '0',
-          Colors.cyanAccent,
+          AppTheme.info,
           Icons.info_outline_rounded,
         ),
         const SizedBox(width: 8),
         _buildCard(
           'Clientes',
           totals['clients']?.toString() ?? '0',
-          Colors.blueAccent,
+          AppTheme.info,
           Icons.storefront_rounded,
         ),
       ],
@@ -351,7 +351,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
         decoration: BoxDecoration(
-          color: AppTheme.darkSurface,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
@@ -393,7 +393,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -409,9 +409,9 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
               ),
             ),
           ),
-          if (crit > 0) _buildBadge(crit, Colors.redAccent),
-          if (warn > 0) _buildBadge(warn, Colors.orangeAccent),
-          if (info > 0) _buildBadge(info, Colors.cyanAccent),
+          if (crit > 0) _buildBadge(crit, AppTheme.error),
+          if (warn > 0) _buildBadge(warn, AppTheme.warning),
+          if (info > 0) _buildBadge(info, AppTheme.info),
           const SizedBox(width: 8),
           SizedBox(
             width: 32,
@@ -448,18 +448,18 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         : code;
 
     final headerColor = crit > 0
-        ? Colors.redAccent.withValues(alpha: 0.2)
+        ? AppTheme.error.withValues(alpha: 0.2)
         : warn > 0
-            ? Colors.orangeAccent.withValues(alpha: 0.12)
-            : Colors.blueGrey.withValues(alpha: 0.1);
+            ? AppTheme.warning.withValues(alpha: 0.12)
+            : AppTheme.textSecondary.withValues(alpha: 0.1);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(10),
         border: crit > 0
-            ? Border.all(color: Colors.redAccent.withValues(alpha: 0.3))
+            ? Border.all(color: AppTheme.error.withValues(alpha: 0.3))
             : null,
       ),
       child: Theme(
@@ -507,8 +507,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                 ),
               ),
               const SizedBox(width: 6),
-              if (crit > 0) _buildBadge(crit, Colors.redAccent),
-              if (warn > 0) _buildBadge(warn, Colors.orangeAccent),
+              if (crit > 0) _buildBadge(crit, AppTheme.error),
+              if (warn > 0) _buildBadge(warn, AppTheme.warning),
               const SizedBox(width: 4),
               Text(
                 '$total',
@@ -567,10 +567,10 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
     final color = _parseColor(colorHex);
 
     final sevColor = severity == 'critical'
-        ? Colors.redAccent
+        ? AppTheme.error
         : severity == 'warning'
-            ? Colors.orangeAccent
-            : Colors.cyanAccent;
+            ? AppTheme.warning
+            : AppTheme.info;
 
     final sevLabel = severity == 'critical'
         ? 'URG'
@@ -582,7 +582,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase.withValues(alpha: 0.6),
+        color: AppTheme.inkSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(8),
         border: Border(
           left: BorderSide(color: color, width: 3),
@@ -629,7 +629,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           // Summary
           Text(
             summary,
-            style: TextStyle(color: Colors.grey[300], fontSize: 12),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
 
           // Detail (if exists)
@@ -696,14 +696,13 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                 ? Icons.filter_list_off_rounded
                 : Icons.check_circle_outline_rounded,
             size: 56,
-            color:
-                hasGlobalData ? Colors.orangeAccent : Colors.greenAccent[400],
+            color: hasGlobalData ? AppTheme.warning : AppTheme.success,
           ),
           const SizedBox(height: 12),
           Text(
             hasGlobalData
                 ? 'Sin alertas para tus clientes'
-                : 'Sin alertas de Nestle',
+                : 'Sin alertas de Nestlé',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,

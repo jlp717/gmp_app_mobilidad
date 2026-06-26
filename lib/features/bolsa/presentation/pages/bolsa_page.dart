@@ -263,7 +263,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
               padding: const EdgeInsets.all(20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -277,7 +277,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
               padding: const EdgeInsets.all(20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -314,7 +314,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: AppTheme.darkSurface,
+          backgroundColor: AppTheme.raisedSurface,
           title: const Text(
             'Configurar bolsa',
             style: TextStyle(color: Colors.white),
@@ -397,7 +397,7 @@ class _BolsaSummaryCard extends StatelessWidget {
             ? AppTheme.error
             : status.isLow
                 ? AppTheme.accentAmber
-                : AppTheme.neonGreen,
+                : AppTheme.success,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,7 +406,7 @@ class _BolsaSummaryCard extends StatelessWidget {
             children: [
               const Icon(
                 Icons.account_balance_wallet,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 22,
               ),
               const SizedBox(width: 8),
@@ -427,8 +427,8 @@ class _BolsaSummaryCard extends StatelessWidget {
               color: status.isDeficit
                   ? AppTheme.error
                   : status.isLow
-                      ? Colors.amber
-                      : AppTheme.neonGreen,
+                      ? AppTheme.warning
+                      : AppTheme.success,
               fontSize: 32,
               fontWeight: FontWeight.bold,
             ),
@@ -440,7 +440,7 @@ class _BolsaSummaryCard extends StatelessWidget {
                 child: _MetricBox(
                   label: 'Acumulado',
                   value: _bolsaMoney(status.acumulado),
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   icon: Icons.trending_up,
                 ),
               ),
@@ -458,7 +458,7 @@ class _BolsaSummaryCard extends StatelessWidget {
                 child: _MetricBox(
                   label: 'Límite',
                   value: _bolsaMoney(status.presupuestoPeriodo),
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   icon: Icons.account_balance,
                 ),
               ),
@@ -469,7 +469,7 @@ class _BolsaSummaryCard extends StatelessWidget {
             'Neto del periodo: ${status.netoPeriodo >= 0 ? '+' : '-'}${_bolsaMoney(status.netoPeriodo.abs())}',
             style: TextStyle(
               color:
-                  status.netoPeriodo >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                  status.netoPeriodo >= 0 ? AppTheme.success : AppTheme.error,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -555,13 +555,13 @@ class _PeriodDropdown<T> extends StatelessWidget {
     return DropdownButtonFormField<T>(
       value: value,
       isExpanded: true,
-      dropdownColor: AppTheme.darkSurface,
+      dropdownColor: AppTheme.raisedSurface,
       iconEnabledColor: Colors.white70,
       decoration: InputDecoration(
         isDense: true,
-        prefixIcon: Icon(icon, color: AppTheme.neonBlue, size: 17),
+        prefixIcon: Icon(icon, color: AppTheme.info, size: 17),
         filled: true,
-        fillColor: AppTheme.darkSurface,
+        fillColor: AppTheme.raisedSurface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -634,7 +634,7 @@ class _GroupedBolsaView extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
+              color: AppTheme.raisedSurface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text(
@@ -662,16 +662,16 @@ class _GroupedSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.25)),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.groups, color: AppTheme.neonBlue, size: 20),
+              Icon(Icons.groups, color: AppTheme.info, size: 20),
               SizedBox(width: 8),
               Text(
                 'Bolsa del equipo',
@@ -689,7 +689,7 @@ class _GroupedSummaryCard extends StatelessWidget {
                 child: _MetricBox(
                   label: 'Disponible',
                   value: _bolsaMoney(summary.saldoDisponible),
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   icon: Icons.account_balance_wallet,
                 ),
               ),
@@ -698,7 +698,7 @@ class _GroupedSummaryCard extends StatelessWidget {
                 child: _MetricBox(
                   label: 'Acumulado',
                   value: _bolsaMoney(summary.acumulado),
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   icon: Icons.trending_up,
                 ),
               ),
@@ -729,10 +729,10 @@ class _GroupedVendorTile extends StatelessWidget {
     final color = status.isDeficit
         ? AppTheme.error
         : status.isLow
-            ? Colors.amber
-            : AppTheme.neonGreen;
+            ? AppTheme.warning
+            : AppTheme.success;
     return Card(
-      color: AppTheme.darkSurface,
+      color: AppTheme.raisedSurface,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -839,8 +839,8 @@ class _ProgressBar extends StatelessWidget {
     final color = pct >= 0.9
         ? AppTheme.error
         : pct >= 0.7
-            ? Colors.amber
-            : AppTheme.neonGreen;
+            ? AppTheme.warning
+            : AppTheme.success;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -863,7 +863,7 @@ class _ProgressBar extends StatelessWidget {
           child: LinearProgressIndicator(
             value: pct,
             minHeight: 10,
-            backgroundColor: AppTheme.darkSurface,
+            backgroundColor: AppTheme.raisedSurface,
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
@@ -952,12 +952,11 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
         child: ChoiceChip(
           selected: selected,
           onSelected: (_) => p.setTipoFilter(tipo),
-          backgroundColor: AppTheme.darkSurface,
-          selectedColor: AppTheme.neonBlue.withValues(alpha: 0.25),
+          backgroundColor: AppTheme.raisedSurface,
+          selectedColor: AppTheme.info.withValues(alpha: 0.25),
           side: BorderSide(
-            color: selected
-                ? AppTheme.neonBlue
-                : Colors.white.withValues(alpha: 0.15),
+            color:
+                selected ? AppTheme.info : Colors.white.withValues(alpha: 0.15),
           ),
           label: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1040,7 +1039,7 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
               fontSize: 12,
             ),
             filled: true,
-            fillColor: AppTheme.darkSurface,
+            fillColor: AppTheme.raisedSurface,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             border: OutlineInputBorder(
@@ -1058,7 +1057,7 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: AppTheme.neonBlue.withValues(alpha: 0.5),
+                color: AppTheme.info.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -1123,8 +1122,8 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonBlue,
-              surface: AppTheme.darkSurface,
+              primary: AppTheme.info,
+              surface: AppTheme.raisedSurface,
             ),
           ),
           child: child!,
@@ -1213,7 +1212,7 @@ class _FilterTextField extends StatelessWidget {
           fontSize: 11,
         ),
         filled: true,
-        fillColor: AppTheme.darkSurface,
+        fillColor: AppTheme.raisedSurface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -1226,7 +1225,7 @@ class _FilterTextField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: AppTheme.neonBlue.withValues(alpha: 0.5),
+            color: AppTheme.info.withValues(alpha: 0.5),
           ),
         ),
       ),
@@ -1245,7 +1244,7 @@ class _MovimientoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCredit = movimiento.tipo.isCredit;
-    final color = isCredit ? AppTheme.neonGreen : AppTheme.warning;
+    final color = isCredit ? AppTheme.success : AppTheme.warning;
     final icon =
         isCredit ? Icons.add_circle_outline : Icons.remove_circle_outline;
     final dateStr = movimiento.fecha != null

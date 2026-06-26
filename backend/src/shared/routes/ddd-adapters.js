@@ -2106,7 +2106,7 @@ function createCobrosRoutes() {
 
   const parseCobrosPagination = (queryParams = {}) => {
     const requestedLimit = parseInt(queryParams.limit, 10);
-    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 100;
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 2000) : 100;
     const requestedOffset = parseInt(queryParams.offset, 10);
     const hasOffset = Number.isFinite(requestedOffset);
     const offset = hasOffset ? Math.max(requestedOffset, 0) : null;
@@ -2342,10 +2342,12 @@ function createCobrosRoutes() {
       const vendedorCodeParam = req.params.vendedorCode;
       logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
       const pagination = parseCobrosPagination(req.query);
-      const cacheKey = `ddd:cobros:pending-summary:${String(vendedorCodeParam || '').trim()}:${cobrosCacheScope(req)}:limit:${pagination.limit}:page:${pagination.page}:offset:${pagination.offset}`;
+      const filters = cobrosQueryFilters(req.query);
+      const cacheKey = `ddd:cobros:pending-summary:${String(vendedorCodeParam || '').trim()}:${cobrosCacheScope(req)}:${cobrosFiltersCacheKey(filters)}:limit:${pagination.limit}:page:${pagination.page}:offset:${pagination.offset}`;
       await sendCobrosCached(req, res, cacheKey, TTL_MS.PENDIENTES, async () => {
         const result = await repo.getPendingSummary(vendedorCodeParam, {
           ...cobrosContext(req),
+          ...filters,
           ...pagination,
         });
         return { success: true, ...result };

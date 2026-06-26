@@ -65,17 +65,10 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         final planner = ref.watch(loadPlannerProvider);
         return Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppTheme.darkSurface,
-                AppTheme.darkBase.withValues(alpha: 0.95),
-              ],
-            ),
+            color: AppTheme.raisedSurface,
             border: Border(
               left: BorderSide(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                color: AppTheme.borderColor.withValues(alpha: 0.9),
               ),
             ),
           ),
@@ -98,21 +91,19 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard.withValues(alpha: 0.25),
+                  color: AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.borderColor.withValues(alpha: 0.15),
-                  ),
+                  border: Border.all(color: AppTheme.borderColor),
                 ),
                 child: TabBar(
                   controller: _tabController,
-                  labelColor: AppTheme.neonBlue,
+                  labelColor: AppTheme.info,
                   unselectedLabelColor: AppTheme.textTertiary,
                   indicator: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                    color: AppTheme.info.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.25),
+                      color: AppTheme.info.withValues(alpha: 0.34),
                     ),
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -203,15 +194,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppTheme.neonBlue.withValues(alpha: 0.1),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.neonBlue.withValues(alpha: 0.03),
-              blurRadius: 8,
-            ),
-          ],
+          border: Border.all(color: AppTheme.borderColor),
+          boxShadow: AppTheme.elevation1,
         ),
         child: TextField(
           onChanged: (v) =>
@@ -226,7 +210,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             prefixIcon: Icon(
               Icons.search_rounded,
               size: 18,
-              color: AppTheme.neonBlue.withValues(alpha: 0.5),
+              color: AppTheme.info,
             ),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
@@ -238,7 +222,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             filled: true,
-            fillColor: AppTheme.darkCard.withValues(alpha: 0.3),
+            fillColor: AppTheme.softPanel,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -246,7 +230,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                color: AppTheme.info.withValues(alpha: 0.4),
               ),
             ),
           ),
@@ -286,7 +270,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             child: _MiniActionButton(
               icon: Icons.add_circle_outline,
               label: 'Añadir todo',
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               onPressed: planner.overflowBoxes.isNotEmpty
                   ? () =>
                       ref.read(loadPlannerProvider.notifier).includeAllOrders()
@@ -306,7 +290,11 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
         title: const Text('Confirmar'),
         content: Text(message),
         actions: [
@@ -355,7 +343,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             _FilterChip(
               label: 'Ligero (<5kg)',
               selected: _filterLight,
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               onSelected: (v) => setState(() => _filterLight = v),
             ),
           ],
@@ -380,7 +368,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               value: _sortMode,
               isDense: true,
               isExpanded: true,
-              dropdownColor: AppTheme.darkCard,
+              dropdownColor: AppTheme.raisedSurface,
               style: const TextStyle(
                 fontSize: 11,
                 color: AppTheme.textSecondary,
@@ -617,10 +605,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.darkCard.withValues(alpha: 0.2),
-              border: Border.all(
-                color: AppTheme.borderColor.withValues(alpha: 0.15),
-              ),
+              color: AppTheme.softPanel,
+              border: Border.all(color: AppTheme.borderColor),
             ),
             child: Icon(
               Icons.inbox_outlined,
@@ -673,14 +659,12 @@ class _MiniActionButton extends StatelessWidget {
         duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isEnabled
-              ? color.withValues(alpha: 0.08)
-              : AppTheme.darkCard.withValues(alpha: 0.15),
+          color: isEnabled ? color.withValues(alpha: 0.08) : AppTheme.softPanel,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isEnabled
                 ? color.withValues(alpha: 0.25)
-                : AppTheme.borderColor.withValues(alpha: 0.08),
+                : AppTheme.borderColor,
           ),
           boxShadow: isEnabled
               ? [
@@ -711,7 +695,7 @@ class _MiniActionButton extends StatelessWidget {
                 color: isEnabled
                     ? color
                     : AppTheme.textTertiary.withValues(alpha: 0.3),
-                letterSpacing: 0.2,
+                letterSpacing: 0,
               ),
             ),
           ],
@@ -766,7 +750,7 @@ class _FilterChip extends StatelessWidget {
             fontSize: 10,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             color: selected ? color : AppTheme.textTertiary,
-            letterSpacing: 0.1,
+            letterSpacing: 0,
           ),
         ),
       ),
@@ -791,11 +775,9 @@ class _ClientRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard.withValues(alpha: 0.25),
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppTheme.borderColor.withValues(alpha: 0.1),
-          ),
+          border: Border.all(color: AppTheme.borderColor),
         ),
         child: Row(
           children: [
@@ -804,7 +786,7 @@ class _ClientRow extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                color: AppTheme.info.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Center(
@@ -813,7 +795,7 @@ class _ClientRow extends StatelessWidget {
                       ? summary.clientCode.substring(0, 2)
                       : summary.clientCode,
                   style: const TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -866,9 +848,9 @@ class _ClientRow extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: (weightPct / 100).clamp(0, 1),
                       minHeight: 3,
-                      backgroundColor: AppTheme.darkCard,
+                      backgroundColor: AppTheme.borderColor,
                       valueColor: AlwaysStoppedAnimation(
-                        weightPct > 30 ? AppTheme.warning : AppTheme.neonBlue,
+                        weightPct > 30 ? AppTheme.warning : AppTheme.info,
                       ),
                     ),
                   ),
@@ -927,14 +909,12 @@ class _OrderRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: isExcluded
-                ? AppTheme.darkCard.withValues(alpha: 0.15)
-                : AppTheme.darkCard.withValues(alpha: 0.25),
+            color: isExcluded ? AppTheme.softPanel : AppTheme.raisedSurface,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isExcluded
                   ? AppTheme.error.withValues(alpha: 0.25)
-                  : AppTheme.borderColor.withValues(alpha: 0.1),
+                  : AppTheme.borderColor,
             ),
           ),
           child: Row(
@@ -973,7 +953,7 @@ class _OrderRow extends StatelessWidget {
                 child: Switch(
                   value: !isExcluded,
                   onChanged: (_) => onToggle(),
-                  activeThumbColor: AppTheme.neonGreen,
+                  activeThumbColor: AppTheme.success,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),

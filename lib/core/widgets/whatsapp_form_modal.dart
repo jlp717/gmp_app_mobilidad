@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// ðŸ“± WHATSAPP FORM MODAL
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ---------------------------------------------------------------------------
+/// WhatsApp form modal
+/// ---------------------------------------------------------------------------
 ///
 /// Modal con formulario para compartir por WhatsApp.
 /// Campos: teléfono (validado +34), mensaje personalizado.
@@ -21,7 +21,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 ///     // result.phone, result.message
 ///     // -> use Share.shareXFiles with the PDF
 ///   }
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ---------------------------------------------------------------------------
 
 class WhatsAppFormResult {
   const WhatsAppFormResult({
@@ -110,7 +110,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
         width: Responsive.clampWidth(context, 400),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: AppTheme.darkSurface,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: whatsAppGreen.withValues(alpha: 0.3)),
           boxShadow: [
@@ -248,7 +248,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
         color: AppTheme.textSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
+        letterSpacing: 0,
       ),
     );
   }
@@ -256,7 +256,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
   InputDecoration _inputDecoration({
     required String hint,
     required IconData icon,
-    Color borderColor = AppTheme.neonBlue,
+    Color borderColor = AppTheme.info,
   }) {
     return InputDecoration(
       hintText: hint,
@@ -264,7 +264,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
           color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
-      fillColor: AppTheme.darkBase,
+      fillColor: AppTheme.inkSurface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

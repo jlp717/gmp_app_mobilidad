@@ -35,13 +35,12 @@ class PdfExportService {
     final dateStr =
         '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
-    // Premium color palette
-    const accentColor = PdfColor.fromInt(0xFF00D4FF);
-    const successColor = PdfColor.fromInt(0xFF00FF88);
-    const errorColor = PdfColor.fromInt(0xFFFF3B5C);
-    const warningColor = PdfColor.fromInt(0xFFFFAA00);
-    const darkBg = PdfColor.fromInt(0xFF0F172A);
-    const darkSurface = PdfColor.fromInt(0xFF1E293B);
+    const accentColor = PdfColor.fromInt(0xFF1D4E89);
+    const successColor = PdfColor.fromInt(0xFF2F855A);
+    const errorColor = PdfColor.fromInt(0xFFB42318);
+    const warningColor = PdfColor.fromInt(0xFFB7791F);
+    const darkBg = PdfColor.fromInt(0xFF101412);
+    const panelColor = PdfColor.fromInt(0xFF1B231F);
     const textPrimary = PdfColors.white;
     const textSecondary = PdfColor.fromInt(0xFFB0B8D4);
     const textTertiary = PdfColor.fromInt(0xFF6B7280);
@@ -107,7 +106,7 @@ class PdfExportService {
           pw.Container(
             padding: const pw.EdgeInsets.all(16),
             decoration: pw.BoxDecoration(
-              color: darkSurface,
+              color: panelColor,
               borderRadius: pw.BorderRadius.circular(8),
             ),
             child: pw.Row(
@@ -122,7 +121,7 @@ class PdfExportService {
                         color: textPrimary,
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
-                        letterSpacing: 1.5,
+                        letterSpacing: 0,
                       ),
                     ),
                     pw.SizedBox(height: 4),
@@ -195,7 +194,7 @@ class PdfExportService {
                     : metrics.volumePct > 80
                         ? warningColor
                         : successColor,
-                darkSurface,
+                panelColor,
                 textPrimary,
                 textSecondary,
               ),
@@ -209,7 +208,7 @@ class PdfExportService {
                     : metrics.weightPct > 80
                         ? warningColor
                         : successColor,
-                darkSurface,
+                panelColor,
                 textPrimary,
                 textSecondary,
               ),
@@ -221,7 +220,7 @@ class PdfExportService {
                     ? '+${metrics.overflowCount} fuera'
                     : 'Todo cabe',
                 metrics.overflowCount > 0 ? errorColor : successColor,
-                darkSurface,
+                panelColor,
                 textPrimary,
                 textSecondary,
               ),
@@ -236,7 +235,7 @@ class PdfExportService {
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
-              color: darkSurface,
+              color: panelColor,
               borderRadius: pw.BorderRadius.circular(6),
             ),
             child: pw.Row(
@@ -295,7 +294,7 @@ class PdfExportService {
 
           _boxTable(
             placedBoxes,
-            darkSurface,
+            panelColor,
             textPrimary,
             textSecondary,
             textTertiary,
@@ -318,7 +317,7 @@ class PdfExportService {
             pw.SizedBox(height: 6),
             _boxTable(
               overflowBoxes,
-              darkSurface,
+              panelColor,
               textPrimary,
               textSecondary,
               textTertiary,
@@ -402,7 +401,7 @@ class PdfExportService {
               style: pw.TextStyle(
                 color: subtitleColor,
                 fontSize: 8,
-                letterSpacing: 1,
+                letterSpacing: 0,
               ),
             ),
             pw.SizedBox(height: 4),

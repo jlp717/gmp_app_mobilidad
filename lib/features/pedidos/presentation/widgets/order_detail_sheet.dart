@@ -26,7 +26,7 @@ class OrderDetailSheet {
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -149,7 +149,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
@@ -201,12 +201,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.check_circle_outline,
-                color: AppTheme.neonGreen, size: 22),
+            Icon(Icons.check_circle_outline, color: AppTheme.success, size: 22),
             SizedBox(width: 8),
             Text('Confirmar pedido', style: TextStyle(color: Colors.white)),
           ],
@@ -224,8 +223,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
-              foregroundColor: AppTheme.neonGreen,
+              backgroundColor: AppTheme.success.withValues(alpha: 0.2),
+              foregroundColor: AppTheme.success,
             ),
             child: const Text('Confirmar'),
           ),
@@ -255,7 +254,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.neonBlue),
+        child: CircularProgressIndicator(color: AppTheme.info),
       );
     }
 
@@ -276,10 +275,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _loadDetail,
-              icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
+              icon: const Icon(Icons.refresh, color: AppTheme.info),
               label: const Text(
                 'Reintentar',
-                style: TextStyle(color: AppTheme.neonBlue),
+                style: TextStyle(color: AppTheme.info),
               ),
             ),
           ],
@@ -428,14 +427,14 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   Widget _buildLineTile(OrderLine line, int number) {
     final showMargin = ref.watch(pedidosProvider).isMarginVisible;
     final marginColor = line.porcentajeMargen >= 15
-        ? AppTheme.neonGreen
+        ? AppTheme.success
         : line.porcentajeMargen >= 5
-            ? Colors.orange
+            ? AppTheme.warning
             : AppTheme.error;
 
     final imageUrl = _imageUrl(line.codigoArticulo);
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.softPanel,
       margin: const EdgeInsets.only(bottom: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -452,14 +451,14 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                    color: AppTheme.info.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
                     child: Text(
                       '$number',
                       style: const TextStyle(
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -480,7 +479,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     child: Container(
                       width: 38,
                       height: 38,
-                      color: AppTheme.darkSurface,
+                      color: AppTheme.raisedSurface,
                       child: SmartProductImage(
                         imageUrl: imageUrl,
                         productCode: line.codigoArticulo,
@@ -539,7 +538,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     Text(
                       PedidosFormatters.money(line.importeVenta),
                       style: TextStyle(
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         fontWeight: FontWeight.bold,
                         fontSize:
                             Responsive.fontSize(context, small: 14, large: 16),
@@ -593,7 +592,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
   Widget _buildLineBolsaImpact(OrderLine line) {
     final impact = line.bolsaImpact;
-    final color = impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning;
+    final color = impact.neto >= 0 ? AppTheme.success : AppTheme.warning;
     final label = impact.consumo > 0 && impact.acumulacion == 0
         ? 'Bolsa usada'
         : impact.acumulacion > 0 && impact.consumo == 0
@@ -643,7 +642,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase.withValues(alpha: 0.5),
+        color: AppTheme.inkSurface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -678,9 +677,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       margin: const EdgeInsets.only(top: 8, bottom: 16),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -699,7 +698,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               _buildTotalItem(
                 'Lineas',
                 '${detail.lines.length}',
-                AppTheme.neonBlue,
+                AppTheme.info,
               ),
               _buildTotalItem(
                 'Cajas',
@@ -728,7 +727,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     PedidosFormatters.money(
                       header.total > 0 ? header.total : totalImporte,
                     ),
-                    AppTheme.neonGreen,
+                    AppTheme.success,
                   ),
                   if (showMargin) ...[
                     _buildTotalItem(
@@ -740,9 +739,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                       '% Margen',
                       '${pctMargen.toStringAsFixed(1)}%',
                       pctMargen >= 15
-                          ? AppTheme.neonGreen
+                          ? AppTheme.success
                           : pctMargen >= 5
-                              ? Colors.orange
+                              ? AppTheme.warning
                               : AppTheme.error,
                     ),
                   ],
@@ -769,7 +768,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           _buildTotalItem(
             'Bolsa +',
             PedidosFormatters.money(impact.acumulacion),
-            AppTheme.neonGreen,
+            AppTheme.success,
           ),
         if (impact.consumo > 0)
           _buildTotalItem(
@@ -780,7 +779,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         _buildTotalItem(
           'Bolsa neta',
           '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
-          impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning,
+          impact.neto >= 0 ? AppTheme.success : AppTheme.warning,
         ),
       ],
     );
@@ -811,7 +810,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border:
             Border(top: BorderSide(color: AppTheme.borderColor, width: 0.5)),
       ),
@@ -829,7 +828,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                         isMarginVisible: canSeeMargin);
                   },
             icon: const Icon(Icons.picture_as_pdf),
-            color: AppTheme.neonGreen,
+            color: AppTheme.success,
             tooltip: 'Exportar PDF',
           ),
           // Clone button
@@ -839,7 +838,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               Navigator.pop(context, 'clone:${widget.orderId}');
             },
             icon: const Icon(Icons.copy_all),
-            color: AppTheme.neonPurple,
+            color: AppTheme.accentIndigo,
             tooltip: 'Clonar pedido',
           ),
           const Spacer(),
@@ -860,7 +859,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     : const Icon(Icons.check_circle_outline),
                 label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.neonGreen,
+                  backgroundColor: AppTheme.success,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -905,10 +904,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   Color _statusColor(String status) {
     switch (status) {
       case 'CONFIRMADO':
-        return AppTheme.neonGreen;
+        return AppTheme.success;
       case 'BORRADOR':
       default:
-        return Colors.orange;
+        return AppTheme.warning;
     }
   }
 

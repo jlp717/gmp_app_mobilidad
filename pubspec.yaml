@@ -3,7 +3,7 @@
 name: gmp_app_mobilidad
 description: "Ultimate Sales Analytics - Ultra-Modern Tablet App for Sales Directors & Representatives"
 publish_to: 'none'
-version: 4.1.8+60
+version: 4.1.9+61
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -78,6 +78,11 @@ dependencies:
   # Zebra Bluetooth Printing
   flutter_bluetooth_printer: ^2.2.0  # Raw ZPL over BT Classic (SPP/RFCOMM)
   permission_handler: ^12.0.1        # Runtime BT permissions Android 12+
+
+  # Background Notifications
+  flutter_local_notifications: ^19.5.0
+  workmanager: ^0.9.0+3
+  timezone: ^0.10.0
 
   # WebView (Three.js 3D visualization)
   webview_flutter: ^4.10.0

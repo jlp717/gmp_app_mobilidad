@@ -7,8 +7,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 
-/// Global Vendor Selector — V2 Premium.
-/// Modern dropdown with refined styling and subtle interactions.
+/// Global vendor selector used in scoped sales views.
 class GlobalVendorSelector extends ConsumerStatefulWidget {
   const GlobalVendorSelector({
     required this.isJefeVentas,
@@ -19,6 +18,7 @@ class GlobalVendorSelector extends ConsumerStatefulWidget {
     this.defaultVendorCode,
     this.forceShow = false,
   });
+
   final bool isJefeVentas;
   final VoidCallback? onChanged;
   final List<String>? allowedVendorCodes;
@@ -176,19 +176,13 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: isCompact ? 2 : 8,
+        vertical: isCompact ? 3 : 8,
       ),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.darkCard,
-            AppTheme.darkSurface.withValues(alpha: 0.9),
-          ],
-        ),
+        color: AppTheme.raisedSurface,
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.1)),
+          bottom:
+              BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.9)),
         ),
       ),
       child: Row(
@@ -196,12 +190,15 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.1),
+              color: AppTheme.info.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              border: Border.all(
+                color: AppTheme.info.withValues(alpha: 0.18),
+              ),
             ),
             child: const Icon(
               Icons.visibility_rounded,
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               size: 16,
             ),
           ),
@@ -210,8 +207,9 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
             'Ver como:',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.white60,
-              fontWeight: FontWeight.w500,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0,
             ),
           ),
           const SizedBox(width: 8),
@@ -220,11 +218,10 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
               height: 36 * Responsive.landscapeScale(context),
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: AppTheme.darkSurface.withValues(alpha: 0.6),
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.2),
-                  width: 1,
+                  color: AppTheme.borderColor.withValues(alpha: 0.9),
                 ),
               ),
               child: _isLoading
@@ -232,10 +229,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                       child: SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.neonBlue,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
                   : DropdownButtonHideUnderline(
@@ -243,25 +237,27 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         value: currentValue,
                         isExpanded: true,
                         isDense: true,
-                        dropdownColor: AppTheme.darkCard,
+                        dropdownColor: AppTheme.raisedSurface,
                         icon: const Icon(
                           Icons.arrow_drop_down_rounded,
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.info,
                           size: 20,
                         ),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
                         ),
                         hint: Text(
                           widget.includeAllOption
                               ? _allOptionLabel
                               : 'Selecciona comercial',
                           style: const TextStyle(
-                            color: Colors.white60,
-                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
                             fontSize: 13,
+                            letterSpacing: 0,
                           ),
                         ),
                         items: [
@@ -271,8 +267,8 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                               child: Text(
                                 _allOptionLabel,
                                 style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
@@ -287,7 +283,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                               child: Text(
                                 displayName,
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: AppTheme.textPrimary,
                                   fontSize: 12,
                                 ),
                               ),

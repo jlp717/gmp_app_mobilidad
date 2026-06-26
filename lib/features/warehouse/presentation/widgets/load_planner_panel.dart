@@ -81,9 +81,9 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         border: Border(
-          left: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
+          left: BorderSide(color: AppTheme.info.withValues(alpha: 0.15)),
         ),
       ),
       child: Column(
@@ -110,10 +110,10 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
   }
 
   Color _statusColor(String s) => s == 'EXCESO'
-      ? Colors.redAccent
+      ? AppTheme.error
       : s == 'OPTIMO'
-          ? Colors.amber
-          : AppTheme.neonGreen;
+          ? AppTheme.warning
+          : AppTheme.success;
 
   // ─── HEADER ───────────────────────────────────────────────────────────
 
@@ -121,12 +121,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.neonBlue.withValues(alpha: 0.08),
-            Colors.transparent,
-          ],
-        ),
+        color: AppTheme.info.withValues(alpha: 0.06),
       ),
       child: Column(
         children: [
@@ -134,24 +129,24 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             children: [
               const Icon(
                 Icons.inventory_2_rounded,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 16,
               ),
               const SizedBox(width: 6),
               const Text(
                 'PEDIDOS DEL DIA',
                 style: TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
+                  letterSpacing: 0,
                 ),
               ),
               const Spacer(),
               Text(
                 '${widget.allOrders.length - widget.excludedIndices.length}/${widget.allOrders.length}',
                 style: const TextStyle(
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -166,7 +161,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 child: _actionBtn(
                   'Añadir Todo',
                   Icons.add_circle_outline,
-                  AppTheme.neonGreen,
+                  AppTheme.success,
                   widget.onAddAll,
                 ),
               ),
@@ -175,7 +170,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 child: _actionBtn(
                   'Quitar Todo',
                   Icons.remove_circle_outline,
-                  Colors.redAccent,
+                  AppTheme.error,
                   widget.onRemoveAll,
                 ),
               ),
@@ -183,7 +178,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               _actionBtn(
                 'Reset',
                 Icons.restart_alt_rounded,
-                Colors.amber,
+                AppTheme.warning,
                 widget.onReset,
               ),
             ],
@@ -195,15 +190,10 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.neonGreen.withValues(alpha: 0.15),
-                      AppTheme.neonBlue.withValues(alpha: 0.15),
-                    ],
-                  ),
+                  color: AppTheme.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppTheme.neonGreen.withValues(alpha: 0.3),
+                    color: AppTheme.success.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -215,13 +205,13 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                         ),
                       )
                     else
                       const Icon(
                         Icons.auto_awesome_rounded,
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         size: 16,
                       ),
                     const SizedBox(width: 6),
@@ -230,7 +220,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                           ? 'Optimizando...'
                           : 'Auto-Organizar (max margen)',
                       style: const TextStyle(
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
@@ -324,13 +314,13 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                color: AppTheme.success.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 '${m.totalImporteEur.toStringAsFixed(0)} €',
                 style: const TextStyle(
-                  color: Color(0xFF4CAF50),
+                  color: AppTheme.success,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                 ),
@@ -366,7 +356,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
   Widget _tab(String label, int idx, IconData icon) {
     final sel = _panelTab == idx;
     final isOverflow = idx == 2;
-    final activeColor = isOverflow ? Colors.redAccent : AppTheme.neonBlue;
+    final activeColor = isOverflow ? AppTheme.error : AppTheme.info;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _panelTab = idx),
@@ -445,7 +435,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           padding: const EdgeInsets.all(10),
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: AppTheme.neonBlue.withValues(alpha: 0.06),
+            color: AppTheme.info.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -454,21 +444,21 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               _summaryItem(
                 'Pedidos',
                 '${activeOrders.map((o) => o.orderNumber).toSet().length}',
-                AppTheme.neonBlue,
+                AppTheme.info,
               ),
               _summaryItem(
                 'Clientes',
                 '${clients.length}',
-                AppTheme.neonPurple,
+                AppTheme.accentIndigo,
               ),
-              _summaryItem('Bultos', '${m.placedCount}', AppTheme.neonGreen),
+              _summaryItem('Bultos', '${m.placedCount}', AppTheme.success),
               _summaryItem(
                 'Peso',
                 '${m.totalWeightKg.toStringAsFixed(0)} kg',
-                Colors.amber,
+                AppTheme.warning,
               ),
               _summaryItem('Valor', '${m.totalImporteEur.toStringAsFixed(0)}€',
-                  const Color(0xFF4CAF50)),
+                  AppTheme.success),
             ],
           ),
         ),
@@ -588,7 +578,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                           ? '${o.boxes.toStringAsFixed(0)} cj'
                           : '${o.units.toStringAsFixed(0)} ud',
                       style: TextStyle(
-                        color: AppTheme.neonGreen.withValues(alpha: 0.7),
+                        color: AppTheme.success.withValues(alpha: 0.7),
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
@@ -692,7 +682,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                           ? '${o.boxes.toStringAsFixed(0)}cj'
                           : '${o.units.toStringAsFixed(0)}u',
                       style: TextStyle(
-                        color: excluded ? Colors.white12 : AppTheme.neonGreen,
+                        color: excluded ? Colors.white12 : AppTheme.success,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -717,8 +707,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                     value: !excluded,
                     onChanged: (v) =>
                         v ? widget.onRestoreOrder(i) : widget.onRemoveOrder(i),
-                    activeThumbColor: AppTheme.neonGreen,
-                    activeTrackColor: AppTheme.neonGreen.withValues(alpha: 0.3),
+                    activeThumbColor: AppTheme.success,
+                    activeTrackColor: AppTheme.success.withValues(alpha: 0.3),
                     inactiveThumbColor: Colors.white24,
                     inactiveTrackColor: Colors.white10,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -741,7 +731,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               width: 140,
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.darkCard.withValues(alpha: 0.95),
+                color: AppTheme.raisedSurface.withValues(alpha: 0.95),
                 border: Border.all(color: cc.withValues(alpha: 0.6)),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -799,15 +789,15 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           padding: const EdgeInsets.all(12),
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: Colors.redAccent.withValues(alpha: 0.08),
+            color: AppTheme.error.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.redAccent.withValues(alpha: 0.3),
+              color: AppTheme.error.withValues(alpha: 0.3),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.redAccent.withValues(alpha: 0.08),
+                color: AppTheme.error.withValues(alpha: 0.08),
                 blurRadius: 8,
               ),
             ],
@@ -819,7 +809,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 children: [
                   const Icon(
                     Icons.warning_rounded,
-                    color: Colors.redAccent,
+                    color: AppTheme.error,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -827,7 +817,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                     child: Text(
                       '${overflow.length} bultos no caben',
                       style: const TextStyle(
-                        color: Colors.redAccent,
+                        color: AppTheme.error,
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -839,7 +829,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               Text(
                 '${widget.result.metrics.overflowWeightKg.toStringAsFixed(0)} kg de exceso de peso',
                 style: TextStyle(
-                  color: Colors.redAccent.withValues(alpha: 0.7),
+                  color: AppTheme.error.withValues(alpha: 0.7),
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                 ),
@@ -859,7 +849,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             margin: const EdgeInsets.only(bottom: 3),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.03),
+              color: AppTheme.error.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
@@ -868,14 +858,14 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withValues(alpha: 0.1),
+                    color: AppTheme.error.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
                     child: Text(
                       '${g.count}',
                       style: const TextStyle(
-                        color: Colors.redAccent,
+                        color: AppTheme.error,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
@@ -907,7 +897,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 Text(
                   '${g.totalWeight.toStringAsFixed(1)} kg',
                   style: const TextStyle(
-                    color: Colors.redAccent,
+                    color: AppTheme.error,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -931,10 +921,10 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
   ) {
     final pct = max > 0 ? (used / max).clamp(0.0, 1.0) : 0.0;
     final c = pct > 0.9
-        ? Colors.redAccent
+        ? AppTheme.error
         : pct > 0.7
-            ? Colors.amber
-            : AppTheme.neonGreen;
+            ? AppTheme.warning
+            : AppTheme.success;
     return Row(
       children: [
         SizedBox(

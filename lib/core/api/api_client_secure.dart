@@ -85,7 +85,11 @@ class ApiClient {
       ),
     );
 
-    // Configure certificate pinning for production
+    // Configure certificate pinning for production.
+    if (kIsWeb) {
+      return dio;
+    }
+
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final client = HttpClient();
       client.badCertificateCallback =

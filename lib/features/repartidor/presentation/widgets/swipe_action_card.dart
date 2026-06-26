@@ -15,7 +15,7 @@ class SwipeActionCard extends StatefulWidget {
     this.leftIcon = Icons.check_circle_outline,
     this.rightIcon = Icons.note_add_outlined,
     this.leftColor = AppTheme.success,
-    this.rightColor = AppTheme.neonBlue,
+    this.rightColor = AppTheme.info,
     this.enabled = true,
   });
   final Widget child;
@@ -205,31 +205,17 @@ class WeeklyMiniChart extends StatelessWidget {
                   curve: Curves.easeOutCubic,
                   height: height.clamp(4.0, 24.0),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: isSelected
-                          ? [
-                              AppTheme.neonBlue,
-                              AppTheme.neonBlue.withValues(alpha: 0.6)
-                            ]
-                          : count > 0
-                              ? [
-                                  AppTheme.neonBlue.withValues(alpha: 0.5),
-                                  AppTheme.neonBlue.withValues(alpha: 0.2)
-                                ]
-                              : [
-                                  AppTheme.borderColor,
-                                  AppTheme.borderColor.withValues(alpha: 0.5)
-                                ],
-                    ),
+                    color: isSelected
+                        ? AppTheme.info
+                        : count > 0
+                            ? AppTheme.info.withValues(alpha: 0.35)
+                            : AppTheme.borderColor.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(4),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                              color: AppTheme.info.withValues(alpha: 0.18),
                               blurRadius: 8,
-                              spreadRadius: 1,
                             ),
                           ]
                         : null,

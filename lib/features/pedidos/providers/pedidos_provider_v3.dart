@@ -553,7 +553,7 @@ class PedidosProviderV3 with ChangeNotifier {
     double precioVenta,
   ) {
     if (!hasClient) {
-      const msg = 'Debes seleccionar un cliente antes de anadir productos.';
+      const msg = 'Debes seleccionar un cliente antes de añadir productos.';
       _error = msg;
       _notify(immediate: true);
       return msg;
@@ -638,6 +638,14 @@ class PedidosProviderV3 with ChangeNotifier {
         }
       }
       line.precioVenta = precioVenta;
+      line.precioCosto = product.costForUnit(unit);
+      line.precioTarifa = product.catalogTariffForUnit(unit);
+      line.precioTarifaCliente = product.clientTariffForUnit(unit);
+      line.precioMinimo = product.minimumPriceForUnit(unit);
+      line.precioClienteSource = product.precioClienteSource;
+      line.precioMinimoSource = product.precioMinimoSource;
+      line.precioEspecialCliente = product.precioEspecialCliente;
+      line.permiteBajoMinimo = product.permiteBajoMinimo;
       line.codigoIva = product.codigoIva;
       line.ivaRate = ivaRateFromCode(product.codigoIva);
       line.recalculate();
@@ -659,12 +667,14 @@ class PedidosProviderV3 with ChangeNotifier {
         unidadesCaja: product.quantityPerBoxForUnit(unit),
         unidadesFraccion: product.unitsFraction,
         precioVenta: precioVenta,
-        precioCosto: product.precioMinimo > 0
-            ? product.precioMinimo * 0.7
-            : product.precioTarifa1 * 0.7,
-        precioTarifa: product.precioTarifa1,
-        precioTarifaCliente: product.precioCliente,
-        precioMinimo: product.precioMinimo,
+        precioCosto: product.costForUnit(unit),
+        precioTarifa: product.catalogTariffForUnit(unit),
+        precioTarifaCliente: product.clientTariffForUnit(unit),
+        precioMinimo: product.minimumPriceForUnit(unit),
+        precioClienteSource: product.precioClienteSource,
+        precioMinimoSource: product.precioMinimoSource,
+        precioEspecialCliente: product.precioEspecialCliente,
+        permiteBajoMinimo: product.permiteBajoMinimo,
         codigoIva: product.codigoIva,
         ivaRate: ivaRate,
       );
@@ -800,6 +810,10 @@ class PedidosProviderV3 with ChangeNotifier {
         precioTarifa: line.precioTarifa,
         precioTarifaCliente: line.precioTarifaCliente,
         precioMinimo: line.precioMinimo,
+        precioClienteSource: line.precioClienteSource,
+        precioMinimoSource: line.precioMinimoSource,
+        precioEspecialCliente: line.precioEspecialCliente,
+        permiteBajoMinimo: line.permiteBajoMinimo,
         codigoIva: line.codigoIva,
         ivaRate: line.ivaRate,
       );

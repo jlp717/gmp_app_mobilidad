@@ -3,6 +3,7 @@
 jest.mock('../src/chatbot/chatbot_authorization', () => {
   const normalizeCode = (value) => String(value || '').trim().toUpperCase();
   const supervisorRoles = new Set(['JEFE_VENTAS', 'JEFE', 'GERENTE', 'ADMIN']);
+  const explicitNonSupervisorRoles = new Set(['COMERCIAL', 'REPARTIDOR', 'ALMACEN']);
   const clientOwners = new Map([
     ['32258', '80'],
     ['12345', '80'],
@@ -10,10 +11,12 @@ jest.mock('../src/chatbot/chatbot_authorization', () => {
   ]);
 
   return {
-    isSupervisor: jest.fn((userContext = {}) =>
-      Boolean(userContext?.isJefeVentas) ||
-      supervisorRoles.has(normalizeCode(userContext?.role))
-    ),
+    isSupervisor: jest.fn((userContext = {}) => {
+      const role = normalizeCode(userContext?.role);
+      if (supervisorRoles.has(role)) return true;
+      if (explicitNonSupervisorRoles.has(role)) return false;
+      return Boolean(userContext?.isJefeVentas);
+    }),
     authorizeResolvedClient: jest.fn(async (conn, userContext, clientCode) => {
       const normalizedClient = normalizeCode(clientCode);
       const owner = {
@@ -21,9 +24,9 @@ jest.mock('../src/chatbot/chatbot_authorization', () => {
         vendorCode: clientOwners.get(normalizedClient) || null,
         verified: clientOwners.has(normalizedClient),
       };
-      const isSupervisor =
-        Boolean(userContext?.isJefeVentas) ||
-        supervisorRoles.has(normalizeCode(userContext?.role));
+      const role = normalizeCode(userContext?.role);
+      const isSupervisor = supervisorRoles.has(role)
+        || (Boolean(userContext?.isJefeVentas) && !explicitNonSupervisorRoles.has(role));
 
       if (isSupervisor) {
         return {
@@ -950,6 +953,33 @@ describe('chatbot massive contract RBAC', () => {
     expect(responseText(orderResponse)).toMatch(/No tengo acceso/i);
     expect(pedidosTools.getOrderDetails).not.toHaveBeenCalled();
     expect(conn.query).not.toHaveBeenCalled();
+  });
+
+  test('does not elevate COMERCIAL when token carries inconsistent supervisor flag', async () => {
+    const response = await handleChatMessage(
+      conn,
+      'deuda cliente 99999',
+      ['80'],
+      null,
+      {
+        userCode: '80',
+        role: 'COMERCIAL',
+        isJefeVentas: true,
+        vendorScope: ['80'],
+        richResponses: true,
+      }
+    );
+
+    expect(responseText(response)).toMatch(/No tengo acceso/i);
+    expect(riskTools.getClientDebt).not.toHaveBeenCalled();
+    expect(authorizeResolvedClient).toHaveBeenCalledWith(
+      conn,
+      expect.objectContaining({
+        role: 'COMERCIAL',
+        isJefeVentas: false,
+      }),
+      '99999'
+    );
   });
 
   test('allows JEFE_VENTAS and ADMIN supervisor roles to query another seller client', async () => {

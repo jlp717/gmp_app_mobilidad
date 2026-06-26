@@ -102,7 +102,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppTheme.darkSurface,
+      color: AppTheme.raisedSurface,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,7 +115,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               hintText: 'Buscar por pedido, cliente o código...',
               hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
               prefixIcon:
-                  const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
+                  const Icon(Icons.search, color: AppTheme.info, size: 18),
               suffixIcon: widget.searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(
@@ -130,7 +130,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     )
                   : null,
               filled: true,
-              fillColor: AppTheme.darkCard,
+              fillColor: AppTheme.raisedSurface,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
@@ -209,14 +209,14 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               children: [
                 Icon(
                   _showAdvanced ? Icons.expand_less : Icons.expand_more,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   size: 16,
                 ),
                 const SizedBox(width: 4),
                 const Text(
                   'Más filtros',
                   style: TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -242,7 +242,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppTheme.darkCard,
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -279,7 +279,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               fontSize: 11,
                             ),
                             filled: true,
-                            fillColor: AppTheme.darkSurface,
+                            fillColor: AppTheme.raisedSurface,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                               borderSide: BorderSide.none,
@@ -289,7 +289,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               vertical: 8,
                             ),
                           ),
-                          dropdownColor: AppTheme.darkSurface,
+                          dropdownColor: AppTheme.raisedSurface,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -328,7 +328,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               fontSize: 11,
                             ),
                             filled: true,
-                            fillColor: AppTheme.darkSurface,
+                            fillColor: AppTheme.raisedSurface,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                               borderSide: BorderSide.none,
@@ -338,7 +338,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               vertical: 8,
                             ),
                           ),
-                          dropdownColor: AppTheme.darkSurface,
+                          dropdownColor: AppTheme.raisedSurface,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -366,8 +366,8 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     child: ElevatedButton(
                       onPressed: widget.onApplyAdvanced,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonBlue,
-                        foregroundColor: AppTheme.darkBase,
+                        backgroundColor: AppTheme.info,
+                        foregroundColor: AppTheme.inkSurface,
                         minimumSize: const Size.fromHeight(38),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -399,12 +399,12 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? (color ?? AppTheme.neonBlue).withValues(alpha: 0.2)
-              : AppTheme.darkCard,
+              ? (color ?? AppTheme.info).withValues(alpha: 0.2)
+              : AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? (color ?? AppTheme.neonBlue).withValues(alpha: 0.5)
+                ? (color ?? AppTheme.info).withValues(alpha: 0.5)
                 : AppTheme.borderColor,
           ),
         ),
@@ -426,7 +426,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.borderColor),
         ),
@@ -434,7 +434,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
           children: [
             Icon(
               Icons.calendar_today,
-              color: AppTheme.neonBlue.withValues(alpha: 0.7),
+              color: AppTheme.info.withValues(alpha: 0.7),
               size: 14,
             ),
             const SizedBox(width: 6),
@@ -461,7 +461,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppTheme.borderColor),
         ),
@@ -492,7 +492,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
         filled: true,
-        fillColor: AppTheme.darkSurface,
+        fillColor: AppTheme.raisedSurface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         isDense: true,
         border: OutlineInputBorder(
@@ -525,9 +525,9 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         return Theme(
           data: Theme.of(ctx).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonBlue,
+              primary: AppTheme.info,
               onPrimary: Colors.white,
-              surface: AppTheme.darkSurface,
+              surface: AppTheme.raisedSurface,
             ),
           ),
           child: child!,

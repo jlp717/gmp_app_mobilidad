@@ -1,295 +1,266 @@
 import 'package:flutter/material.dart';
 
-/// Centralized color palette for GMP App — V2 Premium Edition.
-/// Modern, refined tones with glassmorphism-friendly opacity levels.
+/// Centralized visual palette for GMP App.
+///
+/// Phase 1 keeps the legacy public names used across the app, but remaps them
+/// to a restrained operational design system. New code should prefer the
+/// semantic names: canvas, surface, panel, line, ink, muted, brand, info, etc.
 class AppColors {
   AppColors._();
 
-  // ============================================================================
-  // BASE COLORS — Deep Space Foundation (V2 refined)
-  // ============================================================================
+  // ===========================================================================
+  // OPERATIONAL LEDGER PALETTE
+  // ===========================================================================
 
-  static const Color darkBase = Color(0xFF070A0F);
-  static const Color darkSurface = Color(0xFF0D141B);
-  static const Color darkCard = Color(0xFF151E27);
-  static const Color borderColor = Color(0xFF2A3644);
+  static const Color canvas = Color(0xFFF6F7F4);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color panel = Color(0xFFEEF2ED);
+  static const Color line = Color(0xFFD7DDD5);
+  static const Color ink = Color(0xFF1E2522);
+  static const Color muted = Color(0xFF66736D);
+  static const Color faint = Color(0xFF8B9791);
 
-  static const Color inkSurface = Color(0xFF0A1118);
-  static const Color raisedSurface = Color(0xFF182331);
-  static const Color softPanel = Color(0xFF101923);
-  static const Color mutedPanel = Color(0xFF202A36);
+  static const Color darkCanvas = Color(0xFF101412);
+  static const Color darkSurfaceLayer = Color(0xFF171D1A);
+  static const Color darkPanel = Color(0xFF202822);
+  static const Color darkLine = Color(0xFF33413B);
+  static const Color darkInk = Color(0xFFF2F5F1);
+  static const Color darkMuted = Color(0xFFA7B2AC);
 
-  // Aliases for compatibility
+  static const Color forest = Color(0xFF0E5F4A);
+  static const Color moss = Color(0xFF2F855A);
+  static const Color harbor = Color(0xFF1D4E89);
+  static const Color ochre = Color(0xFFB7791F);
+  static const Color brick = Color(0xFFB42318);
+  static const Color slate = Color(0xFF475569);
+  static const Color teal = Color(0xFF0F766E);
+  static const Color aubergine = Color(0xFF694D75);
+
+  // ===========================================================================
+  // LEGACY BASE ALIASES
+  // ===========================================================================
+
+  static const Color darkBase = darkCanvas;
+  static const Color darkSurface = darkSurfaceLayer;
+  static const Color darkCard = darkPanel;
+  static const Color borderColor = darkLine;
+
+  static const Color inkSurface = Color(0xFF121815);
+  static const Color raisedSurface = Color(0xFF1B231F);
+  static const Color softPanel = Color(0xFF202822);
+  static const Color mutedPanel = Color(0xFF29332E);
+
   static const Color backgroundColor = darkBase;
   static const Color surfaceColor = darkSurface;
   static const Color cardColor = darkCard;
 
-  // ============================================================================
-  // NEON ACCENTS — Refined Premium Palette
-  // ============================================================================
+  // ===========================================================================
+  // ACCENT ALIASES
+  // ===========================================================================
 
-  static const Color neonBlue = Color(0xFF3B82F6);
-  static const Color neonGreen = Color(0xFF10B981);
-  static const Color neonPurple = Color(0xFF8B5CF6);
-  static const Color neonPink = Color(0xFFEC4899);
-  static const Color neonCyan = Color(0xFF06B6D4);
-  static const Color neonTeal = Color(0xFF14B8A6);
-  static const Color neonElectric = Color(0xFF60A5FA);
-  static const Color holoBlue = Color(0xFF2563EB);
+  static const Color primary = forest;
+  static const Color secondary = moss;
 
-  static const Color accentMint = Color(0xFF5EEAD4);
-  static const Color accentAmber = Color(0xFFFBBF24);
-  static const Color accentRose = Color(0xFFFB7185);
-  static const Color accentIndigo = Color(0xFF818CF8);
+  // Legacy names kept so feature files can migrate incrementally.
+  static const Color neonBlue = harbor;
+  static const Color neonGreen = moss;
+  static const Color neonPurple = aubergine;
+  static const Color neonPink = Color(0xFF9F4F63);
+  static const Color neonCyan = teal;
+  static const Color neonTeal = teal;
+  static const Color neonElectric = Color(0xFF386FA4);
+  static const Color holoBlue = harbor;
 
-  // Advanced accents
-  static const Color quantumRed = Color(0xFFFF4466);
-  static const Color quantumOrange = Color(0xFFFFAA00);
-  static const Color quantumLime = Color(0xFF8AFF00);
-  static const Color quantumViolet = Color(0xFF9D4EDD);
+  static const Color accentMint = Color(0xFF74A892);
+  static const Color accentAmber = ochre;
+  static const Color accentRose = Color(0xFFB85C5C);
+  static const Color accentIndigo = Color(0xFF52658C);
 
-  // Holographic effect colors
-  static const Color holoPrimary = Color(0xFF00D4FF);
-  static const Color holoSecondary = Color(0xFFB967FF);
-  static const Color holoAccent = Color(0xFFFF55AA);
-  static const Color holoSuccess = Color(0xFF00FFAA);
-  static const Color holoWarning = Color(0xFFFFAA00);
-  static const Color holoError = Color(0xFFFF4466);
+  static const Color quantumRed = brick;
+  static const Color quantumOrange = ochre;
+  static const Color quantumLime = moss;
+  static const Color quantumViolet = aubergine;
 
-  // Aliases
-  static const Color primary = neonBlue;
-  static const Color secondary = neonGreen;
+  static const Color holoPrimary = harbor;
+  static const Color holoSecondary = aubergine;
+  static const Color holoAccent = Color(0xFF9F4F63);
+  static const Color holoSuccess = moss;
+  static const Color holoWarning = ochre;
+  static const Color holoError = brick;
 
-  // ============================================================================
-  // PREMIUM GRADIENT COLORS — Soft, modern blends
-  // ============================================================================
+  static const Color premiumBlueStart = harbor;
+  static const Color premiumBlueEnd = teal;
+  static const Color premiumPinkStart = Color(0xFF9F4F63);
+  static const Color premiumPinkEnd = brick;
+  static const Color premiumGreenStart = moss;
+  static const Color premiumGreenEnd = teal;
+  static const Color premiumSunriseStart = ochre;
+  static const Color premiumSunriseEnd = brick;
+  static const Color premiumQuantumStart = harbor;
+  static const Color premiumQuantumEnd = aubergine;
+  static const Color premiumNeonStart = moss;
+  static const Color premiumNeonEnd = Color(0xFF9F4F63);
 
-  static const Color premiumBlueStart = Color(0xFF3B82F6);
-  static const Color premiumBlueEnd = Color(0xFF8B5CF6);
-  static const Color premiumPinkStart = Color(0xFFEC4899);
-  static const Color premiumPinkEnd = Color(0xFFF43F5E);
-  static const Color premiumGreenStart = Color(0xFF10B981);
-  static const Color premiumGreenEnd = Color(0xFF06B6D4);
-  static const Color premiumSunriseStart = Color(0xFFF59E0B);
-  static const Color premiumSunriseEnd = Color(0xFFEF4444);
-  static const Color premiumQuantumStart = Color(0xFF00D4FF);
-  static const Color premiumQuantumEnd = Color(0xFFB967FF);
-  static const Color premiumNeonStart = Color(0xFF00FFAA);
-  static const Color premiumNeonEnd = Color(0xFFFF55AA);
+  static const Color glowIntense = harbor;
+  static const Color glowMedium = Color(0xFF2F6690);
+  static const Color glowSubtle = Color(0xFF335C67);
 
-  // ============================================================================
-  // GLOW INTENSITIES
-  // ============================================================================
+  // ===========================================================================
+  // SEMANTIC STATUS COLORS
+  // ===========================================================================
 
-  static const Color glowIntense = Color(0xFF3B82F6);
-  static const Color glowMedium = Color(0xFF2563EB);
-  static const Color glowSubtle = Color(0xFF1D4ED8);
+  static const Color success = Color(0xFF2F855A);
+  static const Color error = Color(0xFFB42318);
+  static const Color warning = Color(0xFFB7791F);
+  static const Color info = Color(0xFF1D4E89);
 
-  // ============================================================================
-  // STATUS COLORS
-  // ============================================================================
+  static const Color obligatorio = error;
+  static const Color opcional = warning;
+  static const Color cobrado = success;
+  static const Color credito = info;
 
-  static const Color success = Color(0xFF10B981);
-  static const Color error = Color(0xFFEF4444);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color info = Color(0xFF3B82F6);
-
-  // Payment status colors
-  static const Color obligatorio = Color(0xFFEF4444);
-  static const Color opcional = Color(0xFFF59E0B);
-  static const Color cobrado = Color(0xFF10B981);
-  static const Color credito = Color(0xFF3B82F6);
-
-  // Aliases for compatibility
   static const Color successColor = success;
   static const Color errorColor = error;
   static const Color warningColor = warning;
   static const Color infoColor = info;
 
-  // ============================================================================
-  // TEXT COLORS — Improved contrast
-  // ============================================================================
+  // ===========================================================================
+  // TEXT COLORS
+  // ===========================================================================
 
-  static const Color textPrimary = Color(0xFFF9FAFB);
-  static const Color textSecondary = Color(0xFF9CA3AF);
-  static const Color textTertiary = Color(0xFF6B7280);
+  static const Color textPrimary = darkInk;
+  static const Color textSecondary = darkMuted;
+  static const Color textTertiary = Color(0xFF75827C);
 
-  // ============================================================================
+  static const Color textPrimaryLight = ink;
+  static const Color textSecondaryLight = muted;
+  static const Color textTertiaryLight = faint;
+
+  // ===========================================================================
   // CHART COLORS
-  // ============================================================================
+  // ===========================================================================
 
-  static const Color chartYellow = Color(0xFFFBBF24);
-  static const Color chartViolet = Color(0xFF8B5CF6);
-  static const Color chartEmerald = Color(0xFF10B981);
-  static const Color chartAmber = Color(0xFFF59E0B);
-  static const Color chartCoral = Color(0xFFFF6B6B);
-  static const Color chartOcean = Color(0xFF00D4FF);
-  static const Color chartLime = Color(0xFF8AFF00);
-  static const Color chartMagenta = Color(0xFFFF55AA);
+  static const Color chartYellow = ochre;
+  static const Color chartViolet = aubergine;
+  static const Color chartEmerald = moss;
+  static const Color chartAmber = Color(0xFFC98A2E);
+  static const Color chartCoral = Color(0xFFB85C5C);
+  static const Color chartOcean = harbor;
+  static const Color chartLime = Color(0xFF6F8F52);
+  static const Color chartMagenta = Color(0xFF9F4F63);
 
   static const List<Color> chartColors = [
-    neonBlue,
-    neonGreen,
-    neonPurple,
-    neonPink,
-    chartYellow,
-    chartViolet,
-    chartEmerald,
-    chartAmber,
+    harbor,
+    moss,
+    ochre,
+    aubergine,
+    teal,
+    slate,
+    chartCoral,
+    chartLime,
   ];
 
-  // ============================================================================
-  // GRADIENTS — Premium V2
-  // ============================================================================
+  // ===========================================================================
+  // GRADIENTS
+  // ===========================================================================
 
-  /// Primary gradient — soft blue to purple
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0x4D3B82F6),
-      Color(0x1A3B82F6),
+      Color(0x331D4E89),
+      Color(0x140E5F4A),
     ],
   );
 
-  /// Holographic gradient — cyan → blue → purple → cyan
   static const LinearGradient holoGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0x2606B6D4),
-      Color(0x1A3B82F6),
-      Color(0x1A8B5CF6),
-      Color(0x2606B6D4),
+      Color(0x24202822),
+      Color(0x161D4E89),
+      Color(0x120E5F4A),
     ],
-    stops: [0.0, 0.35, 0.65, 1.0],
+    stops: [0.0, 0.55, 1.0],
   );
 
-  /// Scanner gradient — vertical cyan sweep
   static const LinearGradient scannerGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [
       Colors.transparent,
-      neonCyan,
+      Color(0x661D4E89),
       Colors.transparent,
     ],
     stops: [0.0, 0.5, 1.0],
   );
 
-  /// Login button gradient — blue → purple → pink
   static const LinearGradient loginGradient = LinearGradient(
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
-    colors: [
-      Color(0xFF3B82F6),
-      Color(0xFF8B5CF6),
-      Color(0xFFEC4899),
-    ],
+    colors: [forest, harbor],
   );
 
-  /// Success gradient — green → teal
   static const LinearGradient successGradient = LinearGradient(
-    colors: [
-      Color(0xFF10B981),
-      Color(0xFF06B6D4),
-    ],
+    colors: [success, teal],
   );
 
-  /// Warning gradient — amber → red
   static const LinearGradient warningGradient = LinearGradient(
-    colors: [
-      Color(0xFFF59E0B),
-      Color(0xFFEF4444),
-    ],
+    colors: [warning, brick],
   );
 
-  /// Brand gradient for logos and headers
   static const LinearGradient brandGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFF3B82F6),
-      Color(0xFF14B8A6),
-      Color(0xFFF59E0B),
-    ],
+    colors: [forest, harbor],
   );
 
   static const LinearGradient appShellGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF070A0F),
-      Color(0xFF0B1415),
-      Color(0xFF101923),
+      darkCanvas,
+      Color(0xFF121815),
+      darkSurfaceLayer,
     ],
-    stops: [0.0, 0.55, 1.0],
+    stops: [0.0, 0.52, 1.0],
   );
 
   static const LinearGradient panelGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF182331),
-      Color(0xFF101923),
+      darkPanel,
+      darkSurfaceLayer,
     ],
   );
 
-  // ============================================================================
-  // DYNAMIC GRADIENTS — For interactive elements
-  // ============================================================================
+  static const List<Color> dynamicGradient1 = [harbor, teal];
+  static const List<Color> dynamicGradient2 = [aubergine, Color(0xFF9F4F63)];
+  static const List<Color> dynamicGradient3 = [harbor, aubergine];
+  static const List<Color> dynamicGradient4 = [moss, teal];
+  static const List<Color> holographicGradient = [harbor, moss, ochre, slate];
 
-  static const List<Color> dynamicGradient1 = [
-    neonBlue,
-    neonGreen,
-  ];
+  // ===========================================================================
+  // SPACING AND MOTION
+  // ===========================================================================
 
-  static const List<Color> dynamicGradient2 = [
-    neonPurple,
-    neonPink,
-  ];
+  static const double paddingS = 8;
+  static const double paddingM = 12;
+  static const double paddingL = 20;
+  static const double paddingXL = 28;
 
-  static const List<Color> dynamicGradient3 = [
-    neonBlue,
-    neonPurple,
-  ];
+  static const Duration animFast = Duration(milliseconds: 120);
+  static const Duration animNormal = Duration(milliseconds: 220);
+  static const Duration animSlow = Duration(milliseconds: 360);
+  static const Duration animPulse = Duration(milliseconds: 1200);
 
-  static const List<Color> dynamicGradient4 = [
-    neonGreen,
-    neonCyan,
-  ];
-
-  static const List<Color> holographicGradient = [
-    neonCyan,
-    neonPurple,
-    neonPink,
-    neonGreen,
-  ];
-
-  // ============================================================================
-  // SPACING CONSTANTS
-  // ============================================================================
-
-  static const double paddingS = 12;
-  static const double paddingM = 16;
-  static const double paddingL = 24;
-  static const double paddingXL = 32;
-
-  // ============================================================================
-  // ANIMATION DURATIONS
-  // ============================================================================
-
-  static const Duration animFast = Duration(milliseconds: 150);
-  static const Duration animNormal = Duration(milliseconds: 300);
-  static const Duration animSlow = Duration(milliseconds: 500);
-  static const Duration animPulse = Duration(milliseconds: 1500);
-
-  // ============================================================================
-  // LEGACY COLORS — Kept for compatibility with older code
-  // ============================================================================
+  // ===========================================================================
+  // LEGACY COLORS
+  // ===========================================================================
 
   static const Color surfaceVariant = darkSurface;
   static const Color outlineVariant = borderColor;
-  static const Color inverseSurface = Color(0xFFF9FAFB);
-  static const Color inversePrimary = Color(0xFF0A0E1A);
+  static const Color inverseSurface = canvas;
+  static const Color inversePrimary = darkBase;
 }

@@ -154,11 +154,11 @@ class SyncQueueService {
       } catch (e) {
         op.attempts++;
         op.lastError = e.toString();
-        if (op.attempts >= _maxAttempts) {
+        if (_requiresManualReview(e) || op.attempts >= _maxAttempts) {
           op.failedAt ??= DateTime.now();
           await _box?.put(op.id, jsonEncode(op.toJson()));
           debugPrint(
-              '[SyncQueue] Max attempts reached, preserving failed operation');
+              '[SyncQueue] Preserving failed operation for manual review');
         } else {
           // Update with incremented attempts
           await _box?.put(op.id, jsonEncode(op.toJson()));
@@ -180,6 +180,11 @@ class SyncQueueService {
   String _shortError(Object error) {
     final text = error.toString();
     return text.length <= 100 ? text : text.substring(0, 100);
+  }
+
+  bool _requiresManualReview(Object error) {
+    return error is ApiException &&
+        (error.statusCode == 409 || error.statusCode == 412);
   }
 
   /// Remove operations older than _maxAge.

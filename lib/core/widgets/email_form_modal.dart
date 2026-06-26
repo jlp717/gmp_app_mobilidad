@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// ðŸ“§ EMAIL FORM MODAL
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ---------------------------------------------------------------------------
+/// Email form modal
+/// ---------------------------------------------------------------------------
 ///
 /// Modal con formulario de envío de email.
 /// Campos: destinatario (validado), asunto (pre-rellenado), cuerpo (opcional).
@@ -18,7 +18,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 ///   if (result != null) {
 ///     // result.email, result.subject, result.body
 ///   }
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ---------------------------------------------------------------------------
 
 class EmailFormResult {
   const EmailFormResult({
@@ -114,12 +114,12 @@ class _EmailFormModalState extends State<EmailFormModal> {
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
-          color: AppTheme.darkSurface,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+          border: Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.neonBlue.withValues(alpha: 0.15),
+              color: AppTheme.info.withValues(alpha: 0.15),
               blurRadius: 30,
               spreadRadius: 2,
             ),
@@ -137,11 +137,11 @@ class _EmailFormModalState extends State<EmailFormModal> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                      color: AppTheme.info.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.email_rounded,
-                        color: AppTheme.neonBlue, size: 22),
+                        color: AppTheme.info, size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -229,8 +229,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     icon: const Icon(Icons.send_rounded, size: 18),
                     label: const Text('Enviar'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.neonBlue,
-                      foregroundColor: AppTheme.darkBase,
+                      backgroundColor: AppTheme.info,
+                      foregroundColor: AppTheme.inkSurface,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
@@ -254,7 +254,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
         color: AppTheme.textSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
+        letterSpacing: 0,
       ),
     );
   }
@@ -267,7 +267,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
           color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
-      fillColor: AppTheme.darkBase,
+      fillColor: AppTheme.inkSurface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -281,7 +281,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppTheme.neonBlue, width: 1.5),
+        borderSide: const BorderSide(color: AppTheme.info, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 enum EstadoEntrega {
   pendiente,
@@ -51,17 +52,17 @@ enum EstadoEntrega {
   Color get color {
     switch (this) {
       case EstadoEntrega.pendiente:
-        return Colors.orange;
+        return AppColors.warning;
       case EstadoEntrega.enRuta:
-        return Colors.blue;
+        return AppColors.info;
       case EstadoEntrega.entregado:
-        return Colors.green;
+        return AppColors.success;
       case EstadoEntrega.parcial:
-        return Colors.amber;
+        return AppColors.accentAmber;
       case EstadoEntrega.noEntregado:
-        return Colors.red;
+        return AppColors.error;
       case EstadoEntrega.rechazado:
-        return Colors.grey;
+        return AppColors.textSecondary;
     }
   }
 

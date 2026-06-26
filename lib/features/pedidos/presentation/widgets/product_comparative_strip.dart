@@ -115,7 +115,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
 
     final color = variacionYtd == null
         ? Colors.white60
-        : (variacionYtd >= 0 ? AppTheme.neonGreen : Colors.redAccent);
+        : (variacionYtd >= 0 ? AppTheme.success : AppTheme.error);
 
     return Material(
       color: Colors.transparent,

@@ -93,7 +93,7 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
         height: 56,
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
+          color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Center(
@@ -115,7 +115,7 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
 
     final color = variation == null
         ? Colors.white60
-        : (variation >= 0 ? AppTheme.neonGreen : Colors.redAccent);
+        : (variation >= 0 ? AppTheme.success : Colors.redAccent);
     final now = DateTime.now();
     final monthLabel = [
       'enero',
@@ -141,7 +141,7 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
           end: Alignment.bottomRight,
           colors: [
             color.withValues(alpha: 0.18),
-            AppTheme.darkSurface.withValues(alpha: 0.6),
+            AppTheme.raisedSurface.withValues(alpha: 0.6),
           ],
         ),
         borderRadius: BorderRadius.circular(10),

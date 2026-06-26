@@ -67,13 +67,13 @@ class _AnimatedKpiChipState extends State<_AnimatedKpiChip>
   Color get _accent {
     switch (widget.kpi.trend) {
       case 'up':
-        return AppColors.neonGreen;
+        return AppColors.success;
 
       case 'down':
-        return AppColors.quantumRed;
+        return AppColors.error;
 
       default:
-        return AppColors.neonBlue;
+        return AppColors.info;
     }
   }
 
@@ -116,20 +116,15 @@ class _AnimatedKpiChipState extends State<_AnimatedKpiChip>
         builder: (context, _) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                _accent.withValues(alpha: 0.15 + _glow.value),
-                _accent.withValues(alpha: 0.05),
-              ],
-            ),
+            color: AppColors.raisedSurface.withValues(alpha: 0.72),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: _accent.withValues(alpha: 0.35)),
             boxShadow: widget.kpi.trend != 'neutral'
                 ? [
                     BoxShadow(
-                      color: _accent.withValues(alpha: _glow.value),
-                      blurRadius: 12,
-                      spreadRadius: 0,
+                      color: Colors.black.withValues(alpha: _glow.value * 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
                     ),
                   ]
                 : null,
@@ -144,7 +139,7 @@ class _AnimatedKpiChipState extends State<_AnimatedKpiChip>
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
                   color: _accent.withValues(alpha: 0.85),
-                  letterSpacing: 0.8,
+                  letterSpacing: 0,
                 ),
               ),
               const SizedBox(height: 2),
@@ -271,8 +266,8 @@ class _AnimatedMiniBarChartState extends State<_AnimatedMiniBarChart>
               ),
               barGroups: List.generate(widget.points.length, (i) {
                 final color = i == widget.points.length - 1
-                    ? AppColors.neonBlue
-                    : AppColors.neonPurple.withValues(alpha: 0.7);
+                    ? AppColors.info
+                    : AppColors.accentIndigo.withValues(alpha: 0.7);
 
                 return BarChartGroupData(
                   x: i,
@@ -283,11 +278,7 @@ class _AnimatedMiniBarChartState extends State<_AnimatedMiniBarChart>
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(4),
                       ),
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [color.withValues(alpha: 0.5), color],
-                      ),
+                      color: color,
                     ),
                   ],
                 );

@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -108,6 +109,7 @@ class PedidosProvider with ChangeNotifier {
   int _productOffset = 0;
   bool _hasMoreProducts = true;
   int _productsLoadGeneration = 0;
+  CancelToken? _productsCancelToken;
 
   // ── Orders List State ──
   List<OrderSummary> _orders = [];
@@ -636,6 +638,9 @@ class PedidosProvider with ChangeNotifier {
     final requestFamily = _selectedFamily;
     final requestBrand = _selectedBrand;
     final requestPrefamily = _selectedPrefamily;
+    _productsCancelToken?.cancel('superseded product catalog request');
+    final cancelToken = CancelToken();
+    _productsCancelToken = cancelToken;
     notifyListeners();
 
     try {
@@ -648,6 +653,7 @@ class PedidosProvider with ChangeNotifier {
         prefamily: requestPrefamily,
         offset: requestOffset,
         forceRefresh: forceRefresh,
+        cancelToken: cancelToken,
       );
 
       if (generation != _productsLoadGeneration ||
@@ -669,6 +675,9 @@ class PedidosProvider with ChangeNotifier {
       _hasMoreProducts = results.length >= 50;
       _productOffset = requestOffset + results.length;
     } catch (e) {
+      if (e is ApiException && e.code == 'CANCELLED') {
+        return;
+      }
       if (generation == _productsLoadGeneration) {
         _error = e.toString();
       }
@@ -763,7 +772,7 @@ class PedidosProvider with ChangeNotifier {
     bool allowPartial = false,
   }) {
     if (!hasClient) {
-      const msg = 'Debes seleccionar un cliente antes de anadir productos.';
+      const msg = 'Debes seleccionar un cliente antes de añadir productos.';
       _error = msg;
       _notify(immediate: true);
       return msg;
@@ -863,9 +872,13 @@ class PedidosProvider with ChangeNotifier {
       line.unidadesFraccion = product.unitsFraction;
       line.precioVenta = precioVenta;
       line.precioCosto = product.costForUnit(unit);
-      line.precioTarifa = product.precioTarifa1;
-      line.precioTarifaCliente = product.precioCliente;
+      line.precioTarifa = product.catalogTariffForUnit(unit);
+      line.precioTarifaCliente = product.clientTariffForUnit(unit);
       line.precioMinimo = product.minimumPriceForUnit(unit);
+      line.precioClienteSource = product.precioClienteSource;
+      line.precioMinimoSource = product.precioMinimoSource;
+      line.precioEspecialCliente = product.precioEspecialCliente;
+      line.permiteBajoMinimo = product.permiteBajoMinimo;
       line.codigoIva = product.codigoIva;
       line.ivaRate = ivaRateFromCode(product.codigoIva);
       line.recalculate();
@@ -888,9 +901,13 @@ class PedidosProvider with ChangeNotifier {
         unidadesFraccion: product.unitsFraction,
         precioVenta: precioVenta,
         precioCosto: product.costForUnit(unit),
-        precioTarifa: product.precioTarifa1,
-        precioTarifaCliente: product.precioCliente,
+        precioTarifa: product.catalogTariffForUnit(unit),
+        precioTarifaCliente: product.clientTariffForUnit(unit),
         precioMinimo: product.minimumPriceForUnit(unit),
+        precioClienteSource: product.precioClienteSource,
+        precioMinimoSource: product.precioMinimoSource,
+        precioEspecialCliente: product.precioEspecialCliente,
+        permiteBajoMinimo: product.permiteBajoMinimo,
         codigoIva: product.codigoIva,
         ivaRate: ivaRate,
       );
@@ -1098,6 +1115,10 @@ class PedidosProvider with ChangeNotifier {
         precioTarifa: line.precioTarifa,
         precioTarifaCliente: line.precioTarifaCliente,
         precioMinimo: line.precioMinimo,
+        precioClienteSource: line.precioClienteSource,
+        precioMinimoSource: line.precioMinimoSource,
+        precioEspecialCliente: line.precioEspecialCliente,
+        permiteBajoMinimo: line.permiteBajoMinimo,
         codigoIva: line.codigoIva,
         ivaRate: line.ivaRate,
         claseLinea: line.claseLinea,
@@ -1194,9 +1215,10 @@ class PedidosProvider with ChangeNotifier {
     final unitsPerBox = sourceProduct?.quantityPerBoxForUnit(unit) ??
         (saleLine.unidadesCaja > 0 ? saleLine.unidadesCaja : 1);
     final cost = sourceProduct?.costForUnit(unit) ?? saleLine.precioCosto;
-    final tariff = sourceProduct?.precioTarifa1 ?? saleLine.precioTarifa;
-    final clientTariff =
-        sourceProduct?.precioCliente ?? saleLine.precioTarifaCliente;
+    final tariff =
+        sourceProduct?.catalogTariffForUnit(unit) ?? saleLine.precioTarifa;
+    final clientTariff = sourceProduct?.clientTariffForUnit(unit) ??
+        saleLine.precioTarifaCliente;
     final minPrice =
         sourceProduct?.minimumPriceForUnit(unit) ?? saleLine.precioMinimo;
     final description = sourceProduct?.name ?? saleLine.descripcion;
@@ -1216,6 +1238,14 @@ class PedidosProvider with ChangeNotifier {
         precioTarifa: tariff,
         precioTarifaCliente: clientTariff,
         precioMinimo: minPrice,
+        precioClienteSource:
+            sourceProduct?.precioClienteSource ?? saleLine.precioClienteSource,
+        precioMinimoSource:
+            sourceProduct?.precioMinimoSource ?? saleLine.precioMinimoSource,
+        precioEspecialCliente: sourceProduct?.precioEspecialCliente ??
+            saleLine.precioEspecialCliente,
+        permiteBajoMinimo:
+            sourceProduct?.permiteBajoMinimo ?? saleLine.permiteBajoMinimo,
         codigoIva: sourceProduct?.codigoIva ?? saleLine.codigoIva,
         ivaRate: saleLine.ivaRate,
         claseLinea: 'SC',
@@ -1396,6 +1426,9 @@ class PedidosProvider with ChangeNotifier {
           'message':
               'Pedido guardado localmente. Se enviara al recuperar conexion.',
         };
+      }
+      if (queuedSyncKey != null) {
+        await PedidosOfflineService.markQueuedOrderFailed(queuedSyncKey, e);
       }
       _debugLog('[confirmOrder] ERROR: $e');
       _debugLog('[confirmOrder] STACK: $st');
@@ -1897,9 +1930,13 @@ class PedidosProvider with ChangeNotifier {
               : (product.precioMinimo > 0
                   ? product.precioMinimo * 0.7
                   : product.precioTarifa1 * 0.7),
-          precioTarifa: product.precioTarifa1,
-          precioTarifaCliente: product.precioCliente,
+          precioTarifa: product.catalogTariffForUnit('CAJAS'),
+          precioTarifaCliente: product.clientTariffForUnit('CAJAS'),
           precioMinimo: product.precioMinimo,
+          precioClienteSource: product.precioClienteSource,
+          precioMinimoSource: product.precioMinimoSource,
+          precioEspecialCliente: product.precioEspecialCliente,
+          permiteBajoMinimo: product.permiteBajoMinimo,
           codigoIva: product.codigoIva,
           ivaRate: ivaRate,
         );
@@ -1968,6 +2005,7 @@ class PedidosProvider with ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _productsCancelToken?.cancel('pedidos provider disposed');
     super.dispose();
   }
 }

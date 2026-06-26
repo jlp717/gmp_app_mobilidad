@@ -1,6 +1,6 @@
 /// Order Card
 /// ==========
-/// Premium card showing order info with gradient by status, swipe actions.
+/// Operational card showing order info with status-aware actions.
 library;
 
 import 'package:flutter/material.dart';
@@ -43,25 +43,15 @@ class OrderCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: theme.gradient,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.primary.withValues(alpha: 0.25)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.primary.withValues(alpha: 0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: theme.primary.withValues(alpha: 0.32)),
+        boxShadow: AppTheme.elevation1,
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -76,7 +66,7 @@ class OrderCard extends StatelessWidget {
                     Icon(
                       Icons.calendar_today_outlined,
                       size: 12,
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: AppTheme.textPrimary.withValues(alpha: 0.4),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -84,7 +74,7 @@ class OrderCard extends StatelessWidget {
                           ? order.fechaFormatted
                           : order.fecha,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: AppTheme.textPrimary.withValues(alpha: 0.5),
                         fontSize: 11,
                       ),
                     ),
@@ -99,13 +89,8 @@ class OrderCard extends StatelessWidget {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            theme.primary.withValues(alpha: 0.2),
-                            theme.primary.withValues(alpha: 0.08),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
+                        color: theme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         border: Border.all(
                             color: theme.primary.withValues(alpha: 0.3)),
                       ),
@@ -123,7 +108,7 @@ class OrderCard extends StatelessWidget {
                           Text(
                             order.clienteName,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppTheme.textPrimary,
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
@@ -160,7 +145,7 @@ class OrderCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.03),
+                    color: AppTheme.textPrimary.withValues(alpha: 0.03),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -169,12 +154,12 @@ class OrderCard extends StatelessWidget {
                       _statItem(
                         Icons.format_list_numbered,
                         '${order.lineCount} líneas',
-                        Colors.white70,
+                        AppTheme.textSecondary,
                       ),
                       _statItem(
                         Icons.euro,
                         PedidosFormatters.money(order.total),
-                        AppTheme.neonGreen,
+                        AppTheme.success,
                       ),
                       if (isMarginVisible)
                         _statItem(
@@ -201,7 +186,7 @@ class OrderCard extends StatelessWidget {
                             context,
                             Icons.send_outlined,
                             'Confirmar',
-                            AppTheme.neonGreen,
+                            AppTheme.success,
                             onResend!,
                           ),
                         if (onDelete != null)
@@ -217,7 +202,7 @@ class OrderCard extends StatelessWidget {
                             context,
                             Icons.copy_all_outlined,
                             'Duplicar',
-                            AppTheme.neonBlue,
+                            AppTheme.info,
                             onDuplicate!,
                           ),
                         if (onViewAlbaran != null)
@@ -225,7 +210,7 @@ class OrderCard extends StatelessWidget {
                             context,
                             Icons.description_outlined,
                             'Albarán',
-                            AppTheme.neonPurple,
+                            AppTheme.accentIndigo,
                             onViewAlbaran!,
                           ),
                       ],
@@ -295,8 +280,8 @@ class OrderCard extends StatelessWidget {
   }
 
   Color _marginColor(double margin) {
-    if (margin >= 15) return AppTheme.neonGreen;
-    if (margin >= 5) return Colors.orange;
+    if (margin >= 15) return AppTheme.success;
+    if (margin >= 5) return AppTheme.warning;
     return AppTheme.error;
   }
 
@@ -305,12 +290,13 @@ class OrderCard extends StatelessWidget {
       return _bolsaStatusChip(
         Icons.account_balance_wallet_outlined,
         'Bolsa: pendiente de confirmar',
-        Colors.white38,
+        AppTheme.textTertiary,
       );
     }
     final generada = order.bolsaGenerada;
-    if (generada ?? false) {
-      final neto = order.bolsaNeto;
+    final neto = order.bolsaNeto;
+    final hasBolsaImpact = (generada ?? false) || neto.abs() > 0.0001;
+    if (hasBolsaImpact) {
       final netoLabel = neto == 0
           ? ''
           : ' (${neto > 0 ? '+' : ''}${PedidosFormatters.money(neto)})';
@@ -319,7 +305,7 @@ class OrderCard extends StatelessWidget {
           : neto < 0
               ? 'Bolsa usada$netoLabel'
               : 'Bolsa compensada';
-      final color = neto >= 0 ? AppTheme.neonGreen : AppTheme.warning;
+      final color = neto >= 0 ? AppTheme.success : AppTheme.warning;
       return _bolsaStatusChip(
         Icons.account_balance_wallet,
         label,
@@ -330,7 +316,7 @@ class OrderCard extends StatelessWidget {
       return _bolsaStatusChip(
         Icons.account_balance_wallet_outlined,
         'Bolsa: sin impacto',
-        Colors.white54,
+        AppTheme.textSecondary,
       );
     }
     return _bolsaStatusChip(

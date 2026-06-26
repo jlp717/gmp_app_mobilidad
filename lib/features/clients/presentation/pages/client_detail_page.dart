@@ -90,7 +90,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
       appBar: AppBar(
         title: Text(
             (_clientData?['client']?['name'] as String?) ?? 'Detalle Cliente'),
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -128,7 +128,8 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
     if (_clientData == null) {
       return const Center(
-          child: Text('No se encontr³ informaci³n del cliente'));
+        child: Text('No se encontró información del cliente'),
+      );
     }
 
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
@@ -153,11 +154,11 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
         // Tab Bar
         ColoredBox(
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           child: TabBar(
             controller: _tabController,
-            indicatorColor: AppTheme.neonBlue,
-            labelColor: AppTheme.neonBlue,
+            indicatorColor: AppTheme.info,
+            labelColor: AppTheme.info,
             unselectedLabelColor: AppTheme.textSecondary,
             tabs: const [
               Tab(text: 'Resumen', icon: Icon(Icons.dashboard, size: 18)),
@@ -200,7 +201,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
       padding: EdgeInsets.symmetric(
           horizontal: Responsive.padding(context, small: 12, large: 16),
           vertical: Responsive.padding(context, small: 6, large: 8)),
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -268,19 +269,18 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                    color: AppTheme.info.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
+                      Icon(Icons.note_add, size: 16, color: AppTheme.info),
                       SizedBox(width: 6),
-                      Text('A±adir observaciones',
-                          style: TextStyle(
-                              color: AppTheme.neonBlue, fontSize: 12)),
+                      Text('Añadir observaciones',
+                          style: TextStyle(color: AppTheme.info, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -292,11 +292,11 @@ class _ClientDetailPageState extends State<ClientDetailPage>
             children: [
               CircleAvatar(
                 radius: Responsive.value(context, phone: 16, desktop: 20),
-                backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
+                backgroundColor: AppTheme.success.withValues(alpha: 0.2),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
                   style: TextStyle(
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                       fontSize:
                           Responsive.fontSize(context, small: 14, large: 18),
                       fontWeight: FontWeight.bold),
@@ -317,12 +317,12 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                     const SizedBox(height: 2),
                     if (!Responsive.isLandscapeCompact(context))
                       Text(
-                        'C³d: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}',
+                        'Cód: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}',
                         style: const TextStyle(
                             fontSize: 12, color: AppTheme.textSecondary),
                       )
                     else
-                      Text('C³d: $code',
+                      Text('Cód: $code',
                           style: const TextStyle(
                               fontSize: 11, color: AppTheme.textSecondary)),
                   ],
@@ -399,19 +399,19 @@ class _ClientDetailPageState extends State<ClientDetailPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonPurple.withValues(alpha: 0.15),
+              color: AppTheme.accentIndigo.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+                const Icon(Icons.route, size: 12, color: AppTheme.accentIndigo),
                 const SizedBox(width: 4),
                 Text(
                   routeDesc.isNotEmpty ? routeDesc : 'Ruta $route',
                   style: const TextStyle(
                       fontSize: 11,
-                      color: AppTheme.neonPurple,
+                      color: AppTheme.accentIndigo,
                       fontWeight: FontWeight.w500),
                 ),
               ],
@@ -424,20 +424,20 @@ class _ClientDetailPageState extends State<ClientDetailPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.15),
+              color: AppTheme.info.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.calendar_today,
-                    size: 12, color: AppTheme.neonBlue),
+                    size: 12, color: AppTheme.info),
                 const SizedBox(width: 4),
                 Text(
                   'Visita: $visitDays',
                   style: const TextStyle(
                       fontSize: 11,
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontWeight: FontWeight.w500),
                 ),
               ],
@@ -450,20 +450,20 @@ class _ClientDetailPageState extends State<ClientDetailPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonGreen.withValues(alpha: 0.15),
+              color: AppTheme.success.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.local_shipping,
-                    size: 12, color: AppTheme.neonGreen),
+                    size: 12, color: AppTheme.success),
                 const SizedBox(width: 4),
                 Text(
                   'Reparto: $deliveryDays',
                   style: const TextStyle(
                       fontSize: 11,
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                       fontWeight: FontWeight.w500),
                 ),
               ],
@@ -479,7 +479,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: const Text('Observaciones del Cliente'),
         content: TextField(
           controller: controller,
@@ -525,7 +525,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
   void _showWhatsAppDialog(List<Map<String, dynamic>> phones) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -572,7 +572,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
     // Build personalized message
     final message = Uri.encodeComponent('Hola, soy tu comercial de Mari Pepa. '
-        'Me gustar­a saber c³mo va todo y recordarte que ma±ana es d­a de visita. '
+        'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
         '¿Est¡ todo en orden? ¿Necesitas algo en particular?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
@@ -608,7 +608,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   title: 'Ventas Totales',
                   value: CurrencyFormatter.formatWhole(totalSales),
                   icon: Icons.euro,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                 ),
               ),
               const SizedBox(width: 8),
@@ -628,7 +628,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   value: '$numOrders',
                   subtitle: '$totalBoxes cajas',
                   icon: Icons.shopping_cart,
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                 ),
               ),
             ],
@@ -711,7 +711,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('Evoluci³n Ventas (12 meses)',
+            Text('Evolución Ventas (12 meses)',
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
@@ -769,13 +769,13 @@ class _ClientDetailPageState extends State<ClientDetailPage>
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: AppTheme.neonBlue,
+            color: AppTheme.info,
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.3),
-                  AppTheme.neonBlue.withValues(alpha: 0)
+                  AppTheme.info.withValues(alpha: 0.3),
+                  AppTheme.info.withValues(alpha: 0)
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -806,19 +806,19 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           child: ListTile(
             leading: Container(
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
                 child: Text('${index + 1}',
                     style: const TextStyle(
-                        color: AppTheme.neonPurple,
+                        color: AppTheme.accentIndigo,
                         fontWeight: FontWeight.bold,
                         fontSize: 16)),
               ),
@@ -827,12 +827,12 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 14)),
-            subtitle: Text('C³d: $code  $timesOrdered ped.  $totalBoxes cj',
+            subtitle: Text('Cód: $code  $timesOrdered ped.  $totalBoxes cj',
                 style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(totalSales),
                 style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.success,
                     fontSize: 13)),
           ),
         );
@@ -855,8 +855,8 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   icon: const Icon(Icons.manage_search),
                   label: const Text('Explorador Avanzado'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-                    foregroundColor: AppTheme.neonBlue,
+                    backgroundColor: AppTheme.info.withValues(alpha: 0.2),
+                    foregroundColor: AppTheme.info,
                     minimumSize: const Size(double.infinity, 45),
                   ),
                   onPressed: () {
@@ -897,7 +897,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: AppTheme.surfaceColor,
+                    color: AppTheme.raisedSurface,
                     child: ListTile(
                       dense: true,
                       contentPadding:

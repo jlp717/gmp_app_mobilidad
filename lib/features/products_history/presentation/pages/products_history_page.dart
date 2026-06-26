@@ -146,10 +146,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
 
   Color _yearColor(int index) {
     const colors = [
-      AppTheme.neonGreen,
-      AppTheme.neonBlue,
-      Colors.orangeAccent,
-      Colors.purpleAccent,
+      AppTheme.success,
+      AppTheme.info,
+      AppTheme.warning,
+      AppTheme.accentIndigo,
       Colors.pinkAccent,
     ];
     return colors[index % colors.length];
@@ -158,10 +158,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       appBar: AppBar(
         title: const Text('Histórico de compras'),
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -182,7 +182,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                         const Icon(
                           Icons.error_outline,
                           size: 48,
-                          color: Colors.redAccent,
+                          color: AppTheme.error,
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -226,7 +226,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
       ..sort((a, b) => b.compareTo(a));
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -259,12 +259,12 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppTheme.neonPurple.withValues(alpha: 0.2)
+                                ? AppTheme.accentIndigo.withValues(alpha: 0.2)
                                 : Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isSelected
-                                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                                  ? AppTheme.accentIndigo.withValues(alpha: 0.5)
                                   : Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
@@ -272,7 +272,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                             '$year',
                             style: TextStyle(
                               color: isSelected
-                                  ? AppTheme.neonPurple
+                                  ? AppTheme.accentIndigo
                                   : Colors.white54,
                               fontWeight: isSelected
                                   ? FontWeight.w700
@@ -336,7 +336,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
     final sortedYears = _selectedYears.toList()..sort((a, b) => b.compareTo(a));
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -374,7 +374,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             _buildSummaryRow(
               'Vendido',
               Icons.euro,
-              AppTheme.neonGreen,
+              AppTheme.success,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -390,7 +390,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             _buildSummaryRow(
               'Sin dto',
               Icons.attach_money,
-              AppTheme.neonBlue,
+              AppTheme.info,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -407,7 +407,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             _buildSummaryRow(
               'Descuento',
               Icons.discount,
-              Colors.orangeAccent,
+              AppTheme.warning,
               sortedYears,
               (year) {
                 final yearData =
@@ -423,7 +423,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             _buildSummaryRow(
               'Unidades',
               Icons.inventory_2,
-              Colors.purpleAccent,
+              AppTheme.accentIndigo,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -514,7 +514,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
     }
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -583,8 +583,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
               final color = variacion == null
                   ? Colors.white54
                   : variacion >= 0
-                      ? AppTheme.neonGreen
-                      : Colors.redAccent;
+                      ? AppTheme.success
+                      : AppTheme.error;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -696,7 +696,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
     if (maxVal == 0) return const SizedBox.shrink();
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -792,7 +792,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                             labels[monthIdx],
                             style: TextStyle(
                               color: isCurrent
-                                  ? AppTheme.neonGreen
+                                  ? AppTheme.success
                                   : Colors.white.withValues(alpha: 0.55),
                               fontSize: 9,
                               fontWeight: isCurrent
@@ -816,7 +816,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
   Widget _buildTopProductsCard() {
     if (_topProducts.isEmpty) return const SizedBox.shrink();
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -861,7 +861,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                         _fmtMoney(p['importe']),
                         textAlign: TextAlign.right,
                         style: const TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -880,7 +880,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
   Widget _buildLinesTable() {
     if (_lines.isEmpty) {
       return const Card(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Center(
@@ -893,7 +893,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
       );
     }
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

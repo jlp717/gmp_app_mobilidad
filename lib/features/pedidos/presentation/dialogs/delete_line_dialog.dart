@@ -27,7 +27,7 @@ class DeleteLineDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [

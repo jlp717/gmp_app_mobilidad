@@ -43,6 +43,8 @@ class PedidosOfflineService {
     String? routeCode,
   }) _confirmOrder = PedidosService.confirmOrder;
 
+  static Future<void> Function()? onChanged;
+
   /// Initialize Hive boxes
   static Future<void> init() async {
     _draftsBox = await _openDraftsBox();
@@ -146,6 +148,7 @@ class PedidosOfflineService {
     };
     await box.put(key, jsonEncode(data));
     debugPrint('[PedidosOffline] Draft saved');
+    _notifyChanged();
     return key;
   }
 
@@ -197,6 +200,7 @@ class PedidosOfflineService {
   static Future<void> deleteDraft(String key) async {
     final box = await _drafts();
     await box.delete(key);
+    _notifyChanged();
   }
 
   /// Get draft count
@@ -250,12 +254,23 @@ class PedidosOfflineService {
     if (notifyQueued) {
       OfflineSyncNotifier.orderQueued(clientName: clientName);
     }
+    _notifyChanged();
     return key;
   }
 
   static Future<void> deleteQueuedOrder(String syncKey) async {
     final box = await _syncQueue();
     await box.delete(syncKey);
+    _notifyChanged();
+  }
+
+  static Future<void> markQueuedOrderFailed(
+    String syncKey,
+    Object error,
+  ) async {
+    final box = await _syncQueue();
+    await _markSyncFailed(box, syncKey, error);
+    _notifyChanged();
   }
 
   static void notifyQueuedOrder(String syncKey) {
@@ -291,6 +306,7 @@ class PedidosOfflineService {
     data.remove("error");
     data.remove("failedAt");
     await box.put(syncKey, jsonEncode(data));
+    _notifyChanged();
     return true;
   }
 
@@ -366,6 +382,9 @@ class PedidosOfflineService {
 
     final remainingPending = getPendingSyncs().length;
     final preservedFailures = getFailedSyncs().length;
+    if (processed > 0 || synced > 0 || failures.isNotEmpty) {
+      _notifyChanged();
+    }
     return {
       "totalPendingAtStart": pending.length,
       "selectedForRun": selected.length,
@@ -396,6 +415,7 @@ class PedidosOfflineService {
   static Future<void> clearAll() async {
     await _draftsBox?.clear();
     await _syncQueueBox?.clear();
+    _notifyChanged();
   }
 
   @visibleForTesting
@@ -555,5 +575,11 @@ class PedidosOfflineService {
   static int? _asIntOrNull(Object? value) {
     if (value is int) return value;
     return int.tryParse(value?.toString() ?? "");
+  }
+
+  static void _notifyChanged() {
+    final callback = onChanged;
+    if (callback == null) return;
+    unawaited(callback());
   }
 }

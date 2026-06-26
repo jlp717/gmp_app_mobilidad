@@ -45,6 +45,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   // Filters
   int? _selectedYear;
   int? _selectedMonth;
+  FacturaDocumentType? _selectedDocumentType;
   DateTime? _dateFrom;
   DateTime? _dateTo;
   String _vendedorCodes = '';
@@ -104,12 +105,22 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return DateFormat('yyyy-MM-dd').format(date);
   }
 
-  void _onSearchChanged() {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 250), _refreshData);
+  String _formatMoney(double value, {int decimals = 2}) {
+    return '${value.toStringAsFixed(decimals)} \u20ac';
   }
 
-  Future<void> _loadInitialData([bool showLoading = true]) async {
+  void _onSearchChanged() {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(
+      const Duration(milliseconds: 250),
+      () => _refreshData(),
+    );
+  }
+
+  Future<void> _loadInitialData([
+    bool showLoading = true,
+    bool forceRefresh = false,
+  ]) async {
     final generation = ++_loadGeneration;
     try {
       if (showLoading) {
@@ -161,15 +172,20 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       );
 
       final results = await Future.wait([
-        FacturasService.getAvailableYears(codes),
+        FacturasService.getAvailableYears(
+          codes,
+          forceRefresh: forceRefresh,
+        ),
         FacturasService.getFacturas(
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
           clientSearch: _clientSearchController.text.trim(),
           docSearch: _facturaSearchController.text.trim(),
+          documentType: _selectedDocumentType,
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
+          forceRefresh: forceRefresh,
         ),
         FacturasService.getSummary(
           vendedorCodes: codes,
@@ -177,8 +193,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           month: _selectedMonth,
           clientSearch: _clientSearchController.text.trim(),
           docSearch: _facturaSearchController.text.trim(),
+          documentType: _selectedDocumentType,
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
+          forceRefresh: forceRefresh,
         ),
       ]);
 
@@ -195,7 +213,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = 'Error cargando facturas: $e';
+        _error = 'Error cargando documentos: $e';
         _isLoading = false;
       });
     }
@@ -257,7 +275,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error abriendo calendario: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ),
       );
     }
@@ -267,13 +285,16 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   Widget _buildFacturaCard(Factura factura) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final documentColor = factura.isAlbaran ? AppTheme.warning : AppTheme.info;
+    final documentIcon =
+        factura.isAlbaran ? Icons.article_outlined : Icons.receipt_long_rounded;
     // final isPaid = factura.estado.toLowerCase() == 'cobrada'; // Removed as property doesn't exist
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFF1E293B)
+            ? AppTheme.raisedSurface
             : Colors.white, // Slighly lighter navy
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
@@ -299,14 +320,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             child: Container(
               width: 4,
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue,
+                color: documentColor,
                 borderRadius: const BorderRadius.only(
                   topRight: Radius.circular(4),
                   bottomRight: Radius.circular(4),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.5),
+                    color: documentColor.withValues(alpha: 0.5),
                     blurRadius: 4,
                   ),
                 ],
@@ -330,17 +351,15 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                           width: 48, // Slightly larger
                           height: 48,
                           decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF2D5A87).withValues(alpha: 0.15),
+                            color: documentColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF2D5A87)
-                                  .withValues(alpha: 0.5),
+                              color: documentColor.withValues(alpha: 0.5),
                             ),
                           ),
-                          child: const Icon(
-                            Icons.receipt_long_rounded, // Rounded
-                            color: Color(0xFF1976D2), // Brighter blue
+                          child: Icon(
+                            documentIcon,
+                            color: documentColor,
                             size: 26,
                           ),
                         ),
@@ -359,10 +378,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                   fontWeight: FontWeight.w900,
                                   fontSize:
                                       Responsive.isSmall(context) ? 16 : 19,
-                                  color: isDark
-                                      ? const Color(0xFF90CAF9)
-                                      : const Color(0xFF0D47A1),
-                                  letterSpacing: 0.3,
+                                  color: documentColor,
+                                  letterSpacing: 0,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -389,8 +406,15 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                   ),
                                 ),
                               const SizedBox(height: 6),
-                              Row(
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 6,
                                 children: [
+                                  _buildDocumentTypeChip(
+                                    factura: factura,
+                                    color: documentColor,
+                                  ),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
@@ -420,7 +444,6 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
                                   Text(
                                     factura.fecha,
                                     style: TextStyle(
@@ -455,11 +478,22 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                     fontSize:
                                         Responsive.isSmall(context) ? 18 : 22,
                                     color: isDark
-                                        ? AppTheme.neonGreen
-                                        : const Color(0xFF2E7D32), // Green
+                                        ? AppTheme.success
+                                        : AppTheme.success, // Green
                                   ),
                                   textAlign: TextAlign.right,
                                 ),
+                              ),
+                              const SizedBox(height: 4),
+                              _buildAmountBreakdown(
+                                label: 'Base',
+                                value: factura.base,
+                                isDark: isDark,
+                              ),
+                              _buildAmountBreakdown(
+                                label: 'IVA',
+                                value: factura.iva,
+                                isDark: isDark,
                               ),
                             ],
                           ),
@@ -512,6 +546,51 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
   }
 
+  Widget _buildAmountBreakdown({
+    required String label,
+    required double value,
+    required bool isDark,
+  }) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Text(
+        '$label ${_formatMoney(value)}',
+        style: TextStyle(
+          color: isDark ? Colors.white60 : Colors.grey.shade700,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+        textAlign: TextAlign.right,
+      ),
+    );
+  }
+
+  Widget _buildDocumentTypeChip({
+    required Factura factura,
+    required Color color,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.18 : 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        factura.tipoLabel.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -527,12 +606,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: isPrimary
-              ? const Color(0xFF2D5A87).withValues(alpha: 0.1)
+              ? AppTheme.info.withValues(alpha: 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isPrimary
-                ? const Color(0xFF2D5A87).withValues(alpha: 0.5)
+                ? AppTheme.info.withValues(alpha: 0.5)
                 : (isDark ? Colors.white24 : Colors.grey.shade300),
           ),
         ),
@@ -542,7 +621,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               icon,
               size: 16,
               color: isPrimary
-                  ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87))
+                  ? (isDark ? AppTheme.info : AppTheme.info)
                   : (isDark ? Colors.white70 : Colors.grey.shade700),
             ),
             const SizedBox(width: 6),
@@ -552,7 +631,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: isPrimary
-                    ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87))
+                    ? (isDark ? AppTheme.info : AppTheme.info)
                     : (isDark ? Colors.white70 : Colors.grey.shade700),
               ),
             ),
@@ -562,7 +641,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
   }
 
-  Future<void> _refreshData() async {
+  Future<void> _refreshData({bool forceRefresh = false}) async {
     if (!mounted) return;
     // Prevent redundant calls if already loading
     if (_isLoading) return;
@@ -584,8 +663,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           month: _selectedMonth,
           clientSearch: clientSearch,
           docSearch: docSearch,
+          documentType: _selectedDocumentType,
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
+          forceRefresh: forceRefresh,
         ),
         FacturasService.getSummary(
           vendedorCodes: codes,
@@ -593,13 +674,15 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           month: _selectedMonth,
           clientSearch: clientSearch,
           docSearch: docSearch,
+          documentType: _selectedDocumentType,
           dateFrom: _formatDateParam(_dateFrom),
           dateTo: _formatDateParam(_dateTo),
+          forceRefresh: forceRefresh,
         ),
       ]);
 
       debugPrint(
-        '[FACTURAS] Refresh complete. Found ${(results[0]! as List).length} facturas.',
+        '[FACTURAS] Refresh complete. Found ${(results[0]! as List).length} documentos.',
       );
 
       if (!mounted || generation != _loadGeneration) return;
@@ -611,7 +694,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
       );
     }
   }
@@ -642,6 +725,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     }
   }
 
+  void _onDocumentTypeChanged(FacturaDocumentType? type) {
+    if (type != _selectedDocumentType) {
+      setState(() => _selectedDocumentType = type);
+      _onSearchChanged();
+    }
+  }
+
   // ============================================================================
   // PDF ACTIONS (with AsyncOperationModal + PdfPreviewScreen)
   // ============================================================================
@@ -650,11 +740,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     final modal =
         AsyncOperationModal.show(context, text: 'Cargando previsualización...');
     try {
-      final bytes = await FacturasService.downloadFacturaPdfBytes(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
-      );
+      final bytes = await FacturasService.downloadDocumentoPdfBytes(factura);
 
       // FIX: Validate PDF buffer is not empty/corrupted before navigating to preview
       // A valid PDF is at minimum ~100 bytes (%PDF-1.x header + trailer)
@@ -667,7 +753,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             content: Text(
               'Error: PDF vacío o corrupto (${bytes.length} bytes). Intenta de nuevo.',
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
         return;
@@ -678,14 +764,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
       final pdfBytes = Uint8List.fromList(bytes);
       final fileName =
-          'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
+          '${factura.pdfFilePrefix}_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
 
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
             pdfBytes: pdfBytes,
-            title: 'Factura ${factura.numeroFormateado}',
+            title: '${factura.tipoLabel} ${factura.numeroFormateado}',
             fileName: fileName,
             onEmailTap: () {
               Navigator.pop(context);
@@ -707,14 +793,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Future<void> _downloadFactura(Factura factura) async {
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando factura...');
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando ${factura.tipoLabel.toLowerCase()}...',
+    );
     try {
-      final file = await FacturasService.downloadFacturaPdf(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
-      );
+      final file = await FacturasService.downloadDocumentoPdf(factura);
 
       modal.close();
       if (!mounted) return;
@@ -741,16 +825,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   Future<void> _shareFacturaPdf(Factura factura) async {
     final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
     try {
-      final file = await FacturasService.downloadFacturaPdf(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
-      );
+      final file = await FacturasService.downloadDocumentoPdf(factura);
       modal.close();
 
       if (!mounted) return;
 
-      final text = 'Adjunto: Factura ${factura.numeroFormateado} - '
+      final text =
+          'Adjunto: ${factura.tipoLabel} ${factura.numeroFormateado} - '
           '${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa';
 
       final renderBox = context.findRenderObject()! as RenderBox;
@@ -764,7 +845,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: text,
-        subject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
+        subject:
+            '${factura.tipoLabel} ${factura.numeroFormateado} - Granja Mari Pepa',
         sharePositionOrigin: origin,
       );
     } catch (e) {
@@ -785,7 +867,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(
-          color: AppTheme.darkSurface,
+          color: AppTheme.raisedSurface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           border: Border(
               top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
@@ -806,40 +888,47 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               Padding(
                 padding: const EdgeInsets.only(bottom: 20),
                 child: Text(
-                  'Compartir Factura',
+                  'Compartir ${factura.tipoLabel}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                 ),
               ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF25D366),
-                  child: Icon(Icons.chat, color: Colors.white, size: 20),
+              if (factura.isFactura) ...[
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFF25D366),
+                    child: Icon(Icons.chat, color: Colors.white, size: 20),
+                  ),
+                  title: const Text(
+                    'WhatsApp',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _whatsAppFactura(factura);
+                  },
                 ),
-                title: const Text(
-                  'WhatsApp',
-                  style: TextStyle(color: Colors.white),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppTheme.info,
+                    child: Icon(
+                      Icons.email_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text(
+                    'Email',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _emailFactura(factura);
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _whatsAppFactura(factura);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppTheme.neonBlue,
-                  child:
-                      Icon(Icons.email_outlined, color: Colors.white, size: 20),
-                ),
-                title:
-                    const Text('Email', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _emailFactura(factura);
-                },
-              ),
+              ],
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Colors.grey,
@@ -864,6 +953,16 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Future<void> _emailFactura(Factura factura) async {
+    if (factura.isAlbaran) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Para albaranes usa Compartir > Sistema.'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
     final result = await EmailFormModal.show(
       context,
       defaultSubject:
@@ -899,10 +998,20 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Future<void> _whatsAppFactura(Factura factura) async {
+    if (factura.isAlbaran) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Para albaranes usa Compartir > Sistema.'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage: 'Hola ${factura.clienteNombre}, le adjunto su factura '
-          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). ðŸ“„\n\n'
+          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). \n\n'
           'Gracias por su confianza - Granja Mari Pepa',
     );
 
@@ -987,7 +1096,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
+                color: AppTheme.raisedSurface,
                 border: Border(
                   bottom:
                       BorderSide(color: Colors.white.withValues(alpha: 0.05)),
@@ -1010,17 +1119,17 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.teal.withValues(alpha: 0.1),
+                              color: AppTheme.accentMint.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
                               Icons.receipt_long_outlined,
-                              color: Colors.teal,
+                              color: AppTheme.accentMint,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            'Mis Facturas',
+                            'Facturas y albaranes',
                             style: Theme.of(context)
                                 .textTheme
                                 .headlineSmall
@@ -1031,7 +1140,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       // Explicit Refresh Button
                       IconButton(
                         icon: const Icon(Icons.refresh),
-                        onPressed: _refreshData,
+                        onPressed: () => _refreshData(forceRefresh: true),
                         tooltip: 'Recargar datos',
                       ),
                     ],
@@ -1070,13 +1179,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                             ? Center(
                                 child: Text(
                                   _error!,
-                                  style: const TextStyle(color: Colors.red),
+                                  style: const TextStyle(color: AppTheme.error),
                                 ),
                               )
                             : _facturas.isEmpty
                                 ? _buildEmptyState()
                                 : RefreshIndicator(
-                                    onRefresh: _refreshData,
+                                    onRefresh: () =>
+                                        _refreshData(forceRefresh: true),
                                     // OPTIMIZATION: Use OptimizedListView for smooth scrolling
                                     child: OptimizedListView(
                                       padding:
@@ -1108,9 +1218,18 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           Expanded(
             child: _buildSummaryItem(
               icon: Icons.receipt_long,
-              label: 'Facturas',
-              value: '${_summary!.totalFacturas}',
-              color: Colors.blue,
+              label: 'Docs',
+              value: '${_summary!.totalDocumentos}',
+              color: AppTheme.info,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildSummaryItem(
+              icon: Icons.calculate_outlined,
+              label: 'Base',
+              value: _formatMoney(_summary!.totalBase, decimals: 0),
+              color: AppTheme.info,
             ),
           ),
           const SizedBox(width: 8),
@@ -1119,7 +1238,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               icon: Icons.euro,
               label: 'Total',
               value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
-              color: Colors.green,
+              color: AppTheme.success,
             ),
           ),
           const SizedBox(width: 8),
@@ -1128,7 +1247,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               icon: Icons.percent,
               label: 'IVA',
               value: '${_summary!.totalIva.toStringAsFixed(0)}€',
-              color: Colors.orange,
+              color: AppTheme.warning,
             ),
           ),
         ],
@@ -1147,7 +1266,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        color: isDark ? AppTheme.raisedSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? Colors.white10 : Colors.grey.shade100,
@@ -1208,7 +1327,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A2332) : Colors.grey.shade50,
+        color: isDark ? AppTheme.softPanel : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
@@ -1232,7 +1351,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: isDark ? Colors.white38 : Colors.grey.shade500,
-                  letterSpacing: 0.5,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -1253,12 +1372,15 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               Expanded(
                 child: _buildSearchField(
                   controller: _facturaSearchController,
-                  hint: 'Nº Factura...',
+                  hint: 'Nº documento...',
                   icon: Icons.receipt_long_outlined,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          _buildDocumentTypeDropdown(),
           const SizedBox(height: 12),
 
           // Date Controls Grid - 2x2 layout
@@ -1340,11 +1462,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
+                        color: AppTheme.error.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child:
-                          const Icon(Icons.close, size: 18, color: Colors.red),
+                      child: const Icon(Icons.close,
+                          size: 18, color: AppTheme.error),
                     ),
                   ),
                 ),
@@ -1361,7 +1483,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     required bool isActive,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accentColor = const Color(0xFF2D5A87);
+    final accentColor = AppTheme.info;
 
     return InkWell(
       onTap: onTap,
@@ -1372,7 +1494,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         decoration: BoxDecoration(
           color: isActive
               ? accentColor.withValues(alpha: 0.08)
-              : (isDark ? const Color(0xFF1E2746) : Colors.white),
+              : (isDark ? AppTheme.raisedSurface : Colors.white),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
@@ -1412,6 +1534,73 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
   }
 
+  Widget _buildDocumentTypeDropdown() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.raisedSurface : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<FacturaDocumentType?>(
+          value: _selectedDocumentType,
+          items: const [
+            DropdownMenuItem<FacturaDocumentType?>(
+              child: Text('Todos'),
+            ),
+            DropdownMenuItem<FacturaDocumentType?>(
+              value: FacturaDocumentType.factura,
+              child: Text('Factura'),
+            ),
+            DropdownMenuItem<FacturaDocumentType?>(
+              value: FacturaDocumentType.albaran,
+              child: Text('Albaran'),
+            ),
+          ],
+          onChanged: _onDocumentTypeChanged,
+          hint: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.description_outlined,
+                size: 16,
+                color: isDark ? Colors.white38 : Colors.grey.shade400,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Todos',
+                style: TextStyle(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.7)
+                      : Colors.black87,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: isDark ? Colors.white38 : Colors.grey.shade400,
+          ),
+          dropdownColor: isDark ? AppTheme.raisedSurface : Colors.white,
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black87,
+            fontSize: 14,
+          ),
+          isExpanded: true,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchField({
     required TextEditingController controller,
     required String hint,
@@ -1422,7 +1611,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        color: isDark ? AppTheme.raisedSurface : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1469,7 +1658,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        color: isDark ? AppTheme.raisedSurface : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1502,7 +1691,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           ),
           icon: Icon(Icons.arrow_drop_down,
               color: isDark ? Colors.white38 : Colors.grey.shade400),
-          dropdownColor: isDark ? const Color(0xFF1E2746) : Colors.white,
+          dropdownColor: isDark ? AppTheme.raisedSurface : Colors.white,
           style: TextStyle(
             color: isDark ? Colors.white : Colors.black87,
             fontSize: 14,
@@ -1515,6 +1704,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   Widget _buildEmptyState() {
     final hasFilters = _selectedMonth != null ||
+        _selectedDocumentType != null ||
         _dateFrom != null ||
         _dateTo != null ||
         _clientSearchController.text.isNotEmpty ||
@@ -1536,8 +1726,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             const SizedBox(height: 16),
             Text(
               hasFilters
-                  ? 'No se han encontrado facturas para los filtros seleccionados'
-                  : 'No hay facturas disponibles',
+                  ? 'No se han encontrado documentos para los filtros seleccionados'
+                  : 'No hay documentos disponibles',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white54,
@@ -1549,7 +1739,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             Text(
               hasFilters
                   ? 'Prueba a seleccionar otro comercial, ampliar el rango de fechas o modificar la búsqueda.'
-                  : 'Las facturas aparecerán aquí cuando estén disponibles.',
+                  : 'Los documentos apareceran aqui cuando esten disponibles.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white38, fontSize: 13),
             ),
@@ -1559,6 +1749,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 onPressed: () {
                   setState(() {
                     _selectedMonth = null;
+                    _selectedDocumentType = null;
                     _dateFrom = null;
                     _dateTo = null;
                     _clientSearchController.clear();

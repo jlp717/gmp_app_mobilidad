@@ -47,17 +47,10 @@ class BolsaMonthlyChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.darkSurface.withValues(alpha: 0.9),
-            AppTheme.darkBase.withValues(alpha: 0.6),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppTheme.neonBlue.withValues(alpha: 0.18),
+          color: AppTheme.info.withValues(alpha: 0.18),
         ),
       ),
       child: Column(
@@ -67,7 +60,7 @@ class BolsaMonthlyChart extends StatelessWidget {
             children: [
               const Icon(
                 Icons.show_chart,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 18,
               ),
               const SizedBox(width: 6),
@@ -80,7 +73,7 @@ class BolsaMonthlyChart extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              _legendDot('Acum.', AppTheme.neonGreen),
+              _legendDot('Acum.', AppTheme.success),
               const SizedBox(width: 8),
               _legendDot('Cons.', AppTheme.warning),
             ],
@@ -118,7 +111,7 @@ class BolsaMonthlyChart extends StatelessWidget {
                             children: [
                               _bar(
                                 height: acumH,
-                                color: AppTheme.neonGreen,
+                                color: AppTheme.success,
                                 glow: isCurrent,
                               ),
                               const SizedBox(width: 2),
@@ -139,7 +132,7 @@ class BolsaMonthlyChart extends StatelessWidget {
                               fontWeight:
                                   isCurrent ? FontWeight.w800 : FontWeight.w500,
                               color: isCurrent
-                                  ? AppTheme.neonBlue
+                                  ? AppTheme.info
                                   : Colors.white.withValues(alpha: 0.55),
                             ),
                           ),
@@ -154,14 +147,14 @@ class BolsaMonthlyChart extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              _stat('Acumulado total', _eur(totalAcum), AppTheme.neonGreen),
+              _stat('Acumulado total', _eur(totalAcum), AppTheme.success),
               const SizedBox(width: 8),
               _stat('Consumido total', _eur(totalCons), AppTheme.warning),
               const SizedBox(width: 8),
               _stat(
                 'Saldo neto',
                 _eur(saldoNeto),
-                saldoNeto >= 0 ? AppTheme.neonBlue : AppTheme.error,
+                saldoNeto >= 0 ? AppTheme.info : AppTheme.error,
               ),
             ],
           ),
@@ -212,7 +205,7 @@ class BolsaMonthlyChart extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         decoration: BoxDecoration(
-          color: AppTheme.darkSurface.withValues(alpha: 0.5),
+          color: AppTheme.raisedSurface.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),

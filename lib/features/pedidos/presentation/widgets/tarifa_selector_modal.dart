@@ -131,7 +131,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
             ? orange.withValues(alpha: 0.18)
             : selected
                 ? orange.withValues(alpha: 0.1)
-                : AppTheme.darkCard,
+                : AppTheme.softPanel,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           onTap: () => setState(() => _selected = selKey),
@@ -167,7 +167,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
     final hasTariffs = widget.tariffs.isNotEmpty;
 
     return Dialog(
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Padding(
@@ -214,7 +214,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard,
+                  color: AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppTheme.borderColor),
                 ),
@@ -402,7 +402,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
-                    foregroundColor: AppTheme.darkBase,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),

@@ -41,14 +41,14 @@ class DaySelectorDialog extends StatelessWidget {
         dayLabels.keys.where((d) => d != currentDay.toLowerCase()).toList();
 
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.swap_horiz, color: AppTheme.neonBlue),
+              Icon(Icons.swap_horiz, color: AppTheme.info),
               SizedBox(width: 8),
               Text('Mover a otro día'),
             ],
@@ -114,7 +114,8 @@ class DaySelectorDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          child: const Text('Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary)),
         ),
       ],
     );
@@ -138,7 +139,7 @@ class _DayOption extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
@@ -147,7 +148,7 @@ class _DayOption extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(icon, color: AppTheme.neonBlue, size: 24),
+                Icon(icon, color: AppTheme.info, size: 24),
                 const SizedBox(width: 12),
                 Text(
                   label.toUpperCase(),
@@ -156,7 +157,7 @@ class _DayOption extends StatelessWidget {
                 ),
                 const Spacer(),
                 const Icon(Icons.arrow_forward_ios,
-                    size: 16, color: Colors.grey),
+                    size: 16, color: AppTheme.textTertiary),
               ],
             ),
           ),
@@ -226,11 +227,11 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
-          Icon(Icons.format_list_numbered, color: AppTheme.neonPink),
+          Icon(Icons.format_list_numbered, color: AppTheme.accentRose),
           SizedBox(width: 8),
           Expanded(child: Text('Posición en la ruta')),
         ],
@@ -284,11 +285,12 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          child: const Text('Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary)),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _selectedPosition),
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
           child: const Text('Continuar'),
         ),
       ],
@@ -342,11 +344,11 @@ class _PositionOption extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isSelected
-            ? AppTheme.neonPink.withValues(alpha: 0.1)
-            : AppTheme.darkSurface,
+            ? AppTheme.accentRose.withValues(alpha: 0.1)
+            : AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isSelected ? AppTheme.neonPink : Colors.transparent,
+          color: isSelected ? AppTheme.accentRose : Colors.transparent,
           width: 2,
         ),
       ),
@@ -358,7 +360,8 @@ class _PositionOption extends StatelessWidget {
           child: Row(
             children: [
               Icon(icon,
-                  color: isSelected ? AppTheme.neonPink : Colors.grey,
+                  color:
+                      isSelected ? AppTheme.accentRose : AppTheme.textTertiary,
                   size: 24),
               const SizedBox(width: 12),
               Expanded(
@@ -369,7 +372,7 @@ class _PositionOption extends StatelessWidget {
                       label,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isSelected ? AppTheme.neonPink : Colors.white,
+                        color: isSelected ? AppTheme.accentRose : Colors.white,
                       ),
                     ),
                     Text(
@@ -382,7 +385,7 @@ class _PositionOption extends StatelessWidget {
               ),
               if (isSelected)
                 const Icon(Icons.check_circle,
-                    color: AppTheme.neonPink, size: 20),
+                    color: AppTheme.accentRose, size: 20),
             ],
           ),
         ),
@@ -423,7 +426,7 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       title: const Text('Seleccionar posición'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -441,7 +444,7 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
                         })
                     : null,
                 icon: const Icon(Icons.remove_circle),
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
               SizedBox(
                 width: 60,
@@ -469,7 +472,7 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
                         })
                     : null,
                 icon: const Icon(Icons.add_circle),
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
             ],
           ),
@@ -478,11 +481,12 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          child: const Text('Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary)),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _value),
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
           child: const Text('Seleccionar'),
         ),
       ],
@@ -527,7 +531,7 @@ class MoveConfirmationDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
@@ -543,7 +547,7 @@ class MoveConfirmationDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase,
+              color: AppTheme.inkSurface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -554,11 +558,11 @@ class MoveConfirmationDialog extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                        color: AppTheme.info.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.person,
-                          color: AppTheme.neonBlue, size: 20),
+                          color: AppTheme.info, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -590,8 +594,8 @@ class MoveConfirmationDialog extends StatelessWidget {
                       child: Column(
                         children: [
                           const Text('DE',
-                              style:
-                                  TextStyle(fontSize: 10, color: Colors.grey)),
+                              style: TextStyle(
+                                  fontSize: 10, color: AppTheme.textTertiary)),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -612,13 +616,13 @@ class MoveConfirmationDialog extends StatelessWidget {
                       ),
                     ),
                     const Icon(Icons.arrow_forward,
-                        color: AppTheme.neonPink, size: 28),
+                        color: AppTheme.accentRose, size: 28),
                     Expanded(
                       child: Column(
                         children: [
                           const Text('A',
-                              style:
-                                  TextStyle(fontSize: 10, color: Colors.grey)),
+                              style: TextStyle(
+                                  fontSize: 10, color: AppTheme.textTertiary)),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -664,11 +668,12 @@ class MoveConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          child: const Text('Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary)),
         ),
         ElevatedButton.icon(
           onPressed: () => Navigator.pop(context, true),
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
           icon: const Icon(Icons.check, size: 18),
           label: const Text('Confirmar y Guardar'),
         ),
@@ -702,11 +707,11 @@ class ReorderConfirmationDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
-          Icon(Icons.save, color: AppTheme.neonBlue, size: 28),
+          Icon(Icons.save, color: AppTheme.info, size: 28),
           SizedBox(width: 8),
           Text('Guardar orden'),
         ],
@@ -717,7 +722,7 @@ class ReorderConfirmationDialog extends StatelessWidget {
           Icon(
             Icons.format_list_numbered,
             size: 48,
-            color: AppTheme.neonPink.withValues(alpha: 0.5),
+            color: AppTheme.accentRose.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
           Text(
@@ -755,11 +760,12 @@ class ReorderConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          child: const Text('Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary)),
         ),
         ElevatedButton.icon(
           onPressed: () => Navigator.pop(context, true),
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
           icon: const Icon(Icons.save, size: 18),
           label: const Text('Guardar'),
         ),

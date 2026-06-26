@@ -12,7 +12,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
     this.subtitle =
         'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
     this.icon = Icons.rocket_launch,
-    this.accentColor = AppTheme.neonPurple,
+    this.accentColor = AppTheme.accentIndigo,
   });
   final String title;
   final String subtitle;
@@ -22,7 +22,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Center(
         child: Padding(
           padding:
@@ -98,7 +98,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
                         Responsive.fontSize(context, small: 20, large: 26),
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
-                    letterSpacing: -0.3,
+                    letterSpacing: 0,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -136,7 +136,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: accentColor,
-                        letterSpacing: 1.2,
+                        letterSpacing: 0,
                       ),
                     ),
                   ],

@@ -72,7 +72,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
         children: [
           Row(
             children: [
-              const Icon(Icons.layers, color: AppTheme.neonBlue, size: 18),
+              const Icon(Icons.layers, color: AppTheme.info, size: 18),
               const SizedBox(width: 8),
               Text(
                 'Jerarquía de Agrupación',
@@ -156,11 +156,11 @@ class _HierarchySelectorState extends State<HierarchySelector> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: isActive
-                  ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                  ? AppTheme.info.withValues(alpha: 0.15)
                   : Colors.white10,
               border: Border.all(
                 color: isActive
-                    ? AppTheme.neonBlue.withValues(alpha: 0.5)
+                    ? AppTheme.info.withValues(alpha: 0.5)
                     : Colors.white10,
               ),
               borderRadius: BorderRadius.circular(20),
@@ -173,8 +173,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
                       size: 16, color: Colors.white30),
                 if (isActive) const SizedBox(width: 8),
                 Icon(_dimensionIcons[dim],
-                    size: 16,
-                    color: isActive ? AppTheme.neonBlue : Colors.white30),
+                    size: 16, color: isActive ? AppTheme.info : Colors.white30),
                 const SizedBox(width: 8),
                 Text(
                   _dimensionLabels[dim]!,
@@ -189,7 +188,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
                   const Icon(Icons.close, size: 14, color: Colors.white30),
                 ] else if (!isActive) ...[
                   const SizedBox(width: 8),
-                  const Icon(Icons.add, size: 14, color: AppTheme.neonBlue),
+                  const Icon(Icons.add, size: 14, color: AppTheme.info),
                 ],
               ],
             ),

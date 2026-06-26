@@ -34,17 +34,17 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
+          color: AppTheme.raisedSurface,
           border: Border(
             top: BorderSide(
-              color: AppTheme.neonBlue.withValues(alpha: 0.15),
+              color: AppTheme.info.withValues(alpha: 0.15),
             ),
           ),
         ),
@@ -53,15 +53,14 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
           onTap: (i) => setState(() => _currentIndex = i),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          selectedItemColor: AppTheme.neonBlue,
+          selectedItemColor: AppTheme.info,
           unselectedItemColor: Colors.white38,
           selectedLabelStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 10,
-            letterSpacing: 0.3,
+            letterSpacing: 0,
           ),
-          unselectedLabelStyle:
-              const TextStyle(fontSize: 9, letterSpacing: 0.2),
+          unselectedLabelStyle: const TextStyle(fontSize: 9, letterSpacing: 0),
           type: BottomNavigationBarType.fixed,
           items: const [
             BottomNavigationBarItem(

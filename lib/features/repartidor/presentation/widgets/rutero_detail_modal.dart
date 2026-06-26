@@ -329,12 +329,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           landscapeFraction: _isCompleted ? 0.80 : 0.95,
         ),
         decoration: BoxDecoration(
-          color: AppTheme.darkBase,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          color: AppTheme.raisedSurface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppTheme.radiusXl),
+          ),
           border: Border.all(
             color: _isCompleted
                 ? AppTheme.success.withValues(alpha: 0.3)
-                : AppTheme.neonBlue.withValues(alpha: 0.2),
+                : AppTheme.borderColor,
           ),
         ),
         child: Column(
@@ -489,9 +491,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               alignLabelWithHint: true,
               errorText: _observacionesError,
               filled: true,
-              fillColor: AppTheme.darkCard,
+              fillColor: AppTheme.softPanel,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
               ),
             ),
           ),
@@ -511,8 +513,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(14),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(color: AppTheme.borderColor),
       ),
       child: Column(
@@ -520,15 +522,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         children: [
           const Row(
             children: [
-              Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+              Icon(Icons.person, color: AppTheme.info, size: 20),
               SizedBox(width: 8),
               Text(
                 'DATOS DEL RECEPTOR',
                 style: TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
-                  letterSpacing: 1,
                 ),
               ),
             ],
@@ -563,9 +564,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   labelText: 'Nombre y Apellidos *',
                   prefixIcon: const Icon(Icons.person_outline, size: 20),
                   filled: true,
-                  fillColor: AppTheme.darkBase,
+                  fillColor: AppTheme.softPanel,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                   errorText: _nombreError,
                   errorStyle: const TextStyle(color: AppTheme.error),
@@ -577,7 +578,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 alignment: Alignment.topLeft,
                 child: Material(
                   elevation: 4,
-                  color: AppTheme.darkCard,
+                  color: AppTheme.raisedSurface,
                   child: SizedBox(
                     height: 200,
                     width: MediaQuery.of(context).size.width -
@@ -588,7 +589,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       itemBuilder: (BuildContext context, int index) {
                         final option = options.elementAt(index);
                         return ListTile(
-                          tileColor: AppTheme.darkBase,
+                          tileColor: AppTheme.softPanel,
                           title: Text(option,
                               style:
                                   const TextStyle(color: AppTheme.textPrimary)),
@@ -633,9 +634,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   labelText: 'DNI / NIF *',
                   prefixIcon: const Icon(Icons.badge_outlined, size: 20),
                   filled: true,
-                  fillColor: AppTheme.darkBase,
+                  fillColor: AppTheme.softPanel,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                   errorText: _dniError,
                   errorStyle: const TextStyle(color: AppTheme.error),
@@ -647,7 +648,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 alignment: Alignment.topLeft,
                 child: Material(
                   elevation: 4,
-                  color: AppTheme.darkCard,
+                  color: AppTheme.raisedSurface,
                   child: SizedBox(
                     height: 200,
                     width: MediaQuery.of(context).size.width -
@@ -658,7 +659,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       itemBuilder: (BuildContext context, int index) {
                         final option = options.elementAt(index);
                         return ListTile(
-                          tileColor: AppTheme.darkBase,
+                          tileColor: AppTheme.softPanel,
                           title: Text(option,
                               style:
                                   const TextStyle(color: AppTheme.textPrimary)),
@@ -682,9 +683,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.15),
-        border: Border.all(color: Colors.orange),
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.warning.withValues(alpha: 0.14),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.36)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       ),
       child: const Text(
         'ATENCIÓN: Si marca en verde sin modificar cantidades, '
@@ -692,7 +693,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         'entrega NO coincide – debe añadir observaciones en la '
         "pestaña 'Observaciones' antes de confirmar.",
         style: TextStyle(
-          color: Colors.orange,
+          color: AppTheme.warning,
           fontSize: 13,
         ),
       ),
@@ -708,7 +709,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           children: [
             const Row(
               children: [
-                Icon(Icons.draw, color: AppTheme.neonBlue, size: 20),
+                Icon(Icons.draw, color: AppTheme.info, size: 20),
                 SizedBox(width: 8),
                 Text(
                   'FIRMA DEL CLIENTE *',
@@ -764,56 +765,39 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildSubmitButton() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.neonBlue, AppTheme.neonCyan],
+    return ElevatedButton(
+      onPressed: _isSubmitting ? null : _submitDelivery,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.success,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: ElevatedButton(
-        onPressed: _isSubmitting ? null : _submitDelivery,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          foregroundColor: AppTheme.darkBase,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-        child: _isSubmitting
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppTheme.darkBase,
-                ),
-              )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle, size: 24),
-                  SizedBox(width: 12),
-                  Text(
-                    'CONFIRMAR ENTREGA',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
+      child: _isSubmitting
+          ? const SizedBox(
+              height: 24,
+              width: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
               ),
-      ),
+            )
+          : const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle, size: 24),
+                SizedBox(width: 12),
+                Text(
+                  'CONFIRMAR ENTREGA',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -822,13 +806,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final result = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
         title: Row(
           children: [
-            const Icon(Icons.edit, color: AppTheme.neonBlue, size: 22),
+            const Icon(Icons.edit, color: AppTheme.info, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -867,7 +851,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               decoration: InputDecoration(
                 labelText: 'Nueva cantidad',
                 filled: true,
-                fillColor: AppTheme.darkBase,
+                fillColor: AppTheme.softPanel,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -896,7 +880,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               if (n != null && n >= 0) Navigator.pop(ctx, n);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
+              backgroundColor: AppTheme.info,
+              foregroundColor: Colors.white,
             ),
             child: const Text('ACEPTAR'),
           ),
@@ -938,7 +923,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         content: Row(
           children: [
             const SizedBox(
@@ -946,13 +931,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               height: 24,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
             ),
             const SizedBox(width: 16),
             Text(
               'Descargando ficha técnica...',
-              style: TextStyle(color: Colors.grey[300]),
+              style: const TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -960,7 +945,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
 
     try {
-      await ApiClient.dio.download(url, filePath);
+      await ApiClient.download(url, filePath);
 
       if (navigator.canPop()) navigator.pop();
 
@@ -982,7 +967,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 'Ficha - ${linea.codigoArticulo.trim()}',
                 style: const TextStyle(fontSize: 14),
               ),
-              backgroundColor: AppTheme.darkSurface,
+              backgroundColor: AppTheme.raisedSurface,
               elevation: 0,
             ),
             body: PDFView(
@@ -1179,7 +1164,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     widget.albaran.estado = EstadoEntrega.entregado;
     await widget.ref
         .read(entregasProvider.notifier)
-        .cargarAlbaranesPendientes();
+        .cargarAlbaranesPendientes(forceRefresh: true);
     await _invalidateFinanceForDelivery();
     return true;
   }
@@ -1269,12 +1254,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.check_circle_outline,
-                color: AppTheme.neonBlue, size: 28),
+            Icon(Icons.check_circle_outline, color: AppTheme.success, size: 28),
             SizedBox(width: 12),
             Text(
               'Confirmar Entrega',
@@ -1295,7 +1279,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.darkBase,
+                color: AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppTheme.borderColor),
               ),
@@ -1463,7 +1447,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               SizedBox(width: 12),
               Text('Entrega registrada correctamente'),
             ]),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             duration: Duration(seconds: 2),
           ),
         );
@@ -1494,7 +1478,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
@@ -1521,7 +1505,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
+              backgroundColor: AppTheme.info,
               foregroundColor: Colors.white,
             ),
             child: const Text('ENTENDIDO'),
@@ -1583,12 +1567,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           );
 
           return AlertDialog(
-            backgroundColor: AppTheme.darkCard,
+            backgroundColor: AppTheme.raisedSurface,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: const Row(
               children: [
-                Icon(Icons.print, color: AppTheme.neonCyan),
+                Icon(Icons.print, color: AppTheme.info),
                 SizedBox(width: 12),
                 Text('Imprimir Ticket',
                     style: TextStyle(color: AppTheme.textPrimary)),
@@ -1604,7 +1588,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.darkBase,
+                        color: AppTheme.softPanel,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(
@@ -1621,7 +1605,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
                                 : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
                             style: const TextStyle(
-                                color: AppTheme.neonCyan, fontSize: 14),
+                                color: AppTheme.info, fontSize: 14),
                           ),
                           Text('Fecha: ${widget.albaran.fecha}',
                               style: const TextStyle(
@@ -1693,14 +1677,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         hintStyle:
                             const TextStyle(color: AppTheme.textTertiary),
                         filled: true,
-                        fillColor: AppTheme.darkBase,
+                        fillColor: AppTheme.softPanel,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide.none),
                         focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: AppTheme.neonCyan)),
+                            borderSide: const BorderSide(color: AppTheme.info)),
                       ),
                       style: const TextStyle(
                           color: AppTheme.textPrimary, fontSize: 14),
@@ -1732,7 +1715,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 SizedBox(width: 12),
                                 Text('Ticket enviado a impresora'),
                               ]),
-                              backgroundColor: Colors.green,
+                              backgroundColor: AppTheme.success,
                             ),
                           );
                         } else {
@@ -1760,7 +1743,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 label:
                     Text(isPrinting ? 'Imprimiendo...' : 'Imprimir en Zebra'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.neonCyan,
+                  backgroundColor: AppTheme.info,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
@@ -1778,11 +1761,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.share, color: AppTheme.neonBlue),
+            Icon(Icons.share, color: AppTheme.info),
             SizedBox(width: 12),
             Text('Compartir Nota',
                 style: TextStyle(color: AppTheme.textPrimary)),
@@ -1799,7 +1782,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _buildShareButton(
               icon: Icons.visibility,
               label: 'Ver PDF',
-              color: AppTheme.neonPurple,
+              color: AppTheme.accentIndigo,
               onTap: () async {
                 Navigator.pop(ctx);
                 await _previewReceiptPdf();
@@ -1809,7 +1792,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _buildShareButton(
               icon: Icons.download,
               label: 'Descargar PDF',
-              color: AppTheme.neonCyan,
+              color: AppTheme.info,
               onTap: () async {
                 Navigator.pop(ctx);
                 await _downloadReceiptPdf();
@@ -1829,7 +1812,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _buildShareButton(
               icon: Icons.email,
               label: 'Enviar por Email',
-              color: AppTheme.neonBlue,
+              color: AppTheme.accentIndigo,
               onTap: () async {
                 Navigator.pop(ctx);
                 await _shareViaEmail();
@@ -1855,11 +1838,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     required VoidCallback onTap,
   }) {
     return Material(
-      color: color.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(12),
+      color: AppTheme.raisedSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        side: BorderSide(color: color.withValues(alpha: 0.28)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(

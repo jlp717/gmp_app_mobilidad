@@ -33,7 +33,7 @@ class OrderKpiDashboard extends ConsumerWidget {
           _trendIcon(stats.trendOrdersPct),
           _trendText(stats.trendOrdersPct),
           Icons.receipt_long_outlined,
-          AppTheme.neonBlue,
+          AppTheme.info,
         ),
       ),
       const SizedBox(width: 6),
@@ -45,7 +45,7 @@ class OrderKpiDashboard extends ConsumerWidget {
           _trendIcon(stats.trendAmountPct),
           _trendText(stats.trendAmountPct),
           Icons.euro,
-          AppTheme.neonGreen,
+          AppTheme.success,
         ),
       ),
     ];
@@ -77,7 +77,7 @@ class OrderKpiDashboard extends ConsumerWidget {
           null,
           null,
           Icons.calculate_outlined,
-          AppTheme.neonPurple,
+          AppTheme.accentIndigo,
         ),
       ),
     );
@@ -100,7 +100,7 @@ class OrderKpiDashboard extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
@@ -153,7 +153,7 @@ class OrderKpiDashboard extends ConsumerWidget {
               height: 44,
               margin: EdgeInsets.only(right: i < cardCount - 1 ? 6 : 0),
               decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Center(
@@ -162,7 +162,7 @@ class OrderKpiDashboard extends ConsumerWidget {
                   height: 12,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                   ),
                 ),
               ),
@@ -174,16 +174,15 @@ class OrderKpiDashboard extends ConsumerWidget {
   }
 
   Color _marginColor(double margin) {
-    if (margin >= 15) return AppTheme.neonGreen;
-    if (margin >= 5) return Colors.orange;
+    if (margin >= 15) return AppTheme.success;
+    if (margin >= 5) return AppTheme.warning;
     return AppTheme.error;
   }
 
   Widget? _trendIcon(double? pct) {
     if (pct == null) return null;
     if (pct > 0) {
-      return const Icon(Icons.arrow_upward,
-          color: AppTheme.neonGreen, size: 12);
+      return const Icon(Icons.arrow_upward, color: AppTheme.success, size: 12);
     } else if (pct < 0) {
       return const Icon(Icons.arrow_downward, color: AppTheme.error, size: 12);
     }
@@ -197,7 +196,7 @@ class OrderKpiDashboard extends ConsumerWidget {
       '${pct > 0 ? '+' : ''}$absPct%',
       style: TextStyle(
         color: pct > 0
-            ? AppTheme.neonGreen
+            ? AppTheme.success
             : (pct < 0 ? AppTheme.error : Colors.white54),
         fontSize: 9,
         fontWeight: FontWeight.w600,

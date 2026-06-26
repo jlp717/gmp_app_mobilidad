@@ -65,7 +65,7 @@ class RuteroFilterBar extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           isDense: true,
           filled: true,
-          fillColor: AppTheme.surfaceColor,
+          fillColor: AppTheme.raisedSurface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
@@ -92,7 +92,7 @@ class RuteroFilterBar extends StatelessWidget {
               height: 32,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.borderColor),
               ),
@@ -105,7 +105,7 @@ class RuteroFilterBar extends StatelessWidget {
                     size: 16,
                     color: AppTheme.textSecondary,
                   ),
-                  dropdownColor: AppTheme.surfaceColor,
+                  dropdownColor: AppTheme.raisedSurface,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppTheme.textPrimary,
@@ -156,11 +156,11 @@ class RuteroFilterBar extends StatelessWidget {
               height: 32,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
+                color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: selectedAlertType != 'ALL'
-                      ? AppTheme.neonPink
+                      ? AppTheme.accentRose
                       : AppTheme.borderColor,
                 ),
               ),
@@ -168,18 +168,18 @@ class RuteroFilterBar extends StatelessWidget {
                 child: DropdownButton<String>(
                   value: selectedAlertType,
                   isExpanded: true,
-                  dropdownColor: AppTheme.surfaceColor,
+                  dropdownColor: AppTheme.raisedSurface,
                   icon: Icon(
                     Icons.bolt,
                     size: 14,
                     color: selectedAlertType != 'ALL'
-                        ? AppTheme.neonPink
+                        ? AppTheme.accentRose
                         : AppTheme.textSecondary,
                   ),
                   style: TextStyle(
                     fontSize: 11,
                     color: selectedAlertType != 'ALL'
-                        ? AppTheme.neonPink
+                        ? AppTheme.accentRose
                         : AppTheme.textPrimary,
                     fontWeight: selectedAlertType != 'ALL'
                         ? FontWeight.bold
@@ -208,21 +208,23 @@ class RuteroFilterBar extends StatelessWidget {
             child: FilterChip(
               label: const Text('Con Alertas'),
               selected: onlyWithAlerts,
-              selectedColor: AppTheme.neonPink.withValues(alpha: 0.2),
-              checkmarkColor: AppTheme.neonPink,
+              selectedColor: AppTheme.accentRose.withValues(alpha: 0.2),
+              checkmarkColor: AppTheme.accentRose,
               padding: EdgeInsets.zero,
               labelStyle: TextStyle(
                 fontSize: 10,
-                color:
-                    onlyWithAlerts ? AppTheme.neonPink : AppTheme.textSecondary,
+                color: onlyWithAlerts
+                    ? AppTheme.accentRose
+                    : AppTheme.textSecondary,
                 fontWeight:
                     onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
                 side: BorderSide(
-                  color:
-                      onlyWithAlerts ? AppTheme.neonPink : AppTheme.borderColor,
+                  color: onlyWithAlerts
+                      ? AppTheme.accentRose
+                      : AppTheme.borderColor,
                 ),
               ),
               onSelected: onOnlyWithAlertsChanged,

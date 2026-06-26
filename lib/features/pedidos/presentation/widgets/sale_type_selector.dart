@@ -27,14 +27,14 @@ class SaleTypeSelector extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
-          dropdownColor: AppTheme.darkCard,
+          dropdownColor: AppTheme.softPanel,
           icon: const Icon(Icons.expand_more, color: Colors.white38, size: 18),
           style: TextStyle(
             color: Colors.white,

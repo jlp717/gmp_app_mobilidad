@@ -22,6 +22,9 @@ class ApiClient {
   static String? _savedAuthToken;
   static Future<bool>? _refreshInFlight;
 
+  /// Absolute local deadline for the current authenticated session.
+  static DateTime? authSessionExpiresAt;
+
   /// Pending requests map for request deduplication
   /// Prevents duplicate API calls when multiple widgets request the same data
   static final Map<String, Future<dynamic>> _pendingRequests = {};
@@ -185,7 +188,11 @@ class ApiClient {
       ),
     );
 
-    // Configure certificate handling with SSL pinning support
+    // Configure certificate handling with SSL pinning support.
+    if (kIsWeb) {
+      return dio;
+    }
+
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final client = HttpClient();
 
@@ -293,6 +300,24 @@ class ApiClient {
         onRequest: (options, handler) {
           final token = _savedAuthToken;
           if (token != null) {
+            if (isAuthSessionExpired) {
+              _savedAuthToken = null;
+              options.headers.remove('Authorization');
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response<Map<String, dynamic>>(
+                    requestOptions: options,
+                    statusCode: 401,
+                    data: const {
+                      'error': 'Tu sesión ha expirado. Inicia sesión de nuevo.',
+                    },
+                  ),
+                  type: DioExceptionType.badResponse,
+                ),
+              );
+              return;
+            }
             options.headers['Authorization'] = 'Bearer $token';
           } else {
             options.headers.remove('Authorization');
@@ -312,7 +337,10 @@ class ApiClient {
           final alreadyRetried =
               error.requestOptions.extra['authRetried'] == true;
 
-          if (statusCode == 401 && !isAuthEndpoint && !alreadyRetried) {
+          if (statusCode == 401 &&
+              !isAuthEndpoint &&
+              !alreadyRetried &&
+              !isAuthSessionExpired) {
             final requestAuth =
                 error.requestOptions.headers['Authorization']?.toString();
             final currentAuth =
@@ -346,6 +374,11 @@ class ApiClient {
     if (kDebugMode) {
       dio.interceptors.add(
         LogInterceptor(
+          requestHeader: false,
+          requestBody: false,
+          responseHeader: false,
+          responseBody: false,
+          error: false,
           logPrint: (log) => debugPrint('[API] $log'),
         ),
       );
@@ -397,9 +430,17 @@ class ApiClient {
     dio.options.headers['Authorization'] = 'Bearer $token';
   }
 
+  /// Whether the current local auth session deadline has elapsed.
+  static bool get isAuthSessionExpired {
+    final expiresAt = authSessionExpiresAt;
+    if (expiresAt == null) return false;
+    return !DateTime.now().isBefore(expiresAt);
+  }
+
   /// Clear authentication token
   static void clearAuthToken() {
     _savedAuthToken = null;
+    authSessionExpiresAt = null;
     dio.options.headers.remove('Authorization');
   }
 
@@ -428,6 +469,11 @@ class ApiClient {
   }
 
   static Future<bool> _refreshAccessTokenInternal() async {
+    if (isAuthSessionExpired) {
+      debugPrint('[ApiClient] Token refresh blocked: local session expired');
+      return false;
+    }
+
     final refreshToken = await SecureStorage.readSecureData('refresh_token');
     if (refreshToken == null || refreshToken.isEmpty) {
       return false;
@@ -493,6 +539,24 @@ class ApiClient {
     return v;
   }
 
+  static Options? _getOptionsForRead({
+    bool forceRefresh = false,
+    Duration? receiveTimeout,
+  }) {
+    if (!forceRefresh && receiveTimeout == null) return null;
+
+    return Options(
+      receiveTimeout: receiveTimeout,
+      headers: forceRefresh
+          ? const {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+              'X-Force-Refresh': 'true',
+            }
+          : null,
+    );
+  }
+
   /// GET request with optional caching
   ///
   /// [cacheKey] - If provided, response will be cached and returned from cache if valid
@@ -521,6 +585,10 @@ class ApiClient {
     }
 
     final future = () async {
+      if (cacheKey != null && forceRefresh) {
+        await CacheService.invalidate(cacheKey);
+      }
+
       // Try cache first if cacheKey provided and not forcing refresh
       if (cacheKey != null && !forceRefresh) {
         try {
@@ -538,9 +606,10 @@ class ApiClient {
           endpoint,
           queryParameters: queryParameters,
           cancelToken: cancelToken,
-          options: receiveTimeout != null
-              ? Options(receiveTimeout: receiveTimeout)
-              : null,
+          options: _getOptionsForRead(
+            forceRefresh: forceRefresh,
+            receiveTimeout: receiveTimeout,
+          ),
         );
         final rawData = response.data;
         if (rawData is! Map) {
@@ -560,7 +629,10 @@ class ApiClient {
 
         return data;
       } on DioException catch (e) {
-        if (cacheKey != null && allowStale && _isNetworkError(e)) {
+        if (cacheKey != null &&
+            !forceRefresh &&
+            allowStale &&
+            _isNetworkError(e)) {
           try {
             final cached = CacheService.getStale(cacheKey, maxStale: maxStale);
             if (cached != null && cached is Map) {
@@ -608,6 +680,10 @@ class ApiClient {
     }
 
     final future = () async {
+      if (cacheKey != null && forceRefresh) {
+        await CacheService.invalidate(cacheKey);
+      }
+
       // Try cache first if cacheKey provided and not forcing refresh
       if (cacheKey != null && !forceRefresh) {
         try {
@@ -625,6 +701,7 @@ class ApiClient {
           endpoint,
           queryParameters: queryParameters,
           cancelToken: cancelToken,
+          options: _getOptionsForRead(forceRefresh: forceRefresh),
         );
 
         final data = response.data;
@@ -645,7 +722,10 @@ class ApiClient {
 
         return result;
       } on DioException catch (e) {
-        if (cacheKey != null && allowStale && _isNetworkError(e)) {
+        if (cacheKey != null &&
+            !forceRefresh &&
+            allowStale &&
+            _isNetworkError(e)) {
           final cached = CacheService.getStale<List<dynamic>>(cacheKey,
               maxStale: maxStale);
           if (cached != null) {
@@ -685,6 +765,31 @@ class ApiClient {
         ),
       );
       return response.data as List<int>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Download a file using the shared Dio client, interceptors and error mapping.
+  static Future<Response<dynamic>> download(
+    String url,
+    String savePath, {
+    Map<String, dynamic>? queryParameters,
+    CancelToken? cancelToken,
+    ProgressCallback? onReceiveProgress,
+    Duration receiveTimeout = const Duration(seconds: 60),
+    bool deleteOnError = true,
+  }) async {
+    try {
+      return await dio.download(
+        url,
+        savePath,
+        queryParameters: queryParameters,
+        cancelToken: cancelToken,
+        onReceiveProgress: onReceiveProgress,
+        deleteOnError: deleteOnError,
+        options: Options(receiveTimeout: receiveTimeout),
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -756,12 +861,33 @@ class ApiClient {
         e.type == DioExceptionType.unknown;
   }
 
+  static Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
+    final redacted = <String, dynamic>{};
+    for (final entry in headers.entries) {
+      final key = entry.key.toLowerCase();
+      final sensitive = key == 'authorization' ||
+          key == 'cookie' ||
+          key == 'set-cookie' ||
+          key.contains('token') ||
+          key.contains('secret') ||
+          key.contains('key');
+      redacted[entry.key] = sensitive ? '[REDACTED]' : entry.value;
+    }
+    return redacted;
+  }
+
   static ApiException _handleError(DioException e) {
     // Always log raw error details for diagnostics (visible in adb logcat)
     debugPrint(
       '[ApiClient] DioException type=${e.type} error=${e.error.runtimeType}: ${e.error}',
     );
-    if (e.type == DioExceptionType.connectionTimeout) {
+    if (e.type == DioExceptionType.cancel) {
+      return ApiException(
+        'Solicitud cancelada.',
+        statusCode: 0,
+        code: 'CANCELLED',
+      );
+    } else if (e.type == DioExceptionType.connectionTimeout) {
       return ApiException(
         'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
         statusCode: 0,
@@ -938,7 +1064,9 @@ class _RetryInterceptor extends Interceptor {
       debugPrint(
         '[ApiClient] ❌ Request failed: ${err.requestOptions.method} ${err.requestOptions.uri}',
       );
-      debugPrint('[ApiClient] Headers sent: ${err.requestOptions.headers}');
+      debugPrint(
+        '[ApiClient] Headers sent: ${ApiClient._redactHeaders(err.requestOptions.headers)}',
+      );
       debugPrint('[ApiClient] Error type: ${err.type}, Error: ${err.error}');
     }
 

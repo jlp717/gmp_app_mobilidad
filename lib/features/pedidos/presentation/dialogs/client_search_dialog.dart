@@ -21,7 +21,7 @@ class ClientSearchDialog {
     return showModalBottomSheet<Map<String, String>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -139,8 +139,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Icon(Icons.person_search,
-                  color: AppTheme.neonBlue, size: 22),
+              const Icon(Icons.person_search, color: AppTheme.info, size: 22),
               const SizedBox(width: 8),
               Text(
                 'Seleccionar cliente',
@@ -176,7 +175,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                     )
                   : null,
               filled: true,
-              fillColor: AppTheme.darkCard,
+              fillColor: AppTheme.raisedSurface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppTheme.borderColor),
@@ -187,7 +186,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.neonBlue),
+                borderSide: const BorderSide(color: AppTheme.info),
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -207,7 +206,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
   Widget _buildResults() {
     if (_isLoading && _clients.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.neonBlue),
+        child: CircularProgressIndicator(color: AppTheme.info),
       );
     }
 
@@ -226,9 +225,9 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: () => _loadClients(search: _searchController.text),
-              icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
+              icon: const Icon(Icons.refresh, color: AppTheme.info),
               label: const Text('Reintentar',
-                  style: TextStyle(color: AppTheme.neonBlue)),
+                  style: TextStyle(color: AppTheme.info)),
             ),
           ],
         ),
@@ -260,7 +259,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             left: 0,
             right: 0,
             child: LinearProgressIndicator(
-                color: AppTheme.neonBlue, backgroundColor: Colors.transparent),
+                color: AppTheme.info, backgroundColor: Colors.transparent),
           ),
       ],
     );
@@ -275,7 +274,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
     final nif = (client['NIF'] ?? client['nif'] ?? '').toString().trim();
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       margin: const EdgeInsets.only(bottom: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -294,12 +293,12 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                  color: AppTheme.info.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
                   child: Icon(Icons.storefront_outlined,
-                      color: AppTheme.neonBlue, size: 18),
+                      color: AppTheme.info, size: 18),
                 ),
               ),
               const SizedBox(width: 10),
@@ -323,7 +322,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                         Text(
                           code,
                           style: TextStyle(
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                             fontSize: Responsive.fontSize(context,
                                 small: 11, large: 12),
                           ),

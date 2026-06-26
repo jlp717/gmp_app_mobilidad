@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
@@ -58,12 +59,12 @@ class UltimasVentasWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.1),
+                    color: AppTheme.info.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.receipt_long,
-                    color: Colors.blue,
+                    color: AppTheme.info,
                     size: 20,
                   ),
                 ),
@@ -137,7 +138,7 @@ class _VentaItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.1),
+              color: AppTheme.mutedPanel.withValues(alpha: 0.48),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
@@ -179,7 +180,7 @@ class _VentaItem extends StatelessWidget {
             Formatters.currency(venta.importe),
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.bold,
-              color: Colors.green[700],
+              color: AppTheme.success,
             ),
           ),
         ],

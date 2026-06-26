@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
@@ -38,7 +39,7 @@ class VentasCards extends StatelessWidget {
                 total: ventasHoy.total,
                 subtitle: '${ventasHoy.cantidad} operaciones',
                 margen: ventasHoy.margen,
-                color: Colors.blue,
+                color: AppTheme.info,
                 icon: Icons.today,
               ),
             ),
@@ -49,7 +50,7 @@ class VentasCards extends StatelessWidget {
                 total: ventasMes.total,
                 subtitle: '${ventasMes.cantidad} operaciones',
                 margen: ventasMes.margen,
-                color: Colors.green,
+                color: AppTheme.success,
                 icon: Icons.calendar_month,
                 variacion: ventasMes.comparativaMesAnterior,
               ),
@@ -68,7 +69,7 @@ class VentasCards extends StatelessWidget {
                 total: ventasAnio.total,
                 subtitle: '${ventasAnio.cantidad} operaciones',
                 margen: ventasAnio.margen,
-                color: Colors.purple,
+                color: AppTheme.accentIndigo,
                 icon: Icons.calendar_today,
               ),
             ),
@@ -176,7 +177,7 @@ class _VentaCardCompact extends StatelessWidget {
                 Text(
                   'Margen: ${Formatters.currency(margen)}',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
+                    color: AppTheme.textSecondary,
                   ),
                 ),
                 if (variacion != null) _buildVariacion(context, variacion!),
@@ -190,7 +191,7 @@ class _VentaCardCompact extends StatelessWidget {
 
   Widget _buildVariacion(BuildContext context, double variacion) {
     final isPositive = variacion >= 0;
-    final color = isPositive ? Colors.green : Colors.red;
+    final color = isPositive ? AppTheme.success : AppTheme.error;
     final icon = isPositive ? Icons.trending_up : Icons.trending_down;
 
     return Row(
@@ -240,12 +241,12 @@ class _ClientesCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
+                    color: AppTheme.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.people,
-                    color: Colors.orange,
+                    color: AppTheme.warning,
                     size: 20,
                   ),
                 ),
@@ -275,7 +276,7 @@ class _ClientesCard extends StatelessWidget {
                   '$clientesHoy',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.orange,
+                    color: AppTheme.warning,
                   ),
                 ),
               ],
@@ -295,7 +296,7 @@ class _ClientesCard extends StatelessWidget {
                   '$clientesMes',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.orange.shade700,
+                    color: AppTheme.warning,
                   ),
                 ),
               ],
@@ -307,18 +308,18 @@ class _ClientesCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.pending, color: Colors.red, size: 14),
+                  const Icon(Icons.pending, color: AppTheme.error, size: 14),
                   const SizedBox(width: 4),
                   Text(
                     '$pedidosPendientes pendientes',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.red,
+                      color: AppTheme.error,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

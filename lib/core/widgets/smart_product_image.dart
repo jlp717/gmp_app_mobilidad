@@ -132,11 +132,11 @@ class SmartProductImage extends StatelessWidget {
 
   static Color _colorFromHash(int hash) {
     const hues = [
-      0xFF00D4FF, // neonBlue
-      0xFF00FF88, // neonGreen
-      0xFFBB86FC, // neonPurple
-      0xFFFF6B9D, // neonPink
-      0xFF00CED1, // neonTeal
+      0xFF1D4E89, // info
+      0xFF2F855A, // success
+      0xFF52658C, // accentIndigo
+      0xFFB85C5C, // accentRose
+      0xFF0F766E, // accentMint
       0xFFFFC233, // chartYellow
       0xFF8B5CF6, // chartViolet
       0xFF10B981, // chartEmerald
@@ -189,7 +189,7 @@ class SmartProductImage extends StatelessWidget {
                     color: accent.withValues(alpha: 0.5),
                     fontWeight: FontWeight.w600,
                     fontSize: 10,
-                    letterSpacing: 1,
+                    letterSpacing: 0,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 1,

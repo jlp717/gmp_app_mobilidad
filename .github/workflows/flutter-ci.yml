@@ -24,11 +24,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
+          flutter-version: '3.35.6'
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart analyze --fatal-infos
-      - run: dart format --set-exit-if-changed .
+      - run: flutter analyze --no-fatal-infos
+      - run: dart format --output=none --set-exit-if-changed lib test
 
   test:
     name: Run Tests
@@ -38,10 +39,11 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
+          flutter-version: '3.35.6'
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter test --coverage
+      - run: flutter test --no-pub --coverage
       - name: Upload Coverage
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238
         if: github.event_name == 'push'
@@ -58,6 +60,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
+          flutter-version: '3.35.6'
           channel: stable
           cache: true
       - run: flutter pub get

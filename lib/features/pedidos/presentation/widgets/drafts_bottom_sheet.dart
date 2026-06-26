@@ -17,7 +17,7 @@ class DraftsBottomSheet {
   }) {
     return showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -80,12 +80,12 @@ class _DraftsBody extends StatelessWidget {
                   : savedAtRaw;
               final key = draft['draftKey'] as String;
               return Card(
-                color: AppTheme.darkCard,
+                color: AppTheme.raisedSurface,
                 margin: const EdgeInsets.only(bottom: 6),
                 child: ListTile(
                   leading: const Icon(
                     Icons.description_outlined,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                   ),
                   title: Text(
                     client.toString(),
@@ -104,7 +104,7 @@ class _DraftsBody extends StatelessWidget {
                       IconButton(
                         icon: const Icon(
                           Icons.restore,
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           size: 20,
                         ),
                         onPressed: () {
@@ -113,7 +113,7 @@ class _DraftsBody extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Borrador cargado'),
-                              backgroundColor: AppTheme.neonGreen,
+                              backgroundColor: AppTheme.success,
                             ),
                           );
                         },

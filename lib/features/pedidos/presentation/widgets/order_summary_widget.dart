@@ -55,7 +55,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     final provider = ref.watch(pedidosProvider);
 
     return ColoredBox(
-      color: AppTheme.darkBase,
+      color: AppTheme.inkSurface,
       child: Column(
         children: [
           // Client header
@@ -77,7 +77,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(color: AppTheme.borderColor, width: 0.5),
         ),
@@ -86,7 +86,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         children: [
           Icon(
             Icons.storefront_outlined,
-            color: provider.hasClient ? AppTheme.neonBlue : Colors.white38,
+            color: provider.hasClient ? AppTheme.info : Colors.white38,
             size: 20,
           ),
           const SizedBox(width: 8),
@@ -111,7 +111,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       Text(
                         provider.clientCode ?? '',
                         style: TextStyle(
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.info,
                           fontSize: Responsive.fontSize(
                             context,
                             small: 11,
@@ -135,13 +135,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                color: AppTheme.info.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${provider.lineCount} lineas',
                 style: TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: Responsive.fontSize(context, small: 11, large: 12),
                   fontWeight: FontWeight.w600,
                 ),
@@ -160,7 +160,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 showDialog<void>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    backgroundColor: AppTheme.darkSurface,
+                    backgroundColor: AppTheme.raisedSurface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -316,9 +316,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   Widget _buildSummaryBar(BuildContext context, PedidosProvider provider) {
     final margin = provider.porcentajeMargen;
     final marginColor = margin >= 15
-        ? AppTheme.neonGreen
+        ? AppTheme.success
         : margin >= 5
-            ? Colors.orange
+            ? AppTheme.warning
             : AppTheme.error;
     final totalShown = provider.totalConIva;
 
@@ -339,7 +339,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: const Border(
           top: BorderSide(color: AppTheme.borderColor, width: 0.5),
         ),
@@ -367,7 +367,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 size: 18,
               ),
               filled: true,
-              fillColor: AppTheme.darkCard,
+              fillColor: AppTheme.softPanel,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -415,7 +415,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       suffixStyle:
                           const TextStyle(color: Colors.white54, fontSize: 12),
                       filled: true,
-                      fillColor: AppTheme.darkCard,
+                      fillColor: AppTheme.softPanel,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 6,
@@ -433,7 +433,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.neonBlue),
+                        borderSide: const BorderSide(color: AppTheme.info),
                       ),
                     ),
                   ),
@@ -443,7 +443,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                   Text(
                     PedidosFormatters.money(provider.totalConDescuento),
                     style: TextStyle(
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                       fontWeight: FontWeight.bold,
                       fontSize:
                           Responsive.fontSize(context, small: 14, large: 15),
@@ -477,7 +477,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 context,
                 PedidosFormatters.money(totalShown),
                 Icons.euro,
-                AppTheme.neonGreen,
+                AppTheme.success,
               ),
               if (provider.isMarginVisible)
                 _buildStatItem(
@@ -531,8 +531,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     provider.isDirty
                         ? Icons.edit_outlined
                         : Icons.check_circle_outline,
-                    color:
-                        provider.isDirty ? Colors.white38 : AppTheme.neonGreen,
+                    color: provider.isDirty ? Colors.white38 : AppTheme.success,
                     size: 12,
                   ),
                   const SizedBox(width: 4),
@@ -543,7 +542,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     style: TextStyle(
                       color: provider.isDirty
                           ? Colors.white38
-                          : AppTheme.neonGreen.withValues(alpha: 0.7),
+                          : AppTheme.success.withValues(alpha: 0.7),
                       fontSize: 10,
                     ),
                   ),
@@ -564,7 +563,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppTheme.darkBase,
+                        color: Colors.white,
                       ),
                     )
                   : const Icon(Icons.preview_outlined),
@@ -576,10 +575,10 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonGreen,
-                foregroundColor: AppTheme.darkBase,
+                backgroundColor: AppTheme.success,
+                foregroundColor: Colors.white,
                 disabledBackgroundColor:
-                    AppTheme.neonGreen.withValues(alpha: 0.5),
+                    AppTheme.success.withValues(alpha: 0.5),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -629,12 +628,12 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     PedidosProvider provider,
   ) {
     final impact = provider.estimatedBolsaImpact;
-    final netColor = impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning;
+    final netColor = impact.neto >= 0 ? AppTheme.success : AppTheme.warning;
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: netColor.withValues(alpha: 0.35)),
       ),
@@ -656,7 +655,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           if (impact.acumulacion > 0)
             _buildBolsaMiniStat(
               '+${PedidosFormatters.money(impact.acumulacion)}',
-              AppTheme.neonGreen,
+              AppTheme.success,
             ),
           if (impact.consumo > 0) ...[
             const SizedBox(width: 8),
@@ -765,7 +764,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       barrierColor: Colors.black54,
       builder: (ctx) {
         return Dialog(
-          backgroundColor: AppTheme.darkSurface,
+          backgroundColor: AppTheme.raisedSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           insetPadding:
@@ -786,7 +785,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                   children: [
                     const Icon(
                       Icons.edit_outlined,
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -833,7 +832,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 Text(
                   line.codigoArticulo,
                   style: TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize:
                         Responsive.fontSize(context, small: 11, large: 13),
                   ),
@@ -845,13 +844,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                      color: AppTheme.info.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       '$equivText  ·  $unitLabel',
                       style: const TextStyle(
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -878,7 +877,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             labelText: 'Cajas',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: AppTheme.darkCard,
+                            fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
@@ -894,7 +893,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: AppTheme.neonGreen,
+                                color: AppTheme.success,
                               ),
                             ),
                           ),
@@ -924,7 +923,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                 'Uds (${formatQty(line.unidadesCaja, 'UNIDADES')} U/C)',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: AppTheme.darkCard,
+                            fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
@@ -940,7 +939,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide:
-                                  const BorderSide(color: AppTheme.neonBlue),
+                                  const BorderSide(color: AppTheme.info),
                             ),
                           ),
                           onChanged: (val) {
@@ -964,7 +963,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       suffixText: ' \u20AC',
                       labelStyle: const TextStyle(color: Colors.white70),
                       filled: true,
-                      fillColor: AppTheme.darkCard,
+                      fillColor: AppTheme.softPanel,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide:
@@ -977,7 +976,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppTheme.neonBlue),
+                        borderSide: const BorderSide(color: AppTheme.info),
                       ),
                     ),
                   ),
@@ -1000,7 +999,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             labelText: 'Cantidad ($unitLabel)',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: AppTheme.darkCard,
+                            fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
@@ -1016,7 +1015,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide:
-                                  const BorderSide(color: AppTheme.neonBlue),
+                                  const BorderSide(color: AppTheme.info),
                             ),
                           ),
                         ),
@@ -1034,7 +1033,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             suffixText: ' \u20AC',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: AppTheme.darkCard,
+                            fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
@@ -1050,7 +1049,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide:
-                                  const BorderSide(color: AppTheme.neonBlue),
+                                  const BorderSide(color: AppTheme.info),
                             ),
                           ),
                         ),
@@ -1189,8 +1188,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.neonBlue,
-                            foregroundColor: AppTheme.darkBase,
+                            backgroundColor: AppTheme.info,
+                            foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -1248,7 +1247,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           content: Text(
             'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',
           ),
-          backgroundColor: AppTheme.neonGreen,
+          backgroundColor: AppTheme.success,
         ),
       );
     }
@@ -1344,7 +1343,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('✅ ${product.name} añadido al carrito'),
-                backgroundColor: AppTheme.neonGreen,
+                backgroundColor: AppTheme.success,
                 duration: const Duration(seconds: 2),
               ),
             );
@@ -1428,7 +1427,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             content: Text(
               'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',
             ),
-            backgroundColor: AppTheme.neonGreen,
+            backgroundColor: AppTheme.success,
           ),
         );
       }
@@ -1477,7 +1476,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
     }
 
     return Dialog(
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
@@ -1610,12 +1609,12 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? AppTheme.neonGreen.withValues(alpha: 0.15)
-                                    : AppTheme.darkCard,
+                                    ? AppTheme.success.withValues(alpha: 0.15)
+                                    : AppTheme.softPanel,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: isSelected
-                                      ? AppTheme.neonGreen
+                                      ? AppTheme.success
                                       : AppTheme.borderColor,
                                   width: isSelected ? 2 : 1,
                                 ),
@@ -1630,7 +1629,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                             ? Icons.check_circle
                                             : Icons.circle_outlined,
                                         color: isSelected
-                                            ? AppTheme.neonGreen
+                                            ? AppTheme.success
                                             : Colors.white54,
                                         size: 20,
                                       ),
@@ -1657,7 +1656,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: AppTheme.neonBlue
+                                          color: AppTheme.info
                                               .withValues(alpha: 0.15),
                                           borderRadius:
                                               BorderRadius.circular(6),
@@ -1665,7 +1664,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                         child: Text(
                                           '${(prod['stockEnvases'] ?? 0).toStringAsFixed(0)} cajas',
                                           style: const TextStyle(
-                                            color: AppTheme.neonBlue,
+                                            color: AppTheme.info,
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -1720,7 +1719,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                   labelStyle:
                                       const TextStyle(color: Colors.white70),
                                   filled: true,
-                                  fillColor: AppTheme.darkCard,
+                                  fillColor: AppTheme.softPanel,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     borderSide: const BorderSide(
@@ -1734,7 +1733,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     borderSide: const BorderSide(
-                                        color: AppTheme.neonGreen),
+                                        color: AppTheme.success),
                                   ),
                                 ),
                                 onChanged: (val) {
@@ -1780,7 +1779,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                color: AppTheme.darkCard,
+                color: AppTheme.softPanel,
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(16),
                   bottomRight: Radius.circular(16),
@@ -1826,10 +1825,10 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                               fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.neonGreen,
-                          foregroundColor: AppTheme.darkBase,
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: Colors.white,
                           disabledBackgroundColor:
-                              AppTheme.neonGreen.withValues(alpha: 0.3),
+                              AppTheme.success.withValues(alpha: 0.3),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),

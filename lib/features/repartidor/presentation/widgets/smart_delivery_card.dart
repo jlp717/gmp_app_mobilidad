@@ -63,10 +63,10 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   Color get _borderColor {
     if (_isEntregado) return AppTheme.success;
     if (widget.albaran.colorEstado == 'purple' || _isFactura)
-      return AppTheme.neonPurple;
+      return AppTheme.accentIndigo;
     if (widget.albaran.colorEstado == 'red' || _isUrgent)
       return AppTheme.obligatorio;
-    return AppTheme.neonBlue;
+    return AppTheme.info;
   }
 
   BoxDecoration get _cardDecoration {
@@ -74,20 +74,18 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     if (_isEntregado) {
       baseColor = AppTheme.success;
     } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
-      baseColor = AppTheme.neonPurple;
+      baseColor = AppTheme.accentIndigo;
     } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {
       baseColor = AppTheme.obligatorio;
     } else {
-      return AppTheme.holoCard(glowColor: _borderColor);
+      baseColor = AppTheme.info;
     }
 
     return BoxDecoration(
-      color: baseColor.withValues(alpha: 0.08), // Light background tint
+      color: AppTheme.raisedSurface,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: baseColor.withValues(alpha: 0.6), width: 1.5),
-      boxShadow: [
-        BoxShadow(color: baseColor.withValues(alpha: 0.1), blurRadius: 8),
-      ],
+      border: Border.all(color: baseColor.withValues(alpha: 0.34), width: 1.2),
+      boxShadow: AppTheme.elevation1,
     );
   }
 
@@ -147,21 +145,13 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: _isFactura
-                  ? [
-                      AppTheme.neonPurple.withValues(alpha: 0.3),
-                      AppTheme.neonPurple.withValues(alpha: 0.1),
-                    ]
-                  : [
-                      AppTheme.darkBase.withValues(alpha: 0.8),
-                      AppTheme.darkBase.withValues(alpha: 0.5),
-                    ],
-            ),
+            color: _isFactura
+                ? AppTheme.accentIndigo.withValues(alpha: 0.14)
+                : AppTheme.softPanel,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: _isFactura
-                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                  ? AppTheme.accentIndigo.withValues(alpha: 0.32)
                   : AppTheme.borderColor,
             ),
           ),
@@ -172,7 +162,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 _isFactura ? Icons.receipt_long : Icons.description_outlined,
                 size: 14,
                 color:
-                    _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
+                    _isFactura ? AppTheme.accentIndigo : AppTheme.textSecondary,
               ),
               const SizedBox(width: 6),
               Text(
@@ -180,8 +170,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                     ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
                     : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                 style: TextStyle(
-                  color:
-                      _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
+                  color: _isFactura
+                      ? AppTheme.accentIndigo
+                      : AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
                   fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
@@ -220,7 +211,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
                 fontSize: Responsive.isSmall(context) ? 17 : 20,
                 fontWeight: FontWeight.bold,
-                letterSpacing: -0.5,
+                letterSpacing: 0,
               ),
             ),
             // Payment badge
@@ -272,7 +263,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                color: AppTheme.info.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -282,7 +273,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                       )
                     : widget.albaran.codigoCliente,
                 style: const TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontWeight: FontWeight.bold,
                   fontSize: 10,
                 ),
@@ -321,24 +312,30 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             ),
             // Repartidor badge for directors (shown when viewing multiple repartidores)
             if (widget.albaran.codigoRepartidor.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                  border:
-                      Border.all(color: Colors.orange.withValues(alpha: 0.5)),
-                ),
-                child: Text(
-                  widget.repartidorNames != null &&
-                          widget.repartidorNames!
-                              .containsKey(widget.albaran.codigoRepartidor)
-                      ? 'R ${widget.albaran.codigoRepartidor} – ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
-                      : 'R ${widget.albaran.codigoRepartidor}',
-                  style: TextStyle(
-                    color: Colors.orange.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: AppTheme.warning.withValues(alpha: 0.32),
+                    ),
+                  ),
+                  child: Text(
+                    widget.repartidorNames != null &&
+                            widget.repartidorNames!
+                                .containsKey(widget.albaran.codigoRepartidor)
+                        ? 'R ${widget.albaran.codigoRepartidor} – ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
+                        : 'R ${widget.albaran.codigoRepartidor}',
+                    style: TextStyle(
+                      color: AppTheme.warning,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -403,7 +400,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     required VoidCallback onTap,
     Color? color,
   }) {
-    final buttonColor = color ?? AppTheme.neonBlue;
+    final buttonColor = color ?? AppTheme.info;
 
     return Material(
       color: Colors.transparent,

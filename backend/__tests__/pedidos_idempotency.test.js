@@ -335,6 +335,25 @@ describe('pedidos create idempotency', () => {
     })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
   });
 
+  test('createOrder fails closed when idempotency lookup is unavailable', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim();
+      if (/FROM\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(normalized)) {
+        const error = new Error('SQL0204 PEDIDO_IDEMPOTENCY not found');
+        error.odbcErrors = [{ code: -204, state: '42704' }];
+        throw error;
+      }
+      throw new Error(`Unexpected SQL after idempotency failure: ${normalized}`);
+    });
+
+    await expect(pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientRequestId: 'offlinesynckey010',
+    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_UNAVAILABLE' });
+
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(false);
+  });
+
   test('POST /api/pedidos/create returns 200 idempotent replay via route contract', async () => {
     mockQueryWithParams.mockResolvedValueOnce([{ 1: 1 }]);
     jest.resetModules();

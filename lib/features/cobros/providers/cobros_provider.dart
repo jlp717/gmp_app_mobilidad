@@ -102,6 +102,9 @@ class CobrosProvider extends ChangeNotifier {
   Map<String, Map<String, dynamic>> _pendingSummary = {};
   String? _lastSummaryVendorCode;
   List<String>? _lastSummaryVendorCodes;
+  String? _lastSummaryTipoDocumento;
+  String? _lastSummaryFechaDesde;
+  String? _lastSummaryFechaHasta;
   double _grandTotal = 0;
   double _grandTotalVencido = 0;
   double _cvcGrandTotal = 0;
@@ -387,10 +390,13 @@ class CobrosProvider extends ChangeNotifier {
   Future<void> cargarPendingSummary(
     String? vendedorCode, {
     List<String>? vendedorCodes,
-    int limit = 100,
+    int limit = 2000,
     int page = 1,
     int offset = 0,
     bool forceRefresh = false,
+    String? tipoDocumento,
+    String? fechaDesde,
+    String? fechaHasta,
   }) async {
     _isLoading = true;
     _error = null;
@@ -410,7 +416,10 @@ class CobrosProvider extends ChangeNotifier {
         _lastSummaryVendorCodes = null;
         baseEndpoint = '/cobros/pending-summary/ALL';
       }
-      final safeLimit = limit < 1 ? 1 : (limit > 100 ? 100 : limit);
+      _lastSummaryTipoDocumento = tipoDocumento?.trim();
+      _lastSummaryFechaDesde = fechaDesde?.trim();
+      _lastSummaryFechaHasta = fechaHasta?.trim();
+      final safeLimit = limit < 1 ? 1 : (limit > 2000 ? 2000 : limit);
       final safeOffset = offset < 0 ? 0 : offset;
       final safePage = page < 1 ? 1 : page;
       final params = <String, String>{
@@ -418,6 +427,9 @@ class CobrosProvider extends ChangeNotifier {
         'page': '$safePage',
         'offset': '$safeOffset',
       };
+      _addNonBlankParam(params, 'tipoDocumento', tipoDocumento);
+      _addNonBlankParam(params, 'fechaDesde', fechaDesde);
+      _addNonBlankParam(params, 'fechaHasta', fechaHasta);
       _addForceRefreshParam(params, forceRefresh);
       final endpoint = _endpointWithQuery(baseEndpoint, params);
       final response = await ApiClient.get(
@@ -773,6 +785,9 @@ class CobrosProvider extends ChangeNotifier {
     await cargarPendingSummary(
       _lastSummaryVendorCode,
       vendedorCodes: _lastSummaryVendorCodes,
+      tipoDocumento: _lastSummaryTipoDocumento,
+      fechaDesde: _lastSummaryFechaDesde,
+      fechaHasta: _lastSummaryFechaHasta,
       forceRefresh: forceRefresh,
     );
   }
@@ -794,6 +809,11 @@ class CobrosProvider extends ChangeNotifier {
     _portfolioClientCount = 0;
     _portfolioVencidoClientCount = 0;
     _summarySource = '';
+    _lastSummaryVendorCode = null;
+    _lastSummaryVendorCodes = null;
+    _lastSummaryTipoDocumento = null;
+    _lastSummaryFechaDesde = null;
+    _lastSummaryFechaHasta = null;
     _error = null;
     notifyListeners();
   }

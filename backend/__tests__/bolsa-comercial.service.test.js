@@ -193,6 +193,30 @@ describe('BolsaComercial Service', () => {
             expect(result.valid).toBe(false);
             expect(result.reason).toBe('PRECIO_DEBAJO_MINIMO');
         });
+
+        test('allows configured client special price below global min floor', async () => {
+            mockQuery.mockResolvedValueOnce([{
+                ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
+                LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 1000,
+                CONSUMIDO: 0, ACUMULADO: 0
+            }]);
+
+            const result = await bolsaService.validateOrderWithBolsa('10', [
+                {
+                    precioTarifaCliente: 12,
+                    precioMinimo: 15,
+                    precioVenta: 13,
+                    cantidadEnvases: 1,
+                    precioEspecialCliente: true,
+                    permiteBajoMinimo: true,
+                    precioClienteSource: 'DSEDAC.PES',
+                }
+            ]);
+
+            expect(result.valid).toBe(true);
+            expect(result.acumulacion).toBe(1);
+            expect(result.lineMovements[0].tipo).toBe('ACUMULACION');
+        });
     });
 
     describe('resolveBolsaReferencePrice', () => {

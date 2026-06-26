@@ -58,29 +58,24 @@ class _RecommendationsSectionState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.neonBlue.withValues(alpha: 0.15),
-                        Colors.deepPurple.withValues(alpha: 0.15),
-                      ],
-                    ),
+                    color: AppTheme.info.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
                         Icons.recommend,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'Recomendaciones ($totalCount)',
                         style: TextStyle(
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.info,
                           fontWeight: FontWeight.w600,
                           fontSize: Responsive.fontSize(
                             context,
@@ -208,11 +203,11 @@ class _RecommendationsSectionState
         width: 168,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
+          color: AppTheme.softPanel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: hasStock
-                ? AppTheme.neonGreen.withValues(alpha: 0.3)
+                ? AppTheme.success.withValues(alpha: 0.3)
                 : AppTheme.borderColor.withValues(alpha: 0.3),
           ),
         ),
@@ -223,7 +218,7 @@ class _RecommendationsSectionState
             Text(
               item.code,
               style: TextStyle(
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 fontWeight: FontWeight.w600,
                 fontSize: Responsive.fontSize(context, small: 9, large: 10),
               ),
@@ -247,7 +242,7 @@ class _RecommendationsSectionState
               children: [
                 Icon(
                   hasStock ? Icons.inventory_2 : Icons.inventory_2_outlined,
-                  color: hasStock ? AppTheme.neonGreen : AppTheme.error,
+                  color: hasStock ? AppTheme.success : AppTheme.error,
                   size: 12,
                 ),
                 const SizedBox(width: 3),
@@ -255,7 +250,7 @@ class _RecommendationsSectionState
                   child: Text(
                     item.stockDisplay,
                     style: TextStyle(
-                      color: hasStock ? AppTheme.neonGreen : AppTheme.error,
+                      color: hasStock ? AppTheme.success : AppTheme.error,
                       fontSize: 9,
                       fontWeight: FontWeight.w500,
                     ),
@@ -276,13 +271,13 @@ class _RecommendationsSectionState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                    color: AppTheme.info.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     mainBadge,
                     style: TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize:
                           Responsive.fontSize(context, small: 8, large: 9),
                       fontWeight: FontWeight.w600,
@@ -296,13 +291,13 @@ class _RecommendationsSectionState
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonPurple.withValues(alpha: 0.12),
+                      color: AppTheme.accentIndigo.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       '${item.unitsPerBox.toStringAsFixed(0)}u/cj',
                       style: TextStyle(
-                        color: AppTheme.neonPurple,
+                        color: AppTheme.accentIndigo,
                         fontSize:
                             Responsive.fontSize(context, small: 8, large: 9),
                         fontWeight: FontWeight.w500,

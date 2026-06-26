@@ -167,10 +167,10 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
 
   Color _yearColor(int index) {
     const colors = [
-      AppTheme.neonGreen,
-      AppTheme.neonBlue,
-      Colors.orangeAccent,
-      Colors.purpleAccent,
+      AppTheme.success,
+      AppTheme.info,
+      AppTheme.warning,
+      AppTheme.accentIndigo,
       Colors.pinkAccent,
     ];
     return colors[index % colors.length];
@@ -191,7 +191,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
               const Icon(
                 Icons.error_outline,
                 size: 48,
-                color: Colors.redAccent,
+                color: AppTheme.error,
               ),
               const SizedBox(height: 12),
               Text(
@@ -235,7 +235,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
       ..sort((a, b) => b.compareTo(a));
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -269,12 +269,12 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppTheme.neonPurple.withValues(alpha: 0.2)
+                                ? AppTheme.accentIndigo.withValues(alpha: 0.2)
                                 : Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isSelected
-                                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                                  ? AppTheme.accentIndigo.withValues(alpha: 0.5)
                                   : Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
@@ -282,7 +282,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                             '$year',
                             style: TextStyle(
                               color: isSelected
-                                  ? AppTheme.neonPurple
+                                  ? AppTheme.accentIndigo
                                   : Colors.white54,
                               fontWeight: isSelected
                                   ? FontWeight.w700
@@ -456,8 +456,8 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
   Widget _activeFilterChip(String label, VoidCallback onClear) {
     return Chip(
       label: Text(label, style: const TextStyle(fontSize: 11)),
-      backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.15),
-      side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.4)),
+      backgroundColor: AppTheme.info.withValues(alpha: 0.15),
+      side: BorderSide(color: AppTheme.info.withValues(alpha: 0.4)),
       deleteIcon: const Icon(Icons.close, size: 14),
       onDeleted: onClear,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -470,7 +470,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
     final sortedYears = _selectedYears.toList()..sort((a, b) => b.compareTo(a));
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -510,7 +510,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
             _buildSummaryRow(
               'Vendido',
               Icons.euro,
-              AppTheme.neonGreen,
+              AppTheme.success,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -527,7 +527,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
             _buildSummaryRow(
               'Sin dto',
               Icons.attach_money,
-              AppTheme.neonBlue,
+              AppTheme.info,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -545,7 +545,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
             _buildSummaryRow(
               'Descuento',
               Icons.discount,
-              Colors.orangeAccent,
+              AppTheme.warning,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -562,7 +562,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
             _buildSummaryRow(
               'Unidades',
               Icons.inventory_2,
-              Colors.purpleAccent,
+              AppTheme.accentIndigo,
               sortedYears,
               (year) {
                 final yearData = _monthlyByYear
@@ -655,7 +655,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
     }
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -726,8 +726,8 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
               final color = variacion == null
                   ? Colors.white54
                   : variacion >= 0
-                      ? AppTheme.neonGreen
-                      : Colors.redAccent;
+                      ? AppTheme.success
+                      : AppTheme.error;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -842,7 +842,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
     if (maxVal == 0) return const SizedBox.shrink();
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -939,7 +939,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                             labels[monthIdx],
                             style: TextStyle(
                               color: isCurrent
-                                  ? AppTheme.neonGreen
+                                  ? AppTheme.success
                                   : Colors.white.withValues(alpha: 0.55),
                               fontSize: 9,
                               fontWeight: isCurrent
@@ -963,7 +963,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
   Widget _buildTopProductsCard() {
     if (_topProducts.isEmpty) return const SizedBox.shrink();
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -1008,7 +1008,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                         _fmtMoney(p['importe']),
                         textAlign: TextAlign.right,
                         style: const TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -1027,7 +1027,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
   Widget _buildLinesTable() {
     if (_lines.isEmpty) {
       return const Card(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Center(
@@ -1040,7 +1040,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
       );
     }
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.raisedSurface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

@@ -24,6 +24,7 @@ import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
+import 'package:gmp_app_mobilidad/core/services/session_scope.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -115,44 +116,95 @@ class AuthState {
 // the provider and force re-initialization, causing session loss and
 // triggering rate limiting from repeated login attempts.
 class AuthNotifier extends AsyncNotifier<AuthState> {
+  static const Duration _sessionDuration = Duration(days: 1);
+  static const String _sessionExpiresAtKey = 'session_expires_at';
+
+  Timer? _sessionExpiryTimer;
+
   @override
   Future<AuthState> build() async {
+    ref.onDispose(() {
+      _sessionExpiryTimer?.cancel();
+    });
+
     // Bind global 401 callback
     ApiClient.onUnauthorized = () {
       debugPrint('[AuthNotifier] 401 detected — logging out');
       logout(sessionExpired: true);
     };
 
+    final visualQaRole = _visualQaRoleOverride();
+    if (visualQaRole.isNotEmpty) {
+      return _buildVisualQaState(visualQaRole);
+    }
+
     // Try auto-login
     return _tryAutoLogin();
   }
 
-  void _applyCacheScope(UserModel user, List<String> vendedorCodes) {
-    final normalizedCodes = vendedorCodes
-        .map((code) => code.trim())
-        .where((code) => code.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+  String _visualQaRoleOverride() {
+    if (!kDebugMode) return '';
+    const definedRole = String.fromEnvironment('GMP_VISUAL_QA_ROLE');
+    final role = definedRole.isNotEmpty
+        ? definedRole
+        : Uri.base.queryParameters['gmpVisualQaRole'] ?? '';
+    return role.trim().toLowerCase();
+  }
 
-    final scope = [
-      'user=${user.code.trim()}',
-      'role=${user.role.trim().toUpperCase()}',
-      'jefe=${user.isJefeVentas}',
-      'vendors=${normalizedCodes.join(',')}',
-    ].join('|');
-    CacheService.setScope(scope);
-    PedidosOfflineService.setScope(scope);
-    PedidosFavoritesService.setScope(scope);
+  AuthState _buildVisualQaState(String role) {
+    final isRepartidor = role == 'repartidor';
+    final isAlmacen = role == 'almacen' || role == 'almacén';
+
+    final user = UserModel(
+      id: 'visual-qa-$role',
+      code: isRepartidor
+          ? 'R01'
+          : isAlmacen
+              ? 'ALM01'
+              : '12',
+      name: isRepartidor
+          ? 'Repartidor QA'
+          : isAlmacen
+              ? 'Almacén QA'
+              : 'Comercial QA',
+      company: 'GMP',
+      role: isRepartidor
+          ? 'REPARTIDOR'
+          : isAlmacen
+              ? 'JEFE'
+              : 'COMERCIAL',
+      vendedorCode: isRepartidor
+          ? 'R01'
+          : isAlmacen
+              ? null
+              : '12',
+      codigoConductor: isRepartidor ? 'R01' : null,
+      isJefeVentas: isAlmacen,
+      showCommissions: true,
+    );
+    final codes = isRepartidor
+        ? const ['R01']
+        : isAlmacen
+            ? const ['12', '14', '80']
+            : const ['12'];
+
+    _applyCacheScope(user, codes);
+    return AuthState(
+      user: user,
+      vendedorCodes: codes,
+      isInitialized: true,
+    );
+  }
+
+  void _applyCacheScope(UserModel user, List<String> vendedorCodes) {
+    SessionScope.apply(user, vendedorCodes);
   }
 
   Future<void> _clearLocalSessionCache() async {
     try {
       await CacheService.clearAll();
-      CacheService.clearScope();
       ApiClient.clearPendingRequests();
-      PedidosOfflineService.clearScope();
-      PedidosFavoritesService.clearScope();
+      SessionScope.clear();
       CachePreWarmer.reset();
       debugPrint('[AuthNotifier] Local session caches cleared');
     } catch (e) {
@@ -160,9 +212,88 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
+  Future<DateTime?> _readSessionExpiresAt() async {
+    final raw = await SecureStorage.readSecureData(_sessionExpiresAtKey);
+    if (raw == null || raw.isEmpty) return null;
+
+    final timestamp = int.tryParse(raw);
+    if (timestamp != null) {
+      return DateTime.fromMillisecondsSinceEpoch(timestamp);
+    }
+
+    return DateTime.tryParse(raw);
+  }
+
+  bool _isSessionExpired(DateTime? expiresAt, {DateTime? now}) {
+    if (expiresAt == null) return true;
+    return !(now ?? DateTime.now()).isBefore(expiresAt);
+  }
+
+  void _applySessionDeadline(DateTime expiresAt) {
+    _sessionExpiryTimer?.cancel();
+    ApiClient.authSessionExpiresAt = expiresAt;
+
+    final remaining = expiresAt.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      unawaited(logout(sessionExpired: true));
+      return;
+    }
+
+    _sessionExpiryTimer = Timer(remaining, () {
+      debugPrint('[AuthNotifier] Session deadline reached - logging out');
+      unawaited(logout(sessionExpired: true));
+    });
+  }
+
+  Future<void> _persistNewSessionDeadline() async {
+    final expiresAt = DateTime.now().add(_sessionDuration);
+    await SecureStorage.writeSecureData(
+      _sessionExpiresAtKey,
+      expiresAt.millisecondsSinceEpoch.toString(),
+    );
+    _applySessionDeadline(expiresAt);
+  }
+
+  Future<void> _clearStoredSession(SharedPreferences prefs) async {
+    _sessionExpiryTimer?.cancel();
+    ApiClient.clearAuthToken();
+    ApiClient.authSessionExpiresAt = null;
+    await ApiClient.clearRefreshToken();
+    await SecureStorage.deleteSecureData('user_token');
+    await SecureStorage.deleteSecureData('user_data');
+    await SecureStorage.deleteSecureData(_sessionExpiresAtKey);
+    await prefs.remove('vendedor_codes');
+    await prefs.remove('global_filter_vendor');
+    await _clearLocalSessionCache();
+  }
+
+  /// Validates the persisted session deadline and clears auth if it expired.
+  Future<bool> ensureSessionIsStillValid() async {
+    final authState = state.value;
+    if (!(authState?.isAuthenticated ?? false)) return false;
+
+    final token = await SecureStorage.readSecureData('user_token');
+    final expiresAt = await _readSessionExpiresAt();
+
+    if (token == null ||
+        token.isEmpty ||
+        expiresAt == null ||
+        _isSessionExpired(expiresAt)) {
+      debugPrint(
+        '[AuthNotifier] Stored session missing or expired - clearing session',
+      );
+      await logout(sessionExpired: true);
+      return false;
+    }
+
+    ApiClient.setAuthToken(token);
+    _applySessionDeadline(expiresAt);
+    return true;
+  }
+
   /// Returns true if the stored token is expired.
   /// The server uses a custom 2-part HMAC format: base64(JSON).hmacHex
-  /// The payload contains a 'timestamp' (ms epoch) and the TTL is 1 hour.
+  /// The payload contains a 'timestamp' (ms epoch) and the TTL is 24 hours.
   bool _isTokenExpired(String token) {
     try {
       // Custom format: base64Payload.hmacHex  (NOT standard 3-part JWT)
@@ -182,14 +313,14 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       }
       final decoded = utf8.decode(base64.decode(dataB64));
       final data = jsonDecode(decoded) as Map<String, dynamic>;
-      // Token payload uses 'timestamp' (ms since epoch), TTL = 1 hour server-side
+      // Token payload uses 'timestamp' (ms since epoch), TTL = 24 hours.
       final timestamp = data['timestamp'];
       if (timestamp == null) return true;
       final ts = timestamp is int
           ? timestamp
           : int.tryParse(timestamp.toString()) ?? 0;
       const ttlMs = 86400000; // 24 hours — matches server JWT_ACCESS_EXPIRES
-      return DateTime.now().millisecondsSinceEpoch - ts > ttlMs;
+      return DateTime.now().millisecondsSinceEpoch - ts >= ttlMs;
     } catch (_) {
       return true; // can't decode → treat as expired
     }
@@ -202,8 +333,25 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       var token = await SecureStorage.readSecureData('user_token');
       final userDataStr = await SecureStorage.readSecureData('user_data');
       final codes = prefs.getStringList('vendedor_codes');
+      final expiresAt = await _readSessionExpiresAt();
+
+      if (token != null || userDataStr != null || codes != null) {
+        if (token == null ||
+            token.isEmpty ||
+            userDataStr == null ||
+            expiresAt == null ||
+            _isSessionExpired(expiresAt)) {
+          debugPrint(
+            '[AuthNotifier] Stored session incomplete or expired - clearing session',
+          );
+          await _clearStoredSession(prefs);
+          return const AuthState(isInitialized: true);
+        }
+      }
 
       if (token != null && userDataStr != null) {
+        _applySessionDeadline(expiresAt!);
+
         // Check token expiry BEFORE restoring session to avoid a burst of 401s
         if (_isTokenExpired(token)) {
           ApiClient.setAuthToken(token);
@@ -214,11 +362,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           } else {
             debugPrint(
                 '[AuthNotifier] Stored token expired — clearing session');
-            await SecureStorage.deleteSecureData('user_token');
-            await SecureStorage.deleteSecureData('refresh_token');
-            await SecureStorage.deleteSecureData('user_data');
-            await prefs.remove('vendedor_codes');
-            await _clearLocalSessionCache();
+            await _clearStoredSession(prefs);
             return const AuthState(isInitialized: true);
           }
         }
@@ -235,12 +379,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             debugPrint(
               '[AuthNotifier] Server rejected stored token — clearing session',
             );
-            ApiClient.clearAuthToken();
-            await SecureStorage.deleteSecureData('user_token');
-            await SecureStorage.deleteSecureData('refresh_token');
-            await SecureStorage.deleteSecureData('user_data');
-            await prefs.remove('vendedor_codes');
-            await _clearLocalSessionCache();
+            await _clearStoredSession(prefs);
             return const AuthState(isInitialized: true);
           }
         } catch (_) {
@@ -354,6 +493,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           'user_data',
           jsonEncode(response['user']),
         );
+        await _persistNewSessionDeadline();
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setStringList('vendedor_codes', vendedorCodes);
@@ -446,6 +586,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       }
       await SecureStorage.writeSecureData(
           'user_data', jsonEncode(response['user']));
+      await _persistNewSessionDeadline();
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('vendedor_codes', vendedorCodes);
@@ -489,18 +630,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       ),
     );
 
-    // Clear token
-    ApiClient.clearAuthToken();
-    await ApiClient.clearRefreshToken();
-    await SecureStorage.deleteSecureData('user_token');
-    await SecureStorage.deleteSecureData('user_data');
-
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('vendedor_codes');
-    await prefs.remove('global_filter_vendor');
-
-    // Clear ALL caches (defense-in-depth for shared devices)
-    await _clearLocalSessionCache();
+    await _clearStoredSession(prefs);
 
     // Clear filters
     try {
@@ -514,6 +645,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<bool> switchRole(String newRole, {String? viewAs}) async {
     final currentState = state.value;
     if (currentState?.user == null) return false;
+
+    if (!await ensureSessionIsStillValid()) return false;
 
     state = AsyncValue.data(currentState!.copyWith(isLoading: true));
 
@@ -547,6 +680,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             'user_data',
             jsonEncode(updatedUser.toJson()),
           );
+          final expiresAt = await _readSessionExpiresAt();
+          if (expiresAt == null || _isSessionExpired(expiresAt)) {
+            await logout(sessionExpired: true);
+            return false;
+          }
+          _applySessionDeadline(expiresAt);
           await _clearLocalSessionCache();
           _applyCacheScope(updatedUser, nextVendedorCodes);
           state = AsyncValue.data(

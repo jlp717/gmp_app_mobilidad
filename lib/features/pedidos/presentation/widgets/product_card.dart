@@ -97,21 +97,21 @@ class _ProductCardState extends State<ProductCard> {
 
     final hasClientePrice = widget.product.precioCliente > 0;
     final promoColor =
-        widget.promo?.isGift == true ? AppTheme.neonGreen : AppTheme.neonPurple;
+        widget.promo?.isGift == true ? AppTheme.success : AppTheme.accentIndigo;
 
     return Card(
       color: inCart
           ? AppTheme.raisedSurface.withValues(alpha: 0.98)
           : AppTheme.softPanel,
       elevation: inCart ? 2 : 0,
-      shadowColor: AppTheme.neonGreen.withValues(alpha: 0.12),
+      shadowColor: AppTheme.success.withValues(alpha: 0.12),
       surfaceTintColor: Colors.transparent,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         side: BorderSide(
           color: inCart
-              ? AppTheme.neonGreen
+              ? AppTheme.success
               : widget.promo != null
                   ? promoColor
                   : AppTheme.borderColor.withValues(alpha: 0.42),
@@ -146,13 +146,13 @@ class _ProductCardState extends State<ProductCard> {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '$badgeQty${widget.cartQtySuffix}',
                           style: const TextStyle(
-                            color: AppTheme.darkBase,
+                            color: AppTheme.inkSurface,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
                           ),
@@ -168,7 +168,10 @@ class _ProductCardState extends State<ProductCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Top badges row
-                    Row(
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         // Purchase history dot
                         Container(
@@ -205,7 +208,6 @@ class _ProductCardState extends State<ProductCard> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(width: 6),
                         // Unit type badge
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -213,10 +215,10 @@ class _ProductCardState extends State<ProductCard> {
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                            color: AppTheme.info.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                              color: AppTheme.info.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(
@@ -224,14 +226,14 @@ class _ProductCardState extends State<ProductCard> {
                             children: [
                               Icon(
                                 _unitTypeIcon(),
-                                color: AppTheme.neonBlue,
+                                color: AppTheme.info,
                                 size: 10,
                               ),
                               const SizedBox(width: 2),
                               Text(
                                 _unitTypeLabel(),
                                 style: TextStyle(
-                                  color: AppTheme.neonBlue,
+                                  color: AppTheme.info,
                                   fontSize: Responsive.fontSize(
                                     context,
                                     small: 9,
@@ -245,44 +247,50 @@ class _ProductCardState extends State<ProductCard> {
                         ),
                         // Promo badge
                         if (widget.promo != null) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: promoColor.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: promoColor.withValues(alpha: 0.4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 150),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (widget.promo!.isGift) ...[
-                                  Icon(
-                                    Icons.card_giftcard,
-                                    color: promoColor,
-                                    size: 10,
-                                  ),
-                                  const SizedBox(width: 2),
-                                ],
-                                Text(
-                                  (widget.promo!.isGift
-                                          ? widget.promo!.giftLabel
-                                          : widget.promo!.promoDesc) +
-                                      (widget.extraPromoCount > 0
-                                          ? ' +${widget.extraPromoCount}'
-                                          : ''),
-                                  style: TextStyle(
-                                    color: promoColor,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              decoration: BoxDecoration(
+                                color: promoColor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: promoColor.withValues(alpha: 0.4),
                                 ),
-                              ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (widget.promo!.isGift) ...[
+                                    Icon(
+                                      Icons.card_giftcard,
+                                      color: promoColor,
+                                      size: 10,
+                                    ),
+                                    const SizedBox(width: 2),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      (widget.promo!.isGift
+                                              ? widget.promo!.giftLabel
+                                              : widget.promo!.promoDesc) +
+                                          (widget.extraPromoCount > 0
+                                              ? ' +${widget.extraPromoCount}'
+                                              : ''),
+                                      style: TextStyle(
+                                        color: promoColor,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -293,7 +301,7 @@ class _ProductCardState extends State<ProductCard> {
                     Text(
                       widget.product.name,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontWeight: FontWeight.w600,
                         fontSize:
                             Responsive.fontSize(context, small: 13, large: 15),
@@ -308,7 +316,7 @@ class _ProductCardState extends State<ProductCard> {
                         Text(
                           widget.product.code,
                           style: TextStyle(
-                            color: Colors.white38,
+                            color: AppTheme.textTertiary,
                             fontSize: Responsive.fontSize(
                               context,
                               small: 11,
@@ -330,7 +338,7 @@ class _ProductCardState extends State<ProductCard> {
                         Icon(
                           Icons.inventory_outlined,
                           color: widget.product.hasStock
-                              ? AppTheme.neonGreen
+                              ? AppTheme.success
                               : AppTheme.error,
                           size: 13,
                         ),
@@ -340,7 +348,7 @@ class _ProductCardState extends State<ProductCard> {
                             _buildStockText(widget.product),
                             style: TextStyle(
                               color: widget.product.hasStock
-                                  ? AppTheme.neonGreen
+                                  ? AppTheme.success
                                   : AppTheme.error,
                               fontSize: Responsive.fontSize(
                                 context,
@@ -378,21 +386,21 @@ class _ProductCardState extends State<ProductCard> {
                         ),
                         decoration: BoxDecoration(
                           color: _showClientePrice
-                              ? AppTheme.neonGreen.withValues(alpha: 0.15)
-                              : Colors.white.withValues(alpha: 0.06),
+                              ? AppTheme.success.withValues(alpha: 0.15)
+                              : AppTheme.textPrimary.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: _showClientePrice
-                                ? AppTheme.neonGreen.withValues(alpha: 0.4)
-                                : Colors.white.withValues(alpha: 0.1),
+                                ? AppTheme.success.withValues(alpha: 0.4)
+                                : AppTheme.textPrimary.withValues(alpha: 0.1),
                           ),
                         ),
                         child: Text(
                           _showClientePrice ? 'Cliente' : 'Tarifa',
                           style: TextStyle(
                             color: _showClientePrice
-                                ? AppTheme.neonGreen
-                                : Colors.white54,
+                                ? AppTheme.success
+                                : AppTheme.textSecondary,
                             fontSize: Responsive.fontSize(
                               context,
                               small: 8,
@@ -412,8 +420,8 @@ class _ProductCardState extends State<ProductCard> {
                         '${_formatPrice(displayPrice)}\u20AC',
                         style: TextStyle(
                           color: _showIva
-                              ? AppTheme.neonPurple
-                              : AppTheme.neonGreen,
+                              ? AppTheme.accentIndigo
+                              : AppTheme.success,
                           fontWeight: FontWeight.bold,
                           fontSize: Responsive.fontSize(
                             context,
@@ -434,21 +442,22 @@ class _ProductCardState extends State<ProductCard> {
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             color: _showIva
-                                ? AppTheme.neonPurple.withValues(alpha: 0.2)
-                                : Colors.white.withValues(alpha: 0.08),
+                                ? AppTheme.accentIndigo.withValues(alpha: 0.2)
+                                : AppTheme.textPrimary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: _showIva
-                                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
-                                  : Colors.white.withValues(alpha: 0.15),
+                                  ? AppTheme.accentIndigo.withValues(alpha: 0.5)
+                                  : AppTheme.textPrimary
+                                      .withValues(alpha: 0.15),
                             ),
                           ),
                           child: Text(
                             _showIva ? 'c/IVA' : 's/IVA',
                             style: TextStyle(
                               color: _showIva
-                                  ? AppTheme.neonPurple
-                                  : Colors.white54,
+                                  ? AppTheme.accentIndigo
+                                  : AppTheme.textSecondary,
                               fontSize: Responsive.fontSize(
                                 context,
                                 small: 7,
@@ -470,9 +479,22 @@ class _ProductCardState extends State<ProductCard> {
                       child: Text(
                         'Min $unitLabel: ${_formatPrice(minPrimaryPrice, decimals: 2)}\u20AC',
                         style: TextStyle(
-                          color: Colors.white38,
+                          color: AppTheme.textTertiary,
                           fontSize:
                               Responsive.fontSize(context, small: 9, large: 10),
+                        ),
+                      ),
+                    ),
+                  if (widget.product.precioEspecialCliente)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Precio exclusivo cliente',
+                        style: TextStyle(
+                          color: AppTheme.success,
+                          fontSize:
+                              Responsive.fontSize(context, small: 9, large: 10),
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -482,15 +504,15 @@ class _ProductCardState extends State<ProductCard> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                      color: AppTheme.info.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                          color: AppTheme.info.withValues(alpha: 0.3)),
                     ),
                     child: Text(
                       _buildBoxContentBadge(),
                       style: TextStyle(
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         fontSize:
                             Responsive.fontSize(context, small: 10, large: 11),
                         fontWeight: FontWeight.w500,
@@ -504,7 +526,7 @@ class _ProductCardState extends State<ProductCard> {
                     Text(
                       'U/R: ${(widget.product.bestPrice / widget.product.unitsRetractil).toStringAsFixed(3)}\u20AC',
                       style: TextStyle(
-                        color: Colors.white54,
+                        color: AppTheme.textSecondary,
                         fontSize:
                             Responsive.fontSize(context, small: 9, large: 10),
                       ),
@@ -527,11 +549,11 @@ class _ProductCardState extends State<ProductCard> {
                         height: 36,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                          color: AppTheme.info.withValues(alpha: 0.14),
                           borderRadius:
                               BorderRadius.circular(AppTheme.radiusFull),
                           border: Border.all(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.38),
+                            color: AppTheme.info.withValues(alpha: 0.38),
                           ),
                         ),
                         child: const Row(
@@ -540,7 +562,7 @@ class _ProductCardState extends State<ProductCard> {
                           children: [
                             Icon(
                               Icons.add_shopping_cart_rounded,
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               size: 16,
                             ),
                             SizedBox(width: 5),
@@ -549,7 +571,7 @@ class _ProductCardState extends State<ProductCard> {
                               maxLines: 1,
                               overflow: TextOverflow.clip,
                               style: TextStyle(
-                                color: AppTheme.neonBlue,
+                                color: AppTheme.info,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -569,13 +591,16 @@ class _ProductCardState extends State<ProductCard> {
                     widget.isFavorite
                         ? Icons.star_rounded
                         : Icons.star_outline_rounded,
-                    color: widget.isFavorite ? Colors.amber : Colors.white24,
+                    color: widget.isFavorite
+                        ? AppTheme.warning
+                        : AppTheme.textTertiary,
                     size: 22,
                   ),
                 ),
               ],
               const SizedBox(width: 2),
-              const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+              const Icon(Icons.chevron_right,
+                  color: AppTheme.textTertiary, size: 18),
             ],
           ),
         ),
@@ -601,8 +626,8 @@ class _ProductCardState extends State<ProductCard> {
       textColor = AppTheme.error;
       icon = Icons.trending_down;
     } else {
-      bgColor = Colors.white.withValues(alpha: 0.08);
-      textColor = Colors.white54;
+      bgColor = AppTheme.textPrimary.withValues(alpha: 0.08);
+      textColor = AppTheme.textSecondary;
       icon = Icons.trending_flat;
     }
 

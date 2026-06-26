@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import workmanager_apple
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -7,6 +8,10 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    WorkmanagerPlugin.registerPeriodicTask(
+      withIdentifier: "com.gmp_movilidad_pedidos_test.notifications.refresh",
+      frequency: NSNumber(value: 30 * 60)
+    )
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

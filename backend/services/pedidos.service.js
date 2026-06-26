@@ -24,6 +24,10 @@ const {
     assertMoneyFitsWriteSchema,
 } = require('../utils/db2-schemas');
 const ERP_SCHEMA = getDb2WriteSchema();
+const PRICING_CONFIG_SCHEMA = 'JAVIER';
+const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
+const CLIENT_SPECIAL_PRICE_TABLE = 'DSEDAC.PES';
+const CLIENT_UNIT_AMOUNT_PROMO_TABLE = 'DSEDAC.PPU';
 const PROMOTIONS_SCHEMA = db2Schema('DSEDAC', 'PROMOTIONS_SCHEMA');
 const PROMOTION_SOURCE_TABLES = new Set(['PRD', 'PMR']);
 const DELETE_STOCK_RESERVE_BY_PEDIDO_SQL = ERP_SCHEMA === 'DSEDAC'
@@ -80,7 +84,7 @@ const productsBreaker = new CircuitBreaker({
     name: 'products-db', 
     failureThreshold: 3,
     successThreshold: 2,
-    timeout: 10000
+    timeout: parseInt(process.env.PRODUCTS_CIRCUIT_TIMEOUT_MS, 10) || 30000
 });
 
 // ============================================================================
@@ -394,15 +398,7 @@ function ensurePedidoIdempotencyKeyFromRequest(req) {
     if (!raw || !String(raw).trim()) {
         return generatePedidoIdempotencyKey();
     }
-    try {
-        return normalizePedidoIdempotencyKey(raw);
-    } catch (err) {
-        if (err.code === 'INVALID_IDEMPOTENCY_KEY') {
-            logger.warn(`[PEDIDOS] Invalid idempotency key replaced with server-generated token`);
-            return generatePedidoIdempotencyKey();
-        }
-        throw err;
-    }
+    return normalizePedidoIdempotencyKey(raw);
 }
 
 function buildCreateOrderPayloadHash({
@@ -452,11 +448,11 @@ async function lookupPedidoIdempotency(idempotencyKey) {
         };
     } catch (lookupErr) {
         if (isTableNotFound(lookupErr)) {
-            logger.warn(`[PEDIDOS] ${ERP_SCHEMA}.PEDIDO_IDEMPOTENCY missing; idempotency lookup skipped`);
-            return null;
+            logger.error(`[PEDIDOS] ${ERP_SCHEMA}.PEDIDO_IDEMPOTENCY missing; refusing create without dedupe`);
+            throw createIdempotencyUnavailableError();
         }
-        logger.warn(`[PEDIDOS] Idempotency lookup failed (continuing INSERT): ${lookupErr.message}`);
-        return null;
+        logger.error(`[PEDIDOS] Idempotency lookup failed: ${lookupErr.message}`);
+        throw createIdempotencyUnavailableError();
     }
 }
 
@@ -481,6 +477,13 @@ function createIdempotencyConflictError(message) {
     const err = new Error(message || 'Token de idempotencia reutilizado con otro payload');
     err.code = 'IDEMPOTENCY_CONFLICT';
     err.status = 409;
+    return err;
+}
+
+function createIdempotencyUnavailableError(message) {
+    const err = new Error(message || 'Idempotencia de pedidos no disponible. Reintenta en unos minutos.');
+    err.code = 'IDEMPOTENCY_UNAVAILABLE';
+    err.status = 503;
     return err;
 }
 
@@ -542,7 +545,7 @@ const VALID_ORDER_STATES = ['BORRADOR', 'CONFIRMANDO', 'CONFIRMADO'];
 const MAX_ORDER_LINES = 200;
 const DB2_BULK_INSERT_CHUNK_SIZE = 25;
 const STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE = 100;
-const PEDIDOS_ERP_TERMINAL = 93;
+const DEFAULT_PEDIDOS_ERP_TERMINAL = 93;
 
 const ORDER_TRANSITIONS = {
     BORRADOR: new Set(['CONFIRMADO']),
@@ -648,8 +651,17 @@ function resolvePedidoActorCodes(header = {}, userId) {
     };
 }
 
-function resolvePedidoTerminal() {
-    return PEDIDOS_ERP_TERMINAL;
+function resolvePedidoTerminal(vendedorCode, userId) {
+    const actor = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }, userId);
+    const vendedor = actor.vendedor;
+    if (/^\d{1,3}$/.test(vendedor)) {
+        const terminal = parseInt(vendedor, 10);
+        if (terminal > 0 && terminal <= 999) return terminal;
+    }
+
+    const fallback = parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '', 10);
+    if (Number.isFinite(fallback) && fallback > 0 && fallback <= 999) return fallback;
+    return DEFAULT_PEDIDOS_ERP_TERMINAL;
 }
 
 function formatPedidoNumeroAcisa(serie, terminal, numeroPedido) {
@@ -679,7 +691,7 @@ function getPedidosConfirmationTarget() {
     const exportSchema = 'DSEDAC';
     const subempresa = trimString(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3) || 'GMP';
     const serie = trimString(process.env.PEDIDOS_SYSTEM_SERIE || 'P').substring(0, 1) || 'P';
-    const terminal = PEDIDOS_ERP_TERMINAL;
+    const terminal = resolvePedidoTerminal();
     return {
         schema,
         requestedSchema,
@@ -1223,6 +1235,236 @@ function currentHhmmss() {
 
 function truncate(value, length) {
     return trimString(value).substring(0, length);
+}
+
+function isMissingPricingTableError(error) {
+    const message = String(error?.message || error?.sqlMessage || error || '');
+    const upperMessage = message.toUpperCase();
+    const pricingObjects = [
+        BOLSA_PRODUCT_PRICE_TABLE,
+        CLIENT_SPECIAL_PRICE_TABLE,
+        CLIENT_UNIT_AMOUNT_PROMO_TABLE,
+    ];
+    return /SQL0204|42704|not\s+found|undefined\s+name/i.test(message)
+        && pricingObjects.some(name => upperMessage.includes(name.toUpperCase()) || upperMessage.includes(name.split('.').pop()));
+}
+
+function yesNoFlag(value, fallback = false) {
+    if (value === null || value === undefined || value === '') return fallback;
+    return parseBooleanFlag(value);
+}
+
+function pricingPlaceholders(values) {
+    return values.map(() => '?').join(',');
+}
+
+function effectiveMinPriceFromRow(row) {
+    const configuredFloor = roundPrice(row.PRECIO_MINIMO ?? row.precioMinimo ?? 0);
+    const cost = roundPrice(row.COSTE_FABRICACION ?? row.costeFabricacion ?? 0);
+    const marginPct = parseFloat(row.MARGEN_OBJETIVO_PCT ?? row.margenObjetivoPct) || 0;
+    const marginFloor = cost > 0 ? roundPrice(cost * (1 + marginPct / 100)) : 0;
+    return Math.max(configuredFloor, marginFloor);
+}
+
+function mergeConfiguredPricing(product, productPricing, clientPrice) {
+    const next = { ...product };
+
+    if (productPricing) {
+        const configuredMin = effectiveMinPriceFromRow(productPricing);
+        const manufacturingCost = roundPrice(productPricing.COSTE_FABRICACION ?? 0);
+        const lockedFloor = roundPrice(productPricing.PRECIO_MINIMO ?? 0);
+        const marginPct = parseFloat(productPricing.MARGEN_OBJETIVO_PCT) || 0;
+
+        next.precioMinimoBase = lockedFloor;
+        next.costeFabricacion = manufacturingCost;
+        next.margenObjetivoPct = marginPct;
+        next.precioMinimoCalculado = configuredMin;
+        next.precioMinimoSource = BOLSA_PRODUCT_PRICE_TABLE;
+
+        if (configuredMin > 0) next.precioMinimo = configuredMin;
+        if (manufacturingCost > 0) next.precioCosto = manufacturingCost;
+    }
+
+    if (clientPrice) {
+        const price = roundPrice(clientPrice.PRECIO_ESPECIAL ?? clientPrice.PRECIO_CLIENTE ?? 0);
+        if (price > 0) {
+            next.precioCliente = price;
+            next.precioClienteSource = String(clientPrice.SOURCE || '').trim();
+            next.precioEspecialCliente = yesNoFlag(clientPrice.IS_SPECIAL_PRICE, false);
+            next.permiteBajoMinimo = yesNoFlag(clientPrice.PERMITE_BAJO_MINIMO, next.precioEspecialCliente);
+            next.precioEspecialMotivo = String(clientPrice.MOTIVO || '').trim();
+            if (next.precioEspecialCliente) {
+                next.precioTarifaCliente = price;
+            }
+        }
+    }
+
+    return next;
+}
+
+async function getConfiguredPricingMaps(articleCodes, clientCode) {
+    const codes = [...new Set((articleCodes || []).map(code => truncate(code, 10)).filter(Boolean))];
+    if (codes.length === 0) return { productPricing: new Map(), clientPrices: new Map() };
+
+    const productPricing = new Map();
+    const clientPrices = new Map();
+    const placeholders = pricingPlaceholders(codes);
+
+    const productSql = `
+        SELECT *
+        FROM (
+            SELECT
+                TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+                UNIDAD_BASE,
+                FECHA_DESDE,
+                FECHA_HASTA,
+                COSTE_FABRICACION,
+                MARGEN_OBJETIVO_PCT,
+                PRECIO_MINIMO,
+                SOURCE,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TRIM(CODIGOARTICULO), TRIM(UNIDAD_BASE)
+                    ORDER BY FECHA_DESDE DESC, ID DESC
+                ) AS RN
+            FROM ${BOLSA_PRODUCT_PRICE_TABLE}
+            WHERE ACTIVO = 'S'
+              AND TRIM(CODIGOARTICULO) IN (${placeholders})
+              AND FECHA_DESDE <= CURRENT DATE
+              AND (FECHA_HASTA IS NULL OR FECHA_HASTA >= CURRENT DATE)
+        ) X
+        WHERE RN = 1`;
+
+    try {
+        const rows = await queryWithParams(productSql, codes, false);
+        for (const row of rows || []) {
+            productPricing.set(String(row.CODIGOARTICULO || '').trim(), row);
+        }
+    } catch (error) {
+        if (isMissingPricingTableError(error)) {
+            logger.warn(`[PEDIDOS] ${BOLSA_PRODUCT_PRICE_TABLE} no existe todavia; se usan tarifas ERP`);
+        } else {
+            throw error;
+        }
+    }
+
+    const trimClient = clientCode ? truncate(clientCode, 10) : '';
+    if (!trimClient) return { productPricing, clientPrices };
+
+    const promoPriceSql = `
+        SELECT *
+        FROM (
+            SELECT
+                TRIM(P.CODIGOARTICULO) AS CODIGOARTICULO,
+                P.PRECIO AS PRECIO_ESPECIAL,
+                P.PROMOCIONPRECIOESPECIAL AS PROMO_ID,
+                'S' AS IS_SPECIAL_PRICE,
+                'S' AS PERMITE_BAJO_MINIMO,
+                'Precio especial ERP' AS MOTIVO,
+                '${CLIENT_SPECIAL_PRICE_TABLE}' AS SOURCE,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TRIM(P.CODIGOARTICULO)
+                    ORDER BY P.FECHA_INICIO DESC, P.PROMOCIONPRECIOESPECIAL DESC, P.SECUENCIA DESC
+                ) AS RN
+            FROM DSEDAC.CLP C
+            JOIN (
+                SELECT
+                    P0.PROMOCIONPRECIOESPECIAL,
+                    P0.CODIGOARTICULO,
+                    P0.SECUENCIA,
+                    DATE(TIMESTAMP_FORMAT(
+                        DIGITS(P0.ANOINICIO) CONCAT RIGHT(DIGITS(P0.MESINICIO), 2) CONCAT RIGHT(DIGITS(P0.DIAINICIO), 2),
+                        'YYYYMMDD'
+                    )) AS FECHA_INICIO,
+                    DATE(TIMESTAMP_FORMAT(
+                        DIGITS(P0.ANOFINAL) CONCAT RIGHT(DIGITS(P0.MESFINAL), 2) CONCAT RIGHT(DIGITS(P0.DIAFINAL), 2),
+                        'YYYYMMDD'
+                    )) AS FECHA_FIN,
+                    P0.PRECIO
+                FROM ${CLIENT_SPECIAL_PRICE_TABLE} P0
+            ) P
+              ON P.PROMOCIONPRECIOESPECIAL IN (
+                  C.PROMOCIONPRECIOESPECIAL,
+                  C.PROMOCIONCLIENTE,
+                  C.PROMOCIONDESCUENTOPRODUCTO,
+                  C.PROMOCIONIMPORTEUNIDAD,
+                  C.PROMOCIONAPORB,
+                  C.PROMOCIONRELACIONSDSCLIART
+              )
+            WHERE TRIM(C.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+              AND TRIM(P.CODIGOARTICULO) IN (${placeholders})
+              AND CURRENT DATE BETWEEN P.FECHA_INICIO AND P.FECHA_FIN
+              AND P.PRECIO > 0
+        ) X
+        WHERE RN = 1`;
+
+    try {
+        const rows = await queryWithParams(promoPriceSql, [trimClient, ...codes], false);
+        for (const row of rows || []) {
+            clientPrices.set(String(row.CODIGOARTICULO || '').trim(), row);
+        }
+    } catch (error) {
+        if (isMissingPricingTableError(error)) {
+            logger.warn(`[PEDIDOS] ${CLIENT_SPECIAL_PRICE_TABLE} no disponible; se usan tarifa ERP/historico`);
+        } else {
+            logger.warn(`[PEDIDOS] Lectura precio especial ERP fallo: ${error.message}; se usa tarifa ERP/historico`);
+        }
+    }
+
+    const missingHistoryCodes = codes.filter(code => !clientPrices.has(code));
+    if (missingHistoryCodes.length > 0) {
+        const historyPlaceholders = pricingPlaceholders(missingHistoryCodes);
+        const historySql = `
+            SELECT *
+            FROM (
+                SELECT
+                    TRIM(L.CODIGOARTICULO) AS CODIGOARTICULO,
+                    L.PRECIOVENTA AS PRECIO_CLIENTE,
+                    'N' AS IS_SPECIAL_PRICE,
+                    'N' AS PERMITE_BAJO_MINIMO,
+                    'Ultimo precio real del cliente' AS MOTIVO,
+                    'DSEDAC.LINDTO' AS SOURCE,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY TRIM(L.CODIGOARTICULO)
+                        ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC, L.NUMERODOCUMENTO DESC
+                    ) AS RN
+                FROM DSEDAC.LINDTO L
+                WHERE TRIM(L.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
+                  AND TRIM(L.CODIGOARTICULO) IN (${historyPlaceholders})
+                  AND L.PRECIOVENTA > 0
+                  AND L.TIPOVENTA IN ('CC', 'VC')
+                  AND L.CLASELINEA IN ('AB', 'VT')
+                  AND L.SERIEALBARAN NOT IN ('N', 'Z')
+            ) X
+            WHERE RN = 1`;
+        try {
+            const rows = await queryWithParams(historySql, [trimClient, ...missingHistoryCodes], false);
+            for (const row of rows || []) {
+                clientPrices.set(String(row.CODIGOARTICULO || '').trim(), row);
+            }
+        } catch (error) {
+            logger.warn(`[PEDIDOS] Lectura historico LINDTO fallo: ${error.message}; se usa tarifa ERP`);
+        }
+    }
+
+    return { productPricing, clientPrices };
+}
+
+async function applyConfiguredPricingToProducts(products, clientCode) {
+    if (!Array.isArray(products) || products.length === 0) return products;
+    const maps = await getConfiguredPricingMaps(products.map(p => p.code), clientCode);
+    return products.map((product) => {
+        const code = String(product.code || '').trim();
+        return mergeConfiguredPricing(
+            product,
+            maps.productPricing.get(code),
+            maps.clientPrices.get(code)
+        );
+    });
+}
+
+async function applyConfiguredPricingToProduct(product, clientCode) {
+    const [priced] = await applyConfiguredPricingToProducts(product ? [product] : [], clientCode);
+    return priced || product;
 }
 
 function clampInt(value, min, max, fallback) {
@@ -1893,7 +2135,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
             cacheKey,
             TTL.SHORT // 5 min
         );
-        return rows.map(r => {
+        const products = rows.map(r => {
             const salesTY = parseFloat(r.SALESTHISYEAR) || 0;
             const salesPY = parseFloat(r.SALESPREVYEAR) || 0;
             const hasPurchased = parseInt(r.HASPURCHASED) || 0;
@@ -1937,8 +2179,10 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 hasPurchased: hasPurchased === 1,
                 yoyChange: salesPY > 0 ? ((salesTY - salesPY) / salesPY * 100) : (salesTY > 0 ? 100 : 0),
             };
-            return applyProductPriceView(product, includeIva);
+            return product;
         });
+        const pricedProducts = await applyConfiguredPricingToProducts(products, clientCodeTrimmed);
+        return pricedProducts.map(product => applyProductPriceView(product, includeIva));
     } catch (error) {
         logger.error(`[PEDIDOS] getProducts error: ${error.message}`);
         throw error;
@@ -1959,10 +2203,13 @@ async function getProductDetail(code, clientCode, options = {}) {
     if (cached) return applyProductPriceView(cached, includeIva);
 
     try {
-        const result = await productsBreaker.execute(
+        let result = await productsBreaker.execute(
             () => getProductDetailRaw(trimCode, trimClient),
             () => null
         );
+        if (!result) {
+            result = await getProductDetailRaw(trimCode, trimClient);
+        }
         
         if (result) await redisCache.set('route', cacheKey, result, TTL.MEDIUM);
         return applyProductPriceView(result, includeIva);
@@ -2060,7 +2307,7 @@ async function getProductDetailRaw(code, clientCode) {
         }
 
         const raw = baseRows[0];
-        const product = {
+        let product = {
             code: (raw.CODE || '').trim(),
             name: (raw.NAME || '').trim(),
             nameExt: (raw.NAMEEXT || '').trim(),
@@ -2179,6 +2426,8 @@ async function getProductDetailRaw(code, clientCode) {
         if (!foundTariff) {
             logger.warn(`[PEDIDOS] getProductDetail stage=TARIFA_CLIENTE code=${trimCode} tariff=${clientTarifaCode} NOT FOUND, used fallback tariff=1 price=${product.precioTarifaCliente}`);
         }
+
+        product = await applyConfiguredPricingToProduct(product, trimClient);
 
         logger.info(`[PEDIDOS] getProductDetail complete code=${trimCode} time=${Date.now() - t0}ms`);
         return product;
@@ -2958,7 +3207,16 @@ async function createOrder({
                 }
                 throw createIdempotencyConflictError();
             }
-            logger.warn(`[PEDIDOS] Failed to persist dedupe key: ${storeErr.message}`);
+            logger.error(`[PEDIDOS] Failed to persist dedupe key for draft ${pedidoId}, rolling back draft: ${storeErr.message}`);
+            try {
+                await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [pedidoId], false);
+                await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [pedidoId], false);
+                await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+                logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after idempotency store failure`);
+            } catch (rollbackErr) {
+                logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after idempotency store failure: ${rollbackErr.message}`);
+            }
+            throw createIdempotencyUnavailableError();
         }
     } else {
         logger.info(`[PEDIDOS] createOrder stage=idempotency_store lineCount=${lineCount} skipped=1 durationMs=0`);
@@ -4452,8 +4710,8 @@ async function getOrderAlbaran(orderId) {
                COALESCE(C.DIADOCUMENTO, P.DIADOCUMENTO) AS DIADOCUMENTO,
                COALESCE(C.MESDOCUMENTO, P.MESDOCUMENTO) AS MESDOCUMENTO,
                COALESCE(C.ANODOCUMENTO, P.ANODOCUMENTO) AS ANODOCUMENTO,
-               TRIM(COALESCE(C.CODIGOCLIENTE, P.CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE,
-               COALESCE(C.IMPORTEALBARAN, P.IMPORTETOTAL, 0) AS IMPORTEALBARAN,
+               TRIM(COALESCE(C.CODIGOCLIENTEALBARAN, P.CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE,
+               COALESCE(C.IMPORTETOTAL, P.IMPORTETOTAL, 0) AS IMPORTEALBARAN,
                TRIM(COALESCE(C.SITUACIONALBARAN, P.SITUACIONPEDIDO, '')) AS SITUACION,
                TRIM(COALESCE(C.ESTADOENVIO, '')) AS ESTADOENVIO,
                COALESCE(C.NUMEROFACTURA, 0) AS NUMEROFACTURA,
@@ -4485,19 +4743,35 @@ async function getOrderAlbaran(orderId) {
         ]);
         return (rows || [])
             .filter(r => integerValue(r.NUMEROALBARAN) > 0)
-            .map(r => ({
-            numeroAlbaran: r.NUMEROALBARAN,
-            serie: r.SERIEALBARAN,
-            terminal: integerValue(r.TERMINALALBARAN),
-            ejercicio: integerValue(r.EJERCICIOALBARAN),
-            fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
-            situacion: (r.SITUACION || '').trim(),
-            estadoEnvio: (r.ESTADOENVIO || '').trim(),
-            importe: parseFloat(r.IMPORTEALBARAN) || 0,
-            numeroFactura: integerValue(r.NUMEROFACTURA),
-            serieFactura: (r.SERIEFACTURA || '').trim(),
-            ejercicioFactura: integerValue(r.EJERCICIOFACTURA),
-        }));
+            .map(r => {
+                const numeroAlbaran = integerValue(r.NUMEROALBARAN);
+                const serieAlbaran = (r.SERIEALBARAN || '').trim();
+                const terminalAlbaran = integerValue(r.TERMINALALBARAN);
+                const ejercicioAlbaran = integerValue(r.EJERCICIOALBARAN);
+                const numeroFactura = integerValue(r.NUMEROFACTURA);
+                const serieFactura = (r.SERIEFACTURA || '').trim();
+                const ejercicioFactura = integerValue(r.EJERCICIOFACTURA);
+                const hasFactura = numeroFactura > 0 && serieFactura && ejercicioFactura > 0;
+                return {
+                    numeroAlbaran,
+                    serie: serieAlbaran,
+                    terminal: terminalAlbaran,
+                    ejercicio: ejercicioAlbaran,
+                    fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
+                    situacion: (r.SITUACION || '').trim(),
+                    estadoEnvio: (r.ESTADOENVIO || '').trim(),
+                    importe: parseFloat(r.IMPORTEALBARAN) || 0,
+                    numeroFactura,
+                    serieFactura,
+                    ejercicioFactura,
+                    documentType: hasFactura ? 'factura' : 'albaran',
+                    documentLabel: hasFactura ? 'Factura' : 'Albaran',
+                    albaranRef: `${serieAlbaran}-${String(terminalAlbaran).padStart(3, '0')}-${String(numeroAlbaran).padStart(6, '0')}`,
+                    facturaRef: hasFactura ? `${serieFactura}-${String(numeroFactura).padStart(6, '0')}` : '',
+                    albaranPdfAvailable: numeroAlbaran > 0 && serieAlbaran && terminalAlbaran > 0 && ejercicioAlbaran > 0,
+                    facturaPdfAvailable: hasFactura,
+                };
+            });
     } catch (error) {
         logger.warn(`[PEDIDOS] getOrderAlbaran: ${error.message}`);
         return [];
@@ -5164,7 +5438,8 @@ async function getComplementaryProducts(productCodes, clientCode) {
 
     const trimmedCodes = productCodes.map(c => c.trim());
     const placeholders = trimmedCodes.map(() => '?').join(',');
-    const cacheKey = `pedidos:complementary:${productCodes.sort().join(',')}`;
+    const trimClient = clientCode ? truncate(clientCode, 10) : '';
+    const cacheKey = `pedidos:complementary:${trimClient || 'no-client'}:${productCodes.sort().join(',')}`;
 
     const sql = `
         SELECT TRIM(L2.CODIGOARTICULO) AS code,
@@ -5208,15 +5483,26 @@ async function getComplementaryProducts(productCodes, clientCode) {
             (s) => queryWithParams(s, params),
             sql, cacheKey, TTL.MEDIUM
         );
-        return rows.map(r => ({
+        const products = rows.map(r => {
+            const price = parseFloat(r.PRICE) || 0;
+            return {
             code: (r.CODE || '').trim(),
             name: (r.NAME || '').trim(),
             cooccurrences: parseInt(r.COOCCURRENCES) || 0,
-            price: parseFloat(r.PRICE) || 0,
+            price,
+            precioTarifa1: price,
+            precioTarifaCliente: price,
+            precioCliente: 0,
             unitsPerBox: parseFloat(r.UNITSPERBOX) || 1,
             stockEnvases: parseFloat(r.STOCKENVASES) || 0,
             stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
             source: 'complementary',
+            };
+        });
+        const pricedProducts = await applyConfiguredPricingToProducts(products, trimClient);
+        return pricedProducts.map(product => ({
+            ...product,
+            price: product.precioTarifaCliente || product.precioCliente || product.price,
         }));
     } catch (error) {
         logger.error(`[PEDIDOS] getComplementaryProducts error: ${error.message}`);
@@ -6016,6 +6302,9 @@ module.exports = {
     searchProductsWithStock,
     calculateLineImporte,
     assertPrecioWithinClientTariff,
+    applyConfiguredPricingToProducts,
+    applyConfiguredPricingToProduct,
+    effectiveMinPriceFromRow,
     isOrderTransitionAllowed,
     canonicalOrderStatus,
     storedOrderStatus,
@@ -6028,6 +6317,7 @@ module.exports = {
         getNextOrderNumber,
         getClientOrderDefaults,
         getDefaultTruckAssignment,
+        resolvePedidoTerminal,
         exportCommercialOrderToSystem,
         withSystemExportLock,
     },

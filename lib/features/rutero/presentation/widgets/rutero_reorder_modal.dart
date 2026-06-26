@@ -125,7 +125,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         : _orderedClients;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -140,16 +140,16 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppTheme.neonPink)),
+                        strokeWidth: 2, color: AppTheme.accentRose)),
               ),
             )
           else
             TextButton.icon(
               onPressed: _saveOrder,
-              icon: const Icon(Icons.save, color: AppTheme.neonPink),
+              icon: const Icon(Icons.save, color: AppTheme.accentRose),
               label: const Text('Guardar',
                   style: TextStyle(
-                      color: AppTheme.neonPink, fontWeight: FontWeight.bold)),
+                      color: AppTheme.accentRose, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -177,16 +177,18 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente para mover...',
-                hintStyle: TextStyle(color: Colors.grey.shade500),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
+                prefixIcon:
+                    const Icon(Icons.search, color: AppTheme.textTertiary),
                 filled: true,
-                fillColor: AppTheme.surfaceColor,
+                fillColor: AppTheme.raisedSurface,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none),
                 suffixIcon: isSearching
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        icon: const Icon(Icons.clear,
+                            color: AppTheme.textTertiary),
                         onPressed: () => setState(() {
                           _searchController.clear();
                           _searchQuery = '';
@@ -202,12 +204,12 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 16),
+                  Icon(Icons.info_outline, color: AppTheme.info, size: 16),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Limpia la búsqueda para arrastrar y soltar.',
-                      style: TextStyle(color: AppTheme.neonBlue, fontSize: 12),
+                      style: TextStyle(color: AppTheme.info, fontSize: 12),
                     ),
                   ),
                 ],
@@ -249,18 +251,18 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
       key: key,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: CircleAvatar(
-          backgroundColor: AppTheme.neonPink.withValues(alpha: 0.1),
+          backgroundColor: AppTheme.accentRose.withValues(alpha: 0.1),
           child: Text(
             '${index + 1}',
             style: const TextStyle(
-                color: AppTheme.neonPink, fontWeight: FontWeight.bold),
+                color: AppTheme.accentRose, fontWeight: FontWeight.bold),
           ),
         ),
         title: Text(
@@ -272,22 +274,22 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         ),
         subtitle: Text(
           (client['code'] as String?) ?? '',
-          style: TextStyle(color: Colors.grey.shade400),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         trailing: isReorderable
-            ? const Icon(Icons.drag_handle, color: Colors.grey)
+            ? const Icon(Icons.drag_handle, color: AppTheme.textTertiary)
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.vertical_align_top),
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     tooltip: 'Mover al inicio',
                     onPressed: () => _moveToTop(index),
                   ),
                   IconButton(
                     icon: const Icon(Icons.vertical_align_bottom),
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     tooltip: 'Mover al final',
                     onPressed: () => _moveToBottom(index),
                   ),

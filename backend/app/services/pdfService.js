@@ -606,11 +606,11 @@ async function generateInvoicePDF(facturaData) {
             // TABLA DE TOTALES POR TIPO DE IVA
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            // Build IVA groups from CPC header-level data (LAC has no IVA columns)
+            // Build IVA groups from header-level data. CAC/CFC are the source of
+            // truth for rounded tax totals; line recomputation can drift by 0.01.
             const grupos = [];
             if (ivaBreakdown) {
-                // CPC stores up to 3 IVA tiers
-                for (let i = 1; i <= 3; i++) {
+                for (let i = 1; i <= 5; i++) {
                     const bi = parseFloat(ivaBreakdown[`BI${i}`]) || 0;
                     const pct = parseFloat(ivaBreakdown[`IVA${i}_PCT`]) || 0;
                     const imp = parseFloat(ivaBreakdown[`IVA${i}_IMP`]) || 0;

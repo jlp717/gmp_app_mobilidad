@@ -90,7 +90,7 @@ class _RepartidorComisionesFinanzasPageState
   Widget build(BuildContext context) {
     if (widget.repartidorId.isEmpty) {
       return const Scaffold(
-        backgroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.inkSurface,
         body: Center(
           child: Text(
             'Selecciona un repartidor para consultar comisiones',
@@ -114,7 +114,7 @@ class _RepartidorComisionesFinanzasPageState
     final tiersAsync = ref.watch(repartidorCommissionTiersProvider);
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
           SmartSyncHeader(
@@ -202,10 +202,15 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: AppTheme.surfaceColor,
+      decoration: const BoxDecoration(
+        color: AppTheme.raisedSurface,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.borderColor, width: 0.5),
+        ),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.euro, color: AppTheme.neonGreen, size: 24),
+          const Icon(Icons.euro, color: AppTheme.success, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -216,7 +221,7 @@ class _Header extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const Text(
@@ -312,18 +317,18 @@ class _Content extends StatelessWidget {
 
     rows.add(
       DataRow(
-        color: WidgetStateProperty.all(Colors.transparent),
+        color: WidgetStateProperty.all(AppTheme.raisedSurface),
         cells: [
           DataCell(
             Text(
               DateFormat('MMMM').format(now),
-              style: const TextStyle(color: Colors.white, fontSize: 11),
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
             ),
           ),
           DataCell(
             Text(
               CurrencyFormatter.format(summary.deliveredAmount),
-              style: const TextStyle(color: Colors.white, fontSize: 10),
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10),
             ),
           ),
           DataCell(
@@ -351,7 +356,7 @@ class _Content extends StatelessWidget {
                     tierText,
                     style: const TextStyle(
                       fontSize: 8,
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                     ),
                   ),
                 ],
@@ -368,7 +373,7 @@ class _Content extends StatelessWidget {
             Text(
               CurrencyFormatter.format(summary.commission),
               style: const TextStyle(
-                color: AppTheme.neonGreen,
+                color: AppTheme.success,
                 fontWeight: FontWeight.bold,
                 fontSize: 10,
               ),
@@ -378,7 +383,7 @@ class _Content extends StatelessWidget {
             Text(
               tierText,
               style: const TextStyle(
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 fontSize: 9,
               ),
             ),
@@ -386,7 +391,10 @@ class _Content extends StatelessWidget {
           DataCell(
             Text(
               CurrencyFormatter.format(thresholdAmount),
-              style: const TextStyle(color: Colors.white70, fontSize: 9),
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 9,
+              ),
             ),
           ),
           DataCell(
@@ -421,7 +429,7 @@ class _Content extends StatelessWidget {
           dataRowMaxHeight: 44,
           headingRowHeight: 36,
           headingRowColor: WidgetStateProperty.all(
-            AppTheme.darkBase,
+            AppTheme.softPanel,
           ),
           columns: const [
             DataColumn(
@@ -479,7 +487,7 @@ class _Content extends StatelessWidget {
                 'COMISIÓN',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   fontSize: 10,
                 ),
               ),
@@ -489,7 +497,7 @@ class _Content extends StatelessWidget {
                 'TRAMO',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 10,
                 ),
               ),
@@ -499,7 +507,7 @@ class _Content extends StatelessWidget {
                 'UMBRAL',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 10,
                 ),
               ),
@@ -509,7 +517,7 @@ class _Content extends StatelessWidget {
                 'EXCESO',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 10,
                 ),
               ),
@@ -519,7 +527,7 @@ class _Content extends StatelessWidget {
                 'TIPO',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 10,
                 ),
               ),
@@ -554,6 +562,7 @@ class _SummaryCards extends StatelessWidget {
     final rhythmStatus = overallCompliance >= 105
         ? 'Adelantado'
         : (overallCompliance >= 95 ? 'En ritmo' : 'Rezagado');
+    final rhythmColor = isOnRhythm ? AppTheme.success : AppTheme.warning;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -561,34 +570,25 @@ class _SummaryCards extends StatelessWidget {
         children: [
           Expanded(
             child: _Card(
-              gradient: [
-                AppTheme.neonBlue.withValues(alpha: 0.2),
-                AppTheme.neonPurple.withValues(alpha: 0.1),
-              ],
-              borderColor: AppTheme.neonBlue.withValues(alpha: 0.3),
+              accentColor: AppTheme.info,
               icon: Icons.calendar_today,
-              iconColor: AppTheme.neonBlue,
+              iconColor: AppTheme.info,
               title: DateFormat('MMMM').format(DateTime.now()).toUpperCase(),
               value: CurrencyFormatter.format(totalActual),
               subtitle: 'de ${CurrencyFormatter.format(totalTarget)}',
               progressValue: totalTarget > 0
                   ? (totalActual / totalTarget).clamp(0.01, double.infinity)
                   : 0.01,
-              progressColor: totalActual >= totalTarget
-                  ? AppTheme.success
-                  : AppTheme.neonBlue,
+              progressColor:
+                  totalActual >= totalTarget ? AppTheme.success : AppTheme.info,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: _Card(
-              gradient: [
-                AppTheme.neonGreen.withValues(alpha: 0.2),
-                AppTheme.success.withValues(alpha: 0.1),
-              ],
-              borderColor: AppTheme.neonGreen.withValues(alpha: 0.3),
+              accentColor: AppTheme.success,
               icon: Icons.trending_up,
-              iconColor: AppTheme.neonGreen,
+              iconColor: AppTheme.success,
               title: 'COMISIÓN',
               value: CurrencyFormatter.format(commission),
               subtitle: '${collectedPct.toStringAsFixed(1)}% cobro',
@@ -599,14 +599,10 @@ class _SummaryCards extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isOnRhythm
-                    ? AppTheme.success.withValues(alpha: 0.15)
-                    : Colors.orange.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.raisedSurface,
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isOnRhythm
-                      ? AppTheme.success.withValues(alpha: 0.3)
-                      : Colors.orange.withValues(alpha: 0.3),
+                  color: rhythmColor.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
@@ -616,7 +612,7 @@ class _SummaryCards extends StatelessWidget {
                     children: [
                       Icon(
                         isOnRhythm ? Icons.trending_up : Icons.speed,
-                        color: isOnRhythm ? AppTheme.success : Colors.orange,
+                        color: rhythmColor,
                         size: 14,
                       ),
                       const SizedBox(width: 6),
@@ -625,7 +621,7 @@ class _SummaryCards extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: isOnRhythm ? AppTheme.success : Colors.orange,
+                          color: rhythmColor,
                         ),
                       ),
                     ],
@@ -636,7 +632,7 @@ class _SummaryCards extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: isOnRhythm ? AppTheme.success : Colors.orange,
+                      color: rhythmColor,
                     ),
                   ),
                   Text(
@@ -644,7 +640,7 @@ class _SummaryCards extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
-                      color: isOnRhythm ? AppTheme.success : Colors.orange,
+                      color: rhythmColor,
                     ),
                   ),
                 ],
@@ -659,8 +655,7 @@ class _SummaryCards extends StatelessWidget {
 
 class _Card extends StatelessWidget {
   const _Card({
-    required this.gradient,
-    required this.borderColor,
+    required this.accentColor,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -670,8 +665,7 @@ class _Card extends StatelessWidget {
     this.progressColor,
   });
 
-  final List<Color> gradient;
-  final Color borderColor;
+  final Color accentColor;
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -685,9 +679,9 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: gradient),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -712,15 +706,15 @@ class _Card extends StatelessWidget {
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppTheme.textPrimary,
             ),
           ),
           if (subtitle != null)
             Text(
               subtitle!,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 9,
-                color: Colors.white.withValues(alpha: 0.6),
+                color: AppTheme.textSecondary,
               ),
             ),
           if (progressValue != null) ...[
@@ -729,7 +723,7 @@ class _Card extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: progressValue,
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                backgroundColor: AppTheme.mutedPanel,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   progressColor ?? AppTheme.success,
                 ),

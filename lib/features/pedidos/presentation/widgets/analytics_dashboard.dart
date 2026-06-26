@@ -22,8 +22,7 @@ class AnalyticsDashboard extends StatelessWidget {
     if (isLoading) {
       return const Padding(
         padding: EdgeInsets.all(32),
-        child:
-            Center(child: CircularProgressIndicator(color: AppTheme.neonBlue)),
+        child: Center(child: CircularProgressIndicator(color: AppTheme.info)),
       );
     }
 
@@ -136,7 +135,7 @@ class AnalyticsDashboard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor, width: 0.5),
       ),
@@ -145,7 +144,7 @@ class AnalyticsDashboard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppTheme.neonBlue, size: 14),
+              Icon(icon, color: AppTheme.info, size: 14),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
@@ -175,14 +174,14 @@ class AnalyticsDashboard extends StatelessWidget {
               children: [
                 Icon(
                   trend >= 0 ? Icons.trending_up : Icons.trending_down,
-                  color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                  color: trend >= 0 ? AppTheme.success : AppTheme.error,
                   size: 12,
                 ),
                 const SizedBox(width: 2),
                 Text(
                   '${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(0)}%',
                   style: TextStyle(
-                    color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                    color: trend >= 0 ? AppTheme.success : AppTheme.error,
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                   ),
@@ -206,7 +205,7 @@ class AnalyticsDashboard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor, width: 0.5),
       ),
@@ -261,7 +260,7 @@ class AnalyticsDashboard extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: val,
-                        color: AppTheme.neonBlue.withValues(alpha: 0.8),
+                        color: AppTheme.info.withValues(alpha: 0.8),
                         width: 16,
                         borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(4)),
@@ -280,8 +279,8 @@ class AnalyticsDashboard extends StatelessWidget {
   Widget _buildStatusCards(
       BuildContext context, Map<String, dynamic> statusDist) {
     final statuses = {
-      'BORRADOR': (AppTheme.neonBlue, Icons.edit_note),
-      'CONFIRMADO': (AppTheme.neonGreen, Icons.check_circle),
+      'BORRADOR': (AppTheme.info, Icons.edit_note),
+      'CONFIRMADO': (AppTheme.success, Icons.check_circle),
     };
 
     return Row(
@@ -332,7 +331,7 @@ class AnalyticsDashboard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor, width: 0.5),
       ),
@@ -375,7 +374,7 @@ class AnalyticsDashboard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: maxSales > 0 ? sales / maxSales : 0,
                         backgroundColor: AppTheme.borderColor,
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         minHeight: 6,
                       ),
                     ),
@@ -384,7 +383,7 @@ class AnalyticsDashboard extends StatelessWidget {
                   Text(
                     '\u20AC${sales.toStringAsFixed(0)}',
                     style: TextStyle(
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                       fontSize:
                           Responsive.fontSize(context, small: 11, large: 12),
                       fontWeight: FontWeight.w600,

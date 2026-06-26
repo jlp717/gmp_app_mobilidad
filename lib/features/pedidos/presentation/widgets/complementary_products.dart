@@ -29,12 +29,12 @@ class ComplementaryProducts extends StatelessWidget {
           child: Row(
             children: [
               const Icon(Icons.auto_awesome,
-                  color: AppTheme.neonPurple, size: 16),
+                  color: AppTheme.accentIndigo, size: 16),
               const SizedBox(width: 6),
               Text(
                 'Productos complementarios',
                 style: TextStyle(
-                  color: AppTheme.neonPurple,
+                  color: AppTheme.accentIndigo,
                   fontWeight: FontWeight.w600,
                   fontSize: Responsive.fontSize(context, small: 13, large: 14),
                 ),
@@ -65,10 +65,10 @@ class ComplementaryProducts extends StatelessWidget {
                     width: 160,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppTheme.darkCard,
+                      color: AppTheme.raisedSurface,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: AppTheme.neonPurple.withValues(alpha: 0.3),
+                          color: AppTheme.accentIndigo.withValues(alpha: 0.3),
                           width: 0.5),
                     ),
                     child: Column(
@@ -87,8 +87,8 @@ class ComplementaryProducts extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(code,
                             style: TextStyle(
-                                color:
-                                    AppTheme.neonPurple.withValues(alpha: 0.7),
+                                color: AppTheme.accentIndigo
+                                    .withValues(alpha: 0.7),
                                 fontSize: 9)),
                         const SizedBox(height: 4),
                         Row(
@@ -101,7 +101,7 @@ class ComplementaryProducts extends StatelessWidget {
                                     color: Colors.white38, fontSize: 9)),
                             const Spacer(),
                             const Icon(Icons.add_circle,
-                                color: AppTheme.neonPurple, size: 16),
+                                color: AppTheme.accentIndigo, size: 16),
                           ],
                         ),
                       ],

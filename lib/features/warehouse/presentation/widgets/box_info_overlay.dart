@@ -69,22 +69,10 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                 width: 240,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard.withValues(alpha: 0.6),
+                  color: AppTheme.raisedSurface.withValues(alpha: 0.94),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.25),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
-                      blurRadius: 20,
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  border: Border.all(color: AppTheme.borderColor),
+                  boxShadow: AppTheme.elevation2,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,13 +84,13 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                         Container(
                           padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                            color: AppTheme.info.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(7),
                           ),
                           child: const Icon(
                             Icons.inventory_2_rounded,
                             size: 14,
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -113,7 +101,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                               color: AppTheme.textPrimary,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: -0.2,
+                              letterSpacing: 0,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -126,7 +114,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: AppTheme.darkCard.withValues(alpha: 0.5),
+                              color: AppTheme.softPanel,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Icon(
@@ -140,19 +128,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                     ),
                     const SizedBox(height: 10),
 
-                    // Subtle divider
-                    Container(
-                      height: 1,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.transparent,
-                            AppTheme.neonBlue.withValues(alpha: 0.2),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
+                    const Divider(height: 1, color: AppTheme.borderColor),
                     const SizedBox(height: 10),
 
                     // Details
@@ -178,7 +154,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                       icon: Icons.fitness_center_rounded,
                       label: 'Peso',
                       value: '${widget.box.weight.toStringAsFixed(1)} kg',
-                      valueColor: AppTheme.neonGreen,
+                      valueColor: AppTheme.success,
                     ),
 
                     // Dimensions with mini visualization
@@ -195,7 +171,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                       label: 'Posición',
                       value:
                           'X:${widget.box.x.toStringAsFixed(0)} Y:${widget.box.y.toStringAsFixed(0)} Z:${widget.box.z.toStringAsFixed(0)}',
-                      valueColor: AppTheme.neonBlue,
+                      valueColor: AppTheme.info,
                     ),
 
                     const SizedBox(height: 8),
@@ -256,7 +232,7 @@ class _InfoRow extends StatelessWidget {
               color: valueColor ?? AppTheme.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              letterSpacing: -0.1,
+              letterSpacing: 0,
             ),
           ),
         ],
@@ -286,13 +262,12 @@ class _DimensionBars extends StatelessWidget {
 
     return Row(
       children: [
-        _DimBar(label: 'L', value: w, maxDim: maxDim, color: AppTheme.neonBlue),
+        _DimBar(label: 'L', value: w, maxDim: maxDim, color: AppTheme.info),
+        const SizedBox(width: 6),
+        _DimBar(label: 'A', value: d, maxDim: maxDim, color: AppTheme.success),
         const SizedBox(width: 6),
         _DimBar(
-            label: 'A', value: d, maxDim: maxDim, color: AppTheme.neonGreen),
-        const SizedBox(width: 6),
-        _DimBar(
-            label: 'H', value: h, maxDim: maxDim, color: AppTheme.neonPurple),
+            label: 'H', value: h, maxDim: maxDim, color: AppTheme.accentIndigo),
       ],
     );
   }
@@ -322,7 +297,7 @@ class _DimBar extends StatelessWidget {
               color: color.withValues(alpha: 0.6),
               fontSize: 8,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
+              letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 2),
@@ -335,7 +310,7 @@ class _DimBar extends StatelessWidget {
               builder: (_, v, __) => LinearProgressIndicator(
                 value: v,
                 minHeight: 3,
-                backgroundColor: AppTheme.darkCard.withValues(alpha: 0.4),
+                backgroundColor: AppTheme.borderColor.withValues(alpha: 0.35),
                 valueColor:
                     AlwaysStoppedAnimation(color.withValues(alpha: 0.6)),
               ),

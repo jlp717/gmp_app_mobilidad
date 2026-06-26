@@ -99,7 +99,7 @@ class RuteroDetailProducts extends StatelessWidget {
             width: 60,
             height: 60,
             child: CircularProgressIndicator(
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               strokeWidth: 3,
             ),
           ),
@@ -184,15 +184,15 @@ class RuteroDetailProducts extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: AppTheme.holoGradient,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.borderColor),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
+              const Icon(Icons.checklist, color: AppTheme.info, size: 20),
               const SizedBox(width: 12),
               Text(
                 '$checked de $total productos verificados',
@@ -228,12 +228,12 @@ class RuteroDetailProducts extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.assignment,
-                    color: AppTheme.neonCyan, size: 18),
+                    color: AppTheme.accentIndigo, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Orden de Preparación: $ordenPreparacion',
                   style: const TextStyle(
-                    color: AppTheme.neonCyan,
+                    color: AppTheme.accentIndigo,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -252,7 +252,7 @@ class RuteroDetailProducts extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: Border(top: BorderSide(color: AppTheme.borderColor)),
       ),
       child: Row(
@@ -265,9 +265,8 @@ class RuteroDetailProducts extends StatelessWidget {
               ),
               label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.neonBlue,
-                side:
-                    BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5)),
+                foregroundColor: AppTheme.info,
+                side: BorderSide(color: AppTheme.info.withValues(alpha: 0.5)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -279,8 +278,8 @@ class RuteroDetailProducts extends StatelessWidget {
               icon: const Icon(Icons.arrow_forward),
               label: const Text('CONTINUAR'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonBlue,
-                foregroundColor: AppTheme.darkBase,
+                backgroundColor: AppTheme.info,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -319,8 +318,8 @@ class _ProductCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        gradient: AppTheme.cardGradient,
-        borderRadius: BorderRadius.circular(14),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
           color: isChecked
               ? AppTheme.success.withValues(alpha: 0.3)
@@ -363,7 +362,7 @@ class _ProductCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isChecked
             ? AppTheme.success.withValues(alpha: 0.2)
-            : AppTheme.darkBase,
+            : AppTheme.softPanel,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isChecked ? AppTheme.success : AppTheme.borderColor,
@@ -386,7 +385,7 @@ class _ProductCard extends StatelessWidget {
         child: Container(
           width: 48,
           height: 48,
-          color: AppTheme.darkBase,
+          color: AppTheme.softPanel,
           child: SmartProductImage(
             imageUrl: url,
             productCode: linea.codigoArticulo,
@@ -473,7 +472,7 @@ class _ProductCard extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             border: Border.all(
-              color: AppTheme.neonBlue.withValues(alpha: 0.5),
+              color: AppTheme.info.withValues(alpha: 0.5),
             ),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -482,14 +481,14 @@ class _ProductCard extends StatelessWidget {
             children: [
               Icon(
                 Icons.description_outlined,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 14,
               ),
               SizedBox(width: 3),
               Text(
                 'Ficha',
                 style: TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 10,
                 ),
               ),
@@ -503,7 +502,7 @@ class _ProductCard extends StatelessWidget {
   Widget _buildQuantityControls(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkBase,
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.borderColor),
       ),
@@ -580,7 +579,7 @@ class _QuantityButton extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           child: Icon(
             icon,
-            color: onTap != null ? AppTheme.neonBlue : AppTheme.textTertiary,
+            color: onTap != null ? AppTheme.info : AppTheme.textTertiary,
             size: 18,
           ),
         ),

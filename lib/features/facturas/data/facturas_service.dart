@@ -13,10 +13,37 @@ import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 
+enum FacturaDocumentType {
+  factura,
+  albaran,
+}
+
+FacturaDocumentType _parseFacturaDocumentType(dynamic value) {
+  final normalized = value
+          ?.toString()
+          .trim()
+          .toLowerCase()
+          .replaceAll('á', 'a')
+          .replaceAll('à', 'a') ??
+      '';
+  return normalized == 'albaran'
+      ? FacturaDocumentType.albaran
+      : FacturaDocumentType.factura;
+}
+
+extension FacturaDocumentTypeX on FacturaDocumentType {
+  String get apiValue =>
+      this == FacturaDocumentType.albaran ? 'albaran' : 'factura';
+
+  String get label =>
+      this == FacturaDocumentType.albaran ? 'Albaran' : 'Factura';
+}
+
 /// Model for invoice list item
 class Factura {
   Factura({
     required this.id,
+    required this.documentType,
     required this.serie,
     required this.numero,
     required this.ejercicio,
@@ -26,6 +53,7 @@ class Factura {
     required this.total,
     required this.base,
     required this.iva,
+    this.terminal,
     this.nombreComercial,
     this.nombreFiscal,
   });
@@ -49,6 +77,9 @@ class Factura {
 
     return Factura(
       id: json['id']?.toString() ?? '',
+      documentType: _parseFacturaDocumentType(
+        json['documentType'] ?? json['tipoDocumento'] ?? json['tipo_documento'],
+      ),
       serie: json['serie']?.toString() ?? '',
       numero: json['numero'] is int
           ? (json['numero'] as int)
@@ -64,12 +95,17 @@ class Factura {
       total: finalTotal,
       base: base,
       iva: iva,
+      terminal: json['terminal'] is int
+          ? json['terminal'] as int
+          : int.tryParse(json['terminal']?.toString() ?? ''),
     );
   }
   final String id;
+  final FacturaDocumentType documentType;
   final String serie;
   final int numero;
   final int ejercicio;
+  final int? terminal;
   final String fecha;
   final String clienteId;
   final String clienteNombre;
@@ -79,7 +115,20 @@ class Factura {
   final double base;
   final double iva;
 
-  String get numeroFormateado => '$serie-${numero.toString().padLeft(5, '0')}';
+  bool get isAlbaran => documentType == FacturaDocumentType.albaran;
+  bool get isFactura => documentType == FacturaDocumentType.factura;
+  String get tipoLabel => documentType.label;
+
+  String get numeroFormateado {
+    if (isAlbaran) {
+      final term =
+          terminal == null ? '' : '-${terminal.toString().padLeft(3, '0')}';
+      return '$serie$term-${numero.toString().padLeft(5, '0')}';
+    }
+    return '$serie-${numero.toString().padLeft(5, '0')}';
+  }
+
+  String get pdfFilePrefix => isAlbaran ? 'Albaran' : 'Factura';
 }
 
 /// Model for invoice detail
@@ -226,6 +275,9 @@ class FacturaLine {
 class FacturaSummary {
   FacturaSummary({
     required this.totalFacturas,
+    required this.totalDocumentos,
+    required this.totalFacturasEmitidas,
+    required this.totalAlbaranes,
     required this.totalImporte,
     required this.totalBase,
     required this.totalIva,
@@ -236,6 +288,16 @@ class FacturaSummary {
       totalFacturas: json['totalFacturas'] is int
           ? (json['totalFacturas'] as int)
           : int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0,
+      totalDocumentos: json['totalDocumentos'] is int
+          ? (json['totalDocumentos'] as int)
+          : int.tryParse(json['totalDocumentos']?.toString() ?? '0') ??
+              (int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0),
+      totalFacturasEmitidas: json['totalFacturasEmitidas'] is int
+          ? (json['totalFacturasEmitidas'] as int)
+          : int.tryParse(json['totalFacturasEmitidas']?.toString() ?? '0') ?? 0,
+      totalAlbaranes: json['totalAlbaranes'] is int
+          ? (json['totalAlbaranes'] as int)
+          : int.tryParse(json['totalAlbaranes']?.toString() ?? '0') ?? 0,
       totalImporte: (json['totalImporte'] is num
           ? (json['totalImporte'] as num).toDouble()
           : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0),
@@ -248,6 +310,9 @@ class FacturaSummary {
     );
   }
   final int totalFacturas;
+  final int totalDocumentos;
+  final int totalFacturasEmitidas;
+  final int totalAlbaranes;
   final double totalImporte;
   final double totalBase;
   final double totalIva;
@@ -289,10 +354,12 @@ class FacturasService {
     String? clientId,
     String? clientSearch,
     String? docSearch,
+    FacturaDocumentType? documentType,
     String? dateFrom,
     String? dateTo,
     int limit = 250,
     int offset = 0,
+    bool forceRefresh = false,
   }) async {
     try {
       var url = '/facturas?vendedorCodes=$vendedorCodes';
@@ -313,6 +380,9 @@ class FacturasService {
       if (docSearch != null && docSearch.isNotEmpty) {
         url += '&docSearch=${Uri.encodeComponent(docSearch)}';
       }
+      if (documentType != null) {
+        url += '&tipoDocumento=${documentType.apiValue}';
+      }
       url += '&limit=$limit&offset=$offset';
 
       final cacheKey = [
@@ -325,6 +395,7 @@ class FacturasService {
         search ?? '',
         clientSearch ?? '',
         docSearch ?? '',
+        documentType?.apiValue ?? 'all',
         limit,
         offset,
       ].join('_');
@@ -333,6 +404,7 @@ class FacturasService {
         url,
         cacheKey: cacheKey,
         cacheTTL: CacheService.shortTTL,
+        forceRefresh: forceRefresh,
       );
 
       if (response['success'] == true && response['facturas'] != null) {
@@ -393,7 +465,10 @@ class FacturasService {
   }
 
   /// Get available years
-  static Future<List<int>> getAvailableYears(String vendedorCodes) async {
+  static Future<List<int>> getAvailableYears(
+    String vendedorCodes, {
+    bool forceRefresh = false,
+  }) async {
     try {
       // Years rarely change - cache for 1 hour
       final cacheKey = 'facturas_years_$vendedorCodes';
@@ -402,6 +477,7 @@ class FacturasService {
         '/facturas/years?vendedorCodes=$vendedorCodes',
         cacheKey: cacheKey,
         cacheTTL: CacheService.longTTL, // 24 hours - years don't change often
+        forceRefresh: forceRefresh,
       );
 
       if (response['success'] == true && response['years'] != null) {
@@ -426,8 +502,10 @@ class FacturasService {
     String? clientId,
     String? clientSearch,
     String? docSearch,
+    FacturaDocumentType? documentType,
     String? dateFrom,
     String? dateTo,
+    bool forceRefresh = false,
   }) async {
     try {
       var url = '/facturas/summary?vendedorCodes=$vendedorCodes';
@@ -445,6 +523,9 @@ class FacturasService {
         url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
       if (docSearch != null && docSearch.isNotEmpty)
         url += '&docSearch=${Uri.encodeComponent(docSearch)}';
+      if (documentType != null) {
+        url += '&tipoDocumento=${documentType.apiValue}';
+      }
 
       // Cache summary with same key pattern as list
       final cacheKey = [
@@ -457,12 +538,14 @@ class FacturasService {
         search ?? '',
         clientSearch ?? '',
         docSearch ?? '',
+        documentType?.apiValue ?? 'all',
       ].join('_');
 
       final response = await ApiClient.get(
         url,
         cacheKey: cacheKey,
         cacheTTL: CacheService.shortTTL, // 5 minutes
+        forceRefresh: forceRefresh,
       );
 
       if (response['success'] == true && response['summary'] != null) {
@@ -567,6 +650,47 @@ class FacturasService {
     } catch (e) {
       debugPrint('Error in shareEmail: $e');
       return null;
+    }
+  }
+
+  /// Download PDF
+  static String _documentPdfEndpoint(Factura factura, {bool preview = false}) {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    if (factura.isAlbaran) {
+      final serie = Uri.encodeComponent(factura.serie);
+      final terminal = factura.terminal ?? 0;
+      return '/repartidor/document/albaran/${factura.ejercicio}/$serie/'
+          '$terminal/${factura.numero}/pdf?_t=$ts';
+    }
+
+    final query = preview ? 'preview=true&_t=$ts' : '_t=$ts';
+    return '/facturas/${factura.serie}/${factura.numero}/'
+        '${factura.ejercicio}/pdf?$query';
+  }
+
+  static Future<File> downloadDocumentoPdf(Factura factura) async {
+    try {
+      final bytes = await ApiClient.getBytes(_documentPdfEndpoint(factura));
+      final dir = await getTemporaryDirectory();
+      final safeSerie =
+          factura.serie.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+      final file = File(
+        '${dir.path}/${factura.pdfFilePrefix}_${safeSerie}_${factura.numero}_${factura.ejercicio}.pdf',
+      );
+      await file.writeAsBytes(bytes);
+      return file;
+    } catch (e) {
+      debugPrint('Error downloading document PDF: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<int>> downloadDocumentoPdfBytes(Factura factura) async {
+    try {
+      return ApiClient.getBytes(_documentPdfEndpoint(factura, preview: true));
+    } catch (e) {
+      debugPrint('Error downloading document PDF bytes: $e');
+      rethrow;
     }
   }
 

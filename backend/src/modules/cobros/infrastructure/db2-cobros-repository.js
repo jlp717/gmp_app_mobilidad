@@ -236,22 +236,150 @@ function formatRepartidorDocKey(serie, numero) {
   return `${trim(serie)}-${trim(numero)}`;
 }
 
+function cvcPart(value) {
+  return trim(value).replace(/:/g, '_');
+}
+
+function cvcLegacyDocKey(row) {
+  return formatRepartidorDocKey(row.SERIE_DOCUMENTO || row.SERIEPEDIDO || row.SERIE, row.NUMERO_DOCUMENTO || row.NUMEROPEDIDO || row.NUMERO);
+}
+
+function cvcPartsFromRow(row = {}) {
+  return {
+    tipoDocumento: cvcPart(row.TIPO_DOCUMENTO || row.TIPODOCUMENTO),
+    origenDocumento: cvcPart(row.ORIGEN_DOCUMENTO || row.ORIGENDOCUMENTO),
+    subempresa: cvcPart(row.SUBEMPRESA || row.SUBEMPRESADOCUMENTO),
+    ejercicioDocumento: cvcPart(row.EJERCICIO_DOCUMENTO || row.EJERCICIODOCUMENTO),
+    serie: cvcPart(row.SERIE_DOCUMENTO || row.SERIEPEDIDO || row.SERIE || row.SERIEDOCUMENTO),
+    terminalDocumento: cvcPart(row.TERMINAL_DOCUMENTO || row.TERMINALDOCUMENTO),
+    numero: cvcPart(row.NUMERO_DOCUMENTO || row.NUMEROPEDIDO || row.NUMERO || row.NUMERODOCUMENTO),
+    xde: cvcPart(row.XDE || row.XDE_DOCUMENTO || row.XDEDOCUMENTO),
+    dex: cvcPart(row.DEX || row.DEX_DOCUMENTO || row.DEXDOCUMENTO),
+  };
+}
+
+function hasFullCvcParts(parts) {
+  return Boolean(
+    parts.tipoDocumento &&
+    parts.subempresa &&
+    parts.ejercicioDocumento &&
+    parts.serie &&
+    parts.terminalDocumento &&
+    parts.numero,
+  );
+}
+
+function cvcFullDocKey(row) {
+  const parts = cvcPartsFromRow(row);
+  if (!hasFullCvcParts(parts)) return '';
+  return [
+    'CVC',
+    parts.tipoDocumento,
+    parts.origenDocumento,
+    parts.subempresa,
+    parts.ejercicioDocumento,
+    parts.serie,
+    parts.terminalDocumento,
+    parts.numero,
+    parts.xde || '0',
+    parts.dex || '0',
+  ].join(':');
+}
+
+function cvcPrimaryDocKey(row) {
+  return cvcFullDocKey(row) || cvcLegacyDocKey(row);
+}
+
+function cvcReferenceSql(alias) {
+  return [
+    "'CVC:'",
+    `COALESCE(TRIM(${alias}.TIPODOCUMENTO), '')`,
+    "':'",
+    `COALESCE(TRIM(${alias}.ORIGENDOCUMENTO), '')`,
+    "':'",
+    `COALESCE(TRIM(${alias}.SUBEMPRESADOCUMENTO), '')`,
+    "':'",
+    `COALESCE(TRIM(CAST(${alias}.EJERCICIODOCUMENTO AS VARCHAR(20))), '')`,
+    "':'",
+    `COALESCE(TRIM(${alias}.SERIEDOCUMENTO), '')`,
+    "':'",
+    `COALESCE(TRIM(CAST(${alias}.TERMINALDOCUMENTO AS VARCHAR(20))), '')`,
+    "':'",
+    `COALESCE(TRIM(CAST(${alias}.NUMERODOCUMENTO AS VARCHAR(20))), '')`,
+    "':'",
+    `COALESCE(TRIM(CAST(${alias}.XDEDOCUMENTO AS VARCHAR(20))), '0')`,
+    "':'",
+    `COALESCE(TRIM(CAST(${alias}.DEXDOCUMENTO AS VARCHAR(20))), '0')`,
+  ].join(' || ');
+}
+
+function cvcLegacyReferenceSql(alias) {
+  return `TRIM(${alias}.SERIEDOCUMENTO) || '-' || TRIM(CAST(${alias}.NUMERODOCUMENTO AS VARCHAR(20)))`;
+}
+
+function parseCvcStableReference(reference) {
+  const value = trim(reference);
+  if (!value.toUpperCase().startsWith('CVC:')) return null;
+  const parts = value.slice(4).split(':');
+  if (parts.length < 9) return null;
+  return {
+    fullReference: value,
+    tipoDocumento: parts[0],
+    origenDocumento: parts[1],
+    subempresa: parts[2],
+    ejercicioDocumento: parts[3],
+    serie: parts[4],
+    terminalDocumento: parts[5],
+    numero: parts[6],
+    xde: parts[7],
+    dex: parts[8],
+    legacyReference: `${parts[4]}-${parts[6]}`,
+  };
+}
+
+function normalizeCobrosDocReference(reference) {
+  const value = trim(reference);
+  if (!value) return '';
+  if (parseCvcStableReference(value)) return value;
+  const stableMatch = value.match(/^CVC:([^:]+-\d+)$/);
+  if (stableMatch) return stableMatch[1];
+  const pedidoMatch = value.match(/^PEDIDO:[^:]+:(.+)$/);
+  if (pedidoMatch) return pedidoMatch[1];
+  return value;
+}
+
+function cvcDocKeySet(row, allowLegacy = true) {
+  const keys = [];
+  const full = cvcFullDocKey(row);
+  const legacy = cvcLegacyDocKey(row);
+  if (full) keys.push(full);
+  if (allowLegacy && legacy && legacy !== '-') keys.push(legacy);
+  return [...new Set(keys.filter(Boolean))];
+}
+
 function db2StringLiteral(value) {
   const escaped = trim(value).split('\'').join('\'\'');
   return '\'' + escaped + '\'';
 }
 
-function resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
-  const scopedKey = trim(clientCode) + '|' + docKey;
-  const portfolioPaid = portfolioAdjustments?.get(scopedKey) || 0;
-  const localPaid = (appCobrosByDoc?.get(docKey) || 0) + (repartidorByDoc?.get(docKey) || 0);
+function resolveDocAppPaid(clientCode, rowOrKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
+  const row = typeof rowOrKey === 'object' && rowOrKey !== null ? rowOrKey : null;
+  const allowLegacy = row ? (parseInt(row.LEGACY_COLLISION_COUNT, 10) || 1) <= 1 : true;
+  const keys = row ? cvcDocKeySet(row, allowLegacy) : [trim(rowOrKey)];
+  let portfolioPaid = 0;
+  let localPaid = 0;
+  for (const docKey of keys) {
+    const scopedKey = trim(clientCode) + '|' + docKey;
+    portfolioPaid += portfolioAdjustments?.get(scopedKey) || 0;
+    localPaid += (appCobrosByDoc?.get(docKey) || 0) + (repartidorByDoc?.get(docKey) || 0);
+  }
   return Math.max(portfolioPaid, localPaid);
 }
 
 function groupCvcRowsByDocument(rows) {
   const grouped = new Map();
   for (const row of rows || []) {
-    const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+    const docKey = cvcPrimaryDocKey(row);
     if (!docKey || docKey === '-') continue;
     let current = grouped.get(docKey);
     if (!current) {
@@ -265,6 +393,9 @@ function groupCvcRowsByDocument(rows) {
       };
       grouped.set(docKey, current);
     }
+    const legacySet = current._legacyKeys || new Set();
+    legacySet.add(cvcLegacyDocKey(row));
+    current._legacyKeys = legacySet;
 
     current.IMPORTE_TOTAL = fromCents(toCents(current.IMPORTE_TOTAL) + toCents(row.IMPORTE_TOTAL));
     current.IMPORTE_COBRADO = fromCents(toCents(current.IMPORTE_COBRADO) + toCents(row.IMPORTE_COBRADO));
@@ -286,18 +417,29 @@ function groupCvcRowsByDocument(rows) {
       current.DIA_VENCIMIENTO = row.DIA_VENCIMIENTO;
     }
   }
-  return [...grouped.values()].map(({ _dueKey, ...row }) => row);
+  const legacyCounts = new Map();
+  for (const row of grouped.values()) {
+    const legacyKey = cvcLegacyDocKey(row);
+    if (!legacyKey || legacyKey === '-') continue;
+    legacyCounts.set(legacyKey, (legacyCounts.get(legacyKey) || 0) + 1);
+  }
+  return [...grouped.values()].map(({ _dueKey, _legacyKeys, ...row }) => ({
+    ...row,
+    LEGACY_COLLISION_COUNT: legacyCounts.get(cvcLegacyDocKey(row)) || 1,
+  }));
 }
 
 function computeClientPendingTotalGrouped(rows, clientCode, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
   const rawByDoc = new Map();
+  const rowByDoc = new Map();
   for (const row of rows || []) {
-    const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+    const docKey = cvcPrimaryDocKey(row);
     rawByDoc.set(docKey, (rawByDoc.get(docKey) || 0) + (parseFloat(row.IMPORTE_PENDIENTE) || 0));
+    rowByDoc.set(docKey, row);
   }
   let totalCents = 0;
   for (const [docKey, rawTotal] of rawByDoc) {
-    const appPaid = resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc);
+    const appPaid = resolveDocAppPaid(clientCode, rowByDoc.get(docKey) || docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc);
     const net = Math.max(0, rawTotal - appPaid);
     if (toCents(net) > 0) totalCents += toCents(net);
   }
@@ -307,23 +449,25 @@ function computeClientPendingTotalGrouped(rows, clientCode, portfolioAdjustments
 function mapCvcRowsToPendientes(rows, clientCode, appCobrosByDoc, repartidorByDoc, portfolioAdjustments) {
   const paidBudgetByDoc = new Map();
   for (const row of rows || []) {
-    const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+    const docKey = cvcPrimaryDocKey(row);
     if (!paidBudgetByDoc.has(docKey)) {
-      paidBudgetByDoc.set(docKey, resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc));
+      paidBudgetByDoc.set(docKey, resolveDocAppPaid(clientCode, row, portfolioAdjustments, appCobrosByDoc, repartidorByDoc));
     }
   }
   const paidRemainingByDoc = new Map(paidBudgetByDoc);
   return (rows || [])
     .map((row) => {
-      const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+      const docKey = cvcPrimaryDocKey(row);
       const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
       const remainingPaid = paidRemainingByDoc.get(docKey) || 0;
       const appPaidThisLine = Math.min(remainingPaid, erpPendiente);
       paidRemainingByDoc.set(docKey, Math.max(0, remainingPaid - appPaidThisLine));
+      const repartidorPaid = cvcDocKeySet(row, (parseInt(row.LEGACY_COLLISION_COUNT, 10) || 1) <= 1)
+        .reduce((sum, key) => sum + (repartidorByDoc.get(key) || 0), 0);
       return mapCvcRowToCobro(
         row,
         appPaidThisLine,
-        repartidorByDoc.get(docKey) || 0,
+        repartidorPaid,
       );
     })
     .filter((cobro) => toCents(cobro.importePendiente) > 0);
@@ -343,13 +487,16 @@ function parseDocReference(reference) {
 
 function stableOrderReference(order) {
   if (trim(order.SOURCE).toUpperCase() === 'CVC') {
-    return `CVC:${legacyOrderReference(order)}`;
+    const stable = trim(order.ID);
+    if (stable.toUpperCase().startsWith('CVC:')) return stable;
+    return cvcFullDocKey(order) || `CVC:${legacyOrderReference(order)}`;
   }
   return `PEDIDO:${trim(order.ID)}:${legacyOrderReference(order)}`;
 }
 
 function normalizePaymentOrderReference(value) {
   const reference = trim(value);
+  if (parseCvcStableReference(reference)) return reference;
   const stableMatch = reference.match(/^(?:PEDIDO:[^:]+:|CVC:)(.+)$/);
   return stableMatch ? stableMatch[1] : reference;
 }
@@ -357,7 +504,7 @@ function normalizePaymentOrderReference(value) {
 function paymentMatchesOrder(paymentReference, order) {
   const reference = trim(paymentReference);
   const legacy = legacyOrderReference(order);
-  return reference === stableOrderReference(order) || normalizePaymentOrderReference(reference) === legacy;
+  return reference === stableOrderReference(order) || normalizeCobrosDocReference(reference) === legacy;
 }
 
 function statusForPendingCents(pendingAfterCents) {
@@ -496,7 +643,8 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
   const numero = row.NUMERO_DOCUMENTO || 0;
   const xde = row.XDE || 1;
   const tipoDoc = trim(row.TIPO_DOCUMENTO || 'FAC');
-  const docKey = `${serie}-${numero}`;
+  const docKey = cvcLegacyDocKey(row);
+  const stableReference = cvcFullDocKey(row) || `CVC:${docKey}`;
   const fecha = toIsoDate(row.ANO_DOCUMENTO, row.MES_DOCUMENTO, row.DIA_DOCUMENTO);
   const fechaVencimiento = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
   const erpPendienteCents = toCents(row.IMPORTE_PENDIENTE);
@@ -511,7 +659,7 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
       ? computeEstadoVencimiento(fechaVencimiento)
       : (vencidoCents > 0 ? 'VENCIDO' : 'PENDIENTE'));
   return {
-    id: `cvc_${serie}_${numero}_${xde}`,
+    id: stableReference,
     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
     referencia: docKey,
     fecha,
@@ -524,10 +672,16 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
     descripcion: `${tipoDoc} ${docKey}`,
     docKey: {
       source: 'CVC',
+      reference: stableReference,
+      legacyReference: docKey,
       serie,
       numero,
       xde,
+      dex: row.DEX || 0,
       subempresa: trim(row.SUBEMPRESA),
+      ejercicioDocumento: row.EJERCICIO_DOCUMENTO || null,
+      terminalDocumento: row.TERMINAL_DOCUMENTO || null,
+      origenDocumento: trim(row.ORIGEN_DOCUMENTO),
       tipoDocumento: tipoDoc,
     },
     appPaymentApplied: appPaidCents > 0 ? fromCents(appPaidCents) : undefined,
@@ -552,6 +706,10 @@ class Db2CobrosRepository extends CobrosRepository {
             TRIM(C.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
             C.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
             C.XDEDOCUMENTO AS XDE,
+            C.DEXDOCUMENTO AS DEX,
+            C.EJERCICIODOCUMENTO AS EJERCICIO_DOCUMENTO,
+            C.TERMINALDOCUMENTO AS TERMINAL_DOCUMENTO,
+            TRIM(C.ORIGENDOCUMENTO) AS ORIGEN_DOCUMENTO,
             TRIM(C.CODIGOCLIENTEALBARAN) AS CODIGO_CLIENTE,
             C.IMPORTEVENCIMIENTO AS IMPORTE_TOTAL,
             C.IMPORTECANCELADO AS IMPORTE_COBRADO,
@@ -571,8 +729,7 @@ class Db2CobrosRepository extends CobrosRepository {
           AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
           ${docFilters.clause}
           ${access.clause}
-        ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
-        FETCH FIRST 100 ROWS ONLY`;
+        ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC`;
 
       const rows = await queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []);
       const appCobrosByDoc = await this.getAppSideCobrosByDoc(clientCode);
@@ -878,12 +1035,14 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     let vendorClause = '';
-    let queryParams = [];
+    let vendorParams = [];
     if (vendorCodes.length > 0) {
       const scoped = buildCvcVendorScopeFilter(vendorCodes);
       vendorClause = scoped.clause;
-      queryParams = scoped.params;
+      vendorParams = scoped.params;
     }
+    const docFilters = buildCobrosDocumentFilters(context, 'CVC');
+    const queryParams = [...docFilters.params, ...vendorParams];
 
     // B7: exclude unassigned-client CVC rows from unscoped global summaries (~7.36MÃ¢â€šÂ¬ ERP noise).
     const emptyClientFilter = vendorCodes.length === 0
@@ -892,7 +1051,7 @@ class Db2CobrosRepository extends CobrosRepository {
 
     const requestedLimit = parseInt(context.limit, 10);
     const safeLimit = Number.isFinite(requestedLimit)
-      ? Math.min(Math.max(requestedLimit, 1), 100)
+      ? Math.min(Math.max(requestedLimit, 1), 2000)
       : 100;
     const requestedOffset = parseInt(context.offset, 10);
     const hasOffset = Number.isFinite(requestedOffset);
@@ -902,12 +1061,23 @@ class Db2CobrosRepository extends CobrosRepository {
       ? Math.floor(safeOffset / safeLimit) + 1
       : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
     const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
+    const cvcFullDocSql = cvcReferenceSql('CVC');
+    const cvcLegacyDocSql = cvcLegacyReferenceSql('CVC');
 
-    const totalsSql = `
-      WITH CVC_DOCS AS (
+    const summarySql = `
+      WITH CVC_DOCS_RAW AS (
         SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+               ${cvcFullDocSql} AS DOC_KEY,
+               ${cvcLegacyDocSql} AS LEGACY_DOCUMENTO,
+               COALESCE(TRIM(CVC.TIPODOCUMENTO), '') AS TIPO_DOCUMENTO,
+               COALESCE(TRIM(CVC.ORIGENDOCUMENTO), '') AS ORIGEN_DOCUMENTO,
+               COALESCE(TRIM(CVC.SUBEMPRESADOCUMENTO), '') AS SUBEMPRESA,
+               COALESCE(CVC.EJERCICIODOCUMENTO, 0) AS EJERCICIO_DOCUMENTO,
                TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+               COALESCE(CVC.TERMINALDOCUMENTO, 0) AS TERMINAL_DOCUMENTO,
                TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO_DOCUMENTO,
+               COALESCE(CVC.XDEDOCUMENTO, 0) AS XDE,
+               COALESCE(CVC.DEXDOCUMENTO, 0) AS DEX,
                SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
@@ -915,96 +1085,61 @@ class Db2CobrosRepository extends CobrosRepository {
          FROM DSEDAC.CVC CVC
          WHERE CVC.IMPORTEPENDIENTE > 0.01
            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+           ${docFilters.clause}
            ${emptyClientFilter}
            ${vendorClause}
-         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20)))
+         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN),
+                  ${cvcFullDocSql},
+                  ${cvcLegacyDocSql},
+                  COALESCE(TRIM(CVC.TIPODOCUMENTO), ''),
+                  COALESCE(TRIM(CVC.ORIGENDOCUMENTO), ''),
+                  COALESCE(TRIM(CVC.SUBEMPRESADOCUMENTO), ''),
+                  COALESCE(CVC.EJERCICIODOCUMENTO, 0),
+                  TRIM(CVC.SERIEDOCUMENTO),
+                  COALESCE(CVC.TERMINALDOCUMENTO, 0),
+                  TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))),
+                  COALESCE(CVC.XDEDOCUMENTO, 0),
+                  COALESCE(CVC.DEXDOCUMENTO, 0)
+      ), CVC_DOCS AS (
+        SELECT R.*,
+               COUNT(*) OVER (PARTITION BY R.CLIENTE, R.LEGACY_DOCUMENTO) AS LEGACY_COLLISION_COUNT
+          FROM CVC_DOCS_RAW R
       ), APP_COBROS AS (
-        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
+        SELECT D.CLIENTE, D.DOC_KEY,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
           FROM CVC_DOCS D
           JOIN ${APP_SCHEMA}.COBROS C
             ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
-           AND (TRIM(C.REFERENCIA) = D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO
-                OR TRIM(C.REFERENCIA) LIKE ${db2StringLiteral('%:')} || D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO)
-         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
+           AND (
+             TRIM(C.REFERENCIA) = D.DOC_KEY
+             OR (
+               D.LEGACY_COLLISION_COUNT = 1
+               AND (
+                 TRIM(C.REFERENCIA) = D.LEGACY_DOCUMENTO
+                 OR TRIM(C.REFERENCIA) = 'CVC:' || D.LEGACY_DOCUMENTO
+               )
+             )
+           )
+         GROUP BY D.CLIENTE, D.DOC_KEY
       ), REP_COBROS AS (
-        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
+        SELECT D.CLIENTE, D.DOC_KEY,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
           FROM CVC_DOCS D
           JOIN ${APP_SCHEMA}.REPARTIDOR_COBROS R
             ON TRIM(R.CODIGOCLIENTEALBARAN) = D.CLIENTE
+           AND COALESCE(TRIM(R.TIPODOCUMENTO), '') = D.TIPO_DOCUMENTO
+           AND COALESCE(TRIM(R.ORIGENDOCUMENTO), '') = D.ORIGEN_DOCUMENTO
+           AND COALESCE(TRIM(R.SUBEMPRESADOCUMENTO), '') = D.SUBEMPRESA
+           AND COALESCE(R.EJERCICIODOCUMENTO, 0) = D.EJERCICIO_DOCUMENTO
            AND TRIM(R.SERIEDOCUMENTO) = D.SERIE_DOCUMENTO
+           AND COALESCE(R.TERMINALDOCUMENTO, 0) = D.TERMINAL_DOCUMENTO
            AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
-         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
-      ), DOC_PAID AS (
-        SELECT D.CLIENTE, D.TOTAL_PENDIENTE, D.TOTAL_VENCIDO,
-               COALESCE(A.TOTAL_APP, 0) + COALESCE(R.TOTAL_REP, 0) AS PAID
-          FROM CVC_DOCS D
-          LEFT JOIN APP_COBROS A
-            ON A.CLIENTE = D.CLIENTE
-           AND A.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
-           AND A.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
-          LEFT JOIN REP_COBROS R
-            ON R.CLIENTE = D.CLIENTE
-           AND R.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
-           AND R.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
-      ), DOC_NET AS (
-        SELECT CLIENTE,
-               TOTAL_PENDIENTE,
-               TOTAL_VENCIDO,
-               PAID,
-               CASE WHEN TOTAL_PENDIENTE - PAID > 0 THEN TOTAL_PENDIENTE - PAID ELSE 0 END AS NET_TOTAL,
-               CASE
-                 WHEN TOTAL_VENCIDO <= 0 OR TOTAL_VENCIDO - PAID <= 0 OR TOTAL_PENDIENTE - PAID <= 0 THEN 0
-                 WHEN TOTAL_VENCIDO - PAID < TOTAL_PENDIENTE - PAID THEN TOTAL_VENCIDO - PAID
-                 ELSE TOTAL_PENDIENTE - PAID
-               END AS NET_VENCIDO
-          FROM DOC_PAID
-      )
-      SELECT COALESCE(SUM(NET_TOTAL), 0) AS GRAND_TOTAL,
-             COALESCE(SUM(NET_VENCIDO), 0) AS GRAND_TOTAL_VENCIDO,
-             COALESCE(SUM(TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
-             COALESCE(SUM(TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO,
-             COUNT(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END) AS CLIENT_COUNT,
-             COUNT(DISTINCT CASE WHEN NET_VENCIDO > 0 THEN CLIENTE ELSE NULL END) AS VENCIDO_CLIENT_COUNT
-        FROM DOC_NET
-    `;
-
-    const pageSql = `
-      WITH CVC_DOCS AS (
-        SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
-               TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO_DOCUMENTO,
-               SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
-               SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                   <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                    THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-         FROM DSEDAC.CVC CVC
-         WHERE CVC.IMPORTEPENDIENTE > 0.01
-           AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-           ${emptyClientFilter}
-           ${vendorClause}
-         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20)))
-      ), APP_COBROS AS (
-        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
-               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
-          FROM CVC_DOCS D
-          JOIN ${APP_SCHEMA}.COBROS C
-            ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
-           AND (TRIM(C.REFERENCIA) = D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO
-                OR TRIM(C.REFERENCIA) LIKE ${db2StringLiteral('%:')} || D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO)
-         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
-      ), REP_COBROS AS (
-        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
-               COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-          FROM CVC_DOCS D
-          JOIN ${APP_SCHEMA}.REPARTIDOR_COBROS R
-            ON TRIM(R.CODIGOCLIENTEALBARAN) = D.CLIENTE
-           AND TRIM(R.SERIEDOCUMENTO) = D.SERIE_DOCUMENTO
-           AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
-         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
+           AND COALESCE(R.XDEDOCUMENTO, 0) = D.XDE
+           AND COALESCE(R.DEXDOCUMENTO, 0) = D.DEX
+         GROUP BY D.CLIENTE, D.DOC_KEY
       ), DOC_NET AS (
         SELECT D.CLIENTE,
+               D.DOC_KEY,
                D.TOTAL_PENDIENTE,
                D.TOTAL_VENCIDO,
                COALESCE(A.TOTAL_APP, 0) + COALESCE(R.TOTAL_REP, 0) AS PAID,
@@ -1025,12 +1160,10 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM CVC_DOCS D
           LEFT JOIN APP_COBROS A
             ON A.CLIENTE = D.CLIENTE
-           AND A.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
-           AND A.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
+           AND A.DOC_KEY = D.DOC_KEY
           LEFT JOIN REP_COBROS R
             ON R.CLIENTE = D.CLIENTE
-           AND R.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
-           AND R.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
+           AND R.DOC_KEY = D.DOC_KEY
       ), CLIENT_NET AS (
         SELECT CLIENTE,
                COUNT(*) AS DOC_COUNT,
@@ -1039,27 +1172,61 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM DOC_NET
          WHERE NET_TOTAL > 0
          GROUP BY CLIENTE
+      ), SCOPE_TOTALS AS (
+        SELECT COALESCE(SUM(NET_TOTAL), 0) AS GRAND_TOTAL,
+               COALESCE(SUM(NET_VENCIDO), 0) AS GRAND_TOTAL_VENCIDO,
+               COALESCE(SUM(TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
+               COALESCE(SUM(TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO,
+               COUNT(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END) AS CLIENT_COUNT,
+               COUNT(DISTINCT CASE WHEN NET_VENCIDO > 0 THEN CLIENTE ELSE NULL END) AS VENCIDO_CLIENT_COUNT
+          FROM DOC_NET
+      ), CLIENT_RANKED AS (
+        SELECT C.CLIENTE,
+               C.DOC_COUNT,
+               C.TOTAL_PENDIENTE,
+               C.TOTAL_VENCIDO,
+               ROW_NUMBER() OVER (ORDER BY C.TOTAL_PENDIENTE DESC, C.CLIENTE ASC) AS RN
+          FROM CLIENT_NET C
+      ), PAGE_CLIENTS AS (
+        SELECT CLIENTE, DOC_COUNT, TOTAL_PENDIENTE, TOTAL_VENCIDO, RN
+          FROM CLIENT_RANKED
+         WHERE RN > ${pageOffset}
+           AND RN <= ${pageOffset + safeLimit}
       )
-      SELECT C.CLIENTE,
-             COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), C.CLIENTE) AS NOMBRE,
-             C.DOC_COUNT,
-             C.TOTAL_PENDIENTE,
-             C.TOTAL_VENCIDO
-        FROM CLIENT_NET C
+      SELECT P.CLIENTE,
+             COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), P.CLIENTE) AS NOMBRE,
+             P.DOC_COUNT,
+             P.TOTAL_PENDIENTE,
+             P.TOTAL_VENCIDO,
+             T.GRAND_TOTAL,
+             T.GRAND_TOTAL_VENCIDO,
+             T.CVC_GRAND_TOTAL,
+             T.CVC_GRAND_TOTAL_VENCIDO,
+             T.CLIENT_COUNT,
+             T.VENCIDO_CLIENT_COUNT,
+             P.RN
+        FROM SCOPE_TOTALS T
+        LEFT JOIN PAGE_CLIENTS P ON 1 = 1
         LEFT JOIN DSEDAC.CLI CLI
-          ON TRIM(CLI.CODIGOCLIENTE) = C.CLIENTE
-       GROUP BY C.CLIENTE, C.DOC_COUNT, C.TOTAL_PENDIENTE, C.TOTAL_VENCIDO
-       ORDER BY C.TOTAL_PENDIENTE DESC, C.CLIENTE ASC
-       OFFSET ${pageOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
+          ON TRIM(CLI.CODIGOCLIENTE) = P.CLIENTE
+       GROUP BY P.CLIENTE, P.DOC_COUNT, P.TOTAL_PENDIENTE, P.TOTAL_VENCIDO, P.RN,
+                T.GRAND_TOTAL, T.GRAND_TOTAL_VENCIDO, T.CVC_GRAND_TOTAL,
+                T.CVC_GRAND_TOTAL_VENCIDO, T.CLIENT_COUNT, T.VENCIDO_CLIENT_COUNT
+       ORDER BY P.RN ASC
     `;
 
     const runQuery = queryParams.length > 0
       ? (sql) => queryWithParams(sql, queryParams, [])
       : (sql) => query(sql, false);
 
-    const [rows, totalRows] = await Promise.all([
-      runQuery(pageSql),
-      runQuery(totalsSql),
+    const appOrderContext = {
+      ...context,
+      vendedorCodes: vendorCodes,
+      vendorCodes,
+    };
+    const [rows, appOrderSummary] = await Promise.all([
+      runQuery(summarySql),
+      this.getAppOrderPendingSummary(appOrderContext),
     ]);
 
     const summary = {};
@@ -1078,11 +1245,6 @@ class Db2CobrosRepository extends CobrosRepository {
       };
     }
 
-    const appOrderSummary = await this.getAppOrderPendingSummary({
-      ...context,
-      vendedorCodes: vendorCodes,
-      vendorCodes,
-    });
     for (const [code, appEntry] of Object.entries(appOrderSummary.summary || {})) {
       if (!summary[code]) {
         summary[code] = {
@@ -1101,7 +1263,7 @@ class Db2CobrosRepository extends CobrosRepository {
       summary[code].source = summary[code].source === 'PEDIDOS_CAB' ? 'PEDIDOS_CAB' : 'CVC+PEDIDOS_CAB';
     }
 
-    const totals = totalRows?.[0] || {};
+    const totals = rows?.[0] || {};
     const cvcNetTotal = parseFloat(totals.GRAND_TOTAL) || 0;
     const cvcNetVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
     const appOrdersTotal = parseFloat(appOrderSummary.grandTotal) || 0;
@@ -1114,6 +1276,7 @@ class Db2CobrosRepository extends CobrosRepository {
     const cvcVencidoClientCount = parseInt(totals.VENCIDO_CLIENT_COUNT, 10) || 0;
     const appClientCount = parseInt(appOrderSummary.clientCount, 10) || 0;
     const mergedClientCount = Math.max(cvcClientCount, appClientCount, Object.keys(summary).length);
+    const returnedDocuments = (rows || []).filter((row) => trim(row.CLIENTE)).length;
 
     return {
       summary,
@@ -1130,7 +1293,7 @@ class Db2CobrosRepository extends CobrosRepository {
         limit: safeLimit,
         page: safePage,
         offset: pageOffset,
-        returnedDocuments: (rows || []).length,
+        returnedDocuments,
       },
     };
   }
@@ -1166,9 +1329,7 @@ class Db2CobrosRepository extends CobrosRepository {
          GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)`;
       const rows = await runQuery(comercialSql, queryParams);
       for (const row of rows || []) {
-        const reference = trim(row.REF);
-        const match = reference.match(/([^:]+-\d+)$/);
-        add(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
+        add(row.CLIENTE, normalizeCobrosDocReference(row.REF), row.TOTAL_APP);
       }
     } catch (error) {
       logger.warn('[COBROS_REPO] App-side COBROS portfolio subtract skipped: ' + error.message);
@@ -1177,8 +1338,15 @@ class Db2CobrosRepository extends CobrosRepository {
     try {
       const repartidorSql = `
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
+               TRIM(R.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
+               TRIM(R.ORIGENDOCUMENTO) AS ORIGEN_DOCUMENTO,
+               TRIM(R.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
+               R.EJERCICIODOCUMENTO AS EJERCICIO_DOCUMENTO,
                TRIM(R.SERIEDOCUMENTO) AS SERIE,
+               R.TERMINALDOCUMENTO AS TERMINAL_DOCUMENTO,
                TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO,
+               R.XDEDOCUMENTO AS XDE,
+               R.DEXDOCUMENTO AS DEX,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
          WHERE EXISTS (
@@ -1191,10 +1359,13 @@ class Db2CobrosRepository extends CobrosRepository {
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
-         GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.SERIEDOCUMENTO), TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))`;
+         GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.TIPODOCUMENTO), TRIM(R.ORIGENDOCUMENTO),
+                  TRIM(R.SUBEMPRESADOCUMENTO), R.EJERCICIODOCUMENTO, TRIM(R.SERIEDOCUMENTO),
+                  R.TERMINALDOCUMENTO, TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))),
+                  R.XDEDOCUMENTO, R.DEXDOCUMENTO`;
       const rows = await runQuery(repartidorSql, queryParams);
       for (const row of rows || []) {
-        add(row.CLIENTE, formatRepartidorDocKey(row.SERIE, row.NUMERO), row.TOTAL_REP);
+        add(row.CLIENTE, cvcPrimaryDocKey(row), row.TOTAL_REP);
       }
     } catch (error) {
       logger.warn('[COBROS_REPO] App-side REPARTIDOR_COBROS portfolio subtract skipped: ' + error.message);
@@ -1262,17 +1433,25 @@ class Db2CobrosRepository extends CobrosRepository {
     const repartidorByDoc = new Map();
     try {
       const repartidorRows = await queryWithParams(
-        `SELECT TRIM(SERIEDOCUMENTO) AS SERIE,
+        `SELECT TRIM(TIPODOCUMENTO) AS TIPO_DOCUMENTO,
+                TRIM(ORIGENDOCUMENTO) AS ORIGEN_DOCUMENTO,
+                TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
+                EJERCICIODOCUMENTO AS EJERCICIO_DOCUMENTO,
+                TRIM(SERIEDOCUMENTO) AS SERIE,
+                TERMINALDOCUMENTO AS TERMINAL_DOCUMENTO,
                 NUMERODOCUMENTO AS NUMERO,
+                XDEDOCUMENTO AS XDE,
+                DEXDOCUMENTO AS DEX,
                 COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL
            FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
           WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-          GROUP BY SERIEDOCUMENTO, NUMERODOCUMENTO`,
+          GROUP BY TIPODOCUMENTO, ORIGENDOCUMENTO, SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO,
+                   SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO`,
         [trim(clientCode)],
         [],
       );
       for (const row of repartidorRows || []) {
-        const docKey = formatRepartidorDocKey(row.SERIE, row.NUMERO);
+        const docKey = cvcPrimaryDocKey(row);
         repartidorByDoc.set(docKey, (repartidorByDoc.get(docKey) || 0) + (parseFloat(row.TOTAL) || 0));
       }
     } catch (error) {
@@ -1294,9 +1473,7 @@ class Db2CobrosRepository extends CobrosRepository {
         [],
       );
       for (const row of comercialRows || []) {
-        const reference = trim(row.REF);
-        const match = reference.match(/([^:]+-\d+)$/);
-        const docKey = match ? match[1] : reference;
+        const docKey = normalizeCobrosDocReference(row.REF);
         byDoc.set(docKey, (byDoc.get(docKey) || 0) + (parseFloat(row.TOTAL) || 0));
       }
     } catch (error) {
@@ -1346,6 +1523,10 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     const stableReference = stableOrderReference(order);
+    const legacyReference = legacyOrderReference(order);
+    const isCvcOrder = trim(order.SOURCE).toUpperCase() === 'CVC';
+    const cvcStableReference = parseCvcStableReference(stableReference);
+    const cvcLegacyIsSafe = !isCvcOrder || !cvcStableReference || ((parseInt(order.LEGACY_COLLISION_COUNT, 10) || 1) <= 1);
     const existingRows = await queryWithParams(
       `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
          FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
@@ -1373,31 +1554,61 @@ class Db2CobrosRepository extends CobrosRepository {
       };
     }
 
+    const paymentReferences = [stableReference];
+    if (legacyReference && cvcLegacyIsSafe) {
+      paymentReferences.push(legacyReference);
+      if (isCvcOrder) paymentReferences.push(`CVC:${legacyReference}`);
+    }
+    const uniquePaymentReferences = [...new Set(paymentReferences.map(trim).filter(Boolean))];
     const paidRows = await queryWithParams(
       `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
          FROM ${APP_SCHEMA}.COBROS
          WHERE TRIM(CODIGO_CLIENTE) = ?
-           AND (TRIM(REFERENCIA) = ? OR TRIM(REFERENCIA) = ?)`,
-      [normalizedClient, stableReference, legacyOrderReference(order)],
+           AND TRIM(REFERENCIA) IN (${uniquePaymentReferences.map(() => '?').join(',')})`,
+      [normalizedClient, ...uniquePaymentReferences],
       [],
     );
     const paidComercialCents = toCents(paidRows?.[0]?.TOTAL_COBRADO);
 
     let paidRepartidorCents = 0;
     try {
-      const docRef = parseDocReference(legacyOrderReference(order));
-      const repartidorRows = await queryWithParams(
-        `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+      let repartidorSql = `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
            FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
-          WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+          WHERE TRIM(CODIGOCLIENTEALBARAN) = ?`;
+      let repartidorParams = [normalizedClient];
+      if (cvcStableReference) {
+        repartidorSql += `
+            AND COALESCE(TRIM(TIPODOCUMENTO), '') = ?
+            AND COALESCE(TRIM(ORIGENDOCUMENTO), '') = ?
+            AND COALESCE(TRIM(SUBEMPRESADOCUMENTO), '') = ?
+            AND COALESCE(EJERCICIODOCUMENTO, 0) = ?
             AND TRIM(SERIEDOCUMENTO) = ?
-            AND NUMERODOCUMENTO = ?`,
-        [normalizedClient, docRef.serie, docRef.numero],
-        [],
-      );
+            AND COALESCE(TERMINALDOCUMENTO, 0) = ?
+            AND NUMERODOCUMENTO = ?
+            AND COALESCE(XDEDOCUMENTO, 0) = ?
+            AND COALESCE(DEXDOCUMENTO, 0) = ?`;
+        repartidorParams.push(
+          cvcStableReference.tipoDocumento,
+          cvcStableReference.origenDocumento,
+          cvcStableReference.subempresa,
+          parseInt(cvcStableReference.ejercicioDocumento, 10) || 0,
+          cvcStableReference.serie,
+          parseInt(cvcStableReference.terminalDocumento, 10) || 0,
+          parseInt(cvcStableReference.numero, 10) || 0,
+          parseInt(cvcStableReference.xde, 10) || 0,
+          parseInt(cvcStableReference.dex, 10) || 0,
+        );
+      } else {
+        const docRef = parseDocReference(legacyReference);
+        repartidorSql += `
+            AND TRIM(SERIEDOCUMENTO) = ?
+            AND NUMERODOCUMENTO = ?`;
+        repartidorParams.push(docRef.serie, docRef.numero);
+      }
+      const repartidorRows = await queryWithParams(repartidorSql, repartidorParams, []);
       paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
       if (paidRepartidorCents > 0) {
-        logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${legacyOrderReference(order)}`);
+        logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${stableReference}`);
       }
     } catch (xtableErr) {
       logger.warn(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS check fallo (continuando): ${xtableErr.message}`);
@@ -1605,9 +1816,19 @@ class Db2CobrosRepository extends CobrosRepository {
     if (rows?.[0]) return rows[0];
 
     const cvcReference = normalizePaymentOrderReference(reference);
+    const parsedCvcReference = parseCvcStableReference(reference);
+    const cvcRefWhere = parsedCvcReference
+      ? `(${cvcReferenceSql('C')} = ?)`
+      : `(
+          ${cvcLegacyReferenceSql('C')} = ?
+          OR 'CVC:' || ${cvcLegacyReferenceSql('C')} = ?
+        )`;
+    const cvcRefParams = parsedCvcReference
+      ? [parsedCvcReference.fullReference]
+      : [cvcReference, reference];
     const cvcRows = await queryWithParams(`
       SELECT
-        'CVC:' || TRIM(C.SERIEDOCUMENTO) || '-' || TRIM(CAST(C.NUMERODOCUMENTO AS VARCHAR(20))) AS ID,
+        ${cvcReferenceSql('C')} AS ID,
         'CVC' AS SOURCE,
         TRIM(C.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE,
         COALESCE((
@@ -1624,20 +1845,32 @@ class Db2CobrosRepository extends CobrosRepository {
              AND LAC.LCCLLN IN ('AB', 'VT')
              AND LAC.LCSRAB NOT IN ('N', 'Z')
         ), '') AS CODIGOVENDEDOR,
+        TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
+        TRIM(C.ORIGENDOCUMENTO) AS ORIGEN_DOCUMENTO,
+        TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
+        C.EJERCICIODOCUMENTO AS EJERCICIO_DOCUMENTO,
         TRIM(C.SERIEDOCUMENTO) AS SERIEPEDIDO,
+        C.TERMINALDOCUMENTO AS TERMINAL_DOCUMENTO,
         C.NUMERODOCUMENTO AS NUMEROPEDIDO,
+        C.XDEDOCUMENTO AS XDE,
+        C.DEXDOCUMENTO AS DEX,
         C.IMPORTEPENDIENTE AS IMPORTETOTAL,
-        'PENDIENTE' AS ESTADO
+        'PENDIENTE' AS ESTADO,
+        (
+          SELECT COUNT(DISTINCT ${cvcReferenceSql('C2')})
+            FROM DSEDAC.CVC C2
+           WHERE TRIM(C2.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGOCLIENTEALBARAN)
+             AND ${cvcLegacyReferenceSql('C2')} = ${cvcLegacyReferenceSql('C')}
+             AND C2.IMPORTEPENDIENTE > 0.01
+             AND (C2.ANULADOSN IS NULL OR C2.ANULADOSN <> 'S')
+        ) AS LEGACY_COLLISION_COUNT
       FROM DSEDAC.CVC C
       WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
         AND C.IMPORTEPENDIENTE > 0.01
         AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
-        AND (
-          TRIM(C.SERIEDOCUMENTO) || '-' || TRIM(CAST(C.NUMERODOCUMENTO AS VARCHAR(20))) = ?
-          OR 'CVC:' || TRIM(C.SERIEDOCUMENTO) || '-' || TRIM(CAST(C.NUMERODOCUMENTO AS VARCHAR(20))) = ?
-        )
+        AND ${cvcRefWhere}
       FETCH FIRST 1 ROW ONLY
-    `, [clientCode, cvcReference, reference], []);
+    `, [clientCode, ...cvcRefParams], []);
     return cvcRows?.[0] || null;
   }
 

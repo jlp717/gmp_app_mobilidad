@@ -39,6 +39,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   /// Por defecto 'pendiente' para que al abrir veas SOLO los clientes con
   /// algun pendiente, en vez de todos en verde que es confuso.
   String _estadoFilter = 'pendiente';
+  DateTime? _summaryFechaDesde;
+  DateTime? _summaryFechaHasta;
   Timer? _debounceTimer;
   bool _isInitialized = false;
   ProviderSubscription<String?>? _vendorSubscription;
@@ -85,6 +87,44 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       return selectedVendor;
     }
     return fallbackVendor;
+  }
+
+  String? _formatDate(DateTime? value) {
+    if (value == null) return null;
+    final y = value.year.toString().padLeft(4, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final d = value.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<void> _pickSummaryDate({required bool isDesde}) async {
+    final initial = isDesde
+        ? (_summaryFechaDesde ?? DateTime.now())
+        : (_summaryFechaHasta ?? DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2015),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppTheme.info,
+            surface: AppTheme.raisedSurface,
+          ),
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isDesde) {
+        _summaryFechaDesde = picked;
+      } else {
+        _summaryFechaHasta = picked;
+      }
+    });
+    await _loadPendingSummary(forceRefresh: true);
   }
 
   @override
@@ -149,6 +189,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final allVendorCodes = authState?.vendedorCodes ?? [];
     final scopedVendorCodes = _resolvedVendorCodes();
     final fallbackVendor = _fallbackVendorCode(authState);
+    final summaryFechaDesde = _formatDate(_summaryFechaDesde);
+    final summaryFechaHasta = _formatDate(_summaryFechaHasta);
+    Future<void> loadSummary(
+      String? vendedorCode, {
+      List<String>? vendedorCodes,
+    }) {
+      return _provider.cargarPendingSummary(
+        vendedorCode,
+        vendedorCodes: vendedorCodes,
+        fechaDesde: summaryFechaDesde,
+        fechaHasta: summaryFechaHasta,
+        forceRefresh: forceRefresh,
+      );
+    }
 
     try {
       if (hasCommercial80VendorScope(
@@ -161,38 +215,24 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             .where((c) => c.isNotEmpty)
             .toList();
         if (codes.length == 1) {
-          await _provider.cargarPendingSummary(
-            codes.first,
-            forceRefresh: forceRefresh,
-          );
+          await loadSummary(codes.first);
         } else {
-          await _provider.cargarPendingSummary(
+          await loadSummary(
             null,
             vendedorCodes: codes,
-            forceRefresh: forceRefresh,
           );
         }
       } else if (selectedVendor != null && selectedVendor.isNotEmpty) {
-        await _provider.cargarPendingSummary(
-          selectedVendor,
-          forceRefresh: forceRefresh,
-        );
+        await loadSummary(selectedVendor);
       } else if (allVendorCodes.isNotEmpty && widget.isJefeVentas) {
-        await _provider.cargarPendingSummary(
+        await loadSummary(
           null,
           vendedorCodes: allVendorCodes,
-          forceRefresh: forceRefresh,
         );
       } else if (fallbackVendor.isNotEmpty) {
-        await _provider.cargarPendingSummary(
-          fallbackVendor,
-          forceRefresh: forceRefresh,
-        );
+        await loadSummary(fallbackVendor);
       } else {
-        await _provider.cargarPendingSummary(
-          null,
-          forceRefresh: forceRefresh,
-        );
+        await loadSummary(null);
       }
       // El provider captura sus propios errores y los expone en `error`.
       // Sin esto, un fallo del API mostraba la pantalla con totales a 0
@@ -256,7 +296,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         decoration: AppTheme.appBackground(),
         child: RefreshIndicator(
           onRefresh: _onRefresh,
-          color: AppTheme.neonBlue,
+          color: AppTheme.info,
           child: Column(
             children: [
               _buildHeader(),
@@ -409,7 +449,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       decoration: AppTheme.premiumPanel(
         accentColor: tieneVencido
             ? AppTheme.error
-            : (tienePendiente ? AppTheme.accentAmber : AppTheme.neonGreen),
+            : (tienePendiente ? AppTheme.accentAmber : AppTheme.success),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -421,7 +461,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   'Pendiente total',
                   fmtMoney(cobros.grandTotal),
                   Icons.account_balance_wallet,
-                  Colors.amber,
+                  AppTheme.accentAmber,
                 ),
               ),
               Container(
@@ -434,7 +474,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   'Vencido',
                   fmtMoney(cobros.grandTotalVencido),
                   Icons.error_outline,
-                  Colors.redAccent,
+                  AppTheme.error,
                 ),
               ),
               Container(
@@ -448,7 +488,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   '$clientesCartera'
                       '${clientesVencidos > 0 ? ' (${clientesVencidos}v)' : ''}',
                   Icons.people_outline,
-                  AppTheme.neonBlue,
+                  AppTheme.info,
                 ),
               ),
             ],
@@ -534,10 +574,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   /// - "Todos": no filtra
   Widget _buildEstadoFilterChips() {
     final filters = const [
-      _FilterDef('pendiente', 'Pendientes', Icons.schedule, Colors.amber),
-      _FilterDef('vencido', 'Vencidos', Icons.error_outline, Colors.redAccent),
       _FilterDef(
-          'aldia', 'Al dia', Icons.check_circle_outline, AppTheme.neonGreen),
+          'pendiente', 'Pendientes', Icons.schedule, AppTheme.accentAmber),
+      _FilterDef('vencido', 'Vencidos', Icons.error_outline, AppTheme.error),
+      _FilterDef(
+          'aldia', 'Al dia', Icons.check_circle_outline, AppTheme.success),
       _FilterDef('todos', 'Todos', Icons.list, Colors.white70),
     ];
     return Container(
@@ -583,6 +624,50 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     );
   }
 
+  Widget _buildSummaryDateFilters() {
+    final hasPeriod = _summaryFechaDesde != null || _summaryFechaHasta != null;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => _pickSummaryDate(isDesde: true),
+            icon: const Icon(Icons.calendar_today, size: 16),
+            label: Text(
+              _summaryFechaDesde == null
+                  ? 'Vence desde'
+                  : DateFormat('dd/MM/yy').format(_summaryFechaDesde!),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _pickSummaryDate(isDesde: false),
+            icon: const Icon(Icons.event, size: 16),
+            label: Text(
+              _summaryFechaHasta == null
+                  ? 'Vence hasta'
+                  : DateFormat('dd/MM/yy').format(_summaryFechaHasta!),
+            ),
+          ),
+          if (hasPeriod)
+            TextButton.icon(
+              onPressed: () async {
+                setState(() {
+                  _summaryFechaDesde = null;
+                  _summaryFechaHasta = null;
+                });
+                await _loadPendingSummary(forceRefresh: true);
+              },
+              icon: const Icon(Icons.clear, size: 16),
+              label: const Text('Limpiar periodo'),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -592,9 +677,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         Responsive.padding(context, small: 10, large: 16),
       ),
       decoration: BoxDecoration(
-        gradient: AppTheme.panelGradient,
+        color: AppTheme.raisedSurface,
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.18)),
+          bottom: BorderSide(color: AppTheme.info.withValues(alpha: 0.18)),
         ),
         boxShadow: [
           BoxShadow(
@@ -610,15 +695,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.12),
+              color: AppTheme.info.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               border: Border.all(
-                color: AppTheme.neonBlue.withValues(alpha: 0.28),
+                color: AppTheme.info.withValues(alpha: 0.28),
               ),
             ),
             child: const Icon(
               Icons.account_balance_wallet,
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               size: 22,
             ),
           ),
@@ -650,21 +735,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               hintStyle: TextStyle(
                   color: AppTheme.textSecondary.withValues(alpha: 0.6)),
               prefixIcon: Icon(Icons.search,
-                  color: AppTheme.neonBlue.withValues(alpha: 0.7)),
+                  color: AppTheme.info.withValues(alpha: 0.7)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide:
-                    BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                    BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide:
-                    BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                    BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: AppTheme.neonBlue, width: 2),
+                borderSide: const BorderSide(color: AppTheme.info, width: 2),
               ),
               filled: true,
               fillColor: AppTheme.softPanel,
@@ -682,6 +766,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   : null,
             ),
           ),
+          const SizedBox(height: 10),
+          _buildSummaryDateFilters(),
         ],
       ),
     );
@@ -755,16 +841,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             if (isFiltering) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   _searchController.clear();
-                  setState(() => _estadoFilter = 'pendiente');
+                  setState(() {
+                    _estadoFilter = 'pendiente';
+                    _summaryFechaDesde = null;
+                    _summaryFechaHasta = null;
+                  });
+                  await _loadPendingSummary(forceRefresh: true);
                 },
                 icon: const Icon(Icons.clear_all, size: 16),
                 label: const Text('Limpiar filtros'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.neonBlue,
-                  side: BorderSide(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                  foregroundColor: AppTheme.info,
+                  side: BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
                 ),
               ),
             ],
@@ -844,11 +934,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               CircleAvatar(
                 backgroundColor: fromErpDebt
                     ? AppTheme.warning.withValues(alpha: 0.1)
-                    : AppTheme.neonBlue.withValues(alpha: 0.1),
+                    : AppTheme.info.withValues(alpha: 0.1),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: TextStyle(
-                    color: fromErpDebt ? AppTheme.warning : AppTheme.neonBlue,
+                    color: fromErpDebt ? AppTheme.warning : AppTheme.info,
                     fontSize:
                         Responsive.fontSize(context, small: 18, large: 24),
                     fontWeight: FontWeight.bold,

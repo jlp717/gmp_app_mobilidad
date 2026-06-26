@@ -86,7 +86,7 @@ class RuteroClientListItem extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: hasObservaciones
@@ -229,7 +229,7 @@ class RuteroClientListItem extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 8,
-                color: Colors.grey.shade600,
+                color: AppTheme.textTertiary,
               ),
             ),
           ] else if (isNewClient) ...[
@@ -311,11 +311,11 @@ class RuteroClientListItem extends StatelessWidget {
               margin: const EdgeInsets.only(right: 8, top: 2),
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.neonPink,
+                color: AppTheme.accentRose,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonPink.withValues(alpha: 0.4),
+                    color: AppTheme.accentRose.withValues(alpha: 0.4),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -351,14 +351,14 @@ class RuteroClientListItem extends StatelessWidget {
               vertical: 2,
             ),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.15),
+              color: AppTheme.info.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               code,
               style: const TextStyle(
                 fontSize: 11,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -374,7 +374,7 @@ class RuteroClientListItem extends StatelessWidget {
               Icon(
                 Icons.place,
                 size: 14,
-                color: Colors.grey.shade500,
+                color: AppTheme.textTertiary,
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -382,7 +382,7 @@ class RuteroClientListItem extends StatelessWidget {
                   [address, city].where((s) => s.isNotEmpty).join(', '),
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.grey.shade400,
+                    color: AppTheme.textSecondary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -416,7 +416,7 @@ class RuteroClientListItem extends StatelessWidget {
                   : 'Sin semanas completadas:',
           style: TextStyle(
             fontSize: 11,
-            color: Colors.grey.shade500,
+            color: AppTheme.textTertiary,
           ),
         ),
         const SizedBox(height: 4),
@@ -428,14 +428,14 @@ class RuteroClientListItem extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                color: AppTheme.info.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 '$selectedYear',
                 style: TextStyle(
                   fontSize: Responsive.isSmall(context) ? 9 : 10,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -456,14 +456,14 @@ class RuteroClientListItem extends StatelessWidget {
                   vertical: 2,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
+                  color: AppTheme.borderColor,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   '${selectedYear - 1}',
                   style: TextStyle(
                     fontSize: Responsive.isSmall(context) ? 9 : 10,
-                    color: Colors.grey.shade300,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -473,7 +473,7 @@ class RuteroClientListItem extends StatelessWidget {
                 formatCurrency(ytdPrevYear),
                 style: TextStyle(
                   fontSize: Responsive.isSmall(context) ? 11 : 12,
-                  color: Colors.grey.shade400,
+                  color: AppTheme.textSecondary,
                 ),
               ),
             ] else if (selectedYear == DateTime.now().year &&
@@ -486,10 +486,10 @@ class RuteroClientListItem extends StatelessWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkBase,
+                  color: AppTheme.inkSurface,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Colors.grey.shade700,
+                    color: AppTheme.borderColor,
                   ),
                 ),
                 textStyle: const TextStyle(
@@ -501,7 +501,7 @@ class RuteroClientListItem extends StatelessWidget {
                 child: Icon(
                   Icons.info_outline,
                   size: 14,
-                  color: Colors.grey.shade600,
+                  color: AppTheme.textTertiary,
                 ),
               ),
             ],
@@ -518,7 +518,7 @@ class RuteroClientListItem extends StatelessWidget {
           onPressed: onMapTap,
           icon: const Icon(
             Icons.directions,
-            color: AppTheme.neonPink,
+            color: AppTheme.accentRose,
             size: 26,
           ),
           tooltip: 'Cómo llegar',
@@ -531,7 +531,7 @@ class RuteroClientListItem extends StatelessWidget {
             onPressed: onNotesTap,
             icon: Icon(
               phones.isNotEmpty ? Icons.edit_note : Icons.note_add,
-              color: Colors.grey.shade400,
+              color: AppTheme.textSecondary,
               size: 26,
             ),
             tooltip: 'Observaciones',
@@ -562,7 +562,7 @@ class RuteroClientListItem extends StatelessWidget {
               onPressed: onCallTap,
               icon: const Icon(
                 Icons.phone,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 26,
               ),
               tooltip: 'Llamar',

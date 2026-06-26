@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Widget para capturar firma del cliente
@@ -48,7 +49,7 @@ class _SignaturePadState extends State<SignaturePad> {
           const SizedBox(height: 8),
           const Text(
             'Pide al cliente que firme en el área de abajo',
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 16),
 
@@ -58,7 +59,9 @@ class _SignaturePadState extends State<SignaturePad> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300, width: 2),
+                border: Border.all(
+                    color: AppTheme.borderColor.withValues(alpha: 0.55),
+                    width: 2),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
@@ -125,7 +128,7 @@ class _SignaturePadState extends State<SignaturePad> {
                       : const Icon(Icons.check),
                   label: Text(_isSaving ? 'Guardando...' : 'Guardar Firma'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(

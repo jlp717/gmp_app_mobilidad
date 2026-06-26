@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-/// Premium pull-to-refresh indicator with branded styling.
-///
-/// Features:
-/// - Neon-colored progress indicator
-/// - Smooth spring-like overscroll
-/// - Consistent with V2.5 theme
+/// Pull-to-refresh indicator with the shared operational palette.
 class PremiumRefreshIndicator extends StatelessWidget {
   const PremiumRefreshIndicator({
     required this.onRefresh,
@@ -25,17 +20,15 @@ class PremiumRefreshIndicator extends StatelessWidget {
       onRefresh: onRefresh,
       displacement: 60,
       edgeOffset: 0,
-      strokeWidth: 3,
-      backgroundColor: AppTheme.darkCard,
-      color: color ?? AppTheme.neonBlue,
+      strokeWidth: 2.5,
+      backgroundColor: AppTheme.raisedSurface,
+      color: color ?? AppTheme.info,
       child: child,
     );
   }
 }
 
-/// Wraps a scroll view with smooth bouncing physics (iOS-like feel).
-///
-/// Use this to give any scrollable area a premium, smooth scrolling feel.
+/// Wraps a scroll view with consistent app scroll physics.
 class SmoothScrollView extends StatelessWidget {
   const SmoothScrollView({
     required this.child,

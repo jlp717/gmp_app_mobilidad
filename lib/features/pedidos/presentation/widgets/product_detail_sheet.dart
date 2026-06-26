@@ -6,6 +6,7 @@ library;
 
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -45,7 +46,7 @@ class ProductDetailSheet extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -73,6 +74,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   bool _loading = true;
   String? _error;
   ProductDetail? _detail;
+  CancelToken? _detailCancelToken;
+  CancelToken? _downloadCancelToken;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -80,7 +84,18 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     _loadDetail();
   }
 
+  @override
+  void dispose() {
+    _detailCancelToken?.cancel('product detail closed');
+    _downloadCancelToken?.cancel('product ficha closed');
+    super.dispose();
+  }
+
   Future<void> _loadDetail() async {
+    final generation = ++_loadGeneration;
+    _detailCancelToken?.cancel('superseded product detail');
+    final cancelToken = CancelToken();
+    _detailCancelToken = cancelToken;
     setState(() {
       _loading = true;
       _error = null;
@@ -89,14 +104,16 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       final detail = await PedidosService.getProductDetail(
         widget.productCode,
         clientCode: widget.clientCode,
+        cancelToken: cancelToken,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _detail = detail;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (e is ApiException && e.code == 'CANCELLED') return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -125,7 +142,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       context: ctx,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.softPanel,
         content: Row(
           children: [
             const SizedBox(
@@ -133,7 +150,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               height: 24,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
             ),
             const SizedBox(width: 16),
@@ -147,7 +164,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     );
 
     try {
-      await ApiClient.dio.download(url, filePath);
+      _downloadCancelToken?.cancel('superseded ficha download');
+      final cancelToken = CancelToken();
+      _downloadCancelToken = cancelToken;
+      await ApiClient.download(url, filePath, cancelToken: cancelToken);
 
       if (navigator.canPop()) navigator.pop();
 
@@ -168,6 +188,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       );
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
+      if (e is ApiException && e.code == 'CANCELLED') return;
       final msg = e.toString().contains('404')
           ? 'No hay ficha técnica para este producto'
           : 'Error al descargar: $e';
@@ -182,11 +203,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppTheme.neonBlue),
+            CircularProgressIndicator(color: AppTheme.info),
             SizedBox(height: 12),
             Text(
               'Cargando detalle...',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -208,7 +229,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               const SizedBox(height: 12),
               Text(
                 'Error: $_error',
-                style: const TextStyle(color: Colors.white70),
+                style: const TextStyle(color: AppTheme.textSecondary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -216,11 +237,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 onPressed: _loadDetail,
                 icon: const Icon(
                   Icons.refresh,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                 ),
                 label: const Text(
                   'Reintentar',
-                  style: TextStyle(color: AppTheme.neonBlue),
+                  style: TextStyle(color: AppTheme.info),
                 ),
               ),
             ],
@@ -269,7 +290,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         height: 4,
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.white24,
+          color: AppTheme.textTertiary,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
@@ -284,7 +305,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         Text(
           p.name,
           style: TextStyle(
-            color: Colors.white,
+            color: AppTheme.textPrimary,
             fontSize: Responsive.fontSize(
               context,
               small: 16,
@@ -299,7 +320,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         Text(
           p.code,
           style: TextStyle(
-            color: AppTheme.neonBlue,
+            color: AppTheme.info,
             fontSize: Responsive.fontSize(
               context,
               small: 12,
@@ -415,7 +436,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             child: Text(
               r.label,
               style: const TextStyle(
-                color: Colors.white54,
+                color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
             ),
@@ -424,7 +445,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             child: Text(
               r.value,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -457,7 +478,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               child: Container(
                 width: double.infinity,
                 height: 200,
-                color: AppTheme.darkCard,
+                color: AppTheme.softPanel,
                 child: SmartProductImage(
                   imageUrl: imageUrl,
                   productCode: code,
@@ -479,9 +500,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ),
               label: const Text('Ver Ficha Tecnica'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.neonBlue,
+                foregroundColor: AppTheme.info,
                 side: const BorderSide(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -504,7 +525,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           padding: EdgeInsets.symmetric(vertical: 8),
           child: Text(
             'Sin tarifas disponibles',
-            style: TextStyle(color: Colors.white38, fontSize: 13),
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
           ),
         ),
       );
@@ -525,16 +546,16 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                    color: AppTheme.info.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                      color: AppTheme.info.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
                     'T${t.code}',
                     style: const TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -545,7 +566,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   child: Text(
                     t.description,
                     style: const TextStyle(
-                      color: Colors.white70,
+                      color: AppTheme.textSecondary,
                       fontSize: 13,
                     ),
                   ),
@@ -553,7 +574,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 Text(
                   PedidosFormatters.money(t.price, decimals: 3),
                   style: const TextStyle(
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.success,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
@@ -575,14 +596,14 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         children: [
           const Icon(
             Icons.sell_outlined,
-            color: AppTheme.neonGreen,
+            color: AppTheme.success,
             size: 20,
           ),
           const SizedBox(width: 8),
           Text(
             PedidosFormatters.money(price, decimals: 3),
             style: const TextStyle(
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -591,7 +612,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           Text(
             '(ultimo precio de venta)',
             style: TextStyle(
-              color: Colors.white54,
+              color: AppTheme.textSecondary,
               fontSize: Responsive.fontSize(
                 context,
                 small: 11,
@@ -621,7 +642,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   child: Text(
                     'Almacen',
                     style: TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -631,7 +652,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   child: Text(
                     'Envases',
                     style: TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -642,7 +663,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   child: Text(
                     'Unidades',
                     style: TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -665,7 +686,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           ? s.almacenName
                           : 'Almacen ${s.almacenCode}',
                       style: const TextStyle(
-                        color: Colors.white70,
+                        color: AppTheme.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -674,7 +695,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     child: Text(
                       s.envases.toStringAsFixed(0),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontSize: 13,
                       ),
                       textAlign: TextAlign.right,
@@ -684,7 +705,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     child: Text(
                       s.unidades.toStringAsFixed(0),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontSize: 13,
                       ),
                       textAlign: TextAlign.right,
@@ -721,12 +742,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         icon: const Icon(Icons.bar_chart_rounded),
         label: const Text('Historico de Ventas'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.2),
-          foregroundColor: AppTheme.neonPurple,
+          backgroundColor: AppTheme.accentIndigo.withValues(alpha: 0.2),
+          foregroundColor: AppTheme.accentIndigo,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: AppTheme.neonPurple.withValues(alpha: 0.4),
+              color: AppTheme.accentIndigo.withValues(alpha: 0.4),
             ),
           ),
           elevation: 0,
@@ -744,7 +765,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: AppTheme.borderColor.withValues(alpha: 0.3),
@@ -755,12 +776,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppTheme.neonBlue, size: 18),
+              Icon(icon, color: AppTheme.info, size: 18),
               const SizedBox(width: 8),
               Text(
                 title,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -789,10 +810,10 @@ class _PdfViewerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.textPrimary,
       appBar: AppBar(
         title: Text(title, style: const TextStyle(fontSize: 14)),
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         elevation: 0,
       ),
       body: PDFView(

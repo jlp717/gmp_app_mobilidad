@@ -109,8 +109,11 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
         title: Row(
           children: [
             Container(
@@ -150,7 +153,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                 hintStyle: TextStyle(
                     color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 filled: true,
-                fillColor: AppTheme.darkBase,
+                fillColor: AppTheme.softPanel,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -197,7 +200,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.error,
-              foregroundColor: Colors.white,
+              foregroundColor: AppTheme.textPrimary,
             ),
             child: const Text('Confirmar'),
           ),
@@ -264,7 +267,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         statusIcon = Icons.cancel;
         statusLabel = 'No Entregado';
       case ItemDeliveryStatus.pending:
-        statusColor = Colors.orange;
+        statusColor = AppTheme.warning;
         statusIcon = Icons.pending;
         statusLabel = 'Pendiente';
     }
@@ -310,7 +313,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                              color: AppTheme.info.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -318,7 +321,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: AppTheme.neonBlue,
+                                color: AppTheme.info,
                               ),
                             ),
                           ),
@@ -354,7 +357,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.darkBase,
+                    color: AppTheme.softPanel,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(

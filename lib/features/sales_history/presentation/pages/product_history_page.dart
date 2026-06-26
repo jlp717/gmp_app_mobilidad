@@ -193,10 +193,10 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                         _clientController.text.isNotEmpty ||
                         _searchController.text.isNotEmpty)
                       TextButton.icon(
-                        icon: const Icon(Icons.clear, color: Colors.redAccent),
+                        icon: const Icon(Icons.clear, color: AppColors.error),
                         label: const Text(
                           'Limpiar',
-                          style: TextStyle(color: Colors.redAccent),
+                          style: TextStyle(color: AppColors.error),
                         ),
                         onPressed: _clearFilters,
                       ),
@@ -404,7 +404,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 DataCell(
                   Text(
                     item.invoice,
-                    style: const TextStyle(color: AppColors.neonBlue),
+                    style: const TextStyle(color: AppColors.info),
                   ),
                 ),
                 DataCell(
@@ -491,7 +491,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
             const SizedBox(width: 16),
             Text(
               'Descargando ficha técnica...',
-              style: TextStyle(color: Colors.grey[300]),
+              style: TextStyle(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -499,7 +499,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
     );
 
     try {
-      await ApiClient.dio.download(url, filePath);
+      await ApiClient.download(url, filePath);
 
       if (navigator.canPop()) navigator.pop();
 
@@ -588,7 +588,7 @@ class _ProductCard extends StatelessWidget {
                       _InfoChip(
                         icon: Icons.receipt_long,
                         label: item.invoice,
-                        color: AppColors.neonBlue,
+                        color: AppColors.info,
                       ),
                       _InfoChip(icon: Icons.calendar_today, label: item.date),
                     ],
@@ -704,7 +704,7 @@ class _ProductThumbnail extends StatelessWidget {
         child: Container(
           width: size,
           height: size,
-          color: AppColors.surfaceColor,
+          color: AppColors.raisedSurface,
           child: SmartProductImage(
             imageUrl: imageUrl,
             productCode: '',

@@ -142,9 +142,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -192,7 +192,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                 hintText: 'Buscar producto, lote, ref...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
-                fillColor: AppTheme.surfaceColor,
+                fillColor: AppTheme.raisedSurface,
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
@@ -214,13 +214,13 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Theme(
-                                data: Theme.of(context)
-                                    .copyWith(dividerColor: Colors.grey[800]),
+                                data: Theme.of(context).copyWith(
+                                    dividerColor: AppTheme.mutedPanel),
                                 child: DataTable(
                                   headingRowColor: WidgetStateProperty.all(
-                                      AppTheme.surfaceColor),
+                                      AppTheme.raisedSurface),
                                   dataRowColor: WidgetStateProperty.all(
-                                      AppTheme.darkBase),
+                                      AppTheme.inkSurface),
                                   columnSpacing: 20,
                                   columns: [
                                     const DataColumn(
@@ -307,7 +307,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                             _currencyFormat.format(totalSales),
                                             style: const TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                color: AppTheme.neonBlue))),
+                                                color: AppTheme.info))),
                                         for (var m = 1; m <= 12; m++) ...[
                                           DataCell(
                                             Text(

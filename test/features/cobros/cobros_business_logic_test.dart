@@ -134,16 +134,22 @@ void main() {
       final provider = CobrosProvider(employeeCode: '98');
       await provider.cargarPendingSummary(
         'ALL',
-        limit: 999,
+        limit: 9999,
         page: 0,
         offset: -10,
+        tipoDocumento: 'COB',
+        fechaDesde: '2026-06-01',
+        fechaHasta: '2026-06-30',
       );
 
       expect(paths, hasLength(1));
       expect(paths.single, contains('/cobros/pending-summary/ALL'));
-      expect(paths.single, contains('limit=100'));
+      expect(paths.single, contains('limit=2000'));
       expect(paths.single, contains('page=1'));
       expect(paths.single, contains('offset=0'));
+      expect(paths.single, contains('tipoDocumento=COB'));
+      expect(paths.single, contains('fechaDesde=2026-06-01'));
+      expect(paths.single, contains('fechaHasta=2026-06-30'));
     });
 
     test('adds server cache buster and vendor scope on forced detail refresh',

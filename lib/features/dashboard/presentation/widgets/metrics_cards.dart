@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
@@ -32,7 +33,7 @@ class MetricsCards extends StatelessWidget {
           count: vencimientos.pendingCount,
           countLabel: 'pendientes',
           amount: vencimientos.totalAmount,
-          color: Colors.orange,
+          color: AppTheme.warning,
           onTap: () {
             // Navegar a detalle de vencimientos
           },
@@ -47,7 +48,7 @@ class MetricsCards extends StatelessWidget {
           count: cobros.realizedCount,
           countLabel: 'realizados',
           amount: cobros.totalAmount,
-          color: Colors.green,
+          color: AppTheme.success,
           onTap: () {
             // Navegar a detalle de cobros
           },
@@ -62,7 +63,7 @@ class MetricsCards extends StatelessWidget {
           count: pedidos.pendingCount,
           countLabel: 'pendientes',
           amount: pedidos.totalAmount,
-          color: Colors.blue,
+          color: AppTheme.info,
           onTap: () {
             // Navegar a detalle de pedidos
           },

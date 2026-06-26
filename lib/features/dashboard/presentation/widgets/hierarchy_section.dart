@@ -16,7 +16,7 @@ class HierarchySection extends StatelessWidget {
     required this.onNodeTap,
     super.key,
     this.selectedNode,
-    this.color = AppTheme.neonBlue,
+    this.color = AppTheme.info,
     this.chartType = ChartType.bar,
   });
   final String title;
@@ -49,7 +49,7 @@ class HierarchySection extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.bold,
               fontSize: 14,
-              letterSpacing: 1.2,
+              letterSpacing: 0,
             ),
           ),
         ),

@@ -89,7 +89,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final total = provider.totalConIva;
 
     return Dialog(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
@@ -140,18 +140,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.neonBlue.withValues(alpha: 0.18),
-            AppTheme.darkSurface,
-            AppTheme.neonGreen.withValues(alpha: 0.08),
-          ],
-        ),
+        color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.08),
+            color: AppTheme.info.withValues(alpha: 0.18),
           ),
         ),
       ),
@@ -161,24 +153,19 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.95),
-                  AppTheme.neonCyan.withValues(alpha: 0.82),
-                ],
-              ),
+              color: AppTheme.info,
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.24),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: const Icon(
               Icons.task_alt_rounded,
-              color: AppTheme.darkBase,
+              color: Colors.white,
               size: 24,
             ),
           ),
@@ -237,7 +224,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: AppTheme.neonCyan, size: 13),
+          Icon(icon, color: AppTheme.info, size: 13),
           const SizedBox(width: 5),
           Text(
             label,
@@ -256,7 +243,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: AppTheme.glassMorphismPremium(
-        glowColor: AppTheme.neonBlue,
+        glowColor: AppTheme.info,
         opacity: 0.5,
       ),
       child: Row(
@@ -265,16 +252,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.3),
-                  AppTheme.neonPurple.withValues(alpha: 0.2)
-                ],
-              ),
+              color: AppTheme.info.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.storefront,
-                color: AppTheme.neonBlue, size: 22),
+            child: const Icon(Icons.storefront, color: AppTheme.info, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -355,20 +336,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.neonGreen.withValues(alpha: 0.13),
-            AppTheme.darkCard.withValues(alpha: 0.88),
-            AppTheme.neonBlue.withValues(alpha: 0.08),
-          ],
-        ),
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.22)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.22)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonGreen.withValues(alpha: 0.10),
+            color: AppTheme.success.withValues(alpha: 0.10),
             blurRadius: 22,
             offset: const Offset(0, 10),
           ),
@@ -383,12 +356,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withValues(alpha: 0.16),
+                  color: AppTheme.success.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.route_rounded,
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   size: 21,
                 ),
               ),
@@ -418,7 +391,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
               _buildStatusPill(
                 isValidated ? 'Validado' : 'Flexible',
-                isValidated ? AppTheme.neonGreen : AppTheme.warning,
+                isValidated ? AppTheme.success : AppTheme.warning,
               ),
               const SizedBox(width: 8),
               if (_isLoadingDeliveryOptions)
@@ -427,7 +400,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.success,
                   ),
                 ),
             ],
@@ -477,7 +450,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                               child: Text(
                                 weekdayLabel,
                                 style: const TextStyle(
-                                  color: AppTheme.neonGreen,
+                                  color: AppTheme.success,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -495,9 +468,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       ? null
                       : _pickDeliveryDate,
                   icon: const Icon(Icons.edit_calendar_rounded),
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.12),
+                    backgroundColor: AppTheme.success.withValues(alpha: 0.12),
                     disabledBackgroundColor:
                         Colors.white.withValues(alpha: 0.04),
                     shape: RoundedRectangleBorder(
@@ -613,10 +586,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             (day) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withValues(alpha: 0.10),
+                color: AppTheme.success.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: AppTheme.neonGreen.withValues(alpha: 0.22),
+                  color: AppTheme.success.withValues(alpha: 0.22),
                 ),
               ),
               child: Text(
@@ -690,7 +663,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             width: 3,
             height: 14,
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -701,7 +674,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               color: AppTheme.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
+              letterSpacing: 0,
             ),
           ),
         ],
@@ -729,7 +702,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.6),
+        color: AppTheme.raisedSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
@@ -741,13 +714,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             height: 28,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.1),
+              color: AppTheme.info.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '${index + 1}',
               style: const TextStyle(
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -779,9 +752,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   Text(
                     'Bolsa ${bolsaDelta > 0 ? '+' : '-'}${PedidosFormatters.money(bolsaDelta.abs())}',
                     style: TextStyle(
-                      color: bolsaDelta > 0
-                          ? AppTheme.neonGreen
-                          : AppTheme.warning,
+                      color:
+                          bolsaDelta > 0 ? AppTheme.success : AppTheme.warning,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -826,7 +798,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     double margin,
   ) {
     final marginColor = margin >= 15
-        ? AppTheme.neonGreen
+        ? AppTheme.success
         : margin >= 5
             ? AppTheme.warning
             : AppTheme.error;
@@ -834,7 +806,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: AppTheme.glassMorphismPremium(
-        glowColor: AppTheme.neonGreen,
+        glowColor: AppTheme.success,
         opacity: 0.4,
       ),
       child: Column(
@@ -894,7 +866,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               Text(
                 PedidosFormatters.money(total),
                 style: const TextStyle(
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                 ),
@@ -914,7 +886,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     child: LinearProgressIndicator(
                       value: (margin / 50).clamp(0.0, 1.0),
                       minHeight: 6,
-                      backgroundColor: AppTheme.darkCard,
+                      backgroundColor: AppTheme.softPanel,
                       valueColor: AlwaysStoppedAnimation<Color>(marginColor),
                     ),
                   ),
@@ -953,7 +925,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           _buildTotalRow(
             'Bolsa generada',
             '+${PedidosFormatters.money(impact.acumulacion)}',
-            valueColor: AppTheme.neonGreen,
+            valueColor: AppTheme.success,
           ),
         if (impact.consumo > 0) ...[
           if (impact.acumulacion > 0) const SizedBox(height: 4),
@@ -967,7 +939,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         _buildTotalRow(
           'Impacto neto bolsa',
           '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
-          valueColor: impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning,
+          valueColor: impact.neto >= 0 ? AppTheme.success : AppTheme.warning,
         ),
       ],
     );
@@ -998,7 +970,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.4),
+        color: AppTheme.raisedSurface.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.2)),
       ),
@@ -1036,12 +1008,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         border: Border(
-            top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+            top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2))),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withValues(alpha: 0.1),
+            color: AppTheme.info.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -1094,8 +1066,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.neonGreen
-                                .withValues(alpha: 0.2 + glow),
+                            color:
+                                AppTheme.success.withValues(alpha: 0.2 + glow),
                             blurRadius: 16 + (glow * 20),
                             spreadRadius: glow * 4,
                           ),
@@ -1118,7 +1090,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: AppTheme.darkBase,
+                                color: Colors.white,
                               ),
                             )
                           : Icon(
@@ -1136,14 +1108,14 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonGreen,
-                        foregroundColor: AppTheme.darkBase,
+                        backgroundColor: AppTheme.success,
+                        foregroundColor: Colors.white,
                         disabledBackgroundColor:
-                            AppTheme.neonGreen.withValues(alpha: 0.4),
+                            AppTheme.success.withValues(alpha: 0.4),
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -1164,8 +1136,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   Widget _buildConfirmStatusBanner() {
     final isError = !_isConfirming && !_confirmSucceeded;
     final color = _confirmSucceeded
-        ? AppTheme.neonGreen
-        : (isError ? AppTheme.error : AppTheme.neonBlue);
+        ? AppTheme.success
+        : (isError ? AppTheme.error : AppTheme.info);
     final icon = _confirmSucceeded
         ? Icons.check_circle_rounded
         : (isError ? Icons.error_outline_rounded : Icons.sync_rounded);
@@ -1279,12 +1251,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.darkSurface,
+          backgroundColor: AppTheme.raisedSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
-              Icon(Icons.local_shipping_rounded, color: AppTheme.neonGreen),
+              Icon(Icons.local_shipping_rounded, color: AppTheme.success),
               SizedBox(width: 8),
               Text('Seleccionar camion', style: TextStyle(color: Colors.white)),
             ],
@@ -1305,13 +1277,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: isCurrent
-                          ? AppTheme.neonGreen.withValues(alpha: 0.15)
-                          : AppTheme.neonBlue.withValues(alpha: 0.1),
+                          ? AppTheme.success.withValues(alpha: 0.15)
+                          : AppTheme.info.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.local_shipping_rounded,
-                      color: isCurrent ? AppTheme.neonGreen : AppTheme.neonBlue,
+                      color: isCurrent ? AppTheme.success : AppTheme.info,
                     ),
                   ),
                   title: Text(
@@ -1322,8 +1294,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     ),
                   ),
                   trailing: isCurrent
-                      ? const Icon(Icons.check_circle,
-                          color: AppTheme.neonGreen)
+                      ? const Icon(Icons.check_circle, color: AppTheme.success)
                       : null,
                   onTap: () {
                     Navigator.pop(ctx);

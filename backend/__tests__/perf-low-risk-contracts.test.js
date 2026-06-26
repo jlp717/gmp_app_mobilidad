@@ -109,8 +109,8 @@ describe('perf low-risk contracts', () => {
         });
     });
 
-    describe('pedidos.service createOrder line insert concurrency contract', () => {
-        test('source uses mapWithConcurrency instead of sequential await per line', () => {
+    describe('pedidos.service createOrder line insert bulk contract', () => {
+        test('source uses chunked bulk inserts instead of sequential await per line', () => {
             const fs = require('fs');
             const path = require('path');
             const source = fs.readFileSync(path.join(__dirname, '../services/pedidos.service.js'), 'utf8');
@@ -119,49 +119,11 @@ describe('perf low-risk contracts', () => {
             expect(start).toBeGreaterThanOrEqual(0);
             expect(end).toBeGreaterThan(start);
             const block = source.slice(start, end);
-            expect(block).toMatch(/mapWithConcurrency\(lineContexts,\s*CREATE_ORDER_LINE_CONCURRENCY/i);
+            expect(block).toMatch(/const lineInserts = lineContexts\.map/i);
+            expect(block).toMatch(/executeBulkInsert\(\(sql, params\) => queryWithParams\(sql, params, false\), lineInserts/i);
+            expect(block).toMatch(/chunkSize:\s*DB2_BULK_INSERT_CHUNK_SIZE/i);
             expect(block).not.toMatch(/for \(let i = 0; i < lines\.length; i\+\+\)[\s\S]*await queryWithParams\(lineInsert\.sql/);
-        });
-
-        test('micro-benchmark: parallel mock inserts finish faster than sequential baseline', async () => {
-            const lineCount = 12;
-            const delayMs = 15;
-            const concurrency = 4;
-
-            async function runSequential() {
-                const start = Date.now();
-                for (let i = 0; i < lineCount; i += 1) {
-                    await new Promise((resolve) => setTimeout(resolve, delayMs));
-                }
-                return Date.now() - start;
-            }
-
-            async function mapWithConcurrency(items, limit, mapper) {
-                const results = new Array(items.length);
-                let next = 0;
-                const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-                    while (next < items.length) {
-                        const index = next++;
-                        results[index] = await mapper(items[index], index);
-                    }
-                });
-                await Promise.all(workers);
-                return results;
-            }
-
-            async function runParallel() {
-                const start = Date.now();
-                await mapWithConcurrency(Array.from({ length: lineCount }), concurrency, async () => {
-                    await new Promise((resolve) => setTimeout(resolve, delayMs));
-                });
-                return Date.now() - start;
-            }
-
-            const sequentialMs = await runSequential();
-            const parallelMs = await runParallel();
-            expect(sequentialMs).toBeGreaterThanOrEqual(lineCount * delayMs - 25);
-            expect(parallelMs).toBeLessThan(sequentialMs);
-            expect(parallelMs).toBeLessThan(lineCount * delayMs);
+            expect(block).not.toMatch(/await queryWithParams\(lineInsert\.sql/);
         });
     });
 

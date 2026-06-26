@@ -48,6 +48,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   final TextEditingController _searchAlbaranController =
       TextEditingController();
   Timer? _loadDebounceTimer;
+  Completer<void>? _loadCompleter;
 
   late AnimationController _listAnimController;
   // Cache the repartidores future to avoid re-fetching on every rebuild
@@ -87,47 +88,90 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     _searchClientController.dispose();
     _searchAlbaranController.dispose();
     _loadDebounceTimer?.cancel();
+    if (_loadCompleter?.isCompleted == false) {
+      _loadCompleter?.complete();
+    }
     _listAnimController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    // Cancel any pending load requests (debounce)
+  Future<void> _loadData({bool forceRefresh = false}) async {
     _loadDebounceTimer?.cancel();
+    if (_loadCompleter?.isCompleted == false) {
+      _loadCompleter?.complete();
+    }
 
-    // Debounce for 300ms to prevent rapid successive calls
-    _loadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
+    final completer = Completer<void>();
+    _loadCompleter = completer;
 
-      final auth = ref.read(authProvider).value;
-      final selectedVendor = ref.read(selectedVendorProvider);
-      final entregas = ref.read(entregasProvider.notifier);
-
-      var targetId = widget.repartidorId ?? auth?.user?.code ?? '';
-
-      // View As logic for directors
-      if (auth?.user?.isJefeVentas ?? false && selectedVendor != null) {
-        targetId = selectedVendor!;
-      }
-
-      // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
-      // The week endpoint needs single ID, handled in _loadWeekData
-
-      if (targetId.isNotEmpty) {
-        if (_lastLoadedId != targetId) {
-          _lastLoadedId = targetId;
+    Future<void> runLoad() async {
+      try {
+        await _executeLoadData(forceRefresh: forceRefresh);
+        if (!completer.isCompleted) completer.complete();
+      } catch (e, stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(e, stackTrace);
         }
-
-        entregas.setRepartidor(targetId, autoReload: false);
-        entregas.seleccionarFecha(_selectedDate);
-
-        // Backend supports multi-ID for week endpoint (uses IN clause)
-        _loadWeekData(targetId);
+      } finally {
+        if (_loadCompleter == completer) {
+          _loadCompleter = null;
+        }
       }
-    });
+    }
+
+    if (forceRefresh) {
+      unawaited(runLoad());
+    } else {
+      _loadDebounceTimer = Timer(
+        const Duration(milliseconds: 300),
+        () => unawaited(runLoad()),
+      );
+    }
+
+    return completer.future;
   }
 
-  Future<void> _loadWeekData(String repartidorId) async {
+  Future<void> _executeLoadData({required bool forceRefresh}) async {
+    if (!mounted) return;
+
+    final auth = ref.read(authProvider).value;
+    final selectedVendor = ref.read(selectedVendorProvider);
+    final entregas = ref.read(entregasProvider.notifier);
+
+    var targetId = widget.repartidorId ?? auth?.user?.code ?? '';
+
+    // View As logic for directors
+    if (auth?.user?.isJefeVentas ?? false) {
+      targetId = selectedVendor ?? targetId;
+    }
+
+    // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
+    // The week endpoint needs single ID, handled in _loadWeekData
+
+    if (targetId.isEmpty) return;
+
+    if (_lastLoadedId != targetId) {
+      _lastLoadedId = targetId;
+    }
+
+    entregas.setRepartidor(targetId, autoReload: false);
+    entregas.seleccionarFecha(
+      _selectedDate,
+      forceRefresh: forceRefresh,
+      autoReload: false,
+    );
+
+    // Backend supports multi-ID for week endpoint (uses IN clause)
+    await Future.wait([
+      entregas.cargarAlbaranesPendientes(forceRefresh: forceRefresh),
+      _loadWeekData(targetId, forceRefresh: forceRefresh),
+    ]);
+  }
+
+  Future<void> _loadWeekData(
+    String repartidorId, {
+    bool forceRefresh = false,
+  }) async {
     final generation = ++_weekLoadGeneration;
     final requestDate = _selectedDate;
     if (mounted) setState(() => _isLoadingWeek = true);
@@ -138,6 +182,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         cacheKey:
             'repartidor:rutero-week:$repartidorId:${requestDate.toIso8601String().substring(0, 10)}',
         cacheTTL: const Duration(minutes: 2),
+        forceRefresh: forceRefresh,
       );
       if (generation != _weekLoadGeneration || !mounted) return;
       if (response['success'] == true) {
@@ -205,14 +250,14 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
           // HEADER (COMPACT)
           SmartSyncHeader(
             title: 'Rutero',
             subtitle: currentName,
-            onSync: _loadData,
+            onSync: () => _loadData(forceRefresh: true),
             isLoading: isLoading || _isLoadingWeek,
             compact: true,
           ),
@@ -259,7 +304,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       color: AppTheme.error,
                       size: 18,
                     ),
-                    onPressed: _loadData,
+                    onPressed: () => _loadData(forceRefresh: true),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -315,22 +360,15 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [
-                  AppTheme.darkCard,
-                  AppTheme.darkSurface,
-                ],
-              ),
+              color: AppTheme.raisedSurface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.neonBlue.withValues(alpha: 0.3),
-              ),
+              border: Border.all(color: AppTheme.borderColor),
             ),
             child: Row(
               children: [
                 const Icon(
                   Icons.person_search,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   size: 20,
                 ),
                 const SizedBox(width: 10),
@@ -347,9 +385,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       ),
                       icon: const Icon(
                         Icons.arrow_drop_down,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                       ),
-                      dropdownColor: AppTheme.darkCard,
+                      dropdownColor: AppTheme.raisedSurface,
                       isExpanded: true,
                       style: const TextStyle(
                         color: AppTheme.textPrimary,
@@ -386,10 +424,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                           ref
                               .read(entregasProvider.notifier)
                               .setRepartidor(val, forceReload: true);
-                          ref
-                              .read(entregasProvider.notifier)
-                              .seleccionarFecha(_selectedDate);
-                          _loadWeekData(val);
+                          ref.read(entregasProvider.notifier).seleccionarFecha(
+                                _selectedDate,
+                                forceRefresh: true,
+                              );
+                          _loadWeekData(val, forceRefresh: true);
                         }
                       },
                     ),
@@ -399,7 +438,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 IconButton(
                   icon: const Icon(
                     Icons.refresh,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     size: 20,
                   ),
                   tooltip: 'Recargar datos',
@@ -408,10 +447,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     if (selectedVendor != null) {
                       ref
                           .read(entregasProvider.notifier)
-                          .setRepartidor(selectedVendor);
-                      ref
-                          .read(entregasProvider.notifier)
-                          .cargarAlbaranesPendientes();
+                          .setRepartidor(selectedVendor, forceReload: true);
+                      ref.read(entregasProvider.notifier).seleccionarFecha(
+                            _selectedDate,
+                            forceRefresh: true,
+                          );
+                      _loadWeekData(selectedVendor, forceRefresh: true);
                     }
                   },
                   padding: EdgeInsets.zero,
@@ -444,7 +485,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             child: Container(
               height: 36,
               decoration: BoxDecoration(
-                color: AppTheme.darkCard,
+                color: AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.borderColor),
               ),
@@ -505,7 +546,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             child: Container(
               height: 36,
               decoration: BoxDecoration(
-                color: AppTheme.darkCard,
+                color: AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.borderColor),
               ),
@@ -595,7 +636,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             height: 38,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: AppTheme.darkCard,
+              color: AppTheme.softPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppTheme.borderColor),
             ),
@@ -604,10 +645,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 value: sortBy,
                 icon: const Icon(
                   Icons.sort,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   size: 18,
                 ),
-                dropdownColor: AppTheme.darkCard,
+                dropdownColor: AppTheme.raisedSurface,
                 items: const [
                   DropdownMenuItem(
                     value: 'default',
@@ -661,7 +702,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.2) : AppTheme.darkCard,
+          color:
+              isSelected ? color.withValues(alpha: 0.16) : AppTheme.softPanel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? color : AppTheme.borderColor,
@@ -700,7 +742,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             width: 60,
             height: 60,
             child: CircularProgressIndicator(
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               strokeWidth: 3,
             ),
           ),
@@ -738,9 +780,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
             ),
             child: RefreshIndicator(
-              onRefresh: _loadData,
-              color: AppTheme.neonBlue,
-              backgroundColor: AppTheme.surfaceColor,
+              onRefresh: () => _loadData(forceRefresh: true),
+              color: AppTheme.info,
+              backgroundColor: AppTheme.raisedSurface,
               child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
                 // Responsive: less bottom padding on phones with bottom nav
@@ -788,15 +830,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           Container(
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.1),
-                  AppTheme.neonCyan.withValues(alpha: 0.05),
-                ],
-              ),
+              color: AppTheme.raisedSurface,
               shape: BoxShape.circle,
               border: Border.all(
-                color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                color: AppTheme.borderColor,
                 width: 2,
               ),
             ),
@@ -833,42 +870,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             icon: const Icon(Icons.today, size: 18),
             label: const Text('Ir a hoy'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.neonBlue,
-              side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5)),
+              foregroundColor: AppTheme.info,
+              side: BorderSide(color: AppTheme.info.withValues(alpha: 0.5)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAiDetail(BuildContext context, String? suggestion) {
-    if (suggestion == null) return;
-    HapticFeedback.mediumImpact();
-    // Simple alert dialog for now
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        title: const Row(
-          children: [
-            Icon(Icons.auto_awesome, color: AppTheme.neonPurple),
-            SizedBox(width: 10),
-            Text(
-              'Análisis Inteligente',
-              style: TextStyle(color: AppTheme.neonPurple),
-            ),
-          ],
-        ),
-        content: Text(
-          suggestion,
-          style: const TextStyle(color: AppTheme.textPrimary),
-        ),
-        actions: [
-          TextButton(
-            child: const Text('Entendido'),
-            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -885,7 +890,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       builder: (ctx) => RuteroDetailModal(albaran: albaran, ref: ref),
     ).then((_) {
       if (mounted) {
-        entregasNotifier.cargarAlbaranesPendientes();
+        entregasNotifier.cargarAlbaranesPendientes(forceRefresh: true);
       }
     });
   }
@@ -939,14 +944,14 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               height: 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(child: Text('Completando ${albaran.nombreCliente}...')),
           ],
         ),
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         duration: const Duration(seconds: 1),
       ),
     );
@@ -973,7 +978,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             duration: const Duration(seconds: 2),
           ),
         );
-        provider.cargarAlbaranesPendientes(); // Refresh list
+        provider.cargarAlbaranesPendientes(forceRefresh: true); // Refresh list
       } else {
         HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -994,19 +999,22 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                color: AppTheme.info.withValues(alpha: 0.14),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.note_add,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 size: 20,
               ),
             ),
@@ -1031,14 +1039,14 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             hintStyle:
                 TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
             filled: true,
-            fillColor: AppTheme.darkBase,
+            fillColor: AppTheme.softPanel,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: AppTheme.borderColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.neonBlue),
+              borderSide: const BorderSide(color: AppTheme.info),
             ),
           ),
         ),
@@ -1061,153 +1069,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
-              foregroundColor: AppTheme.darkBase,
+              backgroundColor: AppTheme.info,
+              foregroundColor: AppTheme.textPrimary,
             ),
             child: const Text('Guardar'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showAiSuggestions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.darkSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.neonPurple.withValues(alpha: 0.3),
-                        AppTheme.neonBlue.withValues(alpha: 0.2),
-                      ],
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    color: AppTheme.neonPurple,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Sugerencias de IA',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildAiSuggestionTile(
-              icon: Icons.route,
-              title: 'Ruta optimizada',
-              subtitle: 'Ahorra 15 min evitando C/ Gran Vía (tráfico)',
-              onTap: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Función próximamente disponible'),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildAiSuggestionTile(
-              icon: Icons.priority_high,
-              title: 'Cobros prioritarios',
-              subtitle: '2 clientes con cobros vencidos hace +5 días',
-              color: AppTheme.obligatorio,
-              onTap: () {
-                Navigator.pop(ctx);
-                ref.read(entregasProvider.notifier).setFilterDebeCobrar('S');
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildAiSuggestionTile(
-              icon: Icons.trending_up,
-              title: 'Oportunidad de venta',
-              subtitle: 'Bar La Esquina suele pedir más en esta época',
-              color: AppTheme.success,
-              onTap: () => Navigator.pop(ctx),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAiSuggestionTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    Color? color,
-  }) {
-    final tileColor = color ?? AppTheme.neonBlue;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: tileColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tileColor.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: tileColor, size: 24),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: tileColor,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

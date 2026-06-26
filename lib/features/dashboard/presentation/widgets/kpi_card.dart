@@ -25,7 +25,7 @@ class KPICard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: AppColors.surfaceColor,
+      color: AppColors.raisedSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: AppColors.cardColor.withValues(alpha: 0.5)),

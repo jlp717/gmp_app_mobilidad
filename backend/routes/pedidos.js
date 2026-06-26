@@ -1394,6 +1394,10 @@ router.post('/create', async (req, res) => {
             logRouteTotal('idempotency_conflict');
             return res.status(409).json({ success: false, code: error.code, error: error.message });
         }
+        if (error.code === 'IDEMPOTENCY_UNAVAILABLE') {
+            logRouteTotal('idempotency_unavailable');
+            return res.status(503).json({ success: false, code: error.code, error: error.message });
+        }
         logRouteTotal('error');
         logger.error(`[PEDIDOS] Error in POST /create: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -2005,8 +2009,8 @@ router.get('/purchase-history-global', async (req, res) => {
         const familia = String(req.query.familia || '').trim();
         const marca = String(req.query.marca || '').trim();
 
-        const limit = Math.min(parseInt(req.query.limit) || 100, 500);
-        const offset = parseInt(req.query.offset) || 0;
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 500);
+        const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
         // Condiciones WHERE
         const where = [

@@ -45,7 +45,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
@@ -57,7 +57,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
             children: [
               Icon(
                 Icons.filter_list,
-                color: AppTheme.neonPurple,
+                color: AppTheme.accentIndigo,
                 size: 18,
               ),
               SizedBox(width: 8),
@@ -127,12 +127,12 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.neonPurple.withValues(alpha: 0.2)
+                        ? AppTheme.accentIndigo.withValues(alpha: 0.2)
                         : Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected
-                          ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                          ? AppTheme.accentIndigo.withValues(alpha: 0.5)
                           : Colors.white.withValues(alpha: 0.1),
                     ),
                   ),
@@ -143,7 +143,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                         estado['icon']! as IconData,
                         size: 12,
                         color: isSelected
-                            ? AppTheme.neonPurple
+                            ? AppTheme.accentIndigo
                             : AppTheme.textSecondary,
                       ),
                       const SizedBox(width: 4),
@@ -151,7 +151,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                         estado['label']! as String,
                         style: TextStyle(
                           color: isSelected
-                              ? AppTheme.neonPurple
+                              ? AppTheme.accentIndigo
                               : AppTheme.textSecondary,
                           fontSize: 11,
                           fontWeight:

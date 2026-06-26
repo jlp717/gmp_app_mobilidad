@@ -12,6 +12,19 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/commissions/data/commissions_service.dart';
 import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/pdf_range_dialog.dart';
 
+BoxDecoration _commissionSurfaceDecoration({
+  Color color = AppTheme.raisedSurface,
+  Color borderColor = AppTheme.borderColor,
+  double borderAlpha = 1,
+  double radius = AppTheme.radiusMd,
+}) {
+  return BoxDecoration(
+    color: color,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: borderColor.withValues(alpha: borderAlpha)),
+  );
+}
+
 class CommissionsPage extends ConsumerStatefulWidget {
   const CommissionsPage(
       {required this.employeeCode,
@@ -156,14 +169,17 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
         title: const Row(
           children: [
-            Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 24),
+            Icon(Icons.info_outline, color: AppTheme.info, size: 24),
             SizedBox(width: 8),
             Text('Cómo funcionan las comisiones',
-                style: TextStyle(color: AppTheme.neonBlue, fontSize: 16)),
+                style: TextStyle(color: AppTheme.info, fontSize: 16)),
           ],
         ),
         content: SingleChildScrollView(
@@ -173,14 +189,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8)),
+                decoration: _commissionSurfaceDecoration(
+                  color: AppTheme.info.withValues(alpha: 0.1),
+                  borderColor: AppTheme.info,
+                  borderAlpha: 0.32,
+                ),
                 child: const Text('⚠️ Todas las cifras son SIN IVA',
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.lightBlue)),
+                        color: AppTheme.info)),
               ),
               const SizedBox(height: 16),
               _buildStep(
@@ -194,7 +212,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
               const SizedBox(height: 12),
               _buildStep(
-                  'ðŸ’° Franjas de Comisión',
+                  'Franjas de Comisión',
                   'El % se aplica SOLO al exceso sobre el objetivo:\n\n'
                       '• Franja 1 (100-103%): 1.0%\n'
                       '• Franja 2 (103-106%): 1.3%\n'
@@ -202,7 +220,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       '• Franja 4 (>110%):    2.0%'),
               const SizedBox(height: 12),
               _buildStep(
-                  'ðŸ“… Ritmo Diario',
+                  'Ritmo Diario',
                   r'Compara tus ventas actuales vs. lo esperado al día de hoy:\n'
                       r'• ✓ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
                       '• ⚠ Naranja (Rezagado) = Necesitas acelerar'),
@@ -217,9 +235,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.info,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+            ),
             child: const Text('Entendido',
                 style: TextStyle(
-                    color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                    color: AppTheme.info, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -345,11 +369,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           final isMonthFuture = selectedMonth > now.month;
 
           return AlertDialog(
-            backgroundColor: AppTheme.surfaceColor,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: AppTheme.raisedSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              side: const BorderSide(color: AppTheme.borderColor),
+            ),
             title: Text('Pagar a $vendorName',
-                style: const TextStyle(color: Colors.white)),
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -357,7 +386,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   // Month selector with paid/future indicators
                   DropdownButtonFormField<int>(
                     initialValue: selectedMonth,
-                    dropdownColor: AppTheme.surfaceColor,
+                    dropdownColor: AppTheme.raisedSurface,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
                     items: List.generate(12, (index) {
                       final m = index + 1;
                       final isPaid = paidMonths.contains(m);
@@ -371,8 +404,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           label,
                           style: TextStyle(
                             color: isPaid
-                                ? Colors.green
-                                : (isFuture ? Colors.grey : Colors.white),
+                                ? AppTheme.success
+                                : (isFuture
+                                    ? AppTheme.textTertiary
+                                    : AppTheme.textPrimary),
                             fontWeight:
                                 isPaid ? FontWeight.bold : FontWeight.normal,
                           ),
@@ -388,9 +423,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           monthCommission.toStringAsFixed(2);
                       setStateDialog(() => selectedMonth = val);
                     },
-                    decoration: const InputDecoration(
+                    decoration: _payFieldDecoration(
                       labelText: 'Mes Correspondiente *',
-                      labelStyle: TextStyle(color: Colors.white60),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -401,22 +435,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: Colors.orange.withValues(alpha: 0.4)),
+                      decoration: _commissionSurfaceDecoration(
+                        color: AppTheme.warning.withValues(alpha: 0.1),
+                        borderColor: AppTheme.warning,
+                        borderAlpha: 0.35,
                       ),
                       child: Row(
                         children: [
                           const Icon(Icons.warning_amber_rounded,
-                              color: Colors.orange, size: 18),
+                              color: AppTheme.warning, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               '${_getMonthName(selectedMonth)} ya tiene un pago registrado. No se recomienda pagar dos veces el mismo mes.',
                               style: const TextStyle(
-                                  color: Colors.orange, fontSize: 11),
+                                  color: AppTheme.warning, fontSize: 11),
                             ),
                           ),
                         ],
@@ -429,22 +462,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: Colors.blue.withValues(alpha: 0.3)),
+                      decoration: _commissionSurfaceDecoration(
+                        color: AppTheme.info.withValues(alpha: 0.1),
+                        borderColor: AppTheme.info,
+                        borderAlpha: 0.35,
                       ),
                       child: const Row(
                         children: [
                           Icon(Icons.info_outline,
-                              color: Colors.lightBlue, size: 18),
+                              color: AppTheme.info, size: 18),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Este mes aún no ha terminado. La comisión puede cambiar.',
-                              style: TextStyle(
-                                  color: Colors.lightBlue, fontSize: 11),
+                              style:
+                                  TextStyle(color: AppTheme.info, fontSize: 11),
                             ),
                           ),
                         ],
@@ -455,63 +487,48 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   TextField(
                     controller: amountController,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: _payFieldDecoration(
                       labelText: 'Importe (\u20ac) *',
-                      labelStyle: const TextStyle(color: Colors.white60),
                       helperText:
                           'Comisión ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
-                      helperStyle: const TextStyle(
-                          color: AppTheme.neonGreen, fontSize: 11),
-                      enabledBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.5))),
+                      helperColor: AppTheme.success,
                     ),
                     onChanged: (val) => setStateDialog(() {}),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: observacionesController,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     maxLines: 3,
                     maxLength: 500,
-                    decoration: InputDecoration(
+                    decoration: _payFieldDecoration(
                       labelText: observacionesRequired
                           ? 'Observaciones * (OBLIGATORIO)'
                           : 'Observaciones (Opcional)',
-                      labelStyle: TextStyle(
-                        color: observacionesRequired
-                            ? Colors.orange
-                            : Colors.white60,
-                        fontWeight: observacionesRequired
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
                       helperText: observacionesRequired
                           ? 'Debes explicar por que se paga menos de lo correspondiente'
                           : 'Notas adicionales sobre este pago',
-                      helperStyle: TextStyle(
-                        color: observacionesRequired
-                            ? Colors.orange
-                            : Colors.white38,
-                        fontSize: 10,
-                      ),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: observacionesRequired
-                              ? Colors.orange.withValues(alpha: 0.7)
-                              : AppTheme.neonBlue.withValues(alpha: 0.5),
-                        ),
-                      ),
+                      labelColor: observacionesRequired
+                          ? AppTheme.warning
+                          : AppTheme.textSecondary,
+                      helperColor: observacionesRequired
+                          ? AppTheme.warning
+                          : AppTheme.textTertiary,
+                      focusColor: observacionesRequired
+                          ? AppTheme.warning
+                          : AppTheme.info,
+                      labelWeight: observacionesRequired
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: conceptController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: _payFieldDecoration(
                       labelText: 'Concepto (Opcional)',
-                      labelStyle: TextStyle(color: Colors.white60),
                     ),
                   ),
                 ],
@@ -520,20 +537,30 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.textSecondary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  ),
+                ),
                 child: const Text('Cancelar',
-                    style: TextStyle(color: Colors.white60)),
+                    style: TextStyle(color: AppTheme.textTertiary)),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                     backgroundColor:
-                        isMonthPaid ? Colors.orange : AppTheme.neonBlue),
+                        isMonthPaid ? AppTheme.warning : AppTheme.info,
+                    foregroundColor: AppTheme.textPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    )),
                 onPressed: () {
                   final amount = double.tryParse(amountController.text) ?? 0;
                   if (amount <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                           content: Text('El importe debe ser mayor que 0'),
-                          backgroundColor: Colors.red),
+                          backgroundColor: AppTheme.error),
                     );
                     return;
                   }
@@ -543,7 +570,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       const SnackBar(
                         content: Text(
                             'Debes indicar una observacion explicando por que se paga menos'),
-                        backgroundColor: Colors.orange,
+                        backgroundColor: AppTheme.warning,
                       ),
                     );
                     return;
@@ -585,7 +612,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ? 'Revisar (Mes ya pagado)'
                       : 'Revisar y Confirmar',
                   style: const TextStyle(
-                      color: Colors.black, fontWeight: FontWeight.bold),
+                      color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -616,17 +643,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            Icon(Icons.warning_amber_rounded,
+                color: AppTheme.warning, size: 28),
             SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Confirmar Registro de Pago',
                 style: TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.bold),
               ),
@@ -640,12 +671,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             children: [
               const Text(
                 'Estas a punto de registrar un pago de comision:',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               _confirmRow('Comercial', vendorName),
               _confirmRow('Mes', '${_getMonthName(month)} / 2026'),
-              const Divider(color: Colors.white12, height: 16),
+              const Divider(color: AppTheme.borderColor, height: 16),
               _confirmRow(
                   'Venta del mes', CurrencyFormatter.format(ventaActual)),
               _confirmRow(
@@ -654,73 +685,41 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 'Ventas sobre objetivo',
                 CurrencyFormatter.format(ventasSobreObjetivo),
                 valueColor: ventasSobreObjetivo >= 0
-                    ? AppTheme.neonGreen
+                    ? AppTheme.success
                     : AppTheme.error,
               ),
-              const Divider(color: Colors.white12, height: 16),
+              const Divider(color: AppTheme.borderColor, height: 16),
               _confirmRow('Comision generada',
                   CurrencyFormatter.format(generatedAmount)),
               _confirmRow(
                 'Importe a pagar',
                 CurrencyFormatter.format(amount),
-                valueColor: isPartialPay ? Colors.orange : AppTheme.neonGreen,
+                valueColor: isPartialPay ? AppTheme.warning : AppTheme.success,
               ),
               _confirmRow('Observaciones',
                   observaciones.isEmpty ? 'Ninguna' : observaciones),
               const SizedBox(height: 12),
               if (isPartialPay)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: Colors.red.withValues(alpha: 0.4)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.red, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'PAGO PARCIAL \u2013 se ha indicado observacion',
-                          style: TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
+                _commissionNotice(
+                  icon: Icons.warning,
+                  color: AppTheme.error,
+                  text: 'PAGO PARCIAL \u2013 se ha indicado observacion',
+                  strong: true,
                 ),
               const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Este pago se guardara como un nuevo registro historico. '
-                  'No se puede modificar despues.',
-                  style: TextStyle(color: Colors.lightBlue, fontSize: 11),
-                ),
+              _commissionNotice(
+                icon: Icons.history_rounded,
+                color: AppTheme.info,
+                text: 'Este pago se guardara como un nuevo registro historico. '
+                    'No se puede modificar despues.',
               ),
               const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Los valores de ventas/objetivo/comision quedan registrados '
-                  'en el momento del pago y pueden diferir de datos futuros.',
-                  style: TextStyle(color: Colors.lightBlue, fontSize: 11),
-                ),
+              _commissionNotice(
+                icon: Icons.lock_clock_rounded,
+                color: AppTheme.info,
+                text:
+                    'Los valores de ventas/objetivo/comision quedan registrados '
+                    'en el momento del pago y pueden diferir de datos futuros.',
               ),
             ],
           ),
@@ -736,9 +735,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(ctx),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: AppTheme.error,
+                      side: const BorderSide(color: AppTheme.error),
                       padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      ),
                     ),
                     child: const Text('CANCELAR',
                         style: TextStyle(
@@ -750,8 +752,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   flex: 2,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.neonGreen,
+                      backgroundColor: AppTheme.success,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      ),
                     ),
                     onPressed: () async {
                       Navigator.pop(ctx);
@@ -774,7 +780,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                                 content: Text('Pago registrado correctamente'),
-                                backgroundColor: Colors.green),
+                                backgroundColor: AppTheme.success),
                           );
                           _loadData(forceRefresh: true);
                         } else {
@@ -785,7 +791,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                                 content: Text('Error: $e'),
-                                backgroundColor: Colors.red),
+                                backgroundColor: AppTheme.error),
                           );
                         }
                       }
@@ -793,7 +799,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     child: const Text(
                       'CONFIRMAR Y REGISTRAR PAGO',
                       style: TextStyle(
-                          color: Colors.black,
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 13),
                       textAlign: TextAlign.center,
@@ -817,12 +823,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           SizedBox(
             width: 150,
             child: Text('$label:',
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                style: const TextStyle(
+                    color: AppTheme.textTertiary, fontSize: 12)),
           ),
           Expanded(
             child: Text(value,
                 style: TextStyle(
-                    color: valueColor ?? Colors.white,
+                    color: valueColor ?? AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 12)),
           ),
@@ -839,12 +846,76 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: Colors.white)),
+                color: AppTheme.textPrimary)),
         const SizedBox(height: 4),
         Text(desc,
             style:
                 const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
       ],
+    );
+  }
+
+  OutlineInputBorder _payFieldBorder(Color color) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      borderSide: BorderSide(color: color),
+    );
+  }
+
+  InputDecoration _payFieldDecoration({
+    required String labelText,
+    String? helperText,
+    Color labelColor = AppTheme.textSecondary,
+    Color helperColor = AppTheme.textTertiary,
+    Color focusColor = AppTheme.info,
+    FontWeight labelWeight = FontWeight.w600,
+  }) {
+    return InputDecoration(
+      labelText: labelText,
+      helperText: helperText,
+      filled: true,
+      fillColor: AppTheme.softPanel,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      labelStyle: TextStyle(color: labelColor, fontWeight: labelWeight),
+      helperStyle: TextStyle(color: helperColor, fontSize: 11),
+      counterStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+      enabledBorder: _payFieldBorder(AppTheme.borderColor),
+      focusedBorder: _payFieldBorder(focusColor),
+      errorBorder: _payFieldBorder(AppTheme.error),
+      focusedErrorBorder: _payFieldBorder(AppTheme.error),
+    );
+  }
+
+  Widget _commissionNotice({
+    required IconData icon,
+    required Color color,
+    required String text,
+    bool strong = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: _commissionSurfaceDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderColor: color,
+        borderAlpha: 0.35,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -855,7 +926,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     );
     if (isCommercial80Code(loggedUserCode)) {
       return Scaffold(
-        backgroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.inkSurface,
         body: Column(
           children: [
             SmartSyncHeader(
@@ -1020,12 +1091,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ? false
           : (actual >= target && target > 0);
       final color = isFuture
-          ? Colors.grey
+          ? AppTheme.textTertiary
           : (isPositive ? AppTheme.success : AppTheme.error);
       final dailyColor = isFuture
-          ? Colors.grey
-          : (dailyGreen ? AppTheme.success : Colors.orangeAccent);
-      final rowBgColor = isFuture ? Colors.black38 : AppTheme.surfaceColor;
+          ? AppTheme.textTertiary
+          : (dailyGreen ? AppTheme.success : AppTheme.warning);
+      final rowBgColor =
+          isFuture ? AppTheme.mutedPanel : AppTheme.raisedSurface;
       final textOpacity = isFuture ? 0.4 : 1.0;
 
       // Monthly Pct Logic
@@ -1062,17 +1134,19 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Text(monthName,
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white.withValues(alpha: textOpacity))),
+                          color: AppTheme.textPrimary
+                              .withValues(alpha: textOpacity))),
                   if (isFuture) ...[
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.3),
+                          color: AppTheme.textTertiary.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(4)),
                       child: const Text('PENDIENTE',
-                          style: TextStyle(fontSize: 8, color: Colors.grey)),
+                          style: TextStyle(
+                              fontSize: 8, color: AppTheme.textTertiary)),
                     ),
                   ],
                 ],
@@ -1081,13 +1155,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // OBJ. MES
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: textOpacity)))),
+                    color:
+                        AppTheme.textPrimary.withValues(alpha: textOpacity)))),
             // VENTA REAL o INCREMENTO EQUIPO (líder)
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(lacSales),
                 style: TextStyle(color: color, fontWeight: FontWeight.bold))),
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(bSales),
                 style: TextStyle(
-                    color: bSales > 0 ? AppTheme.neonBlue : Colors.grey,
+                    color: bSales > 0 ? AppTheme.info : AppTheme.textTertiary,
                     fontWeight:
                         bSales > 0 ? FontWeight.bold : FontWeight.normal))),
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(totalSales),
@@ -1095,7 +1170,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // ESTADO MES
             DataCell(
               isFuture
-                  ? const Text('-', style: TextStyle(color: Colors.grey))
+                  ? const Text('-',
+                      style: TextStyle(color: AppTheme.textTertiary))
                   : Row(
                       children: [
                         Icon(isPositive ? Icons.check_circle : Icons.cancel,
@@ -1106,11 +1182,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 2),
                             decoration: BoxDecoration(
-                                color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                                color: AppTheme.info.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4)),
                             child: Text('F$tier',
                                 style: const TextStyle(
-                                    fontSize: 9, color: AppTheme.neonBlue)),
+                                    fontSize: 9, color: AppTheme.info)),
                           ),
                         ],
                       ],
@@ -1119,7 +1195,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // % SOBRE (mes)
             DataCell(Text(pctText,
                 style: TextStyle(
-                    color: isFuture ? Colors.grey : color, fontSize: 11))),
+                    color: isFuture ? AppTheme.textTertiary : color,
+                    fontSize: 11))),
             // COMISIÓN MES
             DataCell(
               Text(
@@ -1130,8 +1207,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                         : CurrencyFormatter.format(commission)),
                 style: TextStyle(
                     color: isFuture
-                        ? Colors.grey
-                        : (isInformative ? Colors.grey : AppTheme.neonGreen),
+                        ? AppTheme.textTertiary
+                        : (isInformative
+                            ? AppTheme.textTertiary
+                            : AppTheme.success),
                     fontWeight: FontWeight.bold),
               ),
             ),
@@ -1140,18 +1219,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // DÍAS (transcurridos / totales)
             DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays',
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: textOpacity * 0.7),
+                    color: AppTheme.textPrimary
+                        .withValues(alpha: textOpacity * 0.7),
                     fontSize: 11))),
             // OBJ. ACUM. (pro-rated target)
             DataCell(Text(
                 isFuture ? '-' : CurrencyFormatter.format(proRatedTarget),
                 style: TextStyle(
                     fontSize: 11,
-                    color: Colors.white.withValues(alpha: textOpacity)))),
+                    color:
+                        AppTheme.textPrimary.withValues(alpha: textOpacity)))),
             // ESTADO RITMO + % SOBRE
             DataCell(
               isFuture
-                  ? const Text('-', style: TextStyle(color: Colors.grey))
+                  ? const Text('-',
+                      style: TextStyle(color: AppTheme.textTertiary))
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1185,7 +1267,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // DIFERENCIA (Venta Real - Obj. Acumulado)
             DataCell(
               isFuture
-                  ? const Text('-', style: TextStyle(color: Colors.grey))
+                  ? const Text('-',
+                      style: TextStyle(color: AppTheme.textTertiary))
                   : Text(
                       (actual - proRatedTarget) >= 0
                           ? '+${CurrencyFormatter.format(actual - proRatedTarget)}'
@@ -1202,13 +1285,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // COMISIÓN PROVISIONAL
             DataCell(
               isFuture || isInformative
-                  ? const Text('-', style: TextStyle(color: Colors.grey))
+                  ? const Text('-',
+                      style: TextStyle(color: AppTheme.textTertiary))
                   : Text(
                       CurrencyFormatter.format(provisionalCommission),
                       style: TextStyle(
                         color: provisionalCommission > 0
-                            ? AppTheme.neonPurple
-                            : Colors.grey,
+                            ? AppTheme.accentIndigo
+                            : AppTheme.textTertiary,
                         fontWeight: FontWeight.bold,
                         fontSize: 11,
                       ),
@@ -1230,12 +1314,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ? Text(
                           CurrencyFormatter.format(importePagado),
                           style: const TextStyle(
-                              color: AppTheme.neonGreen,
+                              color: AppTheme.success,
                               fontSize: 10,
                               fontWeight: FontWeight.bold),
                         )
                       : const Text('-',
-                          style: TextStyle(color: Colors.grey, fontSize: 10));
+                          style: TextStyle(
+                              color: AppTheme.textTertiary, fontSize: 10));
                 },
               ),
             ),
@@ -1255,12 +1340,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ? Text(
                           CurrencyFormatter.format(ventaComision),
                           style: const TextStyle(
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               fontSize: 10,
                               fontWeight: FontWeight.bold),
                         )
                       : const Text('-',
-                          style: TextStyle(color: Colors.grey, fontSize: 10));
+                          style: TextStyle(
+                              color: AppTheme.textTertiary, fontSize: 10));
                 },
               ),
             ),
@@ -1280,12 +1366,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ? Text(
                           CurrencyFormatter.format(objetivoReal),
                           style: const TextStyle(
-                              color: Colors.amber,
+                              color: AppTheme.accentAmber,
                               fontSize: 10,
                               fontWeight: FontWeight.bold),
                         )
                       : const Text('-',
-                          style: TextStyle(color: Colors.grey, fontSize: 10));
+                          style: TextStyle(
+                              color: AppTheme.textTertiary, fontSize: 10));
                 },
               ),
             ),
@@ -1309,7 +1396,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             child: Text(
                               observaciones,
                               style: const TextStyle(
-                                  color: Colors.orange,
+                                  color: AppTheme.warning,
                                   fontSize: 10,
                                   fontStyle: FontStyle.italic),
                               overflow: TextOverflow.ellipsis,
@@ -1318,7 +1405,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ),
                         )
                       : const Text('-',
-                          style: TextStyle(color: Colors.grey, fontSize: 10));
+                          style: TextStyle(
+                              color: AppTheme.textTertiary, fontSize: 10));
                 },
               ),
             ),
@@ -1360,13 +1448,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       }
 
       final bgColor = isPast
-          ? Colors.black26
+          ? AppTheme.mutedPanel
           : (isCurrent
-              ? AppTheme.neonPurple.withValues(alpha: 0.15)
+              ? AppTheme.accentIndigo.withValues(alpha: 0.15)
               : Colors.transparent);
       final textColor = isPast
-          ? Colors.grey
-          : (isCurrent ? AppTheme.neonPurple : Colors.white24);
+          ? AppTheme.textTertiary
+          : (isCurrent ? AppTheme.accentIndigo : AppTheme.textTertiary);
 
       rows.add(
         DataRow(
@@ -1391,13 +1479,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                         Text('Generado: ${CurrencyFormatter.format(total)}',
                             style: TextStyle(
                                 fontSize: 11,
-                                color: isPast ? Colors.grey : Colors.white70)),
+                                color: isPast
+                                    ? AppTheme.textTertiary
+                                    : AppTheme.textSecondary)),
                         Text('Pagado: ${CurrencyFormatter.format(quarterPaid)}',
                             style: TextStyle(
                                 fontSize: 12,
                                 color: isPast
-                                    ? Colors.white60
-                                    : AppTheme.neonGreen,
+                                    ? AppTheme.textTertiary
+                                    : AppTheme.success,
                                 fontWeight: FontWeight.bold)),
                       ],
                     ),
@@ -1442,7 +1532,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       addQuarterRow(quarters[2] as Map<String, dynamic>, 2);
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
           // Smart Sync Header (like other pages)
@@ -1456,10 +1546,26 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           // Header
           Container(
             padding: const EdgeInsets.all(16),
-            color: AppTheme.surfaceColor,
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            decoration: _commissionSurfaceDecoration(
+              color: AppTheme.raisedSurface,
+              borderColor: AppTheme.borderColor,
+              radius: AppTheme.radiusLg,
+            ),
             child: Row(
               children: [
-                const Icon(Icons.euro, color: AppTheme.neonGreen, size: 24),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: _commissionSurfaceDecoration(
+                    color: AppTheme.success.withValues(alpha: 0.12),
+                    borderColor: AppTheme.success,
+                    borderAlpha: 0.32,
+                    radius: AppTheme.radiusMd,
+                  ),
+                  child:
+                      const Icon(Icons.euro, color: AppTheme.success, size: 20),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1477,10 +1583,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ] else
                         const Text('Comisiones 2026',
                             style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 18)),
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18)),
                       if (isInformative)
                         const Text('Modo Informativo (No Comisionable)',
-                            style: TextStyle(color: Colors.grey, fontSize: 11))
+                            style: TextStyle(
+                                color: AppTheme.textTertiary, fontSize: 11))
                       else
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -1488,7 +1597,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             Text(
                               'Generado: ${CurrencyFormatter.format(grandTotal)}',
                               style: const TextStyle(
-                                  color: AppTheme.neonGreen,
+                                  color: AppTheme.success,
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold),
                             ),
@@ -1496,7 +1605,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             Text(
                               'Pagado: ${CurrencyFormatter.format(totalPaid)}',
                               style: const TextStyle(
-                                  color: AppTheme.neonBlue,
+                                  color: AppTheme.info,
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold),
                             ),
@@ -1510,7 +1619,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     !((_data?['isExcluded'] as bool?) ?? false))
                   IconButton(
                     icon: const Icon(Icons.payment_rounded,
-                        color: AppTheme.neonBlue, size: 28),
+                        color: AppTheme.info, size: 28),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.info.withValues(alpha: 0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        side: BorderSide(
+                          color: AppTheme.info.withValues(alpha: 0.24),
+                        ),
+                      ),
+                    ),
                     // We need the ID/Code of the current single vendor
                     onPressed: () => _showPayDialog(
                         (_data?['vendor'] as String?) ??
@@ -1523,12 +1641,27 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   IconButton(
                     icon: const Icon(Icons.picture_as_pdf_rounded,
                         color: AppTheme.success, size: 28),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.success.withValues(alpha: 0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        side: BorderSide(
+                          color: AppTheme.success.withValues(alpha: 0.24),
+                        ),
+                      ),
+                    ),
                     onPressed: showPdfDialog,
                     tooltip: 'Generar Informe PDF',
                   ),
                 IconButton(
-                  icon:
-                      const Icon(Icons.info_outline, color: AppTheme.neonBlue),
+                  icon: const Icon(Icons.info_outline, color: AppTheme.info),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppTheme.softPanel,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      side: const BorderSide(color: AppTheme.borderColor),
+                    ),
+                  ),
                   onPressed: _showExplanationModal,
                   tooltip: 'Explicación cálculo',
                 ),
@@ -1544,15 +1677,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               width: double.infinity,
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              decoration: _commissionSurfaceDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.12),
+                borderColor: AppTheme.warning,
+                borderAlpha: 0.34,
               ),
               child: Row(
                 children: [
                   const Icon(Icons.money_off_rounded,
-                      color: Colors.orange, size: 20),
+                      color: AppTheme.warning, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1560,7 +1693,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ? 'Este comercial no genera comisión según configuración actual'
                           : 'Este comercial no participa en el plan de comisiones',
                       style: const TextStyle(
-                          color: Colors.orange,
+                          color: AppTheme.warning,
                           fontSize: 13,
                           fontWeight: FontWeight.bold),
                     ),
@@ -1574,22 +1707,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.35)),
+              decoration: _commissionSurfaceDecoration(
+                color: AppTheme.info.withValues(alpha: 0.12),
+                borderColor: AppTheme.info,
+                borderAlpha: 0.35,
               ),
               child: Row(
                 children: [
                   const Icon(Icons.groups_rounded,
-                      color: AppTheme.neonBlue, size: 20),
+                      color: AppTheme.info, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Acumulado de su equipo — $aggregateLabel (suma mensual de 72, 73, 81 y 83).',
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600),
                     ),
@@ -1614,16 +1746,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.neonBlue.withValues(alpha: 0.2),
-                            AppTheme.neonPurple.withValues(alpha: 0.1)
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                      decoration: _commissionSurfaceDecoration(
+                        color: AppTheme.raisedSurface,
+                        borderColor: AppTheme.info,
+                        borderAlpha: 0.32,
+                        radius: AppTheme.radiusLg,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1631,7 +1758,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           Row(
                             children: [
                               const Icon(Icons.calendar_today,
-                                  color: AppTheme.neonBlue, size: 16),
+                                  color: AppTheme.info, size: 16),
                               const SizedBox(width: 6),
                               Text(
                                 _getMonthName(DateTime.now().month)
@@ -1640,7 +1767,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                     fontSize:
                                         Responsive.isSmall(context) ? 9 : 11,
                                     fontWeight: FontWeight.bold,
-                                    color: AppTheme.neonBlue),
+                                    color: AppTheme.info),
                               ),
                             ],
                           ),
@@ -1656,7 +1783,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   fontSize:
                                       Responsive.isSmall(context) ? 14 : 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white),
+                                  color: AppTheme.textPrimary),
                             ),
                             Text(
                               hidePersonalCommissionBadge
@@ -1664,7 +1791,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   : 'de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
                               style: TextStyle(
                                   fontSize: Responsive.isSmall(context) ? 8 : 9,
-                                  color: Colors.white.withValues(alpha: 0.6)),
+                                  color: AppTheme.textSecondary),
                             ),
                             if (!hidePersonalCommissionBadge) ...[
                               const SizedBox(height: 6),
@@ -1678,8 +1805,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                                   ?.toDouble() ??
                                               1)
                                           .clamp(0.01, double.infinity),
-                                  backgroundColor:
-                                      Colors.white.withValues(alpha: 0.1),
+                                  backgroundColor: AppTheme.softPanel,
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                     ((currentMonthData!['actual'] as num?)
                                                     ?.toDouble() ??
@@ -1689,7 +1815,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                                     ?.toDouble() ??
                                                 0)
                                         ? AppTheme.success
-                                        : AppTheme.neonBlue,
+                                        : AppTheme.info,
                                   ),
                                   minHeight: 6,
                                 ),
@@ -1697,7 +1823,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             ],
                           ] else
                             const Text('Sin datos',
-                                style: TextStyle(color: Colors.grey)),
+                                style: TextStyle(color: AppTheme.textTertiary)),
                         ],
                       ),
                     ),
@@ -1707,16 +1833,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.neonGreen.withValues(alpha: 0.2),
-                            AppTheme.success.withValues(alpha: 0.1)
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: AppTheme.neonGreen.withValues(alpha: 0.3)),
+                      decoration: _commissionSurfaceDecoration(
+                        color: AppTheme.raisedSurface,
+                        borderColor: AppTheme.success,
+                        borderAlpha: 0.32,
+                        radius: AppTheme.radiusLg,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1724,14 +1845,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           Row(
                             children: [
                               const Icon(Icons.trending_up,
-                                  color: AppTheme.neonGreen, size: 16),
+                                  color: AppTheme.success, size: 16),
                               const SizedBox(width: 6),
                               Text('COMISIÓN PROV.',
                                   style: TextStyle(
                                       fontSize:
                                           Responsive.isSmall(context) ? 9 : 11,
                                       fontWeight: FontWeight.bold,
-                                      color: AppTheme.neonGreen)),
+                                      color: AppTheme.success)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -1741,14 +1862,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             style: TextStyle(
                                 fontSize: Responsive.isSmall(context) ? 14 : 18,
                                 fontWeight: FontWeight.bold,
-                                color: AppTheme.neonGreen),
+                                color: AppTheme.success),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'Confirmado: ${CurrencyFormatter.format(grandTotal)}',
                             style: TextStyle(
                                 fontSize: Responsive.isSmall(context) ? 8 : 10,
-                                color: Colors.white.withValues(alpha: 0.7)),
+                                color: AppTheme.textSecondary),
                           ),
                         ],
                       ),
@@ -1759,16 +1880,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
+                      decoration: _commissionSurfaceDecoration(
                         color: isOnRhythm
-                            ? AppTheme.success.withValues(alpha: 0.15)
-                            : Colors.orange.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isOnRhythm
-                              ? AppTheme.success.withValues(alpha: 0.3)
-                              : Colors.orange.withValues(alpha: 0.3),
-                        ),
+                            ? AppTheme.success.withValues(alpha: 0.1)
+                            : AppTheme.warning.withValues(alpha: 0.1),
+                        borderColor:
+                            isOnRhythm ? AppTheme.success : AppTheme.warning,
+                        borderAlpha: 0.32,
+                        radius: AppTheme.radiusLg,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1779,7 +1898,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                 isOnRhythm ? Icons.trending_up : Icons.speed,
                                 color: isOnRhythm
                                     ? AppTheme.success
-                                    : Colors.orange,
+                                    : AppTheme.warning,
                                 size: 14,
                               ),
                               const SizedBox(width: 6),
@@ -1791,7 +1910,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   fontWeight: FontWeight.bold,
                                   color: isOnRhythm
                                       ? AppTheme.success
-                                      : Colors.orange,
+                                      : AppTheme.warning,
                                 ),
                               ),
                             ],
@@ -1799,8 +1918,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           Text(
                             '(a día ${DateTime.now().day})',
                             style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.white.withValues(alpha: 0.5)),
+                                fontSize: 9, color: AppTheme.textTertiary),
                           ),
                           const SizedBox(height: 6),
 
@@ -1818,7 +1936,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                           fontSize: Responsive.isSmall(context)
                                               ? 8
                                               : 10,
-                                          color: Colors.white70)),
+                                          color: AppTheme.textSecondary)),
                                   Text(
                                     '${rhythmCompliance.toStringAsFixed(1)}%',
                                     style: TextStyle(
@@ -1828,7 +1946,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                         fontWeight: FontWeight.bold,
                                         color: isOnRhythm
                                             ? AppTheme.success
-                                            : Colors.orange),
+                                            : AppTheme.warning),
                                   ),
                                 ],
                               ),
@@ -1843,7 +1961,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                           fontSize: Responsive.isSmall(context)
                                               ? 8
                                               : 10,
-                                          color: Colors.white70)),
+                                          color: AppTheme.textSecondary)),
                                   Text(
                                       '${overallCompliance.toStringAsFixed(1)}%',
                                       style: TextStyle(
@@ -1851,7 +1969,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                               ? 10
                                               : 12,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
+                                          color: AppTheme.textPrimary)),
                                 ],
                               ),
                             ],
@@ -1863,8 +1981,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             style: TextStyle(
                               fontSize: Responsive.isSmall(context) ? 9 : 11,
                               fontWeight: FontWeight.bold,
-                              color:
-                                  isOnRhythm ? AppTheme.success : Colors.orange,
+                              color: isOnRhythm
+                                  ? AppTheme.success
+                                  : AppTheme.warning,
                             ),
                           ),
                         ],
@@ -1903,13 +2022,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(Icons.search_off_rounded,
-                                          size: 56, color: Colors.white24),
+                                          size: 56,
+                                          color: AppTheme.textTertiary),
                                       SizedBox(height: 16),
                                       Text(
                                         'No se han encontrado comisiones para los filtros seleccionados',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
-                                            color: Colors.white54,
+                                            color: AppTheme.textTertiary,
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500),
                                       ),
@@ -1918,7 +2038,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                         'Prueba a seleccionar otro comercial o verifica que existan datos de ventas disponibles.',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
-                                            color: Colors.white38,
+                                            color: AppTheme.textTertiary,
                                             fontSize: 13),
                                       ),
                                     ],
@@ -1931,8 +2051,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   child: DataTable(
                                     columnSpacing: 20,
                                     headingRowColor: WidgetStateProperty.all(
-                                        AppTheme.surfaceColor
-                                            .withValues(alpha: 0.8)),
+                                      AppTheme.softPanel,
+                                    ),
+                                    border: TableBorder.all(
+                                      color: AppTheme.borderColor,
+                                    ),
                                     columns: [
                                       const DataColumn(
                                           label: Text('MES',
@@ -1980,53 +2103,58 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                           label: Text('COMISIÓN',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonGreen))),
+                                                  color: AppTheme.success))),
                                       const DataColumn(
                                           label: Text('DÍAS',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonPurple))),
+                                                  color:
+                                                      AppTheme.accentIndigo))),
                                       DataColumn(
                                           label: Text('OBJ. ACUM.',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonPurple))),
+                                                  color:
+                                                      AppTheme.accentIndigo))),
                                       DataColumn(
                                           label: Text('RITMO',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonPurple))),
+                                                  color:
+                                                      AppTheme.accentIndigo))),
                                       DataColumn(
                                           label: Text('DIFF',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonPurple))),
+                                                  color:
+                                                      AppTheme.accentIndigo))),
                                       DataColumn(
                                           label: Text('COM. PROV.',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonPurple))),
+                                                  color:
+                                                      AppTheme.accentIndigo))),
                                       // === PAGOS (NEW) ===
                                       DataColumn(
                                           label: Text('IMP. PAGADO',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonBlue))),
+                                                  color: AppTheme.info))),
                                       DataColumn(
                                           label: Text('VENTA REAL',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonBlue))),
+                                                  color: AppTheme.info))),
                                       DataColumn(
                                           label: Text('OBJ. REAL',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonBlue))),
+                                                  color: AppTheme.info))),
                                       DataColumn(
                                           label: Text('OBSERVACIONES',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.neonBlue))),
+                                                  color: AppTheme.info))),
                                     ],
                                     rows: rows,
                                   ),
@@ -2062,9 +2190,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.neonBlue.withValues(alpha: 0.1),
+        color: AppTheme.info.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2072,19 +2200,18 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.3),
+              color: AppTheme.info.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(tier,
                 style: const TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonBlue)),
+                    color: AppTheme.info)),
           ),
           const SizedBox(width: 4),
           Text('$range → $rate',
-              style: TextStyle(
-                  fontSize: 9, color: Colors.white.withValues(alpha: 0.7))),
+              style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -2094,7 +2221,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     if (breakdown.isEmpty) {
       return const Center(
           child: Text('No hay datos disponibles',
-              style: TextStyle(color: Colors.white54)));
+              style: TextStyle(color: AppTheme.textSecondary)));
     }
 
     try {
@@ -2114,7 +2241,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           authState?.user?.tipoVendedor == 'ADMIN' || curCode == '98';
 
       return ColoredBox(
-        color: AppTheme.darkBase,
+        color: AppTheme.inkSurface,
         child: ListView.builder(
           itemCount: sorted.length,
           itemBuilder: (context, index) {
@@ -2132,10 +2259,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               debugPrint('Error rendering vendor card index $index: $itemErr');
               return Container(
                 padding: const EdgeInsets.all(8),
-                color: Colors.red.withValues(alpha: 0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 child: Text(
                     'Error mostrando vendedor: ${sorted[index]['vendedorCode'] ?? '?'}',
-                    style: const TextStyle(color: Colors.red)),
+                    style: const TextStyle(color: AppTheme.error)),
               );
             }
           },
@@ -2145,7 +2272,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       debugPrint('Error sorting/building vendors table: $e');
       return Center(
           child: Text('Error mostrando lista: $e',
-              style: const TextStyle(color: Colors.red)));
+              style: const TextStyle(color: AppTheme.error)));
     }
   }
 
@@ -2174,8 +2301,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         DataRow(
           color: WidgetStateProperty.all(
             qualifies
-                ? AppTheme.neonGreen.withValues(alpha: 0.07)
-                : Colors.orange.withValues(alpha: 0.07),
+                ? AppTheme.success.withValues(alpha: 0.07)
+                : AppTheme.warning.withValues(alpha: 0.07),
           ),
           cells: [
             DataCell(_teamTableText(_getMonthName(month))),
@@ -2191,7 +2318,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   (monthData['teamAggregateCommission'] as num?)?.toDouble() ??
                       0,
                 ),
-                color: qualifies ? AppTheme.neonGreen : Colors.orangeAccent,
+                color: qualifies ? AppTheme.success : AppTheme.warning,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -2203,15 +2330,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.neonGreen.withValues(alpha: 0.15),
-            AppTheme.neonBlue.withValues(alpha: 0.08),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.35)),
+      decoration: _commissionSurfaceDecoration(
+        color: AppTheme.raisedSurface,
+        borderColor: AppTheme.success,
+        borderAlpha: 0.32,
+        radius: AppTheme.radiusLg,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2219,13 +2342,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           Row(
             children: [
               const Icon(Icons.groups_rounded,
-                  color: AppTheme.neonGreen, size: 22),
+                  color: AppTheme.success, size: 22),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
                   'Equipo Almeria - acumulado especial 80',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
                   ),
@@ -2234,7 +2357,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               Text(
                 CurrencyFormatter.format(totalToLeader),
                 style: const TextStyle(
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -2262,11 +2385,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     columnSpacing: 18,
                     horizontalMargin: 10,
                     headingRowColor: WidgetStateProperty.all(
-                      AppTheme.neonGreen.withValues(alpha: 0.16),
+                      AppTheme.softPanel,
                     ),
-                    border: TableBorder.all(color: Colors.white12),
+                    border: TableBorder.all(color: AppTheme.borderColor),
                     headingTextStyle: const TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 11,
                     ),
@@ -2328,28 +2451,24 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.neonGreen.withValues(alpha: 0.15),
-            AppTheme.neonBlue.withValues(alpha: 0.08),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.35)),
+      decoration: _commissionSurfaceDecoration(
+        color: AppTheme.raisedSurface,
+        borderColor: AppTheme.success,
+        borderAlpha: 0.32,
+        radius: AppTheme.radiusLg,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.groups_rounded, color: AppTheme.neonGreen, size: 22),
+              Icon(Icons.groups_rounded, color: AppTheme.success, size: 22),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Equipo Almería — comisión por comercial',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
                   ),
@@ -2366,7 +2485,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           Text(
             'Especial acumulado YTD: ${CurrencyFormatter.format(ytdTeamComm)}',
             style: const TextStyle(
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -2394,7 +2513,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Text(
                     _getMonthName(month),
                     style: const TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2403,7 +2522,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     'exceso ${CurrencyFormatter.format(teamExcess)} · '
                     'comisión ${CurrencyFormatter.format(teamComm)}',
                     style: const TextStyle(
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                       fontSize: 12,
                     ),
                   ),
@@ -2422,8 +2541,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       'com. ${CurrencyFormatter.format(comm)}',
                       style: TextStyle(
                         color: qualifies
-                            ? AppTheme.neonGreen.withValues(alpha: 0.85)
-                            : Colors.orange.shade200,
+                            ? AppTheme.success.withValues(alpha: 0.85)
+                            : AppTheme.warning,
                         fontSize: 11,
                       ),
                     );
@@ -2484,18 +2603,18 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final vendorPct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
     final vendorPositive = totalActual >= totalTarget && totalTarget > 0;
     final statusColor = isExcluded
-        ? Colors.grey
+        ? AppTheme.textTertiary
         : (vendorPositive ? AppTheme.success : AppTheme.error);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isExcluded ? Colors.black26 : AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: _isExpanded
-                ? AppTheme.neonBlue.withValues(alpha: 0.5)
-                : Colors.white12),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: _commissionSurfaceDecoration(
+        color: isExcluded
+            ? AppTheme.mutedPanel.withValues(alpha: 0.54)
+            : AppTheme.raisedSurface,
+        borderColor: _isExpanded ? AppTheme.info : AppTheme.borderColor,
+        borderAlpha: _isExpanded ? 0.5 : 1,
+        radius: AppTheme.radiusLg,
       ),
       child: Column(
         children: [
@@ -2505,12 +2624,12 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
+              decoration: _commissionSurfaceDecoration(
                 color: _isExpanded
-                    ? AppTheme.neonBlue.withValues(alpha: 0.1)
+                    ? AppTheme.info.withValues(alpha: 0.08)
                     : Colors.transparent,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(8)),
+                borderColor: Colors.transparent,
+                radius: AppTheme.radiusLg,
               ),
               child: Row(
                 children: [
@@ -2518,12 +2637,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   CircleAvatar(
                     radius: Responsive.isSmall(context) ? 10 : 12,
                     backgroundColor: isExcluded
-                        ? Colors.grey.withValues(alpha: 0.2)
-                        : AppTheme.neonBlue.withValues(alpha: 0.1),
+                        ? AppTheme.mutedPanel
+                        : AppTheme.info.withValues(alpha: 0.12),
                     child: Text(vendorCode,
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: isExcluded ? Colors.grey : AppTheme.neonBlue,
+                            color: isExcluded
+                                ? AppTheme.textTertiary
+                                : AppTheme.info,
                             fontSize: Responsive.isSmall(context) ? 8 : 10)),
                   ),
                   const SizedBox(width: 8),
@@ -2533,7 +2654,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     child: Text(vendorName,
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: isExcluded ? Colors.grey : Colors.white,
+                            color: isExcluded
+                                ? AppTheme.textTertiary
+                                : AppTheme.textPrimary,
                             fontSize: Responsive.isSmall(context) ? 11 : 13),
                         overflow: TextOverflow.ellipsis),
                   ),
@@ -2544,13 +2667,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                          color: Colors.orange.withValues(alpha: 0.2),
+                          color: AppTheme.warning.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4)),
                       child: const Text('NO COMISIONA',
                           style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: Colors.orange)),
+                              color: AppTheme.warning)),
                     ),
                     const SizedBox(width: 8),
                   ],
@@ -2592,14 +2715,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                             Text(
                                 'Generado: ${CurrencyFormatter.format(grandTotal)}',
                                 style: TextStyle(
-                                    color: AppTheme.neonGreen,
+                                    color: AppTheme.success,
                                     fontWeight: FontWeight.bold,
                                     fontSize:
                                         Responsive.isSmall(context) ? 10 : 12)),
                             Text(
                               'Pagado: ${CurrencyFormatter.format(totalPaid)}',
                               style: TextStyle(
-                                  color: AppTheme.neonBlue,
+                                  color: AppTheme.info,
                                   fontWeight: FontWeight.bold,
                                   fontSize:
                                       Responsive.isSmall(context) ? 8 : 9),
@@ -2613,7 +2736,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         padding: const EdgeInsets.only(left: 8),
                         child: IconButton(
                           icon: const Icon(Icons.payment_rounded,
-                              color: AppTheme.neonBlue, size: 22),
+                              color: AppTheme.info, size: 22),
                           onPressed: () =>
                               widget.onPay?.call(vendorCode, vendorName),
                           tooltip: 'Pagar',
@@ -2623,7 +2746,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       ),
                   ] else
                     const Text('0,00 €',
-                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        style: TextStyle(
+                            color: AppTheme.textTertiary, fontSize: 12)),
                 ],
               ),
             ),
@@ -2631,7 +2755,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
           // EXPANDED CONTENT
           if (_isExpanded) ...[
-            const Divider(height: 1, color: Colors.white12),
+            const Divider(height: 1, color: AppTheme.borderColor),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: _buildVendorDataTable(months, quarters, isExcluded),
@@ -2690,7 +2814,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
       dataRowMinHeight: 28,
       dataRowMaxHeight: 44,
       headingRowHeight: 36,
-      headingRowColor: WidgetStateProperty.all(AppTheme.darkBase),
+      headingRowColor: WidgetStateProperty.all(AppTheme.softPanel),
+      border: TableBorder.all(color: AppTheme.borderColor),
       columns: const [
         DataColumn(
             label: Text('MES',
@@ -2738,61 +2863,61 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             label: Text('COMISIÓN',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.success,
                     fontSize: 10))),
         DataColumn(
             label: Text('DÍAS',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonPurple,
+                    color: AppTheme.accentIndigo,
                     fontSize: 10))),
         DataColumn(
             label: Text('OBJ.AC',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonPurple,
+                    color: AppTheme.accentIndigo,
                     fontSize: 10))),
         DataColumn(
             label: Text('RITMO',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonPurple,
+                    color: AppTheme.accentIndigo,
                     fontSize: 10))),
         DataColumn(
             label: Text('DIFF',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonPurple,
+                    color: AppTheme.accentIndigo,
                     fontSize: 10))),
         DataColumn(
             label: Text('COM.PRV',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonPurple,
+                    color: AppTheme.accentIndigo,
                     fontSize: 10))),
         DataColumn(
             label: Text('IMP.PAG',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 10))),
         DataColumn(
             label: Text('V.REAL',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 10))),
         DataColumn(
             label: Text('OBJ.REAL',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 10))),
         DataColumn(
             label: Text('OBSERV.',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 10))),
       ],
       rows: rows,
@@ -2828,11 +2953,11 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
     final isPositive = actual >= target && target > 0;
     final color = isFuture || isExcluded
-        ? Colors.grey
+        ? AppTheme.textTertiary
         : (isPositive ? AppTheme.success : AppTheme.error);
     final dailyColor = isFuture || isExcluded
-        ? Colors.grey
-        : (dailyGreen ? AppTheme.success : Colors.orangeAccent);
+        ? AppTheme.textTertiary
+        : (dailyGreen ? AppTheme.success : AppTheme.warning);
     final textOpacity = (isFuture || isExcluded) ? 0.5 : 1.0;
 
     final pctDisplay = pct > 0 ? (pct - 100) : 0;
@@ -2848,7 +2973,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
     return DataRow(
       color: WidgetStateProperty.all(
-          isFuture ? Colors.black26 : Colors.transparent),
+          isFuture ? AppTheme.mutedPanel : Colors.transparent),
       cells: [
         DataCell(
           Row(
@@ -2856,7 +2981,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             children: [
               Text(widget.getMonthName(monthNum),
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: textOpacity),
+                      color:
+                          AppTheme.textPrimary.withValues(alpha: textOpacity),
                       fontSize: 11)),
               if (isFuture) ...[
                 const SizedBox(width: 4),
@@ -2864,10 +2990,11 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                   decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.3),
+                      color: AppTheme.textTertiary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(3)),
                   child: const Text('PEND',
-                      style: TextStyle(fontSize: 7, color: Colors.grey)),
+                      style:
+                          TextStyle(fontSize: 7, color: AppTheme.textTertiary)),
                 ),
               ],
             ],
@@ -2875,14 +3002,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
             style: TextStyle(
-                color: Colors.white.withValues(alpha: textOpacity),
+                color: AppTheme.textPrimary.withValues(alpha: textOpacity),
                 fontSize: 10))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(lacSales),
             style: TextStyle(
                 color: color, fontWeight: FontWeight.bold, fontSize: 10))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(bSales),
             style: TextStyle(
-                color: bSales > 0 ? AppTheme.neonBlue : Colors.grey,
+                color: bSales > 0 ? AppTheme.info : AppTheme.textTertiary,
                 fontWeight: bSales > 0 ? FontWeight.bold : FontWeight.normal,
                 fontSize: 10))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(totalSales),
@@ -2891,7 +3018,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         DataCell(
           isFuture
               ? const Text('-',
-                  style: TextStyle(color: Colors.grey, fontSize: 10))
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 10))
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2900,28 +3027,29 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     if (isPositive && tier > 0)
                       Text(' F$tier',
                           style: const TextStyle(
-                              fontSize: 8, color: AppTheme.neonBlue)),
+                              fontSize: 8, color: AppTheme.info)),
                   ],
                 ),
         ),
         DataCell(Text(pctText, style: TextStyle(color: color, fontSize: 9))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(commission),
             style: TextStyle(
-                color: isFuture ? Colors.grey : AppTheme.neonGreen,
+                color: isFuture ? AppTheme.textTertiary : AppTheme.success,
                 fontWeight: FontWeight.bold,
                 fontSize: 10))),
         DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays',
             style: TextStyle(
-                color: Colors.white.withValues(alpha: textOpacity * 0.7),
+                color:
+                    AppTheme.textPrimary.withValues(alpha: textOpacity * 0.7),
                 fontSize: 9))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget),
             style: TextStyle(
                 fontSize: 9,
-                color: Colors.white.withValues(alpha: textOpacity)))),
+                color: AppTheme.textPrimary.withValues(alpha: textOpacity)))),
         DataCell(
           isFuture
               ? const Text('-',
-                  style: TextStyle(color: Colors.grey, fontSize: 9))
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 9))
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2935,7 +3063,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         DataCell(
           isFuture
               ? const Text('-',
-                  style: TextStyle(color: Colors.grey, fontSize: 9))
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 9))
               : Text(
                   (actual - proRatedTarget) >= 0
                       ? '+${CurrencyFormatter.format(actual - proRatedTarget)}'
@@ -2951,13 +3079,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         DataCell(
           isFuture
               ? const Text('-',
-                  style: TextStyle(color: Colors.grey, fontSize: 9))
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 9))
               : Text(
                   CurrencyFormatter.format(provisionalCommission),
                   style: TextStyle(
                       color: provisionalCommission > 0
-                          ? AppTheme.neonPurple
-                          : Colors.grey,
+                          ? AppTheme.accentIndigo
+                          : AppTheme.textTertiary,
                       fontWeight: FontWeight.bold,
                       fontSize: 9),
                 ),
@@ -2978,12 +3106,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ? Text(
                       CurrencyFormatter.format(importePagado),
                       style: const TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontSize: 9,
                           fontWeight: FontWeight.bold),
                     )
                   : const Text('-',
-                      style: TextStyle(color: Colors.grey, fontSize: 9));
+                      style:
+                          TextStyle(color: AppTheme.textTertiary, fontSize: 9));
             },
           ),
         ),
@@ -3003,12 +3132,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ? Text(
                       CurrencyFormatter.format(ventaComision),
                       style: const TextStyle(
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.info,
                           fontSize: 9,
                           fontWeight: FontWeight.bold),
                     )
                   : const Text('-',
-                      style: TextStyle(color: Colors.grey, fontSize: 9));
+                      style:
+                          TextStyle(color: AppTheme.textTertiary, fontSize: 9));
             },
           ),
         ),
@@ -3027,12 +3157,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ? Text(
                       CurrencyFormatter.format(objetivoReal),
                       style: const TextStyle(
-                          color: Colors.amber,
+                          color: AppTheme.accentAmber,
                           fontSize: 9,
                           fontWeight: FontWeight.bold),
                     )
                   : const Text('-',
-                      style: TextStyle(color: Colors.grey, fontSize: 9));
+                      style:
+                          TextStyle(color: AppTheme.textTertiary, fontSize: 9));
             },
           ),
         ),
@@ -3056,7 +3187,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         child: Text(
                           observaciones,
                           style: const TextStyle(
-                              color: Colors.orange,
+                              color: AppTheme.warning,
                               fontSize: 9,
                               fontStyle: FontStyle.italic),
                           overflow: TextOverflow.ellipsis,
@@ -3065,7 +3196,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       ),
                     )
                   : const Text('-',
-                      style: TextStyle(color: Colors.grey, fontSize: 9));
+                      style:
+                          TextStyle(color: AppTheme.textTertiary, fontSize: 9));
             },
           ),
         ),
@@ -3096,24 +3228,25 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
     return DataRow(
       color:
-          WidgetStateProperty.all(AppTheme.neonPurple.withValues(alpha: 0.1)),
+          WidgetStateProperty.all(AppTheme.accentIndigo.withValues(alpha: 0.1)),
       cells: [
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.calendar_view_month,
-                  color: AppTheme.neonPurple, size: 14),
+                  color: AppTheme.accentIndigo, size: 14),
               const SizedBox(width: 4),
               Text(name,
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.neonPurple,
+                      color: AppTheme.accentIndigo,
                       fontSize: 10)),
               const SizedBox(width: 4),
               Text('($label)',
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5), fontSize: 9)),
+                      color: AppTheme.textPrimary.withValues(alpha: 0.5),
+                      fontSize: 9)),
             ],
           ),
         ),
@@ -3131,11 +3264,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               Text('Gen: ${CurrencyFormatter.format(total)}',
                   style: TextStyle(
                       fontSize: 9,
-                      color: isExcluded ? Colors.grey : Colors.white70)),
+                      color: isExcluded
+                          ? AppTheme.textTertiary
+                          : AppTheme.textSecondary)),
               Text('Pag: ${CurrencyFormatter.format(quarterPaid)}',
                   style: TextStyle(
                       fontSize: 10,
-                      color: isExcluded ? Colors.grey : AppTheme.neonGreen,
+                      color:
+                          isExcluded ? AppTheme.textTertiary : AppTheme.success,
                       fontWeight: FontWeight.bold)),
             ],
           ),

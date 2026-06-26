@@ -33,25 +33,18 @@ class RuteroKpiDashboard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: 12, vertical: 12), // Reduced padding
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
-          color: AppTheme.neonBlue.withValues(alpha: 0.3),
+          color: AppTheme.borderColor,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withValues(alpha: 0.05),
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-        ],
       ),
       child: isLoading
           ? const Center(
               child: SizedBox(
                 height: 40, // Reduced height
                 child: CircularProgressIndicator(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   strokeWidth: 2,
                 ),
               ),
@@ -65,7 +58,7 @@ class RuteroKpiDashboard extends StatelessWidget {
                     label: 'Entregas',
                     value: '$entregasCompletadas/$totalEntregas',
                     progress: progresoEntregas,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     icon: Icons.local_shipping_outlined,
                   ),
                 ),

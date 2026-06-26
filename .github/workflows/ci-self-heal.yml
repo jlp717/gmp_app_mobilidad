@@ -60,8 +60,11 @@ jobs:
       run_id: ${{ steps.meta.outputs.run_id }}
       branch: ${{ steps.meta.outputs.branch }}
       commit_sha: ${{ steps.meta.outputs.commit_sha }}
-      failed_jobs: ${{ steps.meta.outputs.failed_jobs }}
+      failed_jobs: ${{ steps.jobs.outputs.failed_names }}
       run_url: ${{ steps.meta.outputs.run_url }}
+      category: ${{ steps.decide.outputs.category }}
+      transient: ${{ steps.decide.outputs.transient }}
+      auto_fixable: ${{ steps.decide.outputs.auto_fixable }}
       should_auto_fix: ${{ steps.decide.outputs.should_auto_fix }}
     steps:
       - name: Checkout

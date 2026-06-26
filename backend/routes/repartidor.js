@@ -1289,6 +1289,23 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                 CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN, CAC.TERMINALALBARAN,
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
                 CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
+                CAC.IMPORTETOTAL,
+                CAC.IMPORTEBRUTO,
+                CAC.IMPORTEBASEIMPONIBLE1,
+                CAC.PORCENTAJEIVA1,
+                CAC.IMPORTEIVA1,
+                CAC.IMPORTEBASEIMPONIBLE2,
+                CAC.PORCENTAJEIVA2,
+                CAC.IMPORTEIVA2,
+                CAC.IMPORTEBASEIMPONIBLE3,
+                CAC.PORCENTAJEIVA3,
+                CAC.IMPORTEIVA3,
+                CAC.IMPORTEBASEIMPONIBLE4,
+                CAC.PORCENTAJEIVA4,
+                CAC.IMPORTEIVA4,
+                CAC.IMPORTEBASEIMPONIBLE5,
+                CAC.PORCENTAJEIVA5,
+                CAC.IMPORTEIVA5,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
                 TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
@@ -1324,8 +1341,17 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
             total: parseFloat(headers[0].IMPORTETOTAL) || 0,
         };
 
-        // Fetch IVA breakdown from CPC (header-level, LAC has no IVA columns)
+        header.IVA_BREAKDOWN = {};
+        for (let slot = 1; slot <= 5; slot++) {
+            header.IVA_BREAKDOWN[`BI${slot}`] = headers[0][`IMPORTEBASEIMPONIBLE${slot}`] || 0;
+            header.IVA_BREAKDOWN[`IVA${slot}_PCT`] = headers[0][`PORCENTAJEIVA${slot}`] || 0;
+            header.IVA_BREAKDOWN[`IVA${slot}_IMP`] = headers[0][`IMPORTEIVA${slot}`] || 0;
+        }
+
+        // Legacy fallback: old CPC headers may carry IVA breakdown when CAC slots are empty.
         try {
+            const hasCacBreakdown = Object.values(header.IVA_BREAKDOWN)
+                .some(value => Math.abs(parseFloat(value) || 0) > 0);
             const ivaRows = await queryWithParams(`
                 SELECT 
                     IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
@@ -1339,7 +1365,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                   AND NUMEROALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
             `, [year, (serie || '').trim(), terminal, number], false);
-            if (ivaRows.length > 0) {
+            if (!hasCacBreakdown && ivaRows.length > 0) {
                 header.IVA_BREAKDOWN = ivaRows[0];
             }
         } catch (e) {

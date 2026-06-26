@@ -155,7 +155,7 @@ class AsyncOperationModal extends StatelessWidget {
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 20, large: 28)),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _borderColor(state),
@@ -208,7 +208,7 @@ class AsyncOperationModal extends StatelessWidget {
   Color _borderColor(_ModalState state) {
     switch (state) {
       case _ModalState.loading:
-        return AppTheme.neonBlue;
+        return AppTheme.info;
       case _ModalState.success:
         return AppTheme.success;
       case _ModalState.error:
@@ -223,9 +223,9 @@ class AsyncOperationModal extends StatelessWidget {
           width: 56,
           height: 56,
           child: CircularProgressIndicator(
-            color: AppTheme.neonBlue,
+            color: AppTheme.info,
             strokeWidth: 3,
-            backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.15),
+            backgroundColor: AppTheme.info.withValues(alpha: 0.15),
           ),
         );
       case _ModalState.success:
@@ -311,7 +311,7 @@ class AsyncOperationModal extends StatelessWidget {
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Reintentar'),
             style: TextButton.styleFrom(
-              foregroundColor: AppTheme.neonBlue,
+              foregroundColor: AppTheme.info,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
           ),

@@ -43,7 +43,7 @@ class ProductHistorySheet extends StatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -192,7 +192,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppTheme.neonBlue),
+            CircularProgressIndicator(color: AppTheme.info),
             SizedBox(height: 12),
             Text(
               'Cargando historial...',
@@ -224,10 +224,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: _loadHistory,
-                icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
+                icon: const Icon(Icons.refresh, color: AppTheme.info),
                 label: const Text(
                   'Reintentar',
-                  style: TextStyle(color: AppTheme.neonBlue),
+                  style: TextStyle(color: AppTheme.info),
                 ),
               ),
             ],
@@ -289,7 +289,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
             ? Icons.trending_down
             : Icons.trending_flat;
     final trendColor = _trend == 'up'
-        ? AppTheme.neonGreen
+        ? AppTheme.success
         : _trend == 'down'
             ? AppTheme.error
             : Colors.white54;
@@ -332,7 +332,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 child: Container(
                   width: 56,
                   height: 56,
-                  color: AppTheme.darkCard,
+                  color: AppTheme.softPanel,
                   child: SmartProductImage(
                     imageUrl: imageUrl,
                     productCode: widget.productCode,
@@ -375,7 +375,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     'Cliente: ${widget.clientCode}'
                     '${widget.clientName.isNotEmpty ? ' - ${widget.clientName}' : ''}',
                     style: const TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 11,
                     ),
                     maxLines: 1,
@@ -444,18 +444,18 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 ),
                 decoration: BoxDecoration(
                   color: sel
-                      ? AppTheme.neonBlue.withValues(alpha: 0.2)
-                      : AppTheme.darkCard,
+                      ? AppTheme.info.withValues(alpha: 0.2)
+                      : AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: sel ? AppTheme.neonBlue : AppTheme.borderColor,
+                    color: sel ? AppTheme.info : AppTheme.borderColor,
                     width: sel ? 1.5 : 1,
                   ),
                 ),
                 child: Text(
                   yr,
                   style: TextStyle(
-                    color: sel ? AppTheme.neonBlue : Colors.white54,
+                    color: sel ? AppTheme.info : Colors.white54,
                     fontSize: 13,
                     fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                   ),
@@ -482,22 +482,22 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     final margin = t.sales > 0 ? ((t.sales - t.cost) / t.sales * 100) : 0.0;
 
     final items = [
-      _KpiItem('Ventas', _fmtEur(t.sales), AppTheme.neonGreen),
+      _KpiItem('Ventas', _fmtEur(t.sales), AppTheme.success),
       // Req #2: coste solo visible para roles con margen visible.
       if (widget.isMarginVisible)
-        _KpiItem('Coste', _fmtEur(t.cost), Colors.orange),
+        _KpiItem('Coste', _fmtEur(t.cost), AppTheme.warning),
       if (widget.isMarginVisible)
         _KpiItem(
           'Margen',
           _fmtPct(margin),
-          margin > 15 ? AppTheme.neonGreen : AppTheme.error,
+          margin > 15 ? AppTheme.success : AppTheme.error,
         ),
-      _KpiItem('Envases', _fmtNum(t.envases), AppTheme.neonBlue),
-      _KpiItem('Unidades', _fmtNum(t.units), Colors.amber),
+      _KpiItem('Envases', _fmtNum(t.envases), AppTheme.info),
+      _KpiItem('Unidades', _fmtNum(t.units), AppTheme.accentAmber),
       _KpiItem(
         'Precio Medio',
         _fmtEur(t.avgPrice, decimals: 3),
-        AppTheme.neonPurple,
+        AppTheme.accentIndigo,
       ),
     ];
 
@@ -510,7 +510,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkCard,
+              color: AppTheme.softPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: item.color.withValues(alpha: 0.3),
@@ -571,11 +571,11 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 ),
                 decoration: BoxDecoration(
                   color: sel
-                      ? AppTheme.neonBlue.withValues(alpha: 0.2)
-                      : AppTheme.darkCard,
+                      ? AppTheme.info.withValues(alpha: 0.2)
+                      : AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: sel ? AppTheme.neonBlue : AppTheme.borderColor,
+                    color: sel ? AppTheme.info : AppTheme.borderColor,
                   ),
                 ),
                 child: Row(
@@ -584,13 +584,13 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     Icon(
                       opt.$3,
                       size: 12,
-                      color: sel ? AppTheme.neonBlue : Colors.white38,
+                      color: sel ? AppTheme.info : Colors.white38,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       opt.$2,
                       style: TextStyle(
-                        color: sel ? AppTheme.neonBlue : Colors.white54,
+                        color: sel ? AppTheme.info : Colors.white54,
                         fontSize: 11,
                         fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                       ),
@@ -641,8 +641,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     required double current,
     required double previous,
   }) {
-    if (current > 0 && previous <= 0) return AppTheme.neonBlue;
-    if (current > previous) return AppTheme.neonGreen;
+    if (current > 0 && previous <= 0) return AppTheme.info;
+    if (current > previous) return AppTheme.success;
     if (current < previous) return AppTheme.error;
     return Colors.white24;
   }
@@ -711,7 +711,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       children: [
         Row(
           children: [
-            _legendDot(AppTheme.neonBlue, currentYr),
+            _legendDot(AppTheme.info, currentYr),
             if (prevYr != null) ...[
               const SizedBox(width: 8),
               _legendDot(Colors.white30, prevYr),
@@ -794,7 +794,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                   barRods: [
                     BarChartRodData(
                       toY: curVal,
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       width: prevYr != null ? 6 : 10,
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(3),
@@ -824,7 +824,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     final sortedYears = _years.keys.toList()..sort();
     if (sortedYears.length < 2) return const SizedBox.shrink();
 
-    final colors = [Colors.white30, AppTheme.neonPurple, AppTheme.neonBlue];
+    final colors = [Colors.white30, AppTheme.accentIndigo, AppTheme.info];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -981,7 +981,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: AppTheme.darkCard,
+            color: AppTheme.softPanel,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: AppTheme.borderColor.withValues(alpha: 0.3),
@@ -996,7 +996,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               columnSpacing: 12,
               horizontalMargin: 10,
               headingTextStyle: const TextStyle(
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
@@ -1023,9 +1023,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                   final margin =
                       d.sales > 0 ? ((d.sales - d.cost) / d.sales * 100) : 0.0;
                   final marginColor = margin > 15
-                      ? AppTheme.neonGreen
+                      ? AppTheme.success
                       : margin > 0
-                          ? Colors.orange
+                          ? AppTheme.warning
                           : AppTheme.error;
                   return DataRow(
                     cells: [
@@ -1049,7 +1049,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                         _comparisonCell(
                           _fmtEur(d.sales),
                           comparisonColor,
-                          textColor: AppTheme.neonGreen,
+                          textColor: AppTheme.success,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1113,7 +1113,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     final margin = t.sales > 0 ? ((t.sales - t.cost) / t.sales * 100) : 0.0;
     final comparisonColor = _yearComparisonColor(year, yearData);
     const s = TextStyle(
-      color: AppTheme.neonGreen,
+      color: AppTheme.success,
       fontWeight: FontWeight.bold,
       fontSize: 10,
     );
@@ -1126,7 +1126,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           _comparisonCell(
             _fmtEur(t.sales),
             comparisonColor,
-            textColor: AppTheme.neonGreen,
+            textColor: AppTheme.success,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1140,7 +1140,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           _comparisonCell(
             widget.isMarginVisible ? _fmtPct(margin) : '—',
             comparisonColor,
-            textColor: AppTheme.neonGreen,
+            textColor: AppTheme.success,
           ),
         ),
         DataCell(
@@ -1176,7 +1176,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: AppTheme.darkCard,
+            color: AppTheme.softPanel,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: AppTheme.borderColor.withValues(alpha: 0.3),
@@ -1191,7 +1191,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               columnSpacing: 14,
               horizontalMargin: 10,
               headingTextStyle: const TextStyle(
-                color: AppTheme.neonPurple,
+                color: AppTheme.accentIndigo,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
@@ -1224,7 +1224,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     final pct = (t.sales - prevT.sales) / prevT.sales * 100;
                     yoy = '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(0)}%';
                     yoyColor = pct > 0
-                        ? AppTheme.neonGreen
+                        ? AppTheme.success
                         : pct < 0
                             ? AppTheme.error
                             : Colors.white54;
@@ -1246,7 +1246,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       Text(
                         _fmtEur(t.sales),
                         style: const TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontSize: 11,
                         ),
                       ),
@@ -1260,7 +1260,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                         style: TextStyle(
                           color: widget.isMarginVisible
                               ? (margin > 15
-                                  ? AppTheme.neonGreen
+                                  ? AppTheme.success
                                   : AppTheme.error)
                               : Colors.white24,
                           fontSize: 11,
@@ -1297,17 +1297,17 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.darkCard,
+              color: AppTheme.softPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: AppTheme.neonPurple.withValues(alpha: 0.3),
+                color: AppTheme.accentIndigo.withValues(alpha: 0.3),
               ),
             ),
             child: Row(
               children: [
                 const Icon(
                   Icons.summarize,
-                  color: AppTheme.neonPurple,
+                  color: AppTheme.accentIndigo,
                   size: 16,
                 ),
                 const SizedBox(width: 6),
@@ -1321,7 +1321,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 Text(
                   _fmtEur(_grandTotal.sales),
                   style: const TextStyle(
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.success,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -1336,7 +1336,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 Text(
                   _fmtNum(_grandTotal.envases),
                   style: const TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -1351,7 +1351,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 Text(
                   _fmtNum(_grandTotal.units),
                   style: const TextStyle(
-                    color: Colors.amber,
+                    color: AppTheme.accentAmber,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),

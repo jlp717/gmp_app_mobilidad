@@ -1,5 +1,5 @@
-// client_alerts_widget.dart: Widget premium para alertas KPI Glacius
-// Diseño futurista con colores neon, agrupación por tipo, y visibilidad por rol
+// client_alerts_widget.dart: Widget premium para alertas KPI
+// Diseño operativo con colores semánticos, agrupación por tipo, y visibilidad por rol
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +7,7 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
-/// Widget que muestra las alertas KPI Glacius de un cliente.
+/// Widget que muestra las alertas KPI de un cliente.
 /// Se adapta al rol del usuario: JEFE_VENTAS ve datos financieros (márgenes, €),
 /// COMERCIAL ve alertas de acción sin datos sensibles.
 class ClientAlertsWidget extends StatefulWidget {
@@ -150,15 +150,15 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.darkSurface,
-            AppTheme.neonPurple.withValues(alpha: 0.04),
-            AppTheme.darkSurface,
+            AppTheme.raisedSurface,
+            AppTheme.accentIndigo.withValues(alpha: 0.04),
+            AppTheme.raisedSurface,
           ],
           stops: const [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppTheme.neonPurple.withValues(alpha: 0.2),
+          color: AppTheme.accentIndigo.withValues(alpha: 0.2),
         ),
       ),
       child: Row(
@@ -168,8 +168,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonPurple.withValues(alpha: 0.2),
-                  AppTheme.neonBlue.withValues(alpha: 0.1),
+                  AppTheme.accentIndigo.withValues(alpha: 0.2),
+                  AppTheme.info.withValues(alpha: 0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(8),
@@ -177,7 +177,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             child: const Icon(
               Icons.insights_rounded,
               size: 16,
-              color: AppTheme.neonPurple,
+              color: AppTheme.accentIndigo,
             ),
           ),
           const SizedBox(width: 10),
@@ -186,19 +186,19 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Alertas Nestle (Glacius)',
+                  'Alertas comerciales',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _hasError
                       ? 'Servicio no disponible'
-                      : 'Sin alertas Nestle para este cliente',
+                      : 'Sin alertas Nestlé para este cliente',
                   style: TextStyle(
                     fontSize: 11,
                     color: _hasError
@@ -241,23 +241,23 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonPurple.withValues(alpha: 0.25),
-                  AppTheme.neonBlue.withValues(alpha: 0.15),
+                  AppTheme.accentIndigo.withValues(alpha: 0.25),
+                  AppTheme.info.withValues(alpha: 0.15),
                 ],
               ),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
-                color: AppTheme.neonPurple.withValues(alpha: 0.4),
+                color: AppTheme.accentIndigo.withValues(alpha: 0.4),
                 width: 0.5,
               ),
             ),
             child: const Text(
-              'Nestle',
+              'Nestlé',
               style: TextStyle(
                 fontSize: 7,
                 fontWeight: FontWeight.w800,
-                color: AppTheme.neonPurple,
-                letterSpacing: 0.5,
+                color: AppTheme.accentIndigo,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -315,20 +315,20 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
         decoration: BoxDecoration(
-          color: AppTheme.neonPurple.withValues(alpha: 0.12),
+          color: AppTheme.accentIndigo.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: AppTheme.neonPurple.withValues(alpha: 0.35),
+            color: AppTheme.accentIndigo.withValues(alpha: 0.35),
             width: 0.5,
           ),
         ),
         child: const Text(
-          'Nestle',
+          'Nestlé',
           style: TextStyle(
             fontSize: 7,
             fontWeight: FontWeight.w800,
-            color: AppTheme.neonPurple,
-            letterSpacing: 0.5,
+            color: AppTheme.accentIndigo,
+            letterSpacing: 0,
           ),
         ),
       ),
@@ -377,20 +377,20 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.darkSurface,
-            AppTheme.neonPurple.withValues(alpha: 0.06),
-            AppTheme.darkSurface,
+            AppTheme.raisedSurface,
+            AppTheme.accentIndigo.withValues(alpha: 0.06),
+            AppTheme.raisedSurface,
           ],
           stops: const [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppTheme.neonPurple.withValues(alpha: 0.3),
+          color: AppTheme.accentIndigo.withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonPurple.withValues(alpha: 0.1),
+            color: AppTheme.accentIndigo.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -409,8 +409,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.neonPurple.withValues(alpha: 0.15),
-                    AppTheme.neonBlue.withValues(alpha: 0.08),
+                    AppTheme.accentIndigo.withValues(alpha: 0.15),
+                    AppTheme.info.withValues(alpha: 0.08),
                   ],
                 ),
                 borderRadius: _expanded
@@ -425,14 +425,14 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          AppTheme.neonPurple.withValues(alpha: 0.3),
-                          AppTheme.neonBlue.withValues(alpha: 0.2),
+                          AppTheme.accentIndigo.withValues(alpha: 0.3),
+                          AppTheme.info.withValues(alpha: 0.2),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.neonPurple.withValues(alpha: 0.3),
+                          color: AppTheme.accentIndigo.withValues(alpha: 0.3),
                           blurRadius: 8,
                         ),
                       ],
@@ -440,7 +440,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                     child: const Icon(
                       Icons.insights_rounded,
                       size: 16,
-                      color: AppTheme.neonPurple,
+                      color: AppTheme.accentIndigo,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -450,12 +450,12 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Alertas Nestle (Glacius)',
+                          'Alertas comerciales',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
-                            letterSpacing: 0.3,
+                            letterSpacing: 0,
                           ),
                         ),
                         Text(
@@ -580,7 +580,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
     return Container(
       margin: const EdgeInsets.only(top: 6),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase.withValues(alpha: 0.6),
+        color: AppTheme.inkSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: config.color.withValues(alpha: 0.2),
@@ -606,7 +606,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: config.color,
-                    letterSpacing: 0.2,
+                    letterSpacing: 0,
                   ),
                 ),
               ),
@@ -668,7 +668,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.4),
+        color: AppTheme.raisedSurface.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(color: sevColor, width: 3),
@@ -740,7 +740,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
     if (raw.containsKey('cuotaAnual') && raw['cuotaAnual'] != null) {
       items.add(_buildFinancialPill(
-          'Cuota', '${_formatNum(raw['cuotaAnual'])}€', AppTheme.neonBlue));
+          'Cuota', '${_formatNum(raw['cuotaAnual'])}€', AppTheme.info));
     }
     if (raw.containsKey('desviacionEur') && raw['desviacionEur'] != null) {
       final val = (raw['desviacionEur'] as num).toDouble();
@@ -856,31 +856,31 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         return const _AlertTypeConfig(
           label: 'Productos Pendientes',
           icon: Icons.inventory_2_rounded,
-          color: Color(0xFFFF6B9D),
+          color: AppTheme.accentRose,
         );
       case 'PROMOCION':
         return const _AlertTypeConfig(
           label: 'Promociones',
           icon: Icons.local_offer_rounded,
-          color: AppTheme.neonGreen,
+          color: AppTheme.success,
         );
       case 'ALTA_CLIENTE':
         return const _AlertTypeConfig(
           label: 'Cliente Nuevo',
           icon: Icons.person_add_rounded,
-          color: AppTheme.neonBlue,
+          color: AppTheme.info,
         );
       case 'AVISO':
         return const _AlertTypeConfig(
           label: 'Avisos',
           icon: Icons.campaign_rounded,
-          color: AppTheme.neonPurple,
+          color: AppTheme.accentIndigo,
         );
       case 'MEDIOS_CLIENTE':
         return const _AlertTypeConfig(
           label: 'Equipamiento',
           icon: Icons.kitchen_rounded,
-          color: AppTheme.neonTeal,
+          color: AppTheme.accentMint,
         );
       default:
         return _AlertTypeConfig(
@@ -919,14 +919,14 @@ class _KpiLoadingShimmer extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppTheme.darkSurface,
-            AppTheme.neonPurple.withValues(alpha: 0.05),
-            AppTheme.darkSurface,
+            AppTheme.raisedSurface,
+            AppTheme.accentIndigo.withValues(alpha: 0.05),
+            AppTheme.raisedSurface,
           ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppTheme.neonPurple.withValues(alpha: 0.15),
+          color: AppTheme.accentIndigo.withValues(alpha: 0.15),
           width: 0.5,
         ),
       ),
@@ -938,12 +938,12 @@ class _KpiLoadingShimmer extends StatelessWidget {
             height: 14,
             child: CircularProgressIndicator(
               strokeWidth: 1.5,
-              color: AppTheme.neonPurple.withValues(alpha: 0.5),
+              color: AppTheme.accentIndigo.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(width: 10),
           Text(
-            'Cargando alertas Nestle (Glacius)...',
+            'Cargando alertas comerciales...',
             style: TextStyle(
               fontSize: 12,
               color: AppTheme.textTertiary.withValues(alpha: 0.7),

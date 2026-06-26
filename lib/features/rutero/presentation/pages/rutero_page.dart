@@ -374,6 +374,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           _selectedMonth,
           _sortMode,
         ].join('_'),
+        forceRefresh: useDirectEndpoint,
       );
 
       final response = result.data;
@@ -412,6 +413,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
       await _loadDayClients(
         useDirectEndpoint: useDirectEndpoint,
+        forceRefresh: useDirectEndpoint,
         generation: generation,
       );
     } on OfflineException catch (e) {
@@ -431,6 +433,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   Future<void> _loadDayClients({
     bool useDirectEndpoint = false,
+    bool forceRefresh = false,
     int? generation,
   }) async {
     if (!mounted) return;
@@ -447,6 +450,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
           vendedorCodes: activeVendedorCode,
           type: _selectedAlertType,
+          forceRefresh: forceRefresh,
         );
         _kpiFilteredCodes = alertCodes.toSet();
       } else {
@@ -478,7 +482,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           _selectedWeek,
           _sortMode,
         ].join('_'),
-        forceRefresh: useDirectEndpoint,
+        forceRefresh: useDirectEndpoint || forceRefresh,
       );
 
       final response = result.data;
@@ -640,7 +644,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     final isSmallScreen = screenHeight < 850;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: SafeArea(
         child: Column(
           children: [
@@ -711,7 +715,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-      color: AppTheme.neonBlue.withValues(alpha: 0.15),
+      color: AppTheme.info.withValues(alpha: 0.15),
       child: Row(
         children: [
           const SizedBox(
@@ -719,14 +723,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             height: 12,
             child: CircularProgressIndicator(
               strokeWidth: 1.5,
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
             ),
           ),
           const SizedBox(width: 8),
           Text(
             'Preparando datos… se actualizará automáticamente',
             style: TextStyle(
-              color: AppTheme.neonBlue.withValues(alpha: 0.9),
+              color: AppTheme.info.withValues(alpha: 0.9),
               fontSize: 11,
             ),
           ),
@@ -774,17 +778,17 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   ? Icons.shopping_bag_outlined
                   : Icons.local_shipping_outlined,
               size: 64,
-              color: AppTheme.neonPink.withValues(alpha: 0.3),
+              color: AppTheme.accentRose.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
               'Sin clientes para ${_weekdayFullLabels[_selectedDay]}',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade400),
+              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             Text(
               'Prueba a cambiar de día o sincronizar',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 14, color: AppTheme.textTertiary),
             ),
           ],
         ),
@@ -869,7 +873,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             Icon(
               Icons.notifications_off_outlined,
               size: 60,
-              color: AppTheme.neonPink.withValues(alpha: 0.3),
+              color: AppTheme.accentRose.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -886,7 +890,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   ? 'Este día no tiene alertas detectadas'
                   : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 24),
             TextButton.icon(
@@ -896,7 +900,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               }),
               icon: const Icon(Icons.filter_list_off),
               label: const Text('Limpiar filtros de KPI'),
-              style: TextButton.styleFrom(foregroundColor: AppTheme.neonPink),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.accentRose),
             ),
           ],
         ),
@@ -912,12 +916,12 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             Icon(
               Icons.search_off,
               size: 48,
-              color: AppTheme.neonPink.withValues(alpha: 0.4),
+              color: AppTheme.accentRose.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 16),
             Text(
               'No se encontró ningún cliente para "$_searchQuery"',
-              style: TextStyle(color: Colors.grey.shade400),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             TextButton(
@@ -927,7 +931,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               }),
               child: const Text(
                 'Limpiar búsqueda',
-                style: TextStyle(color: AppTheme.neonPink),
+                style: TextStyle(color: AppTheme.accentRose),
               ),
             ),
           ],
@@ -936,8 +940,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
 
     return RefreshIndicator(
-      color: AppTheme.neonPink,
-      onRefresh: _loadDayClients,
+      color: AppTheme.accentRose,
+      onRefresh: () => _loadDayClients(
+        useDirectEndpoint: true,
+        forceRefresh: true,
+      ),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         itemCount: filteredClients.length,
@@ -1044,7 +1051,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     // Show selector with all phones + custom option
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1074,7 +1081,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               ),
             ...phones.map(
               (p) => ListTile(
-                leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
+                leading: const Icon(Icons.phone, color: AppTheme.info),
                 title: Text((p['number'] as String?) ?? ''),
                 subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
                 onTap: () {
@@ -1085,7 +1092,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
+              leading: const Icon(Icons.dialpad, color: AppTheme.accentRose),
               title: const Text('Introducir número manualmente'),
               subtitle: const Text('Escribe un número personalizado'),
               onTap: () {
@@ -1114,7 +1121,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: Text(isWhatsApp ? 'WhatsApp' : 'Llamar'),
         content: TextField(
           controller: controller,
@@ -1130,13 +1137,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
               backgroundColor:
-                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
+                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.info,
             ),
             child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
           ),
@@ -1162,7 +1170,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: const Text('Observaciones Cliente'),
         content: TextField(
           controller: ctrl,
@@ -1175,11 +1183,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
             child: const Text('Guardar'),
           ),
         ],
@@ -1242,7 +1252,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     // Always show selector with custom option
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1284,7 +1294,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
+              leading: const Icon(Icons.dialpad, color: AppTheme.accentRose),
               title: const Text('Introducir número manualmente'),
               subtitle: const Text('Escribe un número personalizado'),
               onTap: () {
@@ -1377,6 +1387,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'role': _selectedRole,
         },
         cacheKey: ['rutero_counts', cacheScope, _selectedRole].join('_'),
+        forceRefresh: true,
       );
 
       final countsResponse = result.data;
@@ -1393,16 +1404,16 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       }
     } on OfflineException catch (_) {
       // Si falla, hacer refresh completo
-      await _loadWeekData();
+      await _loadWeekData(useDirectEndpoint: true);
       return;
     } catch (e) {
       debugPrint('[Rutero] Error refreshing counts: $e');
-      await _loadWeekData();
+      await _loadWeekData(useDirectEndpoint: true);
       return;
     }
 
     // Luego refrescar la lista del día actual
-    await _loadDayClients();
+    await _loadDayClients(useDirectEndpoint: true, forceRefresh: true);
 
     if (mounted) {
       setState(() => _lastFetchTime = DateTime.now());
@@ -1605,10 +1616,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => const AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         content: Row(
           children: [
-            CircularProgressIndicator(color: AppTheme.neonPink),
+            CircularProgressIndicator(color: AppTheme.accentRose),
             SizedBox(width: 16),
             Text('Moviendo cliente...'),
           ],
@@ -1717,7 +1728,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     final discard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
@@ -1762,7 +1773,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       },
       child: Dialog(
         insetPadding: const EdgeInsets.all(10),
-        backgroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.inkSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Column(
           children: [
@@ -1808,10 +1819,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
             // Hint
             Container(
               width: double.infinity,
-              color: AppTheme.surfaceColor,
+              color: AppTheme.raisedSurface,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: const Text(
-                'Arrastra para ordenar o usa las flechas. Usa el icono ðŸ“… para mover a otro día.\n'
+                'Arrastra para ordenar o usa las flechas. Usa el icono calendario para mover a otro día.\n'
                 '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
@@ -1827,7 +1838,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                           Icon(
                             Icons.inbox,
                             size: 48,
-                            color: Colors.grey.shade600,
+                            color: AppTheme.textTertiary,
                           ),
                           const SizedBox(height: 8),
                           const Text('No hay clientes en este día'),
@@ -1857,8 +1868,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
                               index: index,
                               child: const Padding(
                                 padding: EdgeInsets.all(12),
-                                child:
-                                    Icon(Icons.drag_handle, color: Colors.grey),
+                                child: Icon(Icons.drag_handle,
+                                    color: AppTheme.textTertiary),
                               ),
                             ),
                             title: Text(
@@ -1872,7 +1883,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                               (item['code'] as String?) ?? '',
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: AppTheme.textTertiary,
                               ),
                             ),
                             trailing: Row(
@@ -1925,7 +1936,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                                 IconButton(
                                   icon: const Icon(
                                     Icons.calendar_month,
-                                    color: AppTheme.neonBlue,
+                                    color: AppTheme.info,
                                   ),
                                   tooltip: 'Mover a otro día',
                                   onPressed: () => _moveClientToDay(index),
@@ -1946,8 +1957,9 @@ class _ReorderDialogState extends State<ReorderDialog> {
                 height: 48,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _hasChanges ? AppTheme.neonPink : Colors.grey,
+                    backgroundColor: _hasChanges
+                        ? AppTheme.accentRose
+                        : AppTheme.textTertiary,
                   ),
                   onPressed: _confirmSave,
                   icon: const Icon(Icons.save),

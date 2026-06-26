@@ -14,7 +14,7 @@ class AdvancedSalesChart extends StatefulWidget {
     required this.hierarchy,
     required this.onBarTap,
     super.key,
-    this.color = AppTheme.neonBlue,
+    this.color = AppTheme.info,
   });
   final List<MatrixNode> matrixData;
   final List<String> hierarchy;
@@ -41,7 +41,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         boxShadow: [
@@ -78,7 +78,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
+                        letterSpacing: 0,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -121,7 +121,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 maxY: maxY,
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
-                    tooltipBgColor: AppTheme.darkCard,
+                    tooltipBgColor: AppTheme.raisedSurface,
                     tooltipRoundedRadius: 8,
                     tooltipPadding: const EdgeInsets.all(12),
                     tooltipMargin: 8,

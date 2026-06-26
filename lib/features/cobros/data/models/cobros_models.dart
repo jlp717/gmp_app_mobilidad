@@ -209,8 +209,7 @@ class CobroPendiente {
   final bool provisional;
 
   bool get isVencido => estado == EstadoCobro.vencido;
-  bool get isPedidoAppProvisional =>
-      provisional || tipo == TipoCobro.pedidoApp;
+  bool get isPedidoAppProvisional => provisional || tipo == TipoCobro.pedidoApp;
 
   String get paymentReference {
     final source = docKey?['source']?.toString().trim().toUpperCase();
@@ -219,7 +218,11 @@ class CobroPendiente {
       final pedidoId = docKey?['id']?.toString().trim() ?? '';
       if (pedidoId.isNotEmpty) return 'PEDIDO:$pedidoId:$ref';
     }
-    if (source == 'CVC' && ref.isNotEmpty) return 'CVC:$ref';
+    if (source == 'CVC') {
+      final stable = docKey?['reference']?.toString().trim() ?? '';
+      if (stable.startsWith('CVC:')) return stable;
+      if (ref.isNotEmpty) return 'CVC:$ref';
+    }
     return ref.isNotEmpty ? ref : id;
   }
 

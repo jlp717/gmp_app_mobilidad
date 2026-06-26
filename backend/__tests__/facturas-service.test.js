@@ -112,6 +112,7 @@ describe('facturas service fiscal totals', () => {
       vendedorCodes: 'ALL',
       year: 2026,
       docSearch: '4306',
+      documentType: 'factura',
     });
 
     expect(facturas).toHaveLength(1);
@@ -124,6 +125,51 @@ describe('facturas service fiscal totals', () => {
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
   });
 
+  test('getFacturasRaw reads unbilled albaranes from CAC with document type', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([
+      {
+        DOCUMENT_TYPE: 'albaran',
+        SERIE: 'J',
+        NUMERO: 1187,
+        EJERCICIO: 2026,
+        TERMINAL: 93,
+        DIA: 29,
+        MES: 6,
+        ANO: 2026,
+        CODIGO_CLIENTE: '4300009588',
+        NOMBRE_CLIENTE: 'CASER RESIDENCIAL SANTO ANGEL',
+        NOMBRE_COMERCIAL: 'CASER RESIDENCIAL SANTO ANGEL',
+        NOMBRE_FISCAL: 'CASER RESIDENCIAL SANTO ANGEL',
+        TOTAL: 125.5,
+        BASE: 114.09,
+        IVA: 11.41,
+      },
+    ]);
+
+    const docs = await facturasService.getFacturasRaw({
+      vendedorCodes: '93',
+      year: 2026,
+      documentType: 'albaran',
+    });
+
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({
+      id: 'ALB-2026-J-93-1187',
+      documentType: 'albaran',
+      tipoDocumento: 'albaran',
+      serie: 'J',
+      numero: 1187,
+      ejercicio: 2026,
+      terminal: 93,
+      total: 125.5,
+    });
+
+    const sql = mockQueryWithParams.mock.calls[0][0];
+    expect(sql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
+    expect(sql).toMatch(/NOT\s*\(\s*CAC\.NUMEROFACTURA\s+>\s+0/i);
+    expect(sql).toMatch(/IMPORTEIVA5/i);
+  });
+
   test('getFacturasRaw bounds list queries with OFFSET/FETCH and clamps limit', async () => {
     mockQueryWithParams.mockResolvedValueOnce([]);
 
@@ -132,6 +178,7 @@ describe('facturas service fiscal totals', () => {
       year: 2026,
       limit: 9999,
       offset: -25,
+      documentType: 'factura',
     });
 
     const [sql, params] = mockQueryWithParams.mock.calls[0];
@@ -178,6 +225,7 @@ describe('facturas service fiscal totals', () => {
       year: 2026,
       limit: 1,
       offset: 1,
+      documentType: 'factura',
     });
 
     expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
@@ -193,7 +241,8 @@ describe('facturas service fiscal totals', () => {
   test('getSummary totals base and IVA from CFC official totals', async () => {
     mockQueryWithParams.mockResolvedValueOnce([
       {
-        NUM_FACTURAS: 1,
+        DOCUMENT_TYPE: 'factura',
+        NUM_DOCUMENTOS: 1,
         TOTAL: 3618.44,
         BASE: 3302.03,
         IVA: 316.41,
@@ -203,22 +252,59 @@ describe('facturas service fiscal totals', () => {
     const summary = await facturasService.getSummary({
       vendedorCodes: 'ALL',
       year: 2026,
+      documentType: 'factura',
     });
 
     expect(summary).toEqual({
       totalFacturas: 1,
+      totalDocumentos: 1,
+      totalFacturasEmitidas: 1,
+      totalAlbaranes: 0,
       totalImporte: 3618.44,
       totalBase: 3302.03,
       totalIva: 316.41,
     });
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
-    expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v2:/);
+    expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v3:/);
+  });
+
+  test('getSummary totals albaran base and all IVA slots from CAC', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([
+      {
+        DOCUMENT_TYPE: 'albaran',
+        NUM_DOCUMENTOS: 1,
+        TOTAL: 711.55,
+        BASE: 671.66,
+        IVA: 39.89,
+      },
+    ]);
+
+    const summary = await facturasService.getSummary({
+      vendedorCodes: '93',
+      year: 2026,
+      documentType: 'albaran',
+    });
+
+    expect(summary).toEqual({
+      totalFacturas: 1,
+      totalDocumentos: 1,
+      totalFacturasEmitidas: 0,
+      totalAlbaranes: 1,
+      totalImporte: 711.55,
+      totalBase: 671.66,
+      totalIva: 39.89,
+    });
+
+    const sql = mockQueryWithParams.mock.calls[0][0];
+    expect(sql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
+    expect(sql).toMatch(/IMPORTEIVA5/i);
   });
 
   test('getSummary applies the same search filters as the invoice list', async () => {
     mockQueryWithParams.mockResolvedValueOnce([
       {
-        NUM_FACTURAS: 1,
+        DOCUMENT_TYPE: 'factura',
+        NUM_DOCUMENTOS: 1,
         TOTAL: 70.30,
         BASE: 63.91,
         IVA: 6.39,
@@ -230,6 +316,7 @@ describe('facturas service fiscal totals', () => {
       year: 2026,
       clientSearch: 'chiringuito',
       docSearch: '4306',
+      documentType: 'factura',
     });
 
     expect(summary.totalFacturas).toBe(1);

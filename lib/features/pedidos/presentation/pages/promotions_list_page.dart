@@ -48,7 +48,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final visiblePromos = filtered.length;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -58,13 +58,13 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withValues(alpha: 0.2),
+                color: AppTheme.success.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '$visiblePromos${visiblePromos < totalPromos ? '/$totalPromos' : ''}',
                 style: const TextStyle(
-                  color: AppTheme.neonGreen,
+                  color: AppTheme.success,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -72,13 +72,13 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             ),
           ],
         ),
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         elevation: 0,
         actions: [
           IconButton(
             icon: Icon(
               _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
-              color: Colors.white70,
+              color: AppTheme.textSecondary,
             ),
             tooltip: _showFilters ? 'Ocultar filtros' : 'Mostrar filtros',
             onPressed: () => setState(() => _showFilters = !_showFilters),
@@ -115,7 +115,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             Icon(
               hasAnyPromos ? Icons.search_off : Icons.local_offer_outlined,
               size: 64,
-              color: Colors.white24,
+              color: AppTheme.textTertiary,
             ),
             const SizedBox(height: 16),
             Text(
@@ -123,7 +123,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   ? 'No hay promociones con esos filtros'
                   : 'No hay promociones activas',
               style: const TextStyle(
-                color: Colors.white54,
+                color: AppTheme.textSecondary,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -135,7 +135,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   ? 'Prueba a cambiar los filtros o la busqueda'
                   : 'Las promociones apareceran aqui cuando esten disponibles',
               style: const TextStyle(
-                color: Colors.white38,
+                color: AppTheme.textTertiary,
                 fontSize: 13,
               ),
               textAlign: TextAlign.center,
@@ -162,19 +162,20 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
 
   Widget _buildFilters() {
     return Container(
-      color: AppTheme.darkSurface,
+      color: AppTheme.raisedSurface,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
         children: [
           // Search bar
           TextField(
             onChanged: (value) => setState(() => _search = value.trim()),
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, codigo o articulo...',
-              hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+              hintStyle:
+                  const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
               prefixIcon:
-                  const Icon(Icons.search, color: AppTheme.neonBlue, size: 20),
+                  const Icon(Icons.search, color: AppTheme.info, size: 20),
               suffixIcon: _search.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
@@ -182,7 +183,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     )
                   : null,
               filled: true,
-              fillColor: AppTheme.darkCard,
+              fillColor: AppTheme.softPanel,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
@@ -206,21 +207,23 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 const SizedBox(width: 8),
                 const SizedBox(
                   height: 20,
-                  child: VerticalDivider(width: 1, color: Colors.white12),
+                  child: VerticalDivider(width: 1, color: AppTheme.borderColor),
                 ),
                 const SizedBox(width: 8),
                 FilterChip(
                   label: const Text('Con stock'),
                   selected: _onlyWithStock,
-                  selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
-                  backgroundColor: AppTheme.darkCard,
+                  selectedColor: AppTheme.success.withValues(alpha: 0.2),
+                  backgroundColor: AppTheme.softPanel,
                   labelStyle: TextStyle(
-                    color: _onlyWithStock ? AppTheme.neonGreen : Colors.white70,
+                    color: _onlyWithStock
+                        ? AppTheme.success
+                        : AppTheme.textSecondary,
                     fontSize: 12,
                   ),
                   side: BorderSide(
                     color: _onlyWithStock
-                        ? AppTheme.neonGreen
+                        ? AppTheme.success
                         : AppTheme.borderColor,
                   ),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -244,20 +247,21 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon,
-              size: 14, color: selected ? AppTheme.neonBlue : Colors.white54),
+              size: 14,
+              color: selected ? AppTheme.info : AppTheme.textSecondary),
           const SizedBox(width: 4),
           Text(label),
         ],
       ),
       selected: selected,
-      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-      backgroundColor: AppTheme.darkCard,
+      selectedColor: AppTheme.info.withValues(alpha: 0.2),
+      backgroundColor: AppTheme.softPanel,
       labelStyle: TextStyle(
-        color: selected ? AppTheme.neonBlue : Colors.white70,
+        color: selected ? AppTheme.info : AppTheme.textSecondary,
         fontSize: 12,
       ),
       side: BorderSide(
-        color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+        color: selected ? AppTheme.info : AppTheme.borderColor,
       ),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
@@ -267,12 +271,12 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
 
   Widget _buildPromoCard(_PromotionGroup group) {
     final isGift = group.promoType == 'GIFT';
-    final accentColor = isGift ? AppTheme.neonPurple : AppTheme.neonGreen;
+    final accentColor = isGift ? AppTheme.accentIndigo : AppTheme.success;
     final first = group.items.first;
     final hasProducts = group.items.any((i) => i.code.isNotEmpty);
 
     return Card(
-      color: AppTheme.darkCard,
+      color: AppTheme.softPanel,
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -348,7 +352,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                           Text(
                             group.promoCode,
                             style: const TextStyle(
-                              color: Colors.white38,
+                              color: AppTheme.textTertiary,
                               fontSize: 11,
                             ),
                           ),
@@ -380,7 +384,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   icon: Icons.shopping_basket,
                   label:
                       'Compra ${first.minQty.toInt()}, lleva ${(first.minQty + first.giftQty).toInt()}',
-                  color: AppTheme.neonPurple,
+                  color: AppTheme.accentIndigo,
                   suffix: first.cumulative ? '(acumulable)' : null,
                 ),
               if (!isGift)
@@ -392,21 +396,21 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                       icon: Icons.attach_money,
                       label:
                           'Oferta: ${PedidosFormatters.money(group.promoPrice, decimals: 3)}',
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                     ),
                     if (group.regularPrice > 0)
                       _buildDetailRow(
                         icon: Icons.price_change,
                         label:
                             'Tarifa: ${PedidosFormatters.money(group.regularPrice, decimals: 3)}',
-                        color: Colors.white54,
+                        color: AppTheme.textSecondary,
                       ),
                     if (group.discountPct > 0)
                       _buildDetailRow(
                         icon: Icons.trending_down,
                         label:
                             '-${PedidosFormatters.number(group.discountPct, decimals: 1)}%',
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                       ),
                   ],
                 ),
@@ -415,20 +419,22 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               Row(
                 children: [
                   Icon(Icons.inventory_2_outlined,
-                      size: 14, color: Colors.white38),
+                      size: 14, color: AppTheme.textTertiary),
                   const SizedBox(width: 4),
                   Text(
                     '${group.items.length} producto(s)',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12),
                   ),
                   const Spacer(),
                   if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
-                    Icon(Icons.calendar_today, size: 12, color: Colors.white38),
+                    Icon(Icons.calendar_today,
+                        size: 12, color: AppTheme.textTertiary),
                     const SizedBox(width: 4),
                     Text(
                       'Hasta ${group.dateTo}',
-                      style:
-                          const TextStyle(color: Colors.white38, fontSize: 11),
+                      style: const TextStyle(
+                          color: AppTheme.textTertiary, fontSize: 11),
                     ),
                   ],
                 ],
@@ -445,15 +451,15 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                           widget.hasStockResolver?.call(item.code) ??
                               item.hasStock;
                       final stockColor = hasStock == true
-                          ? AppTheme.neonGreen
+                          ? AppTheme.success
                           : hasStock == false
                               ? AppTheme.error
-                              : Colors.white38;
+                              : AppTheme.textTertiary;
 
                       return ActionChip(
                         onPressed: () =>
                             widget.onProductTap(item.code, item.name),
-                        backgroundColor: AppTheme.darkSurface,
+                        backgroundColor: AppTheme.raisedSurface,
                         side: BorderSide(
                             color: stockColor.withValues(alpha: 0.45)),
                         avatar: Icon(
@@ -466,7 +472,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                         label: Text(
                           '${item.code} · ${item.name}',
                           style: const TextStyle(
-                            color: Colors.white70,
+                            color: AppTheme.textSecondary,
                             fontSize: 11,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -475,12 +481,12 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     }),
                     if (group.items.length > 8)
                       Chip(
-                        backgroundColor: AppTheme.darkSurface,
+                        backgroundColor: AppTheme.raisedSurface,
                         side: const BorderSide(color: AppTheme.borderColor),
                         label: Text(
                           '+${group.items.length - 8} mas',
                           style: const TextStyle(
-                            color: Colors.white54,
+                            color: AppTheme.textSecondary,
                             fontSize: 11,
                           ),
                         ),

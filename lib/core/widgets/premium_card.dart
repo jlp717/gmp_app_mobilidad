@@ -1,16 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-/// Premium card wrapper with consistent gradient, border, and shadow.
+/// Operational card wrapper with consistent border, density, and shadow.
 ///
-/// Wrap existing card content to instantly apply the V2.5 premium look.
-///
-/// Features:
-/// - Subtle gradient background (top-left → bottom-right)
-/// - Neon border glow
-/// - Multi-layered shadow (ambient + directional)
-/// - Optional accent color for border glow
-/// - Optional glassmorphism effect
+/// The legacy name is retained because it is used throughout feature code.
 class PremiumCard extends StatelessWidget {
   const PremiumCard({
     required this.child,
@@ -22,72 +15,53 @@ class PremiumCard extends StatelessWidget {
     super.key,
   });
 
-  /// The card content
   final Widget child;
-
-  /// Accent color for border glow. Defaults to [AppTheme.neonBlue].
   final Color? accentColor;
-
-  /// Internal padding
   final EdgeInsetsGeometry padding;
-
-  /// External margin
   final EdgeInsetsGeometry? margin;
-
-  /// Custom border radius. Defaults to [AppTheme.radiusLg].
   final double? borderRadius;
 
-  /// Whether to use glassmorphism effect
+  /// Retained for API compatibility. It now uses a denser raised surface.
   final bool glassmorphism;
 
   @override
   Widget build(BuildContext context) {
-    final color = accentColor ?? AppTheme.neonBlue;
+    final color = accentColor ?? AppTheme.info;
 
     return Container(
       margin: margin ?? const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: glassmorphism
-            ? AppTheme.raisedSurface.withValues(alpha: 0.70)
-            : null,
-        gradient: glassmorphism ? null : AppTheme.panelGradient,
+        color: glassmorphism ? AppTheme.raisedSurface : AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(borderRadius ?? AppTheme.radiusLg),
         border: Border.all(
-          color: color.withValues(alpha: 0.18),
-          width: 1,
+          color: AppTheme.borderColor.withValues(alpha: 0.84),
         ),
         boxShadow: [
-          // Ambient shadow
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-          // Accent glow
-          BoxShadow(
-            color: color.withValues(alpha: 0.05),
-            blurRadius: 16,
-            spreadRadius: 1,
-          ),
-          // Deep shadow
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: padding != EdgeInsets.zero
-          ? Padding(padding: padding, child: child)
-          : child,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius ?? AppTheme.radiusLg),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: color.withValues(alpha: 0.58), width: 3),
+            ),
+          ),
+          child: padding != EdgeInsets.zero
+              ? Padding(padding: padding, child: child)
+              : child,
+        ),
+      ),
     );
   }
 }
 
-/// Premium KPI metric card — for numeric dashboard values.
-///
-/// Shows a label, value, optional trend indicator, and an icon
-/// in a compact premium card format.
+/// KPI metric card for numeric dashboard values.
 class PremiumKpiCard extends StatelessWidget {
   const PremiumKpiCard({
     required this.label,
@@ -110,7 +84,7 @@ class PremiumKpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accentColor ?? AppTheme.neonBlue;
+    final color = accentColor ?? AppTheme.info;
 
     return PremiumCard(
       accentColor: color,
@@ -120,7 +94,6 @@ class PremiumKpiCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Icon + label row
           Row(
             children: [
               if (icon != null) ...[
@@ -138,7 +111,6 @@ class PremiumKpiCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          // Value
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -151,7 +123,6 @@ class PremiumKpiCard extends StatelessWidget {
               maxLines: 1,
             ),
           ),
-          // Trend indicator
           if (trend != null || trendLabel != null) ...[
             const SizedBox(height: 4),
             Row(
@@ -159,9 +130,13 @@ class PremiumKpiCard extends StatelessWidget {
                 if (trend != null) Icon(trend, size: 14, color: color),
                 if (trendLabel != null) ...[
                   const SizedBox(width: 4),
-                  Text(
-                    trendLabel!,
-                    style: AppTheme.captionText,
+                  Flexible(
+                    child: Text(
+                      trendLabel!,
+                      style: AppTheme.captionText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ],
@@ -173,7 +148,7 @@ class PremiumKpiCard extends StatelessWidget {
   }
 }
 
-/// Premium section header with optional action button.
+/// Section header with optional action button.
 class PremiumSectionHeader extends StatelessWidget {
   const PremiumSectionHeader({
     required this.title,
@@ -194,7 +169,7 @@ class PremiumSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accentColor ?? AppTheme.neonBlue;
+    final color = accentColor ?? AppTheme.info;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -204,8 +179,9 @@ class PremiumSectionHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
+                color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: color.withValues(alpha: 0.18)),
               ),
               child: Icon(icon, size: 18, color: color),
             ),
@@ -215,16 +191,15 @@ class PremiumSectionHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: AppTheme.headline,
-                ),
+                Text(title, style: AppTheme.headline),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       subtitle!,
                       style: AppTheme.captionText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
               ],
@@ -237,7 +212,8 @@ class PremiumSectionHeader extends StatelessWidget {
                 foregroundColor: color,
                 textStyle: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
                 ),
               ),
               child: Text(actionLabel!),

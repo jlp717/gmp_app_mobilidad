@@ -20,7 +20,7 @@ const facturasBreaker = new CircuitBreaker({
 });
 
 const BATCH_SIZE = 15;
-const FACTURA_CACHE_VERSION = 'v2';
+const FACTURA_CACHE_VERSION = 'v3';
 const TAX_SLOTS = [1, 2, 3, 4, 5];
 const DEFAULT_LIST_LIMIT = 250;
 const MAX_LIST_LIMIT = 500;
@@ -45,6 +45,19 @@ function sortInvoiceRowsDesc(a, b) {
     return (parseInt(b.NUMERO, 10) || 0) - (parseInt(a.NUMERO, 10) || 0);
 }
 
+function normalizeDocumentType(value) {
+    const term = String(value || '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+
+    if (!term || term === 'ALL' || term === 'TODOS' || term === 'TODO') return 'all';
+    if (['FACTURA', 'FACTURAS', 'F'].includes(term)) return 'factura';
+    if (['ALBARAN', 'ALBARANES', 'ALB', 'A'].includes(term)) return 'albaran';
+    return 'all';
+}
+
 function normalizeSearchValue(value) {
     return String(value || '')
         .trim()
@@ -54,14 +67,14 @@ function normalizeSearchValue(value) {
         .toUpperCase();
 }
 
-function buildInvoiceClientSearchFilter(value) {
+function buildClientSearchFilter(value, clientColumn) {
     const term = normalizeSearchValue(value);
     if (!term) return { clause: '', params: [] };
 
     const prefix = `${term}%`;
     if (/^\d+$/.test(term)) {
         return {
-            clause: `AND (TRIM(CFC.CODIGOCLIENTE) LIKE ? OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?)`,
+            clause: `AND (TRIM(${clientColumn}) LIKE ? OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?)`,
             params: [prefix, prefix],
         };
     }
@@ -72,37 +85,37 @@ function buildInvoiceClientSearchFilter(value) {
                   OR UPPER(COALESCE(CLI.NOMBREALTERNATIVO, '')) LIKE ?
                   OR UPPER(COALESCE(CLI.POBLACION, '')) LIKE ?
                   OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?
-                  OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`,
+                  OR TRIM(${clientColumn}) LIKE ?)`,
         params: [textPattern, textPattern, textPattern, prefix, prefix],
     };
 }
 
-function buildInvoiceDocSearchFilter(value) {
+function buildDocSearchFilter(value, numberColumn, serieColumn, clientColumn) {
     const term = normalizeSearchValue(value);
     if (!term) return { clause: '', params: [] };
 
     const prefix = `${term}%`;
     if (/^\d+$/.test(term)) {
         return {
-            clause: `AND (CFC.NUMEROFACTURA = ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ? OR UPPER(TRIM(CFC.SERIEFACTURA)) LIKE ?)`,
+            clause: `AND (${numberColumn} = ? OR TRIM(${clientColumn}) LIKE ? OR UPPER(TRIM(${serieColumn})) LIKE ?)`,
             params: [Number.parseInt(term, 10), prefix, prefix],
         };
     }
 
     return {
-        clause: `AND (UPPER(TRIM(CFC.SERIEFACTURA)) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`,
+        clause: `AND (UPPER(TRIM(${serieColumn})) LIKE ? OR TRIM(${clientColumn}) LIKE ?)`,
         params: [prefix, prefix],
     };
 }
 
-function buildInvoiceSearchFilter(value) {
+function buildSearchFilter(value, numberColumn, serieColumn, clientColumn) {
     const term = normalizeSearchValue(value);
     if (!term) return { clause: '', params: [] };
 
     const prefix = `${term}%`;
     if (/^\d+$/.test(term)) {
         return {
-            clause: `AND (CFC.NUMEROFACTURA = ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ? OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?)`,
+            clause: `AND (${numberColumn} = ? OR TRIM(${clientColumn}) LIKE ? OR UPPER(COALESCE(CLI.NIF, '')) LIKE ?)`,
             params: [Number.parseInt(term, 10), prefix, prefix],
         };
     }
@@ -112,10 +125,34 @@ function buildInvoiceSearchFilter(value) {
         clause: `AND (UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE ?
                   OR UPPER(COALESCE(CLI.NOMBREALTERNATIVO, '')) LIKE ?
                   OR UPPER(COALESCE(CLI.POBLACION, '')) LIKE ?
-                  OR UPPER(TRIM(CFC.SERIEFACTURA)) LIKE ?
-                  OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`,
+                  OR UPPER(TRIM(${serieColumn})) LIKE ?
+                  OR TRIM(${clientColumn}) LIKE ?)`,
         params: [textPattern, textPattern, textPattern, prefix, prefix],
     };
+}
+
+function buildInvoiceClientSearchFilter(value) {
+    return buildClientSearchFilter(value, 'CFC.CODIGOCLIENTE');
+}
+
+function buildInvoiceDocSearchFilter(value) {
+    return buildDocSearchFilter(value, 'CFC.NUMEROFACTURA', 'CFC.SERIEFACTURA', 'CFC.CODIGOCLIENTE');
+}
+
+function buildInvoiceSearchFilter(value) {
+    return buildSearchFilter(value, 'CFC.NUMEROFACTURA', 'CFC.SERIEFACTURA', 'CFC.CODIGOCLIENTE');
+}
+
+function buildAlbaranClientSearchFilter(value) {
+    return buildClientSearchFilter(value, 'CAC.CODIGOCLIENTEALBARAN');
+}
+
+function buildAlbaranDocSearchFilter(value) {
+    return buildDocSearchFilter(value, 'CAC.NUMEROALBARAN', 'CAC.SERIEALBARAN', 'CAC.CODIGOCLIENTEALBARAN');
+}
+
+function buildAlbaranSearchFilter(value) {
+    return buildSearchFilter(value, 'CAC.NUMEROALBARAN', 'CAC.SERIEALBARAN', 'CAC.CODIGOCLIENTEALBARAN');
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -185,8 +222,9 @@ class FacturasService {
         throw new Error('Facturas DB no devolvio datos');
     }
     
-    async getFacturasRaw(params) {
+    async _getFacturasRawLegacy(params) {
         const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
+        const documentType = normalizeDocumentType(params.documentType || params.tipoDocumento);
         const rowsLimit = clampPositiveInt(params.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
         const rowsOffset = clampOffset(params.offset);
 
@@ -335,7 +373,252 @@ class FacturasService {
         }
     }
 
-    async getAvailableYears(vendedorCodes) {
+    async getFacturasRaw(params) {
+        const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
+        const rowsLimit = clampPositiveInt(params.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
+        const rowsOffset = clampOffset(params.offset);
+        const documentType = normalizeDocumentType(params.documentType || params.tipoDocumento);
+        const includeFacturas = documentType !== 'albaran';
+        const includeAlbaranes = documentType !== 'factura';
+
+        if (!vendedorCodes) {
+            throw new Error('vendedorCodes is required');
+        }
+
+        const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v && v !== 'UNK' && /^[A-Z0-9]+$/.test(v));
+
+        const currentYear = year || new Date().getFullYear();
+        const dateFilterApplied = dateFrom && dateTo;
+        const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
+        const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
+
+        function applyCommonFilters(sql, queryParams, {
+            vendorBatch,
+            vendorColumn,
+            dateExpr,
+            yearColumn,
+            monthColumn,
+            clientColumn,
+            clientFilterBuilder,
+            docFilterBuilder,
+            genericFilterBuilder,
+        }) {
+            if (vendorBatch.length > 0) {
+                const placeholders = vendorBatch.map(() => '?').join(',');
+                sql += ` AND TRIM(${vendorColumn}) IN (${placeholders})`;
+                queryParams.push(...vendorBatch);
+            }
+
+            if (dateFilterApplied && dateFromInt && dateToInt) {
+                sql += ` AND ${dateExpr} BETWEEN ? AND ?`;
+                queryParams.push(dateFromInt, dateToInt);
+            } else {
+                sql += ` AND ${yearColumn} = ?`;
+                queryParams.push(currentYear);
+                if (month) {
+                    sql += ` AND ${monthColumn} = ?`;
+                    queryParams.push(month);
+                }
+            }
+
+            if (clientId) {
+                sql += ` AND TRIM(${clientColumn}) = ?`;
+                queryParams.push(clientId.trim());
+            }
+
+            const clientFilter = clientFilterBuilder(clientSearch);
+            sql += ` ${clientFilter.clause}`;
+            queryParams.push(...clientFilter.params);
+
+            const docFilter = docFilterBuilder(docSearch);
+            sql += ` ${docFilter.clause}`;
+            queryParams.push(...docFilter.params);
+
+            const genericFilter = genericFilterBuilder(search);
+            sql += ` ${genericFilter.clause}`;
+            queryParams.push(...genericFilter.params);
+
+            return sql;
+        }
+
+        function buildInvoiceSqlForVendors(vendorBatch, offsetValue, limitValue) {
+            const queryParams = [];
+            let sql = `
+      SELECT
+        'factura' as DOCUMENT_TYPE,
+        TRIM(CFC.SERIEFACTURA) as SERIE,
+        CFC.NUMEROFACTURA as NUMERO,
+        CFC.EJERCICIOFACTURA as EJERCICIO,
+        CAST(NULL AS INTEGER) as TERMINAL,
+        CFC.ANODOCUMENTO as ANO,
+        CFC.MESDOCUMENTO as MES,
+        CFC.DIADOCUMENTO as DIA,
+        TRIM(CFC.CODIGOCLIENTE) as CODIGO_CLIENTE,
+        TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
+        TRIM(CLI.NOMBREALTERNATIVO) as NOMBRE_COMERCIAL,
+        TRIM(CLI.NOMBRECLIENTE) as NOMBRE_FISCAL,
+        CFC.IMPORTETOTAL as TOTAL,
+        CFC.IMPORTEBASEIMPONIBLE as BASE,
+        CFC.IMPORTEIVA as IVA
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
+    `;
+            sql = applyCommonFilters(sql, queryParams, {
+                vendorBatch,
+                vendorColumn: 'CFC.CODIGOVENDEDOR',
+                dateExpr: '(CFC.ANODOCUMENTO * 10000 + CFC.MESDOCUMENTO * 100 + CFC.DIADOCUMENTO)',
+                yearColumn: 'CFC.EJERCICIOFACTURA',
+                monthColumn: 'CFC.MESDOCUMENTO',
+                clientColumn: 'CFC.CODIGOCLIENTE',
+                clientFilterBuilder: buildInvoiceClientSearchFilter,
+                docFilterBuilder: buildInvoiceDocSearchFilter,
+                genericFilterBuilder: buildInvoiceSearchFilter,
+            });
+            sql += ` ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC
+                     OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
+            queryParams.push(offsetValue, limitValue);
+            return { sql, queryParams };
+        }
+
+        function buildAlbaranSqlForVendors(vendorBatch, offsetValue, limitValue) {
+            const queryParams = [];
+            let sql = `
+      SELECT
+        'albaran' as DOCUMENT_TYPE,
+        TRIM(CAC.SERIEALBARAN) as SERIE,
+        CAC.NUMEROALBARAN as NUMERO,
+        CAC.EJERCICIOALBARAN as EJERCICIO,
+        CAC.TERMINALALBARAN as TERMINAL,
+        CAC.ANODOCUMENTO as ANO,
+        CAC.MESDOCUMENTO as MES,
+        CAC.DIADOCUMENTO as DIA,
+        TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGO_CLIENTE,
+        TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
+        TRIM(CLI.NOMBREALTERNATIVO) as NOMBRE_COMERCIAL,
+        TRIM(CLI.NOMBRECLIENTE) as NOMBRE_FISCAL,
+        CAC.IMPORTETOTAL as TOTAL,
+        COALESCE(CAC.IMPORTEBRUTO, 0) as BASE,
+        COALESCE(CAC.IMPORTEIVA1, 0) + COALESCE(CAC.IMPORTEIVA2, 0) + COALESCE(CAC.IMPORTEIVA3, 0) + COALESCE(CAC.IMPORTEIVA4, 0) + COALESCE(CAC.IMPORTEIVA5, 0) as IVA
+      FROM DSEDAC.CAC CAC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+      WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
+        AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
+    `;
+            sql = applyCommonFilters(sql, queryParams, {
+                vendorBatch,
+                vendorColumn: 'CAC.CODIGOVENDEDOR',
+                dateExpr: '(CAC.ANODOCUMENTO * 10000 + CAC.MESDOCUMENTO * 100 + CAC.DIADOCUMENTO)',
+                yearColumn: 'CAC.EJERCICIOALBARAN',
+                monthColumn: 'CAC.MESDOCUMENTO',
+                clientColumn: 'CAC.CODIGOCLIENTEALBARAN',
+                clientFilterBuilder: buildAlbaranClientSearchFilter,
+                docFilterBuilder: buildAlbaranDocSearchFilter,
+                genericFilterBuilder: buildAlbaranSearchFilter,
+            });
+            sql += ` ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC, CAC.NUMEROALBARAN DESC
+                     OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
+            queryParams.push(offsetValue, limitValue);
+            return { sql, queryParams };
+        }
+
+        async function queryDocumentsForVendors(vendorBatch, offsetValue, limitValue) {
+            const queries = [];
+            if (includeFacturas) {
+                const { sql, queryParams } = buildInvoiceSqlForVendors(vendorBatch, offsetValue, limitValue);
+                queries.push(queryWithParams(sql, queryParams));
+            }
+            if (includeAlbaranes) {
+                const { sql, queryParams } = buildAlbaranSqlForVendors(vendorBatch, offsetValue, limitValue);
+                queries.push(queryWithParams(sql, queryParams));
+            }
+            const results = await Promise.all(queries);
+            return results.flat();
+        }
+
+        try {
+            const mergePagination = documentType === 'all' || (!isAll && vendors.length > BATCH_SIZE);
+            const perQueryOffset = mergePagination ? 0 : rowsOffset;
+            const perQueryLimit = mergePagination ? rowsOffset + rowsLimit : rowsLimit;
+
+            let rows;
+            if (isAll || vendors.length === 0) {
+                rows = await queryDocumentsForVendors([], perQueryOffset, perQueryLimit);
+            } else if (vendors.length <= BATCH_SIZE) {
+                rows = await queryDocumentsForVendors(vendors, perQueryOffset, perQueryLimit);
+            } else {
+                const batches = [];
+                for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
+                    batches.push(vendors.slice(i, i + BATCH_SIZE));
+                }
+                const batchResults = await mapWithConcurrency(
+                    batches,
+                    2,
+                    (batch) => queryDocumentsForVendors(batch, 0, rowsOffset + rowsLimit)
+                );
+                rows = batchResults.flat();
+            }
+
+            rows = rows.sort(sortInvoiceRowsDesc);
+            if (mergePagination) {
+                rows = rows.slice(rowsOffset, rowsOffset + rowsLimit);
+            }
+
+            const documentMap = new Map();
+            for (const row of rows) {
+                const sanitize = (v) => {
+                    const n = parseFloat(v) || 0;
+                    if (Object.is(n, -0)) return 0;
+                    if (Math.abs(n) >= 900000) return 0;
+                    return n;
+                };
+                const rowType = String(row.DOCUMENT_TYPE || row.document_type || 'factura').trim().toLowerCase() === 'albaran'
+                    ? 'albaran'
+                    : 'factura';
+                const terminal = row.TERMINAL === null || row.TERMINAL === undefined ? null : parseInt(row.TERMINAL, 10);
+                const key = rowType === 'albaran'
+                    ? `ALB-${row.EJERCICIO}-${row.SERIE}-${terminal || 0}-${row.NUMERO}`
+                    : `${row.SERIE}-${row.NUMERO}-${row.EJERCICIO}`;
+
+                if (!documentMap.has(key)) {
+                    documentMap.set(key, {
+                        id: key,
+                        documentType: rowType,
+                        tipoDocumento: rowType,
+                        serie: row.SERIE,
+                        numero: row.NUMERO,
+                        ejercicio: row.EJERCICIO,
+                        terminal,
+                        fecha: `${String(row.DIA).padStart(2, '0')}/${String(row.MES).padStart(2, '0')}/${row.ANO}`,
+                        clienteId: row.CODIGO_CLIENTE,
+                        clienteNombre: row.NOMBRE_CLIENTE || `Cliente ${row.CODIGO_CLIENTE}`,
+                        nombreComercial: row.NOMBRE_COMERCIAL || row.NOMBRE_CLIENTE || `Cliente ${row.CODIGO_CLIENTE}`,
+                        nombreFiscal: row.NOMBRE_FISCAL || `Cliente ${row.CODIGO_CLIENTE}`,
+                        total: sanitize(row.TOTAL),
+                        base: sanitize(row.BASE),
+                        iva: sanitize(row.IVA)
+                    });
+                } else {
+                    const existing = documentMap.get(key);
+                    existing.total += sanitize(row.TOTAL);
+                    existing.base += sanitize(row.BASE);
+                    existing.iva += sanitize(row.IVA);
+                }
+            }
+
+            return Array.from(documentMap.values());
+        } catch (error) {
+            if (error.message.includes('CWB0111') || error.message.includes('22001') || error.message.includes('parameter')) {
+                logger.warn(`[facturas] Query failed (expected with many vendors), returning empty: ${error.message.substring(0, 80)}`);
+            } else {
+                logger.error(`Error fetching facturas: ${error.message}`);
+            }
+            return [];
+        }
+    }
+
+    async _getAvailableYearsLegacy(vendedorCodes) {
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
         }
@@ -382,14 +665,63 @@ class FacturasService {
         }
     }
 
+    async getAvailableYears(vendedorCodes) {
+        if (!vendedorCodes) {
+            throw new Error('vendedorCodes is required');
+        }
+
+        const invoiceYearsSql = `
+      SELECT DISTINCT EJERCICIOFACTURA as YEAR
+      FROM DSEDAC.CFC
+      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
+        AND @VENDOR_IN@
+    `;
+        const albaranYearsSql = `
+      SELECT DISTINCT CAC.EJERCICIOALBARAN as YEAR
+      FROM DSEDAC.CAC CAC
+      WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
+        AND @VENDOR_IN@
+        AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
+    `;
+
+        try {
+            const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+            let rows;
+            if (isAll) {
+                const [invoiceRows, albaranRows] = await Promise.all([
+                    query(invoiceYearsSql.replace('AND @VENDOR_IN@', '')),
+                    query(albaranYearsSql.replace('AND @VENDOR_IN@', '')),
+                ]);
+                rows = [...invoiceRows, ...albaranRows];
+            } else {
+                const vendors = vendedorCodes.split(',').map(v => v.trim()).filter(v => v && v !== 'UNK' && /^[A-Z0-9]+$/.test(v));
+                const [invoiceRows, albaranRows] = await Promise.all([
+                    batchedVendorQuery(invoiceYearsSql, 'CODIGOVENDEDOR', vendors, queryWithParams),
+                    batchedVendorQuery(albaranYearsSql, 'CAC.CODIGOVENDEDOR', vendors, queryWithParams),
+                ]);
+                rows = [...invoiceRows, ...albaranRows];
+            }
+
+            return [...new Set(rows.map(r => r.YEAR).filter(Boolean))].sort((a, b) => b - a);
+        } catch (error) {
+            if (error.message.includes('CWB0111') || error.message.includes('22001') || error.message.includes('parameter')) {
+                logger.warn(`[facturas] Years query failed (expected with many vendors), returning empty: ${error.message.substring(0, 80)}`);
+            } else {
+                logger.error(`Error fetching available years: ${error.message}`);
+            }
+            return [];
+        }
+    }
+
     async getSummary(params) {
         const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
+        const documentType = normalizeDocumentType(params.documentType || params.tipoDocumento);
 
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
         }
 
-        const cacheKey = `facturas:summary:${FACTURA_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}:${normalizeSearchValue(search)}:${normalizeSearchValue(clientId)}:${normalizeSearchValue(clientSearch)}:${normalizeSearchValue(docSearch)}`;
+        const cacheKey = `facturas:summary:${FACTURA_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}:${documentType}:${normalizeSearchValue(search)}:${normalizeSearchValue(clientId)}:${normalizeSearchValue(clientSearch)}:${normalizeSearchValue(docSearch)}`;
         const cached = await redisCache.get('route', cacheKey);
         if (cached !== null) return cached;
 
@@ -398,7 +730,7 @@ class FacturasService {
         return result;
     }
 
-    async _getSummaryInternal(params) {
+    async _getSummaryInternalLegacy(params) {
         const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {
@@ -498,6 +830,191 @@ class FacturasService {
                 logger.error(`Error fetching summary: ${error.message}`);
             }
             return { totalFacturas: 0, totalImporte: 0, totalBase: 0, totalIva: 0 };
+        }
+    }
+
+    async _getSummaryInternal(params) {
+        const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
+        const documentType = normalizeDocumentType(params.documentType || params.tipoDocumento);
+        const includeFacturas = documentType !== 'albaran';
+        const includeAlbaranes = documentType !== 'factura';
+
+        if (!vendedorCodes) {
+            throw new Error('vendedorCodes is required');
+        }
+
+        const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v && v !== 'UNK' && /^[A-Z0-9]+$/.test(v));
+
+        const dateFilterApplied = dateFrom && dateTo;
+        const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
+        const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
+        const currentYear = year || new Date().getFullYear();
+
+        function applySummaryFilters(sql, queryParams, {
+            batchVendors,
+            vendorColumn,
+            dateExpr,
+            yearColumn,
+            monthColumn,
+            clientColumn,
+            clientFilterBuilder,
+            docFilterBuilder,
+            genericFilterBuilder,
+        }) {
+            if (batchVendors.length > 0) {
+                const placeholders = batchVendors.map(() => '?').join(',');
+                sql += ` AND TRIM(${vendorColumn}) IN (${placeholders})`;
+                queryParams.push(...batchVendors);
+            }
+
+            if (dateFilterApplied && dateFromInt && dateToInt) {
+                sql += ` AND ${dateExpr} BETWEEN ? AND ?`;
+                queryParams.push(dateFromInt, dateToInt);
+            } else {
+                sql += ` AND ${yearColumn} = ?`;
+                queryParams.push(currentYear);
+                if (month) {
+                    sql += ` AND ${monthColumn} = ?`;
+                    queryParams.push(month);
+                }
+            }
+
+            if (clientId) {
+                sql += ` AND TRIM(${clientColumn}) = ?`;
+                queryParams.push(clientId.trim());
+            }
+
+            const clientFilter = clientFilterBuilder(clientSearch);
+            sql += ` ${clientFilter.clause}`;
+            queryParams.push(...clientFilter.params);
+
+            const docFilter = docFilterBuilder(docSearch);
+            sql += ` ${docFilter.clause}`;
+            queryParams.push(...docFilter.params);
+
+            const genericFilter = genericFilterBuilder(search);
+            sql += ` ${genericFilter.clause}`;
+            queryParams.push(...genericFilter.params);
+
+            return sql;
+        }
+
+        async function runInvoiceSummaryBatch(batchVendors) {
+            const queryParams = [];
+            let sql = `
+      SELECT
+        'factura' as DOCUMENT_TYPE,
+        COUNT(DISTINCT TRIM(CFC.SERIEFACTURA) || '-' || CFC.NUMEROFACTURA || '-' || CFC.EJERCICIOFACTURA) as NUM_DOCUMENTOS,
+        SUM(CFC.IMPORTETOTAL) as TOTAL,
+        SUM(CFC.IMPORTEBASEIMPONIBLE) as BASE,
+        SUM(CFC.IMPORTEIVA) as IVA
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
+    `;
+            sql = applySummaryFilters(sql, queryParams, {
+                batchVendors,
+                vendorColumn: 'CFC.CODIGOVENDEDOR',
+                dateExpr: '(CFC.ANODOCUMENTO * 10000 + CFC.MESDOCUMENTO * 100 + CFC.DIADOCUMENTO)',
+                yearColumn: 'CFC.EJERCICIOFACTURA',
+                monthColumn: 'CFC.MESDOCUMENTO',
+                clientColumn: 'CFC.CODIGOCLIENTE',
+                clientFilterBuilder: buildInvoiceClientSearchFilter,
+                docFilterBuilder: buildInvoiceDocSearchFilter,
+                genericFilterBuilder: buildInvoiceSearchFilter,
+            });
+            return queryWithParams(sql, queryParams);
+        }
+
+        async function runAlbaranSummaryBatch(batchVendors) {
+            const queryParams = [];
+            let sql = `
+      SELECT
+        'albaran' as DOCUMENT_TYPE,
+        COUNT(DISTINCT CAC.EJERCICIOALBARAN || '-' || TRIM(CAC.SERIEALBARAN) || '-' || CAC.TERMINALALBARAN || '-' || CAC.NUMEROALBARAN) as NUM_DOCUMENTOS,
+        SUM(CAC.IMPORTETOTAL) as TOTAL,
+        SUM(COALESCE(CAC.IMPORTEBRUTO, 0)) as BASE,
+        SUM(COALESCE(CAC.IMPORTEIVA1, 0) + COALESCE(CAC.IMPORTEIVA2, 0) + COALESCE(CAC.IMPORTEIVA3, 0) + COALESCE(CAC.IMPORTEIVA4, 0) + COALESCE(CAC.IMPORTEIVA5, 0)) as IVA
+      FROM DSEDAC.CAC CAC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+      WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
+        AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
+    `;
+            sql = applySummaryFilters(sql, queryParams, {
+                batchVendors,
+                vendorColumn: 'CAC.CODIGOVENDEDOR',
+                dateExpr: '(CAC.ANODOCUMENTO * 10000 + CAC.MESDOCUMENTO * 100 + CAC.DIADOCUMENTO)',
+                yearColumn: 'CAC.EJERCICIOALBARAN',
+                monthColumn: 'CAC.MESDOCUMENTO',
+                clientColumn: 'CAC.CODIGOCLIENTEALBARAN',
+                clientFilterBuilder: buildAlbaranClientSearchFilter,
+                docFilterBuilder: buildAlbaranDocSearchFilter,
+                genericFilterBuilder: buildAlbaranSearchFilter,
+            });
+            return queryWithParams(sql, queryParams);
+        }
+
+        async function runSummaryBatch(batchVendors) {
+            const queries = [];
+            if (includeFacturas) queries.push(runInvoiceSummaryBatch(batchVendors));
+            if (includeAlbaranes) queries.push(runAlbaranSummaryBatch(batchVendors));
+            const results = await Promise.all(queries);
+            return results.flat();
+        }
+
+        try {
+            let rows;
+            if (isAll || vendors.length === 0) {
+                rows = await runSummaryBatch([]);
+            } else {
+                const batches = [];
+                for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
+                    batches.push(vendors.slice(i, i + BATCH_SIZE));
+                }
+                const batchResults = await Promise.all(batches.map(runSummaryBatch));
+                rows = batchResults.flat();
+            }
+
+            const stats = rows.reduce((acc, r) => {
+                const count = parseInt(r.NUM_DOCUMENTOS, 10) || 0;
+                const rowType = String(r.DOCUMENT_TYPE || r.document_type || '').trim().toLowerCase();
+                if (rowType === 'albaran') {
+                    acc.NUM_ALBARANES += count;
+                } else {
+                    acc.NUM_FACTURAS += count;
+                }
+                acc.TOTAL += parseFloat(r.TOTAL) || 0;
+                acc.BASE += parseFloat(r.BASE) || 0;
+                acc.IVA += parseFloat(r.IVA) || 0;
+                return acc;
+            }, { NUM_FACTURAS: 0, NUM_ALBARANES: 0, TOTAL: 0, BASE: 0, IVA: 0 });
+
+            const totalDocumentos = stats.NUM_FACTURAS + stats.NUM_ALBARANES;
+            return {
+                totalFacturas: totalDocumentos,
+                totalDocumentos,
+                totalFacturasEmitidas: stats.NUM_FACTURAS,
+                totalAlbaranes: stats.NUM_ALBARANES,
+                totalImporte: stats.TOTAL,
+                totalBase: stats.BASE,
+                totalIva: stats.IVA
+            };
+        } catch (error) {
+            if (error.message.includes('CWB0111') || error.message.includes('22001') || error.message.includes('parameter')) {
+                logger.warn(`[facturas] Summary query failed (expected with many vendors), returning zeros: ${error.message.substring(0, 80)}`);
+            } else {
+                logger.error(`Error fetching summary: ${error.message}`);
+            }
+            return {
+                totalFacturas: 0,
+                totalDocumentos: 0,
+                totalFacturasEmitidas: 0,
+                totalAlbaranes: 0,
+                totalImporte: 0,
+                totalBase: 0,
+                totalIva: 0
+            };
         }
     }
 

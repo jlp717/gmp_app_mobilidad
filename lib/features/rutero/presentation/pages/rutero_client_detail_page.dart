@@ -104,9 +104,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -159,11 +159,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                   children: [
                     // Tab bar
                     ColoredBox(
-                      color: AppTheme.surfaceColor,
+                      color: AppTheme.raisedSurface,
                       child: TabBar(
                         controller: _tabController,
-                        indicatorColor: AppTheme.neonPurple,
-                        labelColor: AppTheme.neonPurple,
+                        indicatorColor: AppTheme.accentIndigo,
+                        labelColor: AppTheme.accentIndigo,
                         unselectedLabelColor: AppTheme.textSecondary,
                         labelStyle: const TextStyle(fontSize: 12),
                         tabs: const [
@@ -300,7 +300,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
     String badgeText;
 
     if (isNew) {
-      accentColor = AppTheme.neonBlue;
+      accentColor = AppTheme.info;
       accentIcon = Icons.star;
       badgeText = 'NUEVO';
     } else if (isPositive) {
@@ -409,7 +409,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       height: 250,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: BarChart(
@@ -474,7 +474,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             drawVerticalLine: false,
             horizontalInterval: maxY / 4,
             getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.grey.withValues(alpha: 0.2),
+              color: AppTheme.borderColor.withValues(alpha: 0.2),
               strokeWidth: 1,
             ),
           ),
@@ -490,7 +490,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               barRods: [
                 BarChartRodData(
                   toY: current,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   width: 6,
                   borderRadius: BorderRadius.circular(2),
                 ),
@@ -511,7 +511,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   Widget _buildMonthlyComparisonList(List<Map<String, dynamic>> monthlyData) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -537,7 +537,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
 
           if (isClientNew && current > 0) {
             // Cliente nuevo - todo en azul
-            accentColor = AppTheme.neonBlue;
+            accentColor = AppTheme.info;
             accentIcon = Icons.star;
             badgeText = 'NUEVO';
           } else if (isMonthNew) {
@@ -613,7 +613,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -663,7 +663,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isFrequent
@@ -716,7 +716,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         // Month filter
         Container(
           padding: const EdgeInsets.all(8),
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -740,7 +740,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                   itemBuilder: (context, index) {
                     final p = purchases[index];
                     return Card(
-                      color: AppTheme.surfaceColor,
+                      color: AppTheme.raisedSurface,
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         dense: true,
@@ -798,7 +798,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       child: ChoiceChip(
         label: Text(label, style: const TextStyle(fontSize: 11)),
         selected: isSelected,
-        selectedColor: AppTheme.neonPurple,
+        selectedColor: AppTheme.accentIndigo,
         onSelected: (selected) {
           setState(() => _selectedMonth = selected ? month : null);
           _loadData();
@@ -822,19 +822,19 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       itemBuilder: (context, index) {
         final p = topProducts[index];
         return Card(
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.2),
+                  backgroundColor: AppTheme.accentIndigo.withValues(alpha: 0.2),
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.neonPurple,
+                      color: AppTheme.accentIndigo,
                     ),
                   ),
                 ),
@@ -870,7 +870,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                       ),
                     ),
                   ],

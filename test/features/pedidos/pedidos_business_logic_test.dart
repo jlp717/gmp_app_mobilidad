@@ -167,7 +167,58 @@ void main() {
     }
   });
 
+  group('Product pricing', () {
+    test('keeps global min floor for regular client tariff', () {
+      final product = Product(
+        code: 'P-MIN',
+        name: 'Producto minimo',
+        precioTarifa1: 12,
+        precioCliente: 9,
+        precioMinimo: 10,
+      );
+
+      expect(product.bestPrice, 10);
+    });
+
+    test('allows configured client special price below global min', () {
+      final product = Product(
+        code: 'P-ESP',
+        name: 'Producto especial',
+        precioTarifa1: 12,
+        precioCliente: 9,
+        precioTarifaCliente: 12,
+        precioMinimo: 10,
+        precioEspecialCliente: true,
+        permiteBajoMinimo: true,
+      );
+
+      expect(product.bestPrice, 9);
+    });
+  });
+
   group('OrderLine recalculation', () {
+    test('estimated bolsa impact uses client tariff reference, not global min',
+        () {
+      final line = OrderLine(
+        codigoArticulo: 'P-BOLSA',
+        descripcion: 'Producto bolsa',
+        cantidadEnvases: 2,
+        unidadMedida: 'CAJAS',
+        unidadesCaja: 1,
+        precioVenta: 7,
+        precioTarifa: 11,
+        precioTarifaCliente: 10,
+        precioMinimo: 5,
+      );
+
+      final impact = line.estimatedBolsaImpact;
+
+      expect(impact.hasImpact, isTrue);
+      expect(impact.consumo, 6);
+      expect(impact.acumulacion, 0);
+      expect(impact.neto, -6);
+    });
+
     test('keeps gift lines at zero sale and negative cost margin', () {
       final line = OrderLine(
         codigoArticulo: 'P004',
@@ -315,6 +366,25 @@ void main() {
       expect(detail.lines.single.bolsaImpact.hasImpact, isTrue);
       expect(detail.lines.single.bolsaMovements.single.tipo, 'ACUMULACION');
     });
+
+    test('treats negative bolsa net in order summaries as real impact', () {
+      final order = OrderSummary.fromJson({
+        'id': 43,
+        'numeroPedido': 1002,
+        'clienteCode': 'C002',
+        'clienteName': 'Cliente consumo',
+        'vendedorCode': '10',
+        'fecha': '10/06/2026',
+        'estado': 'CONFIRMADO',
+        'tipoVenta': 'CC',
+        'total': 24,
+        'bolsaGenerada': false,
+        'bolsaNeto': -6.5,
+      });
+
+      expect(order.bolsaGenerada, isTrue);
+      expect(order.bolsaNeto, -6.5);
+    });
   });
 
   group('Product minimum price per unit', () {
@@ -359,7 +429,8 @@ void main() {
       expect(line.billingQuantity, 5);
       expect(line.importeVenta, 12.5);
       expect(line.importeCosto, 5);
-      expect(line.estimatedBolsaImpact.acumulacion, 2.5);
+      expect(line.precioTarifa, 2.5);
+      expect(line.estimatedBolsaImpact.hasImpact, isFalse);
     });
   });
 
@@ -812,7 +883,11 @@ void main() {
       );
 
       final first = provider.confirmOrder('57');
-      await Future<void>.delayed(Duration.zero);
+      for (var attempt = 0;
+          attempt < 10 && api.createOrderCalls == 0;
+          attempt++) {
+        await Future<void>.delayed(Duration.zero);
+      }
       expect(api.createOrderCalls, 1);
 
       final second = provider.confirmOrder('57');

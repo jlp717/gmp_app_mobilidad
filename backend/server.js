@@ -197,8 +197,8 @@ function parseCorsOrigin(value) {
 app.use(cors({
     origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent', 'X-Internal-Token', 'X-Metrics-Token', 'X-Healthcheck-Token'],
-    exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'X-Force-Refresh', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent', 'X-Internal-Token', 'X-Metrics-Token', 'X-Healthcheck-Token'],
+    exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'X-Cache-Status', 'ETag', 'Cache-Control'],
     credentials: true,
     maxAge: 86400
 }));
@@ -479,12 +479,10 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/analytics', analyticsRoutes);
   app.use('/api', masterRoutes); // mounts /products and /vendedores
-  app.use('/api/clients', clientsRoutes);
   app.use('/api', plannerRoutes); // mounts /router/* and /rutero/*
   app.use('/api/objectives', objectivesRoutes);
   app.use('/api/export', exportRoutes);
   app.use('/api/chatbot', chatbotRoutes);
-  app.use('/api/commissions', commissionsRoutes);
   app.use('/api/filters', filtersRoutes);
   app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/repartidor-finanzas', repartidorFinanzasRoutes);
@@ -517,6 +515,11 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
     app.use('/api/pedidos', pedidosLimiter, pedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, cobrosRoutes);
   }
+
+  // Legacy fallbacks for client/commission routes not covered by DDD adapters.
+  app.use('/api/clients', clientsRoutes);
+  app.use('/api/commissions', commissionsRoutes);
+
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {
     app.use('/api/kpi', kpiModule.kpiRoutes);

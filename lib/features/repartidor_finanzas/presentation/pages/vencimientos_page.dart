@@ -81,7 +81,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
     final groups = _groupItems(visible);
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
           _FinanceHeader(
@@ -168,7 +168,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (repartidorId.isEmpty) {
       return const Scaffold(
-        backgroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.inkSurface,
         body: Center(
           child: Text(
             'Selecciona un repartidor para consultar vencimientos',
@@ -201,13 +201,13 @@ class RepartidorVencimientosPage extends ConsumerWidget {
         onItemTap: (item) => _showDetail(context, ref, repartidorId, item),
       ),
       loading: () => const Scaffold(
-        backgroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.inkSurface,
         body: Center(child: CircularProgressIndicator()),
       ),
       error: (error, stackTrace) {
         Sentry.captureException(error, stackTrace: stackTrace);
         return Scaffold(
-          backgroundColor: AppTheme.darkBase,
+          backgroundColor: AppTheme.inkSurface,
           body: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -278,9 +278,9 @@ class RepartidorVencimientosPage extends ConsumerWidget {
         item.importePendiente > 0;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       builder: (sheetContext) {
         return SafeArea(
@@ -312,7 +312,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                 Text(
                   _money(item.importe),
                   style: const TextStyle(
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.success,
                     fontWeight: FontWeight.w900,
                     fontSize: 18,
                   ),
@@ -420,7 +420,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
             }
 
             return AlertDialog(
-              backgroundColor: AppTheme.surfaceColor,
+              backgroundColor: AppTheme.raisedSurface,
               title: const Text(
                 'Abonar vencimiento',
                 style: TextStyle(color: AppTheme.textPrimary),
@@ -449,7 +449,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: formaPago,
-                    dropdownColor: AppTheme.surfaceColor,
+                    dropdownColor: AppTheme.raisedSurface,
                     style: const TextStyle(color: AppTheme.textPrimary),
                     items: const [
                       DropdownMenuItem(
@@ -527,16 +527,23 @@ class _FinanceHeader extends StatelessWidget {
         14,
       ),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withValues(alpha: 0.25),
+            color: AppTheme.borderColor.withValues(alpha: 0.9),
           ),
         ),
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppTheme.neonBlue, size: 26),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.info.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: AppTheme.info, size: 22),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -545,7 +552,7 @@ class _FinanceHeader extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
@@ -580,7 +587,7 @@ class _FilterStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: AppTheme.darkSurface,
+      color: AppTheme.inkSurface,
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         scrollDirection: Axis.horizontal,
@@ -604,11 +611,17 @@ class _FilterStrip extends StatelessWidget {
         label: Text(label),
         selected: isSelected,
         onSelected: (_) => onSelected(filtro),
-        selectedColor: AppTheme.neonBlue,
-        backgroundColor: AppTheme.surfaceColor,
+        selectedColor: AppTheme.info.withValues(alpha: 0.18),
+        backgroundColor: AppTheme.raisedSurface,
         labelStyle: TextStyle(
-          color: isSelected ? AppTheme.darkBase : AppTheme.textSecondary,
+          color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
           fontWeight: FontWeight.w700,
+        ),
+        checkmarkColor: AppTheme.info,
+        side: BorderSide(
+          color: isSelected
+              ? AppTheme.info.withValues(alpha: 0.34)
+              : AppTheme.borderColor,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
@@ -646,7 +659,7 @@ class _GroupHeader extends StatelessWidget {
           Text(
             _money(amount),
             style: const TextStyle(
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),
@@ -671,7 +684,7 @@ class _VencimientoRow extends StatelessWidget {
     final color = _statusColor(item.estado);
 
     return Material(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
@@ -680,7 +693,8 @@ class _VencimientoRow extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.28)),
+            border:
+                Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
           ),
           child: Row(
             children: [
@@ -801,7 +815,7 @@ Color _statusColor(VencimientoEstado estado) {
   return switch (estado) {
     VencimientoEstado.vencido => AppTheme.error,
     VencimientoEstado.hoy => AppTheme.warning,
-    VencimientoEstado.proximo => AppTheme.neonBlue,
+    VencimientoEstado.proximo => AppTheme.info,
   };
 }
 

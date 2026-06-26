@@ -24,7 +24,7 @@ class EntregaDetailSheet extends StatelessWidget {
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
@@ -51,14 +51,13 @@ class EntregaDetailSheet extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.neonBlue, AppTheme.neonPurple],
-                    ),
+                    color: AppTheme.info,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.3),
-                        blurRadius: 12,
+                        color: Colors.black.withValues(alpha: 0.14),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
@@ -108,8 +107,7 @@ class EntregaDetailSheet extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                          colors: [Colors.red, Colors.red.shade700]),
+                      color: AppTheme.error,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Row(
@@ -175,11 +173,11 @@ class EntregaDetailSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonGreen.withValues(alpha: 0.15),
+                    color: AppTheme.success.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(Icons.store,
-                      color: AppTheme.neonGreen, size: 24),
+                      color: AppTheme.success, size: 24),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -224,10 +222,11 @@ class EntregaDetailSheet extends StatelessWidget {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.15),
+                      color: AppTheme.info.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.map, color: Colors.blue, size: 20),
+                    child:
+                        const Icon(Icons.map, color: AppTheme.info, size: 20),
                   ),
                 ),
                 IconButton(
@@ -235,11 +234,11 @@ class EntregaDetailSheet extends StatelessWidget {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.15),
+                      color: AppTheme.success.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child:
-                        const Icon(Icons.phone, color: Colors.green, size: 20),
+                    child: const Icon(Icons.phone,
+                        color: AppTheme.success, size: 20),
                   ),
                 ),
               ],
@@ -283,7 +282,7 @@ class EntregaDetailSheet extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase,
+              color: AppTheme.inkSurface,
               border: Border(
                   top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
             ),
@@ -293,7 +292,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 _buildActionButton(
                   icon: Icons.camera_alt,
                   label: 'Foto',
-                  color: AppTheme.neonPurple,
+                  color: AppTheme.accentIndigo,
                   onTap: () {},
                 ),
 
@@ -303,7 +302,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 _buildActionButton(
                   icon: Icons.draw,
                   label: 'Firma',
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   onTap: () {},
                 ),
 
@@ -313,7 +312,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 _buildActionButton(
                   icon: Icons.report_problem,
                   label: 'Incidencia',
-                  color: Colors.orange,
+                  color: AppTheme.warning,
                   onTap: () {},
                 ),
 
@@ -330,14 +329,12 @@ class EntregaDetailSheet extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 32, vertical: 16),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Colors.green, Color(0xFF2E7D32)],
-                          ),
+                          color: AppTheme.success,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.green.withValues(alpha: 0.4),
-                              blurRadius: 12,
+                              color: Colors.black.withValues(alpha: 0.16),
+                              blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
                           ],
@@ -376,7 +373,7 @@ class EntregaDetailSheet extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: item.estado == EstadoEntrega.entregado
-              ? Colors.green.withValues(alpha: 0.3)
+              ? AppTheme.success.withValues(alpha: 0.3)
               : Colors.white.withValues(alpha: 0.05),
         ),
       ),
@@ -426,7 +423,7 @@ class EntregaDetailSheet extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.1),
+              color: AppTheme.info.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -435,7 +432,7 @@ class EntregaDetailSheet extends StatelessWidget {
                   '${item.cantidadEntregada}',
                   style: TextStyle(
                     color: item.cantidadEntregada > 0
-                        ? Colors.green
+                        ? AppTheme.success
                         : AppTheme.textSecondary,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,

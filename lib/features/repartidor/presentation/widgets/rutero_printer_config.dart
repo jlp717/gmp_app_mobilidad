@@ -29,12 +29,12 @@ class RuteroPrinterConfig extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(14),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
           color: tieneImpresora
-              ? AppTheme.neonCyan.withValues(alpha: 0.4)
-              : Colors.transparent,
+              ? AppTheme.info.withValues(alpha: 0.34)
+              : AppTheme.borderColor,
         ),
       ),
       child: Column(
@@ -44,8 +44,7 @@ class RuteroPrinterConfig extends StatelessWidget {
             children: [
               Icon(
                 Icons.print,
-                color:
-                    tieneImpresora ? AppTheme.neonCyan : AppTheme.textTertiary,
+                color: tieneImpresora ? AppTheme.info : AppTheme.textTertiary,
                 size: 20,
               ),
               const SizedBox(width: 10),
@@ -62,7 +61,7 @@ class RuteroPrinterConfig extends StatelessWidget {
               ),
               Switch(
                 value: tieneImpresora,
-                activeThumbColor: AppTheme.neonCyan,
+                activeThumbColor: AppTheme.info,
                 onChanged: onToggle,
               ),
             ],
@@ -124,7 +123,7 @@ class RuteroPrinterConfig extends StatelessWidget {
                                 height: 12,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
-                                  color: AppTheme.neonCyan,
+                                  color: AppTheme.info,
                                 ),
                               )
                             : const Icon(Icons.wifi_find, size: 14),
@@ -133,9 +132,9 @@ class RuteroPrinterConfig extends StatelessWidget {
                           style: const TextStyle(fontSize: 11),
                         ),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.neonCyan,
+                          foregroundColor: AppTheme.info,
                           side: BorderSide(
-                            color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                            color: AppTheme.info.withValues(alpha: 0.4),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           shape: RoundedRectangleBorder(
@@ -181,9 +180,9 @@ class RuteroPrinterConfig extends StatelessWidget {
                     style: TextStyle(fontSize: 12),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.neonCyan,
+                    foregroundColor: AppTheme.info,
                     side: BorderSide(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                      color: AppTheme.info.withValues(alpha: 0.4),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),

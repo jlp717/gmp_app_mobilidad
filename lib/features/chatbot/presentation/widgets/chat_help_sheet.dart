@@ -34,7 +34,7 @@ class ChatHelpSheet extends StatelessWidget {
       ),
       (
         'Evolucion de ventas',
-        'Como ha evolucionado mis ventas en los ultimos 12 meses?',
+        'Cómo han evolucionado mis ventas en los últimos 12 meses?',
       ),
       (
         'Leer PDF factura',
@@ -129,7 +129,7 @@ class ChatHelpSheet extends StatelessWidget {
 
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.darkSurface,
+        color: AppColors.raisedSurface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: AppColors.borderColor)),
       ),
@@ -184,7 +184,7 @@ class ChatHelpSheet extends StatelessWidget {
           _HelpTipRow(
             icon: Icons.open_in_new_rounded,
             text:
-                'Ver en app salta a Facturas, Clientes, Comisiones o Glacius.',
+                'Ver en app salta a Facturas, Clientes, Comisiones o Alertas.',
           ),
           const SizedBox(height: 12),
           ...questions.map(
@@ -193,7 +193,7 @@ class ChatHelpSheet extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Material(
-                  color: AppColors.darkCard.withValues(alpha: 0.6),
+                  color: AppColors.raisedSurface.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
@@ -210,7 +210,7 @@ class ChatHelpSheet extends StatelessWidget {
                         children: [
                           const Icon(
                             Icons.chat_bubble_outline,
-                            color: AppColors.neonBlue,
+                            color: AppColors.info,
                             size: 18,
                           ),
                           const SizedBox(width: 12),
@@ -256,7 +256,7 @@ class _HelpTipRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: AppColors.neonBlue),
+          Icon(icon, size: 16, color: AppColors.info),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

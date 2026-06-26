@@ -197,15 +197,40 @@ const pool = {
     }
 };
 
+function createQueryTimeoutError(timeoutMs) {
+    const error = new Error(`Query timeout after ${timeoutMs}ms`);
+    error.code = 'DB_QUERY_TIMEOUT';
+    error.fatalConnection = true;
+    return error;
+}
+
+function isQueryTimeoutError(error) {
+    return error?.code === 'DB_QUERY_TIMEOUT' ||
+        error?.fatalConnection === true ||
+        /query timeout/i.test(error?.message || '');
+}
+
 function queryWithTimeout(conn, sql, params, timeoutMs = QUERY_TIMEOUT_MS) {
-    const queryPromise = params !== undefined 
+    let timer = null;
+    const queryPromise = (params !== undefined
         ? conn.query(sql, params)
-        : conn.query(sql);
-    
-    const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms`)), timeoutMs)
-    );
-    
+        : conn.query(sql)).finally(() => {
+            if (timer) clearTimeout(timer);
+        });
+
+    const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(async () => {
+            try {
+                if (typeof conn.cancel === 'function') {
+                    await conn.cancel();
+                }
+            } catch (_) {
+                // The connection is destroyed by caller; cancel is best-effort.
+            }
+            reject(createQueryTimeoutError(timeoutMs));
+        }, timeoutMs);
+    });
+
     return Promise.race([queryPromise, timeoutPromise]);
 }
 
@@ -358,9 +383,30 @@ function isNonTransientDataError(error) {
 // Check if an error is worth retrying (only connection/timeout errors)
 function isRetryableError(error) {
     if (isConnectionError(error)) return true;
+    if (isQueryTimeoutError(error)) return false;
     if (isSqlSyntaxError(error)) return false;
     if (isNonTransientDataError(error)) return false;
     return false;  // default: don't retry unknown errors
+}
+
+function safeOdbcDetails(error) {
+    return (error.odbcErrors || []).map(e => ({
+        state: e.state,
+        code: e.code,
+    }));
+}
+
+function safeParamPreview(params) {
+    if (!Array.isArray(params)) return { count: 0, types: [] };
+    return {
+        count: params.length,
+        types: params.slice(0, 25).map(value => {
+            if (value === null) return 'null';
+            if (Array.isArray(value)) return 'array';
+            return typeof value;
+        }),
+        truncated: params.length > 25,
+    };
 }
 
 function startKeepalive() {
@@ -438,7 +484,8 @@ async function query(sql, logQuery = true, logError = true) {
         } catch (error) {
             lastError = error;
             const connError = isConnectionError(error);
-            destroyConn = connError;
+            const timeoutError = isQueryTimeoutError(error);
+            destroyConn = connError || timeoutError;
 
             if (connError) {
                 connectionErrorCount++;
@@ -447,7 +494,7 @@ async function query(sql, logQuery = true, logError = true) {
             const retryable = isRetryableError(error);
 
             if (logError && attempt === MAX_RETRIES) {
-                const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
+                const odbcDetails = error.odbcErrors ? JSON.stringify(safeOdbcDetails(error)) : '';
                 logger.error(`❌ Query Error (Final Attempt): ${error.message} ${odbcDetails}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
             } else if (logError && retryable) {
                 logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
@@ -516,7 +563,8 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
         } catch (error) {
             lastError = error;
             const connError = isConnectionError(error);
-            destroyConn = connError;
+            const timeoutError = isQueryTimeoutError(error);
+            destroyConn = connError || timeoutError;
 
             if (connError) {
                 connectionErrorCount++;
@@ -525,9 +573,9 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             const retryable = isRetryableError(error);
 
             if (logError && attempt === MAX_RETRIES) {
-                const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
+                const odbcDetails = error.odbcErrors ? JSON.stringify(safeOdbcDetails(error)) : '';
                 const sqlPreview = sql ? sql.replace(/\s+/g, ' ').substring(0, 300) : 'N/A';
-                const paramPreview = params ? JSON.stringify(params).substring(0, 200) : '[]';
+                const paramPreview = JSON.stringify(safeParamPreview(params));
                 logger.error(`❌ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
             } else if (logError && retryable) {
                 logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);

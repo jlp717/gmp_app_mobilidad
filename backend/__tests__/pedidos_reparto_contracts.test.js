@@ -304,8 +304,8 @@ describe('pedidos reparto confirmation contract', () => {
     expect(cpcInsert[0]).toContain('SUBEMPRESAPEDIDO');
     expect(cpcInsert[0]).toContain('EJERCICIOPEDIDO');
     expect(cpcInsert[0]).toContain('DIASERVICIO');
-    // FI-11: pedido ERP fixed format P-093-XXXXXX, independent of vendor/env terminal.
-    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['GMP', 2026, 'P', 93, 778]));
+    // FI-11: pedido ERP uses the effective seller terminal; env terminal is only fallback.
+    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['GMP', 2026, 'P', 57, 778]));
 
     expect(lpcInsert).toBeDefined();
     expect(lpcInsert[0]).toContain('SECUENCIAPEDIDO');
@@ -320,7 +320,7 @@ describe('pedidos reparto confirmation contract', () => {
     expect(localUpdate).toBeDefined();
     expect(localUpdate[0]).toContain('TARGET_SCHEMA = ?');
     expect(localUpdate[0]).toContain('SYSTEM_NUMEROPEDIDO = ?');
-    expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 93, 778]));
+    expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 57, 778]));
     expect(mockConnQuery.mock.calls.some(([sql]) => /SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql))).toBe(true);
     expect(mockConnQuery.mock.calls.some(([sql]) => /^COMMIT$/i.test(sql))).toBe(true);
   });
@@ -365,7 +365,7 @@ describe('pedidos reparto confirmation contract', () => {
     expect(cpcInsert[1]).toEqual(expect.arrayContaining(['R9']));
   });
 
-  test('DSEDAC export keeps ERP terminal separate from seller actor columns', async () => {
+  test('DSEDAC export uses viewed seller terminal and ignores admin/env terminal', async () => {
     process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'JAVIER';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
     process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
@@ -409,7 +409,7 @@ describe('pedidos reparto confirmation contract', () => {
     const cpc = paramsByInsertColumn(cpcInsert);
     const lpc = paramsByInsertColumn(lpcInsert);
     for (const row of [cpc, lpc]) {
-      expect(row.TERMINALPEDIDO).toBe(93);
+      expect(row.TERMINALPEDIDO).toBe(2);
       expect(row.CODIGOVENDEDOR).toBe('02');
       expect(row.CODIGOVENDEDORCOBRO).toBe('02');
       expect(row.CODIGOPROMOTORPREVENTA).toBe('02');
@@ -417,5 +417,129 @@ describe('pedidos reparto confirmation contract', () => {
     }
     expect(cpc.CODIGOVENDEDORUSUARIO).toBe('02');
     expect(cpc.CODIGOUSUARIO).toBe('02');
+  });
+
+  test('DSEDAC export falls back to env terminal for non-numeric sellers', async () => {
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'JAVIER';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
+    process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
+    process.env.PEDIDOS_SYSTEM_TERMINAL = '93';
+    mockGetClientDays.mockReturnValue({
+      deliveryDays: ['martes', 'jueves'],
+      deliveryDaysShort: 'MJ',
+    });
+    mockSuccessfulConfirmationQueries({
+      includeLine: true,
+      vendedorCode: 'A3',
+      vehicleCode: '11',
+      driverCode: '95',
+    });
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 781 }];
+      return [];
+    });
+    mockPool = {
+      connect: jest.fn().mockResolvedValue({
+        query: (...args) => mockConnQuery(...args),
+        close: mockConnClose,
+      }),
+    };
+
+    await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+
+    const cpcInsert = mockConnQuery.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+DSEDAC\.CPC/i.test(sql),
+    );
+    const cpc = paramsByInsertColumn(cpcInsert);
+    expect(cpc.TERMINALPEDIDO).toBe(93);
+    expect(cpc.CODIGOVENDEDOR).toBe('A3');
+  });
+
+  test('getOrderAlbaran resolves real CAC columns and document state', async () => {
+    mockQueryWithParams.mockImplementation(async (sql, params) => {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim();
+      if (/FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID\s*=\s*\?/i.test(normalized)) {
+        expect(params).toEqual([42]);
+        return [{
+          CODIGOCLIENTE: '4300008381',
+          DIADOCUMENTO: 26,
+          MESDOCUMENTO: 6,
+          ANODOCUMENTO: 2026,
+          EJERCICIO: 2026,
+          SERIEPEDIDO: 'M',
+          TERMINAL: 999,
+          NUMEROPEDIDO: 100,
+          SYSTEM_SUBEMPRESAPEDIDO: 'GMP',
+          SYSTEM_EJERCICIOPEDIDO: 2026,
+          SYSTEM_SERIEPEDIDO: 'P',
+          SYSTEM_TERMINALPEDIDO: 93,
+          SYSTEM_NUMEROPEDIDO: 3714,
+        }];
+      }
+      if (/FROM\s+DSEDAC\.CPC\s+P/i.test(normalized)) {
+        expect(normalized).toContain('C.CODIGOCLIENTEALBARAN');
+        expect(normalized).toContain('C.IMPORTETOTAL');
+        expect(normalized).not.toContain('C.CODIGOCLIENTE,');
+        expect(normalized).not.toContain('C.IMPORTEALBARAN');
+        expect(params).toEqual(['GMP', 2026, 'P', 93, 3714]);
+        return [{
+          NUMEROALBARAN: 1192,
+          SERIEALBARAN: 'J',
+          TERMINALALBARAN: 93,
+          EJERCICIOALBARAN: 2026,
+          DIADOCUMENTO: 26,
+          MESDOCUMENTO: 6,
+          ANODOCUMENTO: 2026,
+          CODIGOCLIENTE: '4300008381',
+          IMPORTEALBARAN: 0,
+          SITUACION: 'A',
+          ESTADOENVIO: '',
+          NUMEROFACTURA: 0,
+          SERIEFACTURA: '',
+          EJERCICIOFACTURA: 0,
+        }, {
+          NUMEROALBARAN: 3049,
+          SERIEALBARAN: 'P',
+          TERMINALALBARAN: 3,
+          EJERCICIOALBARAN: 2026,
+          DIADOCUMENTO: 26,
+          MESDOCUMENTO: 6,
+          ANODOCUMENTO: 2026,
+          CODIGOCLIENTE: '4300007815',
+          IMPORTEALBARAN: 188.59,
+          SITUACION: 'A',
+          ESTADOENVIO: '',
+          NUMEROFACTURA: 4984,
+          SERIEFACTURA: 'A',
+          EJERCICIOFACTURA: 2026,
+        }];
+      }
+      throw new Error(`Unexpected SQL: ${normalized}`);
+    });
+
+    const result = await pedidosService.getOrderAlbaran(42);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      serie: 'J',
+      numeroAlbaran: 1192,
+      documentType: 'albaran',
+      documentLabel: 'Albaran',
+      albaranRef: 'J-093-001192',
+      facturaRef: '',
+      albaranPdfAvailable: true,
+      facturaPdfAvailable: false,
+    });
+    expect(result[1]).toMatchObject({
+      serie: 'P',
+      numeroAlbaran: 3049,
+      documentType: 'factura',
+      documentLabel: 'Factura',
+      albaranRef: 'P-003-003049',
+      facturaRef: 'A-004984',
+      numeroFactura: 4984,
+      facturaPdfAvailable: true,
+    });
   });
 });

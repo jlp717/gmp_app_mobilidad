@@ -68,7 +68,7 @@ class _TrendChartPainter extends CustomPainter {
     final safeMax = maxOrders > 0 ? maxOrders : 1;
 
     final linePaint = Paint()
-      ..color = AppTheme.neonBlue.withValues(alpha: 0.8)
+      ..color = AppTheme.info.withValues(alpha: 0.8)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -78,18 +78,18 @@ class _TrendChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          AppTheme.neonBlue.withValues(alpha: 0.3),
-          AppTheme.neonBlue.withValues(alpha: 0.02),
+          AppTheme.info.withValues(alpha: 0.3),
+          AppTheme.info.withValues(alpha: 0.02),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
 
     final dotPaint = Paint()
-      ..color = AppTheme.neonBlue
+      ..color = AppTheme.info
       ..style = PaintingStyle.fill;
 
     final dotBorderPaint = Paint()
-      ..color = AppTheme.neonBlue.withValues(alpha: 0.4)
+      ..color = AppTheme.info.withValues(alpha: 0.4)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 

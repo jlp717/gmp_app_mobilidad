@@ -331,7 +331,7 @@ class TopViewPainter extends CustomPainter {
           color: Color(0xAAFFFFFF),
           fontSize: 9,
           fontWeight: FontWeight.w600,
-          letterSpacing: 2,
+          letterSpacing: 0,
         ),
       ),
       textDirection: TextDirection.ltr,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -35,6 +36,7 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/page
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/vencimientos_page.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/pages/rutero_page.dart';
 import 'package:gmp_app_mobilidad/features/settings/presentation/pages/network_settings_page.dart';
+import 'package:gmp_app_mobilidad/features/settings/presentation/pages/notification_settings_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/articles_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_history_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/personnel_page.dart';
@@ -43,7 +45,7 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehous
 import 'package:url_launcher/url_launcher.dart';
 
 /// Main app shell with navigation rail for tablet mode
-/// Panel de Control (Dashboard) is only visible for Jefe de Ventas
+/// Dashboard is only visible for Jefe de Ventas
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
@@ -68,6 +70,14 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
+    final visualQaRole = _visualQaRoleOverride();
+    if (visualQaRole == 'almacen' || visualQaRole == 'almacén') {
+      _forceAlmacenMode = true;
+      _forceRepartidorMode = false;
+    } else if (visualQaRole == 'repartidor') {
+      _forceRepartidorMode = true;
+      _forceAlmacenMode = false;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
       _checkForUpdates();
@@ -78,6 +88,15 @@ class _MainShellState extends ConsumerState<MainShell> {
         _forceRepartidorMode = true;
       }
     });
+  }
+
+  String _visualQaRoleOverride() {
+    if (!kDebugMode) return '';
+    const definedRole = String.fromEnvironment('GMP_VISUAL_QA_ROLE');
+    final role = definedRole.isNotEmpty
+        ? definedRole
+        : Uri.base.queryParameters['gmpVisualQaRole'] ?? '';
+    return role.trim().toLowerCase();
   }
 
   @override
@@ -148,7 +167,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ? 'Actualización Obligatoria'
                 : 'Actualización Disponible',
             style: const TextStyle(
-              color: Colors.white,
+              color: AppTheme.textPrimary,
               fontWeight: FontWeight.bold,
               fontSize: 20,
             ),
@@ -161,14 +180,14 @@ class _MainShellState extends ConsumerState<MainShell> {
                 (authState?.updateMessage.isNotEmpty ?? false)
                     ? authState!.updateMessage
                     : 'Hay una nueva versión de la app con mejoras críticas.',
-                style: const TextStyle(color: Colors.white70),
+                style: const TextStyle(color: AppTheme.textSecondary),
               ),
               if (isMandatory) ...[
                 const SizedBox(height: 16),
                 const Text(
                   'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
                   style: TextStyle(
-                    color: Colors.orange,
+                    color: AppTheme.warning,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -176,14 +195,14 @@ class _MainShellState extends ConsumerState<MainShell> {
               ],
             ],
           ),
-          backgroundColor: AppTheme.darkCard,
+          backgroundColor: AppTheme.raisedSurface,
           actions: [
             if (!isMandatory)
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text(
                   'MÁS TARDE',
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(color: AppTheme.textSecondary),
                 ),
               )
             else
@@ -196,8 +215,8 @@ class _MainShellState extends ConsumerState<MainShell> {
               ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonBlue,
-                foregroundColor: Colors.black,
+                backgroundColor: AppTheme.success,
+                foregroundColor: Colors.white,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -237,18 +256,20 @@ class _MainShellState extends ConsumerState<MainShell> {
     }
   }
 
-  // Show futuristic logout confirmation modal
+  // Show logout confirmation modal
   Future<void> _showLogoutConfirmation(AuthState authState) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black54,
+      barrierColor: Colors.black.withValues(alpha: 0.56),
       builder: (context) => _LogoutConfirmationDialog(
         userName: authState.user?.name ?? 'Usuario',
       ),
     );
 
-    if (shouldLogout ?? false) {
-      ProviderScope.containerOf(context).read(authProvider.notifier).logout();
+    if ((shouldLogout ?? false) && mounted) {
+      await ProviderScope.containerOf(context)
+          .read(authProvider.notifier)
+          .logout();
     }
   }
 
@@ -333,7 +354,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       showCommissions: showCommissions,
     );
 
-    return navItems
+    final mappedItems = navItems
         .map(
           (item) => _NavItem(
             icon: item.icon,
@@ -343,6 +364,31 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
         )
         .toList();
+
+    if (!isJefeVentas && !_isAlmacenEffective && !_isRepartidorEffective) {
+      const priority = [
+        'Pedidos',
+        'Clientes',
+        'Cobros',
+        'Ruta',
+        'Objetivos',
+        'Comisiones',
+        'Facturas',
+        'Alertas',
+        'Bolsa',
+        'Evolución',
+        'Asistente',
+      ];
+      mappedItems.sort((a, b) {
+        final ai = priority.indexOf(a.label);
+        final bi = priority.indexOf(b.label);
+        final ar = ai == -1 ? priority.length : ai;
+        final br = bi == -1 ? priority.length : bi;
+        return ar.compareTo(br);
+      });
+    }
+
+    return mappedItems;
   }
 
   List<Map<String, String>> _getRepartidores(List<String> codes) {
@@ -437,15 +483,17 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          gradient: AppTheme.panelGradient,
+          color: AppTheme.raisedSurface,
           border: Border(
-            top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.16)),
+            top: BorderSide(
+              color: AppTheme.borderColor.withValues(alpha: 0.72),
+            ),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.34),
-              blurRadius: 18,
-              offset: const Offset(0, -8),
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
             ),
           ],
         ),
@@ -491,6 +539,22 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
+  String _compactBottomLabel(String label) {
+    switch (label) {
+      case 'Expediciones':
+        return 'Exped.';
+      case 'Liquidacion Diaria':
+      case 'Liquidación':
+        return 'Liq. día';
+      case 'Vencimientos':
+        return 'Venc.';
+      case 'Comisiones':
+        return 'Comis.';
+      default:
+        return label;
+    }
+  }
+
   /// Bottom nav item for phone layout
   Widget _buildBottomNavItem({
     required _NavItem item,
@@ -502,42 +566,49 @@ class _MainShellState extends ConsumerState<MainShell> {
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+        padding: const EdgeInsets.fromLTRB(4, 5, 4, 6),
         decoration: BoxDecoration(
           color: isSelected
-              ? item.color.withValues(alpha: 0.13)
+              ? AppTheme.softPanel.withValues(alpha: 0.92)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           border: Border.all(
             color: isSelected
-                ? item.color.withValues(alpha: 0.28)
+                ? item.color.withValues(alpha: 0.38)
                 : Colors.transparent,
           ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedScale(
-              scale: isSelected ? 1.15 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              child: Icon(
-                isSelected ? item.selectedIcon : item.icon,
-                color: isSelected ? item.color : AppTheme.textSecondary,
-                size: 22,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 20,
+              height: 2,
+              decoration: BoxDecoration(
+                color: isSelected ? item.color : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 5),
+            Icon(
+              isSelected ? item.selectedIcon : item.icon,
+              color: isSelected ? item.color : AppTheme.textSecondary,
+              size: 21,
+            ),
+            const SizedBox(height: 3),
             AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 180),
               style: TextStyle(
                 fontSize: 9,
-                color: isSelected ? item.color : AppTheme.textSecondary,
+                color:
+                    isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               child: Text(
-                item.label,
+                _compactBottomLabel(item.label),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -562,17 +633,18 @@ class _MainShellState extends ConsumerState<MainShell> {
               Container(
                 width: 26,
                 height: 26,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [AppTheme.neonBlue, AppTheme.neonPurple],
+                  color: AppTheme.mutedPanel,
+                  border: Border.all(
+                    color: AppTheme.borderColor.withValues(alpha: 0.9),
                   ),
                 ),
                 child: Center(
                   child: Text(
                     user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.textPrimary,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -592,10 +664,12 @@ class _MainShellState extends ConsumerState<MainShell> {
   void _showOverflowMenu(List<_NavItem> navItems, int startIndex) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusLg),
+        ),
+        side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.72)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -606,7 +680,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               width: 32,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
+                color: AppTheme.borderColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -615,6 +689,11 @@ class _MainShellState extends ConsumerState<MainShell> {
               final item = entry.value;
               final isSelected = _currentIndex == actualIndex;
               return ListTile(
+                selected: isSelected,
+                selectedTileColor: AppTheme.softPanel.withValues(alpha: 0.72),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                ),
                 leading: Icon(
                   isSelected ? item.selectedIcon : item.icon,
                   color: isSelected ? item.color : AppTheme.textSecondary,
@@ -622,7 +701,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                 title: Text(
                   item.label,
                   style: TextStyle(
-                    color: isSelected ? item.color : Colors.white,
+                    color: isSelected
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
                     fontWeight:
                         isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
@@ -643,7 +724,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// Drawer for phone layout with user info, mode switcher, and actions
   Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas) {
     return Drawer(
-      backgroundColor: AppTheme.inkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       width: MediaQuery.of(context).size.width * 0.72,
       child: SafeArea(
         child: Column(
@@ -655,7 +736,22 @@ class _MainShellState extends ConsumerState<MainShell> {
             if (isJefeVentas) _buildModeSwitcher(),
             // Network settings removed for user restriction
             const Spacer(),
-            const Divider(color: Colors.white10),
+            const Divider(color: AppTheme.borderColor),
+            ListTile(
+              leading: const Icon(
+                Icons.notifications_active_outlined,
+                color: AppTheme.info,
+                size: 20,
+              ),
+              title: const Text(
+                'Avisos',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _openNotificationSettings();
+              },
+            ),
             // Logout
             ListTile(
               leading: const Icon(
@@ -667,9 +763,12 @@ class _MainShellState extends ConsumerState<MainShell> {
                 'Cerrar Sesión',
                 style: TextStyle(color: AppTheme.error, fontSize: 13),
               ),
-              onTap: () {
+              onTap: () async {
+                final authState = ref.read(authProvider).value;
                 Navigator.pop(context);
-                ref.read(authProvider.notifier).logout();
+                await Future<void>.delayed(Duration.zero);
+                if (!mounted || authState == null) return;
+                await _showLogoutConfirmation(authState);
               },
             ),
             const SizedBox(height: 8),
@@ -680,7 +779,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   // ---------------------------------------------------------------------------
-  // TABLET LAYOUT: Sidebar (original design, identical on large screens)
+  // TABLET LAYOUT: Sidebar navigation for large screens
   // ---------------------------------------------------------------------------
   Widget _buildTabletLayout(
     List<_NavItem> navItems,
@@ -705,17 +804,18 @@ class _MainShellState extends ConsumerState<MainShell> {
                 child: _isNavExpanded
                     ? Container(
                         decoration: BoxDecoration(
-                          gradient: AppTheme.panelGradient,
+                          color: AppTheme.raisedSurface,
                           border: Border(
                             right: BorderSide(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                              color:
+                                  AppTheme.borderColor.withValues(alpha: 0.72),
                             ),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.30),
-                              blurRadius: 20,
-                              offset: const Offset(8, 0),
+                              color: Colors.black.withValues(alpha: 0.16),
+                              blurRadius: 14,
+                              offset: const Offset(4, 0),
                             ),
                           ],
                         ),
@@ -726,7 +826,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                             const SizedBox(height: 16),
 
                             // Mode switcher for Jefe
-                            if (isJefeVentas) _buildModeSwitcher(),
+                            if (isJefeVentas)
+                              _buildModeSwitcher(compact: sidebarW < 128),
 
                             const SizedBox(height: 16),
 
@@ -749,11 +850,16 @@ class _MainShellState extends ConsumerState<MainShell> {
                               ),
                             ),
 
-                            const Divider(height: 1, color: Colors.white10),
+                            const Divider(
+                              height: 1,
+                              color: AppTheme.borderColor,
+                            ),
                             Padding(
                               padding: const EdgeInsets.all(12),
                               child: Column(
                                 children: [
+                                  _buildNotificationSettingsButton(),
+                                  const SizedBox(height: 8),
                                   _buildCollapseButton(),
                                   const SizedBox(height: 8),
                                   _buildLogoutButton(),
@@ -773,10 +879,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                   child: Container(
                     width: 24,
                     decoration: BoxDecoration(
-                      color: AppTheme.inkSurface,
+                      color: AppTheme.raisedSurface,
                       border: Border(
                         right: BorderSide(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                          color: AppTheme.borderColor.withValues(alpha: 0.72),
                         ),
                       ),
                     ),
@@ -787,12 +893,13 @@ class _MainShellState extends ConsumerState<MainShell> {
                           horizontal: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                          color: AppTheme.softPanel,
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.borderColor),
                         ),
                         child: const Icon(
                           Icons.chevron_right_rounded,
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.textSecondary,
                           size: 16,
                         ),
                       ),
@@ -812,85 +919,94 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   /// Mode switcher widget (used in both sidebar and drawer)
-  Widget _buildModeSwitcher() {
+  Widget _buildModeSwitcher({bool compact = false}) {
+    final activeColor = _forceAlmacenMode
+        ? AppTheme.accentIndigo
+        : _forceRepartidorMode
+            ? AppTheme.warning
+            : AppTheme.info;
+    final modeIcon = _forceAlmacenMode
+        ? Icons.warehouse_rounded
+        : _forceRepartidorMode
+            ? Icons.local_shipping
+            : Icons.store;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        width: compact ? 48 : null,
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 0 : 12,
+          vertical: compact ? 8 : 4,
+        ),
         decoration: BoxDecoration(
-          color: _forceAlmacenMode
-              ? AppTheme.neonPink.withValues(alpha: 0.1)
-              : _forceRepartidorMode
-                  ? Colors.orange.withValues(alpha: 0.1)
-                  : AppTheme.neonBlue.withValues(alpha: 0.1),
+          color: AppTheme.softPanel.withValues(alpha: 0.86),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(
-            color: _forceAlmacenMode
-                ? AppTheme.neonPink.withValues(alpha: 0.3)
-                : _forceRepartidorMode
-                    ? Colors.orange.withValues(alpha: 0.3)
-                    : AppTheme.neonBlue.withValues(alpha: 0.3),
-          ),
+          border: Border.all(color: activeColor.withValues(alpha: 0.32)),
         ),
         child: PopupMenuButton<String>(
           tooltip: 'Cambiar Perfil',
           offset: const Offset(0, 40),
-          color: AppTheme.surfaceColor,
+          color: AppTheme.raisedSurface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            side:
+                BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.8)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _forceAlmacenMode
-                    ? Icons.warehouse_rounded
-                    : _forceRepartidorMode
-                        ? Icons.local_shipping
-                        : Icons.store,
-                color: _forceAlmacenMode
-                    ? AppTheme.neonPink
-                    : _forceRepartidorMode
-                        ? Colors.orange
-                        : AppTheme.neonBlue,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  _forceAlmacenMode
-                      ? 'Almacén'
-                      : _forceRepartidorMode
-                          ? 'Reparto'
-                          : 'Ventas',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: _forceAlmacenMode
-                        ? AppTheme.neonPink
-                        : _forceRepartidorMode
-                            ? Colors.orange
-                            : AppTheme.neonBlue,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+          child: compact
+              ? Icon(
+                  modeIcon,
+                  color: activeColor,
+                  size: 20,
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _forceAlmacenMode
+                          ? Icons.warehouse_rounded
+                          : _forceRepartidorMode
+                              ? Icons.local_shipping
+                              : Icons.store,
+                      color: activeColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _forceAlmacenMode
+                            ? 'Almacén'
+                            : _forceRepartidorMode
+                                ? 'Reparto'
+                                : 'Ventas',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: activeColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_drop_down,
+                      color: AppTheme.textSecondary,
+                      size: 18,
+                    ),
+                  ],
                 ),
-              ),
-              const Icon(
-                Icons.arrow_drop_down,
-                color: Colors.white54,
-                size: 18,
-              ),
-            ],
-          ),
           itemBuilder: (context) => [
             const PopupMenuItem(
               value: 'VENTAS',
               child: Row(
                 children: [
-                  Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
+                  Icon(Icons.store, color: AppTheme.info, size: 18),
                   SizedBox(width: 12),
-                  Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
+                  Text(
+                    'Perfil Ventas',
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
                 ],
               ),
             ),
@@ -898,9 +1014,12 @@ class _MainShellState extends ConsumerState<MainShell> {
               value: 'REPARTO',
               child: Row(
                 children: [
-                  Icon(Icons.local_shipping, color: Colors.orange, size: 18),
+                  Icon(Icons.local_shipping, color: AppTheme.warning, size: 18),
                   SizedBox(width: 12),
-                  Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
+                  Text(
+                    'Perfil Reparto',
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
                 ],
               ),
             ),
@@ -908,9 +1027,16 @@ class _MainShellState extends ConsumerState<MainShell> {
               value: 'ALMACEN',
               child: Row(
                 children: [
-                  Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
+                  Icon(
+                    Icons.inventory_2,
+                    color: AppTheme.accentIndigo,
+                    size: 18,
+                  ),
                   SizedBox(width: 12),
-                  Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
+                  Text(
+                    'Perfil Almacén',
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
                 ],
               ),
             ),
@@ -937,6 +1063,17 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Widget _buildUserAvatar(UserModel user, bool isJefeVentas) {
+    final roleColor = isJefeVentas
+        ? AppTheme.info
+        : user.isRepartidor
+            ? AppTheme.warning
+            : AppTheme.success;
+    final roleLabel = isJefeVentas
+        ? 'JEFE'
+        : user.isRepartidor
+            ? 'REPARTIDOR'
+            : 'COMERCIAL';
+
     return Column(
       children: [
         Container(
@@ -944,27 +1081,14 @@ class _MainShellState extends ConsumerState<MainShell> {
           height: 48,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isJefeVentas
-                  ? [AppTheme.neonBlue, AppTheme.neonPurple]
-                  : [AppTheme.neonGreen, AppTheme.neonBlue],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (isJefeVentas ? AppTheme.neonBlue : AppTheme.neonGreen)
-                    .withValues(alpha: 0.3),
-                blurRadius: 12,
-                spreadRadius: 2,
-              ),
-            ],
+            color: AppTheme.softPanel,
+            border: Border.all(color: roleColor.withValues(alpha: 0.44)),
           ),
           child: Center(
             child: Text(
               user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -972,63 +1096,38 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          user.name.length > 16 ? user.name.substring(0, 16) : user.name,
-          style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
-          maxLines: 1,
-          textAlign: TextAlign.center,
+        SizedBox(
+          width: 72,
+          child: Text(
+            user.name.length > 16 ? user.name.substring(0, 16) : user.name,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            textAlign: TextAlign.center,
+          ),
         ),
-        if (isJefeVentas)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: AppTheme.neonBlue.withValues(alpha: 0.2),
-            ),
-            child: const Text(
-              'JEFE',
-              style: TextStyle(
-                fontSize: 8,
-                color: AppTheme.neonBlue,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          )
-        else if (user.isRepartidor)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: Colors.orange.withValues(alpha: 0.2),
-            ),
-            child: const Text(
-              'REPARTIDOR',
-              style: TextStyle(
-                fontSize: 8,
-                color: Colors.orange,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          )
-        else
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: AppTheme.neonGreen.withValues(alpha: 0.2),
-            ),
-            child: const Text(
-              'COMERCIAL',
-              style: TextStyle(
-                fontSize: 7,
-                color: AppTheme.neonGreen,
-                fontWeight: FontWeight.bold,
-              ),
+        Container(
+          margin: const EdgeInsets.only(top: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            color: roleColor.withValues(alpha: 0.12),
+            border: Border.all(color: roleColor.withValues(alpha: 0.28)),
+          ),
+          child: Text(
+            roleLabel,
+            style: TextStyle(
+              fontSize: roleLabel.length > 8 ? 7 : 8,
+              color: roleColor,
+              fontWeight: FontWeight.w700,
             ),
           ),
+        ),
       ],
     );
   }
@@ -1044,28 +1143,18 @@ class _MainShellState extends ConsumerState<MainShell> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
         padding:
             EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          gradient: isSelected ? AppTheme.panelGradient : null,
-          color: isSelected ? null : Colors.transparent,
+          color: isSelected ? AppTheme.softPanel : Colors.transparent,
           border: Border.all(
             color: isSelected
-                ? item.color.withValues(alpha: 0.34)
-                : Colors.white.withValues(alpha: 0.03),
+                ? item.color.withValues(alpha: 0.38)
+                : Colors.transparent,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: item.color.withValues(alpha: 0.14),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ]
-              : [],
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -1086,22 +1175,19 @@ class _MainShellState extends ConsumerState<MainShell> {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedScale(
-                  scale: isSelected ? 1.1 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  child: Icon(
-                    isSelected ? item.selectedIcon : item.icon,
-                    color: isSelected ? item.color : AppTheme.textSecondary,
-                    size: isSmall ? 20 : 24,
-                  ),
+                Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected ? item.color : AppTheme.textSecondary,
+                  size: isSmall ? 20 : 24,
                 ),
                 const SizedBox(height: 4),
                 AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 180),
                   style: TextStyle(
                     fontSize: isSmall ? 8 : 10,
-                    color: isSelected ? item.color : AppTheme.textSecondary,
+                    color: isSelected
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   ),
                   child: Text(
@@ -1121,14 +1207,18 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   Widget _buildLogoutButton() {
     return InkWell(
-      onTap: () => ref.read(authProvider.notifier).logout(),
+      onTap: () async {
+        final authState = ref.read(authProvider).value;
+        if (authState == null) return;
+        await _showLogoutConfirmation(authState);
+      },
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           color: AppTheme.error.withValues(alpha: 0.08),
-          border: Border.all(color: AppTheme.error.withValues(alpha: 0.15)),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.22)),
         ),
         child: const Column(
           children: [
@@ -1158,19 +1248,57 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: AppTheme.neonPurple.withValues(alpha: 0.08),
-          border:
-              Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.15)),
+          color: AppTheme.softPanel,
+          border: Border.all(color: AppTheme.borderColor),
         ),
         child: const Column(
           children: [
-            Icon(Icons.wifi, color: AppTheme.neonPurple, size: 20),
+            Icon(Icons.wifi, color: AppTheme.textSecondary, size: 20),
             SizedBox(height: 4),
             Text(
               'Red',
               style: TextStyle(
                 fontSize: 10,
-                color: AppTheme.neonPurple,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openNotificationSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificationSettingsPage()),
+    );
+  }
+
+  Widget _buildNotificationSettingsButton() {
+    return InkWell(
+      onTap: _openNotificationSettings,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.softPanel,
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: const Column(
+          children: [
+            Icon(
+              Icons.notifications_active_outlined,
+              color: AppTheme.info,
+              size: 20,
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Avisos',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1188,8 +1316,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: AppTheme.neonBlue.withValues(alpha: 0.08),
-          border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
+          color: AppTheme.softPanel,
+          border: Border.all(color: AppTheme.borderColor),
         ),
         child: Column(
           children: [
@@ -1197,7 +1325,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               _isNavExpanded
                   ? Icons.chevron_left_rounded
                   : Icons.chevron_right_rounded,
-              color: AppTheme.neonBlue,
+              color: AppTheme.textSecondary,
               size: 20,
             ),
             const SizedBox(height: 4),
@@ -1205,7 +1333,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               _isNavExpanded ? 'Ocultar' : '',
               style: const TextStyle(
                 fontSize: 9,
-                color: AppTheme.neonBlue,
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1220,20 +1348,23 @@ class _MainShellState extends ConsumerState<MainShell> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         border: Border(
-            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+          bottom: BorderSide(
+            color: AppTheme.borderColor.withValues(alpha: 0.72),
+          ),
+        ),
       ),
       child: Row(
         children: [
           const Row(
             children: [
-              Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
+              Icon(Icons.visibility, color: AppTheme.info, size: 16),
               SizedBox(width: 8),
               Text(
                 'Ver Como',
                 style: TextStyle(
-                  color: Colors.white70,
+                  color: AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -1245,10 +1376,9 @@ class _MainShellState extends ConsumerState<MainShell> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+                border: Border.all(color: AppTheme.borderColor),
               ),
               child: _isLoadingRepartidores
                   ? const Center(
@@ -1257,7 +1387,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: AppTheme.neonPurple,
+                          color: AppTheme.info,
                         ),
                       ),
                     )
@@ -1266,16 +1396,18 @@ class _MainShellState extends ConsumerState<MainShell> {
                         value: _selectedRepartidor,
                         hint: const Text(
                           'Seleccionar Repartidor',
-                          style: TextStyle(color: Colors.white54),
+                          style: TextStyle(color: AppTheme.textSecondary),
                         ),
                         isExpanded: true,
-                        dropdownColor: AppTheme.surfaceColor,
+                        dropdownColor: AppTheme.raisedSurface,
                         icon: const Icon(
                           Icons.keyboard_arrow_down,
-                          color: AppTheme.neonPurple,
+                          color: AppTheme.info,
                         ),
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 13),
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                        ),
                         items: [
                           const DropdownMenuItem(
                             value: 'ALL',
@@ -1386,7 +1518,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorNames: repNamesMap,
           );
         }
-        if (label == 'Liquidacion Diaria') {
+        if (label == 'Liquidacion Diaria' || label == 'Liquidación') {
           return RepartidorLiquidacionDiariaPage(
             repartidorId: effectiveRepartidorId,
           );
@@ -1413,7 +1545,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             initialClientName: _pendingClientName,
           );
         }
-        if (label == 'Chat IA') {
+        if (label == 'Asistente') {
           return ChatbotPage(vendedorCodes: vendedorCodes);
         }
         return const Center(child: Text('Página no encontrada'));
@@ -1548,7 +1680,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             isJefeVentas: false,
             forceShowVendorSelector: isCommercial80,
           );
-        case 'Glacius':
+        case 'Alertas':
           return KpiDashboardPage(
             employeeCode: empCode,
             isJefeVentas: false,
@@ -1570,7 +1702,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
-        case 'Chat IA':
+        case 'Asistente':
           return ChatbotPage(vendedorCodes: effectiveVendorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
@@ -1601,7 +1733,7 @@ class _NavItem {
   final Color color;
 }
 
-// Futuristic Logout Confirmation Dialog
+// Logout confirmation dialog
 class _LogoutConfirmationDialog extends StatelessWidget {
   const _LogoutConfirmationDialog({required this.userName});
   final String userName;
@@ -1620,49 +1752,30 @@ class _LogoutConfirmationDialog extends StatelessWidget {
         width: dw,
         padding: EdgeInsets.all(dp),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.surfaceColor,
-              AppTheme.darkBase.withValues(alpha: 0.95),
-            ],
-          ),
+          color: AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1.5,
+            color: AppTheme.borderColor.withValues(alpha: 0.84),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 40,
-              spreadRadius: 10,
-            ),
-            BoxShadow(
-              color: AppTheme.error.withValues(alpha: 0.1),
-              blurRadius: 30,
-              spreadRadius: -5,
+              color: Colors.black.withValues(alpha: 0.34),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon with glow effect (responsive)
             Container(
               width: iconDim,
               height: iconDim,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppTheme.error.withValues(alpha: 0.15),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.error.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ],
+                border:
+                    Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
               ),
               child: Icon(
                 Icons.logout_rounded,
@@ -1710,7 +1823,8 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                         side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.1)),
+                          color: AppTheme.borderColor.withValues(alpha: 0.8),
+                        ),
                       ),
                     ),
                     child: const Text(
@@ -1730,16 +1844,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      gradient: const LinearGradient(
-                        colors: [AppTheme.error, Color(0xFFB71C1C)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.error.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      color: AppTheme.error,
                     ),
                     child: Material(
                       color: Colors.transparent,

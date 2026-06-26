@@ -20,123 +20,124 @@ class PlannerToolbar extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppTheme.darkSurface.withValues(alpha: 0.95),
-                AppTheme.darkBase.withValues(alpha: 0.9),
-              ],
-            ),
+            color: AppTheme.raisedSurface,
             border: Border(
               bottom: BorderSide(
-                color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                color: AppTheme.borderColor.withValues(alpha: 0.8),
               ),
             ),
           ),
-          child: Row(
-            children: [
-              // View mode pills
-              _PillSegmented<ViewMode>(
-                selected: planner.viewMode,
-                options: const [
-                  (ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
-                  (ViewMode.top, Icons.layers_rounded, 'Planta'),
-                  (ViewMode.front, Icons.crop_square_rounded, 'Frente'),
-                ],
-                onChanged: (v) {
-                  HapticFeedback.selectionClick();
-                  ref.read(loadPlannerProvider.notifier).setViewMode(v);
-                },
-              ),
-              const SizedBox(width: 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                // View mode pills
+                _PillSegmented<ViewMode>(
+                  selected: planner.viewMode,
+                  options: const [
+                    (ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
+                    (ViewMode.top, Icons.layers_rounded, 'Planta'),
+                    (ViewMode.front, Icons.crop_square_rounded, 'Frente'),
+                  ],
+                  onChanged: (v) {
+                    HapticFeedback.selectionClick();
+                    ref.read(loadPlannerProvider.notifier).setViewMode(v);
+                  },
+                ),
+                const SizedBox(width: 8),
 
-              // Color mode pills
-              _PillSegmented<ColorMode>(
-                selected: planner.colorMode,
-                options: const [
-                  (ColorMode.product, Icons.inventory_2_rounded, 'Producto'),
-                  (ColorMode.client, Icons.people_rounded, 'Cliente'),
-                  (ColorMode.weight, Icons.fitness_center_rounded, 'Peso'),
-                  (ColorMode.delivery, Icons.local_shipping_rounded, 'Entrega'),
-                ],
-                onChanged: (v) {
-                  HapticFeedback.selectionClick();
-                  ref.read(loadPlannerProvider.notifier).setColorMode(v);
-                },
-              ),
+                // Color mode pills
+                _PillSegmented<ColorMode>(
+                  selected: planner.colorMode,
+                  options: const [
+                    (ColorMode.product, Icons.inventory_2_rounded, 'Producto'),
+                    (ColorMode.client, Icons.people_rounded, 'Cliente'),
+                    (ColorMode.weight, Icons.fitness_center_rounded, 'Peso'),
+                    (
+                      ColorMode.delivery,
+                      Icons.local_shipping_rounded,
+                      'Entrega'
+                    ),
+                  ],
+                  onChanged: (v) {
+                    HapticFeedback.selectionClick();
+                    ref.read(loadPlannerProvider.notifier).setColorMode(v);
+                  },
+                ),
 
-              const Spacer(),
+                const Spacer(),
 
-              // Profit optimizer – glow on hover
-              _GlowToolButton(
-                icon: Icons.auto_awesome_rounded,
-                tooltip: 'Optimizar carga (max beneficio)',
-                enabled: !planner.isOptimizing,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  ref.read(loadPlannerProvider.notifier).runProfitOptimizer();
-                },
-                color: AppTheme.neonGreen,
-              ),
-              const SizedBox(width: 2),
+                // Profit optimizer – glow on hover
+                _GlowToolButton(
+                  icon: Icons.auto_awesome_rounded,
+                  tooltip: 'Optimizar carga (max beneficio)',
+                  enabled: !planner.isOptimizing,
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    ref.read(loadPlannerProvider.notifier).runProfitOptimizer();
+                  },
+                  color: AppTheme.success,
+                ),
+                const SizedBox(width: 2),
 
-              // Client-side 3D repack
-              _GlowToolButton(
-                icon: Icons.view_in_ar_rounded,
-                tooltip: 'Reordenar cajas (bin packing 3D)',
-                enabled: onRepack != null && planner.placedBoxes.isNotEmpty,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  onRepack?.call();
-                },
-                color: AppTheme.neonBlue,
-              ),
-              const SizedBox(width: 2),
+                // Client-side 3D repack
+                _GlowToolButton(
+                  icon: Icons.view_in_ar_rounded,
+                  tooltip: 'Reordenar cajas (bin packing 3D)',
+                  enabled: onRepack != null && planner.placedBoxes.isNotEmpty,
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    onRepack?.call();
+                  },
+                  color: AppTheme.info,
+                ),
+                const SizedBox(width: 2),
 
-              // Wall toggle
-              _GlowToolButton(
-                icon: Icons.grid_on_rounded,
-                tooltip: 'Mostrar/ocultar paredes',
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  onToggleWalls?.call();
-                },
-                enabled: onToggleWalls != null,
-              ),
-              const SizedBox(width: 2),
+                // Wall toggle
+                _GlowToolButton(
+                  icon: Icons.grid_on_rounded,
+                  tooltip: 'Mostrar/ocultar paredes',
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    onToggleWalls?.call();
+                  },
+                  enabled: onToggleWalls != null,
+                ),
+                const SizedBox(width: 2),
 
-              // Undo
-              _GlowToolButton(
-                icon: Icons.undo_rounded,
-                tooltip: 'Deshacer',
-                enabled: planner.canUndo,
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  ref.read(loadPlannerProvider.notifier).undo();
-                },
-              ),
-              // Redo
-              _GlowToolButton(
-                icon: Icons.redo_rounded,
-                tooltip: 'Rehacer',
-                enabled: planner.canRedo,
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  ref.read(loadPlannerProvider.notifier).redo();
-                },
-              ),
-              const SizedBox(width: 6),
+                // Undo
+                _GlowToolButton(
+                  icon: Icons.undo_rounded,
+                  tooltip: 'Deshacer',
+                  enabled: planner.canUndo,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    ref.read(loadPlannerProvider.notifier).undo();
+                  },
+                ),
+                // Redo
+                _GlowToolButton(
+                  icon: Icons.redo_rounded,
+                  tooltip: 'Rehacer',
+                  enabled: planner.canRedo,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    ref.read(loadPlannerProvider.notifier).redo();
+                  },
+                ),
+                const SizedBox(width: 6),
 
-              // Reset – warning glow
-              _GlowToolButton(
-                icon: Icons.refresh_rounded,
-                tooltip: 'Recalcular (descartar cambios)',
-                enabled: planner.hasManualChanges,
-                onPressed: () => _confirmReset(context, ref),
-                color: AppTheme.warning,
-              ),
-            ],
+                // Reset – warning glow
+                _GlowToolButton(
+                  icon: Icons.refresh_rounded,
+                  tooltip: 'Recalcular (descartar cambios)',
+                  enabled: planner.hasManualChanges,
+                  onPressed: () => _confirmReset(context, ref),
+                  color: AppTheme.warning,
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -148,12 +149,10 @@ class PlannerToolbar extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: AppTheme.warning.withValues(alpha: 0.3),
-          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
         ),
         title: const Row(
           children: [
@@ -209,11 +208,9 @@ class _PillSegmented<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard.withValues(alpha: 0.3),
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppTheme.borderColor.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: AppTheme.borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -227,18 +224,18 @@ class _PillSegmented<T> extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: isActive
-                    ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                    ? AppTheme.info.withValues(alpha: 0.14)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(7),
                 border: isActive
                     ? Border.all(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                        color: AppTheme.info.withValues(alpha: 0.34),
                       )
                     : null,
                 boxShadow: isActive
                     ? [
                         BoxShadow(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                          color: AppTheme.info.withValues(alpha: 0.08),
                           blurRadius: 8,
                         ),
                       ]
@@ -250,9 +247,7 @@ class _PillSegmented<T> extends StatelessWidget {
                   Icon(
                     opt.$2,
                     size: 13,
-                    color: isActive
-                        ? AppTheme.neonBlue
-                        : AppTheme.textTertiary.withValues(alpha: 0.7),
+                    color: isActive ? AppTheme.info : AppTheme.textTertiary,
                   ),
                   const SizedBox(width: 4),
                   AnimatedDefaultTextStyle(
@@ -260,10 +255,8 @@ class _PillSegmented<T> extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                      color: isActive
-                          ? AppTheme.neonBlue
-                          : AppTheme.textTertiary.withValues(alpha: 0.7),
-                      letterSpacing: isActive ? 0.2 : 0.0,
+                      color: isActive ? AppTheme.info : AppTheme.textTertiary,
+                      letterSpacing: 0,
                     ),
                     child: Text(opt.$3),
                   ),
@@ -306,7 +299,7 @@ class _GlowToolButtonState extends State<_GlowToolButton> {
   Widget build(BuildContext context) {
     final baseColor = widget.enabled
         ? (widget.color ?? AppTheme.textSecondary)
-        : AppTheme.textTertiary.withValues(alpha: 0.3);
+        : AppTheme.textTertiary;
 
     return Tooltip(
       message: widget.tooltip,
@@ -325,13 +318,13 @@ class _GlowToolButtonState extends State<_GlowToolButton> {
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color: _pressed
-                ? baseColor.withValues(alpha: 0.1)
+                ? baseColor.withValues(alpha: 0.12)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: _pressed && widget.enabled
                 ? [
                     BoxShadow(
-                      color: baseColor.withValues(alpha: 0.15),
+                      color: baseColor.withValues(alpha: 0.1),
                       blurRadius: 8,
                     ),
                   ]

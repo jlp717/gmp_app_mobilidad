@@ -127,6 +127,23 @@ function routeLabel(code) {
   return normalized || 'SIN RUTA ASIGNADA';
 }
 
+function normalizeVendorCode(value) {
+  const primary = String(value || '').split(',')[0].trim();
+  if (!primary) return '';
+  if (/^\d+$/.test(primary)) return primary.padStart(2, '0').slice(-2);
+  return primary.substring(0, 2);
+}
+
+function expectedPedidoTerminalForVendor(value) {
+  const vendor = normalizeVendorCode(value);
+  if (/^\d{1,3}$/.test(vendor)) {
+    const terminal = parseInt(vendor, 10);
+    if (terminal > 0 && terminal <= 999) return terminal;
+  }
+  const fallback = parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '93', 10);
+  return Number.isFinite(fallback) && fallback > 0 && fallback <= 999 ? fallback : 93;
+}
+
 function toTsv(rows) {
   const headers = [
     'Ejercicio pedido',
@@ -339,13 +356,15 @@ async function main() {
   const logs = await fetchPedidoLogs(out.createdOrderIds);
   out.dbRows = logs;
   out.tsv = toTsv(logs);
-  const terminalOk = logs.every((row) => Number(row.TERMINALPEDIDO) === 93);
+  const expectedVendor = normalizeVendorCode(VENDOR_CODE);
+  const expectedTerminal = expectedPedidoTerminalForVendor(VENDOR_CODE);
+  const terminalOk = logs.every((row) => Number(row.TERMINALPEDIDO) === expectedTerminal);
   const sellerOk = logs.every((row) =>
-    String(row.CODIGOVENDEDOR).trim() === VENDOR_CODE.padStart(2, '0') &&
-    String(row.CODIGOVENDEDORCOBRO).trim() === VENDOR_CODE.padStart(2, '0') &&
-    String(row.CODIGOCOMERCIAL).trim() === VENDOR_CODE.padStart(2, '0'));
+    String(row.CODIGOVENDEDOR).trim() === expectedVendor &&
+    String(row.CODIGOVENDEDORCOBRO).trim() === expectedVendor &&
+    String(row.CODIGOCOMERCIAL).trim() === expectedVendor);
   record(out, 'DB2_LOG_ROWS', 'Filas recuperadas desde JAVIER.PEDIDOS_CAB', logs.length === out.createdOrderIds.length, `rows=${logs.length}/${out.createdOrderIds.length}`, 0);
-  record(out, 'P093_FORMAT', 'Formato ERP P-093 con vendedor real separado', terminalOk && sellerOk, `terminalOk=${terminalOk} sellerOk=${sellerOk}`, 0);
+  record(out, 'ERP_TERMINAL_BY_VENDOR', 'Formato ERP usa terminal del comercial efectivo', terminalOk && sellerOk, `expectedTerminal=${expectedTerminal} expectedVendor=${expectedVendor} terminalOk=${terminalOk} sellerOk=${sellerOk}`, 0);
 
   out.pass = out.tests.every((test) => test.pass);
   console.log(JSON.stringify(out, null, 2));

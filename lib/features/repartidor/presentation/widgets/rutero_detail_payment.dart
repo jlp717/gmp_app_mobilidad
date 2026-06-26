@@ -64,31 +64,13 @@ class RuteroDetailPayment extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.darkCard,
-            if (_isUrgent)
-              AppTheme.obligatorio.withValues(alpha: 0.1)
-            else
-              AppTheme.darkSurface,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
           color: _isUrgent
-              ? AppTheme.obligatorio.withValues(alpha: 0.4)
-              : AppTheme.neonBlue.withValues(alpha: 0.2),
-          width: 2,
+              ? AppTheme.error.withValues(alpha: 0.42)
+              : AppTheme.borderColor,
         ),
-        boxShadow: [
-          if (_isUrgent)
-            BoxShadow(
-              color: AppTheme.obligatorio.withValues(alpha: 0.15),
-              blurRadius: 20,
-            ),
-        ],
       ),
       child: Column(
         children: [
@@ -97,7 +79,6 @@ class RuteroDetailPayment extends StatelessWidget {
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 12,
-              letterSpacing: 1,
             ),
           ),
           const SizedBox(height: 8),
@@ -105,7 +86,7 @@ class RuteroDetailPayment extends StatelessWidget {
             NumberFormat.currency(symbol: '€', locale: 'es_ES')
                 .format(albaran.importeTotal),
             style: TextStyle(
-              color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
+              color: _isUrgent ? AppTheme.error : AppTheme.textPrimary,
               fontSize: Responsive.fontSize(context, small: 28, large: 42),
               fontWeight: FontWeight.bold,
             ),
@@ -114,7 +95,7 @@ class RuteroDetailPayment extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
+              color: (_isUrgent ? AppTheme.error : AppTheme.success)
                   .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -124,7 +105,7 @@ class RuteroDetailPayment extends StatelessWidget {
                 Icon(
                   _isUrgent ? Icons.priority_high : Icons.info_outline,
                   size: 16,
-                  color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                  color: _isUrgent ? AppTheme.error : AppTheme.success,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -132,7 +113,7 @@ class RuteroDetailPayment extends StatelessWidget {
                       ? 'COBRO OBLIGATORIO - ${getPaymentTypeLabel()}'
                       : 'COBRO OPCIONAL - ${getPaymentTypeLabel()}',
                   style: TextStyle(
-                    color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                    color: _isUrgent ? AppTheme.error : AppTheme.success,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
@@ -155,7 +136,6 @@ class RuteroDetailPayment extends StatelessWidget {
             color: AppTheme.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            letterSpacing: 1,
           ),
         ),
         const SizedBox(height: 12),
@@ -196,41 +176,29 @@ class RuteroDetailPayment extends StatelessWidget {
         duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [
-                    AppTheme.neonBlue.withValues(alpha: 0.2),
-                    AppTheme.neonCyan.withValues(alpha: 0.1),
-                  ],
-                )
-              : null,
-          color: isSelected ? null : AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected
+              ? AppTheme.info.withValues(alpha: 0.12)
+              : AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           border: Border.all(
-            color: isSelected ? AppTheme.neonBlue : AppTheme.borderColor,
+            color: isSelected
+                ? AppTheme.info.withValues(alpha: 0.44)
+                : AppTheme.borderColor,
             width: isSelected ? 2 : 1,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.2),
-                    blurRadius: 10,
-                  ),
-                ]
-              : null,
         ),
         child: Column(
           children: [
             Icon(
               icon,
-              color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary,
+              color: isSelected ? AppTheme.info : AppTheme.textSecondary,
               size: 28,
             ),
             const SizedBox(height: 8),
             Text(
               method,
               style: TextStyle(
-                color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary,
+                color: isSelected ? AppTheme.info : AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
                 fontSize: 11,
               ),
@@ -252,18 +220,14 @@ class RuteroDetailPayment extends StatelessWidget {
         duration: AppTheme.animFast,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: isPaid
-              ? LinearGradient(
-                  colors: [
-                    AppTheme.success.withValues(alpha: 0.2),
-                    AppTheme.success.withValues(alpha: 0.1),
-                  ],
-                )
-              : null,
-          color: isPaid ? null : AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(12),
+          color: isPaid
+              ? AppTheme.success.withValues(alpha: 0.12)
+              : AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           border: Border.all(
-            color: isPaid ? AppTheme.success : AppTheme.borderColor,
+            color: isPaid
+                ? AppTheme.success.withValues(alpha: 0.44)
+                : AppTheme.borderColor,
             width: isPaid ? 2 : 1,
           ),
         ),
@@ -274,7 +238,7 @@ class RuteroDetailPayment extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: isPaid ? AppTheme.success : AppTheme.darkBase,
+                color: isPaid ? AppTheme.success : AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: isPaid ? AppTheme.success : AppTheme.borderColor,
@@ -345,7 +309,7 @@ class RuteroDetailPayment extends StatelessWidget {
         suffixText: 'EUR',
         errorText: importeCobradoError,
         filled: true,
-        fillColor: AppTheme.darkCard,
+        fillColor: AppTheme.softPanel,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppTheme.borderColor),
@@ -356,7 +320,7 @@ class RuteroDetailPayment extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.neonBlue),
+          borderSide: const BorderSide(color: AppTheme.info),
         ),
       ),
     );
@@ -403,8 +367,8 @@ class RuteroDetailPayment extends StatelessWidget {
       icon: const Icon(Icons.arrow_forward),
       label: const Text('CONTINUAR A FINALIZAR'),
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppTheme.neonBlue,
-        foregroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.info,
+        foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

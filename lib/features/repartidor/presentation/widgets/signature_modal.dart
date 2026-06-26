@@ -117,8 +117,11 @@ class _SignatureModalState extends State<SignatureModal> {
       // Responsive: use more height in landscape where screen is shorter
       height: Responsive.modalHeight(context),
       decoration: const BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusXl),
+        ),
+        border: Border(top: BorderSide(color: AppTheme.borderColor)),
       ),
       child: Column(
         children: [
@@ -128,7 +131,7 @@ class _SignatureModalState extends State<SignatureModal> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.3),
+              color: AppTheme.textTertiary.withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -144,12 +147,15 @@ class _SignatureModalState extends State<SignatureModal> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppTheme.info.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        border: Border.all(
+                          color: AppTheme.info.withValues(alpha: 0.28),
+                        ),
                       ),
                       child: const Icon(
                         Icons.edit_note,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         size: 24,
                       ),
                     ),
@@ -200,17 +206,11 @@ class _SignatureModalState extends State<SignatureModal> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _isEmpty
-                      ? Colors.grey.withValues(alpha: 0.3)
-                      : AppTheme.neonGreen.withValues(alpha: 0.5),
-                  width: 2,
+                      ? AppTheme.borderColor
+                      : AppTheme.success.withValues(alpha: 0.56),
+                  width: _isEmpty ? 1 : 2,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AppTheme.elevation1,
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
@@ -231,14 +231,16 @@ class _SignatureModalState extends State<SignatureModal> {
                             Icon(
                               Icons.gesture,
                               size: 48,
-                              color: Colors.grey.withValues(alpha: 0.3),
+                              color:
+                                  AppTheme.textTertiary.withValues(alpha: 0.45),
                             ),
                             const SizedBox(height: 12),
                             Text(
                               'Firme aquí',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: Colors.grey.withValues(alpha: 0.5),
+                                color: AppTheme.textTertiary
+                                    .withValues(alpha: 0.7),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -268,8 +270,7 @@ class _SignatureModalState extends State<SignatureModal> {
                     label: const Text('Cancelar'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.2)),
+                      side: const BorderSide(color: AppTheme.borderColor),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -289,7 +290,9 @@ class _SignatureModalState extends State<SignatureModal> {
                     label: const Text('Confirmar Firma'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
-                          _isEmpty ? Colors.grey : AppTheme.neonGreen,
+                          _isEmpty ? AppTheme.softPanel : AppTheme.success,
+                      disabledBackgroundColor: AppTheme.softPanel,
+                      disabledForegroundColor: AppTheme.textTertiary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

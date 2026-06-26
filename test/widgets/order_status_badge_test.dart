@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_status_badge.dart';
 
 void main() {
@@ -218,7 +219,7 @@ void main() {
         expect(decoration.borderRadius, BorderRadius.circular(20));
       });
 
-      testWidgets('has gradient background', (tester) async {
+      testWidgets('uses tonal background and semantic border', (tester) async {
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
@@ -232,7 +233,12 @@ void main() {
         );
 
         final decoration = container.decoration as BoxDecoration;
-        expect(decoration.gradient, isA<LinearGradient>());
+        expect(decoration.gradient, isNull);
+        expect(
+          decoration.color,
+          AppTheme.success.withValues(alpha: 0.12),
+        );
+        expect(decoration.border, isNotNull);
       });
     });
   });
@@ -274,12 +280,14 @@ void main() {
     });
 
     test('getColor returns correct color for each status', () {
-      expect(OrderStatusConfig.getColor('BORRADOR'), const Color(0xFFF97316));
-      expect(OrderStatusConfig.getColor('CONFIRMADO'), const Color(0xFF22C55E));
-      expect(OrderStatusConfig.getColor('ENVIADO'), const Color(0xFF22C55E));
-      expect(OrderStatusConfig.getColor('PENDIENTE_APROBACION'),
-          const Color(0xFFF97316));
-      expect(OrderStatusConfig.getColor('ANULADO'), const Color(0xFFF97316));
+      expect(OrderStatusConfig.getColor('BORRADOR'), AppTheme.warning);
+      expect(OrderStatusConfig.getColor('CONFIRMADO'), AppTheme.success);
+      expect(OrderStatusConfig.getColor('ENVIADO'), AppTheme.success);
+      expect(
+        OrderStatusConfig.getColor('PENDIENTE_APROBACION'),
+        AppTheme.warning,
+      );
+      expect(OrderStatusConfig.getColor('ANULADO'), AppTheme.warning);
     });
 
     test('getIcon returns correct icon for each status', () {

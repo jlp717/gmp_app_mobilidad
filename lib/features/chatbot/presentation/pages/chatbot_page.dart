@@ -8,10 +8,10 @@ import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_provider.da
 
 /// [ChatbotPage] - Professional AI Sales Assistant
 ///
-/// Premium futuristic chat interface with:
+/// Professional chat interface with:
 /// - Clean professional design without childish emojis
 /// - Quick action pills with icons
-/// - Gradient accents and glowing effects
+/// - Operational surfaces and restrained motion
 class ChatbotPage extends ConsumerStatefulWidget {
   const ChatbotPage({
     required this.vendedorCodes,
@@ -26,14 +26,14 @@ class ChatbotPage extends ConsumerStatefulWidget {
 
 class _ChatbotPageState extends ConsumerState<ChatbotPage>
     with SingleTickerProviderStateMixin {
-  static const _background = Color(0xFF10130F);
-  static const _surface = Color(0xFF171B17);
-  static const _surfaceRaised = Color(0xFF20251F);
-  static const _line = Color(0xFF334034);
-  static const _mint = Color(0xFF7DDFA6);
-  static const _cyan = Color(0xFF68D8E6);
-  static const _amber = Color(0xFFF4C95D);
-  static const _rose = Color(0xFFFF8A9A);
+  static const _background = AppTheme.inkSurface;
+  static const _surface = AppTheme.raisedSurface;
+  static const _surfaceRaised = AppTheme.softPanel;
+  static const _line = AppTheme.borderColor;
+  static const _mint = AppTheme.success;
+  static const _cyan = AppTheme.info;
+  static const _amber = AppTheme.accentAmber;
+  static const _rose = AppTheme.accentRose;
 
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -133,7 +133,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                   maxHeight: MediaQuery.of(context).size.height * 0.72,
                 ),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF0B1020),
+                  color: AppTheme.raisedSurface,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
                 ),
                 child: Column(
@@ -154,7 +154,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                         children: [
                           const Icon(
                             Icons.history_rounded,
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                           ),
                           const SizedBox(width: 10),
                           const Expanded(
@@ -182,7 +182,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     ),
                     Divider(
                       height: 1,
-                      color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                      color: AppTheme.info.withValues(alpha: 0.14),
                     ),
                     if (sessions.isEmpty)
                       Padding(
@@ -237,13 +237,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: isActive
-                                      ? AppTheme.neonBlue.withValues(alpha: 0.1)
+                                      ? AppTheme.info.withValues(alpha: 0.1)
                                       : Colors.white.withValues(alpha: 0.035),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color: isActive
-                                        ? AppTheme.neonBlue
-                                            .withValues(alpha: 0.36)
+                                        ? AppTheme.info.withValues(alpha: 0.36)
                                         : Colors.white.withValues(alpha: 0.08),
                                   ),
                                 ),
@@ -253,7 +252,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                       width: 38,
                                       height: 38,
                                       decoration: BoxDecoration(
-                                        color: AppTheme.neonBlue
+                                        color: AppTheme.info
                                             .withValues(alpha: 0.12),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -261,7 +260,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                         isActive
                                             ? Icons.mark_chat_read_outlined
                                             : Icons.chat_bubble_outline,
-                                        color: AppTheme.neonBlue,
+                                        color: AppTheme.info,
                                         size: 19,
                                       ),
                                     ),
@@ -361,16 +360,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
           ),
           Expanded(
             child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF151A14),
-                    Color(0xFF0C0F0C),
-                  ],
-                ),
-              ),
+              decoration: const BoxDecoration(color: _background),
               child: Column(
                 children: [
                   _buildCommandCenter(chatbotState, isJefe),
@@ -456,21 +446,16 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.neonBlue.withValues(alpha: 0.1),
-                    AppTheme.neonPurple.withValues(alpha: 0.05),
-                  ],
-                ),
+                color: AppTheme.softPanel.withValues(alpha: 0.82),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                  color: AppTheme.info.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, color: AppTheme.neonBlue, size: 18),
+                  Icon(icon, color: AppTheme.info, size: 18),
                   const SizedBox(width: 8),
                   Text(
                     label,
@@ -560,7 +545,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
               Tooltip(
                 message: 'Cobertura del asistente',
                 child: IconButton(
-                  onPressed: () => _sendQuery('que puedes hacer por pestanas'),
+                  onPressed: () => _sendQuery('que puedes hacer por pestañas'),
                   icon: const Icon(Icons.radar_outlined),
                   color: _cyan,
                   style: IconButton.styleFrom(
@@ -618,7 +603,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       (
         Icons.bolt_outlined,
         'Briefing',
-        'Resumen Glacius hoy, top clientes y cobros',
+        'Resumen Alertas hoy, top clientes y cobros',
       ),
       (
         Icons.manage_search_outlined,
@@ -633,7 +618,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       (
         Icons.flag_outlined,
         'Objetivo',
-        'Objetivo acumulado ultimos 3 meses',
+        'Objetivo acumulado últimos 3 meses',
       ),
       (
         Icons.euro_outlined,
@@ -724,19 +709,19 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
         Icons.route_outlined,
         'Ruta',
         'Mi ruta hoy y cobros del repartidor',
-        const Color(0xFFA6E36F),
+        AppTheme.accentMint,
       ),
       (
         Icons.payments_outlined,
         'Comisiones',
-        'Comision acumulada ultimos 3 meses',
+        'Comision acumulada últimos 3 meses',
         _amber,
       ),
       (
         Icons.flag_outlined,
         'Objetivos',
         'Objetivo acumulado enero a marzo',
-        const Color(0xFF9EA7FF),
+        AppTheme.accentIndigo,
       ),
       (
         Icons.picture_as_pdf_outlined,
@@ -746,21 +731,21 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       ),
       (
         Icons.ac_unit_outlined,
-        'Glacius',
-        'Resumen Glacius hoy',
-        const Color(0xFF70E2C8),
+        'Alertas',
+        'Resumen Alertas hoy',
+        AppTheme.info,
       ),
       (
         Icons.account_balance_wallet_outlined,
         'Bolsa',
         'Movimientos bolsa',
-        const Color(0xFFD7A8FF),
+        AppTheme.accentIndigo,
       ),
       (
         Icons.local_shipping_outlined,
         'Almacen',
         'Camiones y vehiculos hoy',
-        const Color(0xFFFFB26B),
+        AppTheme.accentAmber,
       ),
     ];
 
@@ -995,7 +980,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       message: 'Lanzar briefing comercial',
                       child: IconButton(
                         onPressed: () => _sendQuery(
-                          'Resumen Glacius hoy con top clientes, pedidos y cobros',
+                          'Resumen Alertas hoy con top clientes, pedidos y cobros',
                         ),
                         icon: const Icon(Icons.bolt_outlined),
                         color: _amber,
@@ -1059,13 +1044,13 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: () => _sendQuery(
-                          'Que puedes hacer por pestanas',
+                          'Que puedes hacer por pestañas',
                         ),
                         icon: const Icon(Icons.radar_outlined, size: 17),
                         label: const Text('Cobertura'),
                         style: FilledButton.styleFrom(
                           backgroundColor: _mint,
-                          foregroundColor: const Color(0xFF07110B),
+                          foregroundColor: AppTheme.inkSurface,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1129,7 +1114,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       (
         Icons.bolt_outlined,
         'Briefing',
-        'Resumen Glacius hoy con top clientes',
+        'Resumen Alertas hoy con top clientes',
         'Ventas, cobros y pedidos',
         _amber,
       ),
@@ -1138,14 +1123,14 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
         'Objetivos',
         'Objetivo acumulado de enero a marzo 2026',
         'Cumplimiento y familias',
-        const Color(0xFF9EA7FF),
+        AppTheme.accentIndigo,
       ),
       (
         Icons.route_outlined,
         'Rutero',
         'Mi ruta hoy y cobros del repartidor',
         'Entregas y cobros',
-        const Color(0xFFA6E36F),
+        AppTheme.accentMint,
       ),
     ];
 
@@ -1261,7 +1246,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
         Icons.route_outlined,
         'Rutero',
         'Rutas, entregas, albaranes y cobros',
-        const Color(0xFFA6E36F),
+        AppTheme.accentMint,
       ),
       (
         Icons.euro_outlined,
@@ -1273,7 +1258,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
         Icons.flag_outlined,
         'Objetivos',
         'Mes, acumulado, familias y desviaciones',
-        const Color(0xFF9EA7FF),
+        AppTheme.accentIndigo,
       ),
       (
         Icons.picture_as_pdf_outlined,
@@ -1283,21 +1268,21 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       ),
       (
         Icons.ac_unit_outlined,
-        'Glacius',
+        'Alertas',
         'Ventas, actividad, pedidos y cobros',
-        const Color(0xFF70E2C8),
+        AppTheme.info,
       ),
       (
         Icons.account_balance_wallet_outlined,
         'Bolsa',
         'Saldo, movimientos y contexto comercial',
-        const Color(0xFFD7A8FF),
+        AppTheme.accentIndigo,
       ),
       (
         Icons.local_shipping_outlined,
         'Almacen',
         'Camiones, carga, stock y vehiculos',
-        const Color(0xFFFFB26B),
+        AppTheme.accentAmber,
       ),
     ];
 
@@ -1306,7 +1291,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       children: [
         const _SectionLabel(
           icon: Icons.dashboard_customize_outlined,
-          label: 'Cobertura por pestanas',
+          label: 'Cobertura por pestañas',
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -1340,7 +1325,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       (
         Icons.flag_outlined,
         'Objetivos',
-        'Objetivo acumulado ultimos 3 meses.',
+        'Objetivo acumulado últimos 3 meses.',
       ),
       (
         Icons.picture_as_pdf_outlined,
@@ -1349,8 +1334,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       ),
       (
         Icons.ac_unit_outlined,
-        'Glacius',
-        'Resumen Glacius hoy y top clientes.',
+        'Alertas',
+        'Resumen Alertas hoy y top clientes.',
       ),
       (
         Icons.route_outlined,
@@ -1443,7 +1428,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           icon: Icons.flag_outlined,
                           label: 'Objetivo',
                           onTap: () => _sendQuery(
-                            'objetivo acumulado ultimos 3 meses',
+                            'objetivo acumulado últimos 3 meses',
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1451,7 +1436,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           icon: Icons.euro_outlined,
                           label: 'Comision',
                           onTap: () => _sendQuery(
-                            'mi comision acumulada ultimos 3 meses',
+                            'mi comision acumulada últimos 3 meses',
                           ),
                         ),
                       ],
@@ -1575,7 +1560,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           : Icons.send_rounded,
                       color: chatState.isLoading
                           ? Colors.white70
-                          : const Color(0xFF07110B),
+                          : AppTheme.inkSurface,
                     ),
                   ),
                 ),
@@ -1663,7 +1648,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF7DDFA6), size: 16),
+        Icon(icon, color: AppTheme.success, size: 16),
         const SizedBox(width: 7),
         Text(
           label.toUpperCase(),
@@ -1671,7 +1656,7 @@ class _SectionLabel extends StatelessWidget {
             color: Colors.grey.shade400,
             fontSize: 10.5,
             fontWeight: FontWeight.w800,
-            letterSpacing: 0.8,
+            letterSpacing: 0,
           ),
         ),
       ],
@@ -1698,7 +1683,7 @@ class _CapabilityCard extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 106),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF20251F).withValues(alpha: 0.74),
+        color: AppTheme.softPanel.withValues(alpha: 0.74),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: accent.withValues(alpha: 0.28)),
       ),
@@ -1761,9 +1746,9 @@ class _PromptTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
-          color: const Color(0xFF171B17).withValues(alpha: 0.78),
+          color: AppTheme.raisedSurface.withValues(alpha: 0.78),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF334034)),
+          border: Border.all(color: AppTheme.borderColor),
         ),
         child: Row(
           children: [
@@ -1771,10 +1756,10 @@ class _PromptTile extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF7DDFA6).withValues(alpha: 0.1),
+                color: AppTheme.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: const Color(0xFF7DDFA6), size: 17),
+              child: Icon(icon, color: AppTheme.success, size: 17),
             ),
             const SizedBox(width: 10),
             SizedBox(
@@ -1806,7 +1791,7 @@ class _PromptTile extends StatelessWidget {
             const SizedBox(width: 8),
             const Icon(
               Icons.arrow_forward_rounded,
-              color: Color(0xFF7DDFA6),
+              color: AppTheme.success,
               size: 17,
             ),
           ],
@@ -1894,7 +1879,7 @@ class _ComposerTool extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: AppTheme.neonBlue),
+            Icon(icon, size: 14, color: AppTheme.info),
             const SizedBox(width: 6),
             Text(
               label,

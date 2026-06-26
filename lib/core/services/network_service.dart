@@ -190,11 +190,17 @@ class NetworkService {
   /// Verifica si un servidor está saludable
   static Future<bool> _checkHealth(String baseUrl) async {
     try {
-      final url = Uri.parse('${baseUrl.replaceFirst('/api', '')}/api/health');
-      final response = await http.get(url).timeout(
-            const Duration(seconds: 3),
-            onTimeout: () => http.Response('Timeout', 408),
-          );
+      final cleanBaseUrl = baseUrl
+          .replaceFirst(RegExp(r'/api/health/?$'), '')
+          .replaceFirst(RegExp(r'/api/?$'), '');
+      final url = Uri.parse('$cleanBaseUrl/api/health');
+      final response = await http.get(
+        url,
+        headers: const {'User-Agent': 'GMP-SRE-HealthCheck/1.0'},
+      ).timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => http.Response('Timeout', 408),
+      );
 
       if (response.statusCode == 200) {
         final body = response.body.toLowerCase();

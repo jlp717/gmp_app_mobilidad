@@ -1085,21 +1085,21 @@ describe('DDD cobros route contracts', () => {
   test('GET /pending-summary/ALL clamps pagination and passes it to repository', async function () {
     mockCobrosRepo.getPendingSummary.mockResolvedValue({
       summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
-      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 },
+      pagination: { limit: 2000, page: 1, offset: 0, returnedDocuments: 0 },
     });
 
     const res = await request(makeApp(createCobrosRoutes(), { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true }))
       .get('/pending-summary/ALL')
-      .query({ limit: '999', page: '0', offset: '-5' });
+      .query({ limit: '9999', page: '0', offset: '-5' });
 
     expect(res.status).toBe(200);
     expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
       'ALL',
-      expect.objectContaining({ limit: 100, page: 1, offset: 0 }),
+      expect.objectContaining({ limit: 2000, page: 1, offset: 0 }),
     );
     expect(res.body).toMatchObject({
       success: true, summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
-      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 },
+      pagination: { limit: 2000, page: 1, offset: 0, returnedDocuments: 0 },
     });
   });
 
@@ -1121,6 +1121,40 @@ describe('DDD cobros route contracts', () => {
     );
     expect(res.body.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
     expect(res.body.summary.C001).toEqual({ nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
+  });
+
+  test('GET /pending-summary/ALL forwards document filters to repository', async function () {
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({
+      summary: {},
+      grandTotal: 0,
+      grandTotalVencido: 0,
+      clientCount: 0,
+      source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+    }))
+      .get('/pending-summary/ALL')
+      .query({
+        fechaDesde: '2026-06-01',
+        fechaHasta: '2026-06-30',
+        tipoDocumento: 'FACTURA',
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
+      'ALL',
+      expect.objectContaining({
+        fechaDesde: '2026-06-01',
+        fechaHasta: '2026-06-30',
+        tipoDocumento: 'COB',
+      }),
+    );
   });
 
   test('GET /pending-summary/:vendedorCode forwards manager visible vendorCodes', async () => {

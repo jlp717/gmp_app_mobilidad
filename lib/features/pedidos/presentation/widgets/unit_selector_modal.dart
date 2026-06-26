@@ -263,7 +263,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final netoUr = _netoUR();
 
     return Dialog(
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Padding(
@@ -277,7 +277,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               children: [
                 const Icon(
                   Icons.straighten,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   size: 22,
                 ),
                 const SizedBox(width: 8),
@@ -320,10 +320,10 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                  color: AppTheme.info.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: AppTheme.info.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -332,7 +332,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                         child: Text(
                           equiv,
                           style: const TextStyle(
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -342,7 +342,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       Text(
                         netoUr,
                         style: const TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -365,8 +365,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Material(
                   color: selected
-                      ? AppTheme.neonBlue.withValues(alpha: 0.15)
-                      : AppTheme.darkCard,
+                      ? AppTheme.info.withValues(alpha: 0.15)
+                      : AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(10),
                   child: InkWell(
                     onTap: () => setState(() {
@@ -382,9 +382,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: selected
-                              ? AppTheme.neonBlue
-                              : AppTheme.borderColor,
+                          color:
+                              selected ? AppTheme.info : AppTheme.borderColor,
                           width: selected ? 1.5 : 1,
                         ),
                       ),
@@ -394,8 +393,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             selected
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_off,
-                            color:
-                                selected ? AppTheme.neonBlue : Colors.white38,
+                            color: selected ? AppTheme.info : Colors.white38,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
@@ -433,14 +431,13 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color:
-                                    AppTheme.neonGreen.withValues(alpha: 0.1),
+                                color: AppTheme.success.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 stockStr,
                                 style: const TextStyle(
-                                  color: AppTheme.neonGreen,
+                                  color: AppTheme.success,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -483,7 +480,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 labelStyle:
                     const TextStyle(color: Colors.white54, fontSize: 13),
                 filled: true,
-                fillColor: AppTheme.darkCard,
+                fillColor: AppTheme.softPanel,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: AppTheme.borderColor),
@@ -495,7 +492,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide:
-                      const BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                      const BorderSide(color: AppTheme.info, width: 1.5),
                 ),
                 contentPadding:
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -559,8 +556,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonBlue,
-                        foregroundColor: AppTheme.darkBase,
+                        backgroundColor: AppTheme.info,
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),

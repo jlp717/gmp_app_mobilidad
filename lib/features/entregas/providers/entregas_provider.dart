@@ -366,17 +366,17 @@ class EntregasNotifier extends Notifier<EntregasState> {
     return EntregasState();
   }
 
-  void _debouncedLoad() {
+  void _debouncedLoad({bool forceRefresh = false}) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      cargarAlbaranesPendientes();
+      cargarAlbaranesPendientes(forceRefresh: forceRefresh);
     });
   }
 
-  void _immediateLoad() {
+  void _immediateLoad({bool forceRefresh = false}) {
     _debounceTimer?.cancel();
     _initialLoadDone = true;
-    cargarAlbaranesPendientes();
+    cargarAlbaranesPendientes(forceRefresh: forceRefresh);
   }
 
   void _cancelDebouncedLoad() {
@@ -392,21 +392,27 @@ class EntregasNotifier extends Notifier<EntregasState> {
     if (autoReload && (wasChanged || forceReload)) {
       state = state.copyWith(repartidorId: repartidorId);
       if (_initialLoadDone) {
-        _debouncedLoad();
+        _debouncedLoad(forceRefresh: forceReload);
       } else {
-        _immediateLoad();
+        _immediateLoad(forceRefresh: forceReload);
       }
     } else {
       state = state.copyWith(repartidorId: repartidorId);
     }
   }
 
-  void seleccionarFecha(DateTime fecha) {
+  void seleccionarFecha(
+    DateTime fecha, {
+    bool forceRefresh = false,
+    bool autoReload = true,
+  }) {
     state = state.copyWith(fechaSeleccionada: fecha);
+    if (!autoReload) return;
+
     if (_initialLoadDone) {
-      _debouncedLoad();
+      _debouncedLoad(forceRefresh: forceRefresh);
     } else {
-      _immediateLoad();
+      _immediateLoad(forceRefresh: forceRefresh);
     }
   }
 
@@ -445,7 +451,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _debouncedLoad();
   }
 
-  Future<void> cargarAlbaranesPendientes() async {
+  Future<void> cargarAlbaranesPendientes({bool forceRefresh = false}) async {
     if (state.repartidorId.isEmpty) return;
 
     final generation = ++_pendingLoadGeneration;
@@ -497,6 +503,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
           requestState.filterDocTipo,
         ].join(':'),
         cacheTTL: const Duration(minutes: 2),
+        forceRefresh: forceRefresh,
       );
 
       if (generation != _pendingLoadGeneration) return;

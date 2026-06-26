@@ -283,7 +283,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('$synced pedido(s) sincronizado(s)'),
-            backgroundColor: AppTheme.neonGreen,
+            backgroundColor: AppTheme.success,
           ),
         );
         await provider.loadOrders(
@@ -326,7 +326,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               duration: const Duration(seconds: 5),
               action: SnackBarAction(
                 label: 'Ver',
-                textColor: Colors.white,
+                textColor: AppTheme.textPrimary,
                 onPressed: () {
                   // El usuario ya está en la pantalla de pedidos; mostramos sus
                   // borradores cambiando al tab "Mis Pedidos".
@@ -357,7 +357,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Selecciona un cliente antes de anadir productos'),
+          content: Text('Selecciona un cliente antes de añadir productos'),
           backgroundColor: AppTheme.warning,
         ),
       );
@@ -387,7 +387,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Selecciona un cliente antes de anadir productos'),
+            content: Text('Selecciona un cliente antes de añadir productos'),
             backgroundColor: AppTheme.warning,
           ),
         );
@@ -675,7 +675,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         title: Text(
           'Pedidos',
           style: TextStyle(
-            color: Colors.white,
+            color: AppTheme.textPrimary,
             fontSize: Responsive.fontSize(context, small: 18, large: 22),
             fontWeight: FontWeight.bold,
           ),
@@ -693,10 +693,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                           ),
                         )
-                      : const Icon(Icons.refresh, color: AppTheme.neonBlue),
+                      : const Icon(Icons.refresh, color: AppTheme.info),
                   tooltip: 'Recargar pedidos',
                   onPressed: isLoading ? null : _refreshMisPedidos,
                 );
@@ -716,7 +716,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   IconButton(
                     icon: const Icon(
                       Icons.local_offer_outlined,
-                      color: AppTheme.neonPurple,
+                      color: AppTheme.accentIndigo,
                     ),
                     tooltip: 'Ver Promociones',
                     onPressed: () {
@@ -760,13 +760,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
-                        color: AppTheme.neonPurple,
+                        color: AppTheme.accentIndigo,
                         shape: BoxShape.circle,
                       ),
                       child: Text(
                         '$uniquePromoCodes',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -793,16 +793,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                             ? 'Borrador modificado...'
                             : '\u{1F4BE} ${prov.lastAutoSaved!.hour.toString().padLeft(2, '0')}:${prov.lastAutoSaved!.minute.toString().padLeft(2, '0')}',
                         style: TextStyle(
-                          color:
-                              prov.isDirty ? Colors.orange : AppTheme.neonGreen,
+                          color: prov.isDirty
+                              ? AppTheme.warning
+                              : AppTheme.success,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   IconButton(
-                    icon:
-                        const Icon(Icons.save_outlined, color: Colors.white70),
+                    icon: const Icon(Icons.save_outlined,
+                        color: AppTheme.textSecondary),
                     tooltip: 'Guardar como borrador manual',
                     onPressed: () async {
                       await prov.saveDraft(
@@ -812,7 +813,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Borrador manual guardado'),
-                            backgroundColor: AppTheme.neonBlue,
+                            backgroundColor: AppTheme.info,
                             duration: Duration(seconds: 2),
                           ),
                         );
@@ -832,7 +833,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 children: [
                   IconButton(
                     icon: const Icon(Icons.drafts_outlined,
-                        color: Colors.white70),
+                        color: AppTheme.textSecondary),
                     tooltip: 'Borradores guardados',
                     onPressed: () => _showDraftsDialog(prov),
                   ),
@@ -843,13 +844,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: const BoxDecoration(
-                          color: AppTheme.neonPurple,
+                          color: AppTheme.accentIndigo,
                           shape: BoxShape.circle,
                         ),
                         child: Text(
                           '$count',
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.textPrimary,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -865,36 +866,45 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           controller: _tabController,
           indicatorSize: TabBarIndicatorSize.tab,
           indicator: BoxDecoration(
-            color: AppTheme.neonBlue.withValues(alpha: 0.14),
+            color: AppTheme.info.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             border: Border.all(
-              color: AppTheme.neonBlue.withValues(alpha: 0.30),
+              color: AppTheme.info.withValues(alpha: 0.30),
             ),
           ),
-          labelColor: Colors.white,
+          labelColor: AppTheme.textPrimary,
           unselectedLabelColor: AppTheme.textSecondary,
-          labelStyle: const TextStyle(
-            fontSize: 12,
+          labelStyle: TextStyle(
+            fontSize: Responsive.isSmall(context) ? 11 : 12,
             fontWeight: FontWeight.w700,
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 12,
+          unselectedLabelStyle: TextStyle(
+            fontSize: Responsive.isSmall(context) ? 11 : 12,
             fontWeight: FontWeight.w500,
           ),
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           dividerColor: Colors.transparent,
-          tabs: const [
+          tabs: [
             Tab(
               height: 40,
-              text: 'Nuevo Pedido',
-              icon: Icon(Icons.add_circle_outline),
+              text: Responsive.isSmall(context) ? 'Nuevo' : 'Nuevo Pedido',
+              icon: const Icon(Icons.add_circle_outline),
             ),
-            Tab(height: 40, text: 'Mis Pedidos', icon: Icon(Icons.list_alt)),
-            Tab(height: 40, text: 'Evolución', icon: Icon(Icons.show_chart)),
             Tab(
-                height: 40,
-                text: 'Devoluciones',
-                icon: Icon(Icons.assignment_return_outlined)),
+              height: 40,
+              text: Responsive.isSmall(context) ? 'Pedidos' : 'Mis Pedidos',
+              icon: const Icon(Icons.list_alt),
+            ),
+            Tab(
+              height: 40,
+              text: Responsive.isSmall(context) ? 'Evol.' : 'Evolución',
+              icon: const Icon(Icons.show_chart),
+            ),
+            Tab(
+              height: 40,
+              text: Responsive.isSmall(context) ? 'Devol.' : 'Devoluciones',
+              icon: const Icon(Icons.assignment_return_outlined),
+            ),
           ],
         ),
       ),
@@ -949,9 +959,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: AppTheme.premiumPanel(
-                accentColor: provider.hasClient
-                    ? AppTheme.neonBlue
-                    : AppTheme.mutedPanel,
+                accentColor:
+                    provider.hasClient ? AppTheme.info : AppTheme.mutedPanel,
               ),
               child: _buildCatalogPanel(),
             ),
@@ -963,9 +972,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: AppTheme.premiumPanel(
-                accentColor: provider.hasLines
-                    ? AppTheme.neonGreen
-                    : AppTheme.accentAmber,
+                accentColor:
+                    provider.hasLines ? AppTheme.success : AppTheme.accentAmber,
               ),
               child: OrderSummaryWidget(
                 vendedorCode: _activeOrderVendedorCode,
@@ -1019,15 +1027,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: const TextStyle(
-        color: AppTheme.darkBase,
+        color: AppTheme.inkSurface,
         fontWeight: FontWeight.bold,
       ),
     );
 
     return Material(
-      color: AppTheme.neonBlue,
+      color: AppTheme.info,
       elevation: 6,
-      shadowColor: AppTheme.neonBlue.withValues(alpha: 0.28),
+      shadowColor: AppTheme.info.withValues(alpha: 0.28),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -1064,7 +1072,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             alignment: hasLines ? Alignment.centerLeft : Alignment.center,
             child: Icon(
               hasLines ? Icons.shopping_cart_outlined : Icons.receipt_outlined,
-              color: AppTheme.darkBase,
+              color: AppTheme.inkSurface,
               size: 24,
             ),
           ),
@@ -1080,9 +1088,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkBase,
+                  color: AppTheme.inkSurface,
                   border: Border.all(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     width: 1.5,
                   ),
                   borderRadius: BorderRadius.circular(9),
@@ -1094,7 +1102,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     cartLabel,
                     maxLines: 1,
                     style: const TextStyle(
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                       height: 1,
@@ -1113,7 +1121,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1146,24 +1154,25 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   children: [
                     Icon(
                       Icons.lock_person_outlined,
-                      color: Colors.white38,
+                      color: AppTheme.textTertiary,
                       size: 56,
                     ),
                     SizedBox(height: 12),
                     Text(
-                      'Selecciona un cliente para cargar catalogo, tarifas y promociones.',
+                      'Selecciona un cliente para cargar catálogo, tarifas y promociones.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppTheme.textSecondary,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     SizedBox(height: 6),
                     Text(
-                      'Sin cliente no se permite anadir articulos.',
+                      'Sin cliente no se permite añadir artículos.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                      style:
+                          TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1232,7 +1241,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         horizontal: padding.left,
         vertical: 8,
       ),
-      color: AppTheme.darkSurface,
+      color: AppTheme.raisedSurface,
       child: Row(
         children: [
           // Client selector
@@ -1299,11 +1308,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard,
+                  color: AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: provider.hasClient
-                        ? AppTheme.neonBlue
+                        ? AppTheme.info
                         : AppTheme.borderColor,
                   ),
                 ),
@@ -1316,8 +1325,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         Icon(
                           Icons.person_outline,
                           color: provider.hasClient
-                              ? AppTheme.neonBlue
-                              : Colors.white54,
+                              ? AppTheme.info
+                              : AppTheme.textSecondary,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
@@ -1328,8 +1337,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                 : 'Seleccionar cliente...',
                             style: TextStyle(
                               color: provider.hasClient
-                                  ? Colors.white
-                                  : Colors.white54,
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.textSecondary,
                               fontSize: Responsive.fontSize(
                                 context,
                                 small: 13,
@@ -1341,7 +1350,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         ),
                         const Icon(
                           Icons.chevron_right,
-                          color: Colors.white38,
+                          color: AppTheme.textTertiary,
                           size: 18,
                         ),
                       ],
@@ -1362,7 +1371,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                           _orderInfoChip(
                             Icons.format_list_numbered,
                             '${provider.lines.length} líneas',
-                            AppTheme.neonBlue,
+                            AppTheme.info,
                           ),
                           _orderInfoChip(
                             Icons.euro,
@@ -1371,7 +1380,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                   ? provider.totalConDescuento
                                   : provider.totalImporte,
                             ),
-                            AppTheme.neonGreen,
+                            AppTheme.success,
                           ),
                           if (provider.globalDiscountPct > 0)
                             _orderInfoChip(
@@ -1386,7 +1395,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                 : 'Sin líneas',
                             provider.hasLines
                                 ? const Color(0xFFF97316)
-                                : Colors.white38,
+                                : AppTheme.textTertiary,
                           ),
                         ],
                       ),
@@ -1448,7 +1457,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             Text(
               'Error al cargar productos',
               style: TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontSize: Responsive.fontSize(context, small: 14, large: 16),
               ),
             ),
@@ -1458,10 +1467,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 vendedorCodes: _vendedorCodes,
                 reset: true,
               ),
-              icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
+              icon: const Icon(Icons.refresh, color: AppTheme.info),
               label: const Text(
                 'Reintentar',
-                style: TextStyle(color: AppTheme.neonBlue),
+                style: TextStyle(color: AppTheme.info),
               ),
             ),
           ],
@@ -1475,12 +1484,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.inventory_2_outlined,
-                color: Colors.white38, size: 48),
+                color: AppTheme.textTertiary, size: 48),
             const SizedBox(height: 12),
             Text(
               'No se encontraron productos',
               style: TextStyle(
-                color: Colors.white54,
+                color: AppTheme.textSecondary,
                 fontSize: Responsive.fontSize(context, small: 14, large: 16),
               ),
             ),
@@ -1556,7 +1565,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           return const Padding(
             padding: EdgeInsets.all(16),
             child: Center(
-              child: CircularProgressIndicator(color: AppTheme.neonBlue),
+              child: CircularProgressIndicator(color: AppTheme.info),
             ),
           );
         }
@@ -1578,7 +1587,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 Text(
                   'Ya comprados',
                   style: TextStyle(
-                    color: Colors.white54,
+                    color: AppTheme.textSecondary,
                     fontSize:
                         Responsive.fontSize(context, small: 11, large: 12),
                     fontWeight: FontWeight.w600,
@@ -1715,7 +1724,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     content: Text(
                       err,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1739,7 +1748,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               messenger.showSnackBar(
                 SnackBar(
                   content: Text('+$fmtQty $unitLabel de ${product.name}'),
-                  backgroundColor: AppTheme.neonGreen,
+                  backgroundColor: AppTheme.success,
                   duration: const Duration(seconds: 1),
                 ),
               );
@@ -1763,7 +1772,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         child: Container(
           height: 80,
           decoration: BoxDecoration(
-            color: AppTheme.darkCard.withValues(alpha: 0.5),
+            color: AppTheme.softPanel.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(12),
           ),
         ),
@@ -1788,7 +1797,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               height: 32,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
+                color: AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.borderColor),
               ),
@@ -1801,7 +1810,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     size: 16,
                     color: AppTheme.textSecondary,
                   ),
-                  dropdownColor: AppTheme.surfaceColor,
+                  dropdownColor: AppTheme.softPanel,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppTheme.textPrimary,
@@ -1833,7 +1842,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
             ),
           ],
@@ -1875,13 +1884,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             Icon(
               Icons.person_search_outlined,
               size: 64,
-              color: Colors.white.withValues(alpha: 0.28),
+              color: AppTheme.textPrimary.withValues(alpha: 0.28),
             ),
             const SizedBox(height: 16),
             Text(
               'Selecciona un cliente',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.86),
+                color: AppTheme.textPrimary.withValues(alpha: 0.86),
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
@@ -1891,7 +1900,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               'La evolución muestra el historial de compras general del cliente.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.56),
+                color: AppTheme.textPrimary.withValues(alpha: 0.56),
                 fontSize: 13,
               ),
             ),
@@ -1921,7 +1930,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: AppTheme.neonBlue),
+            child: CircularProgressIndicator(color: AppTheme.info),
           );
         }
 
@@ -1940,8 +1949,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             .toList();
 
         return RefreshIndicator(
-          color: AppTheme.neonBlue,
-          backgroundColor: AppTheme.darkSurface,
+          color: AppTheme.info,
+          backgroundColor: AppTheme.raisedSurface,
           onRefresh: () => _refreshDevolucionesData(clientCode, vendorCodes),
           child: returns.isEmpty
               ? ListView(
@@ -1952,14 +1961,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     Icon(
                       Icons.assignment_return_outlined,
                       size: 72,
-                      color: Colors.white.withValues(alpha: 0.25),
+                      color: AppTheme.textPrimary.withValues(alpha: 0.25),
                     ),
                     const SizedBox(height: 18),
                     const Text(
                       'Sin devoluciones recientes',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1970,7 +1979,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       'ultimos tres anos.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.56),
+                        color: AppTheme.textPrimary.withValues(alpha: 0.56),
                         fontSize: 13,
                       ),
                     ),
@@ -2001,13 +2010,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64, color: Colors.white.withValues(alpha: 0.28)),
+            Icon(icon,
+                size: 64, color: AppTheme.textPrimary.withValues(alpha: 0.28)),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.86),
+                color: AppTheme.textPrimary.withValues(alpha: 0.86),
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
@@ -2017,7 +2027,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.56),
+                color: AppTheme.textPrimary.withValues(alpha: 0.56),
                 fontSize: 13,
               ),
             ),
@@ -2087,7 +2097,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           'No se pudieron cargar las devoluciones',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white,
+            color: AppTheme.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w700,
           ),
@@ -2097,7 +2107,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           error,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.58),
+            color: AppTheme.textPrimary.withValues(alpha: 0.58),
             fontSize: 12,
           ),
         ),
@@ -2126,7 +2136,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.error.withValues(alpha: 0.28)),
       ),
@@ -2150,7 +2160,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             child: _buildDevolucionesMetric(
               'Lineas',
               returns.length.toString(),
-              AppTheme.neonBlue,
+              AppTheme.info,
             ),
           ),
         ],
@@ -2194,7 +2204,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.error.withValues(alpha: 0.24)),
       ),
@@ -2226,7 +2236,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
@@ -2358,8 +2368,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         const Divider(color: AppTheme.borderColor, height: 1),
         Expanded(
           child: RefreshIndicator(
-            color: AppTheme.neonBlue,
-            backgroundColor: AppTheme.darkSurface,
+            color: AppTheme.info,
+            backgroundColor: AppTheme.raisedSurface,
             onRefresh: () async {
               await Future.wait([
                 provider.loadOrderStats(
@@ -2504,7 +2514,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Widget _buildOrdersList(PedidosProvider provider) {
     if (provider.isLoadingOrders) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.neonBlue),
+        child: CircularProgressIndicator(color: AppTheme.info),
       );
     }
     if (provider.orders.isEmpty) {
@@ -2625,7 +2635,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             content: Text(
               'Pedido #${order.numeroPedidoFormatted} clonado al carrito',
             ),
-            backgroundColor: AppTheme.neonBlue,
+            backgroundColor: AppTheme.info,
           ),
         );
       }
@@ -2670,27 +2680,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.check_circle_outline,
-                color: AppTheme.neonGreen, size: 22),
+            Icon(Icons.check_circle_outline, color: AppTheme.success, size: 22),
             SizedBox(width: 8),
-            Text('Pedido confirmado', style: TextStyle(color: Colors.white)),
+            Text('Pedido confirmado',
+                style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
         content: Text(
           orderNumber.isEmpty
               ? 'El pedido se ha confirmado y Mis Pedidos se ha actualizado.'
               : 'Pedido #$orderNumber confirmado. Mis Pedidos se ha actualizado.',
-          style: const TextStyle(color: Colors.white70),
+          style: const TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Cerrar', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cerrar',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           if (orderId != null)
             FilledButton.icon(
@@ -2727,7 +2737,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         content: Text(
           'Pedido #${order.numeroPedidoFormatted} duplicado al carrito',
         ),
-        backgroundColor: AppTheme.neonBlue,
+        backgroundColor: AppTheme.info,
       ),
     );
   }
@@ -2737,34 +2747,35 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
             Icon(
               Icons.check_circle_outline,
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
               size: 22,
             ),
             SizedBox(width: 8),
-            Text('Confirmar borrador', style: TextStyle(color: Colors.white)),
+            Text('Confirmar borrador',
+                style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
         content: Text(
           '¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
-          style: const TextStyle(color: Colors.white70),
+          style: const TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
               'Confirmar',
-              style: TextStyle(color: AppTheme.neonGreen),
+              style: TextStyle(color: AppTheme.success),
             ),
           ),
         ],
@@ -2789,7 +2800,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             content: Text(
               'Borrador #${order.numeroPedidoFormatted} cargado en el carrito. Confirma desde el carrito.',
             ),
-            backgroundColor: AppTheme.neonBlue,
+            backgroundColor: AppTheme.info,
           ),
         );
       } catch (e) {
@@ -2809,24 +2820,25 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
             SizedBox(width: 8),
-            Text('Eliminar borrador', style: TextStyle(color: Colors.white)),
+            Text('Eliminar borrador',
+                style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
         content: Text(
           '¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
-          style: const TextStyle(color: Colors.white70),
+          style: const TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),

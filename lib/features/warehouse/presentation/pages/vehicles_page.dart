@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 class VehiclesPage extends StatefulWidget {
   const VehiclesPage({super.key});
@@ -66,7 +67,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                       )
                     : RefreshIndicator(
                         onRefresh: _load,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         child: OptimizedListView(
                           padding: const EdgeInsets.all(12),
                           itemCount: _vehicles.length,
@@ -91,12 +92,13 @@ class _VehiclesPageState extends State<VehiclesPage> {
           Container(
             padding:
                 EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
-            decoration: BoxDecoration(
-              color: AppTheme.neonPurple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+            decoration: WarehouseUi.surface(
+              color: AppTheme.accentIndigo.withValues(alpha: 0.1),
+              borderColor: AppTheme.accentIndigo,
+              borderAlpha: 0.22,
             ),
             child: Icon(Icons.local_shipping_rounded,
-                color: AppTheme.neonPurple,
+                color: AppTheme.accentIndigo,
                 size: Responsive.iconSize(context, phone: 18, desktop: 22)),
           ),
           const SizedBox(width: 12),
@@ -107,17 +109,16 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 Text(
                   'FLOTA DE VEHICULOS',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize:
                         Responsive.fontSize(context, small: 13, large: 16),
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1,
+                    letterSpacing: 0,
                   ),
                 ),
                 Text(
                   '${_vehicles.length} vehiculos registrados',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4), fontSize: 11),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                 ),
               ],
             ),
@@ -129,15 +130,16 @@ class _VehiclesPageState extends State<VehiclesPage> {
 
   Widget _vehicleCard(VehicleConfig v) {
     final hasCustomInterior = v.interior.lengthCm > 0 && v.interior.widthCm > 0;
-    final accentColor = hasCustomInterior ? AppTheme.neonGreen : Colors.amber;
+    final accentColor = hasCustomInterior ? AppTheme.success : AppTheme.warning;
     final interior = v.interior;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accentColor.withValues(alpha: 0.1)),
+      decoration: WarehouseUi.surface(
+        color: AppTheme.raisedSurface,
+        borderColor: accentColor,
+        borderAlpha: 0.2,
+        radius: AppTheme.radiusLg,
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -151,9 +153,10 @@ class _VehiclesPageState extends State<VehiclesPage> {
               Container(
                 width: Responsive.value(context, phone: 56, desktop: 64),
                 height: Responsive.value(context, phone: 56, desktop: 64),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
+                decoration: WarehouseUi.surface(
+                  color: AppTheme.info.withValues(alpha: 0.08),
+                  borderColor: AppTheme.info,
+                  borderAlpha: 0.18,
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: v.imageUrl != null && v.imageUrl!.isNotEmpty
@@ -163,7 +166,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => const Icon(
                           Icons.local_shipping_rounded,
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.info,
                           size: 28,
                         ),
                         loadingBuilder: (_, child, progress) {
@@ -174,7 +177,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: AppTheme.neonBlue,
+                                color: AppTheme.info,
                               ),
                             ),
                           );
@@ -182,7 +185,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                       )
                     : const Icon(
                         Icons.local_shipping_rounded,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         size: 28,
                       ),
               ),
@@ -196,23 +199,21 @@ class _VehiclesPageState extends State<VehiclesPage> {
                       children: [
                         Text(v.code,
                             style: const TextStyle(
-                                color: Colors.white,
+                                color: AppTheme.textPrimary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700)),
                         const SizedBox(width: 8),
                         if (v.matricula.isNotEmpty)
                           Text(v.matricula,
                               style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.3),
-                                  fontSize: 11)),
+                                  color: AppTheme.textTertiary, fontSize: 11)),
                       ],
                     ),
                     if (v.description.isNotEmpty)
                       Text(
                         v.description,
                         style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 11),
+                            color: AppTheme.textSecondary, fontSize: 11),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -222,25 +223,24 @@ class _VehiclesPageState extends State<VehiclesPage> {
                         _miniKpi(
                             'Interior',
                             '${interior.lengthCm.toInt()}x${interior.widthCm.toInt()}x${interior.heightCm.toInt()} cm',
-                            AppTheme.neonBlue),
+                            AppTheme.info),
                         const SizedBox(width: 12),
                         _miniKpi(
                             'Carga',
                             '${v.maxPayloadKg.toStringAsFixed(0)} kg',
-                            AppTheme.neonGreen),
+                            AppTheme.success),
                         const SizedBox(width: 12),
                         _miniKpi(
                             'Vol.',
                             '${v.containerVolumeM3.toStringAsFixed(2)} m³',
-                            Colors.amber),
+                            AppTheme.warning),
                       ],
                     ),
                   ],
                 ),
               ),
               // Edit indicator
-              Icon(Icons.edit_rounded,
-                  color: Colors.white.withValues(alpha: 0.15), size: 18),
+              Icon(Icons.edit_rounded, color: AppTheme.textTertiary, size: 18),
             ],
           ),
         ),
@@ -256,8 +256,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
             style: TextStyle(
                 color: color, fontSize: 10, fontWeight: FontWeight.w700)),
         Text(label,
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.25), fontSize: 8)),
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 8)),
       ],
     );
   }
@@ -275,7 +274,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkCard,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
@@ -284,81 +283,92 @@ class _VehiclesPageState extends State<VehiclesPage> {
             16,
             Responsive.padding(ctx, small: 14, large: 20),
             MediaQuery.of(ctx).viewInsets.bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Configurar ${v.code}',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: Responsive.fontSize(ctx, small: 14, large: 16),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(v.description,
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
-            const SizedBox(height: 20),
-            Row(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height * 0.82,
+          ),
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(child: _field(largoC, 'Largo (cm)', Icons.straighten)),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: _field(anchoC, 'Ancho (cm)', Icons.width_normal)),
-                const SizedBox(width: 10),
-                Expanded(child: _field(altoC, 'Alto (cm)', Icons.height)),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.textTertiary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Configurar ${v.code}',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: Responsive.fontSize(ctx, small: 14, large: 16),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(v.description,
+                    style: TextStyle(
+                        color: AppTheme.textPrimary.withValues(alpha: 0.4),
+                        fontSize: 12)),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                        child: _field(largoC, 'Largo (cm)', Icons.straighten)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child:
+                            _field(anchoC, 'Ancho (cm)', Icons.width_normal)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _field(altoC, 'Alto (cm)', Icons.height)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _field(toleranciaC, 'Tolerancia exceso (%)', Icons.tune),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await WarehouseDataService.updateTruckConfig(
+                          vehicleCode: v.code,
+                          largoInteriorCm: double.tryParse(largoC.text),
+                          anchoInteriorCm: double.tryParse(anchoC.text),
+                          altoInteriorCm: double.tryParse(altoC.text),
+                          toleranciaExceso: double.tryParse(toleranciaC.text),
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _load();
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                                content: Text('Error: $e'),
+                                backgroundColor: AppTheme.error),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.save_rounded, size: 18),
+                    label: const Text('GUARDAR',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, letterSpacing: 0)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.info,
+                      foregroundColor: AppTheme.textPrimary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 12),
-            _field(toleranciaC, 'Tolerancia exceso (%)', Icons.tune),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  try {
-                    await WarehouseDataService.updateTruckConfig(
-                      vehicleCode: v.code,
-                      largoInteriorCm: double.tryParse(largoC.text),
-                      anchoInteriorCm: double.tryParse(anchoC.text),
-                      altoInteriorCm: double.tryParse(altoC.text),
-                      toleranciaExceso: double.tryParse(toleranciaC.text),
-                    );
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    _load();
-                  } catch (e) {
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.redAccent),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.save_rounded, size: 18),
-                label: const Text('GUARDAR',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700, letterSpacing: 1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-                  foregroundColor: AppTheme.neonBlue,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -368,14 +378,14 @@ class _VehiclesPageState extends State<VehiclesPage> {
     return TextField(
       controller: c,
       keyboardType: TextInputType.number,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         labelStyle:
-            TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
-        prefixIcon: Icon(icon, size: 18, color: Colors.white30),
+            const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+        prefixIcon: Icon(icon, size: 18, color: AppTheme.textTertiary),
         filled: true,
-        fillColor: AppTheme.darkBase,
+        fillColor: AppTheme.softPanel,
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide.none),

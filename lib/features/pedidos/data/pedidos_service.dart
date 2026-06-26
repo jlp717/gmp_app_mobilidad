@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
@@ -36,6 +37,15 @@ class Product {
     this.precioCosto = 0,
     this.codigoTarifaCliente = 1,
     this.precioTarifaCliente = 0,
+    this.precioClienteSource = '',
+    this.precioMinimoSource = '',
+    this.precioEspecialCliente = false,
+    this.permiteBajoMinimo = false,
+    this.precioEspecialMotivo = '',
+    this.precioMinimoBase = 0,
+    this.precioMinimoCalculado = 0,
+    this.costeFabricacion = 0,
+    this.margenObjetivoPct = 0,
     this.nameExt = '',
     this.familyName = '',
     this.prefamilia = '',
@@ -90,6 +100,17 @@ class Product {
           ? json['codigoTarifaCliente'] as int
           : int.tryParse(json['codigoTarifaCliente']?.toString() ?? '1') ?? 1,
       precioTarifaCliente: _toDouble(json['precioTarifaCliente']),
+      precioClienteSource:
+          (json['precioClienteSource'] ?? '').toString().trim(),
+      precioMinimoSource: (json['precioMinimoSource'] ?? '').toString().trim(),
+      precioEspecialCliente: _toBool(json['precioEspecialCliente']),
+      permiteBajoMinimo: _toBool(json['permiteBajoMinimo']),
+      precioEspecialMotivo:
+          (json['precioEspecialMotivo'] ?? '').toString().trim(),
+      precioMinimoBase: _toDouble(json['precioMinimoBase']),
+      precioMinimoCalculado: _toDouble(json['precioMinimoCalculado']),
+      costeFabricacion: _toDouble(json['costeFabricacion']),
+      margenObjetivoPct: _toDouble(json['margenObjetivoPct']),
       nameExt: (json['nameExt'] ?? '').toString().trim(),
       familyName: (json['familyName'] ?? '').toString().trim(),
       prefamilia: (json['prefamilia'] ?? '').toString().trim(),
@@ -152,6 +173,15 @@ class Product {
       precioCosto: precioCosto,
       codigoTarifaCliente: codigoTarifaCliente,
       precioTarifaCliente: precioTarifaCliente,
+      precioClienteSource: precioClienteSource,
+      precioMinimoSource: precioMinimoSource,
+      precioEspecialCliente: precioEspecialCliente,
+      permiteBajoMinimo: permiteBajoMinimo,
+      precioEspecialMotivo: precioEspecialMotivo,
+      precioMinimoBase: precioMinimoBase,
+      precioMinimoCalculado: precioMinimoCalculado,
+      costeFabricacion: costeFabricacion,
+      margenObjetivoPct: margenObjetivoPct,
       nameExt: nameExt,
       familyName: familyName,
       prefamilia: prefamilia,
@@ -203,6 +233,15 @@ class Product {
   final double precioCosto;
   final int codigoTarifaCliente;
   final double precioTarifaCliente;
+  final String precioClienteSource;
+  final String precioMinimoSource;
+  final bool precioEspecialCliente;
+  final bool permiteBajoMinimo;
+  final String precioEspecialMotivo;
+  final double precioMinimoBase;
+  final double precioMinimoCalculado;
+  final double costeFabricacion;
+  final double margenObjetivoPct;
   // Extended fields from ART table
   final String nameExt;
   final String familyName;
@@ -239,6 +278,9 @@ class Product {
   /// Best available price (client > tariff), never below minimum price.
   double get bestPrice {
     final raw = precioCliente > 0 ? precioCliente : precioTarifa1;
+    if (precioEspecialCliente && permiteBajoMinimo && precioCliente > 0) {
+      return raw;
+    }
     if (precioMinimo > 0 && raw < precioMinimo) return precioMinimo;
     return raw;
   }
@@ -398,10 +440,9 @@ class Product {
     return '';
   }
 
-  /// Price for given unit type.
-  /// bestPrice is always per CAJA (box).
-  double priceForUnit(String unit) {
-    final base = bestPrice;
+  /// Converts a box-level amount to the selected sale unit.
+  double amountForUnit(double base, String unit) {
+    if (base <= 0) return 0;
     if (unit == 'CAJAS') return base;
     final norm = _normalizedUnit;
 
@@ -423,15 +464,23 @@ class Product {
     return base;
   }
 
+  /// Price for given unit type.
+  /// bestPrice is always per CAJA (box).
+  double priceForUnit(String unit) => amountForUnit(bestPrice, unit);
+
+  /// Client tariff/reference price expressed in the selected sale unit.
+  double clientTariffForUnit(String unit) {
+    final base = precioTarifaCliente > 0 ? precioTarifaCliente : precioCliente;
+    return amountForUnit(base, unit);
+  }
+
+  /// Catalog tariff expressed in the selected sale unit.
+  double catalogTariffForUnit(String unit) =>
+      amountForUnit(precioTarifa1, unit);
+
   /// Minimum allowed price expressed in the selected sale unit.
   /// precioMinimo is stored as a box-level value in the backend.
-  double minimumPriceForUnit(String unit) {
-    if (precioMinimo <= 0) return 0;
-    if (unit == 'CAJAS') return precioMinimo;
-    final qtyPerBox = quantityPerBoxForUnit(unit);
-    if (qtyPerBox <= 0) return precioMinimo;
-    return precioMinimo / qtyPerBox;
-  }
+  double minimumPriceForUnit(String unit) => amountForUnit(precioMinimo, unit);
 
   /// Cost expressed in the selected sale unit.
   ///
@@ -442,11 +491,7 @@ class Product {
     final base = precioCosto > 0
         ? precioCosto
         : (precioMinimo > 0 ? precioMinimo * 0.7 : precioTarifa1 * 0.7);
-    if (base <= 0) return 0;
-    if (unit == 'CAJAS') return base;
-    final qtyPerBox = quantityPerBoxForUnit(unit);
-    if (qtyPerBox <= 0) return base;
-    return base / qtyPerBox;
+    return amountForUnit(base, unit);
   }
 
   /// Stock available expressed in the given unit type
@@ -898,6 +943,10 @@ class OrderLine {
     this.precioTarifa = 0,
     this.precioTarifaCliente = 0,
     this.precioMinimo = 0,
+    this.precioClienteSource = '',
+    this.precioMinimoSource = '',
+    this.precioEspecialCliente = false,
+    this.permiteBajoMinimo = false,
     this.importeVenta = 0,
     this.importeCosto = 0,
     this.importeMargen = 0,
@@ -941,6 +990,20 @@ class OrderLine {
       precioTarifaCliente:
           _toDouble(json['precioTarifaCliente'] ?? json['PRECIOTARIFACLIENTE']),
       precioMinimo: _toDouble(json['precioMinimo'] ?? json['PRECIOMINIMO']),
+      precioClienteSource:
+          (json['precioClienteSource'] ?? json['PRECIOCLIENTESOURCE'] ?? '')
+              .toString()
+              .trim(),
+      precioMinimoSource:
+          (json['precioMinimoSource'] ?? json['PRECIOMINIMOSOURCE'] ?? '')
+              .toString()
+              .trim(),
+      precioEspecialCliente: _toBool(
+        json['precioEspecialCliente'] ?? json['PRECIOESPECIALCLIENTE'],
+      ),
+      permiteBajoMinimo: _toBool(
+        json['permiteBajoMinimo'] ?? json['PERMITEBAJOMINIMO'],
+      ),
       importeVenta: _toDouble(json['importeVenta'] ?? json['IMPORTEVENTA']),
       importeCosto: _toDouble(json['importeCosto'] ?? json['IMPORTECOSTO']),
       importeMargen: _toDouble(json['importeMargen'] ?? json['IMPORTEMARGEN']),
@@ -986,6 +1049,10 @@ class OrderLine {
   double precioTarifa;
   double precioTarifaCliente;
   double precioMinimo;
+  String precioClienteSource;
+  String precioMinimoSource;
+  bool precioEspecialCliente;
+  bool permiteBajoMinimo;
   double importeVenta;
   double importeCosto;
   double importeMargen;
@@ -1014,6 +1081,12 @@ class OrderLine {
         'precioTarifa': precioTarifa,
         'precioTarifaCliente': precioTarifaCliente,
         'precioMinimo': precioMinimo,
+        if (precioClienteSource.isNotEmpty)
+          'precioClienteSource': precioClienteSource,
+        if (precioMinimoSource.isNotEmpty)
+          'precioMinimoSource': precioMinimoSource,
+        if (precioEspecialCliente) 'precioEspecialCliente': true,
+        if (permiteBajoMinimo) 'permiteBajoMinimo': true,
         'codigoIva': codigoIva,
         'ivaRate': ivaRate,
         'claseLinea': claseLinea,
@@ -1043,11 +1116,14 @@ class OrderLine {
   }
 
   OrderBolsaImpact get estimatedBolsaImpact {
-    if (precioMinimo <= 0 || billingQuantity <= 0) {
+    final referencePrice = precioTarifaCliente > 0
+        ? precioTarifaCliente
+        : (precioTarifa > 0 ? precioTarifa : precioMinimo);
+    if (referencePrice <= 0 || billingQuantity <= 0) {
       return const OrderBolsaImpact();
     }
     final diff = double.parse(
-      ((precioVenta - precioMinimo) * billingQuantity).toStringAsFixed(2),
+      ((precioVenta - referencePrice) * billingQuantity).toStringAsFixed(2),
     );
     if (diff > 0) {
       return OrderBolsaImpact(
@@ -1232,6 +1308,10 @@ class OrderSummary {
   }
 
   static bool? _parseBolsaGenerada(Map<String, dynamic> json) {
+    if (json['bolsaNeto'] != null &&
+        _toDouble(json['bolsaNeto']).abs() > 0.0001) {
+      return true;
+    }
     if (json['bolsaGenerada'] == true) return true;
     if (json['bolsaGenerada'] == false) return false;
     final summary = json['bolsaSummary'];
@@ -1641,6 +1721,7 @@ class PedidosService {
     int limit = 50,
     int offset = 0,
     bool forceRefresh = false,
+    CancelToken? cancelToken,
   }) async {
     final params = <String, dynamic>{
       'vendedorCodes': vendedorCodes,
@@ -1678,6 +1759,7 @@ class PedidosService {
         cacheTTL: const Duration(minutes: 5),
         forceRefresh: forceRefresh,
         maxStale: const Duration(minutes: 5),
+        cancelToken: cancelToken,
       );
       final list = response['products'] as List? ?? [];
       return list
@@ -1693,6 +1775,7 @@ class PedidosService {
     String code, {
     String? clientCode,
     bool includeIva = false,
+    CancelToken? cancelToken,
   }) async {
     final trimmedCode = code.trim();
     if (trimmedCode.isEmpty) {
@@ -1710,6 +1793,7 @@ class PedidosService {
             'pedidos:detail:$trimmedCode:${clientCode ?? ''}:${includeIva ? 'iva' : 'base'}',
         cacheTTL: const Duration(minutes: 10),
         maxStale: const Duration(minutes: 5),
+        cancelToken: cancelToken,
       );
       final detail = ProductDetail.fromJson(response);
       // Debug: trace if critical fields arrive as zeros
@@ -2023,6 +2107,19 @@ class PedidosService {
     }
   }
 
+  static Future<List<int>> downloadAlbaranPdfBytes({
+    required int ejercicio,
+    required String serie,
+    required int terminal,
+    required int numero,
+  }) async {
+    final safeSerie = Uri.encodeComponent(serie.trim());
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    return ApiClient.getBytes(
+      '/repartidor/document/albaran/$ejercicio/$safeSerie/$terminal/$numero/pdf?preview=true&_t=$ts',
+    );
+  }
+
   static Future<OrderDetail> getOrderDetail(
     int orderId, {
     bool forceRefresh = false,
@@ -2082,8 +2179,7 @@ class PedidosService {
         data: line.toJson(),
         syncType: 'add_line',
       );
-      CacheService.invalidate('pedidos:order:$orderId');
-      CacheService.invalidateByPrefix('pedidos:orders:');
+      await invalidateOrderMutationCaches(orderId: orderId);
     } catch (e) {
       _debugLog('[PedidosService] Error addLine: $e');
       rethrow;
@@ -2101,8 +2197,7 @@ class PedidosService {
         data: data,
         syncType: 'update_line',
       );
-      CacheService.invalidate('pedidos:order:$orderId');
-      CacheService.invalidateByPrefix('pedidos:orders:');
+      await invalidateOrderMutationCaches(orderId: orderId);
     } catch (e) {
       _debugLog('[PedidosService] Error updateLine: $e');
       rethrow;
@@ -2115,8 +2210,7 @@ class PedidosService {
         '$_base/$orderId/lines/$lineId',
         syncType: 'delete_line',
       );
-      CacheService.invalidate('pedidos:order:$orderId');
-      CacheService.invalidateByPrefix('pedidos:orders:');
+      await invalidateOrderMutationCaches(orderId: orderId);
     } catch (e) {
       _debugLog('[PedidosService] Error deleteLine: $e');
       rethrow;

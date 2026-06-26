@@ -57,14 +57,14 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppTheme.inkSurface,
         body: Center(child: ModernLoading(message: 'Analizando evolución...')),
       );
     }
 
     if (_error != null) {
       return Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppTheme.inkSurface,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -86,7 +86,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     final topProducts = (_data?['topProducts'] as List? ?? []);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppTheme.inkSurface,
       body: SingleChildScrollView(
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
@@ -99,7 +99,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
             const SizedBox(height: 24),
             Text('Productos Top (Ventas)',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold, color: Colors.white)),
+                    fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
             const SizedBox(height: 12),
             _buildTopProducts(topProducts),
           ],
@@ -123,7 +123,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
             title: 'Ventas Anuales',
             value: CurrencyFormatter.formatWhole(totalYear),
             icon: Icons.analytics,
-            color: AppTheme.neonBlue,
+            color: AppTheme.info,
           ),
         ),
         const SizedBox(width: 12),
@@ -162,12 +162,16 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     return Container(
       height: 250,
       padding: const EdgeInsets.all(16),
-      decoration: AppTheme.glassMorphism(),
+      decoration: _panelDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Evolución Mensual',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              )),
           const SizedBox(height: 20),
           Expanded(
             child: LineChart(
@@ -197,20 +201,13 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
                   LineChartBarData(
                     spots: spots,
                     isCurved: true,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     barWidth: 4,
                     isStrokeCapRound: true,
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.neonBlue.withValues(alpha: 0.3),
-                          AppTheme.neonBlue.withValues(alpha: 0)
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
+                      color: AppTheme.info.withValues(alpha: 0.12),
                     ),
                   ),
                 ],
@@ -226,7 +223,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     if (topProducts.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(20),
-        decoration: AppTheme.glassMorphism(),
+        decoration: _panelDecoration(),
         child: const Center(
             child: Text('No hay datos de productos',
                 style: TextStyle(color: AppTheme.textSecondary))),
@@ -258,7 +255,7 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: AppTheme.glassMorphism(),
+      decoration: _panelDecoration(accentColor: color),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -294,22 +291,26 @@ class _ProductTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: AppTheme.glassMorphism(),
+      decoration: _panelDecoration(),
       child: ListTile(
         leading: Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppTheme.neonPurple.withValues(alpha: 0.1),
+            color: AppTheme.accentIndigo.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(Icons.inventory_2,
-              color: AppTheme.neonPurple, size: 20),
+              color: AppTheme.accentIndigo, size: 20),
         ),
         title: Text(product['name'] ?? 'Producto',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            )),
         subtitle: Text('Cód: ${product['code']} • ${product['totalUnits']} uds',
             style:
                 const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
@@ -317,8 +318,18 @@ class _ProductTile extends StatelessWidget {
             CurrencyFormatter.formatWhole(
                 (product['totalSales'] as num).toDouble()),
             style: const TextStyle(
-                fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                fontWeight: FontWeight.bold, color: AppTheme.success)),
       ),
     );
   }
+}
+
+BoxDecoration _panelDecoration({Color? accentColor}) {
+  return BoxDecoration(
+    color: AppTheme.raisedSurface,
+    borderRadius: BorderRadius.circular(8),
+    border: Border.all(
+      color: (accentColor ?? AppTheme.borderColor).withValues(alpha: 0.8),
+    ),
+  );
 }

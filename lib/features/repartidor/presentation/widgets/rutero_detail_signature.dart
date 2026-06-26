@@ -1,7 +1,4 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:signature/signature.dart';
@@ -26,7 +23,7 @@ class RuteroDetailSignature extends StatelessWidget {
           children: [
             const Row(
               children: [
-                Icon(Icons.draw, color: AppTheme.neonBlue, size: 20),
+                Icon(Icons.draw, color: AppTheme.info, size: 20),
                 SizedBox(width: 8),
                 Text(
                   'FIRMA DEL CLIENTE *',
@@ -104,56 +101,39 @@ class RuteroDetailSignaturePanel extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 24),
-        Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppTheme.neonBlue, AppTheme.neonCyan],
+        ElevatedButton(
+          onPressed: isSubmitting ? null : onSubmit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.success,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
             ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.neonBlue.withValues(alpha: 0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
-          child: ElevatedButton(
-            onPressed: isSubmitting ? null : onSubmit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              foregroundColor: AppTheme.darkBase,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: isSubmitting
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.darkBase,
-                    ),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle, size: 24),
-                      SizedBox(width: 12),
-                      Text(
-                        'CONFIRMAR ENTREGA',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
+          child: isSubmitting
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
                   ),
-          ),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, size: 24),
+                    SizedBox(width: 12),
+                    Text(
+                      'CONFIRMAR ENTREGA',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ],
     );

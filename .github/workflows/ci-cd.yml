@@ -5,9 +5,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop, test, pre]
+    branches: ['**']
   pull_request:
-    branches: [main, develop, test, pre]
+    branches: ['**']
   workflow_dispatch:
     inputs:
       skip_tests:
@@ -21,7 +21,7 @@ on:
 
 env:
   FLUTTER_VERSION: '3.35.6'
-  NODE_VERSION: '22'
+  NODE_VERSION: '20'
   JAVA_VERSION: '17'
   # Allow Node 20 actions to run on their native runtime (compat mode after Node 20 deprecation)
   ACTIONS_ALLOW_USE_OF_NODE20: 'true'
@@ -126,15 +126,16 @@ jobs:
             ${{ runner.os }}-flutter-pub-
 
       - name: Flutter format check
-        run: dart format --set-exit-if-changed lib test || true
-        continue-on-error: true
+        run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Flutter analyze
         id: analyze
         run: |
-          # Run analyze and capture output
           mkdir -p /tmp/ci-artifacts
-          OUTPUT=$(flutter analyze 2>&1 || true)
+          set +e
+          OUTPUT=$(flutter analyze --no-fatal-infos 2>&1)
+          ANALYZE_STATUS=$?
+          set -e
           echo "$OUTPUT"
           
           # Save full output for self-heal workflow
@@ -148,9 +149,9 @@ jobs:
           echo "warning_count=$WARNING_COUNT" >> $GITHUB_OUTPUT
           
           # Only fail on actual errors, not infos/warnings
-          if [ "$ERROR_COUNT" -gt 0 ]; then
+          if [ "$ANALYZE_STATUS" -ne 0 ] || [ "$ERROR_COUNT" -gt 0 ]; then
             echo "exit_code=1" >> $GITHUB_OUTPUT
-            echo "::error::Found $ERROR_COUNT error(s) in Flutter code"
+            echo "::error::Flutter analyze failed with $ERROR_COUNT error(s)"
             # Extract error locations for rapid diagnosis
             echo "$OUTPUT" | grep "error -" | head -10 | sed 's/^/  ::error file=/'
             exit 1
@@ -184,8 +185,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Backend dependencies
-        run: |
-          cd backend && npm ci
+        working-directory: backend
+        run: npm ci
 
       - name: Backend lint
         id: lint
@@ -194,13 +195,17 @@ jobs:
           cd backend
           
           # ESLint
-          LINT_OUTPUT=$(npm run lint --if-present 2>&1 || true)
+          set +e
+          LINT_OUTPUT=$(npm run lint --if-present 2>&1)
+          LINT_STATUS=$?
           echo "::group::ESLint output"
           echo "$LINT_OUTPUT"
           echo "::endgroup::"
           
           # TypeScript check
-          TSC_OUTPUT=$(npx tsc --noEmit 2>&1 || true)
+          TSC_OUTPUT=$(npx tsc --noEmit 2>&1)
+          TSC_STATUS=$?
+          set -e
           echo "::group::TypeScript output"
           echo "$TSC_OUTPUT"
           echo "::endgroup::"
@@ -209,12 +214,13 @@ jobs:
           echo "$LINT_OUTPUT" > /tmp/ci-artifacts/eslint.log
           echo "$TSC_OUTPUT" > /tmp/ci-artifacts/tsc.log
           
-          # Count TSC errors
+          # Count errors
           TSC_ERRORS=$(echo "$TSC_OUTPUT" | grep -c "error TS" || echo "0")
-          if [ "$TSC_ERRORS" -gt 0 ]; then
+          if [ "$LINT_STATUS" -ne 0 ] || [ "$TSC_STATUS" -ne 0 ] || [ "$TSC_ERRORS" -gt 0 ]; then
             echo "exit_code=1" >> $GITHUB_OUTPUT
             echo "error_count=$TSC_ERRORS" >> $GITHUB_OUTPUT
-            echo "::warning::Found $TSC_ERRORS TypeScript error(s)"
+            echo "::error::Backend lint/typecheck failed"
+            exit 1
           else
             echo "exit_code=0" >> $GITHUB_OUTPUT
             echo "error_count=0" >> $GITHUB_OUTPUT
@@ -244,20 +250,24 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Backend dependencies
-        run: cd backend && npm ci
+        working-directory: backend
+        run: npm ci
 
       - name: Backend tests
         id: test
         run: |
           mkdir -p /tmp/ci-artifacts
           cd backend
-          RESULT=$(npx jest --passWithNoTests --coverage --silent 2>&1 || echo "FAILED")
+          set +e
+          RESULT=$(npm run test:ci -- --coverage --silent 2>&1)
+          TEST_STATUS=$?
+          set -e
           echo "$RESULT"
           
           # Save for self-heal workflow
           echo "$RESULT" > /tmp/ci-artifacts/jest.log
           
-          if echo "$RESULT" | grep -q "Test Suites:"; then
+          if [ "$TEST_STATUS" -eq 0 ]; then
             echo "result=passed" >> $GITHUB_OUTPUT
           else
             echo "result=failed" >> $GITHUB_OUTPUT
@@ -370,7 +380,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Backend dependencies
-        run: cd backend && npm ci
+        working-directory: backend
+        run: npm ci
 
       - name: npm audit
         id: scan
@@ -627,12 +638,20 @@ jobs:
     timeout-minutes: 5
     needs: [build-android-release]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: android-release-${{ github.sha }}
+          path: build/app/outputs
 
       - name: Get current version
         id: version
@@ -644,8 +663,12 @@ jobs:
       - name: Create git tag
         run: |
           TAG="v${{ steps.version.outputs.current }}"
-          git tag "$TAG" || true
-          git push origin "$TAG" || true
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally"
+          else
+            git tag "$TAG"
+          fi
+          git push origin "$TAG"
           echo "Created tag: $TAG"
 
       - name: Create release notes
@@ -662,8 +685,8 @@ jobs:
           body_path: release-notes.md
           draft: false
           files: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
+            build/app/outputs/**/*.apk
+            build/app/outputs/**/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -746,7 +769,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "# Reproduce locally:" >> $GITHUB_STEP_SUMMARY
-          echo "git pull && cd backend && npm ci && npx jest" >> $GITHUB_STEP_SUMMARY
+          echo "git pull && cd backend && npm ci && npm run test:ci" >> $GITHUB_STEP_SUMMARY
           echo "flutter analyze && flutter test" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

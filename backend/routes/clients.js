@@ -679,7 +679,7 @@ router.get('/:code', verifyToken, async (req, res) => {
     const vendorCode = vendedorCodes ? vendedorCodes.split(',')[0]?.trim() : null;
     const clientDays = getClientDays(vendorCode, clientCode);
 
-    logger.info(`[CLIENT ${clientCode}] phones: ${JSON.stringify(phones)}, editableNotes: ${JSON.stringify(editableNotes)}, days: ${JSON.stringify(clientDays)}`);
+    logger.info(`[CLIENT ${safeClientCode}] detail loaded phoneCount=${phones.length} notesCount=${editableNotes.length} hasDays=${Boolean(clientDays)}`);
 
     res.json({
       client: {

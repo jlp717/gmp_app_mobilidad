@@ -47,7 +47,7 @@ class _ChatTypingDotsState extends State<ChatTypingDots>
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: AppColors.neonBlue.withValues(alpha: 0.85),
+                    color: AppColors.info.withValues(alpha: 0.85),
                     shape: BoxShape.circle,
                   ),
                 ),

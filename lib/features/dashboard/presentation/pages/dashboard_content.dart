@@ -150,7 +150,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final result = await showDialog<FiFilterState>(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         child: Container(
           padding: const EdgeInsets.all(16),
           constraints: const BoxConstraints(maxWidth: 400, maxHeight: 400),
@@ -160,7 +160,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.filter_alt, color: AppTheme.neonBlue),
+                  const Icon(Icons.filter_alt, color: AppTheme.info),
                   const SizedBox(width: 8),
                   const Text('Filtros de Producto',
                       style:
@@ -307,7 +307,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
   // REMOVED: _openFamilyFilter - replaced by _openFiFiltersDialog above
 
-  Future<void> _fetchAllData() async {
+  Future<void> _fetchAllData({bool forceRefresh = false}) async {
     if (!mounted) return;
     final generation = ++_loadGeneration;
     setState(() {
@@ -370,6 +370,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           queryParameters: params,
           cacheKey: 'dash_matrix_${_cacheKeyFromParams(params)}_v2',
           cacheTTL: const Duration(minutes: 60),
+          forceRefresh: forceRefresh,
         ),
         ApiClient.get(
           '/dashboard/metrics',
@@ -377,6 +378,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           cacheKey: 'dash_metrics_${_cacheKeyFromParams(params)}',
           cacheTTL: const Duration(minutes: 30),
           receiveTimeout: const Duration(seconds: 20),
+          forceRefresh: forceRefresh,
         ),
       ]);
 
@@ -530,9 +532,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final isJefeVentas = ref.watch(authProvider).value?.isDirector ?? false;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: RefreshIndicator(
-        onRefresh: _fetchAllData,
+        onRefresh: () => _fetchAllData(forceRefresh: true),
         child: SingleChildScrollView(
           padding:
               EdgeInsets.zero, // Zero padding because Header is top-full-width
@@ -541,11 +543,11 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             children: [
               // Smart Sync Header
               SmartSyncHeader(
-                title: 'Panel de Control',
-                subtitle: 'Visión General del Negocio',
+                title: 'Actividad comercial',
+                subtitle: 'Ventas, clientes y evolución del periodo',
                 lastSync: _lastFetchTime,
                 isLoading: _isLoading,
-                onSync: _fetchAllData,
+                onSync: () => _fetchAllData(forceRefresh: true),
               ),
 
               Padding(
@@ -571,7 +573,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                       _buildErrorWidget()
                     else ...[
                       if (_isLoading)
-                        const LinearProgressIndicator(color: AppTheme.neonBlue),
+                        const LinearProgressIndicator(color: AppTheme.info),
                       _buildKPISection(),
                       const SizedBox(height: 16),
                       // Chart Type Toggle
@@ -602,8 +604,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppTheme.neonBlue),
+                                        strokeWidth: 2, color: AppTheme.info),
                                   ),
                                 ),
                               ),
@@ -627,9 +628,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final small = Responsive.isSmall(context);
     return Row(
       children: [
-        Icon(Icons.dashboard, color: AppTheme.neonBlue, size: small ? 22 : 28),
+        Icon(Icons.dashboard, color: AppTheme.info, size: small ? 22 : 28),
         SizedBox(width: small ? 8 : 12),
-        Text('Panel de Control',
+        Text('Actividad comercial',
             style: TextStyle(
                 color: Colors.white,
                 fontSize: small ? 16 : 20,
@@ -637,7 +638,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         const Spacer(),
         IconButton(
           icon: const Icon(Icons.cleaning_services_outlined,
-              color: AppTheme.neonBlue),
+              color: AppTheme.info),
           onPressed: _resetFilters,
           tooltip: 'Resetear Filtros',
         ),
@@ -670,7 +671,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   isExpanded: true,
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: AppTheme.surfaceColor,
+                    fillColor: AppTheme.raisedSurface,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -679,17 +680,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
                             color: _selectedVendedor != null
-                                ? AppTheme.neonBlue
+                                ? AppTheme.info
                                 : Colors.transparent)),
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                        borderSide: const BorderSide(color: AppTheme.info)),
                     prefixIcon: const Icon(Icons.person,
-                        color: AppTheme.neonBlue, size: 20),
+                        color: AppTheme.info, size: 20),
                   ),
-                  dropdownColor: AppTheme.darkCard,
-                  icon: const Icon(Icons.arrow_drop_down,
-                      color: AppTheme.neonBlue),
+                  dropdownColor: AppTheme.raisedSurface,
+                  icon: const Icon(Icons.arrow_drop_down, color: AppTheme.info),
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   items: [
                     const DropdownMenuItem<String>(
@@ -722,18 +722,18 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     height: 44,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
+                      color: AppTheme.raisedSurface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: _selectedClientCodes.isNotEmpty
-                              ? AppTheme.neonPurple
+                              ? AppTheme.accentIndigo
                               : Colors.transparent),
                     ),
                     child: Row(
                       children: [
                         Icon(Icons.people_alt,
                             color: _selectedClientCodes.isNotEmpty
-                                ? AppTheme.neonPurple
+                                ? AppTheme.accentIndigo
                                 : AppTheme.textSecondary,
                             size: 18),
                         const SizedBox(width: 8),
@@ -767,18 +767,18 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     height: 44,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
+                      color: AppTheme.raisedSurface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: _fiFilters.isNotEmpty
-                              ? AppTheme.neonBlue
+                              ? AppTheme.info
                               : Colors.transparent),
                     ),
                     child: Row(
                       children: [
                         Icon(Icons.filter_alt,
                             color: _fiFilters.isNotEmpty
-                                ? AppTheme.neonBlue
+                                ? AppTheme.info
                                 : AppTheme.textSecondary,
                             size: 18),
                         const SizedBox(width: 8),
@@ -827,18 +827,18 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     height: 44,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
+                      color: AppTheme.raisedSurface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: _selectedProductCodes.isNotEmpty
-                              ? AppTheme.neonPurple
+                              ? AppTheme.accentIndigo
                               : Colors.transparent),
                     ),
                     child: Row(
                       children: [
                         Icon(Icons.inventory_2,
                             color: _selectedProductCodes.isNotEmpty
-                                ? AppTheme.neonPurple
+                                ? AppTheme.accentIndigo
                                 : AppTheme.textSecondary,
                             size: 18),
                         const SizedBox(width: 8),
@@ -935,18 +935,18 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.neonBlue.withValues(alpha: 0.15),
+        color: AppTheme.info.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.4)),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppTheme.neonBlue),
+          Icon(icon, size: 14, color: AppTheme.info),
           const SizedBox(width: 4),
           Text('$label:',
               style: const TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 11,
                   fontWeight: FontWeight.bold)),
           const SizedBox(width: 4),
@@ -967,22 +967,22 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       title: Row(
         children: [
           const Text('Filtros de Fecha',
-              style: TextStyle(color: AppTheme.neonBlue, fontSize: 14)),
+              style: TextStyle(color: AppTheme.info, fontSize: 14)),
           if (_hasPendingChanges) ...[
             const SizedBox(width: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.2),
+                  color: AppTheme.accentAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4)),
               child: const Text('Cambios pendientes',
-                  style: TextStyle(color: Colors.amber, fontSize: 10)),
+                  style: TextStyle(color: AppTheme.accentAmber, fontSize: 10)),
             ),
           ],
         ],
       ),
-      collapsedBackgroundColor: AppTheme.surfaceColor.withValues(alpha: 0.5),
-      backgroundColor: AppTheme.surfaceColor,
+      collapsedBackgroundColor: AppTheme.raisedSurface.withValues(alpha: 0.5),
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       collapsedShape:
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1017,8 +1017,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                           });
                         },
                         selectedColor:
-                            AppTheme.neonPurple.withValues(alpha: 0.3),
-                        checkmarkColor: AppTheme.neonPurple,
+                            AppTheme.accentIndigo.withValues(alpha: 0.3),
+                        checkmarkColor: AppTheme.accentIndigo,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
@@ -1057,7 +1057,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             ),
             TextButton(
               child: const Text('Limpiar',
-                  style: TextStyle(fontSize: 11, color: AppTheme.neonBlue)),
+                  style: TextStyle(fontSize: 11, color: AppTheme.info)),
               onPressed: () {
                 setState(() {
                   _pendingMonths.clear();
@@ -1086,8 +1086,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   _hasPendingChanges = true;
                 });
               },
-              selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
-              checkmarkColor: AppTheme.neonBlue,
+              selectedColor: AppTheme.info.withValues(alpha: 0.3),
+              checkmarkColor: AppTheme.info,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
@@ -1111,7 +1111,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   }
                 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
+              backgroundColor: AppTheme.info,
               disabledBackgroundColor: Colors.white10,
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
@@ -1146,7 +1146,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Indicadores Clave',
+            const Text('KPIs del periodo',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -1169,7 +1169,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   'Ventas Período',
                   CurrencyFormatter.format(totalSales),
                   Icons.euro,
-                  AppTheme.neonBlue,
+                  AppTheme.info,
                   width: cardWidth,
                   subtitle: growthPercent != 0
                       ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs año ant.'
@@ -1180,7 +1180,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   'Margen Bruto',
                   CurrencyFormatter.format(totalMargin),
                   Icons.trending_up,
-                  AppTheme.neonGreen,
+                  AppTheme.success,
                   width: cardWidth,
                   subtitle: '${marginPct.toStringAsFixed(1)}% del total',
                   trend: marginPct >= 15
@@ -1191,28 +1191,28 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   'Cartera Activa',
                   uniqueClients.toString(),
                   Icons.people,
-                  AppTheme.neonPurple,
+                  AppTheme.accentIndigo,
                   width: cardWidth,
                 ),
                 _buildKPICard(
                   'Ventas Hoy',
                   CurrencyFormatter.format(todaySales),
                   Icons.today,
-                  Colors.amber,
+                  AppTheme.accentAmber,
                   width: cardWidth,
                 ),
                 _buildKPICard(
                   'Pedidos Hoy',
                   totalOrders.toString(),
                   Icons.shopping_cart,
-                  AppTheme.neonCyan,
+                  AppTheme.info,
                   width: cardWidth,
                 ),
                 _buildKPICard(
                   'Crec. Interanual',
                   '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}%',
                   Icons.show_chart,
-                  growthPercent >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                  growthPercent >= 0 ? AppTheme.success : AppTheme.error,
                   width: cardWidth,
                   subtitle: 'vs ${CurrencyFormatter.format(lastMonthSales)}',
                   trend: growthPercent >= 0 ? 'up' : 'down',
@@ -1235,7 +1235,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.surfaceColor,
+            AppTheme.raisedSurface,
             color.withValues(alpha: 0.08),
           ],
         ),
@@ -1275,8 +1275,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                           ? Icons.trending_down
                           : Icons.trending_flat),
                   color: trend == 'up'
-                      ? AppTheme.neonGreen
-                      : (trend == 'down' ? AppTheme.error : Colors.amber),
+                      ? AppTheme.success
+                      : (trend == 'down'
+                          ? AppTheme.error
+                          : AppTheme.accentAmber),
                   size: 16,
                 ),
             ],
@@ -1302,7 +1304,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   Widget _buildErrorWidget() {
     return ErrorStateWidget(
       message: 'Error: $_error',
-      onRetry: _fetchAllData,
+      onRetry: () => _fetchAllData(forceRefresh: true),
     );
   }
 
@@ -1310,7 +1312,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   Widget _buildChartTypeToggle() {
     return Row(
       children: [
-        const Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: 16),
+        const Icon(Icons.bar_chart, color: AppTheme.info, size: 16),
         const SizedBox(width: 8),
         const Text('Tipo de grafico:',
             style: TextStyle(color: Colors.white70, fontSize: 12)),
@@ -1347,7 +1349,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               onSelected: (_) {
                 setState(() => _chartType = type);
               },
-              selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
+              selectedColor: AppTheme.info.withValues(alpha: 0.3),
               backgroundColor: Colors.white10,
               showCheckmark: false,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1374,19 +1376,20 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       margin: EdgeInsets.only(left: depth * 16.0, bottom: 8, top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.15),
+        color: AppTheme.warning.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.analytics_outlined, color: Colors.orange, size: 16),
+          const Icon(Icons.analytics_outlined,
+              color: AppTheme.warning, size: 16),
           const SizedBox(width: 8),
           Text(
             'MARGEN $level: ',
             style: const TextStyle(
-                color: Colors.orange,
+                color: AppTheme.warning,
                 fontSize: 11,
                 fontWeight: FontWeight.bold),
           ),
@@ -1558,7 +1561,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -1574,8 +1577,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                         fontSize: 18,
                         fontWeight: FontWeight.bold)),
                 Text('${_selectedCodes.length} seleccionados',
-                    style: const TextStyle(
-                        color: AppTheme.neonBlue, fontSize: 14)),
+                    style: const TextStyle(color: AppTheme.info, fontSize: 14)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1588,7 +1590,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                 hintStyle: const TextStyle(color: Colors.white30),
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 filled: true,
-                fillColor: AppTheme.darkCard,
+                fillColor: AppTheme.raisedSurface,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none),
@@ -1598,8 +1600,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
             Expanded(
               child: _isLoading
                   ? const Center(
-                      child:
-                          CircularProgressIndicator(color: AppTheme.neonBlue))
+                      child: CircularProgressIndicator(color: AppTheme.info))
                   : _searchResults.isEmpty
                       ? const Center(
                           child: Text('No hay resultados',
@@ -1619,9 +1620,8 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                                 isSelected
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
-                                color: isSelected
-                                    ? AppTheme.neonBlue
-                                    : Colors.white24,
+                                color:
+                                    isSelected ? AppTheme.info : Colors.white24,
                               ),
                               title: Text(name,
                                   style: TextStyle(
@@ -1642,13 +1642,13 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.neonBlue
+                                        color: AppTheme.info
                                             .withValues(alpha: 0.2),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(family,
                                           style: const TextStyle(
-                                              color: AppTheme.neonBlue,
+                                              color: AppTheme.info,
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold)),
                                     ),
@@ -1676,7 +1676,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                     Navigator.pop(context, resultSet);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonBlue,
+                    backgroundColor: AppTheme.info,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
@@ -1837,14 +1837,13 @@ class _FiFilterDialogContentState extends State<_FiFilterDialogContent> {
           children: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child:
-                  const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: AppTheme.textTertiary)),
             ),
             const SizedBox(width: 8),
             ElevatedButton(
               onPressed: () => widget.onApply(_currentFilters),
-              style:
-                  ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.info),
               child: const Text('Aplicar'),
             ),
           ],

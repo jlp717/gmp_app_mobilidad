@@ -127,7 +127,7 @@ class ClientBalanceBadge extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
@@ -136,7 +136,7 @@ class ClientBalanceBadge extends StatelessWidget {
           children: [
             Icon(
               Icons.account_balance_wallet,
-              color: AppTheme.neonBlue,
+              color: AppTheme.info,
               size: 22,
             ),
             SizedBox(width: 8),
@@ -169,7 +169,7 @@ class ClientBalanceBadge extends StatelessWidget {
                 PedidosFormatters.money(facturado),
                 'Total facturado al cliente durante '
                     'el ejercicio $year.',
-                AppTheme.neonBlue,
+                AppTheme.info,
               ),
               const SizedBox(height: 10),
               _infoRow(
@@ -177,14 +177,14 @@ class ClientBalanceBadge extends StatelessWidget {
                 PedidosFormatters.money(cobrado),
                 'Total cobrado del cliente durante '
                     'el ejercicio $year.',
-                AppTheme.neonGreen,
+                AppTheme.success,
               ),
               const SizedBox(height: 14),
               // Status explanation
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard,
+                  color: AppTheme.softPanel,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: color.withValues(alpha: 0.3)),
                 ),
@@ -224,17 +224,17 @@ class ClientBalanceBadge extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     _riskLevel(
-                      AppTheme.neonGreen,
+                      AppTheme.success,
                       'Sin riesgo',
                       'Sin deuda pendiente',
                     ),
                     _riskLevel(
-                      AppTheme.neonGreen,
+                      AppTheme.success,
                       'Riesgo bajo',
                       'Pendiente < 5.000\u20AC',
                     ),
                     _riskLevel(
-                      Colors.orange,
+                      AppTheme.warning,
                       'Riesgo medio',
                       'Pendiente entre 5.000\u20AC y 10.000\u20AC',
                     ),
@@ -254,7 +254,7 @@ class ClientBalanceBadge extends StatelessWidget {
             onPressed: () => Navigator.pop(ctx),
             child: const Text(
               'Entendido',
-              style: TextStyle(color: AppTheme.neonBlue),
+              style: TextStyle(color: AppTheme.info),
             ),
           ),
         ],
@@ -427,14 +427,14 @@ String clientDebtAmountLabel(Map<String, Object?> debt) {
 
 Color clientDebtColor(Map<String, Object?> debt) {
   final state = debt['state'];
-  if (state == 'loading') return AppTheme.neonBlue;
+  if (state == 'loading') return AppTheme.info;
   if (state == 'error') return AppTheme.warning;
   if (state == 'unknown') return Colors.white54;
   final pending = (debt['pending'] as double?) ?? 0;
   final overdue = (debt['overdue'] as double?) ?? 0;
   if (overdue > 0 || pending > 10000) return AppTheme.error;
-  if (pending > 5000) return Colors.orange;
-  return AppTheme.neonGreen;
+  if (pending > 5000) return AppTheme.warning;
+  return AppTheme.success;
 }
 
 IconData clientDebtIcon(Map<String, Object?> debt) {

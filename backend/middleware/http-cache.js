@@ -59,12 +59,30 @@ function generateETag(data) {
 }
 
 function getAuthScope(req) {
-    const userScope = req.user?.codigo || req.user?.code || req.user?.id;
-    if (userScope) return String(userScope);
+    const headers = req.headers || {};
+    const user = req.user || null;
+    const userScope = user?.codigo || user?.code || user?.id;
+    if (userScope) {
+        const scopePayload = {
+            id: String(userScope),
+            role: String(user.role || user.userRole || ''),
+            isJefeVentas: Boolean(user.isJefeVentas),
+            vendedorCode: String(user.vendedorCode || user.codigoVendedor || ''),
+            vendedorCodes: Array.isArray(user.vendedorCodes)
+                ? user.vendedorCodes.map(String).sort()
+                : String(user.vendedorCodes || ''),
+            viewAs: String(user.viewAs || user.view_as || headers['x-view-as'] || ''),
+        };
+        return crypto
+            .createHash('sha256')
+            .update(JSON.stringify(scopePayload))
+            .digest('hex')
+            .substring(0, 24);
+    }
 
     if (requiresVerifiedUserForCache(req)) return null;
 
-    const authorization = req.headers.authorization || '';
+    const authorization = headers.authorization || '';
     if (!authorization.startsWith('Bearer ')) return null;
 
     return crypto
@@ -77,7 +95,39 @@ function getAuthScope(req) {
 function getCacheKey(prefix, req) {
     const authScope = getAuthScope(req);
     if (!authScope) return null;
-    return `${prefix}:${authScope}:${req.path}:${JSON.stringify(req.query)}`;
+    return `${prefix}:${authScope}:${req.path}:${JSON.stringify(getCacheQuery(req.query))}`;
+}
+
+function getCacheQuery(query = {}) {
+    return Object.keys(query)
+        .filter(key => !['forceRefresh', 'refresh', '_ts'].includes(key))
+        .sort()
+        .reduce((normalized, key) => {
+            normalized[key] = query[key];
+            return normalized;
+        }, {});
+}
+
+function hasNoCacheDirective(value) {
+    return String(value || '')
+        .toLowerCase()
+        .split(',')
+        .map(part => part.trim())
+        .some(part => part === 'no-cache' || part === 'no-store' || part === 'max-age=0');
+}
+
+function isCacheBypassRequest(req) {
+    const query = req.query || {};
+    const headers = req.headers || {};
+    if (query.forceRefresh != null || query.refresh != null || query._ts != null) {
+        return true;
+    }
+
+    if (hasNoCacheDirective(headers['cache-control'])) return true;
+    if (String(headers.pragma || '').toLowerCase() === 'no-cache') return true;
+
+    const forceHeader = String(headers['x-force-refresh'] || '').toLowerCase();
+    return forceHeader === 'true' || forceHeader === '1' || forceHeader === 'yes';
 }
 
 function serialize(value) {
@@ -103,6 +153,12 @@ function set(key, data, ttlSeconds) {
 
     if (size > MAX_ENTRY_SIZE) {
         return false;
+    }
+
+    const existing = cache.get(key);
+    if (existing) {
+        totalCacheSize -= existing.size;
+        cache.delete(key);
     }
 
     evictIfNeeded(size);
@@ -137,6 +193,13 @@ function get(key) {
     return entry.data;
 }
 
+function deleteKey(key) {
+    const entry = cache.get(key);
+    if (!entry) return false;
+    totalCacheSize -= entry.size;
+    return cache.delete(key);
+}
+
 function invalidate(pattern) {
     let count = 0;
     for (const key of cache.keys()) {
@@ -165,7 +228,13 @@ function cached(cachePrefix, ttlSeconds) {
         if (!cacheKey) {
             return next();
         }
-        const cachedData = get(cacheKey);
+        const bypassCache = isCacheBypassRequest(req);
+        if (bypassCache) {
+            deleteKey(cacheKey);
+            res.setHeader('X-Cache-Status', 'BYPASS');
+        }
+
+        const cachedData = bypassCache ? null : get(cacheKey);
 
         const etag = cachedData ? generateETag(cachedData) : null;
         const ifNoneMatch = req.headers['if-none-match'];
@@ -182,7 +251,9 @@ function cached(cachePrefix, ttlSeconds) {
             return res.json(cachedData);
         }
 
-        res.setHeader('X-Cache-Status', 'MISS');
+        if (!bypassCache) {
+            res.setHeader('X-Cache-Status', 'MISS');
+        }
 
         const originalJson = res.json.bind(res);
         res.json = function (data) {
@@ -280,6 +351,7 @@ module.exports = {
     getCacheStats,
     invalidate,
     invalidateAll,
+    isCacheBypassRequest,
     CACHE_TTL,
     MAX_ENTRY_SIZE,
     MAX_TOTAL_CACHE,

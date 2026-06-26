@@ -7,6 +7,7 @@ library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -61,6 +62,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
   String? _error;
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
+  CancelToken? _alternativesCancelToken;
+  CancelToken? _searchCancelToken;
+  int _searchGeneration = 0;
   bool _showSearch = false;
 
   // Quantity selection per product code
@@ -76,15 +80,21 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
   void dispose() {
     _searchController.dispose();
     _searchDebounce?.cancel();
+    _alternativesCancelToken?.cancel('stock alternatives closed');
+    _searchCancelToken?.cancel('stock search closed');
     super.dispose();
   }
 
   Future<void> _loadAlternatives() async {
     try {
+      _alternativesCancelToken?.cancel('superseded alternatives request');
+      final cancelToken = CancelToken();
+      _alternativesCancelToken = cancelToken;
       final response = await ApiClient.get(
         '/pedidos/similar-products/${widget.product.code.trim()}',
         cacheKey: 'pedidos:similar-products:${widget.product.code.trim()}',
         cacheTTL: CacheService.shortTTL,
+        cancelToken: cancelToken,
       );
       if (!mounted) return;
       if (response['success'] == true) {
@@ -111,6 +121,8 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
   void _onSearchChanged(String query) {
     _searchDebounce?.cancel();
     if (query.trim().length < 2) {
+      _searchGeneration++;
+      _searchCancelToken?.cancel('search cleared');
       setState(() {
         _searchResults = [];
         _isSearching = false;
@@ -123,6 +135,10 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
   }
 
   Future<void> _searchProducts(String query) async {
+    final generation = ++_searchGeneration;
+    _searchCancelToken?.cancel('superseded product search');
+    final cancelToken = CancelToken();
+    _searchCancelToken = cancelToken;
     setState(() => _isSearching = true);
     try {
       final response = await ApiClient.get(
@@ -133,8 +149,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         },
         cacheKey: 'pedidos:search-products:$query:20',
         cacheTTL: CacheService.realtimeTTL,
+        cancelToken: cancelToken,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       if (response['success'] == true) {
         final list = response['products'] as List<dynamic>? ?? [];
         setState(() {
@@ -145,8 +162,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         setState(() => _isSearching = false);
       }
     } catch (e) {
+      if (e is ApiException && e.code == 'CANCELLED') return;
       debugPrint('[StockAlternatives] search error: $e');
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() => _isSearching = false);
     }
   }
@@ -168,7 +186,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase,
+        color: AppTheme.inkSurface,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
@@ -229,7 +247,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   width: 3,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: _showSearch ? AppTheme.neonBlue : AppTheme.neonGreen,
+                    color: _showSearch ? AppTheme.info : AppTheme.success,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -239,10 +257,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                       ? 'RESULTADOS DE BÚSQUEDA'
                       : 'ALTERNATIVAS INTELIGENTES',
                   style: TextStyle(
-                    color: _showSearch ? AppTheme.neonBlue : AppTheme.neonGreen,
+                    color: _showSearch ? AppTheme.info : AppTheme.success,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
                   ),
                 ),
                 const Spacer(),
@@ -251,13 +268,13 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonGreen.withValues(alpha: 0.1),
+                      color: AppTheme.success.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '${_alternatives.length}',
                       style: const TextStyle(
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -289,12 +306,12 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: _showSearch
-                ? AppTheme.neonBlue.withValues(alpha: 0.1)
-                : AppTheme.darkSurface,
+                ? AppTheme.info.withValues(alpha: 0.1)
+                : AppTheme.raisedSurface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _showSearch
-                  ? AppTheme.neonBlue.withValues(alpha: 0.3)
+                  ? AppTheme.info.withValues(alpha: 0.3)
                   : AppTheme.borderColor,
             ),
           ),
@@ -303,7 +320,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             children: [
               Icon(
                 _showSearch ? Icons.auto_awesome : Icons.search,
-                color: _showSearch ? AppTheme.neonBlue : AppTheme.textSecondary,
+                color: _showSearch ? AppTheme.info : AppTheme.textSecondary,
                 size: 16,
               ),
               const SizedBox(width: 8),
@@ -312,8 +329,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     ? 'Ver recomendaciones'
                     : 'Buscar en todo el catálogo',
                 style: TextStyle(
-                  color:
-                      _showSearch ? AppTheme.neonBlue : AppTheme.textSecondary,
+                  color: _showSearch ? AppTheme.info : AppTheme.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -329,11 +345,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     return TextField(
       controller: _searchController,
       onChanged: _onSearchChanged,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         hintText: 'Buscar productos con stock...',
         hintStyle: const TextStyle(color: AppTheme.textTertiary),
-        prefixIcon: const Icon(Icons.search, color: AppTheme.neonBlue),
+        prefixIcon: const Icon(Icons.search, color: AppTheme.info),
         suffixIcon: _isSearching
             ? const Padding(
                 padding: EdgeInsets.all(12),
@@ -342,7 +358,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                   ),
                 ),
               )
@@ -357,11 +373,10 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   )
                 : null,
         filled: true,
-        fillColor: AppTheme.darkSurface,
+        fillColor: AppTheme.raisedSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+          borderSide: BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -369,8 +384,8 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: AppTheme.neonBlue.withValues(alpha: 0.5), width: 2),
+          borderSide:
+              BorderSide(color: AppTheme.info.withValues(alpha: 0.5), width: 2),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -405,7 +420,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                       ? 'Stock Insuficiente'
                       : 'Sin Stock Disponible',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -446,7 +461,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: AppTheme.textPrimary.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -463,7 +478,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 Text(
                   widget.product.name,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: AppTheme.textPrimary.withValues(alpha: 0.5),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     decoration: TextDecoration.lineThrough,
@@ -476,7 +491,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 Text(
                   '${widget.product.code.trim()} · ${widget.product.family}',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
+                    color: AppTheme.textPrimary.withValues(alpha: 0.3),
                     fontSize: 11,
                   ),
                 ),
@@ -500,7 +515,6 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     color: AppTheme.error,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
                   ),
                 ),
               ],
@@ -517,7 +531,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppTheme.neonBlue),
+            CircularProgressIndicator(color: AppTheme.info),
             SizedBox(height: 12),
             Text(
               'Buscando alternativas...',
@@ -572,7 +586,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: AppTheme.neonBlue),
+                CircularProgressIndicator(color: AppTheme.info),
                 SizedBox(height: 12),
                 Text(
                   'Buscando...',
@@ -660,11 +674,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.6),
+        color: AppTheme.raisedSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: hasStock
-              ? AppTheme.neonBlue.withValues(alpha: 0.3)
+              ? AppTheme.info.withValues(alpha: 0.3)
               : AppTheme.warning.withValues(alpha: 0.3),
         ),
       ),
@@ -680,7 +694,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: hasStock
-                      ? AppTheme.neonBlue.withValues(alpha: 0.1)
+                      ? AppTheme.info.withValues(alpha: 0.1)
                       : AppTheme.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -690,7 +704,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     Text(
                       '${stockEnv.toInt()}',
                       style: TextStyle(
-                        color: hasStock ? AppTheme.neonBlue : AppTheme.warning,
+                        color: hasStock ? AppTheme.info : AppTheme.warning,
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                       ),
@@ -713,7 +727,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     Text(
                       name,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -734,7 +748,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         child: Text(
                           family,
                           style: const TextStyle(
-                            color: AppTheme.neonGreen,
+                            color: AppTheme.success,
                             fontSize: 10,
                           ),
                         ),
@@ -745,7 +759,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         child: Text(
                           PedidosFormatters.money(precio, decimals: 3),
                           style: const TextStyle(
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -763,7 +777,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: AppTheme.darkBase,
+                    color: AppTheme.inkSurface,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppTheme.borderColor),
                   ),
@@ -785,7 +799,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                               ? _getQty(code, stockEnv).toInt().toString()
                               : _getQty(code, stockEnv).toStringAsFixed(1),
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
                           ),
@@ -811,15 +825,10 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.neonBlue.withValues(alpha: 0.2),
-                            AppTheme.neonBlue.withValues(alpha: 0.05),
-                          ],
-                        ),
+                        color: AppTheme.info.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                          color: AppTheme.info.withValues(alpha: 0.4),
                         ),
                       ),
                       child: const Row(
@@ -827,14 +836,14 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         children: [
                           Icon(
                             Icons.add_shopping_cart,
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                             size: 16,
                           ),
                           SizedBox(width: 4),
                           Text(
                             'Añadir',
                             style: TextStyle(
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
@@ -909,22 +918,22 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     var scoreColor = AppTheme.textTertiary;
     var scoreLabel = '';
     if (score >= 65) {
-      scoreColor = AppTheme.neonBlue;
+      scoreColor = AppTheme.info;
       scoreLabel = 'Excelente match';
     } else if (score >= 40) {
-      scoreColor = AppTheme.neonGreen;
+      scoreColor = AppTheme.success;
       scoreLabel = 'Buen match';
     } else if (score > 0) {
-      scoreColor = Colors.orange;
+      scoreColor = AppTheme.warning;
       scoreLabel = 'Match aceptable';
     }
 
     // Stock semaphore color
     Color stockColor;
     if (stockEnv >= 10) {
-      stockColor = AppTheme.neonGreen;
+      stockColor = AppTheme.success;
     } else if (stockEnv >= 3) {
-      stockColor = Colors.orange;
+      stockColor = AppTheme.warning;
     } else {
       stockColor = AppTheme.error;
     }
@@ -933,9 +942,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.6),
+        color: AppTheme.raisedSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.15)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -979,7 +988,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     Text(
                       name,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1002,7 +1011,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                             Text(
                               PedidosFormatters.money(precio, decimals: 3),
                               style: const TextStyle(
-                                color: AppTheme.neonBlue,
+                                color: AppTheme.info,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1012,8 +1021,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                               Text(
                                 '= ${PedidosFormatters.money(precio * qty)}',
                                 style: TextStyle(
-                                  color:
-                                      AppTheme.neonBlue.withValues(alpha: 0.6),
+                                  color: AppTheme.info.withValues(alpha: 0.6),
                                   fontSize: 11,
                                 ),
                               ),
@@ -1052,7 +1060,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               // Quantity selector
               Container(
                 decoration: BoxDecoration(
-                  color: AppTheme.darkBase,
+                  color: AppTheme.inkSurface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppTheme.borderColor),
                 ),
@@ -1070,7 +1078,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                             ? qty.toInt().toString()
                             : qty.toStringAsFixed(1),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1092,26 +1100,21 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.neonGreen.withValues(alpha: 0.2),
-                          AppTheme.neonGreen.withValues(alpha: 0.05),
-                        ],
-                      ),
+                      color: AppTheme.success.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: AppTheme.neonGreen.withValues(alpha: 0.4)),
+                          color: AppTheme.success.withValues(alpha: 0.4)),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.add_shopping_cart,
-                            color: AppTheme.neonGreen, size: 16),
+                            color: AppTheme.success, size: 16),
                         SizedBox(width: 4),
                         Text(
                           'Añadir',
                           style: TextStyle(
-                            color: AppTheme.neonGreen,
+                            color: AppTheme.success,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1136,7 +1139,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppTheme.darkBase,
+                        color: AppTheme.inkSurface,
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: AppTheme.borderColor),
                       ),
@@ -1173,7 +1176,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
           child: Icon(
             icon,
             size: 18,
-            color: disabled ? AppTheme.textTertiary : AppTheme.neonGreen,
+            color: disabled ? AppTheme.textTertiary : AppTheme.success,
           ),
         ),
       ),
@@ -1211,7 +1214,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${altProduct.name} añadido al carrito'),
-          backgroundColor: AppTheme.neonGreen,
+          backgroundColor: AppTheme.success,
           duration: const Duration(seconds: 2),
         ),
       );

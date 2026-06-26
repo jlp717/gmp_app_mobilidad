@@ -27,7 +27,7 @@ class AdvancedSalesChartV3 extends StatefulWidget {
     required this.hierarchy,
     required this.onBarTap,
     super.key,
-    this.color = AppTheme.neonBlue,
+    this.color = AppTheme.info,
   });
   final List<MatrixNode> matrixData;
   final List<String> hierarchy;
@@ -128,7 +128,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
+                  letterSpacing: 0,
                 ),
               ),
               const SizedBox(height: 4),
@@ -203,7 +203,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
   BarTouchData _createBarTouchData(List<MatrixNode> topItems) {
     return BarTouchData(
       touchTooltipData: BarTouchTooltipData(
-        tooltipBgColor: AppTheme.darkCard,
+        tooltipBgColor: AppTheme.raisedSurface,
         tooltipRoundedRadius: 8,
         tooltipPadding: const EdgeInsets.all(12),
         tooltipMargin: 8,
@@ -342,7 +342,7 @@ class _PerformanceOptimizedContainer extends StatelessWidget {
   const _PerformanceOptimizedContainer({required this.child});
   final Widget child;
   static final _cachedDecoration = BoxDecoration(
-    color: AppTheme.surfaceColor,
+    color: AppTheme.raisedSurface,
     borderRadius: BorderRadius.circular(16),
     border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
     boxShadow: [
@@ -402,7 +402,7 @@ class _PieChartV3State extends State<PieChartV3> {
       height: Responsive.scale(context, 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),

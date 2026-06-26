@@ -236,7 +236,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
     if (products.isEmpty) {
       return const Center(
-        child: Text('No hay productos', style: TextStyle(color: Colors.grey)),
+        child: Text('No hay productos',
+            style: TextStyle(color: AppTheme.textTertiary)),
       );
     }
 
@@ -330,7 +331,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         title: const Text('Observaciones Cliente'),
         content: TextField(
           controller: ctrl,
@@ -343,11 +344,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
             child: const Text('Guardar'),
           ),
         ],
@@ -402,10 +405,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         elevation: 0,
         toolbarHeight: 50,
         title: Column(
@@ -491,7 +494,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ],
                           ),
                         ),
-                      // KPI Glacius alerts
+                      // KPI alerts
                       ClientAlertsWidget(clientId: widget.clientCode),
                       if (_showFilters) _buildFilters(),
                       _buildSummaryRow(),
@@ -506,7 +509,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                                 ? const Center(
                                     child: Text(
                                       'Sin datos',
-                                      style: TextStyle(color: Colors.grey),
+                                      style: TextStyle(
+                                          color: AppTheme.textTertiary),
                                     ),
                                   )
                                 : _buildFiHierarchyList()),
@@ -524,9 +528,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       ), // Increased for all 5 FI filters
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         border: Border(
-            bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.3))),
+            bottom:
+                BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3))),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -563,7 +568,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
+                      selectedColor: AppTheme.info.withValues(alpha: 0.3),
                     ),
                   ),
                 ),
@@ -602,7 +607,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                      color: AppTheme.info.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text('Todos', style: TextStyle(fontSize: 9)),
@@ -659,7 +664,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             labelPadding:
                                 const EdgeInsets.symmetric(horizontal: 3),
                             selectedColor:
-                                AppTheme.neonPurple.withValues(alpha: 0.3),
+                                AppTheme.accentIndigo.withValues(alpha: 0.3),
                           ),
                         ),
                       ),
@@ -698,9 +703,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.darkBase,
+                color: AppTheme.inkSurface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade700),
+                border: Border.all(color: AppTheme.borderColor),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -710,7 +715,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       Icon(
                         Icons.filter_alt,
                         size: 14,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                       ),
                       SizedBox(width: 4),
                       Text(
@@ -751,7 +756,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
-                      _filtersDirty ? AppTheme.neonBlue : Colors.grey,
+                      _filtersDirty ? AppTheme.info : AppTheme.textTertiary,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 ),
@@ -879,9 +884,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase,
+        color: AppTheme.inkSurface,
         border: Border(
-          bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.25)),
+          bottom:
+              BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.25)),
         ),
       ),
       child: ListView.separated(
@@ -901,10 +907,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             width: widget.isJefeVentas ? 178 : 150,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
+              color: AppTheme.raisedSurface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: AppTheme.neonBlue.withValues(alpha: 0.25),
+                color: AppTheme.info.withValues(alpha: 0.25),
               ),
             ),
             child: Column(
@@ -917,7 +923,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                       ),
                     ),
                     const Spacer(),
@@ -1043,9 +1049,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       case 'red':
         return AppTheme.error;
       case 'blue':
-        return AppTheme.neonBlue;
+        return AppTheme.info;
       default:
-        return fallback ?? AppTheme.neonBlue;
+        return fallback ?? AppTheme.info;
     }
   }
 
@@ -1177,16 +1183,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.25)),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.12),
+              color: AppTheme.info.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
@@ -1204,7 +1210,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                   ),
                 ),
               ],
@@ -1225,8 +1231,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       height: height,
       padding: const EdgeInsets.only(bottom: 2),
       decoration: const BoxDecoration(
-        color: AppTheme.darkBase,
-        border: Border(bottom: BorderSide(color: AppTheme.neonBlue, width: 2)),
+        color: AppTheme.inkSurface,
+        border: Border(bottom: BorderSide(color: AppTheme.info, width: 2)),
         boxShadow: [
           BoxShadow(
             color: Colors.black26,
@@ -1254,21 +1260,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           final prevIsZero = prevSales.abs() < 0.01;
           final currIsZero = sales.abs() < 0.01;
 
-          var borderColor = Colors.grey.withValues(alpha: 0.3);
-          var bgColor = AppTheme.surfaceColor;
+          var borderColor = AppTheme.borderColor.withValues(alpha: 0.3);
+          var bgColor = AppTheme.raisedSurface;
           var showNewBadge = false;
 
           if (isClientNew && !currIsZero) {
-            borderColor = const Color(0xFF2979FF); // Distinct Blue
-            bgColor = const Color(0xFF2979FF).withValues(alpha: 0.20);
+            borderColor = AppTheme.info; // Distinct Blue
+            bgColor = AppTheme.info.withValues(alpha: 0.20);
             showNewBadge = true;
           } else if (currIsZero && !prevIsZero) {
             borderColor = AppTheme.error;
             bgColor = AppTheme.error.withValues(alpha: 0.15);
           } else if (!currIsZero && prevIsZero) {
             // New month sales
-            borderColor = const Color(0xFF2979FF); // Distinct Blue
-            bgColor = const Color(0xFF2979FF).withValues(alpha: 0.20);
+            borderColor = AppTheme.info; // Distinct Blue
+            bgColor = AppTheme.info.withValues(alpha: 0.20);
             showNewBadge = true;
           } else if (yoyTrend == 'up') {
             borderColor = AppTheme.success;
@@ -1306,7 +1312,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         style: TextStyle(
                           fontSize: 7,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF2979FF),
+                          color: AppTheme.info,
                         ),
                       ),
                   ],
@@ -1385,7 +1391,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       return const Padding(
         padding: EdgeInsets.all(8),
         child: Text('Sin productos',
-            style: TextStyle(color: Colors.grey, fontSize: 11)),
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
       );
     }
     return Column(children: allProducts.map(_buildFiProduct).toList());
@@ -1404,9 +1410,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         border: Border(
-            bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.25))),
+            bottom: BorderSide(
+                color: AppTheme.borderColor.withValues(alpha: 0.25))),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -1430,8 +1437,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                  selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
-                  checkmarkColor: AppTheme.neonBlue,
+                  selectedColor: AppTheme.info.withValues(alpha: 0.3),
+                  checkmarkColor: AppTheme.info,
                 ),
               );
             }),
@@ -1467,12 +1474,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final canExpand = children.isNotEmpty;
 
     return Card(
-      color: AppTheme.neonPurple.withValues(alpha: 0.08),
+      color: AppTheme.accentIndigo.withValues(alpha: 0.08),
       margin: const EdgeInsets.only(bottom: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-            color: AppTheme.neonPurple.withValues(alpha: 0.4), width: 2),
+            color: AppTheme.accentIndigo.withValues(alpha: 0.4), width: 2),
       ),
       child: Column(
         children: [
@@ -1498,7 +1505,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           expanded
                               ? Icons.keyboard_arrow_down
                               : Icons.keyboard_arrow_right,
-                          color: AppTheme.neonPurple,
+                          color: AppTheme.accentIndigo,
                           size: 20,
                         )
                       else
@@ -1511,7 +1518,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                          color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -1519,7 +1526,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           style: TextStyle(
                             fontSize: 8,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.neonPurple,
+                            color: AppTheme.accentIndigo,
                           ),
                         ),
                       ),
@@ -1549,7 +1556,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         ),
                       ),
                       // Stats with YoY
-                      _buildLevelStatsByYear(fi1, AppTheme.neonPurple),
+                      _buildLevelStatsByYear(fi1, AppTheme.accentIndigo),
                     ],
                   ),
                   // Monthly breakdown if enabled
@@ -1594,10 +1601,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 4),
       decoration: BoxDecoration(
-        color: AppTheme.neonBlue.withValues(alpha: 0.08),
+        color: AppTheme.info.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-            color: AppTheme.neonBlue.withValues(alpha: 0.4), width: 1.5),
+        border:
+            Border.all(color: AppTheme.info.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Column(
         children: [
@@ -1622,7 +1629,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           expanded
                               ? Icons.keyboard_arrow_down
                               : Icons.keyboard_arrow_right,
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.info,
                           size: 18,
                         )
                       else
@@ -1634,7 +1641,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                          color: AppTheme.info.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: const Text(
@@ -1642,7 +1649,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           style: TextStyle(
                             fontSize: 7,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                           ),
                         ),
                       ),
@@ -1672,7 +1679,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       ),
                       _buildLevelStatsByYear(
                         fi2,
-                        AppTheme.neonBlue,
+                        AppTheme.info,
                         compact: true,
                       ),
                     ],
@@ -1718,9 +1725,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
       decoration: BoxDecoration(
-        color: AppTheme.neonGreen.withValues(alpha: 0.06),
+        color: AppTheme.success.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.35)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.35)),
       ),
       child: Column(
         children: [
@@ -1745,7 +1752,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           expanded
                               ? Icons.keyboard_arrow_down
                               : Icons.keyboard_arrow_right,
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           size: 16,
                         )
                       else
@@ -1757,7 +1764,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonGreen.withValues(alpha: 0.2),
+                          color: AppTheme.success.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: const Text(
@@ -1765,7 +1772,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           style: TextStyle(
                             fontSize: 6,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.neonGreen,
+                            color: AppTheme.success,
                           ),
                         ),
                       ),
@@ -1795,7 +1802,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       ),
                       _buildLevelStatsByYear(
                         fi3,
-                        AppTheme.neonGreen,
+                        AppTheme.success,
                         compact: true,
                       ),
                     ],
@@ -2068,7 +2075,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Color _monthlyTrendColor(double sales, double prevSales) {
     final currZero = sales.abs() < 0.01;
     final prevZero = prevSales.abs() < 0.01;
-    if (!currZero && prevZero) return const Color(0xFF2979FF);
+    if (!currZero && prevZero) return AppTheme.info;
     if (currZero && !prevZero) return AppTheme.error;
     if (!currZero && !prevZero) {
       return sales >= prevSales ? AppTheme.success : AppTheme.error;
@@ -2131,13 +2138,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
               decoration: BoxDecoration(
                 color: hasSales
-                    ? AppTheme.darkCard
-                    : AppTheme.darkCard.withValues(alpha: 0.3),
+                    ? AppTheme.raisedSurface
+                    : AppTheme.raisedSurface.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: hasSales
-                      ? AppTheme.neonBlue.withValues(alpha: 0.35)
-                      : Colors.grey.withValues(alpha: 0.2),
+                      ? AppTheme.info.withValues(alpha: 0.35)
+                      : AppTheme.borderColor.withValues(alpha: 0.2),
                 ),
               ),
               child: Column(
@@ -2221,9 +2228,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               margin: const EdgeInsets.only(right: 4),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.darkCard.withValues(alpha: 0.3),
+                color: AppTheme.raisedSurface.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                border: Border.all(
+                    color: AppTheme.borderColor.withValues(alpha: 0.2)),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -2262,8 +2270,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           // Si el cliente es NUEVO (sin ventas en todo el año anterior), todos los meses con ventas son NUEVO
           if (isClientNew && !currIsZero) {
             isNew = true;
-            yoyColor = const Color(0xFF2979FF); // Distinct Blue
-            bgColor = const Color(0xFF2979FF).withValues(alpha: 0.20);
+            yoyColor = AppTheme.info; // Distinct Blue
+            bgColor = AppTheme.info.withValues(alpha: 0.20);
           } else if (currIsZero && !prevIsZero) {
             // Perdió ventas - este año 0, año pasado vendió
             isLost = true;
@@ -2273,8 +2281,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           } else if (!currIsZero && prevIsZero) {
             // Venta este mes, pero 0 el año pasado -> NUEVO (Blue)
             isNew = true;
-            yoyColor = const Color(0xFF2979FF); // Distinct Blue
-            bgColor = const Color(0xFF2979FF).withValues(alpha: 0.20);
+            yoyColor = AppTheme.info; // Distinct Blue
+            bgColor = AppTheme.info.withValues(alpha: 0.20);
           } else if (!prevIsZero && !currIsZero) {
             yoyPct = ((sales - prevSales) / prevSales) * 100;
             yoySign = yoyPct >= 0 ? '+' : '';
@@ -2282,7 +2290,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             bgColor = yoyColor.withValues(alpha: 0.12);
           } else {
             yoyColor = AppTheme.textSecondary;
-            bgColor = AppTheme.darkCard;
+            bgColor = AppTheme.raisedSurface;
           }
 
           return Container(
@@ -2344,7 +2352,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     style: TextStyle(
                       fontSize: compact ? 7 : 8,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                     ),
                   ),
               ],
@@ -2389,7 +2397,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       decoration: BoxDecoration(
-        color: AppTheme.neonPurple.withValues(alpha: 0.08),
+        color: AppTheme.accentIndigo.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -2498,7 +2506,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 style: const TextStyle(
                   fontSize: 8,
                   fontWeight: FontWeight.bold,
-                  color: Colors.orange,
+                  color: AppTheme.warning,
                 ),
               ),
             ),
@@ -2515,7 +2523,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase,
+        color: AppTheme.inkSurface,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -2574,7 +2582,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       style: const TextStyle(
                         fontSize: 8,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                       ),
                     ),
                   ),
@@ -2651,7 +2659,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             : unitType;
     }
 
-    var borderColor = AppTheme.surfaceColor;
+    var borderColor = AppTheme.raisedSurface;
     if (comparison.isNotEmpty) {
       borderColor = _comparisonColorFromName(comparison['color']?.toString());
     } else if (yoyTrend == 'up') {
@@ -2659,7 +2667,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     } else if (yoyTrend == 'down') {
       borderColor = AppTheme.error;
     } else if (yoyTrend == 'new') {
-      borderColor = AppTheme.neonBlue;
+      borderColor = AppTheme.info;
     }
 
     final baseUrl = ApiConfig.baseUrl;
@@ -2672,11 +2680,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: hasDiscount
-              ? Colors.orange.withValues(alpha: 0.5)
+              ? AppTheme.warning.withValues(alpha: 0.5)
               : borderColor.withValues(alpha: 0.3),
           width: hasDiscount ? 1.5 : 1,
         ),
@@ -2701,7 +2709,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   child: Container(
                     width: 44,
                     height: 44,
-                    color: AppTheme.darkBase,
+                    color: AppTheme.inkSurface,
                     child: SmartProductImage(
                       imageUrl: imageUrl,
                       productCode: code,
@@ -2728,7 +2736,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                            color: AppTheme.info.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -2736,7 +2744,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             style: const TextStyle(
                               fontSize: 8,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                             ),
                           ),
                         ),
@@ -2748,7 +2756,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
+                              color: AppTheme.warning.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(3),
                             ),
                             child: Text(
@@ -2758,7 +2766,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               style: const TextStyle(
                                 fontSize: 6,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.orange,
+                                color: AppTheme.warning,
                               ),
                             ),
                           ),
@@ -2796,8 +2804,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               ),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                  color:
-                                      AppTheme.neonBlue.withValues(alpha: 0.4),
+                                  color: AppTheme.info.withValues(alpha: 0.4),
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -2806,14 +2813,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                                 children: [
                                   Icon(
                                     Icons.description_outlined,
-                                    color: AppTheme.neonBlue,
+                                    color: AppTheme.info,
                                     size: 11,
                                   ),
                                   SizedBox(width: 2),
                                   Text(
                                     'Ficha',
                                     style: TextStyle(
-                                      color: AppTheme.neonBlue,
+                                      color: AppTheme.info,
                                       fontSize: 8,
                                     ),
                                   ),
@@ -2845,8 +2852,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           _buildProductCommercialByYear(
             p,
             unitLabel,
-            borderColor == AppTheme.surfaceColor
-                ? AppTheme.neonPurple
+            borderColor == AppTheme.raisedSurface
+                ? AppTheme.accentIndigo
                 : borderColor,
             hasDiscount,
             avgDiscountPct,
@@ -2905,7 +2912,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final margin = (f['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final comparisonColor = _comparisonColorFromName(
       _comparisonFrom(f)['color']?.toString(),
-      fallback: AppTheme.neonBlue,
+      fallback: AppTheme.info,
     );
 
     var pCount = 0;
@@ -2914,7 +2921,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     }
 
     return Card(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.raisedSurface,
       margin: const EdgeInsets.only(bottom: 4),
       child: Column(
         children: [
@@ -2924,13 +2931,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             leading: CircleAvatar(
               radius: 12,
-              backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
+              backgroundColor: AppTheme.info.withValues(alpha: 0.2),
               child: Text(
                 code,
                 style: const TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                 ),
               ),
             ),
@@ -2992,17 +2999,17 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final expanded = _expandedSubfamilies.contains(key);
     final comparisonColor = _comparisonColorFromName(
       _comparisonFrom(s)['color']?.toString(),
-      fallback: AppTheme.neonPurple,
+      fallback: AppTheme.accentIndigo,
     );
 
     return Container(
       margin: const EdgeInsets.only(left: 12, right: 4, bottom: 2),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase,
+        color: AppTheme.inkSurface,
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(
-            color: AppTheme.neonPurple.withValues(alpha: 0.5),
+            color: AppTheme.accentIndigo.withValues(alpha: 0.5),
             width: 3,
           ),
         ),
@@ -3027,7 +3034,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   Icon(
                     expanded ? Icons.folder_open : Icons.folder,
                     size: 16,
-                    color: Colors.grey,
+                    color: AppTheme.textTertiary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -3136,11 +3143,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       margin: const EdgeInsets.only(left: 8, right: 4, bottom: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(8),
         border: discount
             ? Border.all(
-                color: Colors.orange.withValues(alpha: 0.5), width: 1.5)
+                color: AppTheme.warning.withValues(alpha: 0.5), width: 1.5)
             : null,
       ),
       child: Column(
@@ -3163,7 +3170,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   child: Container(
                     width: 48,
                     height: 48,
-                    color: AppTheme.darkBase,
+                    color: AppTheme.inkSurface,
                     child: SmartProductImage(
                       imageUrl: imageUrl,
                       productCode: code,
@@ -3190,7 +3197,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                            color: AppTheme.info.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -3219,8 +3226,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               ),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                  color:
-                                      AppTheme.neonBlue.withValues(alpha: 0.4),
+                                  color: AppTheme.info.withValues(alpha: 0.4),
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -3229,14 +3235,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                                 children: [
                                   Icon(
                                     Icons.description_outlined,
-                                    color: AppTheme.neonBlue,
+                                    color: AppTheme.info,
                                     size: 12,
                                   ),
                                   SizedBox(width: 3),
                                   Text(
                                     'Ficha',
                                     style: TextStyle(
-                                      color: AppTheme.neonBlue,
+                                      color: AppTheme.info,
                                       fontSize: 9,
                                     ),
                                   ),
@@ -3268,7 +3274,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.neonPurple.withValues(alpha: 0.08),
+              color: AppTheme.accentIndigo.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
@@ -3281,7 +3287,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         'PVP/$unitLabel',
                         style: TextStyle(
                           fontSize: 8,
-                          color: Colors.grey.shade400,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                       Row(
@@ -3292,7 +3298,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.neonPurple,
+                              color: AppTheme.accentIndigo,
                             ),
                           ),
                           if (prevYearAvgPrice > 0)
@@ -3300,7 +3306,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               ' (${_formatCurrency(prevYearAvgPrice)})',
                               style: TextStyle(
                                 fontSize: 8,
-                                color: Colors.grey.shade500,
+                                color: AppTheme.textTertiary,
                               ),
                             ),
                         ],
@@ -3317,14 +3323,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           'Coste/$unitLabel',
                           style: TextStyle(
                             fontSize: 8,
-                            color: Colors.grey.shade400,
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                         Text(
                           _formatCurrency(avgUnitCost),
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.grey.shade300,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                       ],
@@ -3339,7 +3345,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           'Margen/$unitLabel',
                           style: TextStyle(
                             fontSize: 8,
-                            color: Colors.grey.shade400,
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                         Text(
@@ -3363,7 +3369,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         unitLabel,
                         style: TextStyle(
                           fontSize: 8,
-                          color: Colors.grey.shade400,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                       Row(
@@ -3376,7 +3382,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.neonBlue,
+                              color: AppTheme.info,
                             ),
                           ),
                           if (prevYearUnits > 0)
@@ -3384,7 +3390,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               ' (${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})',
                               style: TextStyle(
                                 fontSize: 8,
-                                color: Colors.grey.shade500,
+                                color: AppTheme.textTertiary,
                               ),
                             ),
                         ],
@@ -3401,7 +3407,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase,
+              color: AppTheme.inkSurface,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
@@ -3425,7 +3431,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.neonBlue,
+                            color: AppTheme.info,
                           ),
                         ),
                         if (prevYearSales > 0)
@@ -3433,7 +3439,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ' (${_formatCurrency(prevYearSales)})',
                             style: TextStyle(
                               fontSize: 9,
-                              color: Colors.grey.shade500,
+                              color: AppTheme.textTertiary,
                             ),
                           ),
                       ],
@@ -3481,7 +3487,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         : (avgDiscountPct > 0
                             ? '${avgDiscountPct.toStringAsFixed(0)}%'
                             : '✓'),
-                    Colors.orange,
+                    AppTheme.warning,
                     isBold: true,
                   ),
               ],
@@ -3511,14 +3517,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 final isNeutral = trend == 'neutral' || trend == null;
 
                 // Background & Border Colors
-                var bc = Colors.grey.shade800;
+                var bc = AppTheme.mutedPanel;
                 var bgColor = Colors.transparent;
                 var bWidth = 0.5;
-                if (s > 0) bc = Colors.grey.shade600;
+                if (s > 0) bc = AppTheme.textTertiary;
 
                 if (isNew) {
-                  bc = AppTheme.neonBlue;
-                  bgColor = AppTheme.neonBlue.withValues(alpha: 0.1);
+                  bc = AppTheme.info;
+                  bgColor = AppTheme.info.withValues(alpha: 0.1);
                   bWidth = 1.0;
                 } else if (!isNeutral) {
                   if (trend == 'up') {
@@ -3551,7 +3557,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           Text(
                             _mNames[m - 1],
                             style: const TextStyle(
-                                fontSize: 8, color: Colors.grey),
+                                fontSize: 8, color: AppTheme.textTertiary),
                           ),
 
                           // SALES DISPLAY
@@ -3574,7 +3580,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           else
                             const Text(
                               '-',
-                              style: TextStyle(fontSize: 8, color: Colors.grey),
+                              style: TextStyle(
+                                  fontSize: 8, color: AppTheme.textTertiary),
                             ),
 
                           // VARIATION DISPLAY (Strict Logic)
@@ -3584,7 +3591,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               style: TextStyle(
                                 fontSize: 7,
                                 fontWeight: FontWeight.bold,
-                                color: AppTheme.neonBlue,
+                                color: AppTheme.info,
                               ),
                             )
                           else if (isLost)
@@ -3619,14 +3626,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         style: TextStyle(
           fontSize: 7,
           fontWeight: FontWeight.bold,
-          color: AppTheme.neonBlue,
+          color: AppTheme.info,
         ),
       );
     }
 
     final isPositive = variation > 0;
     final color = trend == 'neutral'
-        ? AppTheme.neonBlue
+        ? AppTheme.info
         : (isPositive ? AppTheme.success : AppTheme.error);
     final prefix =
         isPositive ? '+' : ''; // No prefix if 0, but logic above handles < 1.0
@@ -3671,7 +3678,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       context: ctx,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: AppTheme.raisedSurface,
         content: Row(
           children: [
             const SizedBox(
@@ -3679,13 +3686,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               height: 24,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
               ),
             ),
             const SizedBox(width: 16),
             Text(
               'Descargando ficha técnica...',
-              style: TextStyle(color: Colors.grey[300]),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -3693,7 +3700,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
 
     try {
-      await ApiClient.dio.download(fichaUrl, filePath);
+      await ApiClient.download(fichaUrl, filePath);
 
       if (navigator.canPop()) navigator.pop();
 
@@ -3713,7 +3720,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 'Ficha Técnica - $productCode',
                 style: const TextStyle(fontSize: 14),
               ),
-              backgroundColor: AppTheme.surfaceColor,
+              backgroundColor: AppTheme.raisedSurface,
               elevation: 0,
             ),
             body: PDFView(

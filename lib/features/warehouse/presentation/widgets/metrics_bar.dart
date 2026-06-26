@@ -22,56 +22,53 @@ class MetricsBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.darkBase.withValues(alpha: 0.9),
-            AppTheme.darkSurface.withValues(alpha: 0.6),
-          ],
-        ),
+        color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withValues(alpha: 0.1),
+            color: AppTheme.borderColor.withValues(alpha: 0.8),
           ),
         ),
       ),
-      child: Row(
-        children: [
-          // Volume circular gauge
-          _CircularGaugeCard(
-            label: 'Volumen',
-            value: m.volumePct,
-            current: (m.usedVolumeCm3 / 1e6).toStringAsFixed(1),
-            unit: 'm³',
-            max: '${(m.containerVolumeCm3 / 1e6).toStringAsFixed(1)} m³',
-            color: _statusColor(m.volumePct),
-          ),
-          const SizedBox(width: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            // Volume circular gauge
+            _CircularGaugeCard(
+              label: 'Volumen',
+              value: m.volumePct,
+              current: (m.usedVolumeCm3 / 1e6).toStringAsFixed(1),
+              unit: 'm³',
+              max: '${(m.containerVolumeCm3 / 1e6).toStringAsFixed(1)} m³',
+              color: _statusColor(m.volumePct),
+            ),
+            const SizedBox(width: 10),
 
-          // Weight circular gauge
-          _CircularGaugeCard(
-            label: 'Peso',
-            value: m.weightPct,
-            current: m.totalWeightKg.toStringAsFixed(0),
-            unit: 'kg',
-            max: '${m.maxPayloadKg.toStringAsFixed(0)} kg',
-            color: _statusColor(m.weightPct),
-          ),
-          const SizedBox(width: 10),
+            // Weight circular gauge
+            _CircularGaugeCard(
+              label: 'Peso',
+              value: m.weightPct,
+              current: m.totalWeightKg.toStringAsFixed(0),
+              unit: 'kg',
+              max: '${m.maxPayloadKg.toStringAsFixed(0)} kg',
+              color: _statusColor(m.weightPct),
+            ),
+            const SizedBox(width: 10),
 
-          // Status badge (with pulse for EXCESO)
-          _PremiumStatusBadge(status: m.status),
-          const SizedBox(width: 10),
+            // Status badge (with pulse for EXCESO)
+            _PremiumStatusBadge(status: m.status),
+            const SizedBox(width: 10),
 
-          // Box count card
-          _BoxCountCard(placed: m.placedCount, overflow: m.overflowCount),
+            // Box count card
+            _BoxCountCard(placed: m.placedCount, overflow: m.overflowCount),
 
-          const Spacer(),
+            const Spacer(),
 
-          // Save indicator
-          _PremiumSaveIndicator(state: saveState),
-        ],
+            // Save indicator
+            _PremiumSaveIndicator(state: saveState),
+          ],
+        ),
       ),
     );
   }
@@ -107,11 +104,10 @@ class _CircularGaugeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: AppTheme.gradientCard(
-        startColor: color,
-        endColor: color.withValues(alpha: 0.3),
-        borderRadius: 10,
-        borderOpacity: 0.15,
+      decoration: BoxDecoration(
+        color: AppTheme.softPanel,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -128,7 +124,7 @@ class _CircularGaugeCard extends StatelessWidget {
                 painter: _ArcPainter(
                   progress: v,
                   color: color,
-                  bgColor: AppTheme.darkCard.withValues(alpha: 0.5),
+                  bgColor: AppTheme.borderColor.withValues(alpha: 0.35),
                 ),
                 child: Center(
                   child: Text(
@@ -170,7 +166,7 @@ class _CircularGaugeCard extends StatelessWidget {
                         color: AppTheme.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
+                        letterSpacing: 0,
                       ),
                     ),
                   ),
@@ -352,7 +348,7 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
                   color: color,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -377,11 +373,9 @@ class _BoxCountCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard.withValues(alpha: 0.3),
+        color: AppTheme.softPanel,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppTheme.borderColor.withValues(alpha: 0.15),
-        ),
+        border: Border.all(color: AppTheme.borderColor),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -396,7 +390,7 @@ class _BoxCountCard extends StatelessWidget {
                 color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -432,7 +426,7 @@ class _PremiumSaveIndicator extends StatelessWidget {
         ),
       SaveState.saving => (
           Icons.cloud_upload_rounded,
-          AppTheme.neonBlue,
+          AppTheme.info,
           'Guardando...'
         ),
       SaveState.unsaved => (

@@ -7,11 +7,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
-import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
@@ -83,6 +83,7 @@ void main() async {
     // Initialize offline infrastructure
     await ConnectivityService.instance.initialize();
     await SyncQueueService.instance.initialize();
+    await NotificationOrchestrator.instance.initialize();
     debugPrint(
       '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
     );
@@ -155,6 +156,11 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
         ConnectivityService.instance.stream.listen((status) {
       if (status == ConnectivityStatus.online) {
         _runAutoSync();
+        unawaited(
+          NotificationOrchestrator.instance.refreshAll(
+            reason: 'connectivity_online',
+          ),
+        );
       }
     });
   }
@@ -174,9 +180,17 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
-      // User returned to the app - verify session is still valid
-      _validateSessionOnResume();
-      _runAutoSync();
+      unawaited(_handleAppResumed());
+    }
+  }
+
+  Future<void> _handleAppResumed() async {
+    final isSessionValid = await _validateSessionOnResume();
+    if (isSessionValid) {
+      await _runAutoSync();
+      await NotificationOrchestrator.instance.refreshAll(
+        reason: 'app_resumed',
+      );
     }
   }
 
@@ -207,6 +221,9 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
         debugPrint('[AutoSync] $failed offline orders preserved as failed');
         OfflineSyncNotifier.orderSyncFailed(failed);
       }
+      await NotificationOrchestrator.instance.refreshOrderReminders(
+        reason: 'auto_sync_complete',
+      );
     } catch (e, stack) {
       debugPrint('[AutoSync] Error syncing pending operations: $e');
       await Sentry.captureException(e, stackTrace: stack);
@@ -216,28 +233,22 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   }
 
   /// Validate session when app resumes to prevent unexpected logouts
-  Future<void> _validateSessionOnResume() async {
+  Future<bool> _validateSessionOnResume() async {
     try {
       final authState = ref.read(authProvider);
 
-      // If user was authenticated, verify token still exists in storage
-      if (authState.value?.isAuthenticated ?? false) {
-        final token = await SecureStorage.readSecureData('user_token');
+      if (!(authState.value?.isAuthenticated ?? false)) return false;
 
-        if (token == null || token.isEmpty) {
-          // Token was cleared - session is invalid
-          debugPrint(
-              '[AppLifecycle] Token missing on resume - triggering logout');
-          ref.read(authProvider.notifier).logout(sessionExpired: true);
-        } else {
-          // Token exists - ensure Dio header is set (might have been lost on reinitialize)
-          ApiClient.setAuthToken(token);
-          await ApiClient.refreshAccessToken();
-          debugPrint('[AppLifecycle] Session validated successfully on resume');
-        }
-      }
+      final isStillValid =
+          await ref.read(authProvider.notifier).ensureSessionIsStillValid();
+      if (!isStillValid) return false;
+
+      await ApiClient.refreshAccessToken();
+      debugPrint('[AppLifecycle] Session validated successfully on resume');
+      return true;
     } catch (e) {
       debugPrint('[AppLifecycle] Session validation error: $e');
+      return false;
     }
   }
 
@@ -283,7 +294,15 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   Widget build(BuildContext context) {
     ref.listen(authProvider, (previous, next) {
       _authChangeSignal.value++;
-      if (next.value?.isAuthenticated ?? false) {
+      final authState = next.value;
+      unawaited(
+        NotificationOrchestrator.instance.syncForUser(
+          user: authState?.user,
+          vendedorCodes: authState?.vendedorCodes ?? const <String>[],
+          reason: 'auth_provider',
+        ),
+      );
+      if (authState?.isAuthenticated ?? false) {
         _runAutoSync();
       }
     });

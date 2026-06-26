@@ -58,8 +58,8 @@ class OrderEmptyState extends StatelessWidget {
                 icon: const Icon(Icons.clear_all, size: 16),
                 label: const Text('Limpiar filtros'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.neonBlue,
-                  foregroundColor: AppTheme.darkBase,
+                  backgroundColor: AppTheme.info,
+                  foregroundColor: AppTheme.inkSurface,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

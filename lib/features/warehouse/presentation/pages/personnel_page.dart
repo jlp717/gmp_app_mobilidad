@@ -2,12 +2,14 @@
 /// Gestión de operarios de almacén / preparadores de pedidos
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 class PersonnelPage extends StatefulWidget {
   const PersonnelPage({super.key});
@@ -50,15 +52,17 @@ class _PersonnelPageState extends State<PersonnelPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AppTheme.darkCard,
+          backgroundColor: AppTheme.raisedSurface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            side: const BorderSide(color: AppTheme.borderColor),
           ),
           title: const Text(
             'Nuevo Operario',
             style: TextStyle(
-                color: AppTheme.neonBlue, fontWeight: FontWeight.w700),
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -68,20 +72,21 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
-                  dropdownColor: AppTheme.darkCard,
-                  style: const TextStyle(color: Colors.white),
+                  dropdownColor: AppTheme.raisedSurface,
+                  style: const TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: 'Rol',
-                    labelStyle:
-                        TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    filled: true,
+                    fillColor: AppTheme.softPanel,
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15)),
+                      borderSide: const BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.neonBlue),
+                      borderSide:
+                          const BorderSide(color: AppTheme.accentIndigo),
                     ),
                   ),
                   items: const [
@@ -108,7 +113,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
               onPressed: () => Navigator.pop(ctx),
               child: Text(
                 'Cancelar',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                style: const TextStyle(color: AppTheme.textTertiary),
               ),
             ),
             ElevatedButton(
@@ -132,14 +137,14 @@ class _PersonnelPageState extends State<PersonnelPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                           content: Text('Error: $e'),
-                          backgroundColor: Colors.redAccent),
+                          backgroundColor: AppTheme.error),
                     );
                   }
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.3),
-                foregroundColor: AppTheme.neonBlue,
+                backgroundColor: AppTheme.accentIndigo,
+                foregroundColor: AppTheme.textPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
@@ -154,19 +159,20 @@ class _PersonnelPageState extends State<PersonnelPage> {
   Widget _field(TextEditingController ctrl, String label, IconData icon) {
     return TextField(
       controller: ctrl,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        prefixIcon: Icon(icon,
-            color: AppTheme.neonBlue.withValues(alpha: 0.5), size: 20),
+        labelStyle: const TextStyle(color: AppTheme.textSecondary),
+        prefixIcon: Icon(icon, color: AppTheme.accentIndigo, size: 20),
+        filled: true,
+        fillColor: AppTheme.softPanel,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+          borderSide: const BorderSide(color: AppTheme.borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.neonBlue),
+          borderSide: const BorderSide(color: AppTheme.accentIndigo),
         ),
       ),
     );
@@ -175,10 +181,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
-          // Header
           Container(
             padding: EdgeInsets.fromLTRB(
                 Responsive.padding(context, small: 14, large: 20),
@@ -190,14 +195,13 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 Container(
                   padding: EdgeInsets.all(
                       Responsive.padding(context, small: 8, large: 10)),
-                  decoration: BoxDecoration(
-                    color: AppTheme.neonPurple.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+                  decoration: WarehouseUi.surface(
+                    color: AppTheme.accentIndigo.withValues(alpha: 0.15),
+                    borderColor: AppTheme.accentIndigo,
+                    borderAlpha: 0.3,
                   ),
                   child: Icon(Icons.groups_rounded,
-                      color: AppTheme.neonPurple,
+                      color: AppTheme.accentIndigo,
                       size:
                           Responsive.iconSize(context, phone: 20, desktop: 24)),
                 ),
@@ -209,63 +213,65 @@ class _PersonnelPageState extends State<PersonnelPage> {
                       Text(
                         'PERSONAL DE ALMACÉN',
                         style: TextStyle(
-                          color: AppTheme.neonPurple,
+                          color: AppTheme.accentIndigo,
                           fontSize: Responsive.fontSize(context,
                               small: 13, large: 16),
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
+                          letterSpacing: 0,
                         ),
                       ),
                       Text(
                         '${_personnel.length} operarios activos',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
                           fontSize: 12,
                         ),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.cleaning_services_rounded,
-                      color: Colors.amber, size: 20),
-                  tooltip: 'Limpiar entradas de test',
-                  onPressed: () async {
-                    try {
-                      await WarehouseDataService.cleanupTestPersonnel();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Entradas de test limpiadas'),
-                            backgroundColor: Colors.amber,
-                          ),
-                        );
-                        _load();
+                if (kDebugMode)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.cleaning_services_rounded,
+                      color: AppTheme.warning,
+                      size: 20,
+                    ),
+                    tooltip: 'Limpiar entradas de test',
+                    onPressed: () async {
+                      try {
+                        await WarehouseDataService.cleanupTestPersonnel();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Entradas de test limpiadas'),
+                              backgroundColor: AppTheme.warning,
+                            ),
+                          );
+                          _load();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: AppTheme.error,
+                            ),
+                          );
+                        }
                       }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
+                    },
+                  ),
                 FloatingActionButton.small(
                   heroTag: 'add_person',
-                  backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.3),
+                  backgroundColor: AppTheme.accentIndigo,
+                  foregroundColor: AppTheme.textPrimary,
                   onPressed: _showAddDialog,
-                  child: const Icon(Icons.person_add_rounded,
-                      color: AppTheme.neonPurple, size: 20),
+                  child: const Icon(Icons.person_add_rounded, size: 20),
                 ),
               ],
             ),
           ),
-
-          // List
           Expanded(
             child: _loading
                 ? const SkeletonList(itemCount: 4, itemHeight: 80)
@@ -276,21 +282,22 @@ class _PersonnelPageState extends State<PersonnelPage> {
                           children: [
                             Icon(
                               Icons.person_off_outlined,
-                              color: Colors.white.withValues(alpha: 0.3),
+                              color: AppTheme.textTertiary,
                               size: 48,
                             ),
                             const SizedBox(height: 12),
                             Text(
                               'Sin personal registrado',
-                              style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.5)),
+                              style: const TextStyle(
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ],
                         ),
                       )
                     : RefreshIndicator(
                         onRefresh: _load,
-                        color: AppTheme.neonPurple,
+                        color: AppTheme.accentIndigo,
                         child: OptimizedListView(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: _personnel.length,
@@ -313,9 +320,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(14),
+          color: AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           border: Border.all(color: roleColor.withValues(alpha: 0.15)),
+          boxShadow: AppTheme.elevation1,
         ),
         child: Row(
           children: [
@@ -342,7 +350,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         child: Text(
                           person.name,
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
@@ -353,13 +361,13 @@ class _PersonnelPageState extends State<PersonnelPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: AppTheme.softPanel,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
+                          child: const Text(
                             'ERP',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.2),
+                              color: AppTheme.textTertiary,
                               fontSize: 8,
                               fontWeight: FontWeight.w600,
                             ),
@@ -388,21 +396,18 @@ class _PersonnelPageState extends State<PersonnelPage> {
                       if (person.phone.isNotEmpty) ...[
                         const SizedBox(width: 8),
                         Icon(Icons.phone_outlined,
-                            color: Colors.white.withValues(alpha: 0.3),
-                            size: 12),
+                            color: AppTheme.textTertiary, size: 12),
                         const SizedBox(width: 4),
                         Text(
                           person.phone,
-                          style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.4),
-                              fontSize: 11),
+                          style: const TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 11),
                         ),
                       ],
                       if (person.email.isNotEmpty) ...[
                         const SizedBox(width: 8),
                         Icon(Icons.email_outlined,
-                            color: Colors.white.withValues(alpha: 0.3),
-                            size: 12),
+                            color: AppTheme.textTertiary, size: 12),
                       ],
                     ],
                   ),
@@ -410,8 +415,8 @@ class _PersonnelPageState extends State<PersonnelPage> {
               ),
             ),
             if (isCustom)
-              Icon(Icons.more_vert_rounded,
-                  color: Colors.white.withValues(alpha: 0.15), size: 18),
+              const Icon(Icons.more_vert_rounded,
+                  color: AppTheme.textTertiary, size: 18),
           ],
         ),
       ),
@@ -421,9 +426,12 @@ class _PersonnelPageState extends State<PersonnelPage> {
   void _showPersonActions(WarehousePerson person) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.darkCard,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusLg),
+        ),
+      ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -431,14 +439,14 @@ class _PersonnelPageState extends State<PersonnelPage> {
           children: [
             Text(person.name,
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.edit_rounded, color: AppTheme.neonBlue),
-              title:
-                  const Text('Editar', style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.edit_rounded, color: AppTheme.info),
+              title: const Text('Editar',
+                  style: TextStyle(color: AppTheme.textPrimary)),
               onTap: () {
                 Navigator.pop(ctx);
                 _showEditDialog(person);
@@ -446,9 +454,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline_rounded,
-                  color: Colors.redAccent),
+                  color: AppTheme.error),
               title: const Text('Eliminar',
-                  style: TextStyle(color: Colors.redAccent)),
+                  style: TextStyle(color: AppTheme.error)),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(person);
@@ -470,15 +478,17 @@ class _PersonnelPageState extends State<PersonnelPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AppTheme.darkCard,
+          backgroundColor: AppTheme.raisedSurface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            side: const BorderSide(color: AppTheme.borderColor),
           ),
           title: const Text(
             'Editar Operario',
             style: TextStyle(
-                color: AppTheme.neonBlue, fontWeight: FontWeight.w700),
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -488,20 +498,21 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
-                  dropdownColor: AppTheme.darkCard,
-                  style: const TextStyle(color: Colors.white),
+                  dropdownColor: AppTheme.raisedSurface,
+                  style: const TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: 'Rol',
-                    labelStyle:
-                        TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    filled: true,
+                    fillColor: AppTheme.softPanel,
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15)),
+                      borderSide: const BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.neonBlue),
+                      borderSide:
+                          const BorderSide(color: AppTheme.accentIndigo),
                     ),
                   ),
                   items: const [
@@ -527,7 +538,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text('Cancelar',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                  style: const TextStyle(color: AppTheme.textTertiary)),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -547,14 +558,14 @@ class _PersonnelPageState extends State<PersonnelPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                           content: Text('Error: $e'),
-                          backgroundColor: Colors.redAccent),
+                          backgroundColor: AppTheme.error),
                     );
                   }
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.3),
-                foregroundColor: AppTheme.neonBlue,
+                backgroundColor: AppTheme.accentIndigo,
+                foregroundColor: AppTheme.textPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
@@ -570,18 +581,21 @@ class _PersonnelPageState extends State<PersonnelPage> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
         title: const Text('Eliminar operario',
-            style: TextStyle(
-                color: Colors.redAccent, fontWeight: FontWeight.w700)),
+            style:
+                TextStyle(color: AppTheme.error, fontWeight: FontWeight.w700)),
         content: Text('¿Eliminar a ${person.name}?',
-            style: const TextStyle(color: Colors.white70)),
+            style: const TextStyle(color: AppTheme.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text('Cancelar',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                style: const TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -594,14 +608,14 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                         content: Text('Error: $e'),
-                        backgroundColor: Colors.redAccent),
+                        backgroundColor: AppTheme.error),
                   );
                 }
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent.withValues(alpha: 0.3),
-              foregroundColor: Colors.redAccent,
+              backgroundColor: AppTheme.error.withValues(alpha: 0.3),
+              foregroundColor: AppTheme.error,
             ),
             child: const Text('Eliminar'),
           ),
@@ -613,13 +627,13 @@ class _PersonnelPageState extends State<PersonnelPage> {
   Color _roleColor(String role) {
     switch (role) {
       case 'SUPERVISOR':
-        return Colors.amber;
+        return AppTheme.warning;
       case 'CARGADOR':
-        return AppTheme.neonGreen;
+        return AppTheme.success;
       case 'EXPEDIDOR':
-        return AppTheme.neonBlue;
+        return AppTheme.info;
       default:
-        return AppTheme.neonPurple;
+        return AppTheme.accentIndigo;
     }
   }
 }

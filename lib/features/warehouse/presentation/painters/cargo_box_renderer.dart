@@ -2,7 +2,7 @@
 /// Features:
 /// - Gradient-lit faces (top bright → bottom dark)
 /// - Large, readable product labels with pill backgrounds
-/// - Selection glow with neon outline
+/// - Selection outline with restrained focus contrast
 /// - LOD: simplified rendering at low zoom
 /// - Viewport culling: skip boxes off-screen
 /// - Soft shadows between boxes
@@ -281,7 +281,7 @@ class CargoBoxRenderer {
               color: Colors.white.withValues(alpha: 0.45),
               fontSize: math.min(faceW * 0.18, 9).toDouble(),
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+              letterSpacing: 0,
             ),
           ),
           textDirection: TextDirection.ltr,
@@ -344,7 +344,7 @@ class CargoBoxRenderer {
         color: _textColorForBg(boxColor),
         fontSize: fontSize,
         fontWeight: FontWeight.bold,
-        letterSpacing: 0.3,
+        letterSpacing: 0,
       ),
       bgColor: boxColor.withValues(alpha: 0.85),
       borderColor: isSelected ? Colors.white : null,

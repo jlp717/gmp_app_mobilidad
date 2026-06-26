@@ -47,7 +47,7 @@ class RuteroDetailCompleted extends StatelessWidget {
             _ShareButton(
               icon: Icons.print,
               label: 'Imprimir Ticket (Zebra)',
-              color: const Color(0xFF00BCD4),
+              color: AppTheme.info,
               onTap: onShowZebraPrintPreview,
             ),
           ],
@@ -61,14 +61,9 @@ class RuteroDetailCompleted extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.success.withValues(alpha: 0.15),
-            AppTheme.success.withValues(alpha: 0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.34)),
       ),
       child: Row(
         children: [
@@ -95,7 +90,6 @@ class RuteroDetailCompleted extends StatelessWidget {
                     color: AppTheme.success,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    letterSpacing: 0.5,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -120,8 +114,8 @@ class RuteroDetailCompleted extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(14),
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(color: AppTheme.borderColor),
       ),
       child: Column(
@@ -209,21 +203,20 @@ class RuteroDetailCompleted extends StatelessWidget {
             color: AppTheme.textSecondary,
             fontWeight: FontWeight.bold,
             fontSize: 12,
-            letterSpacing: 1,
           ),
         ),
         const SizedBox(height: 12),
         _ShareButton(
           icon: Icons.visibility,
           label: 'Ver PDF',
-          color: AppTheme.neonPurple,
+          color: AppTheme.accentIndigo,
           onTap: onPreviewReceiptPdf,
         ),
         const SizedBox(height: 10),
         _ShareButton(
           icon: Icons.download,
           label: 'Descargar PDF',
-          color: AppTheme.neonBlue,
+          color: AppTheme.info,
           onTap: onDownloadReceiptPdf,
         ),
         const SizedBox(height: 10),
@@ -237,7 +230,7 @@ class RuteroDetailCompleted extends StatelessWidget {
         _ShareButton(
           icon: Icons.email,
           label: 'Enviar por Email',
-          color: AppTheme.neonCyan,
+          color: AppTheme.accentIndigo,
           onTap: onShareViaEmail,
         ),
       ],
@@ -297,11 +290,14 @@ class _ShareButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(12),
+      color: AppTheme.raisedSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        side: BorderSide(color: color.withValues(alpha: 0.28)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(

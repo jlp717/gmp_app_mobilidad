@@ -137,9 +137,9 @@ class OrderLineTile extends StatelessWidget {
         line.precioVenta > 0 &&
         line.precioVenta < line.precioMinimo;
     final marginColor = line.porcentajeMargen >= 15
-        ? AppTheme.neonGreen
+        ? AppTheme.success
         : line.porcentajeMargen >= 5
-            ? Colors.orange
+            ? AppTheme.warning
             : AppTheme.error;
 
     return Dismissible(
@@ -161,8 +161,8 @@ class OrderLineTile extends StatelessWidget {
       },
       child: Card(
         color: isGiftLine
-            ? AppTheme.neonGreen.withValues(alpha: 0.08)
-            : AppTheme.darkCard,
+            ? AppTheme.success.withValues(alpha: 0.08)
+            : AppTheme.softPanel,
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -223,8 +223,7 @@ class OrderLineTile extends StatelessWidget {
                                 vertical: 1,
                               ),
                               decoration: BoxDecoration(
-                                color:
-                                    AppTheme.neonGreen.withValues(alpha: 0.2),
+                                color: AppTheme.success.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Row(
@@ -232,14 +231,14 @@ class OrderLineTile extends StatelessWidget {
                                 children: [
                                   Icon(
                                     Icons.card_giftcard,
-                                    color: AppTheme.neonGreen,
+                                    color: AppTheme.success,
                                     size: 10,
                                   ),
                                   SizedBox(width: 2),
                                   Text(
                                     'REGALO',
                                     style: TextStyle(
-                                      color: AppTheme.neonGreen,
+                                      color: AppTheme.success,
                                       fontSize: 9,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -262,13 +261,15 @@ class OrderLineTile extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color: line.claseLinea == 'SC'
-                                      ? Colors.blueGrey.withValues(alpha: 0.25)
-                                      : AppTheme.neonPurple
+                                      ? AppTheme.textSecondary
+                                          .withValues(alpha: 0.18)
+                                      : AppTheme.accentIndigo
                                           .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
                                     color: line.claseLinea == 'SC'
-                                        ? Colors.blueGrey
+                                        ? AppTheme.textSecondary
+                                            .withValues(alpha: 0.45)
                                         : Colors.transparent,
                                     width: 0.5,
                                   ),
@@ -277,8 +278,8 @@ class OrderLineTile extends StatelessWidget {
                                   line.claseLinea == 'SC' ? 'SC' : 'VT',
                                   style: TextStyle(
                                     color: line.claseLinea == 'SC'
-                                        ? Colors.blueGrey.shade200
-                                        : AppTheme.neonPurple,
+                                        ? AppTheme.textSecondary
+                                        : AppTheme.accentIndigo,
                                     fontSize: Responsive.fontSize(
                                       context,
                                       small: 9,
@@ -354,7 +355,7 @@ class OrderLineTile extends StatelessWidget {
                                       child: Icon(
                                         Icons.add,
                                         size: 14,
-                                        color: AppTheme.neonBlue,
+                                        color: AppTheme.info,
                                       ),
                                     ),
                                   ),
@@ -396,14 +397,14 @@ class OrderLineTile extends StatelessWidget {
                         children: [
                           const Icon(
                             Icons.card_giftcard,
-                            color: AppTheme.neonGreen,
+                            color: AppTheme.success,
                             size: 13,
                           ),
                           const SizedBox(width: 3),
                           Text(
                             '0,00 €',
                             style: TextStyle(
-                              color: AppTheme.neonGreen,
+                              color: AppTheme.success,
                               fontWeight: FontWeight.bold,
                               fontSize: Responsive.fontSize(
                                 context,
@@ -451,7 +452,7 @@ class OrderLineTile extends StatelessWidget {
                       Text(
                         PedidosFormatters.money(line.importeVenta),
                         style: TextStyle(
-                          color: AppTheme.neonGreen,
+                          color: AppTheme.success,
                           fontWeight: FontWeight.bold,
                           fontSize: Responsive.fontSize(
                             context,
@@ -537,7 +538,7 @@ class _LineDiscountChip extends StatelessWidget {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: AppTheme.darkSurface,
+          backgroundColor: AppTheme.raisedSurface,
           title: const Text(
             'Descuento de línea',
             style: TextStyle(color: Colors.white),
@@ -590,12 +591,12 @@ class _LineDiscountChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           color: hasDiscount
-              ? AppTheme.neonGreen.withValues(alpha: 0.18)
+              ? AppTheme.success.withValues(alpha: 0.18)
               : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: hasDiscount
-                ? AppTheme.neonGreen.withValues(alpha: 0.6)
+                ? AppTheme.success.withValues(alpha: 0.6)
                 : Colors.white24,
             width: 0.5,
           ),
@@ -606,7 +607,7 @@ class _LineDiscountChip extends StatelessWidget {
             Icon(
               hasDiscount ? Icons.percent : Icons.local_offer_outlined,
               size: 11,
-              color: hasDiscount ? AppTheme.neonGreen : Colors.white54,
+              color: hasDiscount ? AppTheme.success : Colors.white54,
             ),
             const SizedBox(width: 3),
             Text(
@@ -614,7 +615,7 @@ class _LineDiscountChip extends StatelessWidget {
                   ? '-${line.lineDiscountPct.toStringAsFixed(line.lineDiscountPct % 1 == 0 ? 0 : 1)}%'
                   : 'Dto',
               style: TextStyle(
-                color: hasDiscount ? AppTheme.neonGreen : Colors.white54,
+                color: hasDiscount ? AppTheme.success : Colors.white54,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
               ),

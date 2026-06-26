@@ -66,7 +66,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     final isWide = MediaQuery.of(context).size.width > 800;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
           // Premium gradient header
@@ -137,26 +137,13 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
         bottom: 10,
       ),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.darkSurface,
-            AppTheme.darkBase.withValues(alpha: 0.95),
-          ],
-        ),
+        color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withValues(alpha: 0.2),
+            color: AppTheme.borderColor.withValues(alpha: 0.8),
           ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppTheme.elevation1,
       ),
       child: Row(
         children: [
@@ -194,16 +181,16 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                     Icon(
                       Icons.local_shipping_outlined,
                       size: 12,
-                      color: AppTheme.neonBlue.withValues(alpha: 0.6),
+                      color: AppTheme.info,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       widget.vehicleCode,
                       style: TextStyle(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.8),
+                        color: AppTheme.info,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        letterSpacing: 0.5,
+                        letterSpacing: 0,
                       ),
                     ),
                     Padding(
@@ -267,9 +254,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 shaderCallback: (bounds) {
                   return LinearGradient(
                     colors: [
-                      AppTheme.neonBlue.withValues(alpha: 0.3),
-                      AppTheme.neonBlue,
-                      AppTheme.neonBlue.withValues(alpha: 0.3),
+                      AppTheme.info.withValues(alpha: 0.25),
+                      AppTheme.info,
+                      AppTheme.info.withValues(alpha: 0.25),
                     ],
                     stops: [
                       (_shimmerCtrl.value - 0.3).clamp(0.0, 1.0),
@@ -281,7 +268,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 child: const Icon(
                   Icons.local_shipping_rounded,
                   size: 48,
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                 ),
               ),
               const SizedBox(height: 20),
@@ -294,7 +281,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                   ),
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 0.5,
+                  letterSpacing: 0,
                 ),
               ),
               const SizedBox(height: 12),
@@ -304,8 +291,8 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    backgroundColor: AppTheme.darkCard.withValues(alpha: 0.5),
-                    color: AppTheme.neonBlue,
+                    backgroundColor: AppTheme.softPanel,
+                    color: AppTheme.info,
                     minHeight: 2,
                   ),
                 ),
@@ -385,7 +372,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                                     color: AppTheme.error,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.3,
+                                    letterSpacing: 0,
                                   ),
                                 ),
                               ],
@@ -443,7 +430,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                  color: AppTheme.info.withValues(alpha: 0.18),
                   blurRadius: 16,
                   spreadRadius: 1,
                 ),
@@ -454,8 +441,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 HapticFeedback.mediumImpact();
                 _showPanelSheet(context);
               },
-              backgroundColor: AppTheme.neonBlue,
-              child: const Icon(Icons.list_rounded, color: AppTheme.darkBase),
+              backgroundColor: AppTheme.info,
+              foregroundColor: AppTheme.textPrimary,
+              child: const Icon(Icons.list_rounded),
             ),
           ),
         ),
@@ -475,21 +463,15 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
         builder: (_, controller) {
           return Container(
             decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
+              color: AppTheme.raisedSurface,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(20)),
               border: Border(
                 top: BorderSide(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                  color: AppTheme.borderColor.withValues(alpha: 0.9),
                 ),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.08),
-                  blurRadius: 24,
-                  offset: const Offset(0, -4),
-                ),
-              ],
+              boxShadow: AppTheme.elevation2,
             ),
             child: Column(
               children: [
@@ -499,7 +481,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                    color: AppTheme.borderColor,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -562,7 +544,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                    color: AppTheme.info.withValues(alpha: 0.14),
                     blurRadius: 12,
                   ),
                 ],
@@ -612,18 +594,18 @@ class _GlassIconButton extends StatelessWidget {
         height: 36,
         decoration: BoxDecoration(
           color: isActive
-              ? AppTheme.neonBlue.withValues(alpha: 0.15)
-              : AppTheme.darkCard.withValues(alpha: 0.4),
+              ? AppTheme.info.withValues(alpha: 0.14)
+              : AppTheme.softPanel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
-                ? AppTheme.neonBlue.withValues(alpha: 0.4)
-                : AppTheme.borderColor.withValues(alpha: 0.3),
+                ? AppTheme.info.withValues(alpha: 0.34)
+                : AppTheme.borderColor,
           ),
           boxShadow: isActive
               ? [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                    color: AppTheme.info.withValues(alpha: 0.12),
                     blurRadius: 8,
                   ),
                 ]
@@ -632,7 +614,7 @@ class _GlassIconButton extends StatelessWidget {
         child: Icon(
           icon,
           size: 18,
-          color: isActive ? AppTheme.neonBlue : AppTheme.textPrimary,
+          color: isActive ? AppTheme.info : AppTheme.textPrimary,
         ),
       ),
     );

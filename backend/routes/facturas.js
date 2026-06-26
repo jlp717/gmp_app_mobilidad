@@ -79,6 +79,7 @@ router.get('/', verifyToken, async (req, res, next) => {
             clientId: req.query.clientId,
             clientSearch: req.query.clientSearch,
             docSearch: req.query.docSearch,
+            documentType: req.query.documentType || req.query.tipoDocumento,
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo,
             limit: req.query.limit ? parseInt(req.query.limit, 10) : undefined,
@@ -146,6 +147,7 @@ router.get('/summary', verifyToken, async (req, res, next) => {
             clientId: req.query.clientId,
             clientSearch: req.query.clientSearch,
             docSearch: req.query.docSearch,
+            documentType: req.query.documentType || req.query.tipoDocumento,
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo
         };
@@ -163,7 +165,15 @@ router.get('/summary', verifyToken, async (req, res, next) => {
         logger.warn(`[facturas/summary] Returning zeros due to: ${error.message.substring(0, 100)}`);
         res.json({
             success: true,
-            summary: { totalFacturas: 0, totalImporte: 0, totalBase: 0, totalIva: 0 }
+            summary: {
+                totalFacturas: 0,
+                totalDocumentos: 0,
+                totalFacturasEmitidas: 0,
+                totalAlbaranes: 0,
+                totalImporte: 0,
+                totalBase: 0,
+                totalIva: 0
+            }
         });
     }
 });

@@ -92,21 +92,21 @@ class _FilterBarState extends State<FilterBar> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.search, color: AppTheme.neonBlue, size: 20),
+              const Icon(Icons.search, color: AppTheme.info, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Filtros de Búsqueda',
                 style: TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: AppTheme.info,
                     fontSize: 14,
                     fontWeight: FontWeight.bold),
               ),
@@ -114,10 +114,10 @@ class _FilterBarState extends State<FilterBar> {
               if (_hasActiveFilters)
                 TextButton.icon(
                   onPressed: _clearAll,
-                  icon: const Icon(Icons.clear,
-                      size: 16, color: Colors.redAccent),
+                  icon:
+                      const Icon(Icons.clear, size: 16, color: AppTheme.error),
                   label: const Text('Limpiar',
-                      style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                      style: TextStyle(color: AppTheme.error, fontSize: 12)),
                 ),
             ],
           ),
@@ -170,9 +170,9 @@ class _FilterBarState extends State<FilterBar> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white54, fontSize: 12),
-        prefixIcon: Icon(icon, color: AppTheme.neonGreen, size: 18),
+        prefixIcon: Icon(icon, color: AppTheme.success, size: 18),
         filled: true,
-        fillColor: AppTheme.darkBase,
+        fillColor: AppTheme.inkSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,

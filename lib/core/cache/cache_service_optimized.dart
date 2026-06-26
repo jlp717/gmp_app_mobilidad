@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 /// CacheService V3 Performance Optimized
@@ -64,17 +65,15 @@ class CacheServiceOptimized {
   static Future<void> init() async {
     await Hive.initFlutter();
 
-    final key = _generateEncryptionKey();
-    final encryptionCipher = HiveAesCipher(key);
-
-    // Open boxes with optimized batch size
-    _cacheBox = await Hive.openBox<dynamic>(
+    // Open boxes with SecureStorage-backed random keys; legacyKey migrates the
+    // previous static-key encrypted boxes without keeping that key in use.
+    _cacheBox = await HiveSecureBox.open<dynamic>(
       _cacheBoxName,
-      encryptionCipher: encryptionCipher,
+      legacyKey: _generateEncryptionKey(),
     );
-    _metadataBox = await Hive.openBox<dynamic>(
+    _metadataBox = await HiveSecureBox.open<dynamic>(
       _metadataBoxName,
-      encryptionCipher: encryptionCipher,
+      legacyKey: _generateEncryptionKey(),
     );
 
     // Pre-warm memory cache with critical keys

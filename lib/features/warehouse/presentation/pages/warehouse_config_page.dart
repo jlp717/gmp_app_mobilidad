@@ -85,7 +85,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -102,7 +102,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
     final newValue = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
+        backgroundColor: AppTheme.raisedSurface,
         title: Text(
           label,
           style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -131,12 +131,12 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
                 labelStyle: const TextStyle(color: Colors.white38),
                 enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                    color: AppTheme.info.withValues(alpha: 0.3),
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: AppTheme.neonBlue),
+                  borderSide: const BorderSide(color: AppTheme.info),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -154,8 +154,8 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-              foregroundColor: AppTheme.neonBlue,
+              backgroundColor: AppTheme.info.withValues(alpha: 0.2),
+              foregroundColor: AppTheme.info,
             ),
             child: const Text('Guardar'),
           ),
@@ -174,7 +174,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('$label actualizado'),
-              backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.8),
+              backgroundColor: AppTheme.success.withValues(alpha: 0.8),
               duration: const Duration(seconds: 1),
             ),
           );
@@ -184,7 +184,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error: $e'),
-              backgroundColor: Colors.redAccent,
+              backgroundColor: AppTheme.error,
             ),
           );
         }
@@ -195,9 +195,9 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: AppTheme.darkBase,
+        backgroundColor: AppTheme.inkSurface,
         elevation: 0,
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,10 +205,10 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             Text(
               'CONFIGURACION',
               style: TextStyle(
-                color: AppTheme.neonBlue,
+                color: AppTheme.info,
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
+                letterSpacing: 0,
               ),
             ),
             Text(
@@ -222,14 +222,14 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             onPressed: _loadConfig,
             icon: const Icon(
               Icons.refresh_rounded,
-              color: AppTheme.neonGreen,
+              color: AppTheme.success,
             ),
           ),
         ],
       ),
       body: _loading
           ? const Center(
-              child: CircularProgressIndicator(color: AppTheme.neonBlue),
+              child: CircularProgressIndicator(color: AppTheme.info),
             )
           : _error != null
               ? _buildError()
@@ -262,7 +262,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                       ),
                     )
                   : const Icon(Icons.auto_fix_high_rounded),
@@ -270,8 +270,8 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
                 _seeding ? 'Generando...' : 'Generar valores por defecto',
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.15),
-                foregroundColor: AppTheme.neonGreen,
+                backgroundColor: AppTheme.success.withValues(alpha: 0.15),
+                foregroundColor: AppTheme.success,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 12,
@@ -312,10 +312,10 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 6),
           decoration: BoxDecoration(
-            color: AppTheme.darkCard,
+            color: AppTheme.raisedSurface,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: AppTheme.neonBlue.withValues(alpha: 0.08),
+              color: AppTheme.info.withValues(alpha: 0.08),
             ),
           ),
           child: ListTile(
@@ -346,13 +346,13 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
                 vertical: 6,
               ),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                color: AppTheme.info.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 value,
                 style: const TextStyle(
-                  color: AppTheme.neonBlue,
+                  color: AppTheme.info,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -372,7 +372,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         children: [
           const Icon(
             Icons.error_outline_rounded,
-            color: Colors.redAccent,
+            color: AppTheme.error,
             size: 48,
           ),
           const SizedBox(height: 12),
@@ -390,8 +390,8 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Reintentar'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-              foregroundColor: AppTheme.neonBlue,
+              backgroundColor: AppTheme.info.withValues(alpha: 0.2),
+              foregroundColor: AppTheme.info,
             ),
           ),
         ],

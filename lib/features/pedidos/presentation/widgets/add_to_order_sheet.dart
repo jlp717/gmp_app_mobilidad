@@ -4,6 +4,9 @@
 /// unit, and tariff selection.
 library;
 
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,7 +35,7 @@ class AddToOrderSheet {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -72,8 +75,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   List<TariffEntry> _tariffs = [];
   List<StockEntry> _stockByWarehouse = [];
   int _clientTarifaCode = 1;
-  bool _loadingTariffs = true;
   bool _editingExistingLine = false;
+  CancelToken? _detailCancelToken;
+  int _detailLoadGeneration = 0;
 
   Product get product => widget.product;
   bool get isDual => product.isDualFieldProduct;
@@ -147,15 +151,53 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         existingLine?.precioVenta ?? _unitPriceForSelection(selectedUnit),
       ),
     );
+    unawaited(_loadProductDetailForClient());
   }
 
   @override
   void dispose() {
+    _detailCancelToken?.cancel('add-to-order sheet closed');
     _qtyController.dispose();
     _cajasController.dispose();
     _unidadesController.dispose();
     _priceController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadProductDetailForClient() async {
+    final generation = ++_detailLoadGeneration;
+    _detailCancelToken?.cancel('superseded product detail request');
+    final cancelToken = CancelToken();
+    _detailCancelToken = cancelToken;
+    final prov = ref.read(pedidosProvider);
+
+    try {
+      final detail = await PedidosService.getProductDetail(
+        product.code,
+        clientCode: prov.hasClient ? prov.clientCode : null,
+        cancelToken: cancelToken,
+      );
+      if (!mounted || generation != _detailLoadGeneration) return;
+      setState(() {
+        _tariffs = detail.tariffs;
+        _stockByWarehouse = detail.stockByWarehouse;
+        _clientTarifaCode = detail.codigoTarifaCliente;
+        if (detail.clientPrice > 0 &&
+            !_userOverrodePrice &&
+            !_editingExistingLine) {
+          _priceController.text = _formatPriceForInput(
+            _priceFromBoxForSelection(
+              detail.clientPrice,
+              detail.product,
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      if (e is ApiException && e.code == 'CANCELLED') return;
+      debugPrint('[AddToOrderSheet] Error cargando tarifas/stock: $e');
+      if (!mounted || generation != _detailLoadGeneration) return;
+    }
   }
 
   double _unitPriceForSelection(String unit) {
@@ -343,7 +385,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
@@ -353,18 +395,18 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
               size: 24,
             ),
             SizedBox(width: 8),
-            Text('Precio bajo', style: TextStyle(color: Colors.white)),
+            Text('Precio bajo', style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
         content: Text(
           'El precio (${PedidosFormatters.money(price, decimals: 3)}) es inferior al minimo (${PedidosFormatters.money(minPrice, decimals: 3)})',
-          style: const TextStyle(color: Colors.white70),
+          style: const TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -387,6 +429,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       productName: product.name,
       productCode: product.code,
       headers: ApiClient.authHeaders,
+      rootNavigator: false,
     );
   }
 
@@ -394,35 +437,6 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   Widget build(BuildContext context) {
     return StatefulBuilder(
       builder: (ctx, setModalState) {
-        if (_loadingTariffs) {
-          _loadingTariffs = false;
-          final prov = ref.read(pedidosProvider);
-          PedidosService.getProductDetail(
-            product.code,
-            clientCode: prov.hasClient ? prov.clientCode : null,
-          ).then((detail) {
-            if (ctx.mounted) {
-              setModalState(() {
-                _tariffs = detail.tariffs;
-                _stockByWarehouse = detail.stockByWarehouse;
-                _clientTarifaCode = detail.codigoTarifaCliente;
-                if (detail.clientPrice > 0 &&
-                    !_userOverrodePrice &&
-                    !_editingExistingLine) {
-                  _priceController.text = _formatPriceForInput(
-                    _priceFromBoxForSelection(
-                      detail.clientPrice,
-                      detail.product,
-                    ),
-                  );
-                }
-              });
-            }
-          }).catchError((Object e) {
-            debugPrint('[AddToOrderSheet] Error cargando tarifas/stock: $e');
-          });
-        }
-
         final qty = isDual
             ? _parseInputNumber(_cajasController.text)
             : _parseInputNumber(_qtyController.text);
@@ -460,7 +474,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white24,
+                      color: AppTheme.textTertiary,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -487,7 +501,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 Text(
                   product.name,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize:
                         Responsive.fontSize(context, small: 15, large: 17),
                     fontWeight: FontWeight.bold,
@@ -501,7 +515,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     Text(
                       product.code,
                       style: TextStyle(
-                        color: AppTheme.neonBlue,
+                        color: AppTheme.info,
                         fontSize: Responsive.fontSize(
                           context,
                           small: 11,
@@ -512,9 +526,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     const Spacer(),
                     Icon(
                       Icons.inventory_outlined,
-                      color: product.hasStock
-                          ? AppTheme.neonGreen
-                          : AppTheme.error,
+                      color:
+                          product.hasStock ? AppTheme.success : AppTheme.error,
                       size: 14,
                     ),
                     const SizedBox(width: 4),
@@ -529,7 +542,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               _buildStockText(),
                               style: TextStyle(
                                 color: product.hasStock
-                                    ? AppTheme.neonGreen
+                                    ? AppTheme.success
                                     : AppTheme.error,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -542,7 +555,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 _showWarehouseStock
                                     ? Icons.expand_less
                                     : Icons.expand_more,
-                                color: Colors.white38,
+                                color: AppTheme.textTertiary,
                                 size: 16,
                               ),
                           ],
@@ -578,7 +591,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               children: [
                                 const Icon(
                                   Icons.warehouse,
-                                  color: AppTheme.neonBlue,
+                                  color: AppTheme.info,
                                   size: 13,
                                 ),
                                 const SizedBox(width: 4),
@@ -588,7 +601,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                         ? s.almacenName
                                         : 'Almacen ${s.almacenCode}',
                                     style: const TextStyle(
-                                      color: Colors.white70,
+                                      color: AppTheme.textSecondary,
                                       fontSize: 11,
                                     ),
                                   ),
@@ -596,7 +609,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 Text(
                                   _buildWarehouseStockText(s),
                                   style: const TextStyle(
-                                    color: Colors.white54,
+                                    color: AppTheme.textSecondary,
                                     fontSize: 11,
                                   ),
                                 ),
@@ -612,7 +625,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     _buildQuickLink(
                       icon: Icons.info_outline,
                       label: 'Datos producto',
-                      color: AppTheme.neonBlue,
+                      color: AppTheme.info,
                       onTap: () {
                         final prov = ref.read(pedidosProvider);
                         final canSeeMargin = ref.watch(
@@ -632,7 +645,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       _buildQuickLink(
                         icon: Icons.bar_chart_rounded,
                         label: 'Historial compras',
-                        color: AppTheme.neonPurple,
+                        color: AppTheme.accentIndigo,
                         onTap: () {
                           final prov = ref.read(pedidosProvider);
                           final canSeeMargin = ref.watch(
@@ -692,7 +705,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.warning,
-                        foregroundColor: AppTheme.darkBase,
+                        foregroundColor: AppTheme.inkSurface,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -706,7 +719,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   Text(
                     'Tarifas',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: AppTheme.textSecondary,
                       fontSize: Responsive.fontSize(
                         context,
                         small: 11,
@@ -754,12 +767,12 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             ),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? AppTheme.neonGreen.withValues(alpha: 0.2)
-                                  : AppTheme.darkCard,
+                                  ? AppTheme.success.withValues(alpha: 0.2)
+                                  : AppTheme.softPanel,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: isSelected
-                                    ? AppTheme.neonGreen
+                                    ? AppTheme.success
                                     : AppTheme.borderColor,
                               ),
                             ),
@@ -772,8 +785,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                       : 'T${t.code}',
                                   style: TextStyle(
                                     color: isSelected
-                                        ? AppTheme.neonGreen
-                                        : Colors.white54,
+                                        ? AppTheme.success
+                                        : AppTheme.textSecondary,
                                     fontSize: 11,
                                   ),
                                 ),
@@ -785,8 +798,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                   ),
                                   style: TextStyle(
                                     color: isSelected
-                                        ? AppTheme.neonGreen
-                                        : Colors.white,
+                                        ? AppTheme.success
+                                        : AppTheme.textPrimary,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -810,7 +823,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             Text(
                               'Cajas',
                               style: TextStyle(
-                                color: Colors.white70,
+                                color: AppTheme.textSecondary,
                                 fontSize: Responsive.fontSize(
                                   context,
                                   small: 11,
@@ -848,7 +861,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                             decimal: true),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: AppTheme.textPrimary,
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -861,13 +874,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                       );
                                       setModalState(() {});
                                     },
-                                    decoration:
-                                        _qtyFieldDeco(AppTheme.neonGreen),
+                                    decoration: _qtyFieldDeco(AppTheme.success),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                _buildQtyButton(Icons.add, AppTheme.neonBlue,
-                                    () {
+                                _buildQtyButton(Icons.add, AppTheme.info, () {
                                   final cur = _parseInputNumber(
                                     _cajasController.text,
                                   );
@@ -895,7 +906,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             Text(
                               'Unidades (${_formatUc(product.unitsPerBox)} U/C)',
                               style: TextStyle(
-                                color: Colors.white70,
+                                color: AppTheme.textSecondary,
                                 fontSize: Responsive.fontSize(
                                   context,
                                   small: 11,
@@ -912,7 +923,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               ),
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: AppTheme.textPrimary,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -924,7 +935,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 );
                                 setModalState(() {});
                               },
-                              decoration: _qtyFieldDeco(AppTheme.neonBlue),
+                              decoration: _qtyFieldDeco(AppTheme.info),
                             ),
                           ],
                         ),
@@ -938,7 +949,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     Text(
                       'Unidad de medida',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppTheme.textSecondary,
                         fontSize: Responsive.fontSize(
                           context,
                           small: 11,
@@ -975,15 +986,16 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: selected
-                                  ? AppTheme.neonBlue.withValues(alpha: 0.2)
-                                  : AppTheme.darkCard,
-                              foregroundColor:
-                                  selected ? AppTheme.neonBlue : Colors.white70,
+                                  ? AppTheme.info.withValues(alpha: 0.2)
+                                  : AppTheme.softPanel,
+                              foregroundColor: selected
+                                  ? AppTheme.info
+                                  : AppTheme.textSecondary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 side: BorderSide(
                                   color: selected
-                                      ? AppTheme.neonBlue
+                                      ? AppTheme.info
                                       : AppTheme.borderColor,
                                   width: selected ? 1.5 : 1,
                                 ),
@@ -1015,8 +1027,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                   style: TextStyle(
                                     fontSize: 9,
                                     color: selected
-                                        ? AppTheme.neonGreen
-                                        : Colors.white38,
+                                        ? AppTheme.success
+                                        : AppTheme.textTertiary,
                                   ),
                                 ),
                                 Text(
@@ -1024,7 +1036,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                   style: TextStyle(
                                     fontSize: 8,
                                     color: unitStock > 0
-                                        ? Colors.white30
+                                        ? AppTheme.textTertiary
                                         : AppTheme.error.withValues(alpha: 0.6),
                                   ),
                                 ),
@@ -1056,7 +1068,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.darkCard,
+                          color: AppTheme.softPanel,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                             color: AppTheme.borderColor.withValues(alpha: 0.6),
@@ -1069,7 +1081,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             Text(
                               'Precio: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} €/$selectedLabel',
                               style: const TextStyle(
-                                color: Colors.white70,
+                                color: AppTheme.textSecondary,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1080,7 +1092,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               Text(
                                 '1 caja = $boxContent · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
                                 style: const TextStyle(
-                                  color: Colors.white54,
+                                  color: AppTheme.textSecondary,
                                   fontSize: 11,
                                 ),
                               ),
@@ -1088,7 +1100,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               Text(
                                 '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
                                 style: const TextStyle(
-                                  color: Colors.white54,
+                                  color: AppTheme.textSecondary,
                                   fontSize: 11,
                                 ),
                               ),
@@ -1098,7 +1110,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               'Stock: ${_formatUnitQty(selectedStock, _selectedUnit)} $selectedLabel',
                               style: TextStyle(
                                 color: selectedStock > 0
-                                    ? AppTheme.neonGreen
+                                    ? AppTheme.success
                                     : AppTheme.error,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -1113,7 +1125,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 style: TextStyle(
                                   color: price < minPriceForSelected
                                       ? AppTheme.error
-                                      : Colors.white38,
+                                      : AppTheme.textTertiary,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1127,7 +1139,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   Text(
                     'Cantidad (${Product.unitLabel(_selectedUnit)})',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: AppTheme.textSecondary,
                       fontSize: Responsive.fontSize(
                         context,
                         small: 11,
@@ -1156,7 +1168,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           ),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.textPrimary,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1164,11 +1176,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             _userOverrodePrice = true;
                             setModalState(() {});
                           },
-                          decoration: _qtyFieldDeco(AppTheme.neonGreen),
+                          decoration: _qtyFieldDeco(AppTheme.success),
                         ),
                       ),
                       const SizedBox(width: 10),
-                      _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
+                      _buildQtyButton(Icons.add, AppTheme.info, () {
                         final cur = _parseInputNumber(_qtyController.text);
                         setModalState(
                           () => _qtyController.text =
@@ -1192,9 +1204,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             );
                           },
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.neonBlue,
+                            foregroundColor: AppTheme.info,
                             side: BorderSide(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                              color: AppTheme.info.withValues(alpha: 0.4),
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -1223,18 +1235,19 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   controller: _priceController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 16),
                   onChanged: (_) => setModalState(() {}),
                   decoration: InputDecoration(
                     labelText: 'Precio',
                     suffixText: ' \u20AC',
                     suffixStyle: const TextStyle(
-                      color: AppTheme.neonGreen,
+                      color: AppTheme.success,
                       fontSize: 16,
                     ),
-                    labelStyle: const TextStyle(color: Colors.white70),
+                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
                     filled: true,
-                    fillColor: AppTheme.darkCard,
+                    fillColor: AppTheme.softPanel,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -1244,7 +1257,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.neonBlue),
+                      borderSide: const BorderSide(color: AppTheme.info),
                     ),
                   ),
                 ),
@@ -1261,7 +1274,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                   price <
                                       product.minimumPriceForUnit(_selectedUnit)
                               ? AppTheme.error
-                              : Colors.white38,
+                              : AppTheme.textTertiary,
                           fontSize: 11,
                         ),
                       ),
@@ -1269,7 +1282,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     Text(
                       'Total: ${PedidosFormatters.money(total)}',
                       style: const TextStyle(
-                        color: AppTheme.neonGreen,
+                        color: AppTheme.success,
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1286,9 +1299,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     final margen =
                         price > 0 ? ((price - costo) / price * 100) : 0.0;
                     final margenColor = margen >= 15
-                        ? AppTheme.neonGreen
+                        ? AppTheme.success
                         : margen >= 5
-                            ? Colors.orange
+                            ? AppTheme.warning
                             : AppTheme.error;
                     return Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -1354,8 +1367,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           icon: const Icon(Icons.add_shopping_cart),
                           label: const Text('Anadir al pedido'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.neonBlue,
-                            foregroundColor: AppTheme.darkBase,
+                            backgroundColor: AppTheme.info,
+                            foregroundColor: AppTheme.inkSurface,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -1474,7 +1487,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
               'Se ha añadido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppTheme.textPrimary,
               ),
             ),
             backgroundColor: AppTheme.warning,
@@ -1499,7 +1512,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
             content: Text(
               errorFromAdd,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontWeight: FontWeight.bold,
               ),
             ),

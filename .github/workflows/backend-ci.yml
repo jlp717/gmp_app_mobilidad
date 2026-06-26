@@ -21,8 +21,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      - run: cd backend && npm ci
-      - run: cd backend && npm test
+      - run: npm ci
+        working-directory: backend
+      - run: npm run test:ci
+        working-directory: backend
 
   lint:
     name: Lint Backend
@@ -34,5 +36,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      - run: cd backend && npm ci
-      - run: cd backend && npm run lint --if-present
+      - run: npm ci
+        working-directory: backend
+      - run: npm run lint --if-present
+        working-directory: backend
