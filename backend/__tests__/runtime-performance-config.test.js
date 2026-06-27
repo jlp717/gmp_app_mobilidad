@@ -127,6 +127,7 @@ describe('runtime performance configuration', () => {
     expect(clientFilterBlock).toMatch(/LAC\.LCMMDC < \$\{TRANSITION_MONTH\}/);
     expect(clientFilterBlock).toMatch(/LAC\.\$\{VENDOR_COLUMN\} IN/);
     expect(clientFilterBlock).not.toMatch(/TRIM\(\$\{laclaeVendorCol\}\)/);
+    expect(dddRoutes).toMatch(/managerOwnVendorScope[\s\S]*vendorCodes: vendorScope\.codes/);
   });
 
   test('pedido order analytics uses qualified vendor filters without TRIM', () => {
@@ -171,5 +172,6 @@ describe('runtime performance configuration', () => {
     expect(pendingSummaryBlock).not.toMatch(/CVC_DOCS_RAW/);
     expect(pendingSummaryBlock).not.toMatch(/APP_COBROS AS/);
     expect(pendingSummaryBlock).not.toMatch(/DOC_NET AS/);
+    expect(source).toMatch(/groupedRows\.length > 0 && adjustmentVendorCodes\.length > 0/);
   });
 });

@@ -441,11 +441,10 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     if (!existsRows || existsRows.length === 0) {
       return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`) };
     }
-    const assignedVendors = await lookupClientAssignedVendorCodes(client);
     return {
       ok: true,
       clientCode: client,
-      vendorCodes: assignedVendors.length > 0 ? assignedVendors : vendorScope.codes,
+      vendorCodes: vendorScope.codes,
     };
   }
 

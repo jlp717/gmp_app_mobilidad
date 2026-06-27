@@ -734,17 +734,17 @@ class Db2CobrosRepository extends CobrosRepository {
       const rows = await queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []);
       const appCobrosByDoc = await this.getAppSideCobrosByDoc(clientCode);
       const repartidorByDoc = await this.getAppSideRepartidorByDoc(clientCode);
+      const groupedRows = groupCvcRowsByDocument(rows);
       const adjustmentVendorCodes = normalizeVendorCodeList(
         context.adjustmentVendorCode
           ? [context.adjustmentVendorCode]
           : (context.vendorCodes || context.vendedorCodes || []),
       );
       let portfolioAdjustments = null;
-      if (adjustmentVendorCodes.length > 0) {
+      if (groupedRows.length > 0 && adjustmentVendorCodes.length > 0) {
         const scoped = buildCvcVendorScopeFilter(adjustmentVendorCodes);
         portfolioAdjustments = await this.getAppSideCobrosByDocForVendorScope(scoped.clause, scoped.params);
       }
-      const groupedRows = groupCvcRowsByDocument(rows);
       const cobros = mapCvcRowsToPendientes(
         groupedRows,
         clientCode,
@@ -1069,7 +1069,11 @@ class Db2CobrosRepository extends CobrosRepository {
     const summarySql = `
       WITH CVC_CLIENTS AS (
         SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), TRIM(CVC.CODIGOCLIENTEALBARAN)) AS NOMBRE,
+               COALESCE(
+                 NULLIF(MIN(TRIM(CLI.NOMBREALTERNATIVO)), ''),
+                 MIN(TRIM(CLI.NOMBRECLIENTE)),
+                 MIN(TRIM(CVC.CODIGOCLIENTEALBARAN))
+               ) AS NOMBRE,
                COUNT(*) AS DOC_COUNT,
                SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
