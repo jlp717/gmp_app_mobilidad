@@ -192,9 +192,9 @@ describe('runtime performance configuration', () => {
     expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDVD\) IN/);
     expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDCL\) =/);
     expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDRF\) =/);
-    expect(dddCommissionsBlock).toMatch(/UNION ALL/);
-    expect(dddCommissionsBlock).toMatch(/getCommissionVendorColumnExpr\('L', 'sales'\)/);
-    expect(dddCommissionsBlock).toMatch(/getCommissionVendorColumnExpr\('L', 'objective'\)/);
+    expect(dddCommissionsBlock).toMatch(/require\('\.\.\/\.\.\/\.\.\/routes\/commissions'\)/);
+    expect(dddCommissionsBlock).toMatch(/calculateVendorData\(safeVendedorCode, selectedYear, config\)/);
+    expect(dddCommissionsBlock).not.toMatch(/FROM DSED\.LACLAE L/);
     expect(dddCommissionsBlock).not.toMatch(/L\.LCAADC IN \(\?, \?\)/);
   });
 

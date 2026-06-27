@@ -46,8 +46,6 @@ const {
   lookupClientAssignedVendorCodes,
   sanitizeCodeListForParams,
   normalizeCvcTipoDocumentoFilter,
-  LACLAE_SALES_FILTER,
-  getCommissionVendorColumnExpr,
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
@@ -2965,51 +2963,13 @@ function createCommissionsRoutes() {
       const cacheKey = `ddd:commissions:v2:${cacheScope}:${safeVendedorCode}:${selectedYear}`;
 
       const result = await performanceCache.getOrFetch(cacheKey, async () => {
-        const { queryWithParams: qp } = require('../../../config/db');
-        const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
-        const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
-        const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
-        const salesRows = await qp(`
-          SELECT S.SALES_YEAR AS YEAR,
-                 S.SALES_MONTH AS MONTH,
-                 SUM(S.SALES) AS SALES
-          FROM (
-            SELECT L.LCAADC AS SALES_YEAR,
-                   L.LCMMDC AS SALES_MONTH,
-                   SUM(L.LCIMVT) AS SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC = ?
-              AND ${LACLAE_SALES_FILTER}
-              AND ${currentSalesVendorCol} = ?
-            GROUP BY L.LCAADC, L.LCMMDC
-
-            UNION ALL
-
-            SELECT L.LCAADC AS SALES_YEAR,
-                   L.LCMMDC AS SALES_MONTH,
-                   SUM(L.LCIMVT) AS SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC = ?
-              AND L.LCMMDC < 3
-              AND ${LACLAE_SALES_FILTER}
-              AND ${previousJanFebVendorCol} = ?
-            GROUP BY L.LCAADC, L.LCMMDC
-
-            UNION ALL
-
-            SELECT L.LCAADC AS SALES_YEAR,
-                   L.LCMMDC AS SALES_MONTH,
-                   SUM(L.LCIMVT) AS SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC = ?
-              AND L.LCMMDC >= 3
-              AND ${LACLAE_SALES_FILTER}
-              AND ${previousMarDecVendorCol} = ?
-            GROUP BY L.LCAADC, L.LCMMDC
-          ) S
-          GROUP BY S.SALES_YEAR, S.SALES_MONTH
-          ORDER BY YEAR, MONTH
-        `, [selectedYear, safeVendedorCode, prevYear, safeVendedorCode, prevYear, safeVendedorCode], false);
+        const { _private: commissionsPrivate } = require('../../../routes/commissions');
+        const config = await commissionsPrivate.loadCommissionConfig(selectedYear);
+        const vendorData = await commissionsPrivate.calculateVendorData(safeVendedorCode, selectedYear, config);
+        const salesRows = (vendorData.months || []).flatMap((month) => [
+          { YEAR: selectedYear, MONTH: month.month, SALES: month.actual || 0 },
+          { YEAR: prevYear, MONTH: month.month, SALES: month.prevSales || 0 },
+        ]);
 
         return { success: true, salesRows, year: selectedYear, vendorCode: safeVendedorCode };
       }, { role: req?.user?.role || 'COMERCIAL', isAllQuery: vendedorCode === 'ALL' });
