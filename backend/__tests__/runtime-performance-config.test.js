@@ -156,6 +156,21 @@ describe('runtime performance configuration', () => {
     expect(getProductsBlock).not.toMatch(/FROM DSEDAC\.ARO[\s\S]*GROUP BY CODIGOARTICULO[\s\S]*\) S ON A\.CODIGOARTICULO/);
   });
 
+  test('pedido delivery and family helpers avoid known cold-path log noise', () => {
+    const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
+
+    expect(source).toMatch(/Promise\.all\(\[vendorRowsPromise, allVendorRowsPromise\]\)/);
+    expect(source).toMatch(/LEFT JOIN DSEDAC\.FAM F ON A\.CODIGOFAMILIA = F\.CODIGOFAMILIA/);
+    expect(source).not.toMatch(/MAX\(TRIM\(DESCRIPCIONFAMILIA\)\)/);
+  });
+
+  test('KPI dashboard uses vendor client cache before DB2 LACLAE fallback', () => {
+    const source = fs.readFileSync(path.join(backendRoot, 'kpi/routes.js'), 'utf8');
+
+    expect(source).toMatch(/getClientCodesFromCache\(codes\.join\(','\)\)/);
+    expect(source).toMatch(/setVendorClientSetCache\(cacheKey, cachedResult\)/);
+  });
+
   test('cobros pending summary uses client aggregation instead of document-wide CVC rebuild', () => {
     const source = fs.readFileSync(
       path.join(backendRoot, 'src/modules/cobros/infrastructure/db2-cobros-repository.js'),

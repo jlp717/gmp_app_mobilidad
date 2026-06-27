@@ -952,29 +952,21 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
 
     try {
         const currentYear = new Date().getFullYear();
-        const params = [cleanClient, currentYear - 1];
-        let vendorFilter = '';
-        if (cleanVendor) {
-            vendorFilter = ' AND TRIM(R1_T8CDVD) = ?';
-            params.push(cleanVendor);
-        }
-        const rows = await queryWithParams(`
+        const vendorRowsPromise = cleanVendor
+            ? queryWithParams(`
             SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
                    R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
             FROM DSED.LACLAE
             WHERE TRIM(LCCDCL) = ?
               AND LCAADC >= ?
-              ${vendorFilter}
+              AND TRIM(R1_T8CDVD) = ?
             FETCH FIRST 20 ROWS ONLY`,
-            params,
-            false
-        );
-        const laclaeDays = deliveryDaysFromRows(rows, LACLAE_DELIVERY_COLUMNS);
-        if (laclaeDays.length > 0) {
-            return { days: laclaeDays, source: 'DSED.LACLAE' };
-        }
-        if (cleanVendor) {
-            const allVendorRows = await queryWithParams(`
+                [cleanClient, currentYear - 1, cleanVendor],
+                false
+            )
+            : Promise.resolve([]);
+        const allVendorRowsPromise = cleanVendor
+            ? queryWithParams(`
                 SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
                        R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
                 FROM DSED.LACLAE
@@ -983,7 +975,14 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
                 FETCH FIRST 20 ROWS ONLY`,
                 [cleanClient, currentYear - 1],
                 false
-            );
+            )
+            : Promise.resolve([]);
+        const [rows, allVendorRows] = await Promise.all([vendorRowsPromise, allVendorRowsPromise]);
+        const laclaeDays = deliveryDaysFromRows(rows, LACLAE_DELIVERY_COLUMNS);
+        if (laclaeDays.length > 0) {
+            return { days: laclaeDays, source: 'DSED.LACLAE' };
+        }
+        if (cleanVendor) {
             const allLaclaeDays = deliveryDaysFromRows(allVendorRows, LACLAE_DELIVERY_COLUMNS);
             if (allLaclaeDays.length > 0) {
                 return { days: allLaclaeDays, source: 'DSED.LACLAE' };
@@ -5062,14 +5061,15 @@ async function getFamilies() {
 async function getFamiliesDetailed() {
     const sql = `
         SELECT
-            TRIM(CODIGOFAMILIA) AS CODE,
-            COALESCE(MAX(TRIM(DESCRIPCIONFAMILIA)), '') AS NAME,
-            COALESCE(MAX(TRIM(CODIGOPREFAMILIA)), '') AS PREFAMILY,
+            TRIM(A.CODIGOFAMILIA) AS CODE,
+            COALESCE(MAX(TRIM(F.DESCRIPCIONFAMILIA)), MIN(TRIM(A.CODIGOFAMILIA))) AS NAME,
+            COALESCE(MAX(TRIM(A.CODIGOPREFAMILIA)), '') AS PREFAMILY,
             COUNT(*) AS ART_COUNT
-        FROM DSEDAC.ART
-        WHERE (ANOBAJA = 0 OR ANOBAJA IS NULL)
-          AND CODIGOFAMILIA <> ''
-        GROUP BY TRIM(CODIGOFAMILIA)
+        FROM DSEDAC.ART A
+        LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
+        WHERE (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)
+          AND A.CODIGOFAMILIA <> ''
+        GROUP BY TRIM(A.CODIGOFAMILIA)
         ORDER BY NAME
     `;
     const cacheKey = 'pedidos:families:detailed';

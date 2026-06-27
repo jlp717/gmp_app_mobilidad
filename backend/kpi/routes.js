@@ -10,6 +10,7 @@ const { getSchedulerStatus } = require('./services/scheduler');
 const { getPrometheusMetrics, metricsMiddleware } = require('./services/metrics');
 const { transformAlert } = require('./services/alert_transformer');
 const logger = require('../middleware/logger');
+const { getClientCodesFromCache } = require('../services/laclae');
 
 const router = Router();
 const vendorClientSetCache = new Map();
@@ -82,6 +83,13 @@ async function getVendorClientSet(vendorCodes, mode = 'current') {
   return withVendorClientSetInFlight(cacheKey, async () => {
     const secondCache = getVendorClientSetCache(cacheKey);
     if (secondCache) return secondCache;
+
+    const laclaeCachedCodes = getClientCodesFromCache(codes.join(','));
+    if (Array.isArray(laclaeCachedCodes) && laclaeCachedCodes.length > 0) {
+      const cachedResult = new Set(laclaeCachedCodes.map(normalizeClientCodeForDb2).filter(Boolean));
+      setVendorClientSetCache(cacheKey, cachedResult);
+      return cachedResult;
+    }
 
     const placeholders = codes.map(() => `CAST(? AS VARCHAR(${DB2_VENDOR_CODE_MAX_LEN}))`).join(',');
     const yearClause = mode === 'recent'
