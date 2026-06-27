@@ -34,7 +34,7 @@ const runtimePerformanceEnv = {
     PM2_EXEC_MODE: defaultExecMode,
     DB_TOTAL_CONNECTION_BUDGET: String(totalDbConnectionBudget),
     DB_TOTAL_QUERY_CONCURRENCY: String(totalDbConcurrencyBudget),
-    DB_POOL_MIN: process.env.DB_POOL_MIN || (isMultiInstance ? '0' : '5'),
+    DB_POOL_MIN: process.env.DB_POOL_MIN || (isMultiInstance ? '1' : '5'),
     DB_POOL_MAX: process.env.DB_POOL_MAX || defaultDbPoolMax,
     DB_POOL_ACQUIRE_MS: process.env.DB_POOL_ACQUIRE_MS || '15000',
     DB_POOL_FAST_FAIL_MS: process.env.DB_POOL_FAST_FAIL_MS || '10000',
