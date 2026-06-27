@@ -83,4 +83,12 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/CASE predicate caused full scans/);
     expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
   });
+
+  test('DDD clients list paginates cached client codes before LACLAE enrichment', () => {
+    const source = fs.readFileSync(path.join(backendRoot, 'src/shared/routes/ddd-adapters.js'), 'utf8');
+
+    expect(source).toMatch(/fastPath: true/);
+    expect(source).toMatch(/slice\(safeOffset, safeOffset \+ safeLimit\)/);
+    expect(source).toMatch(/AND L\.LCCDCL IN \(\$\{placeholders\}\)/);
+  });
 });

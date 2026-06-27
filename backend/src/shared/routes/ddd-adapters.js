@@ -2648,6 +2648,138 @@ function createClientsRoutes() {
         const searchClause = buildClientSearchFilter(safeSearch, 'C');
         const queryParams = searchClause.params;
 
+        if (!safeSearch) {
+          const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
+          if (Array.isArray(cachedClientCodes) && cachedClientCodes.length > 0) {
+            const pageCodes = [...new Set(cachedClientCodes.map(c => sanitizeForSQL(c)).filter(Boolean))]
+              .sort()
+              .slice(safeOffset, safeOffset + safeLimit);
+
+            if (pageCodes.length === 0) {
+              return { success: true, clients: [], count: cachedClientCodes.length, isAllQuery };
+            }
+
+            const placeholders = pageCodes.map(() => '?').join(',');
+            const [detailRows, statRows, lastRows] = await Promise.all([
+              queryWithParams(`
+                SELECT
+                  C.CODIGOCLIENTE as code,
+                  COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
+                  C.NIF as nif,
+                  C.DIRECCION as address,
+                  C.POBLACION as city,
+                  C.PROVINCIA as province,
+                  C.CODIGOPOSTAL as postalCode,
+                  C.TELEFONO1 as phone,
+                  C.TELEFONO2 as phone2,
+                  C.CODIGORUTA as route,
+                  C.PERSONACONTACTO as contactPerson,
+                  C.ANOBAJA as yearInactive
+                FROM DSEDAC.CLI C
+                WHERE C.ANOBAJA = 0
+                  AND C.CODIGOCLIENTE IN (${placeholders})
+              `, pageCodes, false),
+              queryWithParams(`
+                SELECT
+                  L.LCCDCL AS CLIENT_CODE,
+                  SUM(L.LCIMVT) AS TOTAL_PURCHASES,
+                  SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGIN,
+                  COUNT(DISTINCT L.LCAADC || L.LCMMDC || L.LCDDDC) AS NUM_ORDERS,
+                  MAX(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) AS LAST_PURCHASE_DATE
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC >= ?
+                  AND L.TPDC = 'LAC'
+                  AND L.LCTPVT IN ('CC', 'VC')
+                  AND L.LCCLLN IN ('AB', 'VT')
+                  AND L.LCSRAB NOT IN ('N', 'Z')
+                  AND L.LCCDCL IN (${placeholders})
+                GROUP BY L.LCCDCL
+              `, [MIN_YEAR, ...pageCodes], false),
+              queryWithParams(`
+                SELECT CLIENT_CODE, LAST_VENDOR FROM (
+                  SELECT
+                    L.LCCDCL AS CLIENT_CODE,
+                    L.LCCDVD AS LAST_VENDOR,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY L.LCCDCL
+                      ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
+                    ) AS RN
+                  FROM DSED.LACLAE L
+                  WHERE L.LCAADC >= ?
+                    AND L.TPDC = 'LAC'
+                    AND L.LCTPVT IN ('CC', 'VC')
+                    AND L.LCCLLN IN ('AB', 'VT')
+                    AND L.LCSRAB NOT IN ('N', 'Z')
+                    AND L.LCCDCL IN (${placeholders})
+                ) X WHERE RN = 1
+              `, [MIN_YEAR, ...pageCodes], false),
+            ]);
+
+            const vendorCodesForNames = [...new Set(lastRows
+              .map(r => (r.LAST_VENDOR || '').toString().trim())
+              .filter(Boolean))];
+            const vendorNameRows = vendorCodesForNames.length > 0
+              ? await queryWithParams(`
+                  SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, TRIM(NOMBREVENDEDOR) as VENDOR_NAME
+                  FROM DSEDAC.VDD
+                  WHERE TRIM(CODIGOVENDEDOR) IN (${vendorCodesForNames.map(() => '?').join(',')})
+                `, vendorCodesForNames, false)
+              : [];
+
+            const detailMap = new Map();
+            detailRows.forEach(row => {
+              const code = (row.code ?? row.CODE ?? '').toString().trim();
+              if (code) detailMap.set(code, row);
+            });
+            const statMap = new Map();
+            statRows.forEach(row => {
+              const code = (row.CLIENT_CODE || '').toString().trim();
+              if (code) statMap.set(code, row);
+            });
+            const lastVendorMap = new Map();
+            lastRows.forEach(row => {
+              const code = (row.CLIENT_CODE || '').toString().trim();
+              if (code) lastVendorMap.set(code, (row.LAST_VENDOR || '').toString().trim());
+            });
+            const vendorNameMap = new Map();
+            vendorNameRows.forEach(row => {
+              const code = (row.VENDOR_CODE || '').toString().trim();
+              if (code) vendorNameMap.set(code, (row.VENDOR_NAME || '').toString().trim());
+            });
+
+            const fastClients = pageCodes
+              .map(code => {
+                const details = detailMap.get(code);
+                if (!details) return null;
+                const stats = statMap.get(code) || {};
+                const vendorCode = lastVendorMap.get(code) || '';
+                return {
+                  code,
+                  name: (details.name ?? details.NAME ?? '').toString().trim(),
+                  nif: (details.nif ?? details.NIF ?? '').toString().trim(),
+                  address: (details.address ?? details.ADDRESS ?? '').toString().trim(),
+                  city: (details.city ?? details.CITY ?? '').toString().trim(),
+                  province: (details.province ?? details.PROVINCE ?? '').toString().trim(),
+                  postalCode: (details.postalCode ?? details.POSTALCODE ?? '').toString().trim(),
+                  phone: (details.phone ?? details.PHONE ?? '').toString().trim(),
+                  phone2: (details.phone2 ?? details.PHONE2 ?? '').toString().trim(),
+                  route: (details.route ?? details.ROUTE ?? '').toString().trim(),
+                  contactPerson: (details.contactPerson ?? details.CONTACTPERSON ?? '').toString().trim(),
+                  totalPurchases: Number(stats.TOTAL_PURCHASES ?? 0) || 0,
+                  numOrders: Number(stats.NUM_ORDERS ?? 0) || 0,
+                  lastDateInt: Number(stats.LAST_PURCHASE_DATE ?? 0) || 0,
+                  totalMargin: Number(stats.TOTAL_MARGIN ?? 0) || 0,
+                  yearInactive: Number(details.yearInactive ?? details.YEARINACTIVE ?? 0) || 0,
+                  vendorName: vendorNameMap.get(vendorCode) || '',
+                  vendorCode,
+                };
+              })
+              .filter(Boolean);
+
+            return { success: true, clients: fastClients, count: cachedClientCodes.length, isAllQuery, fastPath: true };
+          }
+        }
+
         const vendorScopedCliFilter = clientCodesFilter
           ? ''
           : buildClientListVendorSqlFilter(vendedorCodes, 'C');
