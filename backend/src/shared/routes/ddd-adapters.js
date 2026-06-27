@@ -647,7 +647,7 @@ function createAuthRoutes() {
       const refreshToken = signRefreshToken({
         id: user.id, user: user.code, role: user.role, isJefeVentas: user.isJefeVentas
       });
-      registerSession(
+      await registerSession(
         user.id,
         refreshToken,
         req.get('user-agent') || 'unknown',

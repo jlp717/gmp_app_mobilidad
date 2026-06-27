@@ -68,6 +68,12 @@ const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 86_400_000, 'JW
 const REFRESH_TTL_MS = parseTtlMs(process.env.JWT_REFRESH_EXPIRES, 604_800_000, 'JWT_REFRESH_EXPIRES'); // 7d default
 const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10);
 const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const AUTH_REDIS_TIMEOUT_MS = parseInt(process.env.AUTH_REDIS_TIMEOUT_MS || process.env.REDIS_COMMAND_TIMEOUT_MS || '1000', 10);
+const AUTH_ALLOW_STATELESS_REFRESH_FALLBACK = process.env.AUTH_ALLOW_STATELESS_REFRESH_FALLBACK === 'true'
+    || (isProduction && process.env.PM2_EXEC_MODE === 'cluster');
+const AUTH_SESSION_PREFIX = 'gmp:auth:session:';
+const AUTH_USER_PREFIX = 'gmp:auth:user:';
+const AUTH_REVOKED_PREFIX = 'gmp:auth:revoked:';
 
 logger.info(`[AUTH] Access TTL: ${ACCESS_TTL_MS}ms (${Math.round(ACCESS_TTL_MS / 60000)}min), Refresh TTL: ${REFRESH_TTL_MS}ms (${Math.round(REFRESH_TTL_MS / 86400000)}d)`);
 
@@ -76,6 +82,7 @@ logger.info(`[AUTH] Access TTL: ${ACCESS_TTL_MS}ms (${Math.round(ACCESS_TTL_MS /
 // =============================================================================
 
 const activeSessions = new Map();
+const revokedRefreshTokens = new Map();
 let sessionCleanupInterval = null;
 
 function startSessionCleanup() {
@@ -93,6 +100,10 @@ function startSessionCleanup() {
             if (validSessions.length === 0) {
                 activeSessions.delete(userId);
             }
+        }
+
+        for (const [tokenHash, expiresAt] of revokedRefreshTokens.entries()) {
+            if (expiresAt <= now) revokedRefreshTokens.delete(tokenHash);
         }
         
         if (cleanedCount > 0) {
@@ -139,6 +150,7 @@ function _dedupWarn(ip, key, message) {
 function shutdown() {
     stopSessionCleanup();
     activeSessions.clear();
+    revokedRefreshTokens.clear();
     logger.info('[AUTH] Auth subsystem shut down');
 }
 
@@ -229,7 +241,198 @@ exports.verifyRefreshToken = (token) => {
 // SESSION MANAGEMENT
 // =============================================================================
 
-function registerSession(userId, refreshToken, userAgent, ip) {
+function hashRefreshToken(refreshToken) {
+    return crypto.createHash('sha256').update(refreshToken).digest('hex');
+}
+
+function refreshTtlSeconds(expiresAt = Date.now() + REFRESH_TTL_MS) {
+    return Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+}
+
+function getRedisClient() {
+    try {
+        const { redisCache } = require('../services/redis-cache');
+        if (redisCache?.isConnected && redisCache.client) return redisCache.client;
+    } catch (_) {
+        // Redis cache is optional; fall back to per-worker memory.
+    }
+    return null;
+}
+
+async function withRedisTimeout(promise, operation) {
+    let timer = null;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(
+                    () => reject(new Error(`auth redis ${operation} timeout after ${AUTH_REDIS_TIMEOUT_MS}ms`)),
+                    AUTH_REDIS_TIMEOUT_MS
+                );
+            })
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+async function redisSetEx(client, key, ttlSeconds, value) {
+    if (typeof client.setEx === 'function') return withRedisTimeout(client.setEx(key, ttlSeconds, value), 'setEx');
+    if (typeof client.setex === 'function') return withRedisTimeout(client.setex(key, ttlSeconds, value), 'setex');
+    return withRedisTimeout(client.set(key, value, { EX: ttlSeconds }), 'set');
+}
+
+async function redisGet(client, key) {
+    return withRedisTimeout(client.get(key), 'get');
+}
+
+async function redisDel(client, keys) {
+    if (!Array.isArray(keys)) return withRedisTimeout(client.del(keys), 'del');
+    if (keys.length === 0) return 0;
+    return withRedisTimeout(client.del(keys), 'del');
+}
+
+async function redisSAdd(client, key, value) {
+    if (typeof client.sAdd === 'function') return withRedisTimeout(client.sAdd(key, value), 'sAdd');
+    return withRedisTimeout(client.sadd(key, value), 'sadd');
+}
+
+async function redisSRem(client, key, value) {
+    if (typeof client.sRem === 'function') return withRedisTimeout(client.sRem(key, value), 'sRem');
+    return withRedisTimeout(client.srem(key, value), 'srem');
+}
+
+async function redisSMembers(client, key) {
+    if (typeof client.sMembers === 'function') return withRedisTimeout(client.sMembers(key), 'sMembers');
+    return withRedisTimeout(client.smembers(key), 'smembers');
+}
+
+async function redisExpire(client, key, ttlSeconds) {
+    return withRedisTimeout(client.expire(key, ttlSeconds), 'expire');
+}
+
+function rememberSessionInProcess(userId, session) {
+    const userSessions = activeSessions.get(userId) || [];
+
+    if (userSessions.length >= MAX_SESSIONS_PER_USER) {
+        userSessions.sort((a, b) => a.createdAt - b.createdAt);
+        userSessions.shift();
+        logger.info(`[AUTH] Removed oldest session for user ${userId}`);
+    }
+
+    userSessions.push(session);
+    activeSessions.set(userId, userSessions);
+}
+
+async function rememberSessionInRedis(userId, refreshToken, session) {
+    const client = getRedisClient();
+    if (!client) return false;
+
+    const tokenHash = hashRefreshToken(refreshToken);
+    const ttl = refreshTtlSeconds(session.expiresAt);
+    const sessionKey = `${AUTH_SESSION_PREFIX}${tokenHash}`;
+    const userKey = `${AUTH_USER_PREFIX}${userId}`;
+    const storedSession = {
+        ...session,
+        refreshToken: undefined,
+        tokenHash
+    };
+
+    try {
+        await redisSetEx(client, sessionKey, ttl, JSON.stringify(storedSession));
+        await redisSAdd(client, userKey, tokenHash);
+        await redisExpire(client, userKey, REFRESH_TTL_MS / 1000);
+        await enforceRedisMaxSessions(client, userId);
+        return true;
+    } catch (error) {
+        logger.warn(`[AUTH] Redis session store unavailable: ${error.message}`);
+        return false;
+    }
+}
+
+async function getRedisSession(refreshToken) {
+    const client = getRedisClient();
+    if (!client) return null;
+
+    try {
+        const tokenHash = hashRefreshToken(refreshToken);
+        const raw = await redisGet(client, `${AUTH_SESSION_PREFIX}${tokenHash}`);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        logger.warn(`[AUTH] Redis session lookup failed: ${error.message}`);
+        return null;
+    }
+}
+
+async function getRedisUserTokenHashes(client, userId) {
+    try {
+        const values = await redisSMembers(client, `${AUTH_USER_PREFIX}${userId}`);
+        return Array.isArray(values) ? values : [];
+    } catch (error) {
+        logger.warn(`[AUTH] Redis user session lookup failed: ${error.message}`);
+        return [];
+    }
+}
+
+async function enforceRedisMaxSessions(client, userId) {
+    const tokenHashes = await getRedisUserTokenHashes(client, userId);
+    if (tokenHashes.length <= MAX_SESSIONS_PER_USER) return;
+
+    const sessions = [];
+    for (const tokenHash of tokenHashes) {
+        const raw = await redisGet(client, `${AUTH_SESSION_PREFIX}${tokenHash}`);
+        if (!raw) {
+            await redisSRem(client, `${AUTH_USER_PREFIX}${userId}`, tokenHash);
+            continue;
+        }
+        try {
+            sessions.push({ tokenHash, session: JSON.parse(raw) });
+        } catch (_) {
+            await redisSRem(client, `${AUTH_USER_PREFIX}${userId}`, tokenHash);
+        }
+    }
+
+    sessions.sort((a, b) => (a.session.createdAt || 0) - (b.session.createdAt || 0));
+    const toRemove = sessions.slice(0, Math.max(0, sessions.length - MAX_SESSIONS_PER_USER));
+    for (const { tokenHash } of toRemove) {
+        await redisDel(client, `${AUTH_SESSION_PREFIX}${tokenHash}`);
+        await redisSRem(client, `${AUTH_USER_PREFIX}${userId}`, tokenHash);
+    }
+}
+
+async function isRefreshTokenRevoked(refreshToken) {
+    const tokenHash = hashRefreshToken(refreshToken);
+    const localExpiry = revokedRefreshTokens.get(tokenHash);
+    if (localExpiry && localExpiry > Date.now()) return true;
+    if (localExpiry) revokedRefreshTokens.delete(tokenHash);
+
+    const client = getRedisClient();
+    if (!client) return false;
+
+    try {
+        const value = await redisGet(client, `${AUTH_REVOKED_PREFIX}${tokenHash}`);
+        return value === '1';
+    } catch (error) {
+        logger.warn(`[AUTH] Redis revoked token lookup failed: ${error.message}`);
+        return false;
+    }
+}
+
+async function blacklistRefreshToken(refreshToken, expiresAt = Date.now() + REFRESH_TTL_MS) {
+    const tokenHash = hashRefreshToken(refreshToken);
+    revokedRefreshTokens.set(tokenHash, expiresAt);
+
+    const client = getRedisClient();
+    if (!client) return;
+
+    try {
+        await redisSetEx(client, `${AUTH_REVOKED_PREFIX}${tokenHash}`, refreshTtlSeconds(expiresAt), '1');
+    } catch (error) {
+        logger.warn(`[AUTH] Redis token blacklist failed: ${error.message}`);
+    }
+}
+
+async function registerSession(userId, refreshToken, userAgent, ip) {
     const now = Date.now();
     const session = {
         refreshToken,
@@ -239,37 +442,54 @@ function registerSession(userId, refreshToken, userAgent, ip) {
         createdAt: now,
         expiresAt: now + REFRESH_TTL_MS
     };
-    
-    const userSessions = activeSessions.get(userId) || [];
-    
-    if (userSessions.length >= MAX_SESSIONS_PER_USER) {
-        userSessions.sort((a, b) => a.createdAt - b.createdAt);
-        userSessions.shift();
-        logger.info(`[AUTH] Removed oldest session for user ${userId}`);
-    }
-    
-    userSessions.push(session);
-    activeSessions.set(userId, userSessions);
-    
+
+    rememberSessionInProcess(userId, session);
+    await rememberSessionInRedis(userId, refreshToken, session);
+
     logger.info(`[AUTH] Registered new session for user ${userId} from ${ip}`);
 }
 
 exports.registerSession = registerSession;
 
-exports.invalidateAllSessions = (userId) => {
+exports.invalidateAllSessions = async (userId) => {
+    const sessions = activeSessions.get(userId) || [];
     activeSessions.delete(userId);
+
+    for (const session of sessions) {
+        await blacklistRefreshToken(session.refreshToken, session.expiresAt);
+    }
+
+    const client = getRedisClient();
+    if (client) {
+        const tokenHashes = await getRedisUserTokenHashes(client, userId);
+        for (const tokenHash of tokenHashes) {
+            await redisSetEx(client, `${AUTH_REVOKED_PREFIX}${tokenHash}`, REFRESH_TTL_MS / 1000, '1');
+            await redisDel(client, `${AUTH_SESSION_PREFIX}${tokenHash}`);
+        }
+        await redisDel(client, `${AUTH_USER_PREFIX}${userId}`);
+    }
+
     logger.info(`[AUTH] Invalidated all sessions for user ${userId}`);
 };
 
-function isRefreshTokenValid(userId, refreshToken) {
+async function isRefreshTokenValid(userId, refreshToken) {
+    if (await isRefreshTokenRevoked(refreshToken)) return false;
+
     const sessions = activeSessions.get(userId);
-    if (!sessions) return false;
-    return sessions.some(s => s.refreshToken === refreshToken && s.expiresAt > Date.now());
+    if (sessions?.some(s => s.refreshToken === refreshToken && s.expiresAt > Date.now())) {
+        return true;
+    }
+
+    const redisSession = await getRedisSession(refreshToken);
+    return Boolean(redisSession && redisSession.userId === userId && redisSession.expiresAt > Date.now());
 }
 
-function revokeRefreshToken(userId, refreshToken) {
+async function revokeRefreshToken(userId, refreshToken) {
     const sessions = activeSessions.get(userId);
+    let expiresAt = Date.now() + REFRESH_TTL_MS;
     if (sessions) {
+        const session = sessions.find(s => s.refreshToken === refreshToken);
+        if (session?.expiresAt) expiresAt = session.expiresAt;
         const filtered = sessions.filter(s => s.refreshToken !== refreshToken);
         if (filtered.length > 0) {
             activeSessions.set(userId, filtered);
@@ -277,6 +497,16 @@ function revokeRefreshToken(userId, refreshToken) {
             activeSessions.delete(userId);
         }
     }
+
+    const tokenHash = hashRefreshToken(refreshToken);
+    const client = getRedisClient();
+    if (client) {
+        const redisSession = await getRedisSession(refreshToken);
+        if (redisSession?.expiresAt) expiresAt = redisSession.expiresAt;
+        await redisDel(client, `${AUTH_SESSION_PREFIX}${tokenHash}`);
+        await redisSRem(client, `${AUTH_USER_PREFIX}${userId}`, tokenHash);
+    }
+    await blacklistRefreshToken(refreshToken, expiresAt);
 }
 
 // =============================================================================
@@ -419,13 +649,19 @@ exports.handleRefreshToken = async (req, res) => {
         const userId = payload.id;
         const userCode = payload.user;
         
-        if (!isRefreshTokenValid(userId, refreshToken)) {
+        let validRefreshSession = await isRefreshTokenValid(userId, refreshToken);
+        if (!validRefreshSession && AUTH_ALLOW_STATELESS_REFRESH_FALLBACK && !(await isRefreshTokenRevoked(refreshToken))) {
+            validRefreshSession = true;
+            logger.warn(`[AUTH] Refresh token for user ${userCode} was signed but missing from shared session store; accepting once for cluster migration`);
+        }
+
+        if (!validRefreshSession) {
             _dedupWarn(req.ip, 'revoked_refresh', `Revoked refresh token used from IP: ${req.ip}`);
-            exports.invalidateAllSessions(userId);
+            await exports.invalidateAllSessions(userId);
             return res.status(401).json({ error: 'Sesión revocada. Por favor, inicia sesión de nuevo.', code: 'SESSION_REVOKED' });
         }
         
-        revokeRefreshToken(userId, refreshToken);
+        await revokeRefreshToken(userId, refreshToken);
         
         const newAccessToken = exports.signAccessToken({
             id: userId,
@@ -445,7 +681,7 @@ exports.handleRefreshToken = async (req, res) => {
             vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
         });
         
-        registerSession(userId, newRefreshToken, req.get('user-agent') || 'unknown', req.ip || 'unknown');
+        await registerSession(userId, newRefreshToken, req.get('user-agent') || 'unknown', req.ip || 'unknown');
         
         logger.info(`[AUTH] Token refreshed for user ${userCode}`);
         
@@ -466,7 +702,7 @@ exports.handleLogout = async (req, res) => {
     try {
         const userId = req.user?.id;
         if (userId) {
-            exports.invalidateAllSessions(userId);
+            await exports.invalidateAllSessions(userId);
             logger.info(`[AUTH] User ${userId} logged out`);
         }
         res.json({ success: true, message: 'Logged out successfully' });
@@ -483,3 +719,11 @@ exports.handleLogout = async (req, res) => {
 exports.ACCESS_TTL_MS = ACCESS_TTL_MS;
 exports.REFRESH_TTL_MS = REFRESH_TTL_MS;
 exports.activeSessions = activeSessions;
+exports.revokedRefreshTokens = revokedRefreshTokens;
+exports._authSessionStorage = {
+    hashRefreshToken,
+    isRefreshTokenValid,
+    revokeRefreshToken,
+    isRefreshTokenRevoked,
+    blacklistRefreshToken,
+};

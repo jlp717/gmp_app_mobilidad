@@ -355,7 +355,7 @@ router.post('/login',
                 vendorCodes: vendedorCodes,
                 vendedorCodes: vendedorCodes
             });
-            registerSession(
+            await registerSession(
                 `V${vendedorCode}`,
                 refreshToken,
                 req.get('user-agent') || 'unknown',
@@ -456,7 +456,7 @@ router.post('/switch-role', verifyToken, async (req, res) => {
             vendorCodes,
             vendedorCodes: vendorCodes
         });
-        registerSession(userId, refreshToken, req.get('user-agent') || 'unknown', getClientIP(req) || req.ip || 'unknown');
+        await registerSession(userId, refreshToken, req.get('user-agent') || 'unknown', getClientIP(req) || req.ip || 'unknown');
 
         res.json({ success: true, role: newRole, token: accessToken, refreshToken, tokenExpiresIn: 3600 });
     } catch (error) {

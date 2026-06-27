@@ -634,9 +634,12 @@ async function startServer() {
   }
 
   // ─── PHASE 3: Initialize caches (pool is stable, schema is ready) ─────
-  initCache()
-    .then(() => logger.info('✅ Redis cache initialized'))
-    .catch(err => logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`));
+  try {
+    await initCache();
+    logger.info('✅ Redis cache initialized');
+  } catch (err) {
+    logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`);
+  }
 
   logger.info('📦 Pre-loading critical caches before accepting requestsâ€¦');
   const cacheStart = Date.now();
