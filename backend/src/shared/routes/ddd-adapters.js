@@ -421,7 +421,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
   const managerOwnVendorScope = context.isManager
     && context.code
     && vendorScope.codes.length === 1
-    && pedidoCodesMatch(vendorScope.codes[0], context.code);
+    && salesCodesMatch(vendorScope.codes[0], context.code);
   if (managerOwnVendorScope) {
     const existsRows = await cachedQuery(
       (sql, params = []) => queryWithParams(sql, params),
