@@ -948,23 +948,65 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         // Original per-vendor queries (single vendor mode)
         const safeYear = parseInt(selectedYear);
         const safePrevYear = parseInt(prevYear);
-        const vendedorFilter = buildCommissionVendorFilter(vendedorCode, safeYear, 'L');
+        const safeVendorCodes = getCodeVariants(vendedorCode);
+        const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
+        const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+        const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+        const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
         const salesQuery = `
-            SELECT 
-                L.LCAADC as YEAR,
-                LCMMDC as MONTH,
-                SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC IN (?, ?)
-                AND ${LACLAE_SALES_FILTER}
-                ${vendedorFilter}
-            GROUP BY L.LCAADC, LCMMDC
+            SELECT S.SALES_YEAR as YEAR,
+                   S.SALES_MONTH as MONTH,
+                   SUM(S.SALES) as SALES
+            FROM (
+                SELECT L.LCAADC as SALES_YEAR,
+                       L.LCMMDC as SALES_MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND ${LACLAE_SALES_FILTER}
+                  AND ${currentSalesVendorCol} IN (${vendorPlaceholders})
+                GROUP BY L.LCAADC, L.LCMMDC
+
+                UNION ALL
+
+                SELECT L.LCAADC as SALES_YEAR,
+                       L.LCMMDC as SALES_MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND L.LCMMDC < 3
+                  AND ${LACLAE_SALES_FILTER}
+                  AND ${previousJanFebVendorCol} IN (${vendorPlaceholders})
+                GROUP BY L.LCAADC, L.LCMMDC
+
+                UNION ALL
+
+                SELECT L.LCAADC as SALES_YEAR,
+                       L.LCMMDC as SALES_MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND L.LCMMDC >= 3
+                  AND ${LACLAE_SALES_FILTER}
+                  AND ${previousMarDecVendorCol} IN (${vendorPlaceholders})
+                GROUP BY L.LCAADC, L.LCMMDC
+            ) S
+            GROUP BY S.SALES_YEAR, S.SALES_MONTH
             ORDER BY YEAR, MONTH
         `;
         const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales:${vendedorCode}:${safeYear}`;
         salesRows = await redisCache.get('route', cacheKey);
         if (!salesRows) {
-            salesRows = await queryWithParams(salesQuery, [safeYear, safePrevYear], false);
+            salesRows = safeVendorCodes.length > 0
+                ? await queryWithParams(salesQuery, [
+                    safeYear,
+                    ...safeVendorCodes,
+                    safePrevYear,
+                    ...safeVendorCodes,
+                    safePrevYear,
+                    ...safeVendorCodes
+                ], false)
+                : [];
             if (salesRows.length > 0) {
                 redisCache.set('route', cacheKey, salesRows, TTL.SHORT).catch(() => {});
             }

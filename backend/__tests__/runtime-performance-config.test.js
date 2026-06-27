@@ -81,10 +81,17 @@ describe('runtime performance configuration', () => {
 
   test('commissions batch sales query avoids CASE predicates in vendor filters', () => {
     const source = fs.readFileSync(path.join(backendRoot, 'routes/commissions.js'), 'utf8');
+    const calculateVendorDataBlock = source.slice(
+      source.indexOf('async function calculateVendorData'),
+      source.indexOf('async function getCurrentPaymentSnapshot'),
+    );
 
     expect(source).toMatch(/UNION ALL/);
     expect(source).toMatch(/CASE predicate caused full scans/);
     expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
+    expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);
+    expect(calculateVendorDataBlock).toMatch(/previousMarDecVendorCol/);
+    expect(calculateVendorDataBlock).not.toMatch(/buildCommissionVendorFilter\(vendedorCode, safeYear, 'L'\)/);
   });
 
   test('DDD clients list paginates cached client codes before LACLAE enrichment', () => {
