@@ -137,4 +137,39 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/CAST\(\? AS CHAR\(2\)\)/);
     expect(source).not.toMatch(/AND TRIM\(CODIGOVENDEDOR\) IN/);
   });
+
+  test('pedido product catalog paginates before page-level enrichment and caches final response', () => {
+    const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
+    const getProductsBlock = source.slice(
+      source.indexOf('async function getProducts'),
+      source.indexOf('async function getProductDetail'),
+    );
+
+    expect(getProductsBlock).toMatch(/pedidos:products_final_v3/);
+    expect(getProductsBlock).toMatch(/ART_RANKED AS/);
+    expect(getProductsBlock).toMatch(/ART_PAGE AS/);
+    expect(getProductsBlock).toMatch(/WHERE RN > \?/);
+    expect(getProductsBlock).toMatch(/JOIN ART_PAGE P ON S\.CODIGOARTICULO = P\.CODIGOARTICULO/);
+    expect(getProductsBlock).toMatch(/JOIN ART_PAGE P ON SR\.CODIGOARTICULO = P\.CODIGOARTICULO/);
+    expect(getProductsBlock).toMatch(/JOIN ART_PAGE P ON TRIM\(L\.CODIGOARTICULO\) = P\.CODIGOARTICULO/);
+    expect(getProductsBlock).not.toMatch(/FROM DSEDAC\.ARO[\s\S]*GROUP BY CODIGOARTICULO[\s\S]*\) S ON A\.CODIGOARTICULO/);
+  });
+
+  test('cobros pending summary uses client aggregation instead of document-wide CVC rebuild', () => {
+    const source = fs.readFileSync(
+      path.join(backendRoot, 'src/modules/cobros/infrastructure/db2-cobros-repository.js'),
+      'utf8',
+    );
+    const pendingSummaryBlock = source.slice(
+      source.indexOf('async getPendingSummary'),
+      source.indexOf('async getAppSideCobrosByDocForVendorScope'),
+    );
+
+    expect(pendingSummaryBlock).toMatch(/CVC_CLIENTS AS/);
+    expect(pendingSummaryBlock).toMatch(/FETCH FIRST \$\{clientFetchLimit\} ROWS ONLY/);
+    expect(pendingSummaryBlock).toMatch(/getAppSideCobrosByClient\(vendorClause, vendorParams\)/);
+    expect(pendingSummaryBlock).not.toMatch(/CVC_DOCS_RAW/);
+    expect(pendingSummaryBlock).not.toMatch(/APP_COBROS AS/);
+    expect(pendingSummaryBlock).not.toMatch(/DOC_NET AS/);
+  });
 });

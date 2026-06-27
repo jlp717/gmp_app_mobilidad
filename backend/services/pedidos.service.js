@@ -1133,6 +1133,13 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
         throw new Error('clientCode and vendedorCode are required');
     }
 
+    const cleanClient = trimString(clientCode).substring(0, 10);
+    const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
+    const cleanDate = deliveryDate ? trimString(deliveryDate).substring(0, 10) : '';
+    const cacheKey = `pedidos:delivery-options:${cleanClient}:${cleanVendor}:${cleanDate || 'next'}`;
+    const cached = await redisCache.get('route', cacheKey);
+    if (cached) return cached;
+
     const deliveryPlan = await resolveDeliveryPlan({ clientCode, vendedorCode, deliveryDate });
     const assignment = await getDefaultTruckAssignment({
         clientCode,
@@ -1140,9 +1147,9 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
         deliveryDate: deliveryPlan.date.iso,
     });
 
-    return {
-        clientCode: trimString(clientCode),
-        vendedorCode: trimString(vendedorCode).split(',')[0].substring(0, 2),
+    const options = {
+        clientCode: cleanClient,
+        vendedorCode: cleanVendor,
         allowedDeliveryDays: deliveryPlan.allowedDays,
         allowedDeliveryDaysShort: deliveryPlan.allowedDaysShort,
         suggestedDeliveryDate: deliveryPlan.date.iso,
@@ -1159,6 +1166,8 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
         validated: deliveryPlan.validated,
         deliveryDaysSource: deliveryPlan.source,
     };
+    await redisCache.set('route', cacheKey, options, TTL.SHORT);
+    return options;
 }
 
 async function getAvailableVehicles() {
@@ -2051,6 +2060,9 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
     const equivalentSundayPrev = new Date(prevYear, 0, 1 + firstSundayOffsetPrev + (weekNumber - 1) * 7);
     const endMonthPrevious = equivalentSundayPrev.getMonth() + 1;
     const endDayPrevious = equivalentSundayPrev.getDate();
+    const resultCacheKey = `pedidos:products_final_v3:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}`;
+    const cachedProducts = await redisCache.get('route', resultCacheKey);
+    if (cachedProducts) return cachedProducts;
 
     const historyParams = [
         // CASE WHEN SALES_THIS_YEAR: year, month_lt, month_eq, day (4)
@@ -2068,32 +2080,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
     ];
 
     const sql = `
-        SELECT
-            TRIM(A.CODIGOARTICULO) AS code,
-            TRIM(A.DESCRIPCIONARTICULO) AS name,
-            TRIM(A.CODIGOMARCA) AS brand,
-            TRIM(A.CODIGOFAMILIA) AS family,
-            TRIM(A.CODIGOEAN) AS ean,
-            A.UNIDADESCAJA AS unitsPerBox,
-            A.UNIDADESFRACCION AS unitsFraction,
-            A.UNIDADESRETRACTIL AS unitsRetractil,
-            TRIM(A.UNIDADMEDIDA) AS unitMeasure,
-            A.PESO AS weight,
-            COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS stockEnvases,
-            COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS stockUnidades,
-            COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
-            COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
-            COALESCE(CT.CODIGOTARIFA, 1) AS codigoTarifaCliente,
-            COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
-            COALESCE(LC.PRECIOCOSTO, 0) AS precioCosto,
-            TRIM(COALESCE(NULLIF(TRIM(A.CODIGOIVA), ''), '2')) AS codigoIva,
-            TRIM(COALESCE(A.FORMATO, '')) AS formato,
-            COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
-            COALESCE(PH.SALES_THIS_YEAR, 0) AS salesThisYear,
-            COALESCE(PH.SALES_PREV_YEAR, 0) AS salesPrevYear,
-            CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 1 ELSE 0 END AS hasPurchased
-        FROM DSEDAC.ART A
-        LEFT JOIN (
+        WITH PH AS (
             SELECT
                 TRIM(L.LCCDRF) AS CODIGOARTICULO,
                 SUM(CASE WHEN L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)) THEN L.LCIMVT ELSE 0 END) AS SALES_THIS_YEAR,
@@ -2107,48 +2094,112 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
               )
               AND ${LACLAE_SALES_FILTER}
             GROUP BY TRIM(L.LCCDRF)
-        ) PH ON TRIM(A.CODIGOARTICULO) = PH.CODIGOARTICULO
-        LEFT JOIN (
-            SELECT CODIGOARTICULO,
-                SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
-                SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-            FROM DSEDAC.ARO
-            WHERE CODIGOALMACEN = 1
-            GROUP BY CODIGOARTICULO
-        ) S ON A.CODIGOARTICULO = S.CODIGOARTICULO
-        LEFT JOIN (
+        ), ART_RANKED AS (
+            SELECT
+                TRIM(A.CODIGOARTICULO) AS CODIGOARTICULO,
+                TRIM(A.DESCRIPCIONARTICULO) AS DESCRIPCIONARTICULO,
+                TRIM(A.CODIGOMARCA) AS CODIGOMARCA,
+                TRIM(A.CODIGOFAMILIA) AS CODIGOFAMILIA,
+                TRIM(A.CODIGOEAN) AS CODIGOEAN,
+                A.UNIDADESCAJA,
+                A.UNIDADESFRACCION,
+                A.UNIDADESRETRACTIL,
+                TRIM(A.UNIDADMEDIDA) AS UNIDADMEDIDA,
+                A.PESO,
+                TRIM(COALESCE(NULLIF(TRIM(A.CODIGOIVA), ''), '2')) AS CODIGOIVA,
+                TRIM(COALESCE(A.FORMATO, '')) AS FORMATO,
+                COALESCE(A.PRODUCTOPESADOSN, '') AS PRODUCTOPESADOSN,
+                COALESCE(PH.SALES_THIS_YEAR, 0) AS SALES_THIS_YEAR,
+                COALESCE(PH.SALES_PREV_YEAR, 0) AS SALES_PREV_YEAR,
+                COALESCE(PH.PURCHASE_COUNT, 0) AS PURCHASE_COUNT,
+                ROW_NUMBER() OVER (
+                    ORDER BY
+                        CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 0 ELSE 1 END ASC,
+                        COALESCE(PH.SALES_THIS_YEAR, 0) ASC,
+                        COALESCE(PH.PURCHASE_COUNT, 0) DESC,
+                        A.DESCRIPCIONARTICULO ASC,
+                        TRIM(A.CODIGOARTICULO) ASC
+                ) AS RN
+            FROM DSEDAC.ART A
+            LEFT JOIN PH ON TRIM(A.CODIGOARTICULO) = PH.CODIGOARTICULO
+            ${where}
+        ), ART_PAGE AS (
+            SELECT *
+              FROM ART_RANKED
+             WHERE RN > ?
+               AND RN <= ?
+        ), CLIENT_TARIFF AS (
+            SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
+              FROM DSEDAC.CLC CLC
+             WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+             FETCH FIRST 1 ROW ONLY
+        ), STOCK AS (
+            SELECT S.CODIGOARTICULO,
+                SUM(S.ENVASESDISPONIBLES) AS ENVASES_DISP,
+                SUM(S.UNIDADESDISPONIBLES) AS UNIDADES_DISP
+            FROM DSEDAC.ARO S
+            JOIN ART_PAGE P ON S.CODIGOARTICULO = P.CODIGOARTICULO
+            WHERE S.CODIGOALMACEN = 1
+            GROUP BY S.CODIGOARTICULO
+        ), RESERVED AS (
             SELECT SR.CODIGOARTICULO,
                 SUM(SR.CANTIDADENVASES) AS RES_ENV,
                 SUM(SR.CANTIDADUNIDADES) AS RES_UNI
             FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
             JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
+            JOIN ART_PAGE P ON SR.CODIGOARTICULO = P.CODIGOARTICULO
             GROUP BY SR.CODIGOARTICULO
-        ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
+        ), LAST_COST AS (
+            SELECT CA, PRECIOCOSTO
+              FROM (
+                SELECT TRIM(L.CODIGOARTICULO) AS CA,
+                       L.PRECIOCOSTO,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY TRIM(L.CODIGOARTICULO)
+                         ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+                       ) AS RN
+                  FROM DSEDAC.LAC L
+                  JOIN ART_PAGE P ON TRIM(L.CODIGOARTICULO) = P.CODIGOARTICULO
+                 WHERE L.PRECIOCOSTO > 0
+              ) X
+             WHERE RN = 1
+        )
+        SELECT
+            A.CODIGOARTICULO AS code,
+            A.DESCRIPCIONARTICULO AS name,
+            A.CODIGOMARCA AS brand,
+            A.CODIGOFAMILIA AS family,
+            A.CODIGOEAN AS ean,
+            A.UNIDADESCAJA AS unitsPerBox,
+            A.UNIDADESFRACCION AS unitsFraction,
+            A.UNIDADESRETRACTIL AS unitsRetractil,
+            A.UNIDADMEDIDA AS unitMeasure,
+            A.PESO AS weight,
+            COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS stockEnvases,
+            COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS stockUnidades,
+            COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
+            COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
+            COALESCE(CT.CODIGOTARIFA, 1) AS codigoTarifaCliente,
+            COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
+            COALESCE(LC.PRECIOCOSTO, 0) AS precioCosto,
+            A.CODIGOIVA AS codigoIva,
+            A.FORMATO AS formato,
+            A.PRODUCTOPESADOSN AS productoPesado,
+            A.SALES_THIS_YEAR AS salesThisYear,
+            A.SALES_PREV_YEAR AS salesPrevYear,
+            CASE WHEN A.PURCHASE_COUNT > 0 THEN 1 ELSE 0 END AS hasPurchased
+        FROM ART_PAGE A
+        LEFT JOIN STOCK S ON A.CODIGOARTICULO = S.CODIGOARTICULO
+        LEFT JOIN RESERVED RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
         LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
         LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
-        LEFT JOIN (
-            SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
-            FROM DSEDAC.CLC CLC
-            WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
-            FETCH FIRST 1 ROW ONLY
-        ) CT ON 1 = 1
+        LEFT JOIN CLIENT_TARIFF CT ON 1 = 1
         LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
             AND TC.CODIGOTARIFA = CT.CODIGOTARIFA
-        LEFT JOIN (
-            SELECT TRIM(CODIGOARTICULO) AS CA, PRECIOCOSTO,
-                ROW_NUMBER() OVER (PARTITION BY TRIM(CODIGOARTICULO) ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC) AS RN
-            FROM DSEDAC.LAC
-            WHERE PRECIOCOSTO > 0
-        ) LC ON TRIM(A.CODIGOARTICULO) = LC.CA AND LC.RN = 1
-        ${where}
-        ORDER BY
-            CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 0 ELSE 1 END ASC,
-            COALESCE(PH.SALES_THIS_YEAR, 0) ASC,
-            COALESCE(PH.PURCHASE_COUNT, 0) DESC,
-            A.DESCRIPCIONARTICULO ASC
-        OFFSET ? ROWS FETCH FIRST ? ROWS ONLY`;
+        LEFT JOIN LAST_COST LC ON A.CODIGOARTICULO = LC.CA
+        ORDER BY A.RN ASC`;
 
-    const finalParams = [...historyParams, clientCodeTrimmed, ...params, offset, limit];
+    const finalParams = [...historyParams, ...params, offset, offset + limit, clientCodeTrimmed];
 
     const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}`;
 
@@ -2206,7 +2257,9 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
             return product;
         });
         const pricedProducts = await applyConfiguredPricingToProducts(products, clientCodeTrimmed);
-        return pricedProducts.map(product => applyProductPriceView(product, includeIva));
+        const finalProducts = pricedProducts.map(product => applyProductPriceView(product, includeIva));
+        await redisCache.set('route', resultCacheKey, finalProducts, TTL.SHORT);
+        return finalProducts;
     } catch (error) {
         logger.error(`[PEDIDOS] getProducts error: ${error.message}`);
         throw error;

@@ -1061,158 +1061,38 @@ class Db2CobrosRepository extends CobrosRepository {
       ? Math.floor(safeOffset / safeLimit) + 1
       : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
     const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
-    const cvcFullDocSql = cvcReferenceSql('CVC');
-    const cvcLegacyDocSql = cvcLegacyReferenceSql('CVC');
+    const clientFetchLimit = Math.min(10000, Math.max(5000, pageOffset + safeLimit));
 
+    // The mobile summary only needs client-level debt. The previous version
+    // rebuilt every CVC document plus app-side document joins before paging,
+    // which made cold requests scale with the whole ERP portfolio.
     const summarySql = `
-      WITH CVC_DOCS_RAW AS (
+      WITH CVC_CLIENTS AS (
         SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               ${cvcFullDocSql} AS DOC_KEY,
-               ${cvcLegacyDocSql} AS LEGACY_DOCUMENTO,
-               COALESCE(TRIM(CVC.TIPODOCUMENTO), '') AS TIPO_DOCUMENTO,
-               COALESCE(TRIM(CVC.ORIGENDOCUMENTO), '') AS ORIGEN_DOCUMENTO,
-               COALESCE(TRIM(CVC.SUBEMPRESADOCUMENTO), '') AS SUBEMPRESA,
-               COALESCE(CVC.EJERCICIODOCUMENTO, 0) AS EJERCICIO_DOCUMENTO,
-               TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
-               COALESCE(CVC.TERMINALDOCUMENTO, 0) AS TERMINAL_DOCUMENTO,
-               TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO_DOCUMENTO,
-               COALESCE(CVC.XDEDOCUMENTO, 0) AS XDE,
-               COALESCE(CVC.DEXDOCUMENTO, 0) AS DEX,
+               COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), TRIM(CVC.CODIGOCLIENTEALBARAN)) AS NOMBRE,
+               COUNT(*) AS DOC_COUNT,
                SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
          FROM DSEDAC.CVC CVC
+         LEFT JOIN DSEDAC.CLI CLI
+           ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
          WHERE CVC.IMPORTEPENDIENTE > 0.01
            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
            ${docFilters.clause}
            ${emptyClientFilter}
            ${vendorClause}
-         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN),
-                  ${cvcFullDocSql},
-                  ${cvcLegacyDocSql},
-                  COALESCE(TRIM(CVC.TIPODOCUMENTO), ''),
-                  COALESCE(TRIM(CVC.ORIGENDOCUMENTO), ''),
-                  COALESCE(TRIM(CVC.SUBEMPRESADOCUMENTO), ''),
-                  COALESCE(CVC.EJERCICIODOCUMENTO, 0),
-                  TRIM(CVC.SERIEDOCUMENTO),
-                  COALESCE(CVC.TERMINALDOCUMENTO, 0),
-                  TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))),
-                  COALESCE(CVC.XDEDOCUMENTO, 0),
-                  COALESCE(CVC.DEXDOCUMENTO, 0)
-      ), CVC_DOCS AS (
-        SELECT R.*,
-               COUNT(*) OVER (PARTITION BY R.CLIENTE, R.LEGACY_DOCUMENTO) AS LEGACY_COLLISION_COUNT
-          FROM CVC_DOCS_RAW R
-      ), APP_COBROS AS (
-        SELECT D.CLIENTE, D.DOC_KEY,
-               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
-          FROM CVC_DOCS D
-          JOIN ${APP_SCHEMA}.COBROS C
-            ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
-           AND (
-             TRIM(C.REFERENCIA) = D.DOC_KEY
-             OR (
-               D.LEGACY_COLLISION_COUNT = 1
-               AND (
-                 TRIM(C.REFERENCIA) = D.LEGACY_DOCUMENTO
-                 OR TRIM(C.REFERENCIA) = 'CVC:' || D.LEGACY_DOCUMENTO
-               )
-             )
-           )
-         GROUP BY D.CLIENTE, D.DOC_KEY
-      ), REP_COBROS AS (
-        SELECT D.CLIENTE, D.DOC_KEY,
-               COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-          FROM CVC_DOCS D
-          JOIN ${APP_SCHEMA}.REPARTIDOR_COBROS R
-            ON TRIM(R.CODIGOCLIENTEALBARAN) = D.CLIENTE
-           AND COALESCE(TRIM(R.TIPODOCUMENTO), '') = D.TIPO_DOCUMENTO
-           AND COALESCE(TRIM(R.ORIGENDOCUMENTO), '') = D.ORIGEN_DOCUMENTO
-           AND COALESCE(TRIM(R.SUBEMPRESADOCUMENTO), '') = D.SUBEMPRESA
-           AND COALESCE(R.EJERCICIODOCUMENTO, 0) = D.EJERCICIO_DOCUMENTO
-           AND TRIM(R.SERIEDOCUMENTO) = D.SERIE_DOCUMENTO
-           AND COALESCE(R.TERMINALDOCUMENTO, 0) = D.TERMINAL_DOCUMENTO
-           AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
-           AND COALESCE(R.XDEDOCUMENTO, 0) = D.XDE
-           AND COALESCE(R.DEXDOCUMENTO, 0) = D.DEX
-         GROUP BY D.CLIENTE, D.DOC_KEY
-      ), DOC_NET AS (
-        SELECT D.CLIENTE,
-               D.DOC_KEY,
-               D.TOTAL_PENDIENTE,
-               D.TOTAL_VENCIDO,
-               COALESCE(A.TOTAL_APP, 0) + COALESCE(R.TOTAL_REP, 0) AS PAID,
-               CASE
-                 WHEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) > 0
-                 THEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                 ELSE 0
-               END AS NET_TOTAL,
-               CASE
-                 WHEN D.TOTAL_VENCIDO <= 0
-                   OR D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) <= 0
-                   OR D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) <= 0 THEN 0
-                 WHEN D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                   < D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                   THEN D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                 ELSE D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-               END AS NET_VENCIDO
-          FROM CVC_DOCS D
-          LEFT JOIN APP_COBROS A
-            ON A.CLIENTE = D.CLIENTE
-           AND A.DOC_KEY = D.DOC_KEY
-          LEFT JOIN REP_COBROS R
-            ON R.CLIENTE = D.CLIENTE
-           AND R.DOC_KEY = D.DOC_KEY
-      ), CLIENT_NET AS (
-        SELECT CLIENTE,
-               COUNT(*) AS DOC_COUNT,
-               COALESCE(SUM(NET_TOTAL), 0) AS TOTAL_PENDIENTE,
-               COALESCE(SUM(NET_VENCIDO), 0) AS TOTAL_VENCIDO
-          FROM DOC_NET
-         WHERE NET_TOTAL > 0
-         GROUP BY CLIENTE
-      ), SCOPE_TOTALS AS (
-        SELECT COALESCE(SUM(NET_TOTAL), 0) AS GRAND_TOTAL,
-               COALESCE(SUM(NET_VENCIDO), 0) AS GRAND_TOTAL_VENCIDO,
-               COALESCE(SUM(TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
-               COALESCE(SUM(TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO,
-               COUNT(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END) AS CLIENT_COUNT,
-               COUNT(DISTINCT CASE WHEN NET_VENCIDO > 0 THEN CLIENTE ELSE NULL END) AS VENCIDO_CLIENT_COUNT
-          FROM DOC_NET
-      ), CLIENT_RANKED AS (
-        SELECT C.CLIENTE,
-               C.DOC_COUNT,
-               C.TOTAL_PENDIENTE,
-               C.TOTAL_VENCIDO,
-               ROW_NUMBER() OVER (ORDER BY C.TOTAL_PENDIENTE DESC, C.CLIENTE ASC) AS RN
-          FROM CLIENT_NET C
-      ), PAGE_CLIENTS AS (
-        SELECT CLIENTE, DOC_COUNT, TOTAL_PENDIENTE, TOTAL_VENCIDO, RN
-          FROM CLIENT_RANKED
-         WHERE RN > ${pageOffset}
-           AND RN <= ${pageOffset + safeLimit}
+         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
       )
-      SELECT P.CLIENTE,
-             COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), P.CLIENTE) AS NOMBRE,
-             P.DOC_COUNT,
-             P.TOTAL_PENDIENTE,
-             P.TOTAL_VENCIDO,
-             T.GRAND_TOTAL,
-             T.GRAND_TOTAL_VENCIDO,
-             T.CVC_GRAND_TOTAL,
-             T.CVC_GRAND_TOTAL_VENCIDO,
-             T.CLIENT_COUNT,
-             T.VENCIDO_CLIENT_COUNT,
-             P.RN
-        FROM SCOPE_TOTALS T
-        LEFT JOIN PAGE_CLIENTS P ON 1 = 1
-        LEFT JOIN DSEDAC.CLI CLI
-          ON TRIM(CLI.CODIGOCLIENTE) = P.CLIENTE
-       GROUP BY P.CLIENTE, P.DOC_COUNT, P.TOTAL_PENDIENTE, P.TOTAL_VENCIDO, P.RN,
-                T.GRAND_TOTAL, T.GRAND_TOTAL_VENCIDO, T.CVC_GRAND_TOTAL,
-                T.CVC_GRAND_TOTAL_VENCIDO, T.CLIENT_COUNT, T.VENCIDO_CLIENT_COUNT
-       ORDER BY P.RN ASC
+      SELECT CLIENTE,
+             NOMBRE,
+             DOC_COUNT,
+             TOTAL_PENDIENTE,
+             TOTAL_VENCIDO
+        FROM CVC_CLIENTS
+       ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC
+       FETCH FIRST ${clientFetchLimit} ROWS ONLY
     `;
 
     const runQuery = queryParams.length > 0
@@ -1224,23 +1104,47 @@ class Db2CobrosRepository extends CobrosRepository {
       vendedorCodes: vendorCodes,
       vendorCodes,
     };
-    const [rows, appOrderSummary] = await Promise.all([
+    const [rows, appClientAdjustments, appOrderSummary] = await Promise.all([
       runQuery(summarySql),
+      this.getAppSideCobrosByClient(vendorClause, vendorParams),
       this.getAppOrderPendingSummary(appOrderContext),
     ]);
 
-    const summary = {};
-    for (const r of rows || []) {
+    const cvcRows = Array.isArray(rows) ? rows : [];
+    const cvcEntries = cvcRows.map((r) => {
       const code = trim(r.CLIENTE);
-      if (!code) continue;
-      const total = fromCents(toCents(r.TOTAL_PENDIENTE));
-      if (toCents(total) <= 0) continue;
-      const vencido = fromCents(toCents(r.TOTAL_VENCIDO));
-      summary[code] = {
+      const paid = toCents(appClientAdjustments.get(code) || 0);
+      const cvcTotalCents = toCents(r.TOTAL_PENDIENTE);
+      const cvcVencidoCents = toCents(r.TOTAL_VENCIDO);
+      const netTotalCents = Math.max(0, cvcTotalCents - paid);
+      const netVencidoCents = cvcVencidoCents <= 0
+        ? 0
+        : Math.min(netTotalCents, Math.max(0, cvcVencidoCents - paid));
+      return {
+        code,
         nombre: trim(r.NOMBRE) || code,
+        count: parseInt(r.DOC_COUNT, 10) || 0,
+        cvcTotal: fromCents(cvcTotalCents),
+        cvcVencido: fromCents(cvcVencidoCents),
+        total: fromCents(netTotalCents),
+        vencido: fromCents(netVencidoCents),
+      };
+    }).filter((entry) => entry.code && toCents(entry.total) > 0);
+
+    cvcEntries.sort((a, b) => {
+      const totalDiff = toCents(b.total) - toCents(a.total);
+      return totalDiff !== 0 ? totalDiff : a.code.localeCompare(b.code);
+    });
+
+    const pagedEntries = cvcEntries.slice(pageOffset, pageOffset + safeLimit);
+    const summary = {};
+    for (const entry of pagedEntries) {
+      const { code, total, vencido } = entry;
+      summary[code] = {
+        nombre: entry.nombre,
         total,
         vencido,
-        count: parseInt(r.DOC_COUNT, 10) || 0,
+        count: entry.count,
         estado: vencido > 0 ? 'VENCIDO' : 'PENDIENTE',
       };
     }
@@ -1263,20 +1167,19 @@ class Db2CobrosRepository extends CobrosRepository {
       summary[code].source = summary[code].source === 'PEDIDOS_CAB' ? 'PEDIDOS_CAB' : 'CVC+PEDIDOS_CAB';
     }
 
-    const totals = rows?.[0] || {};
-    const cvcNetTotal = parseFloat(totals.GRAND_TOTAL) || 0;
-    const cvcNetVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
+    const cvcNetTotal = cvcEntries.reduce((sum, entry) => sum + (parseFloat(entry.total) || 0), 0);
+    const cvcNetVencido = cvcEntries.reduce((sum, entry) => sum + (parseFloat(entry.vencido) || 0), 0);
     const appOrdersTotal = parseFloat(appOrderSummary.grandTotal) || 0;
     const grandTotal = cvcNetTotal + appOrdersTotal;
     const grandTotalVencido = cvcNetVencido + (parseFloat(appOrderSummary.grandTotalVencido) || 0);
-    const cvcGrandTotal = parseFloat(totals.CVC_GRAND_TOTAL ?? totals.GRAND_TOTAL) || 0;
-    const cvcGrandTotalVencido = parseFloat(totals.CVC_GRAND_TOTAL_VENCIDO ?? totals.GRAND_TOTAL_VENCIDO) || 0;
+    const cvcGrandTotal = cvcRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_PENDIENTE) || 0), 0);
+    const cvcGrandTotalVencido = cvcRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_VENCIDO) || 0), 0);
     const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - cvcNetTotal);
-    const cvcClientCount = parseInt(totals.CLIENT_COUNT, 10) || 0;
-    const cvcVencidoClientCount = parseInt(totals.VENCIDO_CLIENT_COUNT, 10) || 0;
+    const cvcClientCount = cvcEntries.length;
+    const cvcVencidoClientCount = cvcEntries.filter((entry) => toCents(entry.vencido) > 0).length;
     const appClientCount = parseInt(appOrderSummary.clientCount, 10) || 0;
     const mergedClientCount = Math.max(cvcClientCount, appClientCount, Object.keys(summary).length);
-    const returnedDocuments = (rows || []).filter((row) => trim(row.CLIENTE)).length;
+    const returnedDocuments = pagedEntries.length;
 
     return {
       summary,
