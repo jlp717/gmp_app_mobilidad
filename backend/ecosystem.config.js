@@ -5,13 +5,19 @@
  * monitoring, and auto-restart
  */
 
-const requestedInstances = process.env.PM2_INSTANCES || 1;
+const requestedInstances = process.env.PM2_INSTANCES || '1';
 const parsedInstanceCount = Number.parseInt(requestedInstances, 10);
 const requestedInstanceCount = Number.isFinite(parsedInstanceCount)
     ? parsedInstanceCount
     : (requestedInstances === 'max' ? 9 : 1);
-const multiInstanceDbPoolMax = requestedInstanceCount > 8 ? '6' : '12';
-const multiInstanceDbConcurrency = requestedInstanceCount > 8 ? '3' : '6';
+const isMultiInstance = requestedInstanceCount > 1;
+const defaultDbPoolMax = isMultiInstance
+    ? (requestedInstanceCount > 8 ? '6' : '12')
+    : '40';
+const defaultDbConcurrency = isMultiInstance
+    ? (requestedInstanceCount > 8 ? '3' : '6')
+    : '16';
+const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
 
 const runtimePerformanceEnv = {
     UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE || '128',
@@ -19,12 +25,14 @@ const runtimePerformanceEnv = {
     HTTP_COMPRESSION_THRESHOLD: process.env.HTTP_COMPRESSION_THRESHOLD || '1024',
     HTTP_COMPRESSION_LEVEL: process.env.HTTP_COMPRESSION_LEVEL || '6',
     HTTP_REQUEST_TIMEOUT_MS: process.env.HTTP_REQUEST_TIMEOUT_MS || '45000',
-    DB_POOL_MIN: process.env.DB_POOL_MIN || '1',
-    DB_POOL_MAX: process.env.DB_POOL_MAX || multiInstanceDbPoolMax,
-    DB_POOL_ACQUIRE_MS: process.env.DB_POOL_ACQUIRE_MS || '10000',
-    DB_POOL_FAST_FAIL_MS: process.env.DB_POOL_FAST_FAIL_MS || '5000',
-    DB_QUERY_CONCURRENCY: process.env.DB_QUERY_CONCURRENCY || multiInstanceDbConcurrency,
-    DB_QUERY_QUEUE_TIMEOUT_MS: process.env.DB_QUERY_QUEUE_TIMEOUT_MS || '10000',
+    PM2_INSTANCES: requestedInstances,
+    PM2_EXEC_MODE: defaultExecMode,
+    DB_POOL_MIN: process.env.DB_POOL_MIN || (isMultiInstance ? '1' : '5'),
+    DB_POOL_MAX: process.env.DB_POOL_MAX || defaultDbPoolMax,
+    DB_POOL_ACQUIRE_MS: process.env.DB_POOL_ACQUIRE_MS || '15000',
+    DB_POOL_FAST_FAIL_MS: process.env.DB_POOL_FAST_FAIL_MS || '10000',
+    DB_QUERY_CONCURRENCY: process.env.DB_QUERY_CONCURRENCY || defaultDbConcurrency,
+    DB_QUERY_QUEUE_TIMEOUT_MS: process.env.DB_QUERY_QUEUE_TIMEOUT_MS || '12000',
     REDIS_DISABLE_OFFLINE_QUEUE: process.env.REDIS_DISABLE_OFFLINE_QUEUE || 'true',
     REDIS_COMMAND_TIMEOUT_MS: process.env.REDIS_COMMAND_TIMEOUT_MS || '1000',
     QUERY_CACHE_REBUILD_WAIT_MS: process.env.QUERY_CACHE_REBUILD_WAIT_MS || '5000',
@@ -40,7 +48,7 @@ module.exports = {
 
             // ==================== CLUSTERING ====================
             instances: requestedInstances,
-            exec_mode: process.env.PM2_EXEC_MODE || (requestedInstanceCount > 1 ? 'cluster' : 'fork'),
+            exec_mode: defaultExecMode,
 
             // ==================== ENVIRONMENT ====================
             env: {
