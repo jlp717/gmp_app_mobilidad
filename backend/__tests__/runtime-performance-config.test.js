@@ -112,4 +112,29 @@ describe('runtime performance configuration', () => {
     expect(source).not.toMatch(/DATE\(LAC\.FECHA\)/);
     expect(source).not.toMatch(/TRIM\(L\.R1_T8CDVD\)/);
   });
+
+  test('pedido client authorization avoids CASE vendor predicates in hot client scope checks', () => {
+    const commonSource = fs.readFileSync(path.join(backendRoot, 'utils/common.js'), 'utf8');
+    const legacyRoutes = fs.readFileSync(path.join(backendRoot, 'routes/pedidos.js'), 'utf8');
+    const dddRoutes = fs.readFileSync(path.join(backendRoot, 'src/shared/routes/ddd-adapters.js'), 'utf8');
+    const clientFilterBlock = commonSource.slice(
+      commonSource.indexOf('function buildClientVendorParamFilter'),
+      commonSource.indexOf('function expandVendorCodesForSql'),
+    );
+
+    expect(legacyRoutes).toMatch(/managerOwnVendorScope/);
+    expect(dddRoutes).toMatch(/managerOwnVendorScope/);
+    expect(clientFilterBlock).toMatch(/LAC\.LCMMDC < \$\{TRANSITION_MONTH\}/);
+    expect(clientFilterBlock).toMatch(/LAC\.\$\{VENDOR_COLUMN\} IN/);
+    expect(clientFilterBlock).not.toMatch(/TRIM\(\$\{laclaeVendorCol\}\)/);
+  });
+
+  test('pedido order analytics uses qualified vendor filters without TRIM', () => {
+    const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
+
+    expect(source).toMatch(/function buildPedidoCabVendorFilter/);
+    expect(source).toMatch(/buildPedidoCabVendorFilter\(vendedorCodes, 'C'\)/);
+    expect(source).toMatch(/CAST\(\? AS CHAR\(2\)\)/);
+    expect(source).not.toMatch(/AND TRIM\(CODIGOVENDEDOR\) IN/);
+  });
 });

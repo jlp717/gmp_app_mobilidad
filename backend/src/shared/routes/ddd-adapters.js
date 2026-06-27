@@ -418,6 +418,37 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
   const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
   if (!vendorScope.ok) return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
 
+  const managerOwnVendorScope = context.isManager
+    && context.code
+    && vendorScope.codes.length === 1
+    && pedidoCodesMatch(vendorScope.codes[0], context.code);
+  if (managerOwnVendorScope) {
+    const existsRows = await cachedQuery(
+      (sql, params = []) => queryWithParams(sql, params),
+      `SELECT 1
+         FROM DSEDAC.CLI CLI
+        WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+        FETCH FIRST 1 ROW ONLY`,
+      {
+        cacheKey: `pedido-client-exists:${client}`,
+        prefix: 'pedidos-auth',
+        ttl: RedisTTL.SHORT || 60,
+        params: { client },
+        queryType: 'pedido-client-auth',
+      },
+      [client],
+    );
+    if (!existsRows || existsRows.length === 0) {
+      return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`) };
+    }
+    const assignedVendors = await lookupClientAssignedVendorCodes(client);
+    return {
+      ok: true,
+      clientCode: client,
+      vendorCodes: assignedVendors.length > 0 ? assignedVendors : vendorScope.codes,
+    };
+  }
+
   const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
   let rows = await queryWithParams(
     `SELECT 1

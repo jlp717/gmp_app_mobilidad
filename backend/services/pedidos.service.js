@@ -6051,19 +6051,31 @@ async function getSimilarProducts(productCode) {
 // ORDER ANALYTICS
 // =============================================================================
 
-async function getOrderAnalytics(vendedorCodes) {
-    const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-    let vendorFilter = '';
-    const vendorParams = [];
-    
-    if (!isAll) {
-        const vendorList = vendedorCodes.split(',').map(v => v.trim()).filter(Boolean);
-        if (vendorList.length > 0) {
-            const placeholders = vendorList.map(() => '?').join(',');
-            vendorFilter = `AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
-            vendorParams.push(...vendorList);
-        }
+function buildPedidoCabVendorFilter(vendedorCodes, alias = '') {
+    const raw = String(vendedorCodes || '').trim();
+    if (!raw || raw.toUpperCase() === 'ALL') {
+        return { clause: '', params: [] };
     }
+    const codes = raw
+        .split(',')
+        .map(v => v.trim())
+        .filter(v => /^[a-zA-Z0-9]+$/.test(v))
+        .map(v => v.substring(0, 2))
+        .filter(Boolean);
+    if (codes.length === 0) {
+        return { clause: 'AND 1=0', params: [] };
+    }
+    const prefix = alias ? `${alias}.` : '';
+    return {
+        clause: `AND ${prefix}CODIGOVENDEDOR IN (${codes.map(() => 'CAST(? AS CHAR(2))').join(',')})`,
+        params: codes,
+    };
+}
+
+async function getOrderAnalytics(vendedorCodes) {
+    const monthlyVendorFilter = buildPedidoCabVendorFilter(vendedorCodes);
+    const topVendorFilter = buildPedidoCabVendorFilter(vendedorCodes, 'C');
+    const statusVendorFilter = buildPedidoCabVendorFilter(vendedorCodes);
 
     const cacheKey = `pedidos:analytics:${vendedorCodes}`;
 
@@ -6078,7 +6090,7 @@ async function getOrderAnalytics(vendedorCodes) {
         FROM ${ERP_SCHEMA}.PEDIDOS_CAB
         WHERE ESTADO IN ('CONFIRMADO','ENVIADO')
           AND EJERCICIO = YEAR(CURRENT_DATE)
-          ${vendorFilter}
+          ${monthlyVendorFilter.clause}
         GROUP BY ANODOCUMENTO, MESDOCUMENTO
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
         FETCH FIRST 6 ROWS ONLY
@@ -6094,7 +6106,7 @@ async function getOrderAnalytics(vendedorCodes) {
         JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON C.ID = L.PEDIDO_ID
         WHERE C.ESTADO IN ('CONFIRMADO','ENVIADO')
           AND C.EJERCICIO = YEAR(CURRENT_DATE)
-          ${vendorFilter}
+          ${topVendorFilter.clause}
         GROUP BY L.CODIGOARTICULO, L.DESCRIPCION
         ORDER BY totalSales DESC
         FETCH FIRST 10 ROWS ONLY
@@ -6104,15 +6116,30 @@ async function getOrderAnalytics(vendedorCodes) {
         SELECT TRIM(ESTADO) AS status, COUNT(*) AS count
         FROM ${ERP_SCHEMA}.PEDIDOS_CAB
         WHERE EJERCICIO = YEAR(CURRENT_DATE)
-          ${vendorFilter}
+          ${statusVendorFilter.clause}
         GROUP BY ESTADO
     `;
 
     try {
         const [monthly, topProducts, statusDist] = await Promise.all([
-            cachedQuery((s) => queryWithParams(s, vendorParams), sql, cacheKey + ':monthly', TTL.SHORT),
-            cachedQuery((s) => queryWithParams(s, vendorParams), topSql, cacheKey + ':top', TTL.SHORT),
-            cachedQuery((s) => queryWithParams(s, vendorParams), statusSql, cacheKey + ':status', TTL.SHORT),
+            cachedQuery(
+                (s, params = []) => queryWithParams(s, params),
+                sql,
+                { cacheKey: `${cacheKey}:monthly`, prefix: 'pedidos', ttl: TTL.SHORT, params: { vendedorCodes, part: 'monthly' }, queryType: 'pedidos-analytics' },
+                monthlyVendorFilter.params,
+            ),
+            cachedQuery(
+                (s, params = []) => queryWithParams(s, params),
+                topSql,
+                { cacheKey: `${cacheKey}:top`, prefix: 'pedidos', ttl: TTL.SHORT, params: { vendedorCodes, part: 'top' }, queryType: 'pedidos-analytics' },
+                topVendorFilter.params,
+            ),
+            cachedQuery(
+                (s, params = []) => queryWithParams(s, params),
+                statusSql,
+                { cacheKey: `${cacheKey}:status`, prefix: 'pedidos', ttl: TTL.SHORT, params: { vendedorCodes, part: 'status' }, queryType: 'pedidos-analytics' },
+                statusVendorFilter.params,
+            ),
         ]);
 
         return {

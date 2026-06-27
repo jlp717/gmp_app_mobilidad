@@ -234,8 +234,15 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
     if (safeCodes.length === 0) {
         return { clause: '', params: [] };
     }
-    const placeholders = safeCodes.map(() => 'CAST(? AS VARCHAR(2))').join(',');
-    const laclaeVendorCol = getVendorColumnExpr('LAC');
+    const placeholders = safeCodes.map(() => 'CAST(? AS CHAR(2))').join(',');
+    const safeLiteralInList = safeCodes.map((code) => `'${code.replace(/'/g, "''")}'`).join(',');
+    const laclaeVendorPredicate = VENDOR_COLUMN === 'LCCDVD'
+        ? `LAC.LCCDVD IN (${placeholders})`
+        : `(
+              (LAC.LCMMDC < ${TRANSITION_MONTH} AND LAC.LCCDVD IN (${placeholders}))
+              OR (LAC.LCMMDC >= ${TRANSITION_MONTH} AND LAC.${VENDOR_COLUMN} IN (${safeLiteralInList}))
+            )`;
+    const laclaeVendorParams = safeCodes;
     return {
         clause: `
       AND (
@@ -254,10 +261,10 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
              AND LAC.LCCLLN IN ('AB', 'VT')
              AND LAC.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
              AND LAC.LCAADC >= ${MIN_YEAR}
-             AND TRIM(${laclaeVendorCol}) IN (${placeholders})
+             AND ${laclaeVendorPredicate}
         )
       )`,
-        params: [...safeCodes, ...safeCodes],
+        params: [...safeCodes, ...laclaeVendorParams],
     };
 }
 
@@ -402,10 +409,38 @@ function buildLaclaeBoundedClientCodesSql(vendorCodes) {
     ) AND TRIM(${laclaeVendorCol}) IN (${inList})`;
 }
 
+const _clientAssignedVendorCache = new Map();
+const CLIENT_ASSIGNED_VENDOR_TTL_MS = 60000;
+
 async function lookupClientAssignedVendorCodes(clientCode) {
     const client = String(clientCode || '').trim().substring(0, 10);
     if (!client) return [];
-    const laclaeVendorCol = getVendorColumnExpr('LAC');
+    const cached = _clientAssignedVendorCache.get(client);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.codes.slice();
+    }
+    const laclaeVendorSelects = VENDOR_COLUMN === 'LCCDVD'
+        ? `SELECT LAC.LCCDVD AS VENDOR_CODE
+               FROM DSED.LACLAE LAC
+              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+                AND LAC.LCAADC >= ?
+                AND LAC.TPDC = 'LAC'`
+        : `SELECT LAC.LCCDVD AS VENDOR_CODE
+               FROM DSED.LACLAE LAC
+              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+                AND LAC.LCAADC >= ?
+                AND LAC.LCMMDC < ${TRANSITION_MONTH}
+                AND LAC.TPDC = 'LAC'
+             UNION
+             SELECT LAC.${VENDOR_COLUMN} AS VENDOR_CODE
+               FROM DSED.LACLAE LAC
+              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+                AND LAC.LCAADC >= ?
+                AND LAC.LCMMDC >= ${TRANSITION_MONTH}
+                AND LAC.TPDC = 'LAC'`;
+    const laclaeParams = VENDOR_COLUMN === 'LCCDVD'
+        ? [client, MIN_YEAR]
+        : [client, MIN_YEAR, client, MIN_YEAR];
     const rows = await queryWithParams(
         `SELECT DISTINCT TRIM(VENDOR_CODE) AS VENDOR_CODE
            FROM (
@@ -413,18 +448,19 @@ async function lookupClientAssignedVendorCodes(clientCode) {
                FROM DSEDAC.CLP CLP
               WHERE TRIM(CLP.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
              UNION
-             SELECT TRIM(${laclaeVendorCol}) AS VENDOR_CODE
-               FROM DSED.LACLAE LAC
-              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
-                AND LAC.LCAADC >= ?
-                AND LAC.TPDC = 'LAC'
+             ${laclaeVendorSelects}
            ) V
           WHERE VENDOR_CODE IS NOT NULL AND TRIM(VENDOR_CODE) <> ''`,
-        [client, client, MIN_YEAR],
+        [client, ...laclaeParams],
     );
-    return (rows || [])
+    const codes = (rows || [])
         .map((row) => String(row.VENDOR_CODE || row.vendor_code || '').trim())
         .filter(Boolean);
+    _clientAssignedVendorCache.set(client, {
+        codes,
+        expiresAt: Date.now() + CLIENT_ASSIGNED_VENDOR_TTL_MS,
+    });
+    return codes.slice();
 }
 
 /**
