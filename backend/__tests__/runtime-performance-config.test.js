@@ -94,4 +94,22 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/slice\(safeOffset, safeOffset \+ safeLimit\)/);
     expect(source).toMatch(/AND L\.LCCDCL IN \(\$\{placeholders\}\)/);
   });
+
+  test('DDD rutero sales endpoints use canonical DSED LACLAE tables without DATE column casts', () => {
+    const source = fs.readFileSync(
+      path.join(backendRoot, 'src/modules/rutero/infrastructure/db2-rutero-repository.js'),
+      'utf8',
+    );
+
+    expect(source).toMatch(/FROM DSED\.LACLAE L/);
+    expect(source).toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    expect(source).toMatch(/L\.LCAADC = \?/);
+    expect(source).toMatch(/L\.LCMMDC = \?/);
+    expect(source).toMatch(/L\.LCDDDC = \?/);
+    expect(source).toMatch(/L\.R1_T8CDVD = CAST\(\? AS CHAR\(2\)\)/);
+    expect(source).not.toMatch(/JAVIER\.LACLAE/);
+    expect(source).not.toMatch(/JAVIER\.CLIENTES/);
+    expect(source).not.toMatch(/DATE\(LAC\.FECHA\)/);
+    expect(source).not.toMatch(/TRIM\(L\.R1_T8CDVD\)/);
+  });
 });

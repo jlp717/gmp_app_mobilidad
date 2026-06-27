@@ -5,6 +5,27 @@ const { RuteroRepository } = require('../domain/rutero-repository');
 const { RutaConfig } = require('../domain/ruta-config');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 
+const LACLAE_SALES_FILTER = `
+        L.TPDC = 'LAC'
+        AND L.LCTPVT IN ('CC', 'VC')
+        AND L.LCCLLN IN ('AB', 'VT')
+        AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+`;
+
+function getDateParts(date) {
+  const source = date ? new Date(date) : new Date();
+  if (Number.isNaN(source.getTime())) return null;
+  return {
+    year: source.getFullYear(),
+    month: source.getMonth() + 1,
+    day: source.getDate(),
+  };
+}
+
+function normalizeVendorCode(vendorCode) {
+  return String(vendorCode || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 2);
+}
+
 class Db2RuteroRepository extends RuteroRepository {
   constructor(dbPool) {
     super();
@@ -18,13 +39,13 @@ class Db2RuteroRepository extends RuteroRepository {
       SELECT
         RC.ID,
         RC.CODIGOCLIENTE,
-        CL.NOMBRE as NOMBRECLIENTE,
+        COALESCE(TRIM(CL.NOMBRECLIENTE), TRIM(RC.CODIGOCLIENTE)) AS NOMBRECLIENTE,
         RC.ORDEN,
         RC.DIA_SEMANA,
         RC.VENDEDOR,
         RC.TIEMPO_ESTIMADO
       FROM JAVIER.RUTERO_CONFIG RC
-      LEFT JOIN JAVIER.CLIENTES CL ON TRIM(RC.CODIGOCLIENTE) = TRIM(CL.CODIGO)
+      LEFT JOIN DSEDAC.CLI CL ON TRIM(CL.CODIGOCLIENTE) = TRIM(RC.CODIGOCLIENTE)
       WHERE RC.VENDEDOR = ?
         AND RC.DIA_SEMANA = ?
         AND RC.ORDEN >= 0
@@ -60,47 +81,57 @@ class Db2RuteroRepository extends RuteroRepository {
   }
 
   async getCommissions({ vendorCode, date, role }) {
-    const dateFilter = date ? `AND DATE(LAC.FECHA) = DATE(?)` : '';
+    const safeVendorCode = normalizeVendorCode(vendorCode);
+    if (!safeVendorCode) return [];
+
+    const dateParts = getDateParts(date);
+    const dateFilter = dateParts ? 'AND L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ?' : '';
 
     const sql = `
       SELECT
-        LAC.CODIGOCLIENTE,
-        CL.NOMBRE as NOMBRE_CLIENTE,
-        SUM(LAC.IMPORTE) as TOTAL_VENTAS,
-        SUM(LAC.COMISION) as TOTAL_COMISION,
+        TRIM(L.LCCDCL) AS CODIGOCLIENTE,
+        COALESCE(TRIM(CL.NOMBRECLIENTE), TRIM(L.LCCDCL)) AS NOMBRE_CLIENTE,
+        COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS TOTAL_COMISION,
         COUNT(*) as NUM_VENTAS
-      FROM JAVIER.LACLAE LAC
-      LEFT JOIN JAVIER.CLIENTES CL ON TRIM(LAC.CODIGOCLIENTE) = TRIM(CL.CODIGO)
-      WHERE LAC.VENDEDOR = ?
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI CL ON TRIM(CL.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      WHERE L.R1_T8CDVD = CAST(? AS CHAR(2))
         ${dateFilter}
-      GROUP BY LAC.CODIGOCLIENTE, CL.NOMBRE
+        AND ${LACLAE_SALES_FILTER}
+      GROUP BY TRIM(L.LCCDCL), COALESCE(TRIM(CL.NOMBRECLIENTE), TRIM(L.LCCDCL))
       ORDER BY TOTAL_VENTAS DESC
       FETCH FIRST 100 ROWS ONLY
     `;
 
-    const params = [vendorCode];
-    if (date) params.push(date);
+    const params = [safeVendorCode];
+    if (dateParts) params.push(dateParts.year, dateParts.month, dateParts.day);
 
     const result = await this._db.executeParams(sql, params);
     return result;
   }
 
   async getDaySummary({ vendorCode, date }) {
-    const dateFilter = date ? `AND DATE(LAC.FECHA) = DATE(?)` : '';
+    const safeVendorCode = normalizeVendorCode(vendorCode);
+    if (!safeVendorCode) return {};
+
+    const dateParts = getDateParts(date);
+    const dateFilter = dateParts ? 'AND L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ?' : '';
 
     const sql = `
       SELECT
-        COUNT(*) as TOTAL_CLIENTES,
-        SUM(LAC.IMPORTE) as TOTAL_VENTAS,
-        SUM(LAC.COMISION) as TOTAL_COMISION,
-        COUNT(DISTINCT LAC.CODIGOCLIENTE) as CLIENTES_CON_VENTA
-      FROM JAVIER.LACLAE LAC
-      WHERE LAC.VENDEDOR = ?
+        COUNT(DISTINCT L.LCCDCL) AS TOTAL_CLIENTES,
+        COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS TOTAL_COMISION,
+        COUNT(DISTINCT L.LCCDCL) AS CLIENTES_CON_VENTA
+      FROM DSED.LACLAE L
+      WHERE L.R1_T8CDVD = CAST(? AS CHAR(2))
         ${dateFilter}
+        AND ${LACLAE_SALES_FILTER}
     `;
 
-    const params = [vendorCode];
-    if (date) params.push(date);
+    const params = [safeVendorCode];
+    if (dateParts) params.push(dateParts.year, dateParts.month, dateParts.day);
 
     const result = await this._db.executeParams(sql, params);
     return result[0] || {};
