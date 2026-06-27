@@ -89,8 +89,12 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/UNION ALL/);
     expect(source).toMatch(/CASE predicate caused full scans/);
     expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
+    expect(source).toMatch(/getClientCodesFromCache/);
+    expect(source).toMatch(/getCommissionSalesRowsFromClientCache/);
+    expect(source).toMatch(/L\.LCCDCL IN \(\$\{placeholders\}\)/);
     expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);
     expect(calculateVendorDataBlock).toMatch(/previousMarDecVendorCol/);
+    expect(calculateVendorDataBlock).toMatch(/usedClientScopeSalesRows/);
     expect(calculateVendorDataBlock).not.toMatch(/buildCommissionVendorFilter\(vendedorCode, safeYear, 'L'\)/);
   });
 
