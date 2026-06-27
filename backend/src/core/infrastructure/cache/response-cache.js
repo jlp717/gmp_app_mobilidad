@@ -5,6 +5,14 @@
  */
 const logger = require('../../../../middleware/logger');
 
+function getSharedRedisCache() {
+  try {
+    return require('../../../../services/redis-cache').redisCache;
+  } catch (_err) {
+    return null;
+  }
+}
+
 class ResponseCache {
   constructor() {
     this._l1Cache = new Map();
@@ -43,6 +51,21 @@ class ResponseCache {
         logger.debug(`[Cache] L2 read error: ${err.message}`);
       }
     }
+    const sharedRedisCache = getSharedRedisCache();
+    if (sharedRedisCache) {
+      try {
+        const sharedData = await sharedRedisCache.get('response', key);
+        if (sharedData !== null) {
+          this._l1Cache.set(key, {
+            data: sharedData,
+            expiresAt: Date.now() + this._defaultTtl
+          });
+          return sharedData;
+        }
+      } catch (err) {
+        logger.debug(`[Cache] Shared L2 read error: ${err.message}`);
+      }
+    }
 
     return null;
   }
@@ -62,12 +85,25 @@ class ResponseCache {
         logger.debug(`[Cache] L2 write error: ${err.message}`);
       }
     }
+    const sharedRedisCache = getSharedRedisCache();
+    if (sharedRedisCache) {
+      try {
+        const ttlSeconds = Math.floor((ttl || this._defaultTtl) / 1000);
+        await sharedRedisCache.set('response', key, data, ttlSeconds);
+      } catch (err) {
+        logger.debug(`[Cache] Shared L2 write error: ${err.message}`);
+      }
+    }
   }
 
   invalidate(key) {
     this._l1Cache.delete(key);
     if (this._l2Client) {
       this._l2Client.del(key).catch(() => {});
+    }
+    const sharedRedisCache = getSharedRedisCache();
+    if (sharedRedisCache) {
+      sharedRedisCache.delete('response', key).catch(() => {});
     }
   }
 
@@ -84,6 +120,10 @@ class ResponseCache {
         }
       }).catch(() => {});
     }
+    const sharedRedisCache = getSharedRedisCache();
+    if (sharedRedisCache) {
+      sharedRedisCache.invalidatePattern(`response:${pattern}*`).catch(() => {});
+    }
   }
 
   clear() {
@@ -93,7 +133,7 @@ class ResponseCache {
   getStats() {
     return {
       l1Size: this._l1Cache.size,
-      l2Available: !!this._l2Client,
+      l2Available: !!this._l2Client || !!getSharedRedisCache(),
       defaultTtl: this._defaultTtl
     };
   }

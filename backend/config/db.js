@@ -33,12 +33,88 @@ const POOL_CONFIG = {
     min: parseInt(process.env.DB_POOL_MIN, 10) || 5,  // Increased from 3 for better availability
     max: parseInt(process.env.DB_POOL_MAX, 10) || 50, // Increased from 30 for better concurrency
     idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_MS, 10) || 60000, // Increased from 30000
-    acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 60000 // Increased from 30000
+    acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 15000
+};
+
+const POOL_ACQUIRE_FAST_FAIL_MS = parseInt(process.env.DB_POOL_FAST_FAIL_MS, 10) ||
+    Math.min(10000, POOL_CONFIG.acquireTimeoutMs);
+const DEFAULT_DB_QUERY_CONCURRENCY = Math.max(2, Math.min(8, POOL_CONFIG.max));
+const DB_QUERY_CONCURRENCY = parseInt(process.env.DB_QUERY_CONCURRENCY, 10) || DEFAULT_DB_QUERY_CONCURRENCY;
+const DB_QUERY_QUEUE_TIMEOUT_MS = parseInt(process.env.DB_QUERY_QUEUE_TIMEOUT_MS, 10) || 15000;
+
+const queryGate = {
+    active: 0,
+    waiters: [],
+    timeouts: 0,
+
+    async acquire() {
+        if (DB_QUERY_CONCURRENCY <= 0) {
+            return () => {};
+        }
+
+        if (this.active < DB_QUERY_CONCURRENCY) {
+            this.active++;
+            return () => this.release();
+        }
+
+        const start = Date.now();
+        return new Promise((resolve, reject) => {
+            const waiter = {
+                done: false,
+                resolve: () => {
+                    if (waiter.done) return;
+                    waiter.done = true;
+                    clearTimeout(waiter.timer);
+                    this.active++;
+                    resolve(() => this.release());
+                },
+                reject: (error) => {
+                    if (waiter.done) return;
+                    waiter.done = true;
+                    clearTimeout(waiter.timer);
+                    reject(error);
+                }
+            };
+
+            waiter.timer = setTimeout(() => {
+                const idx = this.waiters.indexOf(waiter);
+                if (idx >= 0) this.waiters.splice(idx, 1);
+                this.timeouts++;
+                const waitedMs = Date.now() - start;
+                const error = new Error(`DB query queue timeout after ${waitedMs}ms`);
+                error.code = 'DB_QUERY_QUEUE_TIMEOUT';
+                waiter.reject(error);
+            }, DB_QUERY_QUEUE_TIMEOUT_MS);
+
+            this.waiters.push(waiter);
+        });
+    },
+
+    release() {
+        if (this.active > 0) this.active--;
+        while (this.waiters.length > 0 && this.active < DB_QUERY_CONCURRENCY) {
+            const waiter = this.waiters.shift();
+            waiter.resolve();
+            break;
+        }
+    },
+
+    getMetrics() {
+        return {
+            active: this.active,
+            waiting: this.waiters.length,
+            max: DB_QUERY_CONCURRENCY,
+            queueTimeoutMs: DB_QUERY_QUEUE_TIMEOUT_MS,
+            timeouts: this.timeouts,
+        };
+    }
 };
 
 const pool = {
     connections: [],
     active: 0,
+    waiting: 0,
+    acquireTimeouts: 0,
     min: POOL_CONFIG.min,
     max: POOL_CONFIG.max,
     idleTimeoutMs: POOL_CONFIG.idleTimeoutMs,
@@ -92,25 +168,33 @@ const pool = {
     async acquire() {
         if (this._closed) throw new Error('Pool is closed');
         const start = Date.now();
+        const acquireDeadlineMs = Math.min(this.acquireTimeoutMs, POOL_ACQUIRE_FAST_FAIL_MS);
 
         // Implement circuit breaker pattern to prevent cascade failures
         if (this.active >= this.max) {
             const waitTime = 20;
             let attempts = 0;
-            const maxAttempts = Math.floor(this.acquireTimeoutMs / waitTime);
-            
-            while (this.active >= this.max && attempts < maxAttempts) {
-                if (Date.now() - start > this.acquireTimeoutMs) {
-                    logger.warn(`[POOL] Connection acquisition timeout after ${this.acquireTimeoutMs}ms`);
-                    throw new Error('Pool: acquire timeout - max connections reached');
+            const maxAttempts = Math.max(1, Math.floor(acquireDeadlineMs / waitTime));
+
+            this.waiting++;
+            try {
+                while (this.active >= this.max && attempts < maxAttempts) {
+                    if (Date.now() - start > acquireDeadlineMs) {
+                        this.acquireTimeouts++;
+                        logger.warn(`[POOL] Connection acquisition timeout after ${acquireDeadlineMs}ms`);
+                        throw new Error('Pool: acquire timeout - max connections reached');
+                    }
+
+                    await new Promise(res => setTimeout(res, waitTime));
+                    attempts++;
                 }
-                
-                await new Promise(res => setTimeout(res, waitTime));
-                attempts++;
-            }
-            
-            if (this.active >= this.max) {
-                throw new Error('Pool: unable to acquire connection after waiting');
+
+                if (this.active >= this.max) {
+                    this.acquireTimeouts++;
+                    throw new Error('Pool: unable to acquire connection after waiting');
+                }
+            } finally {
+                if (this.waiting > 0) this.waiting--;
             }
         }
 
@@ -128,20 +212,26 @@ const pool = {
                 // Wait for connection with exponential backoff
                 let waitTime = 20;
                 let totalWait = 0;
-                
-                while (!c && totalWait < this.acquireTimeoutMs) {
-                    await new Promise(res => setTimeout(res, waitTime));
-                    totalWait += waitTime;
-                    c = this.connections.find(c => !c.inUse);
-                    
-                    // Exponential backoff up to 200ms
-                    if (waitTime < 200) {
-                        waitTime += 20;
+
+                this.waiting++;
+                try {
+                    while (!c && totalWait < acquireDeadlineMs) {
+                        await new Promise(res => setTimeout(res, waitTime));
+                        totalWait += waitTime;
+                        c = this.connections.find(c => !c.inUse);
+
+                        // Exponential backoff up to 200ms
+                        if (waitTime < 200) {
+                            waitTime += 20;
+                        }
                     }
-                }
-                
-                if (!c) {
-                    throw new Error('Pool: acquire timeout - no available connections');
+                    
+                    if (!c) {
+                        this.acquireTimeouts++;
+                        throw new Error(`Pool: acquire timeout - no available connections after ${acquireDeadlineMs}ms`);
+                    }
+                } finally {
+                    if (this.waiting > 0) this.waiting--;
                 }
             }
         } else {
@@ -192,6 +282,11 @@ const pool = {
             total: this.connections.length,
             min: this.min,
             max: this.max,
+            waiting: this.waiting,
+            acquireTimeouts: this.acquireTimeouts,
+            acquireTimeoutMs: this.acquireTimeoutMs,
+            fastFailMs: POOL_ACQUIRE_FAST_FAIL_MS,
+            queryGate: queryGate.getMetrics(),
             closed: this._closed
         };
     }
@@ -208,6 +303,12 @@ function isQueryTimeoutError(error) {
     return error?.code === 'DB_QUERY_TIMEOUT' ||
         error?.fatalConnection === true ||
         /query timeout/i.test(error?.message || '');
+}
+
+function isPoolAcquireError(error) {
+    return error?.code === 'DB_QUERY_QUEUE_TIMEOUT' ||
+        /pool: .*acquire timeout/i.test(error?.message || '') ||
+        /db query queue timeout/i.test(error?.message || '');
 }
 
 function queryWithTimeout(conn, sql, params, timeoutMs = QUERY_TIMEOUT_MS) {
@@ -382,6 +483,7 @@ function isNonTransientDataError(error) {
 
 // Check if an error is worth retrying (only connection/timeout errors)
 function isRetryableError(error) {
+    if (isPoolAcquireError(error)) return false;
     if (isConnectionError(error)) return true;
     if (isQueryTimeoutError(error)) return false;
     if (isSqlSyntaxError(error)) return false;
@@ -465,7 +567,9 @@ async function query(sql, logQuery = true, logError = true) {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         let conn = null;
         let destroyConn = false;
+        let releaseGate = null;
         try {
+            releaseGate = await queryGate.acquire();
             conn = await pool.acquire();
 
             await ensureUtf8(conn);
@@ -522,6 +626,7 @@ async function query(sql, logQuery = true, logError = true) {
                     // Ignore close errors on stale connections
                 }
             }
+            if (releaseGate) releaseGate();
         }
     }
 
@@ -544,7 +649,9 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         let conn = null;
         let destroyConn = false;
+        let releaseGate = null;
         try {
+            releaseGate = await queryGate.acquire();
             conn = await pool.acquire();
 
             await ensureUtf8(conn);
@@ -599,6 +706,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                     await pool.release(conn, { destroy: destroyConn });
                 } catch (e) { /* ignore */ }
             }
+            if (releaseGate) releaseGate();
         }
     }
 

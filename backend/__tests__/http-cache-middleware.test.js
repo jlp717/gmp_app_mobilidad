@@ -8,7 +8,7 @@ jest.mock('../middleware/logger', () => ({
 }));
 
 const { cacheMiddleware, invalidateAll } = require('../middleware/http-cache');
-const { networkOptimizer } = require('../middleware/network-optimizer');
+const { networkOptimizer, responseCoalescing } = require('../middleware/network-optimizer');
 
 function makeRes() {
   const headers = {};
@@ -21,6 +21,36 @@ function makeRes() {
     json: jest.fn((body) => body),
     status: jest.fn(function status(code) { this.statusCode = code; return this; }),
     end: jest.fn(),
+  };
+}
+
+function makeEventedRes() {
+  const res = makeRes();
+  const handlers = {};
+  res.on = jest.fn((event, handler) => {
+    handlers[event] = handler;
+    return res;
+  });
+  res.emit = (event) => {
+    if (handlers[event]) handlers[event]();
+  };
+  res.json = jest.fn(function json(body) {
+    res.body = body;
+    res.emit('finish');
+    return body;
+  });
+  return res;
+}
+
+function makeGetReq(overrides = {}) {
+  const headers = overrides.headers || {};
+  return {
+    method: 'GET',
+    path: '/api/dashboard/metrics',
+    query: {},
+    headers,
+    get: jest.fn((name) => headers[String(name).toLowerCase()]),
+    ...overrides,
   };
 }
 
@@ -204,5 +234,49 @@ describe('network optimizer cache headers', () => {
     expect(res.headers['cache-control']).toContain('private');
     expect(res.headers['cache-control']).not.toContain('public');
     expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('skips ETag hashing for large array payloads', () => {
+    const req = makeGetReq();
+    const res = makeRes();
+    const next = jest.fn();
+
+    networkOptimizer(req, res, next);
+    res.json({ rows: Array.from({ length: 250 }, (_, index) => ({ id: index })) });
+
+    expect(res.setHeader).not.toHaveBeenCalledWith('ETag', expect.any(String));
+  });
+
+  test('coalesced responses preserve original error status', async () => {
+    const req = makeGetReq({ headers: { authorization: 'Bearer same-token' } });
+    const firstRes = makeEventedRes();
+    const secondRes = makeEventedRes();
+    const firstNext = jest.fn();
+    const secondNext = jest.fn();
+
+    responseCoalescing(req, firstRes, firstNext);
+    responseCoalescing(req, secondRes, secondNext);
+
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(secondNext).not.toHaveBeenCalled();
+
+    firstRes.status(500).json({ error: 'boom' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(secondRes.status).toHaveBeenCalledWith(500);
+    expect(secondRes.json).toHaveBeenCalledWith({ error: 'boom' });
+  });
+
+  test('force-refresh requests bypass response coalescing', () => {
+    const req = makeGetReq({ query: { forceRefresh: 'true' } });
+    const firstNext = jest.fn();
+    const secondNext = jest.fn();
+
+    responseCoalescing(req, makeEventedRes(), firstNext);
+    responseCoalescing(req, makeEventedRes(), secondNext);
+
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(secondNext).toHaveBeenCalledTimes(1);
   });
 });

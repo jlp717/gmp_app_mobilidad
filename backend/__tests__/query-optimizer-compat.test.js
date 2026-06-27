@@ -113,6 +113,41 @@ describe('cachedQuery backward compatibility', () => {
     );
   });
 
+  test('coalesces concurrent cache misses for the same key', async () => {
+    let resolveQuery;
+    const query = jest.fn(() => new Promise((resolve) => {
+      resolveQuery = resolve;
+    }));
+
+    const first = cachedQuery(query, 'SELECT CODE FROM CLI', 'clients:coalesce', 300);
+    const second = cachedQuery(query, 'SELECT CODE FROM CLI', 'clients:coalesce', 300);
+
+    await Promise.resolve();
+    resolveQuery([{ CODE: '01' }]);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      [{ CODE: '01', code: '01' }],
+      [{ CODE: '01', code: '01' }],
+    ]);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(mockSet).toHaveBeenCalledTimes(1);
+  });
+
+  test('serves stale data when a cache rebuild fails', async () => {
+    const successfulQuery = jest.fn().mockResolvedValue([{ CODE: 'old' }]);
+    await expect(
+      cachedQuery(successfulQuery, 'SELECT CODE FROM CLI', 'clients:stale', 300),
+    ).resolves.toEqual([{ CODE: 'old' }]);
+
+    const failingQuery = jest.fn().mockRejectedValue(new Error('DB2 unavailable'));
+    await expect(
+      cachedQuery(failingQuery, 'SELECT CODE FROM CLI', 'clients:stale', 300),
+    ).resolves.toEqual([{ CODE: 'old', code: 'old' }]);
+
+    expect(successfulQuery).toHaveBeenCalledTimes(1);
+    expect(failingQuery).toHaveBeenCalledTimes(1);
+  });
+
   test('cached pedidos query key is covered by pedidos mutation invalidation pattern', async () => {
     const { redisCache } = require('../services/redis-cache');
     const query = jest.fn().mockResolvedValue([{ ID: 'P-1' }]);

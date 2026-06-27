@@ -19,28 +19,47 @@ const PREWARM_MAX_CONCURRENCY = 10;
 
 function getRedisCacheAdapter() {
   const redisCache = global.redisCache;
-  if (!redisCache || typeof redisCache !== 'object') return null;
-
-  const get = typeof redisCache.get === 'function'
-    ? function getValue(key) { return redisCache.get(key); }
-    : null;
-  const set = typeof redisCache.setex === 'function'
-    ? function setWithTtl(key, ttlSeconds, value) { return redisCache.setex(key, ttlSeconds, value); }
-    : (typeof redisCache.set === 'function'
-      ? async function setWithFallback(key, ttlSeconds, value) {
-          try {
-            return await redisCache.set(key, value, 'EX', ttlSeconds);
-          } catch (_err) {
-            return redisCache.set(key, value);
+  if (redisCache && typeof redisCache === 'object') {
+    const get = typeof redisCache.get === 'function'
+      ? function getValue(key) { return redisCache.get(key); }
+      : null;
+    const set = typeof redisCache.setex === 'function'
+      ? function setWithTtl(key, ttlSeconds, value) { return redisCache.setex(key, ttlSeconds, value); }
+      : (typeof redisCache.set === 'function'
+        ? async function setWithFallback(key, ttlSeconds, value) {
+            try {
+              return await redisCache.set(key, value, 'EX', ttlSeconds);
+            } catch (_err) {
+              return redisCache.set(key, value);
+            }
           }
-        }
-      : null);
-  const del = typeof redisCache.del === 'function'
-    ? function deleteKeyOrPattern(keyOrPattern) { return redisCache.del(keyOrPattern); }
-    : null;
+        : null);
+    const del = typeof redisCache.del === 'function'
+      ? function deleteKeyOrPattern(keyOrPattern) { return redisCache.del(keyOrPattern); }
+      : null;
 
-  if (!get && !set && !del) return null;
-  return { get, set, del };
+    if (get || set || del) return { get, set, del };
+  }
+
+  try {
+    const { redisCache: sharedRedisCache } = require('../../../../services/redis-cache');
+    return {
+      get: async function getSharedValue(key) {
+        return sharedRedisCache.get('performance', key);
+      },
+      set: async function setSharedValue(key, ttlSeconds, value) {
+        return sharedRedisCache.set('performance', key, parseCachedPayload(value), ttlSeconds);
+      },
+      del: async function deleteSharedKeyOrPattern(keyOrPattern) {
+        if (String(keyOrPattern).includes('*')) {
+          return sharedRedisCache.invalidatePattern(`performance:${keyOrPattern}`);
+        }
+        return sharedRedisCache.delete('performance', keyOrPattern);
+      }
+    };
+  } catch (_err) {
+    return null;
+  }
 }
 function parseCachedPayload(value) {
   if (value == null) return null;

@@ -12,10 +12,10 @@ const crypto = require('crypto');
  */
 const FEATURE_FLAGS = {
     HTTP2_PUSH: process.env.ENABLE_HTTP2_PUSH === 'true',
-    AGGRESSIVE_COMPRESSION: true, // Always on for JSON
-    ETAG_CACHING: true,
-    RESPONSE_COALESCING: true,
-    PREFETCH_HINTS: true,
+    AGGRESSIVE_COMPRESSION: process.env.ENABLE_AGGRESSIVE_COMPRESSION !== 'false',
+    ETAG_CACHING: process.env.ENABLE_ETAG_CACHING !== 'false',
+    RESPONSE_COALESCING: process.env.ENABLE_RESPONSE_COALESCING !== 'false',
+    PREFETCH_HINTS: process.env.ENABLE_PREFETCH_HINTS === 'true',
     FAST_304: true, // Quick 304 responses
 };
 
@@ -23,9 +23,9 @@ const FEATURE_FLAGS = {
  * Compression thresholds by content type (OPTIMIZED)
  */
 const COMPRESSION_CONFIG = {
-    threshold: 256, // Lower threshold for more compression (was 1024)
-    level: 9, // Maximum compression level (was 6)
-    memLevel: 9,
+    threshold: parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024,
+    level: parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6,
+    memLevel: parseInt(process.env.HTTP_COMPRESSION_MEM_LEVEL, 10) || 8,
     contentTypes: [
         'application/json',
         'text/plain',
@@ -72,6 +72,9 @@ const PREFETCH_HINTS = {
  */
 const pendingRequests = new Map();
 const COALESCE_WINDOW_MS = 50;
+const MAX_PENDING_REQUESTS = parseInt(process.env.HTTP_COALESCE_MAX_PENDING, 10) || 1000;
+const MAX_ETAG_BYTES = parseInt(process.env.HTTP_ETAG_MAX_BYTES, 10) || 256 * 1024;
+const MAX_ETAG_ARRAY_ITEMS = parseInt(process.env.HTTP_ETAG_MAX_ARRAY_ITEMS, 10) || 200;
 const MAX_PENDING_AGE_MS = 60000; // 60s — heavy DB2 queries (commissions ALL, clients) need this
 
 setInterval(() => {
@@ -164,15 +167,43 @@ function addPrefetchHints(req, res) {
 /**
  * Setup ETag support for conditional requests
  */
+function hasLargeArrayPayload(data) {
+    if (Array.isArray(data)) {
+        return data.length > MAX_ETAG_ARRAY_ITEMS;
+    }
+    if (!data || typeof data !== 'object') {
+        return false;
+    }
+    return Object.values(data).some(value => Array.isArray(value) && value.length > MAX_ETAG_ARRAY_ITEMS);
+}
+
 function setupETagSupport(req, res) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        return;
+    }
+
     const originalJson = res.json.bind(res);
 
     res.json = function (data) {
+        if (res.statusCode >= 400 || hasLargeArrayPayload(data)) {
+            return originalJson(data);
+        }
+
+        let payload;
+        try {
+            payload = JSON.stringify(data);
+        } catch (_) {
+            return originalJson(data);
+        }
+
+        if (Buffer.byteLength(payload, 'utf8') > MAX_ETAG_BYTES) {
+            return originalJson(data);
+        }
+
         // Generate ETag from response data
-        const crypto = require('crypto');
         const etag = crypto
             .createHash('md5')
-            .update(JSON.stringify(data))
+            .update(payload)
             .digest('hex')
             .substring(0, 16);
 
@@ -193,6 +224,35 @@ function setupETagSupport(req, res) {
  * Response coalescing middleware
  * Combines identical concurrent requests into one
  */
+function hasNoCacheDirective(value) {
+    return String(value || '')
+        .toLowerCase()
+        .split(',')
+        .map(part => part.trim())
+        .some(part => part === 'no-cache' || part === 'no-store' || part === 'max-age=0');
+}
+
+function isCoalescingBypass(req) {
+    const query = req.query || {};
+    const headers = req.headers || {};
+    if (query.forceRefresh != null || query.refresh != null || query._ts != null) return true;
+    if (hasNoCacheDirective(headers['cache-control'])) return true;
+    if (String(headers.pragma || '').toLowerCase() === 'no-cache') return true;
+    const forceHeader = String(headers['x-force-refresh'] || '').toLowerCase();
+    return forceHeader === 'true' || forceHeader === '1' || forceHeader === 'yes';
+}
+
+function stableQueryString(query = {}) {
+    return JSON.stringify(
+        Object.keys(query)
+            .sort()
+            .reduce((acc, key) => {
+                acc[key] = query[key];
+                return acc;
+            }, {})
+    );
+}
+
 function responseCoalescing(req, res, next) {
     if (!FEATURE_FLAGS.RESPONSE_COALESCING) {
         return next();
@@ -203,13 +263,17 @@ function responseCoalescing(req, res, next) {
         return next();
     }
 
+    if (isCoalescingBypass(req) || pendingRequests.size >= MAX_PENDING_REQUESTS) {
+        return next();
+    }
+
     // Create request signature
     const authFingerprint = crypto
         .createHash('sha256')
         .update(req.get('authorization') || '')
         .digest('hex')
         .slice(0, 16);
-    const signature = `${authFingerprint}:${req.path}?${JSON.stringify(req.query)}`;
+    const signature = `${authFingerprint}:${req.path}?${stableQueryString(req.query)}`;
 
     // Check if identical request is pending
     if (pendingRequests.has(signature)) {
@@ -219,7 +283,10 @@ function responseCoalescing(req, res, next) {
         pending.promise
             .then(result => {
                 res.setHeader('X-Coalesced', 'true');
-                res.json(result);
+                if (result.cacheControl) {
+                    res.setHeader('Cache-Control', result.cacheControl);
+                }
+                res.status(result.statusCode || 200).json(result.data);
             })
             .catch(err => {
                 res.status(500).json({ error: 'Request coalescing failed', code: 'COALESCING_ERROR' });
@@ -236,7 +303,13 @@ function responseCoalescing(req, res, next) {
         rejectPromise = reject;
     });
 
-    pendingRequests.set(signature, { promise, resolve: resolvePromise, reject: rejectPromise, createdAt: Date.now() });
+    pendingRequests.set(signature, {
+        promise,
+        resolve: resolvePromise,
+        reject: rejectPromise,
+        createdAt: Date.now(),
+        settled: false,
+    });
 
     // Override res.json to capture response
     const originalJson = res.json.bind(res);
@@ -244,7 +317,12 @@ function responseCoalescing(req, res, next) {
         // Resolve pending requests
         const pending = pendingRequests.get(signature);
         if (pending) {
-            pending.resolve(data);
+            pending.settled = true;
+            pending.resolve({
+                statusCode: res.statusCode,
+                cacheControl: res.getHeader ? res.getHeader('Cache-Control') : null,
+                data,
+            });
 
             // Clean up after coalesce window
             setTimeout(() => {
@@ -260,6 +338,14 @@ function responseCoalescing(req, res, next) {
         const pending = pendingRequests.get(signature);
         if (pending) {
             pending.reject(err);
+            pendingRequests.delete(signature);
+        }
+    });
+
+    res.on('finish', () => {
+        const pending = pendingRequests.get(signature);
+        if (pending && !pending.settled) {
+            pending.reject(new Error('Coalesced request finished without JSON response'));
             pendingRequests.delete(signature);
         }
     });

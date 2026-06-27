@@ -17,9 +17,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const { monitorEventLoopDelay } = require('perf_hooks');
 const logger = require('./middleware/logger');
 const { verifyToken, handleRefreshToken, handleLogout } = require('./middleware/auth');
-  const { initDb, query, queryWithParams, getPoolMetrics } = require('./config/db');
+const { initDb, query, queryWithParams, getPoolMetrics } = require('./config/db');
 const {
     globalLimiter,
     createSecurityHeaders,
@@ -182,6 +183,15 @@ if (USE_DDD_ROUTES) {
 const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
+const HTTP_COMPRESSION_THRESHOLD = parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024;
+const HTTP_COMPRESSION_LEVEL = parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6;
+const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 45000;
+const HEALTH_DB_TIMEOUT_MS = parseInt(process.env.HEALTH_DB_TIMEOUT_MS, 10) || 1500;
+const HEALTH_DB_CACHE_MS = parseInt(process.env.HEALTH_DB_CACHE_MS, 10) || 5000;
+
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
+eventLoopDelay.enable();
+let dbHealthCache = null;
 
 // Middleware â€” Security
 function parseCorsOrigin(value) {
@@ -209,8 +219,8 @@ app.use(validateContentLength);
 app.use(createSecurityHeaders());
 app.use(helmet());
 app.use(compression({
-    threshold: 256, // Compress responses > 256 bytes (lower threshold = more compression)
-    level: 9, // Maximum compression (balance for CPU vs bandwidth)
+    threshold: HTTP_COMPRESSION_THRESHOLD,
+    level: HTTP_COMPRESSION_LEVEL,
     filter: (req, res) => {
         // Don't compress if client doesn't accept gzip
         const contentType = res.getHeader('Content-Type') || '';
@@ -317,32 +327,65 @@ if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
 // Prometheus metrics endpoint (internal or authorized scraper only)
 app.get('/api/metrics', requireInternalMetricsAccess, metricsHandler);
 
+function withTimeout(promise, timeoutMs, label) {
+  let timer = null;
+  return Promise.race([
+    promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
+    })
+  ]);
+}
+
+async function checkDbHealth() {
+  if (dbHealthCache && Date.now() - dbHealthCache.checkedAt < HEALTH_DB_CACHE_MS) {
+    return dbHealthCache;
+  }
+
+  const dbStart = Date.now();
+  try {
+    await withTimeout(
+      query('SELECT 1 as ok FROM SYSIBM.SYSDUMMY1', false, false),
+      HEALTH_DB_TIMEOUT_MS,
+      'DB health'
+    );
+    dbHealthCache = {
+      status: 'connected',
+      queryTime: Date.now() - dbStart,
+      poolMetrics: getPoolMetrics(),
+      checkedAt: Date.now(),
+    };
+  } catch (e) {
+    dbHealthCache = {
+      status: 'error',
+      queryTime: Date.now() - dbStart,
+      poolMetrics: getPoolMetrics(),
+      error: e.message,
+      checkedAt: Date.now(),
+    };
+  }
+
+  return dbHealthCache;
+}
+
 // Health check (public minimal; SRE/internal gets detailed diagnostics)
 app.get('/api/health', async (req, res) => {
   const start = Date.now();
-  let dbStatus = 'disconnected';
-  let dbQueryTime = 0;
-  let poolMetrics = {};
-
-  try {
-    const dbStart = Date.now();
-    await query('SELECT 1 as ok FROM SYSIBM.SYSDUMMY1', false);
-    dbQueryTime = Date.now() - dbStart;
-    dbStatus = 'connected';
-    poolMetrics = getPoolMetrics();
-  } catch (e) {
-    dbStatus = 'error';
-  }
-
-  const status = dbStatus === 'connected' ? 'ok' : 'degraded';
-
   if (!canSeeInternalDetails(req)) {
     return res.json({
-      status,
+      status: 'ok',
       timestamp: new Date().toISOString(),
       responseTime: `${Date.now() - start}ms`
     });
   }
+
+  const dbHealth = await checkDbHealth();
+  const dbStatus = dbHealth.status;
+  const dbQueryTime = dbHealth.queryTime;
+  const poolMetrics = dbHealth.poolMetrics;
+  const status = dbStatus === 'connected' ? 'ok' : 'degraded';
 
   // Get Redis status with detailed stats
   let redisStatus = 'disconnected';
@@ -379,14 +422,12 @@ app.get('/api/health', async (req, res) => {
     gcInfo = { note: 'GC available - call global.gc() manually if needed' };
   }
 
-  // Event loop lag (if available)
-  let eventLoopLag = 0;
-  try {
-    const drift = Date.now() - start;
-    eventLoopLag = drift > 5 ? drift - 5 : 0;
-  } catch (e) {
-    eventLoopLag = 0;
-  }
+  const eventLoopMeanMs = Number.isFinite(eventLoopDelay.mean)
+    ? Math.round(eventLoopDelay.mean / 1e6)
+    : 0;
+  const eventLoopP95Ms = typeof eventLoopDelay.percentile === 'function'
+    ? Math.round(eventLoopDelay.percentile(95) / 1e6)
+    : 0;
 
   res.json({
     status,
@@ -410,7 +451,7 @@ app.get('/api/health', async (req, res) => {
       external: `${externalMB}MB`
     },
     gc: gcInfo,
-    eventLoop: { lag: `${eventLoopLag}ms` },
+    eventLoop: { mean: `${eventLoopMeanMs}ms`, p95: `${eventLoopP95Ms}ms` },
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     responseTime: `${Date.now() - start}ms`,
@@ -672,6 +713,9 @@ async function startServer() {
       process.send('ready');
     }
   });
+  server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
+  server.headersTimeout = Math.min(65000, HTTP_REQUEST_TIMEOUT_MS + 5000);
+  server.keepAliveTimeout = parseInt(process.env.HTTP_KEEPALIVE_TIMEOUT_MS, 10) || 5000;
 }
 
 // ==================== OPTIMIZATION MONITORING ENDPOINTS ====================

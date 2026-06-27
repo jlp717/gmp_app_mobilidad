@@ -77,7 +77,7 @@ class CacheStampedeLock {
         this.locks = new Map();
         this.promises = new Map();
         this.staleData = new Map();
-        this.STALE_TTL_MS = 30000; // Serve stale for 30s while refreshing
+        this.STALE_TTL_MS = parseInt(process.env.QUERY_CACHE_STALE_MS, 10) || 300000;
     }
 
     /**
@@ -326,6 +326,55 @@ class CacheKeyGenerator {
 // Singleton instances
 const stampedeLock = new CacheStampedeLock();
 const cacheMetrics = new CacheMetrics();
+const CACHE_REBUILD_WAIT_MS = parseInt(process.env.QUERY_CACHE_REBUILD_WAIT_MS, 10) || 5000;
+const CACHE_REBUILD_POLL_MS = parseInt(process.env.QUERY_CACHE_REBUILD_POLL_MS, 10) || 100;
+const CACHE_LOCK_TTL_MS = parseInt(process.env.QUERY_CACHE_LOCK_TTL_MS, 10) || 15000;
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForCachedRebuild(fullCacheKey, queryType) {
+    const staleData = stampedeLock.getStale(fullCacheKey);
+    if (staleData !== null) {
+        cacheMetrics.recordHit('stale', queryType);
+        return { found: true, value: staleData, source: 'stale' };
+    }
+
+    const deadline = Date.now() + CACHE_REBUILD_WAIT_MS;
+    while (Date.now() < deadline) {
+        const inFlightPromise = stampedeLock.getPromise(fullCacheKey);
+        if (inFlightPromise) {
+            cacheMetrics.recordStampedePrevention();
+            try {
+                return { found: true, value: await inFlightPromise, source: 'in-flight' };
+            } catch (error) {
+                const staleAfterError = stampedeLock.getStale(fullCacheKey);
+                if (staleAfterError !== null) {
+                    cacheMetrics.recordHit('stale', queryType);
+                    return { found: true, value: staleAfterError, source: 'stale-after-error' };
+                }
+                throw error;
+            }
+        }
+
+        const cached = await redisCache.get('query', fullCacheKey);
+        if (cached !== null) {
+            cacheMetrics.recordHit('redis', queryType);
+            return { found: true, value: cached, source: 'redis' };
+        }
+
+        await delay(CACHE_REBUILD_POLL_MS);
+    }
+
+    const staleAfterWait = stampedeLock.getStale(fullCacheKey);
+    if (staleAfterWait !== null) {
+        cacheMetrics.recordHit('stale', queryType);
+        return { found: true, value: staleAfterWait, source: 'stale-timeout' };
+    }
+
+    return { found: false, value: null, source: 'miss' };
+}
 
 /**
  * Query metadata for optimization decisions
@@ -647,53 +696,58 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
         return normalizeCachedRowCasing(cached);
     }
 
-    const inFlightPromise = stampedeLock.getPromise(fullCacheKey);
-    if (inFlightPromise) {
+    cacheMetrics.recordMiss(queryType);
+
+    if (!stampedeLock.acquire(fullCacheKey)) {
+        const waited = await waitForCachedRebuild(fullCacheKey, queryType);
+        if (waited.found) {
+            logger.debug(`[QueryOptimizer] Served ${waited.source} during rebuild: ${fullCacheKey}`);
+            return normalizeCachedRowCasing(waited.value);
+        }
         cacheMetrics.recordStampedePrevention();
-        logger.debug(`[QueryOptimizer] Awaiting in-flight query: ${fullCacheKey}`);
-        return normalizeCachedRowCasing(await inFlightPromise);
+        logger.warn(`[QueryOptimizer] Local cache rebuild wait expired: ${fullCacheKey}`);
+        stampedeLock.release(fullCacheKey);
+        stampedeLock.acquire(fullCacheKey);
     }
 
-    // Check if another process is building this cache (stampede prevention)
-    if (stampedeLock.isBuilding(fullCacheKey)) {
-        const staleData = stampedeLock.getStale(fullCacheKey);
-        if (staleData !== null) {
-            cacheMetrics.recordHit('stale', queryType);
-            logger.debug(`[QueryOptimizer] Serving stale data while refreshing: ${fullCacheKey}`);
-            return staleData;
-        }
+    let redisLockToken = null;
+    let freshResult = null;
+    let shouldReleaseLocalLock = true;
 
-        // Wait briefly for cache to be built
-        const lockAge = stampedeLock.getLockAge(fullCacheKey);
-        if (lockAge < 5000) { // Max wait 5s
-            await new Promise(resolve => setTimeout(resolve, 100));
-            const retryCached = await redisCache.get('query', fullCacheKey);
-            if (retryCached !== null) {
-                cacheMetrics.recordHit('redis', queryType);
-                return retryCached;
+    try {
+        if (redisCache.isConnected && typeof redisCache.acquireLock === 'function') {
+            redisLockToken = await redisCache.acquireLock('query', fullCacheKey, CACHE_LOCK_TTL_MS);
+            if (!redisLockToken) {
+                stampedeLock.release(fullCacheKey);
+                shouldReleaseLocalLock = false;
+
+                const waited = await waitForCachedRebuild(fullCacheKey, queryType);
+                if (waited.found) {
+                    logger.debug(`[QueryOptimizer] Served ${waited.source} from distributed rebuild: ${fullCacheKey}`);
+                    return normalizeCachedRowCasing(waited.value);
+                }
+
+                if (stampedeLock.acquire(fullCacheKey)) {
+                    shouldReleaseLocalLock = true;
+                    redisLockToken = await redisCache.acquireLock('query', fullCacheKey, CACHE_LOCK_TTL_MS);
+                } else {
+                    stampedeLock.release(fullCacheKey);
+                    stampedeLock.acquire(fullCacheKey);
+                    shouldReleaseLocalLock = true;
+                }
+
+                if (!redisLockToken) {
+                    logger.warn(`[QueryOptimizer] Distributed cache lock wait expired, rebuilding locally: ${fullCacheKey}`);
+                }
             }
         }
 
-        cacheMetrics.recordStampedePrevention();
-        logger.debug(`[QueryOptimizer] Stampede prevention triggered: ${fullCacheKey}`);
-    }
-
-    // Try to acquire lock
-    if (!stampedeLock.acquire(fullCacheKey)) {
-        // Return stale if available, otherwise execute without caching
-        const staleData = stampedeLock.getStale(fullCacheKey);
-        if (staleData !== null) {
-            cacheMetrics.recordHit('stale', queryType);
-            return staleData;
-        }
-    }
-
-    try {
         // Execute query
         const start = Date.now();
         const queryPromise = queryFn(sql, ...normalized.queryArgs);
         stampedeLock.setPromise(fullCacheKey, queryPromise);
         const result = await queryPromise;
+        freshResult = result;
         const duration = Date.now() - start;
 
         // Record stats
@@ -706,10 +760,20 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
 
         return result;
     } catch (error) {
+        const staleData = stampedeLock.getStale(fullCacheKey);
+        if (staleData !== null) {
+            cacheMetrics.recordHit('stale', queryType);
+            logger.warn(`[QueryOptimizer] Serving stale after rebuild error for ${fullCacheKey}: ${error.message}`);
+            return normalizeCachedRowCasing(staleData);
+        }
         throw error;
     } finally {
-        // Release lock
-        stampedeLock.release(fullCacheKey);
+        if (shouldReleaseLocalLock) {
+            stampedeLock.release(fullCacheKey, freshResult);
+        }
+        if (redisLockToken && typeof redisCache.releaseLock === 'function') {
+            redisCache.releaseLock('query', fullCacheKey, redisLockToken).catch(() => {});
+        }
     }
 }
 

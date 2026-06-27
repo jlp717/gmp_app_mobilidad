@@ -17,13 +17,20 @@ const logger = require('../middleware/logger');
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT) || 6379;
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
+const REDIS_CONNECT_TIMEOUT_MS = parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS, 10) || 5000;
+const REDIS_COMMAND_TIMEOUT_MS = parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS, 10) || 1000;
 
 const REDIS_CONFIG = {
     url: process.env.REDIS_URL || `redis://${REDIS_HOST}:${REDIS_PORT}`,
     password: REDIS_PASSWORD,
+    disableOfflineQueue: process.env.REDIS_DISABLE_OFFLINE_QUEUE !== 'false',
+    pingInterval: parseInt(process.env.REDIS_PING_INTERVAL_MS, 10) || 60000,
     socket: {
         host: REDIS_HOST,
         port: REDIS_PORT,
+        connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+        keepAlive: true,
+        keepAliveInitialDelay: 10000,
         reconnectStrategy: (retries) => {
             if (retries > 10) {
                 logger.warn('[RedisCache] Max retries reached, continuing without Redis');
@@ -84,23 +91,8 @@ class RedisCacheService {
             return true;
         }
         try {
-            // Optimized Redis config for high throughput
-            const optimizedConfig = {
-                ...REDIS_CONFIG,
-                // Connection pool settings for high throughput
-                connect_timeout: 10000,
-                lazyConnect: false,
-                // Keep-alive settings
-                keepAlive: true,
-                keepAliveInitialDelay: 10000,
-                // Retry strategy for resilience
-                max_retries_per_request: 3,
-                enable_ready_check: true,
-                enable_offline_queue: true,
-            };
-
             // Main client for read/write
-            this.client = Redis.createClient(optimizedConfig);
+            this.client = Redis.createClient(REDIS_CONFIG);
 
             // Event handlers
             this.client.on('connect', () => {
@@ -126,14 +118,12 @@ class RedisCacheService {
             });
 
             // Connect with timeout
-            await Promise.race([
-                this.client.connect(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 5000))
-            ]);
+            await this._withTimeout(this.client.connect(), REDIS_CONNECT_TIMEOUT_MS, 'connect');
 
             // Setup pub/sub only if connected
             try {
                 this.subscriber = this.client.duplicate();
+                await this._withTimeout(this.subscriber.connect(), REDIS_CONNECT_TIMEOUT_MS, 'subscriber connect');
                 await this._setupInvalidationChannel();
             } catch (e) {
                 logger.warn('[RedisCache] ⚠️ Pub/sub unavailable, continuing without');
@@ -207,6 +197,23 @@ class RedisCacheService {
         }
     }
 
+    async _withTimeout(promise, timeoutMs, operation) {
+        let timer = null;
+        try {
+            return await Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    timer = setTimeout(
+                        () => reject(new Error(`Redis ${operation} timeout after ${timeoutMs}ms`)),
+                        timeoutMs
+                    );
+                })
+            ]);
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    }
+
     /**
      * Generate cache key with namespace
      */
@@ -277,7 +284,11 @@ class RedisCacheService {
         // Try L2 (Redis)
         if (this.isConnected) {
             try {
-                const l2Value = await this.client.get(fullKey);
+                const l2Value = await this._withTimeout(
+                    this.client.get(fullKey),
+                    REDIS_COMMAND_TIMEOUT_MS,
+                    'get'
+                );
                 if (l2Value !== null) {
                     const parsed = JSON.parse(l2Value);
                     this.stats.hits.l2++;
@@ -322,7 +333,11 @@ class RedisCacheService {
         }
 
         try {
-            await this.client.setEx(fullKey, ttl, JSON.stringify(value));
+            await this._withTimeout(
+                this.client.setEx(fullKey, ttl, JSON.stringify(value)),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'set'
+            );
             return true;
         } catch (error) {
             logger.warn(`[RedisCache] Set error: ${error.message}`);
@@ -344,10 +359,61 @@ class RedisCacheService {
         // Delete from L2
         if (this.isConnected) {
             try {
-                await this.client.del(fullKey);
+                await this._withTimeout(
+                    this.client.del(fullKey),
+                    REDIS_COMMAND_TIMEOUT_MS,
+                    'delete'
+                );
             } catch (error) {
                 logger.warn(`[RedisCache] Delete error: ${error.message}`);
             }
+        }
+    }
+
+    /**
+     * Acquire a short-lived distributed lock. Returns a token on success.
+     */
+    async acquireLock(namespace, key, ttlMs = 10000) {
+        if (!this.isConnected) return null;
+        const fullKey = this._generateKey(namespace, `lock:${key}`);
+        const token = `${process.pid}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+
+        try {
+            const result = await this._withTimeout(
+                this.client.set(fullKey, token, { NX: true, PX: ttlMs }),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'lock'
+            );
+            return result === 'OK' ? token : null;
+        } catch (error) {
+            logger.debug(`[RedisCache] Lock unavailable for ${fullKey}: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Release a distributed lock only when owned by the caller.
+     */
+    async releaseLock(namespace, key, token) {
+        if (!this.isConnected || !token) return false;
+        const fullKey = this._generateKey(namespace, `lock:${key}`);
+
+        try {
+            const current = await this._withTimeout(
+                this.client.get(fullKey),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'lock get'
+            );
+            if (current !== token) return false;
+            await this._withTimeout(
+                this.client.del(fullKey),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'lock release'
+            );
+            return true;
+        } catch (error) {
+            logger.debug(`[RedisCache] Lock release failed for ${fullKey}: ${error.message}`);
+            return false;
         }
     }
 
@@ -363,20 +429,38 @@ class RedisCacheService {
         // Publish to all instances
         if (this.isConnected) {
             try {
-                await this.client.publish('cache:invalidate', JSON.stringify({ pattern: fullPattern }));
+                await this._withTimeout(
+                    this.client.publish('cache:invalidate', JSON.stringify({ pattern: fullPattern })),
+                    REDIS_COMMAND_TIMEOUT_MS,
+                    'publish invalidation'
+                );
 
                 const keys = [];
                 if (typeof this.client.scanIterator === 'function') {
                     for await (const key of this.client.scanIterator({ MATCH: fullPattern, COUNT: 500 })) {
                         keys.push(key);
                         if (keys.length >= 500) {
-                            await this.client.del(keys.splice(0, keys.length));
+                            await this._withTimeout(
+                                this.client.del(keys.splice(0, keys.length)),
+                                REDIS_COMMAND_TIMEOUT_MS,
+                                'delete pattern batch'
+                            );
                         }
                     }
                 } else {
-                    keys.push(...await this.client.keys(fullPattern));
+                    keys.push(...await this._withTimeout(
+                        this.client.keys(fullPattern),
+                        REDIS_COMMAND_TIMEOUT_MS,
+                        'keys'
+                    ));
                 }
-                if (keys.length > 0) await this.client.del(keys);
+                if (keys.length > 0) {
+                    await this._withTimeout(
+                        this.client.del(keys),
+                        REDIS_COMMAND_TIMEOUT_MS,
+                        'delete pattern'
+                    );
+                }
 
                 logger.info(`[RedisCache] 🧹 Invalidated pattern: ${pattern} (${keys.length} keys)`);
             } catch (error) {
@@ -434,9 +518,17 @@ class RedisCacheService {
 
         if (this.isConnected) {
             try {
-                const keys = await this.client.keys('gmp:*');
+                const keys = await this._withTimeout(
+                    this.client.keys('gmp:*'),
+                    REDIS_COMMAND_TIMEOUT_MS,
+                    'keys flush'
+                );
                 if (keys.length > 0) {
-                    await this.client.del(keys);
+                    await this._withTimeout(
+                        this.client.del(keys),
+                        REDIS_COMMAND_TIMEOUT_MS,
+                        'flush delete'
+                    );
                 }
                 logger.info(`[RedisCache] 🧹 Flushed all caches (${keys.length} keys)`);
             } catch (error) {

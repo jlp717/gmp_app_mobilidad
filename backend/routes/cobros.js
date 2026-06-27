@@ -1077,7 +1077,13 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             ? Math.max(requestedPage, 1)
             : 1;
         const pendingSummaryOffset = (pendingSummaryPage - 1) * pendingSummaryLimit;
-        const visibleVendorCodes = normalizeCodeList(context.vendorCodes);
+        const visibleVendorCodes = [
+            ...new Set([
+                ...normalizeCodeList(context.vendorCodes),
+                ...normalizeCodeList(req.user?.vendorCodes),
+                ...normalizeCodeList(req.user?.vendedorCodes),
+            ])
+        ];
         let selectedVendorCodes = isAll
             ? (manager ? visibleVendorCodes : [])
             : normalizeCodeList(requested);
@@ -1154,11 +1160,11 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}:${context.userRole}:${context.userId}:${selectedVendorCodes.join(',')}:limit:${pendingSummaryLimit}:page:${pendingSummaryPage}`;
         const cacheKeyPortfolio = `cobros:pending-summary-portfolio:${vendedorCodeParam}:${context.userRole}:${context.userId}:${selectedVendorCodes.join(',')}`;
         const pageQueryFn = vendorParams.length > 0
-            ? () => queryWithParams(pageSql, vendorParams)
-            : () => query(pageSql, false);
+            ? (sql = pageSql, params = vendorParams) => queryWithParams(sql, params)
+            : (sql = pageSql) => query(sql, false);
         const portfolioQueryFn = vendorParams.length > 0
-            ? () => queryWithParams(portfolioSql, vendorParams)
-            : () => query(portfolioSql, false);
+            ? (sql = portfolioSql, params = vendorParams) => queryWithParams(sql, params)
+            : (sql = portfolioSql) => query(sql, false);
         const [rows, portfolioRows] = await Promise.all([
             cachedQuery(pageQueryFn, pageSql, cacheKeyVendedor, TTL.SHORT),
             cachedQuery(portfolioQueryFn, portfolioSql, cacheKeyPortfolio, TTL.SHORT),

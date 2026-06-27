@@ -64,6 +64,7 @@ const TTL_MS = {
   PRODUCT_CATALOG: 5 * 60 * 1000,
   PRODUCT_DETAIL: 2 * 60 * 1000,
   PROMOTIONS: 30 * 60 * 1000,
+  CLIENT_EVOLUTION: 5 * 60 * 1000,
   ORDER_HISTORY: 1 * 60 * 1000,
   ORDER_STATS: 5 * 60 * 1000,
   ALBARANES: 2 * 60 * 1000,
@@ -1700,13 +1701,26 @@ function createPedidosRoutes() {
       if (!clientCheck || clientCheck.length === 0) return res.status(403).json({ success: false, error: "No tienes acceso a este cliente", message: "Cliente no encontrado o no tienes permiso para verlo" });
       const currentYear = new Date().getFullYear();
       const startYear = currentYear - 2;
-      const monthlyDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM DSED.LACLAE L WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
-      const monthlyData = await queryWithParams(monthlyDataSql, [clientCode, startYear, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]);
-      const topProductsDataSql = ['SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
-      const topProductsData = await queryWithParams(topProductsDataSql, [clientCode, currentYear - 1, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]);
-      const returnsDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
-      const returnsData = await queryWithParams(returnsDataSql, [clientCode, startYear, "D", "DV", ...laclaeVendorFilter.params]);
-      res.json({ success: true, years: [startYear, startYear + 1, currentYear], monthlySales: monthlyData.map((r) => ({ year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS) })), topProducts: topProductsData.map((r) => ({ code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS) })), returns: returnsData.map((r) => ({ year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME, units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT) })) });
+      const cacheSecurityScope = buildCacheSecurityScope(req, { includeMargin: false });
+      const cacheKey = `ddd:client-evolution:${cacheSecurityScope}:${clientCode}:${vendorScope.codes.join(',') || 'ALL'}:${startYear}:${currentYear}`;
+      await withCache(cache, cacheKey, TTL_MS.CLIENT_EVOLUTION, async () => {
+        const monthlyDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM DSED.LACLAE L WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
+        const topProductsDataSql = ['SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
+        const returnsDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
+        const [monthlyData, topProductsData, returnsData] = await Promise.all([
+          queryWithParams(monthlyDataSql, [clientCode, startYear, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]),
+          queryWithParams(topProductsDataSql, [clientCode, currentYear - 1, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]),
+          queryWithParams(returnsDataSql, [clientCode, startYear, "D", "DV", ...laclaeVendorFilter.params]),
+        ]);
+
+        return {
+          success: true,
+          years: [startYear, startYear + 1, currentYear],
+          monthlySales: monthlyData.map((r) => ({ year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS) })),
+          topProducts: topProductsData.map((r) => ({ code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS) })),
+          returns: returnsData.map((r) => ({ year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME, units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT) }))
+        };
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /client-evolution/:clientCode: ${error.message}`);
       res.status(500).json({ success: false, error: "Error getting client evolution" });

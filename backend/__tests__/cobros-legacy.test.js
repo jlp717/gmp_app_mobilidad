@@ -109,7 +109,10 @@ describe('legacy cobros route hardening', () => {
     })).get('/pending-summary/ALL');
 
     expect(res.status).toBe(200);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
+    const sql = mockCachedQuery.mock.calls[0][1];
+    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s+\('01','1','02','2'\)/i);
+    expect(sql).toMatch(/TRIM\(.*LCCDVD.*\)\s+IN\s+\('01','1','02','2'\)/i);
+    expect(mockQuery.mock.calls[0][0]).toBe(sql);
   });
 
   test('pending-summary uses semi-join vendor filter and due-today vencido rule', async () => {
@@ -127,7 +130,8 @@ describe('legacy cobros route hardening', () => {
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
     expect(sql).toMatch(/<=\s*\(YEAR\(CURRENT_DATE\) \* 10000 \+ MONTH\(CURRENT_DATE\) \* 100 \+ DAY\(CURRENT_DATE\)\)/i);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
+    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s+\('01','1','02','2'\)/i);
+    expect(mockQuery.mock.calls[0][0]).toBe(sql);
   });
 
   test('pending-summary SQL is bounded and deterministically ordered for production-sized CVC', async () => {
