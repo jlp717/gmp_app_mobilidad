@@ -24,6 +24,7 @@ const REDIS_CONFIG = {
     url: process.env.REDIS_URL || `redis://${REDIS_HOST}:${REDIS_PORT}`,
     password: REDIS_PASSWORD,
     disableOfflineQueue: process.env.REDIS_DISABLE_OFFLINE_QUEUE !== 'false',
+    enableOfflineQueue: false,
     pingInterval: parseInt(process.env.REDIS_PING_INTERVAL_MS, 10) || 60000,
     socket: {
         host: REDIS_HOST,
@@ -53,8 +54,8 @@ const TTL = {
 // L1 In-Memory Cache (OPTIMIZED v3 - Maximum Performance)
 const L1_CACHE = new Map();
 const L1_STALE_CACHE = new Map(); // Stale-while-revalidate: serve expired data while refreshing
-const L1_MAX_SIZE = 10000; // Doubled for JEFE_VENTAS + COMMERCIAL workloads
-const L1_TTL_MS = 180000; // 3 minutes (increased for better cache utilization)
+const L1_MAX_SIZE = parseInt(process.env.L1_CACHE_MAX_SIZE, 10) || 10000;
+const L1_TTL_MS = parseInt(process.env.L1_CACHE_TTL_MS, 10) || 60000;
 const L1_STALE_TTL_MS = 3600000; // 1 hour — serve stale data for up to 1h while background refresh runs
 
 // Pre-warm cache with frequently accessed keys
@@ -78,7 +79,16 @@ class RedisCacheService {
             misses: 0,
             sets: 0,
             invalidations: 0,
+            byNamespace: {},
         };
+    }
+
+    _recordNamespace(namespace, field) {
+        if (!namespace) return;
+        if (!this.stats.byNamespace[namespace]) {
+            this.stats.byNamespace[namespace] = { hits: 0, misses: 0, sets: 0 };
+        }
+        this.stats.byNamespace[namespace][field]++;
     }
 
     /**
@@ -227,6 +237,8 @@ class RedisCacheService {
     _getL1(key) {
         const entry = L1_CACHE.get(key);
         if (entry && Date.now() < entry.expiry) {
+            L1_CACHE.delete(key);
+            L1_CACHE.set(key, entry);
             this.stats.hits.l1++;
             return entry.value;
         }
@@ -278,6 +290,7 @@ class RedisCacheService {
         // Try L1 first
         const l1Value = this._getL1(fullKey);
         if (l1Value !== null) {
+            this._recordNamespace(namespace, 'hits');
             return l1Value;
         }
 
@@ -292,6 +305,7 @@ class RedisCacheService {
                 if (l2Value !== null) {
                     const parsed = JSON.parse(l2Value);
                     this.stats.hits.l2++;
+                    this._recordNamespace(namespace, 'hits');
                     // Promote to L1 with full TTL
                     this._setL1(fullKey, parsed, L1_TTL_MS);
                     return parsed;
@@ -305,11 +319,13 @@ class RedisCacheService {
         const staleValue = this._getStale(fullKey);
         if (staleValue !== null) {
             this.stats.hits.l1++; // Count as hit (better than nothing)
+            this._recordNamespace(namespace, 'hits');
             logger.debug(`[RedisCache] Serving stale data for: ${fullKey}`);
             return staleValue;
         }
 
         this.stats.misses++;
+        this._recordNamespace(namespace, 'misses');
         return null;
     }
 
@@ -326,6 +342,7 @@ class RedisCacheService {
         // Always set L1
         this._setL1(fullKey, value, ttl * 1000);
         this.stats.sets++;
+        this._recordNamespace(namespace, 'sets');
 
         // Set L2 if connected
         if (!this.isConnected) {
@@ -494,6 +511,30 @@ class RedisCacheService {
         return freshData;
     }
 
+    async setMany(namespace, entries, ttl = TTL.DEFAULT) {
+        if (!Array.isArray(entries) || entries.length === 0) return true;
+
+        for (const { key, value } of entries) {
+            this._setL1(this._generateKey(namespace, key), value, ttl * 1000);
+            this.stats.sets++;
+            this._recordNamespace(namespace, 'sets');
+        }
+
+        if (!this.isConnected) return true;
+
+        try {
+            const multi = this.client.multi();
+            for (const { key, value } of entries) {
+                multi.setEx(this._generateKey(namespace, key), ttl, JSON.stringify(value));
+            }
+            await this._withTimeout(multi.exec(), REDIS_COMMAND_TIMEOUT_MS, 'setMany');
+            return true;
+        } catch (error) {
+            logger.warn(`[RedisCache] SetMany error: ${error.message}`);
+            return false;
+        }
+    }
+
     /**
      * Get cache statistics
      */
@@ -563,10 +604,12 @@ module.exports = {
     initCache: () => redisCache.init(),
     getCache: (ns, key) => redisCache.get(ns, key),
     setCache: (ns, key, val, ttl) => redisCache.set(ns, key, val, ttl),
+    setManyCache: (ns, entries, ttl) => redisCache.setMany(ns, entries, ttl),
     deleteCache: (ns, key) => redisCache.delete(ns, key),
     invalidateCache: (pattern) => redisCache.invalidatePattern(pattern),
     invalidateCachePattern: (pattern) => redisCache.invalidatePattern(pattern),
     deleteCachePattern: (pattern) => redisCache.invalidatePattern(pattern), // Alias for clarity
     getOrSetCache: (ns, key, fn, ttl) => redisCache.getOrSet(ns, key, fn, ttl),
     getCacheStats: () => redisCache.getStats(),
+    getRedisClient: () => redisCache.client,
 };

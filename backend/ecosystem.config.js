@@ -20,8 +20,8 @@ const defaultDbPoolMax = isMultiInstance
 const defaultDbConcurrency = isMultiInstance
     ? String(Math.max(1, Math.floor(totalDbConcurrencyBudget / safeInstanceCount)))
     : String(Math.min(16, totalDbConcurrencyBudget));
-const defaultThreadPoolSize = isMultiInstance ? '32' : '128';
-const defaultOldSpaceMb = isMultiInstance ? '384' : '512';
+const defaultThreadPoolSize = '128';
+const defaultOldSpaceMb = '512';
 const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
 
 const runtimePerformanceEnv = {
@@ -29,7 +29,7 @@ const runtimePerformanceEnv = {
     NODE_OPTIONS: process.env.NODE_OPTIONS || `--max-old-space-size=${defaultOldSpaceMb}`,
     HTTP_COMPRESSION_THRESHOLD: process.env.HTTP_COMPRESSION_THRESHOLD || '1024',
     HTTP_COMPRESSION_LEVEL: process.env.HTTP_COMPRESSION_LEVEL || '6',
-    HTTP_REQUEST_TIMEOUT_MS: process.env.HTTP_REQUEST_TIMEOUT_MS || '45000',
+    HTTP_REQUEST_TIMEOUT_MS: process.env.HTTP_REQUEST_TIMEOUT_MS || '30000',
     PM2_INSTANCES: requestedInstances,
     PM2_EXEC_MODE: defaultExecMode,
     DB_TOTAL_CONNECTION_BUDGET: String(totalDbConnectionBudget),

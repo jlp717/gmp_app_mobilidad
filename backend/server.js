@@ -20,7 +20,7 @@ const compression = require('compression');
 const { monitorEventLoopDelay } = require('perf_hooks');
 const logger = require('./middleware/logger');
 const { verifyToken, handleRefreshToken, handleLogout } = require('./middleware/auth');
-const { initDb, query, queryWithParams, getPoolMetrics } = require('./config/db');
+const { initDb, query, queryWithParams, getPoolMetrics, runWithDbRequestContext } = require('./config/db');
 const {
     globalLimiter,
     createSecurityHeaders,
@@ -186,12 +186,48 @@ const PORT = process.env.PORT || 3334;
 const HTTP_COMPRESSION_THRESHOLD = parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024;
 const HTTP_COMPRESSION_LEVEL = parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6;
 const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 45000;
+const HTTP_LIST_TIMEOUT_MS = parseInt(process.env.HTTP_LIST_TIMEOUT_MS, 10) || 10000;
+const HTTP_ACTION_TIMEOUT_MS = parseInt(process.env.HTTP_ACTION_TIMEOUT_MS, 10) || 20000;
+const HTTP_REPORT_TIMEOUT_MS = parseInt(process.env.HTTP_REPORT_TIMEOUT_MS, 10) || 60000;
 const HEALTH_DB_TIMEOUT_MS = parseInt(process.env.HEALTH_DB_TIMEOUT_MS, 10) || 1500;
 const HEALTH_DB_CACHE_MS = parseInt(process.env.HEALTH_DB_CACHE_MS, 10) || 5000;
 
 const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
 eventLoopDelay.enable();
 let dbHealthCache = null;
+
+function resolveRequestTimeoutMs(req) {
+  const path = req.path || '';
+  if (path.includes('/report') || path.includes('/export') || path.includes('/pdf') || path.includes('/metrics')) {
+    return HTTP_REPORT_TIMEOUT_MS;
+  }
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return HTTP_ACTION_TIMEOUT_MS;
+  }
+  if (req.method === 'GET') {
+    return HTTP_LIST_TIMEOUT_MS;
+  }
+  return HTTP_REQUEST_TIMEOUT_MS;
+}
+
+function requestTimeoutMiddleware(req, res, next) {
+  const timeoutMs = resolveRequestTimeoutMs(req);
+  req.setTimeout(timeoutMs);
+  res.setTimeout(timeoutMs);
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      logger.warn(`[REQUEST_TIMEOUT] ${req.method} ${req.path} timeoutMs=${timeoutMs}`);
+      res.status(503).json({
+        success: false,
+        error: 'Request timeout',
+        code: 'REQUEST_TIMEOUT',
+      });
+    }
+  }, timeoutMs);
+  res.on('finish', () => clearTimeout(timer));
+  res.on('close', () => clearTimeout(timer));
+  next();
+}
 
 // Middleware â€” Security
 function parseCorsOrigin(value) {
@@ -213,6 +249,13 @@ app.use(cors({
     maxAge: 86400
 }));
 app.use(addRequestId);
+app.use(requestTimeoutMiddleware);
+app.use((req, res, next) => runWithDbRequestContext({
+  requestId: req.requestId,
+  method: req.method,
+  path: req.path,
+  req,
+}, next));
 app.use(detectScannerProbes);
 app.use(detectSuspiciousAgents);
 app.use(validateContentLength);
@@ -818,6 +861,9 @@ app.use((err, req, res, next) => {
   } else if (err.name === 'NotFoundError') {
     statusCode = 404;
     errorMessage = 'Not found';
+  } else if (err.code === 'DB_CIRCUIT_OPEN' || err.code === 'DB_QUERY_QUEUE_TIMEOUT' || err.code === 'DB_QUERY_TIMEOUT') {
+    statusCode = 503;
+    errorMessage = 'Database temporarily unavailable';
   } else if (err.code === 'SQLITE_CANTOPEN' || err.message?.includes('database')) {
     statusCode = 503;
     errorMessage = 'Database unavailable';
@@ -891,6 +937,15 @@ const gracefulShutdown = async (signal) => {
   
   // 2. Close DB pool
   try {
+    const { closePool } = require('./config/db');
+    await closePool();
+    logger.info('Database pool closed');
+  } catch (e) {
+    logger.warn(`DB close error: ${e.message}`);
+  }
+
+  // 2b. Legacy safety close path; closePool() above leaves getPool() null.
+  try {
     const { getPool } = require('./config/db');
     const pool = getPool();
     if (pool && typeof pool.close === 'function') {
@@ -948,13 +1003,24 @@ const gracefulShutdown = async (signal) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// ==================== MEMORY MANAGEMENT ====================
-// Log memory usage periodically in development
-if (process.env.NODE_ENV !== 'production') {
+// ==================== MEMORY / EVENT LOOP MANAGEMENT ====================
+const MEMORY_LOG_INTERVAL_MS = parseInt(process.env.MEMORY_LOG_INTERVAL_MS, 10) || 300000;
+if (MEMORY_LOG_INTERVAL_MS > 0) {
   setInterval(() => {
     const usage = process.memoryUsage();
-    logger.debug(`[MEMORY] Heap: ${Math.round(usage.heapUsed / 1024 / 1024)}MB, RSS: ${Math.round(usage.rss / 1024 / 1024)}MB`);
-  }, 60000);
+    const heapUsedMb = Math.round(usage.heapUsed / 1024 / 1024);
+    const rssMb = Math.round(usage.rss / 1024 / 1024);
+    const eventLoopP95Ms = typeof eventLoopDelay.percentile === 'function'
+      ? Math.round(eventLoopDelay.percentile(95) / 1e6)
+      : 0;
+    const logLine = `[RUNTIME] heap=${heapUsedMb}MB rss=${rssMb}MB eventLoopP95=${eventLoopP95Ms}ms`;
+    if (eventLoopP95Ms > 100) {
+      logger.warn(`[EVENT_LOOP_LAG] ${logLine}`);
+    } else {
+      logger.info(logLine);
+    }
+    eventLoopDelay.reset();
+  }, MEMORY_LOG_INTERVAL_MS).unref();
 }
 
 startServer().catch((err) => {

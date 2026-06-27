@@ -20,7 +20,7 @@
     "lint": "eslint src/**/*.ts --quiet",
     "test": "jest --passWithNoTests --forceExit",
     "test:targeted": "jest --runInBand --forceExit",
-    "test:ci": "jest --ci --runInBand --forceExit --passWithNoTests __tests__/pedidos_contracts.test.js __tests__/pedidos_idempotency.test.js __tests__/performance-cache.test.js __tests__/perf-low-risk-contracts.test.js __tests__/http-cache-middleware.test.js __tests__/security-middleware.test.js",
+    "test:ci": "jest --ci --runInBand --forceExit --passWithNoTests __tests__/pedidos_contracts.test.js __tests__/pedidos_idempotency.test.js __tests__/performance-cache.test.js __tests__/perf-low-risk-contracts.test.js __tests__/runtime-performance-config.test.js __tests__/http-cache-middleware.test.js __tests__/security-middleware.test.js",
     "test:coverage": "jest --coverage --passWithNoTests --forceExit",
     "test:watch": "jest --watch",
     "db:migrate": "sequelize-cli db:migrate",

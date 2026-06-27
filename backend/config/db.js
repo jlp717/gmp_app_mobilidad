@@ -1,10 +1,17 @@
 const odbc = require('odbc');
 const dotenv = require('dotenv');
+const { AsyncLocalStorage } = require('async_hooks');
 const logger = require('../middleware/logger');
 
 dotenv.config();
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const dbRequestContext = new AsyncLocalStorage();
+
+function parseIntEnv(name, defaultValue) {
+    const parsed = parseInt(process.env[name], 10);
+    return Number.isFinite(parsed) ? parsed : defaultValue;
+}
 
 const DB_UID = process.env.ODBC_UID;
 const DB_PWD = process.env.ODBC_PWD;
@@ -18,10 +25,12 @@ const DB_UID_FINAL = DB_UID || 'JAVIER';
 const DB_PWD_FINAL = DB_PWD || (NODE_ENV === 'development' ? 'JAVIER' : '');
 
 const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;CCSID=1208;CMPTDM=1;
-    CPOOLMAX=${parseInt(process.env.ODBC_POOL_MAX) || 20};
-    CPOOLMIN=${parseInt(process.env.ODBC_POOL_MIN) || 3};
-    CPTOUT=${parseInt(process.env.ODBC_TIMEOUT) || 60};
-    COMMTIMEOUT=${parseInt(process.env.ODBC_COMM_TIMEOUT) || 90};
+    CPOOLMAX=${parseIntEnv('ODBC_POOL_MAX', 20)};
+    CPOOLMIN=${parseIntEnv('ODBC_POOL_MIN', 3)};
+    CPTOUT=${parseIntEnv('ODBC_TIMEOUT', 60)};
+    COMMTIMEOUT=${parseIntEnv('ODBC_COMM_TIMEOUT', 90)};
+    LONGDATACOMPAT=1;
+    ExtendedColInfo=0;
     DBQ=${DB_DSN};`;
 
 // Pool sizing — configurable via env for production tuning.
@@ -30,17 +39,21 @@ const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;C
 // Increased to 50 for high-concurrency scenarios (up to ~40 vendors in parallel).
 // For multi-user environments, increased max connections to handle concurrent users
 const POOL_CONFIG = {
-    min: parseInt(process.env.DB_POOL_MIN, 10) || 5,  // Increased from 3 for better availability
-    max: parseInt(process.env.DB_POOL_MAX, 10) || 50, // Increased from 30 for better concurrency
-    idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_MS, 10) || 60000, // Increased from 30000
-    acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 15000
+    min: parseIntEnv('DB_POOL_MIN', NODE_ENV === 'production' ? 1 : 5),
+    max: parseIntEnv('DB_POOL_MAX', NODE_ENV === 'production' ? 5 : 25),
+    idleTimeoutMs: parseIntEnv('DB_POOL_IDLE_MS', 60000),
+    acquireTimeoutMs: parseIntEnv('DB_POOL_ACQUIRE_MS', 15000)
 };
 
-const POOL_ACQUIRE_FAST_FAIL_MS = parseInt(process.env.DB_POOL_FAST_FAIL_MS, 10) ||
+const POOL_ACQUIRE_FAST_FAIL_MS = parseIntEnv('DB_POOL_FAST_FAIL_MS', 0) ||
     Math.min(10000, POOL_CONFIG.acquireTimeoutMs);
 const DEFAULT_DB_QUERY_CONCURRENCY = Math.max(2, Math.min(8, POOL_CONFIG.max));
-const DB_QUERY_CONCURRENCY = parseInt(process.env.DB_QUERY_CONCURRENCY, 10) || DEFAULT_DB_QUERY_CONCURRENCY;
-const DB_QUERY_QUEUE_TIMEOUT_MS = parseInt(process.env.DB_QUERY_QUEUE_TIMEOUT_MS, 10) || 15000;
+const DB_QUERY_CONCURRENCY = parseIntEnv('DB_QUERY_CONCURRENCY', DEFAULT_DB_QUERY_CONCURRENCY);
+const DB_QUERY_QUEUE_TIMEOUT_MS = parseIntEnv('DB_QUERY_QUEUE_TIMEOUT_MS', 15000);
+const DB_QUERY_SLOW_MS = parseIntEnv('DB_QUERY_SLOW_MS', 500);
+const DB_CIRCUIT_FAILURE_THRESHOLD = parseIntEnv('DB_CIRCUIT_FAILURE_THRESHOLD', 6);
+const DB_CIRCUIT_RESET_MS = parseIntEnv('DB_CIRCUIT_RESET_MS', 15000);
+const DB_POOL_METRICS_INTERVAL_MS = parseIntEnv('DB_POOL_METRICS_INTERVAL_MS', 60000);
 
 const queryGate = {
     active: 0,
@@ -106,6 +119,55 @@ const queryGate = {
             max: DB_QUERY_CONCURRENCY,
             queueTimeoutMs: DB_QUERY_QUEUE_TIMEOUT_MS,
             timeouts: this.timeouts,
+        };
+    }
+};
+
+const dbCircuit = {
+    state: 'closed',
+    failures: 0,
+    openedAt: 0,
+    lastError: null,
+
+    beforeRequest() {
+        if (this.state !== 'open') return;
+        if (Date.now() - this.openedAt >= DB_CIRCUIT_RESET_MS) {
+            this.state = 'half_open';
+            return;
+        }
+        const error = new Error('DB2 circuit open');
+        error.code = 'DB_CIRCUIT_OPEN';
+        error.statusCode = 503;
+        throw error;
+    },
+
+    recordSuccess() {
+        this.failures = 0;
+        this.lastError = null;
+        if (this.state !== 'closed') {
+            logger.info('[DB_CIRCUIT] closed');
+        }
+        this.state = 'closed';
+    },
+
+    recordFailure(error) {
+        if (!isConnectionError(error) && !isPoolAcquireError(error)) return;
+        this.failures++;
+        this.lastError = error?.code || error?.message || 'unknown';
+        if (this.failures >= DB_CIRCUIT_FAILURE_THRESHOLD || this.state === 'half_open') {
+            this.state = 'open';
+            this.openedAt = Date.now();
+            logger.warn(`[DB_CIRCUIT] open failures=${this.failures} last=${this.lastError}`);
+        }
+    },
+
+    getMetrics() {
+        return {
+            state: this.state,
+            failures: this.failures,
+            openedAt: this.openedAt || null,
+            resetMs: DB_CIRCUIT_RESET_MS,
+            lastError: this.lastError,
         };
     }
 };
@@ -345,6 +407,7 @@ const RETRY_DELAY_BASE_MS = 500;
 const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS, 10) || 120000;
 let poolRecreateInProgress = false;
 let keepaliveInterval = null;
+let poolMetricsInterval = null;
 
 const _utf8Connections = new WeakSet();
 
@@ -388,6 +451,7 @@ async function initDb() {
             await pool._ensureMinConnections();
             logger.info(`✅ Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
             startKeepalive();
+            startPoolMetrics();
         } catch (error) {
             logger.error(`❌ Database connection failed during init: ${error.message}`);
             throw error;
@@ -426,6 +490,7 @@ async function recreatePool() {
         await pool._ensureMinConnections();
         logger.info('✅ Database pool recreated successfully');
         startKeepalive();
+        startPoolMetrics();
         poolRecreateDelay = 1000; // Reset backoff
     } catch (error) {
         logger.error(`❌ Pool recreation failed: ${error.message}`);
@@ -511,6 +576,45 @@ function safeParamPreview(params) {
     };
 }
 
+function normalizeSqlForLog(sql, maxLength = 500) {
+    return String(sql || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, maxLength);
+}
+
+function getRequestContext() {
+    return dbRequestContext.getStore() || {};
+}
+
+function runWithDbRequestContext(context, fn) {
+    return dbRequestContext.run(context || {}, fn);
+}
+
+function getContextUser(ctx) {
+    const requestUser = ctx.req?.user || {};
+    return ctx.user
+        || requestUser.id
+        || requestUser.codigo
+        || requestUser.user
+        || requestUser.username
+        || '-';
+}
+
+function logQueryPerformance({ sql, params, duration, rowCount, paramQuery }) {
+    const preview = normalizeSqlForLog(sql);
+    if (duration >= DB_QUERY_SLOW_MS) {
+        const ctx = getRequestContext();
+        logger.warn(`[SLOW_QUERY] durationMs=${duration} rows=${rowCount} method=${ctx.method || '-'} path=${ctx.path || '-'} user=${getContextUser(ctx)} sql="${preview}" params=${JSON.stringify(safeParamPreview(params))}`);
+        return;
+    }
+
+    if (process.env.DB_QUERY_LOG_ALL === 'true') {
+        const label = paramQuery ? 'Param Query' : 'Query';
+        logger.info(`📊 ${label} (${duration}ms): ${preview.substring(0, 100)}... → ${rowCount} rows`);
+    }
+}
+
 function startKeepalive() {
     stopKeepalive();
     keepaliveInterval = setInterval(async () => {
@@ -531,6 +635,23 @@ function stopKeepalive() {
     if (keepaliveInterval) {
         clearInterval(keepaliveInterval);
         keepaliveInterval = null;
+    }
+}
+
+function startPoolMetrics() {
+    stopPoolMetrics();
+    if (DB_POOL_METRICS_INTERVAL_MS <= 0) return;
+    poolMetricsInterval = setInterval(() => {
+        const metrics = pool.getMetrics();
+        logger.info(`[DB_POOL] active=${metrics.active} idle=${metrics.idle} total=${metrics.total}/${metrics.max} waiting=${metrics.waiting} queryActive=${metrics.queryGate.active}/${metrics.queryGate.max} queryWaiting=${metrics.queryGate.waiting} circuit=${dbCircuit.state}`);
+    }, DB_POOL_METRICS_INTERVAL_MS);
+    if (typeof poolMetricsInterval.unref === 'function') poolMetricsInterval.unref();
+}
+
+function stopPoolMetrics() {
+    if (poolMetricsInterval) {
+        clearInterval(poolMetricsInterval);
+        poolMetricsInterval = null;
     }
 }
 
@@ -560,6 +681,7 @@ async function query(sql, logQuery = true, logError = true) {
         await initDb();
         if (!dbPool) throw new Error('Database pool not initialized and failed to re-init');
     }
+    dbCircuit.beforeRequest();
 
     let lastError = null;
     let connectionErrorCount = 0;
@@ -577,6 +699,8 @@ async function query(sql, logQuery = true, logError = true) {
             const start = Date.now();
             const result = await queryWithTimeout(conn, sql);
             const duration = Date.now() - start;
+            dbCircuit.recordSuccess();
+            logQueryPerformance({ sql, params: [], duration, rowCount: result.length, paramQuery: false });
 
             if (logQuery) {
                 const preview = sql.replace(/\s+/g, ' ').substring(0, 100);
@@ -594,6 +718,7 @@ async function query(sql, logQuery = true, logError = true) {
             if (connError) {
                 connectionErrorCount++;
             }
+            dbCircuit.recordFailure(error);
 
             const retryable = isRetryableError(error);
 
@@ -642,6 +767,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
         await initDb();
         if (!dbPool) throw new Error('Database pool not initialized');
     }
+    dbCircuit.beforeRequest();
 
     let lastError = null;
     let connectionErrorCount = 0;
@@ -659,6 +785,8 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             const start = Date.now();
             const result = await queryWithTimeout(conn, sql, params);
             const duration = Date.now() - start;
+            dbCircuit.recordSuccess();
+            logQueryPerformance({ sql, params, duration, rowCount: result.length, paramQuery: true });
 
             if (logQuery) {
                 const preview = sql.replace(/\s+/g, ' ').substring(0, 80);
@@ -676,6 +804,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             if (connError) {
                 connectionErrorCount++;
             }
+            dbCircuit.recordFailure(error);
 
             const retryable = isRetryableError(error);
 
@@ -722,17 +851,22 @@ function getPool() {
 }
 
 function getPoolMetrics() {
-    return pool.getMetrics();
+    return {
+        ...pool.getMetrics(),
+        circuit: dbCircuit.getMetrics(),
+    };
 }
 
 async function closePool() {
     stopKeepalive();
+    stopPoolMetrics();
     await pool.close();
     dbPool = null;
 }
 
 module.exports = {
     getPoolMetrics,
+    runWithDbRequestContext,
     initDb,
     query,
     queryWithParams,
