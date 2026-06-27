@@ -19,12 +19,43 @@ const facturasBreaker = new CircuitBreaker({
     timeout: 15000
 });
 
+function boundedIntFromEnv(name, defaultValue, minValue, maxValue) {
+    const parsed = parseInt(process.env[name], 10);
+    if (!Number.isFinite(parsed)) return defaultValue;
+    return Math.min(maxValue, Math.max(minValue, parsed));
+}
+
 const BATCH_SIZE = 15;
 const FACTURA_CACHE_VERSION = 'v3';
+const FACTURAS_LIST_BATCH_CONCURRENCY = boundedIntFromEnv('FACTURAS_LIST_BATCH_CONCURRENCY', 2, 1, 2);
+const FACTURAS_SUMMARY_BATCH_CONCURRENCY = boundedIntFromEnv('FACTURAS_SUMMARY_BATCH_CONCURRENCY', 1, 1, 2);
+const IN_FLIGHT_LIMIT = 200;
 const TAX_SLOTS = [1, 2, 3, 4, 5];
 const DEFAULT_LIST_LIMIT = 250;
 const MAX_LIST_LIMIT = 500;
 const MAX_LIST_OFFSET = 5000;
+const facturasListInFlight = new Map();
+const facturasSummaryInFlight = new Map();
+
+async function withInFlight(map, key, loader) {
+    const existing = map.get(key);
+    if (existing) return existing;
+
+    const promise = (async () => loader())();
+    map.set(key, promise);
+
+    while (map.size > IN_FLIGHT_LIMIT) {
+        const oldestKey = map.keys().next().value;
+        if (oldestKey === undefined || oldestKey === key) break;
+        map.delete(oldestKey);
+    }
+
+    try {
+        return await promise;
+    } finally {
+        if (map.get(key) === promise) map.delete(key);
+    }
+}
 
 function clampPositiveInt(value, defaultValue, maxValue) {
     const parsed = parseInt(value, 10);
@@ -233,21 +264,26 @@ class FacturasService {
         const cached = await redisCache.get('route', cacheKey);
         if (cached !== null) return cached;
 
-        const result = await facturasBreaker.execute(
-            () => this.getFacturasRaw(params),
-            async () => {
-                const stale = await redisCache.get('route', cacheKey);
-                if (stale !== null) return stale;
-                throw new Error('Facturas DB no disponible dentro del timeout seguro');
+        return withInFlight(facturasListInFlight, cacheKey, async () => {
+            const secondCache = await redisCache.get('route', cacheKey);
+            if (secondCache !== null) return secondCache;
+
+            const result = await facturasBreaker.execute(
+                () => this.getFacturasRaw(params),
+                async () => {
+                    const stale = await redisCache.get('route', cacheKey);
+                    if (stale !== null) return stale;
+                    throw new Error('Facturas DB no disponible dentro del timeout seguro');
+                }
+            );
+
+            if (result) {
+                await redisCache.set('route', cacheKey, result, TTL.SHORT);
+                return result;
             }
-        );
 
-        if (result) {
-            await redisCache.set('route', cacheKey, result, TTL.SHORT);
-            return result;
-        }
-
-        throw new Error('Facturas DB no devolvio datos');
+            throw new Error('Facturas DB no devolvio datos');
+        });
     }
     
     async _getFacturasRawLegacy(params) {
@@ -555,13 +591,16 @@ class FacturasService {
             const queries = [];
             if (includeFacturas) {
                 const { sql, queryParams } = buildInvoiceSqlForVendors(vendorBatch, offsetValue, limitValue);
-                queries.push(queryWithParams(sql, queryParams));
+                queries.push(() => queryWithParams(sql, queryParams));
             }
             if (includeAlbaranes) {
                 const { sql, queryParams } = buildAlbaranSqlForVendors(vendorBatch, offsetValue, limitValue);
-                queries.push(queryWithParams(sql, queryParams));
+                queries.push(() => queryWithParams(sql, queryParams));
             }
-            const results = await Promise.all(queries);
+            const results = [];
+            for (const runQuery of queries) {
+                results.push(await runQuery());
+            }
             return results.flat();
         }
 
@@ -582,7 +621,7 @@ class FacturasService {
                 }
                 const batchResults = await mapWithConcurrency(
                     batches,
-                    2,
+                    FACTURAS_LIST_BATCH_CONCURRENCY,
                     (batch) => queryDocumentsForVendors(batch, 0, rowsOffset + rowsLimit)
                 );
                 rows = batchResults.flat();
@@ -753,9 +792,14 @@ class FacturasService {
         const cached = await redisCache.get('route', cacheKey);
         if (cached !== null) return cached;
 
-        const result = await this._getSummaryInternal(params);
-        await redisCache.set('route', cacheKey, result, TTL.MEDIUM);
-        return result;
+        return withInFlight(facturasSummaryInFlight, cacheKey, async () => {
+            const secondCache = await redisCache.get('route', cacheKey);
+            if (secondCache !== null) return secondCache;
+
+            const result = await this._getSummaryInternal(params);
+            await redisCache.set('route', cacheKey, result, TTL.MEDIUM);
+            return result;
+        });
     }
 
     async _getSummaryInternalLegacy(params) {
@@ -985,9 +1029,12 @@ class FacturasService {
 
         async function runSummaryBatch(batchVendors) {
             const queries = [];
-            if (includeFacturas) queries.push(runInvoiceSummaryBatch(batchVendors));
-            if (includeAlbaranes) queries.push(runAlbaranSummaryBatch(batchVendors));
-            const results = await Promise.all(queries);
+            if (includeFacturas) queries.push(() => runInvoiceSummaryBatch(batchVendors));
+            if (includeAlbaranes) queries.push(() => runAlbaranSummaryBatch(batchVendors));
+            const results = [];
+            for (const runQuery of queries) {
+                results.push(await runQuery());
+            }
             return results.flat();
         }
 
@@ -1000,7 +1047,11 @@ class FacturasService {
                 for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
                     batches.push(vendors.slice(i, i + BATCH_SIZE));
                 }
-                const batchResults = await Promise.all(batches.map(runSummaryBatch));
+                const batchResults = await mapWithConcurrency(
+                    batches,
+                    FACTURAS_SUMMARY_BATCH_CONCURRENCY,
+                    runSummaryBatch
+                );
                 rows = batchResults.flat();
             }
 

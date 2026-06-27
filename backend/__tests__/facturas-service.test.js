@@ -454,4 +454,67 @@ describe('facturas service fiscal totals', () => {
     ]);
     expect(mockRedisSet.mock.calls[0][1]).toContain(':CHIRINGUITO:4306');
   });
+
+  test('getSummary coalesces identical concurrent cache misses', async () => {
+    mockQueryWithParams.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return [
+        {
+          DOCUMENT_TYPE: 'factura',
+          NUM_DOCUMENTOS: 2,
+          TOTAL: 20,
+          BASE: 18,
+          IVA: 2,
+        },
+      ];
+    });
+
+    const params = {
+      vendedorCodes: '93',
+      year: 2026,
+      documentType: 'factura',
+    };
+    const [first, second] = await Promise.all([
+      facturasService.getSummary(params),
+      facturasService.getSummary(params),
+    ]);
+
+    expect(first).toEqual(second);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockRedisSet).toHaveBeenCalledTimes(1);
+  });
+
+  test('getSummary limits many-vendor summary fan-out', async () => {
+    let active = 0;
+    let maxActive = 0;
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise(resolve => setTimeout(resolve, 2));
+      active -= 1;
+      return [
+        {
+          DOCUMENT_TYPE: /FROM\s+DSEDAC\.CAC\s+CAC/i.test(sql) ? 'albaran' : 'factura',
+          NUM_DOCUMENTOS: 1,
+          TOTAL: 1,
+          BASE: 1,
+          IVA: 0,
+        },
+      ];
+    });
+
+    const vendedorCodes = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).join(',');
+    const summary = await facturasService.getSummary({
+      vendedorCodes,
+      year: 2026,
+    });
+
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(6);
+    expect(maxActive).toBe(1);
+    expect(summary).toMatchObject({
+      totalDocumentos: 6,
+      totalFacturasEmitidas: 3,
+      totalAlbaranes: 3,
+    });
+  });
 });

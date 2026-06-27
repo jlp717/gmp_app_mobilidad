@@ -124,7 +124,11 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   }
 
   /// Fetch all dashboard data in parallel
-  Future<void> fetchAll({int? year, int? month}) async {
+  Future<void> fetchAll({
+    int? year,
+    int? month,
+    bool forceRefresh = false,
+  }) async {
     final currentState = _getCurrentState() ?? const DashboardState();
     final fetchYear = year ?? currentState.selectedYear;
     final fetchMonth = month ?? currentState.selectedMonth;
@@ -149,12 +153,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 
       // Parallel fetch — server Redis cache makes this fast
       final results = await Future.wait<dynamic>([
-        _fetchMetrics(queryParams),
-        _fetchRecentSales(queryParams),
-        _fetchSalesEvolution(queryParams),
-        _fetchYoYComparison(queryParams),
-        _fetchTopProducts(queryParams),
-        _fetchTopClients(queryParams),
+        _fetchMetrics(queryParams, forceRefresh: forceRefresh),
+        _fetchRecentSales(queryParams, forceRefresh: forceRefresh),
+        _fetchSalesEvolution(queryParams, forceRefresh: forceRefresh),
+        _fetchYoYComparison(queryParams, forceRefresh: forceRefresh),
+        _fetchTopProducts(queryParams, forceRefresh: forceRefresh),
+        _fetchTopClients(queryParams, forceRefresh: forceRefresh),
       ]);
 
       final metrics = results[0] as DashboardMetrics?;
@@ -184,7 +188,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 
   /// Refresh — bypasses server cache
   Future<void> refresh() async {
-    await fetchAll();
+    await fetchAll(forceRefresh: true);
   }
 
   /// Change date filter
@@ -201,13 +205,17 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   // PRIVATE FETCHING METHODS
   // ============================================================
 
-  Future<DashboardMetrics?> _fetchMetrics(Map<String, String> params) async {
+  Future<DashboardMetrics?> _fetchMetrics(
+    Map<String, String> params, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final response = await ApiClient.get(
         ApiConfig.dashboardMetrics,
         queryParameters: params,
         cacheKey: 'dashboard:metrics:${_cacheKeyFromParams(params)}',
         cacheTTL: CacheService.shortTTL,
+        forceRefresh: forceRefresh,
       );
       if (response == null) return null;
       return DashboardMetrics.fromJson(response as Map<String, dynamic>);
@@ -217,7 +225,10 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
     }
   }
 
-  Future<List<RecentSale>> _fetchRecentSales(Map<String, String> params) async {
+  Future<List<RecentSale>> _fetchRecentSales(
+    Map<String, String> params, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '15';
       final response = await ApiClient.get(
@@ -225,6 +236,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         queryParameters: p,
         cacheKey: 'dashboard:recent-sales:${_cacheKeyFromParams(p)}',
         cacheTTL: const Duration(minutes: 2),
+        forceRefresh: forceRefresh,
       );
       if (response == null) return [];
       final list =
@@ -239,7 +251,9 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   }
 
   Future<List<SalesEvolutionPoint>> _fetchSalesEvolution(
-      Map<String, String> params) async {
+    Map<String, String> params, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final p = Map<String, String>.from(params)..['months'] = '12';
       final response = await ApiClient.get(
@@ -247,6 +261,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         queryParameters: p,
         cacheKey: 'dashboard:sales-evolution:${_cacheKeyFromParams(p)}',
         cacheTTL: CacheService.defaultTTL,
+        forceRefresh: forceRefresh,
       );
       if (response == null) return [];
       final dataList =
@@ -260,13 +275,17 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
     }
   }
 
-  Future<YoYComparison?> _fetchYoYComparison(Map<String, String> params) async {
+  Future<YoYComparison?> _fetchYoYComparison(
+    Map<String, String> params, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final response = await ApiClient.get(
         ApiConfig.yoyComparison,
         queryParameters: params,
         cacheKey: 'dashboard:yoy:${_cacheKeyFromParams(params)}',
         cacheTTL: CacheService.defaultTTL,
+        forceRefresh: forceRefresh,
       );
       if (response == null) return null;
       return YoYComparison.fromJson(response as Map<String, dynamic>);
@@ -276,7 +295,10 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
     }
   }
 
-  Future<List<TopProduct>> _fetchTopProducts(Map<String, String> params) async {
+  Future<List<TopProduct>> _fetchTopProducts(
+    Map<String, String> params, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '10';
       final response = await ApiClient.get(
@@ -284,6 +306,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         queryParameters: p,
         cacheKey: 'dashboard:top-products:${_cacheKeyFromParams(p)}',
         cacheTTL: CacheService.defaultTTL,
+        forceRefresh: forceRefresh,
       );
       if (response == null) return [];
       final list =
@@ -297,7 +320,10 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
     }
   }
 
-  Future<List<TopClient>> _fetchTopClients(Map<String, String> params) async {
+  Future<List<TopClient>> _fetchTopClients(
+    Map<String, String> params, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '10';
       final response = await ApiClient.get(
@@ -305,6 +331,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         queryParameters: p,
         cacheKey: 'dashboard:top-clients:${_cacheKeyFromParams(p)}',
         cacheTTL: CacheService.defaultTTL,
+        forceRefresh: forceRefresh,
       );
       if (response == null) return [];
       final list =

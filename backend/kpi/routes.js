@@ -13,13 +13,28 @@ const logger = require('../middleware/logger');
 
 const router = Router();
 const vendorClientSetCache = new Map();
+const vendorClientSetInFlight = new Map();
 const VENDOR_CLIENT_SET_TTL_MS = 10 * 60 * 1000;
+const MAX_VENDOR_CLIENT_FILTER_CODES = 15;
+const DB2_VENDOR_CODE_MAX_LEN = 2;
+const DB2_CLIENT_CODE_MAX_LEN = 10;
 
 function normalizeVendorCodes(value) {
+  const seen = new Set();
   return String(value || '')
     .split(',')
-    .map(c => c.trim())
-    .filter(c => c && /^[A-Z0-9]+$/i.test(c));
+    .map(c => c.trim().toUpperCase())
+    .filter(c => c && /^[A-Z0-9]+$/i.test(c))
+    .map(c => c.slice(0, DB2_VENDOR_CODE_MAX_LEN))
+    .filter((c) => {
+      if (!c || seen.has(c)) return false;
+      seen.add(c);
+      return true;
+    });
+}
+
+function normalizeClientCodeForDb2(value) {
+  return String(value || '').trim().slice(0, DB2_CLIENT_CODE_MAX_LEN);
 }
 
 function getVendorClientSetCache(key) {
@@ -42,6 +57,21 @@ function setVendorClientSetCache(key, value) {
   }
 }
 
+async function withVendorClientSetInFlight(key, loader) {
+  const existing = vendorClientSetInFlight.get(key);
+  if (existing) return existing;
+
+  const promise = (async () => loader())();
+  vendorClientSetInFlight.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    if (vendorClientSetInFlight.get(key) === promise) {
+      vendorClientSetInFlight.delete(key);
+    }
+  }
+}
+
 async function getVendorClientSet(vendorCodes, mode = 'current') {
   const codes = normalizeVendorCodes(vendorCodes).sort();
   if (codes.length === 0) return new Set();
@@ -49,21 +79,26 @@ async function getVendorClientSet(vendorCodes, mode = 'current') {
   const cached = getVendorClientSetCache(cacheKey);
   if (cached) return cached;
 
-  const placeholders = codes.map(() => '?').join(',');
-  const yearClause = mode === 'recent'
-    ? 'LCAADC >= YEAR(CURRENT_DATE) - 1'
-    : 'LCAADC = YEAR(CURRENT_DATE)';
-  const vendorQuery = `
-    SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
-    FROM DSED.LACLAE
-    WHERE TRIM(LCCDVD) IN (${placeholders})
-      AND ${yearClause}
-      AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')
-  `;
-  const vendorClientsResult = await kpiQuery(vendorQuery, codes);
-  const result = new Set(vendorClientsResult.rows.map(r => (r.CLIENT_CODE || '').trim()).filter(Boolean));
-  setVendorClientSetCache(cacheKey, result);
-  return result;
+  return withVendorClientSetInFlight(cacheKey, async () => {
+    const secondCache = getVendorClientSetCache(cacheKey);
+    if (secondCache) return secondCache;
+
+    const placeholders = codes.map(() => `CAST(? AS VARCHAR(${DB2_VENDOR_CODE_MAX_LEN}))`).join(',');
+    const yearClause = mode === 'recent'
+      ? 'LCAADC >= YEAR(CURRENT_DATE) - 1'
+      : 'LCAADC = YEAR(CURRENT_DATE)';
+    const vendorQuery = `
+      SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
+      FROM DSED.LACLAE
+      WHERE TRIM(LCCDVD) IN (${placeholders})
+        AND ${yearClause}
+        AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')
+    `;
+    const vendorClientsResult = await kpiQuery(vendorQuery, codes);
+    const result = new Set(vendorClientsResult.rows.map(r => (r.CLIENT_CODE || '').trim()).filter(Boolean));
+    setVendorClientSetCache(cacheKey, result);
+    return result;
+  });
 }
 
 // Métricas middleware en todas las rutas KPI
@@ -280,7 +315,7 @@ router.get('/alerts/clients', async (req, res) => {
     // If > 15 codes, it's a jefe seeing "all" â†’ skip the expensive LACLAE query
     if (vendorCodesStr && vendorCodesStr !== 'ALL') {
       const codes = normalizeVendorCodes(vendorCodesStr);
-      if (codes.length > 0 && codes.length <= 15) {
+      if (codes.length > 0 && codes.length <= MAX_VENDOR_CLIENT_FILTER_CODES) {
         const validCodes = await getVendorClientSet(codes, 'recent');
         clientCodes = clientCodes.filter(c => validCodes.has(c));
       }
@@ -557,12 +592,17 @@ router.get('/dashboard', async (req, res) => {
       if (vendorCodes.length === 0) {
         return res.status(400).json({ success: false, error: 'vendorCode invalido' });
       }
-      const validCodes = await getVendorClientSet(vendorCodes, 'current');
 
-      logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCodes.join(',')}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
+      if (vendorCodes.length > MAX_VENDOR_CLIENT_FILTER_CODES) {
+        logger.info(`[kpi:dashboard] Vendor filter skipped for ${vendorCodes.length} codes; treating as manager ALL scope`);
+      } else {
+        const validCodes = await getVendorClientSet(vendorCodes, 'current');
 
-      filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
-      logger.info(`[kpi:dashboard] After vendor filter: ${filteredAlerts.length} alerts`);
+        logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCodes.join(',')}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
+
+        filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
+        logger.info(`[kpi:dashboard] After vendor filter: ${filteredAlerts.length} alerts`);
+      }
     }
 
     // 3. Compute totals, byType, and clientsMap â€” all from the SAME filtered data
@@ -606,21 +646,30 @@ router.get('/dashboard', async (req, res) => {
     const clientInfo = {}; // code â†’ { name, address, city }
     if (clientCodes.length > 0) {
       try {
-        const placeholders = clientCodes.map(() => '?').join(',');
-        const cliResult = await kpiQuery(
-          `SELECT TRIM(C.CODIGOCLIENTE) AS CODE,
-                  COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) AS NAME,
-                  TRIM(C.DIRECCION) AS ADDRESS, TRIM(C.POBLACION) AS CITY
-           FROM DSEDAC.CLI C
-           WHERE C.CODIGOCLIENTE IN (${placeholders})`,
-          clientCodes
-        );
-        for (const r of cliResult.rows) {
-          clientInfo[(r.CODE || '').trim()] = {
-            name: r.NAME || '',
-            address: r.ADDRESS || '',
-            city: r.CITY || '',
-          };
+        const db2ClientCodes = [...new Set(clientCodes.map(normalizeClientCodeForDb2).filter(Boolean))];
+        if (db2ClientCodes.length > 0) {
+          const placeholders = db2ClientCodes.map(() => `CAST(? AS VARCHAR(${DB2_CLIENT_CODE_MAX_LEN}))`).join(',');
+          const cliResult = await kpiQuery(
+            `SELECT TRIM(C.CODIGOCLIENTE) AS CODE,
+                    COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) AS NAME,
+                    TRIM(C.DIRECCION) AS ADDRESS, TRIM(C.POBLACION) AS CITY
+             FROM DSEDAC.CLI C
+             WHERE TRIM(C.CODIGOCLIENTE) IN (${placeholders})`,
+            db2ClientCodes
+          );
+          for (const r of cliResult.rows) {
+            clientInfo[(r.CODE || '').trim()] = {
+              name: r.NAME || '',
+              address: r.ADDRESS || '',
+              city: r.CITY || '',
+            };
+          }
+          for (const originalCode of clientCodes) {
+            const db2Code = normalizeClientCodeForDb2(originalCode);
+            if (db2Code && clientInfo[db2Code] && !clientInfo[originalCode]) {
+              clientInfo[originalCode] = clientInfo[db2Code];
+            }
+          }
         }
       } catch (e) {
         logger.warn(`[kpi:api] Error fetching client info: ${e.message}`);
