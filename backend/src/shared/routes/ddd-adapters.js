@@ -46,6 +46,8 @@ const {
   lookupClientAssignedVendorCodes,
   sanitizeCodeListForParams,
   normalizeCvcTipoDocumentoFilter,
+  LACLAE_SALES_FILTER,
+  getCommissionVendorColumnExpr,
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
@@ -114,6 +116,30 @@ function normalizeSearchTerm(value) {
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .slice(0, 80)
     .toUpperCase();
+}
+
+function buildLaclaeDateRangeFilter(alias, from, to) {
+  const prefix = alias ? `${alias}.` : '';
+  const fromYear = from.getFullYear();
+  const fromMonth = from.getMonth() + 1;
+  const fromDay = from.getDate();
+  const toYear = to.getFullYear();
+  const toMonth = to.getMonth() + 1;
+  const toDay = to.getDate();
+  const startClause = `(${prefix}LCMMDC > ? OR (${prefix}LCMMDC = ? AND ${prefix}LCDDDC >= ?))`;
+  const endClause = `(${prefix}LCMMDC < ? OR (${prefix}LCMMDC = ? AND ${prefix}LCDDDC <= ?))`;
+
+  if (fromYear === toYear) {
+    return {
+      sql: `${prefix}LCAADC = ? AND ${startClause} AND ${endClause}`,
+      params: [fromYear, fromMonth, fromMonth, fromDay, toMonth, toMonth, toDay],
+    };
+  }
+
+  return {
+    sql: `(${prefix}LCAADC > ? OR (${prefix}LCAADC = ? AND ${startClause})) AND (${prefix}LCAADC < ? OR (${prefix}LCAADC = ? AND ${endClause}))`,
+    params: [fromYear, fromYear, fromMonth, fromMonth, fromDay, toYear, toYear, toMonth, toMonth, toDay],
+  };
 }
 
 function buildClientSearchFilter(safeSearch, alias = 'C') {
@@ -1463,8 +1489,6 @@ function createPedidosRoutes() {
       const defaultFrom = new Date(now.getFullYear(), 0, 1);
       const from = req.query.from ? new Date(String(req.query.from)) : defaultFrom;
       const to = req.query.to ? new Date(String(req.query.to)) : now;
-      const fromYmd = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
-      const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
 
       let vendor = String(req.query.vendedorCode || '').trim();
       if (!userIsJefe) {
@@ -1487,32 +1511,33 @@ function createPedidosRoutes() {
       const limit = Math.min(parseInt(req.query.limit) || 100, 500);
       const offset = parseInt(req.query.offset) || 0;
 
-      const where = [
-        `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
+      const dateRange = buildLaclaeDateRangeFilter('L', from, to);
+      const filters = [
         `L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB')`,
         `L.LCSRAB NOT IN ('N','Z','G','D')`,
       ];
-      const params = [fromYmd, toYmd];
+      const filterParams = [];
 
       if (!isAllVendor) {
         const vendors = vendor.split(',').map(v => v.trim()).filter(Boolean);
         if (vendors.length > 0 && vendors.length <= 50) {
-          where.push(`TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`);
-          params.push(...vendors);
+          filters.push(`L.LCCDVD IN (${vendors.map(() => '?').join(',')})`);
+          filterParams.push(...vendors);
         } else if (vendors.length > 50) {
           const safe = vendors
             .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
             .map(v => `'${v.replace(/'/g, "''")}'`)
             .join(',');
-          if (safe) where.push(`TRIM(L.LCCDVD) IN (${safe})`);
+          if (safe) filters.push(`L.LCCDVD IN (${safe})`);
         }
       }
-      if (clientCode) { where.push(`TRIM(L.LCCDCL) = ?`); params.push(clientCode); }
-      if (productCode) { where.push(`TRIM(L.LCCDRF) = ?`); params.push(productCode); }
-      if (familia) { where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOFAMILIA) = ?)`); params.push(familia); }
-      if (marca) { where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOMARCA) = ?)`); params.push(marca); }
+      if (clientCode) { filters.push(`L.LCCDCL = ?`); filterParams.push(clientCode); }
+      if (productCode) { filters.push(`L.LCCDRF = ?`); filterParams.push(productCode); }
+      if (familia) { filters.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE CODIGOFAMILIA = ?)`); filterParams.push(familia); }
+      if (marca) { filters.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE CODIGOMARCA = ?)`); filterParams.push(marca); }
 
-      const whereSql = where.join(' AND ');
+      const whereSql = [dateRange.sql, ...filters].join(' AND ');
+      const params = [...dateRange.params, ...filterParams];
 
       const detailSql = `
         SELECT L.LCAADC AS ANO, L.LCMMDC AS MES, L.LCDDDC AS DIA,
@@ -1528,7 +1553,7 @@ function createPedidosRoutes() {
           TRIM(L.LCSRAB) AS SERIEALBARAN, L.LCNRAB AS NUMEROALBARAN
         FROM DSED.LACLAE L
         LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-        LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+        LEFT JOIN DSEDAC.CLI C ON C.CODIGOCLIENTE = L.LCCDCL
         WHERE ${whereSql}
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
         OFFSET ${offset} ROWS FETCH FIRST ${limit} ROWS ONLY`;
@@ -1551,9 +1576,6 @@ function createPedidosRoutes() {
         GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
         ORDER BY IMPORTE DESC FETCH FIRST 10 ROWS ONLY`;
 
-      const lastYearFrom = (from.getFullYear() - 1) * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
-      const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
-
       const monthlyByYearSql = `
         SELECT L.LCAADC AS ANO, L.LCMMDC AS MES,
           COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENDIDO,
@@ -1564,11 +1586,13 @@ function createPedidosRoutes() {
         FROM DSED.LACLAE L WHERE ${whereSql}
         GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC DESC, L.LCMMDC`;
 
-      const lastYearWhereSql = [
-        `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
-        ...where.slice(1),
-      ].join(' AND ');
-      const lastYearParams = [lastYearFrom, lastYearTo, ...params.slice(2)];
+      const lastYearFromDate = new Date(from);
+      lastYearFromDate.setFullYear(from.getFullYear() - 1);
+      const lastYearToDate = new Date(to);
+      lastYearToDate.setFullYear(to.getFullYear() - 1);
+      const lastYearDateRange = buildLaclaeDateRangeFilter('L', lastYearFromDate, lastYearToDate);
+      const lastYearWhereSql = [lastYearDateRange.sql, ...filters].join(' AND ');
+      const lastYearParams = [...lastYearDateRange.params, ...filterParams];
       const lastYearTotalSql = `
         SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
         FROM DSED.LACLAE L WHERE ${lastYearWhereSql}`;
@@ -2942,16 +2966,50 @@ function createCommissionsRoutes() {
 
       const result = await performanceCache.getOrFetch(cacheKey, async () => {
         const { queryWithParams: qp } = require('../../../config/db');
+        const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+        const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+        const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
         const salesRows = await qp(`
-          SELECT L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
-          FROM DSED.LACLAE L
-          WHERE L.LCAADC IN (?, ?)
-            AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
-            AND LCSRAB NOT IN ('N', 'Z') AND TPDC = 'LAC'
-            AND R1_T8CDVD = ?
-          GROUP BY L.LCAADC, LCMMDC
+          SELECT S.SALES_YEAR AS YEAR,
+                 S.SALES_MONTH AS MONTH,
+                 SUM(S.SALES) AS SALES
+          FROM (
+            SELECT L.LCAADC AS SALES_YEAR,
+                   L.LCMMDC AS SALES_MONTH,
+                   SUM(L.LCIMVT) AS SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND ${LACLAE_SALES_FILTER}
+              AND ${currentSalesVendorCol} = ?
+            GROUP BY L.LCAADC, L.LCMMDC
+
+            UNION ALL
+
+            SELECT L.LCAADC AS SALES_YEAR,
+                   L.LCMMDC AS SALES_MONTH,
+                   SUM(L.LCIMVT) AS SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC < 3
+              AND ${LACLAE_SALES_FILTER}
+              AND ${previousJanFebVendorCol} = ?
+            GROUP BY L.LCAADC, L.LCMMDC
+
+            UNION ALL
+
+            SELECT L.LCAADC AS SALES_YEAR,
+                   L.LCMMDC AS SALES_MONTH,
+                   SUM(L.LCIMVT) AS SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC >= 3
+              AND ${LACLAE_SALES_FILTER}
+              AND ${previousMarDecVendorCol} = ?
+            GROUP BY L.LCAADC, L.LCMMDC
+          ) S
+          GROUP BY S.SALES_YEAR, S.SALES_MONTH
           ORDER BY YEAR, MONTH
-        `, [selectedYear, prevYear, safeVendedorCode], false);
+        `, [selectedYear, safeVendedorCode, prevYear, safeVendedorCode, prevYear, safeVendedorCode], false);
 
         return { success: true, salesRows, year: selectedYear, vendorCode: safeVendedorCode };
       }, { role: req?.user?.role || 'COMERCIAL', isAllQuery: vendedorCode === 'ALL' });

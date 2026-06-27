@@ -1423,9 +1423,11 @@ describe('DDD pedidos purchase-history-global lastYear scope contract', function
 
   test('lastYear total query reuses whereSql and scope params from current period', function() {
     const block = dddPurchaseHistoryGlobalBlock();
-    expect(block).toMatch(/const lastYearWhereSql[\s\S]*\.\.\.where\.slice\(1\)/);
+    expect(block).toMatch(/const filters = \[/);
+    expect(block).toMatch(/const filterParams = \[\]/);
+    expect(block).toMatch(/const lastYearWhereSql[\s\S]*\.\.\.filters/);
     expect(block).toMatch(/const lastYearTotalSql[\s\S]*WHERE \$\{lastYearWhereSql\}/);
-    expect(block).toMatch(/const lastYearParams = \[lastYearFrom, lastYearTo, \.\.\.params\.slice\(2\)\]/);
+    expect(block).toMatch(/const lastYearParams = \[\.\.\.lastYearDateRange\.params, \.\.\.filterParams\]/);
     expect(block).not.toMatch(/lastYearTotalSql[\s\S]*\[lastYearFrom, lastYearTo\]\s*,\s*false\)/);
   });
 });

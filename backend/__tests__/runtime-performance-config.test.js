@@ -171,6 +171,33 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/setVendorClientSetCache\(cacheKey, cachedResult\)/);
   });
 
+  test('DDD commission and purchase history cold paths use bounded DB2 predicates', () => {
+    const source = fs.readFileSync(path.join(backendRoot, 'src/shared/routes/ddd-adapters.js'), 'utf8');
+    const purchaseHistoryBlock = source.slice(
+      source.indexOf("router.get('/purchase-history-global'"),
+      source.indexOf("router.post('/complementary'", source.indexOf("router.get('/purchase-history-global'")),
+    );
+    const dddCommissionsBlock = source.slice(
+      source.indexOf('function createCommissionsRoutes'),
+      source.indexOf('module.exports'),
+    );
+
+    expect(source).toMatch(/function buildLaclaeDateRangeFilter/);
+    expect(purchaseHistoryBlock).toMatch(/buildLaclaeDateRangeFilter\('L', from, to\)/);
+    expect(purchaseHistoryBlock).toMatch(/L\.LCCDVD IN/);
+    expect(purchaseHistoryBlock).toMatch(/L\.LCCDCL = \?/);
+    expect(purchaseHistoryBlock).toMatch(/L\.LCCDRF = \?/);
+    expect(purchaseHistoryBlock).toMatch(/C\.CODIGOCLIENTE = L\.LCCDCL/);
+    expect(purchaseHistoryBlock).not.toMatch(/LCAADC \* 10000/);
+    expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDVD\) IN/);
+    expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDCL\) =/);
+    expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDRF\) =/);
+    expect(dddCommissionsBlock).toMatch(/UNION ALL/);
+    expect(dddCommissionsBlock).toMatch(/getCommissionVendorColumnExpr\('L', 'sales'\)/);
+    expect(dddCommissionsBlock).toMatch(/getCommissionVendorColumnExpr\('L', 'objective'\)/);
+    expect(dddCommissionsBlock).not.toMatch(/L\.LCAADC IN \(\?, \?\)/);
+  });
+
   test('cobros pending summary uses client aggregation instead of document-wide CVC rebuild', () => {
     const source = fs.readFileSync(
       path.join(backendRoot, 'src/modules/cobros/infrastructure/db2-cobros-repository.js'),
