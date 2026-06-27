@@ -5,29 +5,36 @@
  * monitoring, and auto-restart
  */
 
-const requestedInstances = process.env.PM2_INSTANCES || '1';
+const requestedInstances = process.env.PM2_INSTANCES || '8';
 const parsedInstanceCount = Number.parseInt(requestedInstances, 10);
 const requestedInstanceCount = Number.isFinite(parsedInstanceCount)
     ? parsedInstanceCount
     : (requestedInstances === 'max' ? 9 : 1);
 const isMultiInstance = requestedInstanceCount > 1;
+const totalDbConnectionBudget = Number.parseInt(process.env.DB_TOTAL_CONNECTION_BUDGET || '40', 10);
+const totalDbConcurrencyBudget = Number.parseInt(process.env.DB_TOTAL_QUERY_CONCURRENCY || '32', 10);
+const safeInstanceCount = Math.max(1, requestedInstanceCount);
 const defaultDbPoolMax = isMultiInstance
-    ? (requestedInstanceCount > 8 ? '6' : '12')
-    : '40';
+    ? String(Math.max(1, Math.floor(totalDbConnectionBudget / safeInstanceCount)))
+    : String(totalDbConnectionBudget);
 const defaultDbConcurrency = isMultiInstance
-    ? (requestedInstanceCount > 8 ? '3' : '6')
-    : '16';
+    ? String(Math.max(1, Math.floor(totalDbConcurrencyBudget / safeInstanceCount)))
+    : String(Math.min(16, totalDbConcurrencyBudget));
+const defaultThreadPoolSize = isMultiInstance ? '32' : '128';
+const defaultOldSpaceMb = isMultiInstance ? '384' : '512';
 const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
 
 const runtimePerformanceEnv = {
-    UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE || '128',
-    NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=512',
+    UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE || defaultThreadPoolSize,
+    NODE_OPTIONS: process.env.NODE_OPTIONS || `--max-old-space-size=${defaultOldSpaceMb}`,
     HTTP_COMPRESSION_THRESHOLD: process.env.HTTP_COMPRESSION_THRESHOLD || '1024',
     HTTP_COMPRESSION_LEVEL: process.env.HTTP_COMPRESSION_LEVEL || '6',
     HTTP_REQUEST_TIMEOUT_MS: process.env.HTTP_REQUEST_TIMEOUT_MS || '45000',
     PM2_INSTANCES: requestedInstances,
     PM2_EXEC_MODE: defaultExecMode,
-    DB_POOL_MIN: process.env.DB_POOL_MIN || (isMultiInstance ? '1' : '5'),
+    DB_TOTAL_CONNECTION_BUDGET: String(totalDbConnectionBudget),
+    DB_TOTAL_QUERY_CONCURRENCY: String(totalDbConcurrencyBudget),
+    DB_POOL_MIN: process.env.DB_POOL_MIN || (isMultiInstance ? '0' : '5'),
     DB_POOL_MAX: process.env.DB_POOL_MAX || defaultDbPoolMax,
     DB_POOL_ACQUIRE_MS: process.env.DB_POOL_ACQUIRE_MS || '15000',
     DB_POOL_FAST_FAIL_MS: process.env.DB_POOL_FAST_FAIL_MS || '10000',
