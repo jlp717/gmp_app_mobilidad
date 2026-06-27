@@ -185,8 +185,8 @@ app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
 const HTTP_COMPRESSION_THRESHOLD = parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024;
 const HTTP_COMPRESSION_LEVEL = parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6;
-const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 45000;
-const HTTP_LIST_TIMEOUT_MS = parseInt(process.env.HTTP_LIST_TIMEOUT_MS, 10) || 10000;
+const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 30000;
+const HTTP_LIST_TIMEOUT_MS = parseInt(process.env.HTTP_LIST_TIMEOUT_MS, 10) || HTTP_REQUEST_TIMEOUT_MS;
 const HTTP_ACTION_TIMEOUT_MS = parseInt(process.env.HTTP_ACTION_TIMEOUT_MS, 10) || 20000;
 const HTTP_REPORT_TIMEOUT_MS = parseInt(process.env.HTTP_REPORT_TIMEOUT_MS, 10) || 60000;
 const HEALTH_DB_TIMEOUT_MS = parseInt(process.env.HEALTH_DB_TIMEOUT_MS, 10) || 1500;
@@ -198,7 +198,19 @@ let dbHealthCache = null;
 
 function resolveRequestTimeoutMs(req) {
   const path = req.path || '';
-  if (path.includes('/report') || path.includes('/export') || path.includes('/pdf') || path.includes('/metrics')) {
+  const originalUrl = req.originalUrl || path;
+  if (
+    path.includes('/report') ||
+    path.includes('/export') ||
+    path.includes('/pdf') ||
+    path.includes('/metrics') ||
+    originalUrl.includes('/objectives/evolution') ||
+    originalUrl.includes('/objectives/matrix') ||
+    originalUrl.includes('/objectives/by-client') ||
+    originalUrl.includes('/commissions/summary') ||
+    originalUrl.includes('/cobros/pending-summary') ||
+    originalUrl.includes('/planner/rutero/day')
+  ) {
     return HTTP_REPORT_TIMEOUT_MS;
   }
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
@@ -214,14 +226,43 @@ function requestTimeoutMiddleware(req, res, next) {
   const timeoutMs = resolveRequestTimeoutMs(req);
   req.setTimeout(timeoutMs);
   res.setTimeout(timeoutMs);
+  const originalJson = res.json.bind(res);
+  const originalSend = res.send.bind(res);
+  const originalEnd = res.end.bind(res);
+  function isLateResponse() {
+    return Boolean((res.locals.requestTimedOut && !res.locals.sendingTimeoutResponse) || res.writableEnded || res.destroyed);
+  }
+  res.json = function guardedJson(payload) {
+    if (isLateResponse()) {
+      logger.warn(`[LATE_RESPONSE_SUPPRESSED] ${req.method} ${req.originalUrl || req.path}`);
+      return res;
+    }
+    return originalJson(payload);
+  };
+  res.send = function guardedSend(payload) {
+    if (isLateResponse()) {
+      logger.warn(`[LATE_RESPONSE_SUPPRESSED] ${req.method} ${req.originalUrl || req.path}`);
+      return res;
+    }
+    return originalSend(payload);
+  };
+  res.end = function guardedEnd(...args) {
+    if (isLateResponse()) {
+      return res;
+    }
+    return originalEnd(...args);
+  };
   const timer = setTimeout(() => {
     if (!res.headersSent) {
+      res.locals.requestTimedOut = true;
+      res.locals.sendingTimeoutResponse = true;
       logger.warn(`[REQUEST_TIMEOUT] ${req.method} ${req.path} timeoutMs=${timeoutMs}`);
       res.status(503).json({
         success: false,
         error: 'Request timeout',
         code: 'REQUEST_TIMEOUT',
       });
+      res.locals.sendingTimeoutResponse = false;
     }
   }, timeoutMs);
   res.on('finish', () => clearTimeout(timer));

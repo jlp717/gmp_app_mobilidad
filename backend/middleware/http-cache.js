@@ -257,6 +257,9 @@ function cached(cachePrefix, ttlSeconds) {
 
         const originalJson = res.json.bind(res);
         res.json = function (data) {
+            if (res.headersSent || res.writableEnded || res.locals?.requestTimedOut) {
+                return res;
+            }
             if (
                 res.statusCode >= 200 &&
                 res.statusCode < 300 &&

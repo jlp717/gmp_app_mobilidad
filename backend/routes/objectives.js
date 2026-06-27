@@ -900,13 +900,10 @@ router.get('/evolution', verifyToken, async (req, res) => {
         let inheritedMonthlySales = {};
         const isAll = !effectiveVendorCodes || effectiveVendorCodes === 'ALL';
 
-        let multiVendorTargets = null;
-        if (vendorCodesArray.length > 1) {
-            const targetSets = await Promise.all(
-                vendorCodesArray.map(code => buildVendorObjectiveTargets(code, yearsArray, now))
-            );
-            multiVendorTargets = mergeVendorObjectiveTargets(targetSets, yearsArray);
-        }
+        // Multi-vendor evolution is intentionally calculated from the scoped aggregate
+        // query above. Building targets per vendor triggered N+1 full LACLAE scans and
+        // saturated DB2 under jefe/commercial-team dashboards.
+        const multiVendorTargets = null;
 
         if (!isAll && vendorCodesArray.length === 1) {
             // Check if vendor has any months without data in previous year (for current year objectives)
@@ -964,7 +961,9 @@ router.get('/evolution', verifyToken, async (req, res) => {
         }
 
         // 1. Get Target Config
-        const targetPct = await getVendorTargetConfig(effectiveVendorCodes);
+        const targetPct = await getVendorTargetConfig(
+            vendorCodesArray.length > 1 ? 'ALL' : effectiveVendorCodes
+        );
 
         for (const year of yearsArray) {
             // Calculate Annual Objective first
@@ -2535,26 +2534,81 @@ async function handleByClientRequest(req, res) {
             // Fallback: Use original query with vendedor filter if cache not available
             const vendedorFilterSales = buildColumnaVendedorFilter(effectiveVendorCodes, yearsArray, 'L');
 
-            currentRows = await queryWithParams(`
-                SELECT 
-                    L.LCCDCL as CODE,
-                    COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
-                    MIN(C.DIRECCION) as ADDRESS,
-                    MIN(C.CODIGOPOSTAL) as POSTALCODE,
-                    MIN(C.POBLACION) as CITY,
-                    SUM(L.LCIMVT) as SALES,
-                    SUM(L.LCIMCT) as COST
-                FROM DSED.LACLAE L
-                LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-                WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
-                  AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
-                  AND ${LACLAE_SALES_FILTER}
-                  ${vendedorFilterSales}
-                  ${extraFilters}
-                GROUP BY L.LCCDCL
-                ORDER BY SALES DESC
-                FETCH FIRST ? ROWS ONLY
-            `, [...yearsArray, ...monthsArray, ...extraFilterParams, rowsLimit]);
+            if (!extraFilters) {
+                const salesRows = await queryWithParams(`
+                    SELECT
+                        L.LCCDCL as CODE,
+                        SUM(L.LCIMVT) as SALES,
+                        SUM(L.LCIMCT) as COST
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER}
+                      ${vendedorFilterSales}
+                    GROUP BY L.LCCDCL
+                    ORDER BY SALES DESC
+                    FETCH FIRST ? ROWS ONLY
+                `, [...yearsArray, ...monthsArray, rowsLimit], false);
+
+                const topCodes = salesRows
+                    .map(r => (r.CODE || '').toString().trim())
+                    .filter(Boolean);
+
+                if (topCodes.length > 0) {
+                    const detailsRows = await queryWithParams(`
+                        SELECT
+                            C.CODIGOCLIENTE as CODE,
+                            COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                            C.DIRECCION as ADDRESS,
+                            C.CODIGOPOSTAL as POSTALCODE,
+                            C.POBLACION as CITY
+                        FROM DSEDAC.CLI C
+                        WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
+                          AND C.ANOBAJA = 0
+                    `, topCodes, false);
+
+                    const detailsMap = new Map();
+                    detailsRows.forEach(r => {
+                        const codeValue = (r.CODE || '').toString().trim();
+                        if (codeValue) detailsMap.set(codeValue, r);
+                    });
+
+                    currentRows = salesRows.map(r => {
+                        const codeValue = (r.CODE || '').toString().trim();
+                        const details = detailsMap.get(codeValue) || {};
+                        return {
+                            CODE: codeValue,
+                            NAME: details.NAME,
+                            ADDRESS: details.ADDRESS,
+                            POSTALCODE: details.POSTALCODE,
+                            CITY: details.CITY,
+                            SALES: r.SALES,
+                            COST: r.COST
+                        };
+                    }).filter(r => r.NAME);
+                }
+            } else {
+                currentRows = await queryWithParams(`
+                    SELECT 
+                        L.LCCDCL as CODE,
+                        COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
+                        MIN(C.DIRECCION) as ADDRESS,
+                        MIN(C.CODIGOPOSTAL) as POSTALCODE,
+                        MIN(C.POBLACION) as CITY,
+                        SUM(L.LCIMVT) as SALES,
+                        SUM(L.LCIMCT) as COST
+                    FROM DSED.LACLAE L
+                    LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+                    WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER}
+                      ${vendedorFilterSales}
+                      ${extraFilters}
+                    GROUP BY L.LCCDCL
+                    ORDER BY SALES DESC
+                    FETCH FIRST ? ROWS ONLY
+                `, [...yearsArray, ...monthsArray, ...extraFilterParams, rowsLimit]);
+            }
             totalClientsCount = cachedClientCodeCount && !extraFilters
                 ? cachedClientCodeCount
                 : currentRows.length;

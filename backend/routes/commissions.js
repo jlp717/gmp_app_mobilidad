@@ -578,7 +578,9 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     // Use CASE expression to handle commission sources per row:
     // current-year sales use LCC seller logic; previous-year baselines use the
     // historical transition (Jan/Feb LCC, Mar+ R1 assignment).
-    const vendorColExpr = getCommissionVendorColumnExprForYear(year, 'L');
+    const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+    const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+    const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
     const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
     const placeholders = safeCodes.map(() => '?').join(',');
 
@@ -593,18 +595,53 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     const variantPlaceholders = codeVariants.map(() => '?').join(',');
 
     const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
-        // 1. LACLAE sales for ALL vendors (current + prev year)
-        // NOTE: GROUP BY must use the same month-based CASE expression as SELECT.
-        // Current-year sales use LCCDVD. Prior-year commission baselines use
-        // LCCDVD for Jan/Feb and R1_T8CDVD from March onward.
+        // 1. LACLAE sales for ALL vendors (current + prev year).
+        // Split by direct vendor columns instead of TRIM(CASE...) in the WHERE
+        // clause; the CASE predicate caused full scans and 30-40s dashboard loads.
         queryWithParams(`
-            SELECT TRIM(${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC IN (?, ?)
-              AND ${LACLAE_SALES_FILTER}
-              AND TRIM(${vendorColExpr}) IN (${placeholders})
-            GROUP BY TRIM(${vendorColExpr}), L.LCAADC, LCMMDC
-        `, [year, year - 1, ...safeCodes], false),
+            SELECT S.VENDOR_CODE as VENDOR_CODE,
+                   S.SALES_YEAR as YEAR,
+                   S.SALES_MONTH as MONTH,
+                   SUM(S.SALES) as SALES
+            FROM (
+                SELECT TRIM(${currentSalesVendorCol}) as VENDOR_CODE,
+                       L.LCAADC as SALES_YEAR,
+                       L.LCMMDC as SALES_MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND ${LACLAE_SALES_FILTER}
+                  AND TRIM(${currentSalesVendorCol}) IN (${placeholders})
+                GROUP BY TRIM(${currentSalesVendorCol}), L.LCAADC, L.LCMMDC
+
+                UNION ALL
+
+                SELECT TRIM(${previousJanFebVendorCol}) as VENDOR_CODE,
+                       L.LCAADC as SALES_YEAR,
+                       L.LCMMDC as SALES_MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND L.LCMMDC < 3
+                  AND ${LACLAE_SALES_FILTER}
+                  AND TRIM(${previousJanFebVendorCol}) IN (${placeholders})
+                GROUP BY TRIM(${previousJanFebVendorCol}), L.LCAADC, L.LCMMDC
+
+                UNION ALL
+
+                SELECT TRIM(${previousMarDecVendorCol}) as VENDOR_CODE,
+                       L.LCAADC as SALES_YEAR,
+                       L.LCMMDC as SALES_MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND L.LCMMDC >= 3
+                  AND ${LACLAE_SALES_FILTER}
+                  AND TRIM(${previousMarDecVendorCol}) IN (${placeholders})
+                GROUP BY TRIM(${previousMarDecVendorCol}), L.LCAADC, L.LCMMDC
+            ) S
+            GROUP BY S.VENDOR_CODE, S.SALES_YEAR, S.SALES_MONTH
+        `, [year, ...safeCodes, year - 1, ...safeCodes, year - 1, ...safeCodes], false),
 
         // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
         // Use codeVariants (both padded + unpadded) to match however codes are stored in VENTAS_B.

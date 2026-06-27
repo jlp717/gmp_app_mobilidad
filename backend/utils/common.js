@@ -1045,9 +1045,25 @@ function createErrorResponse(error, userMessage = 'Error interno del servidor', 
 function handleRouteError(error, res, userMessage = 'Error interno del servidor', statusCode = 500, extras = {}) {
     // Log full error details internally (never sent to client)
     logger.error(`[ROUTE ERROR] ${error.message}${error.stack ? '\n' + error.stack.substring(0, 500) : ''}`);
+
+    if (res.headersSent || res.writableEnded || res.locals?.requestTimedOut) {
+        logger.warn(`[ROUTE ERROR] Response already completed; suppressing duplicate error response: ${error.message}`);
+        return;
+    }
+
+    const dbUnavailableCodes = new Set(['DB_CIRCUIT_OPEN', 'DB_QUERY_QUEUE_TIMEOUT', 'DB_QUERY_TIMEOUT']);
+    const safeStatusCode = dbUnavailableCodes.has(error?.code) ? 503 : statusCode;
+    const safeUserMessage = dbUnavailableCodes.has(error?.code)
+        ? 'Base de datos temporalmente no disponible'
+        : userMessage;
     
+    const responseExtras = { ...extras };
+    if (error?.code || extras.code) {
+        responseExtras.code = error?.code || extras.code;
+    }
+
     // Send safe response to client
-    res.status(statusCode).json(createErrorResponse(error, userMessage, extras));
+    res.status(safeStatusCode).json(createErrorResponse(error, safeUserMessage, responseExtras));
 }
 
 module.exports = {

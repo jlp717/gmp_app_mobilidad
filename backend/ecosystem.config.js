@@ -93,8 +93,8 @@ module.exports = {
             // ==================== MEMORY & RESTART ====================
             max_memory_restart: process.env.PM2_MAX_MEMORY_RESTART || '512M',
             min_uptime: '10s', // Minimum uptime before considering "started"
-            max_restarts: 10, // Max restarts within min_uptime
-            restart_delay: 4000, // Delay between restarts
+            max_restarts: parseInt(process.env.PM2_MAX_RESTARTS, 10) || 50,
+            restart_delay: parseInt(process.env.PM2_RESTART_DELAY_MS, 10) || 1000,
 
             // ==================== LOGGING ====================
             log_file: './logs/combined.log',
@@ -116,7 +116,7 @@ module.exports = {
 
             // ==================== PROCESS MANAGEMENT ====================
             autorestart: true,
-            exp_backoff_restart_delay: 100, // Exponential backoff
+            exp_backoff_restart_delay: parseInt(process.env.PM2_EXP_BACKOFF_RESTART_DELAY_MS, 10) || 500,
 
             // ==================== GRACEFUL SHUTDOWN ====================
             shutdown_with_message: true,
