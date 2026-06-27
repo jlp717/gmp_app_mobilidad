@@ -74,6 +74,7 @@ describe('runtime performance configuration', () => {
 
     expect(source).toMatch(/scoped aggregate/);
     expect(source).toMatch(/fetchObjectiveEvolutionRows/);
+    expect(source).toMatch(/getClientCodesFromCache\(safeVendorCodes\[0\]\)/);
     expect(source).toMatch(/TRIM\(L\.R1_T8CDVD\) IN/);
     expect(source).not.toMatch(/vendorCodesArray\.map\(code => buildVendorObjectiveTargets/);
   });

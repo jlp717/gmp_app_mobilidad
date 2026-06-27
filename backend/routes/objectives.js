@@ -641,6 +641,30 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
         `, uniqueYears);
     }
 
+    if (safeVendorCodes.length === 1) {
+        const cachedClientCodes = getClientCodesFromCache(safeVendorCodes[0]);
+        if (Array.isArray(cachedClientCodes) && cachedClientCodes.length > 0 && cachedClientCodes.length <= 300) {
+            const safeClientCodes = cachedClientCodes.map(code => sanitizeForSQL(code)).filter(Boolean);
+            if (safeClientCodes.length > 0) {
+                const clientPlaceholders = safeClientCodes.map(() => '?').join(',');
+                return queryWithParams(`
+                    SELECT
+                        L.LCAADC as YEAR,
+                        L.LCMMDC as MONTH,
+                        SUM(L.LCIMVT) as SALES,
+                        SUM(L.LCIMCT) as COST,
+                        COUNT(DISTINCT L.LCCDCL) as CLIENTS
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC IN (${yearPlaceholders})
+                      AND ${LACLAE_SALES_FILTER}
+                      AND L.LCCDCL IN (${clientPlaceholders})
+                    GROUP BY L.LCAADC, L.LCMMDC
+                    ORDER BY L.LCAADC, L.LCMMDC
+                `, [...uniqueYears, ...safeClientCodes], false);
+            }
+        }
+    }
+
     const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
     return queryWithParams(`
         SELECT
