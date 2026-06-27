@@ -171,7 +171,10 @@ describe('runtime performance configuration', () => {
     const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
 
     expect(source).toMatch(/Promise\.all\(\[vendorRowsPromise, allVendorRowsPromise\]\)/);
+    expect(source).toMatch(/LCCDCL = CAST\(\? AS CHAR\(10\)\)/);
+    expect(source).toMatch(/R1_T8CDVD = CAST\(\? AS CHAR\(2\)\)/);
     expect(source).toMatch(/LEFT JOIN DSEDAC\.FAM F ON A\.CODIGOFAMILIA = F\.CODIGOFAMILIA/);
+    expect(source).not.toMatch(/WHERE TRIM\(LCCDCL\) = \?/);
     expect(source).not.toMatch(/MAX\(TRIM\(DESCRIPCIONFAMILIA\)\)/);
   });
 

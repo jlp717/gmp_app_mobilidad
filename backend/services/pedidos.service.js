@@ -957,9 +957,9 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
             SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
                    R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
             FROM DSED.LACLAE
-            WHERE TRIM(LCCDCL) = ?
+            WHERE LCCDCL = CAST(? AS CHAR(10))
               AND LCAADC >= ?
-              AND TRIM(R1_T8CDVD) = ?
+              AND R1_T8CDVD = CAST(? AS CHAR(2))
             FETCH FIRST 20 ROWS ONLY`,
                 [cleanClient, currentYear - 1, cleanVendor],
                 false
@@ -970,7 +970,7 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
                 SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
                        R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
                 FROM DSED.LACLAE
-                WHERE TRIM(LCCDCL) = ?
+                WHERE LCCDCL = CAST(? AS CHAR(10))
                   AND LCAADC >= ?
                 FETCH FIRST 20 ROWS ONLY`,
                 [cleanClient, currentYear - 1],
