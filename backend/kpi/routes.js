@@ -438,14 +438,24 @@ router.get('/loads/:loadId/audit', async (req, res) => {
     const { loadId } = req.params;
 
     const loadResult = await kpiQuery(
-      'SELECT * FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [loadId]
+      `SELECT ID, LOAD_ID, STATUS, FILES_PROCESSED, TOTAL_ALERTS, ERRORS, STARTED_AT, COMPLETED_AT, CHECKSUM, CREATED_AT
+       FROM ${SCHEMA}.KPI_LOADS
+       WHERE LOAD_ID = ?
+       FETCH FIRST 1 ROWS ONLY`,
+      [loadId]
     );
     if (loadResult.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Carga no encontrada' });
     }
 
     const filesResult = await kpiQuery(
-      'SELECT * FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ? ORDER BY PROCESSED_AT', [loadId]
+      `SELECT ID, LOAD_ID, FILENAME, FILE_SIZE, FILE_HASH, ROWS_TOTAL, ROWS_PARSED, ROWS_SKIPPED,
+              ALERTS_GENERATED, PARSE_ERRORS, PROCESSED_AT
+       FROM ${SCHEMA}.KPI_FILE_AUDIT
+       WHERE LOAD_ID = ?
+       ORDER BY PROCESSED_AT
+       FETCH FIRST 500 ROWS ONLY`,
+      [loadId]
     );
 
     res.json({

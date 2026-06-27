@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
@@ -996,7 +997,7 @@ router.get('/history/signature', verifyToken, async (req, res) => {
 
                 for (const fullPath of pathsToTry) {
                     if (fs.existsSync(fullPath)) {
-                        const fileBuffer = fs.readFileSync(fullPath);
+                        const fileBuffer = await fsPromises.readFile(fullPath);
                         if (fileBuffer.length > 50) {
                             firmaBase64 = fileBuffer.toString('base64');
                             signatureSource = 'FILE';
@@ -1413,7 +1414,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                     for (const basePath of basePaths) {
                         const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
                         if (fs.existsSync(fullPath)) {
-                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            signatureBase64 = (await fsPromises.readFile(fullPath)).toString('base64');
                             signatureSource = 'FILE';
                             logger.info(`[PDF] Found signature file at ${fullPath}`);
                             break;
@@ -2250,7 +2251,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
                     for (const basePath of basePaths) {
                         const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
                         if (fs.existsSync(fullPath)) {
-                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            signatureBase64 = (await fsPromises.readFile(fullPath)).toString('base64');
                             signatureSource = 'FILE';
                             break;
                         }

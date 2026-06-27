@@ -36,6 +36,22 @@ const DEFAULT_FINANCE_SCHEMA_COLUMNS = [
   ['REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
   ['REPARTIDOR_COBROS', 'OPERADOR'],
   ['REPARTIDOR_COBROS', 'CREATED_AT'],
+  ['REPARTIDOR_COBROS', 'ENTREGA_APP_ID'],
+  ['REPARTIDOR_COBROS', 'LIQUIDADO_SN'],
+  ['REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR'],
+  ['REPARTIDOR_COBROS', 'CODIGO_CLIENTE'],
+  ['REPARTIDOR_COBROS', 'TIPO_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'ORIGEN_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'SUBEMPRESA_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'EJERCICIO_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'SERIE_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'TERMINAL_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'NUMERO_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'XDE_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'DEX_DOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'FORMA_PAGO'],
+  ['REPARTIDOR_COBROS', 'IMPORTE_COBRADO'],
+  ['REPARTIDOR_COBROS', 'IMPORTE_PENDIENTE'],
   ['REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR'],
   ['REPARTIDOR_FINANCIAL_BALANCES', 'SALDO_PENDIENTE'],
   ['REPARTIDOR_FINANCIAL_BALANCES', 'UPDATED_BY'],
@@ -155,6 +171,47 @@ async function getFinanceSchemaInfo() {
     _financeSchemaInfo = info;
   }
   return info;
+}
+
+function cobroReplaySelect(info) {
+  const candidates = [
+    'ID',
+    'ENTREGA_APP_ID',
+    'CODIGOVENDEDOR',
+    'CODIGO_REPARTIDOR',
+    'CODIGOCLIENTEALBARAN',
+    'CODIGO_CLIENTE',
+    'TIPODOCUMENTO',
+    'TIPO_DOCUMENTO',
+    'ORIGENDOCUMENTO',
+    'ORIGEN_DOCUMENTO',
+    'SUBEMPRESADOCUMENTO',
+    'SUBEMPRESA_DOCUMENTO',
+    'EJERCICIODOCUMENTO',
+    'EJERCICIO_DOCUMENTO',
+    'SERIEDOCUMENTO',
+    'SERIE_DOCUMENTO',
+    'TERMINALDOCUMENTO',
+    'TERMINAL_DOCUMENTO',
+    'NUMERODOCUMENTO',
+    'NUMERO_DOCUMENTO',
+    'XDEDOCUMENTO',
+    'XDE_DOCUMENTO',
+    'DEXDOCUMENTO',
+    'DEX_DOCUMENTO',
+    'CODIGOFORMAPAGO',
+    'FORMA_PAGO',
+    'PANTALLA_ORIGEN',
+    'IMPORTEVENCIMIENTO',
+    'IMPORTE_COBRADO',
+    'IMPORTEPENDIENTE',
+    'IMPORTE_PENDIENTE',
+    'LIQUIDADO_SN',
+    'NUMEROLIQUIDACION',
+    'CREATED_AT',
+  ];
+  const columns = candidates.filter((column) => info.has('REPARTIDOR_COBROS', column));
+  return columns.length > 0 ? columns.join(', ') : 'ID, IDEMPOTENCY_TOKEN';
 }
 
 async function getCobrosSchemaInfo() {
@@ -1268,7 +1325,34 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
   params.push(candidateLimit);
 
   const rows = await queryWithParams(`
-    SELECT *
+    SELECT
+      TIPODOCUMENTO,
+      ORIGENDOCUMENTO,
+      SUBEMPRESADOCUMENTO,
+      EJERCICIODOCUMENTO,
+      SERIEDOCUMENTO,
+      TERMINALDOCUMENTO,
+      NUMERODOCUMENTO,
+      XDEDOCUMENTO,
+      DEXDOCUMENTO,
+      CODIGOCLIENTEALBARAN,
+      NOMBRE_CLIENTE,
+      NOMBREALTERNATIVO,
+      POBLACION,
+      DIAVENCIMIENTO,
+      MESVENCIMIENTO,
+      ANOVENCIMIENTO,
+      FACTURA_BASE_DIA,
+      FACTURA_BASE_MES,
+      FACTURA_BASE_ANO,
+      ALBARAN_BASE_DIA,
+      ALBARAN_BASE_MES,
+      ALBARAN_BASE_ANO,
+      DIASLIMITECREDITO,
+      DIASLIMITECREDITOCONFECHAALB,
+      IMPORTEVENCIMIENTO,
+      IMPORTEPENDIENTE,
+      RN
     FROM (
       SELECT
         CVC.TIPODOCUMENTO,
@@ -1386,8 +1470,9 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
 
 async function registerCobro(input) {
   const replayExisting = async () => {
+    const info = await getFinanceSchemaInfo();
     const existingRows = await queryWithParams(`
-      SELECT *
+      SELECT ${cobroReplaySelect(info)}
       FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
@@ -1400,9 +1485,10 @@ async function registerCobro(input) {
   try {
     const result = await withTransaction(async (conn) => {
       await lockCobrosForPayment(conn);
+      const info = await getFinanceSchemaInfo();
 
       const existingRows = await conn.query(`
-        SELECT *
+        SELECT ${cobroReplaySelect(info)}
         FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
         WHERE IDEMPOTENCY_TOKEN = ?
         FETCH FIRST 1 ROW ONLY
@@ -1415,7 +1501,6 @@ async function registerCobro(input) {
       }
 
       await validateCobroDocument(input, conn);
-      const info = await getFinanceSchemaInfo();
       await assertDocumentNotAlreadyCollected(conn, info, input);
       const insert = cobroInsertStatement(info, input);
       await conn.query(insert.sql, insert.params);
@@ -1517,8 +1602,9 @@ async function validateCobroDocument(input, conn = null) {
 
 async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
   async function replayExisting() {
+    const info = await getFinanceSchemaInfo();
     const existingRows = await queryWithParams(`
-      SELECT *
+      SELECT ${cobroReplaySelect(info)}
       FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
@@ -1549,12 +1635,13 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
   try {
     return await withTransaction(async (conn) => {
       await lockCobrosForPayment(conn);
+      const info = await getFinanceSchemaInfo();
       if (isDeliveryStatusAvailable()) {
         await conn.query(`LOCK TABLE ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS IN EXCLUSIVE MODE`);
       }
 
       const tokenRows = await conn.query(`
-        SELECT *
+        SELECT ${cobroReplaySelect(info)}
         FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
         WHERE IDEMPOTENCY_TOKEN = ?
         FETCH FIRST 1 ROW ONLY
@@ -1603,7 +1690,6 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
       }, conn);
 
-      const info = await getFinanceSchemaInfo();
       await assertDocumentNotAlreadyCollected(conn, info, {
         ...cobro,
         codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
@@ -2634,7 +2720,7 @@ async function reverseCobro({
   }
 
   const existingRows = await queryWithParams(
-    `SELECT * FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+    `SELECT ${cobroReplaySelect(await getFinanceSchemaInfo())} FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
      WHERE IDEMPOTENCY_TOKEN = ?
      FETCH FIRST 1 ROW ONLY`,
     [token], false, false,

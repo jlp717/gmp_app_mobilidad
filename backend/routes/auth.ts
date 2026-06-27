@@ -32,6 +32,7 @@ import { loginLimiter, validateBody, validationSchemas, detectSqlInjection } fro
 import { auditLogin, getClientIP } from '../middleware/audit';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import path from 'path';
 const { getVendorVisibilityScope } = require('../utils/common');
 
@@ -55,10 +56,10 @@ if (!fs.existsSync(lockoutsDir)) {
     fs.mkdirSync(lockoutsDir, { recursive: true, mode: 0o700 }); // Restrictive permissions
 }
 
-function loadLockouts(): Record<string, LockoutInfo> {
+async function loadLockouts(): Promise<Record<string, LockoutInfo>> {
     try {
         if (fs.existsSync(lockoutsPath)) {
-            const data = fs.readFileSync(lockoutsPath, 'utf8');
+            const data = await fsPromises.readFile(lockoutsPath, 'utf8');
             return JSON.parse(data);
         }
     } catch (e) {
@@ -67,10 +68,10 @@ function loadLockouts(): Record<string, LockoutInfo> {
     return {};
 }
 
-function saveLockouts(lockouts: Record<string, LockoutInfo>): void {
+async function saveLockouts(lockouts: Record<string, LockoutInfo>): Promise<void> {
     try {
         // Write with restrictive file permissions
-        fs.writeFileSync(lockoutsPath, JSON.stringify(lockouts, null, 2), {
+        await fsPromises.writeFile(lockoutsPath, JSON.stringify(lockouts, null, 2), {
             mode: 0o600, // Owner read/write only
             encoding: 'utf8'
         });
@@ -94,13 +95,13 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 /**
  * Handles failed login attempt with progressive lockout
  */
-function handleFailedLogin(
+async function handleFailedLogin(
     res: Response,
     safeUser: string,
     requestId: string,
     message: string
-): Response {
-    const lockouts = loadLockouts();
+): Promise<Response> {
+    const lockouts = await loadLockouts();
     const current = lockouts[safeUser] || { count: 0, lastAttempt: 0 };
     current.count += 1;
     current.lastAttempt = Date.now();
@@ -112,7 +113,7 @@ function handleFailedLogin(
     }
     
     lockouts[safeUser] = current;
-    saveLockouts(lockouts);
+    await saveLockouts(lockouts);
 
     const remainingAttempts = MAX_FAILED_ATTEMPTS - current.count;
     
@@ -170,7 +171,7 @@ router.post('/login',
             }
 
             // Check if account is locked out
-            const lockouts = loadLockouts();
+            const lockouts = await loadLockouts();
             const lockoutInfo = lockouts[safeUser];
             
             if (lockoutInfo && lockoutInfo.lockedUntil) {
@@ -186,7 +187,7 @@ router.post('/login',
                 } else {
                     // Lockout expired, reset
                     delete lockouts[safeUser];
-                    saveLockouts(lockouts);
+                    await saveLockouts(lockouts);
                 }
             }
 
@@ -355,9 +356,9 @@ router.post('/login',
             logger.info(`[${requestId}] 🔐 Login successful for ${vendedorName} (${vendedorCode})`);
             
             // Clear lockout on success (load fresh in case it changed)
-            const freshLockouts = loadLockouts();
+            const freshLockouts = await loadLockouts();
             delete freshLockouts[safeUser];
-            saveLockouts(freshLockouts);
+            await saveLockouts(freshLockouts);
 
             // Determine final role
             let finalRole = 'COMERCIAL';

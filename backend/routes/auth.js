@@ -21,6 +21,7 @@ const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection, bruteForc
 const { auditLogin, getClientIP } = require('../middleware/audit');
 const bcrypt = require('bcrypt');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const { getVendorVisibilityScope } = require('../utils/common');
 
@@ -35,10 +36,10 @@ if (!fs.existsSync(lockoutsDir)) {
     fs.mkdirSync(lockoutsDir, { recursive: true, mode: 0o700 });
 }
 
-function loadLockouts() {
+async function loadLockouts() {
     try {
         if (fs.existsSync(lockoutsPath)) {
-            return JSON.parse(fs.readFileSync(lockoutsPath, 'utf8'));
+            return JSON.parse(await fsPromises.readFile(lockoutsPath, 'utf8'));
         }
     } catch (e) {
         logger.warn(`[Auth] Failed to load lockouts: ${e.message}`);
@@ -46,9 +47,9 @@ function loadLockouts() {
     return {};
 }
 
-function saveLockouts(lockouts) {
+async function saveLockouts(lockouts) {
     try {
-        fs.writeFileSync(lockoutsPath, JSON.stringify(lockouts, null, 2), { mode: 0o600 });
+        await fsPromises.writeFile(lockoutsPath, JSON.stringify(lockouts, null, 2), { mode: 0o600 });
     } catch (e) {
         logger.error(`[Auth] Failed to save lockouts: ${e.message}`);
     }
@@ -62,8 +63,8 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 // HELPERS
 // =============================================================================
 
-function handleFailedLogin(res, safeUser, requestId, message) {
-    const lockouts = loadLockouts();
+async function handleFailedLogin(res, safeUser, requestId, message) {
+    const lockouts = await loadLockouts();
     const current = lockouts[safeUser] || { count: 0, lastAttempt: 0 };
     current.count += 1;
     current.lastAttempt = Date.now();
@@ -74,7 +75,7 @@ function handleFailedLogin(res, safeUser, requestId, message) {
     }
     
     lockouts[safeUser] = current;
-    saveLockouts(lockouts);
+    await saveLockouts(lockouts);
 
     const remainingAttempts = MAX_FAILED_ATTEMPTS - current.count;
     
@@ -127,7 +128,7 @@ router.post('/login',
             }
 
             // Check lockout
-            const lockouts = loadLockouts();
+            const lockouts = await loadLockouts();
             const lockoutInfo = lockouts[safeUser];
             
             if (lockoutInfo && lockoutInfo.lockedUntil) {
@@ -142,7 +143,7 @@ router.post('/login',
                     });
                 } else {
                     delete lockouts[safeUser];
-                    saveLockouts(lockouts);
+                    await saveLockouts(lockouts);
                 }
             }
 
@@ -312,9 +313,9 @@ router.post('/login',
             logger.info(`[${requestId}] Login successful for ${vendedorName} (${vendedorCode})`);
 
             // Clear lockout on success
-            const successLockouts = loadLockouts();
+            const successLockouts = await loadLockouts();
             delete successLockouts[safeUser];
-            saveLockouts(successLockouts);
+            await saveLockouts(successLockouts);
 
             let finalRole = 'COMERCIAL';
             if (isJefeVentas) finalRole = 'JEFE_VENTAS';

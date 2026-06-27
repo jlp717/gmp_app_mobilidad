@@ -165,7 +165,10 @@ async function loadCommissionConfig(year: number): Promise<CommissionConfig> {
   return queryCache.getOrSet(cacheKey, async () => {
     try {
       const rows = await odbcPool.query<Record<string, unknown>[]>(`
-        SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY
+        SELECT IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT
+        FROM JAVIER.COMM_CONFIG
+        WHERE YEAR = ?
+        FETCH FIRST 1 ROWS ONLY
       `, [year]);
 
       if (rows && rows.length > 0) {

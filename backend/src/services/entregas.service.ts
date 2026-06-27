@@ -270,7 +270,7 @@ class EntregasService {
             } catch {
                 // Tabla puede no existir, usar log local
                 logger.warn('[ENTREGAS] Tabla ENTREGAS_LOG no disponible, usando log local');
-                this.guardarLogLocal({
+                await this.guardarLogLocal({
                     id: registroId,
                     ...params,
                     fechaHora: ahora
@@ -361,7 +361,7 @@ class EntregasService {
             const filename = `firma_${entregaId}_${Date.now()}.png`;
             const destPath = path.join(this.uploadsPath, 'signatures', filename);
 
-            fs.writeFileSync(destPath, buffer);
+            await fs.promises.writeFile(destPath, buffer);
 
             logger.info(`[ENTREGAS] Firma guardada: ${filename}`);
             return destPath;
@@ -395,20 +395,20 @@ class EntregasService {
     /**
      * Guarda log local cuando la BD no está disponible
      */
-    private guardarLogLocal(registro: Record<string, unknown>): void {
+    private async guardarLogLocal(registro: Record<string, unknown>): Promise<void> {
         const logPath = path.join(this.uploadsPath, 'entregas_log.json');
         let logs: Record<string, unknown>[] = [];
 
         if (fs.existsSync(logPath)) {
             try {
-                logs = JSON.parse(fs.readFileSync(logPath, 'utf8'));
+                logs = JSON.parse(await fs.promises.readFile(logPath, 'utf8'));
             } catch {
                 logs = [];
             }
         }
 
         logs.push(registro);
-        fs.writeFileSync(logPath, JSON.stringify(logs, null, 2));
+        await fs.promises.writeFile(logPath, JSON.stringify(logs, null, 2));
     }
 
     /**

@@ -1311,7 +1311,16 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
     const placeholders = pricingPlaceholders(codes);
 
     const productSql = `
-        SELECT *
+        SELECT
+            CODIGOARTICULO,
+            UNIDAD_BASE,
+            FECHA_DESDE,
+            FECHA_HASTA,
+            COSTE_FABRICACION,
+            MARGEN_OBJETIVO_PCT,
+            PRECIO_MINIMO,
+            SOURCE,
+            RN
         FROM (
             SELECT
                 TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
@@ -1351,7 +1360,15 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
     if (!trimClient) return { productPricing, clientPrices };
 
     const promoPriceSql = `
-        SELECT *
+        SELECT
+            CODIGOARTICULO,
+            PRECIO_ESPECIAL,
+            PROMO_ID,
+            IS_SPECIAL_PRICE,
+            PERMITE_BAJO_MINIMO,
+            MOTIVO,
+            SOURCE,
+            RN
         FROM (
             SELECT
                 TRIM(P.CODIGOARTICULO) AS CODIGOARTICULO,
@@ -1414,7 +1431,14 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
     if (missingHistoryCodes.length > 0) {
         const historyPlaceholders = pricingPlaceholders(missingHistoryCodes);
         const historySql = `
-            SELECT *
+            SELECT
+                CODIGOARTICULO,
+                PRECIO_CLIENTE,
+                IS_SPECIAL_PRICE,
+                PERMITE_BAJO_MINIMO,
+                MOTIVO,
+                SOURCE,
+                RN
             FROM (
                 SELECT
                     TRIM(L.CODIGOARTICULO) AS CODIGOARTICULO,

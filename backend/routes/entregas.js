@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -872,7 +873,15 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
         // Parameterized query to prevent SQL injection
         const itemParams = [numero, ejercicio];
         let itemsSql = `
-            SELECT *
+            SELECT
+                SECUENCIA,
+                CODIGOARTICULO,
+                DESCRIPCION,
+                CANTIDADUNIDADES,
+                CANTIDADENVASES,
+                CANTIDADCAJAS,
+                IMPORTEVENTA,
+                UNIDADMEDIDA
             FROM DSEDAC.LAC
             WHERE NUMEROALBARAN = ? AND EJERCICIOALBARAN = ?
         `;
@@ -1012,7 +1021,10 @@ router.post('/update', verifyToken, async (req, res) => {
         let previousState = null;
         try {
             const prev = await queryWithParams(
-                `SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ${lookupColumn} = ?`,
+                `SELECT ID, STATUS, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, OPERADOR, PANTALLA_ORIGEN, REPARTIDOR_ID
+                 FROM JAVIER.DELIVERY_STATUS
+                 WHERE ${lookupColumn} = ?
+                 FETCH FIRST 1 ROWS ONLY`,
                 [lookupKey]
             );
             if (prev.length > 0) previousState = prev[0];
@@ -1129,7 +1141,7 @@ router.post('/uploads/signature', verifyToken, async (req, res) => {
 
         const organizedDir = path.join(photosDir, year, month);
         if (!fs.existsSync(organizedDir)) {
-            fs.mkdirSync(organizedDir, { recursive: true });
+            await fsPromises.mkdir(organizedDir, { recursive: true });
         }
 
         // Clean entregaId for filename (replace special chars)
@@ -1146,7 +1158,7 @@ router.post('/uploads/signature', verifyToken, async (req, res) => {
 
         // Save base64 to file
         const base64Data = firma.replace(/^data:image\/png;base64,/, "");
-        fs.writeFileSync(filePath, base64Data, 'base64');
+        await fsPromises.writeFile(filePath, base64Data, 'base64');
 
         logger.info(`[SIGN] Saved signature: ${relativePath} for delivery ${entregaId}`);
 

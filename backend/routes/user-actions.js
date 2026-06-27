@@ -106,7 +106,7 @@ router.get('/stats', async (req, res) => {
         let actionsCount = 0, installsCount = 0, uniqueUsers = new Set();
 
         if (fs.existsSync(actionsFile)) {
-            const lines = fs.readFileSync(actionsFile, 'utf8').split('\n').filter(Boolean);
+            const lines = (await fsPromises.readFile(actionsFile, 'utf8')).split('\n').filter(Boolean);
             actionsCount = lines.length;
             lines.forEach(line => {
                 try {
@@ -116,7 +116,7 @@ router.get('/stats', async (req, res) => {
             });
         }
         if (fs.existsSync(installsFile)) {
-            installsCount = fs.readFileSync(installsFile, 'utf8').split('\n').filter(Boolean).length;
+            installsCount = (await fsPromises.readFile(installsFile, 'utf8')).split('\n').filter(Boolean).length;
         }
 
         res.json({

@@ -209,7 +209,7 @@ function getSnapshotMonths(year, startMonth, endMonth) {
 async function getCommissionConfig(year) {
     try {
         const rows = await queryWithParams(`
-            SELECT *
+            SELECT IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT
             FROM JAVIER.COMM_CONFIG
             WHERE YEAR = ?
             FETCH FIRST 1 ROWS ONLY

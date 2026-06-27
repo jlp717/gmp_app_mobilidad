@@ -212,7 +212,10 @@ class CobrosService {
 
       // Obtener presupuesto
       const presupuestoResult = await odbcPool.query<Record<string, unknown>[]>(
-        `SELECT * FROM JAVIER.PRESUPUESTOS WHERE ID = ? AND ESTADO = 'PENDIENTE'`,
+        `SELECT ID
+        FROM JAVIER.PRESUPUESTOS
+        WHERE ID = ? AND ESTADO = 'PENDIENTE'
+        FETCH FIRST 1 ROWS ONLY`,
         [idPresupuesto]
       );
 
