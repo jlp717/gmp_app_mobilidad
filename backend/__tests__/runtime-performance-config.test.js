@@ -73,6 +73,8 @@ describe('runtime performance configuration', () => {
     const source = fs.readFileSync(path.join(backendRoot, 'routes/objectives.js'), 'utf8');
 
     expect(source).toMatch(/scoped aggregate/);
+    expect(source).toMatch(/fetchObjectiveEvolutionRows/);
+    expect(source).toMatch(/TRIM\(L\.R1_T8CDVD\) IN/);
     expect(source).not.toMatch(/vendorCodesArray\.map\(code => buildVendorObjectiveTargets/);
   });
 

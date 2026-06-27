@@ -619,6 +619,68 @@ function mergeVendorObjectiveTargets(targetSets, yearsArray) {
     return { monthlyObjectiveByYear, annualObjectiveByYear };
 }
 
+async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears) {
+    const yearPlaceholders = uniqueYears.map(() => '?').join(',');
+    const safeVendorCodes = [...new Set((vendorCodesArray || [])
+        .map(code => sanitizeForSQL(code))
+        .filter(Boolean))];
+
+    if (safeVendorCodes.length === 0 || !effectiveVendorCodes || effectiveVendorCodes === 'ALL') {
+        return queryWithParams(`
+            SELECT 
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                COUNT(DISTINCT L.LCCDCL) as CLIENTS
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${yearPlaceholders})
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY YEAR, MONTH
+        `, uniqueYears);
+    }
+
+    const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
+    return queryWithParams(`
+        SELECT
+            S.YEAR as YEAR,
+            S.MONTH as MONTH,
+            SUM(S.SALES) as SALES,
+            SUM(S.COST) as COST,
+            COUNT(DISTINCT S.CLIENT_CODE) as CLIENTS
+        FROM (
+            SELECT
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                L.LCCDCL as CLIENT_CODE,
+                L.LCIMVT as SALES,
+                L.LCIMCT as COST
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${yearPlaceholders})
+              AND L.LCMMDC < 3
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(L.LCCDVD) IN (${vendorPlaceholders})
+
+            UNION ALL
+
+            SELECT
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                L.LCCDCL as CLIENT_CODE,
+                L.LCIMVT as SALES,
+                L.LCIMCT as COST
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${yearPlaceholders})
+              AND L.LCMMDC >= 3
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(L.R1_T8CDVD) IN (${vendorPlaceholders})
+        ) S
+        GROUP BY S.YEAR, S.MONTH
+        ORDER BY S.YEAR, S.MONTH
+    `, [...uniqueYears, ...safeVendorCodes, ...uniqueYears, ...safeVendorCodes]);
+}
+
 // =============================================================================
 // OBJECTIVES SUMMARY (Quota vs Actual)
 // =============================================================================
@@ -844,9 +906,6 @@ router.get('/evolution', verifyToken, async (req, res) => {
         const yearsFilter = uniqueYears.join(',');
         const vendorCodesArray = parseVendorCodes(effectiveVendorCodes);
 
-        // Use Date-Aware filter (handles LCCDVD for <March 2026 and R1_T8CDVD for >=March 2026)
-        const vendedorFilter = buildColumnaVendedorFilter(effectiveVendorCodes, uniqueYears, 'L');
-
         // Get Active Days for calculating pace 
         // Logic: if multiple vendors selected, we might average or select first? 
         // User is usually viewing ONE vendor or ALL. 
@@ -866,21 +925,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
 
         // Single optimized query - get monthly totals per year
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
-        const rows = await queryWithParams(`
-            SELECT 
-                L.LCAADC as YEAR,
-                L.LCMMDC as MONTH,
-                SUM(L.LCIMVT) as SALES,
-                SUM(L.LCIMCT) as COST,
-                COUNT(DISTINCT L.LCCDCL) as CLIENTS
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
-              AND ${LACLAE_SALES_FILTER}
-              ${vendedorFilter}
-            GROUP BY L.LCAADC, L.LCMMDC
-            ORDER BY YEAR, MONTH
-        `, uniqueYears);
-
+        const rows = await fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears);
 
         // =====================================================================
         // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
