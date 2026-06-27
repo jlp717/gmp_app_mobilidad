@@ -15,6 +15,7 @@ const {
   MIN_YEAR,
   normalizeCvcTipoDocumentoFilter,
 } = require('../../../../utils/common');
+const { getClientCodesFromCache } = require('../../../../services/laclae');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
@@ -192,6 +193,20 @@ function normalizeVendorCodeList(value) {
   return values
     .map((code) => trim(code))
     .filter((code) => code && code.toUpperCase() !== 'ALL');
+}
+
+function buildCvcClientScopeFilter(clientCodes) {
+  const codes = [
+    ...new Set((clientCodes || [])
+      .map((code) => trim(code).substring(0, 10))
+      .filter((code) => /^[A-Za-z0-9]+$/.test(code))),
+  ];
+  if (codes.length === 0) return null;
+  if (codes.length > 80) return null;
+  return {
+    clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${codes.map(() => 'CAST(? AS VARCHAR(10))').join(',')})`,
+    params: codes,
+  };
 }
 
 function expandVendorCodesForQuery(value) {
@@ -1037,7 +1052,8 @@ class Db2CobrosRepository extends CobrosRepository {
     let vendorClause = '';
     let vendorParams = [];
     if (vendorCodes.length > 0) {
-      const scoped = buildCvcVendorScopeFilter(vendorCodes);
+      const cachedClientScope = buildCvcClientScopeFilter(getClientCodesFromCache(vendorCodes.join(',')));
+      const scoped = cachedClientScope || buildCvcVendorScopeFilter(vendorCodes);
       vendorClause = scoped.clause;
       vendorParams = scoped.params;
     }

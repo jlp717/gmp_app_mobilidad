@@ -167,6 +167,8 @@ describe('runtime performance configuration', () => {
     );
 
     expect(pendingSummaryBlock).toMatch(/CVC_CLIENTS AS/);
+    expect(pendingSummaryBlock).toMatch(/getClientCodesFromCache\(vendorCodes\.join\(','\)\)/);
+    expect(pendingSummaryBlock).toMatch(/buildCvcClientScopeFilter/);
     expect(pendingSummaryBlock).toMatch(/FETCH FIRST \$\{clientFetchLimit\} ROWS ONLY/);
     expect(pendingSummaryBlock).toMatch(/getAppSideCobrosByClient\(vendorClause, vendorParams\)/);
     expect(pendingSummaryBlock).not.toMatch(/CVC_DOCS_RAW/);
