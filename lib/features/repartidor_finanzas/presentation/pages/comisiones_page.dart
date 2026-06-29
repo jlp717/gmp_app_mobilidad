@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -210,7 +211,11 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.euro, color: AppTheme.success, size: 24),
+          const RepartidorExecutiveIcon(
+            icon: Icons.euro,
+            color: AppTheme.success,
+            size: 24,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -423,117 +428,122 @@ class _Content extends StatelessWidget {
     return SingleChildScrollView(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 10,
-          dataRowMinHeight: 28,
-          dataRowMaxHeight: 44,
-          headingRowHeight: 36,
-          headingRowColor: WidgetStateProperty.all(
-            AppTheme.softPanel,
+        child: RepartidorExecutivePanel(
+          accentColor: AppTheme.info,
+          margin: const EdgeInsets.all(12),
+          padding: EdgeInsets.zero,
+          child: DataTable(
+            columnSpacing: 10,
+            dataRowMinHeight: 28,
+            dataRowMaxHeight: 44,
+            headingRowHeight: 36,
+            headingRowColor: WidgetStateProperty.all(
+              AppTheme.softPanel,
+            ),
+            columns: const [
+              DataColumn(
+                label: Text(
+                  'MES',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'OBJETIVO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'COBRADO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'EST.',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  '%',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'COMISIÓN',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.success,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'TRAMO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.info,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'UMBRAL',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.info,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'EXCESO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.info,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'TIPO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.info,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
+            rows: rows,
           ),
-          columns: const [
-            DataColumn(
-              label: Text(
-                'MES',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'OBJETIVO',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'COBRADO',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'EST.',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                '%',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'COMISIÓN',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.success,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'TRAMO',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.info,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'UMBRAL',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.info,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'EXCESO',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.info,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'TIPO',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.info,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ],
-          rows: rows,
         ),
       ),
     );
@@ -596,15 +606,9 @@ class _SummaryCards extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Container(
+            child: RepartidorExecutivePanel(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.raisedSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: rhythmColor.withValues(alpha: 0.3),
-                ),
-              ),
+              accentColor: rhythmColor,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -676,13 +680,9 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
-      ),
+      accentColor: accentColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

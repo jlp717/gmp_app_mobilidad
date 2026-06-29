@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 /// Premium floating-pill toolbar with animated highlight indicators.
 class PlannerToolbar extends StatelessWidget {
@@ -19,13 +20,11 @@ class PlannerToolbar extends StatelessWidget {
         final planner = ref.watch(loadPlannerProvider);
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppTheme.raisedSurface,
-            border: Border(
-              bottom: BorderSide(
-                color: AppTheme.borderColor.withValues(alpha: 0.8),
-              ),
-            ),
+          decoration: WarehouseUi.executiveSurface(
+            accent: AppTheme.accentIndigo,
+            radius: 0,
+            borderAlpha: 0.14,
+            accentAlpha: 0.035,
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -207,10 +206,11 @@ class _PillSegmented<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppTheme.softPanel,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.borderColor),
+      decoration: WarehouseUi.executiveSurface(
+        accent: AppTheme.info,
+        borderAlpha: 0.14,
+        accentAlpha: 0.035,
+        elevated: false,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -319,8 +319,11 @@ class _GlowToolButtonState extends State<_GlowToolButton> {
           decoration: BoxDecoration(
             color: _pressed
                 ? baseColor.withValues(alpha: 0.12)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+                : baseColor.withValues(alpha: widget.enabled ? 0.04 : 0.0),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(
+              color: baseColor.withValues(alpha: widget.enabled ? 0.14 : 0.0),
+            ),
             boxShadow: _pressed && widget.enabled
                 ? [
                     BoxShadow(

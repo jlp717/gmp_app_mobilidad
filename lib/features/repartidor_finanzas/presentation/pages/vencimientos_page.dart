@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -278,67 +279,67 @@ class RepartidorVencimientosPage extends ConsumerWidget {
         item.importePendiente > 0;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.raisedSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.cliente,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item.documento,
-                  style: const TextStyle(color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Vence: ${DateFormat('dd/MM/yyyy').format(item.fecha)}',
-                  style: const TextStyle(color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _money(item.importe),
-                  style: const TextStyle(
-                    color: AppTheme.success,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                  ),
-                ),
-                if ((item.notas ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 8),
+        return RepartidorExecutiveSheet(
+          accentColor: _statusColor(item.estado),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    item.notas!,
-                    style: const TextStyle(color: AppTheme.textTertiary),
-                  ),
-                ],
-                if (canAbonar) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        _showAbonoDialog(context, ref, repartidorId, item);
-                      },
-                      icon: const Icon(Icons.payments),
-                      label: const Text('Abonar'),
+                    item.cliente,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.documento,
+                    style: const TextStyle(color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Vence: ${DateFormat('dd/MM/yyyy').format(item.fecha)}',
+                    style: const TextStyle(color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _money(item.importe),
+                    style: const TextStyle(
+                      color: AppTheme.success,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                    ),
+                  ),
+                  if ((item.notas ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      item.notas!,
+                      style: const TextStyle(color: AppTheme.textTertiary),
+                    ),
+                  ],
+                  if (canAbonar) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                          _showAbonoDialog(context, ref, repartidorId, item);
+                        },
+                        icon: const Icon(Icons.payments),
+                        label: const Text('Abonar'),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -421,6 +422,12 @@ class RepartidorVencimientosPage extends ConsumerWidget {
 
             return AlertDialog(
               backgroundColor: AppTheme.raisedSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                side: BorderSide(
+                  color: AppTheme.info.withValues(alpha: 0.28),
+                ),
+              ),
               title: const Text(
                 'Abonar vencimiento',
                 style: TextStyle(color: AppTheme.textPrimary),
@@ -536,13 +543,10 @@ class _FinanceHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.info.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: AppTheme.info, size: 22),
+          RepartidorExecutiveIcon(
+            icon: icon,
+            color: AppTheme.info,
+            size: 22,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -607,23 +611,11 @@ class _FilterStrip extends StatelessWidget {
     final isSelected = selected == filtro;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
+      child: RepartidorExecutivePill(
+        label: label,
+        color: AppTheme.info,
         selected: isSelected,
-        onSelected: (_) => onSelected(filtro),
-        selectedColor: AppTheme.info.withValues(alpha: 0.18),
-        backgroundColor: AppTheme.raisedSurface,
-        labelStyle: TextStyle(
-          color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
-          fontWeight: FontWeight.w700,
-        ),
-        checkmarkColor: AppTheme.info,
-        side: BorderSide(
-          color: isSelected
-              ? AppTheme.info.withValues(alpha: 0.34)
-              : AppTheme.borderColor,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        onTap: () => onSelected(filtro),
       ),
     );
   }
@@ -683,82 +675,74 @@ class _VencimientoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _statusColor(item.estado);
 
-    return Material(
-      color: AppTheme.raisedSurface,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border:
-                Border.all(color: AppTheme.borderColor.withValues(alpha: 0.8)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+    return RepartidorExecutivePanel(
+      accentColor: color,
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 52,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.cliente,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${item.documento} - '
-                      '${DateFormat('dd/MM/yyyy').format(item.fecha)}',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    if ((item.vendedor ?? '').isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        item.vendedor!,
-                        style: const TextStyle(
-                          color: AppTheme.textTertiary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _money(item.importe),
+                    item.cliente,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  _StatusPill(label: _statusLabel(item.estado), color: color),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item.documento} - '
+                    '${DateFormat('dd/MM/yyyy').format(item.fecha)}',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  if ((item.vendedor ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      item.vendedor!,
+                      style: const TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _money(item.importe),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _StatusPill(label: _statusLabel(item.estado), color: color),
+              ],
+            ),
+          ],
         ),
       ),
     );

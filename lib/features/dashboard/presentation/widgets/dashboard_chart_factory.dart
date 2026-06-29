@@ -55,9 +55,18 @@ class DashboardChartFactory extends StatelessWidget {
       height: Responsive.scale(context, 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.92),
+            color.withValues(alpha: 0.045),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+        boxShadow: AppTheme.elevation2,
       ),
       child: Column(
         children: [

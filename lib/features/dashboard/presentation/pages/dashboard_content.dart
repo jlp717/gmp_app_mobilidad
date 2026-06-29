@@ -33,6 +33,62 @@ String _cacheKeyFromParams(Map<String, Object?> params) {
       .join('&');
 }
 
+BoxDecoration _executivePanelDecoration({
+  Color accent = AppTheme.info,
+  double radius = AppTheme.radiusXl,
+  double accentAlpha = 0.26,
+}) {
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        AppTheme.raisedSurface,
+        AppTheme.softPanel.withValues(alpha: 0.92),
+        accent.withValues(alpha: 0.045),
+      ],
+    ),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: accent.withValues(alpha: accentAlpha)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.18),
+        blurRadius: 18,
+        offset: const Offset(0, 8),
+      ),
+      BoxShadow(
+        color: accent.withValues(alpha: 0.06),
+        blurRadius: 24,
+      ),
+    ],
+  );
+}
+
+BoxDecoration _executiveFieldDecoration({
+  required bool active,
+  Color accent = AppTheme.info,
+}) {
+  return BoxDecoration(
+    color: active
+        ? accent.withValues(alpha: 0.10)
+        : AppTheme.softPanel.withValues(alpha: 0.82),
+    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+    border: Border.all(
+      color: active
+          ? accent.withValues(alpha: 0.52)
+          : Colors.white.withValues(alpha: 0.08),
+    ),
+    boxShadow: active
+        ? [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.10),
+              blurRadius: 14,
+            ),
+          ]
+        : null,
+  );
+}
+
 /// Professional Dashboard - Power BI Style for Sales Manager
 /// Multi-select filters: Years, Months, Vendors, Clients
 /// Drill-down capabilites
@@ -150,10 +206,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final result = await showDialog<FiFilterState>(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: AppTheme.raisedSurface,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         child: Container(
           padding: const EdgeInsets.all(16),
           constraints: const BoxConstraints(maxWidth: 400, maxHeight: 400),
+          decoration: _executivePanelDecoration(accent: AppTheme.info),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -626,24 +684,63 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
   Widget _buildHeader() {
     final small = Responsive.isSmall(context);
-    return Row(
-      children: [
-        Icon(Icons.dashboard, color: AppTheme.info, size: small ? 22 : 28),
-        SizedBox(width: small ? 8 : 12),
-        Text('Actividad comercial',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: small ? 16 : 20,
-                fontWeight: FontWeight.bold)),
-        const Spacer(),
-        IconButton(
-          icon: const Icon(Icons.cleaning_services_outlined,
-              color: AppTheme.info),
-          onPressed: _resetFilters,
-          tooltip: 'Resetear Filtros',
-        ),
-        // Removed separate Refresh button as it's now in SmartSyncHeader
-      ],
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: small ? 12 : 16,
+        vertical: small ? 10 : 14,
+      ),
+      decoration: _executivePanelDecoration(accent: AppTheme.info),
+      child: Row(
+        children: [
+          Container(
+            width: small ? 34 : 40,
+            height: small ? 34 : 40,
+            decoration: BoxDecoration(
+              color: AppTheme.info.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: AppTheme.info.withValues(alpha: 0.34)),
+            ),
+            child: Icon(
+              Icons.dashboard_customize_outlined,
+              color: AppTheme.info,
+              size: small ? 19 : 22,
+            ),
+          ),
+          SizedBox(width: small ? 10 : 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Actividad comercial',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: small ? 16 : 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Vista ejecutiva de ventas, margen y cartera',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.52),
+                    fontSize: small ? 10 : 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.cleaning_services_outlined),
+            color: AppTheme.info,
+            onPressed: _resetFilters,
+            tooltip: 'Resetear Filtros',
+          ),
+          // Removed separate Refresh button as it's now in SmartSyncHeader
+        ],
+      ),
     );
   }
 
@@ -651,282 +748,325 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final small = Responsive.isSmall(context);
     final filterWidth = small ? 140.0 : 160.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Row 1: Main filters
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: _executivePanelDecoration(
+        accent: AppTheme.accentIndigo,
+        accentAlpha: 0.20,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              // Vendor Dropdown
-              SizedBox(
-                width: filterWidth,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey<String>(_selectedVendedor ?? 'ALL'),
-                  initialValue: _vendedoresDisponibles
-                          .any((v) => v['code'].toString() == _selectedVendedor)
-                      ? _selectedVendedor
-                      : '',
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: AppTheme.raisedSurface,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: _selectedVendedor != null
-                                ? AppTheme.info
-                                : Colors.transparent)),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppTheme.info)),
-                    prefixIcon: const Icon(Icons.person,
-                        color: AppTheme.info, size: 20),
-                  ),
-                  dropdownColor: AppTheme.raisedSurface,
-                  icon: const Icon(Icons.arrow_drop_down, color: AppTheme.info),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  items: [
-                    const DropdownMenuItem<String>(
-                        value: '', child: Text('Todos')),
-                    ..._vendedoresDisponibles.map((v) {
-                      return DropdownMenuItem<String>(
-                        value: v['code'].toString(),
-                        child: Text(
-                            (v['name'] as String?) ?? v['code'].toString(),
-                            overflow: TextOverflow.ellipsis),
-                      );
-                    }),
-                  ],
-                  onChanged: (val) {
-                    final normalizedValue = val?.isEmpty ?? false ? null : val;
-                    if (normalizedValue == _selectedVendedor) return;
-                    ref
-                        .read(filterProvider.notifier)
-                        .setVendor(normalizedValue);
-                  },
-                ),
+              const Icon(
+                Icons.manage_search_outlined,
+                color: AppTheme.accentIndigo,
+                size: 18,
               ),
               const SizedBox(width: 8),
-              // Client Filter Button
-              SizedBox(
-                width: filterWidth,
-                child: GestureDetector(
-                  onTap: _openClientFilter,
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.raisedSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: _selectedClientCodes.isNotEmpty
-                              ? AppTheme.accentIndigo
-                              : Colors.transparent),
+              const Text(
+                'Segmentacion ejecutiva',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              if (_selectedVendedor != null ||
+                  _selectedClientCodes.isNotEmpty ||
+                  _fiFilters.isNotEmpty ||
+                  _selectedProductCodes.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentIndigo.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    border: Border.all(
+                      color: AppTheme.accentIndigo.withValues(alpha: 0.28),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.people_alt,
-                            color: _selectedClientCodes.isNotEmpty
-                                ? AppTheme.accentIndigo
-                                : AppTheme.textSecondary,
-                            size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
+                  ),
+                  child: const Text(
+                    'Activa',
+                    style: TextStyle(
+                      color: AppTheme.accentIndigo,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Row 1: Main filters
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                // Vendor Dropdown
+                SizedBox(
+                  width: filterWidth,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey<String>(_selectedVendedor ?? 'ALL'),
+                    initialValue: _vendedoresDisponibles.any(
+                            (v) => v['code'].toString() == _selectedVendedor)
+                        ? _selectedVendedor
+                        : '',
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppTheme.softPanel.withValues(alpha: 0.82),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: _selectedVendedor != null
+                                  ? AppTheme.info
+                                  : Colors.transparent)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppTheme.info)),
+                      prefixIcon: const Icon(Icons.person,
+                          color: AppTheme.info, size: 20),
+                    ),
+                    dropdownColor: AppTheme.raisedSurface,
+                    icon:
+                        const Icon(Icons.arrow_drop_down, color: AppTheme.info),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    items: [
+                      const DropdownMenuItem<String>(
+                          value: '', child: Text('Todos')),
+                      ..._vendedoresDisponibles.map((v) {
+                        return DropdownMenuItem<String>(
+                          value: v['code'].toString(),
                           child: Text(
-                            _selectedClientCodes.isEmpty
-                                ? 'Clientes'
-                                : '${_selectedClientCodes.length} selec.',
-                            style: TextStyle(
-                                color: _selectedClientCodes.isNotEmpty
-                                    ? Colors.white
-                                    : Colors.white54,
-                                fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const Icon(Icons.arrow_drop_down,
-                            color: Colors.white54),
-                      ],
-                    ),
+                              (v['name'] as String?) ?? v['code'].toString(),
+                              overflow: TextOverflow.ellipsis),
+                        );
+                      }),
+                    ],
+                    onChanged: (val) {
+                      final normalizedValue =
+                          val?.isEmpty ?? false ? null : val;
+                      if (normalizedValue == _selectedVendedor) return;
+                      ref
+                          .read(filterProvider.notifier)
+                          .setVendor(normalizedValue);
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // FI Filters Button
-              SizedBox(
-                width: filterWidth,
-                child: GestureDetector(
-                  onTap: _openFiFiltersDialog,
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.raisedSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: _fiFilters.isNotEmpty
-                              ? AppTheme.info
-                              : Colors.transparent),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.filter_alt,
-                            color: _fiFilters.isNotEmpty
-                                ? AppTheme.info
-                                : AppTheme.textSecondary,
-                            size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _fiFilters.isEmpty
-                                ? 'Categorias'
-                                : _buildFiFilterSummary(),
-                            style: TextStyle(
-                                color: _fiFilters.isNotEmpty
-                                    ? Colors.white
-                                    : Colors.white54,
-                                fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const Icon(Icons.arrow_drop_down,
-                            color: Colors.white54),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Product Filter Button
-              SizedBox(
-                width: filterWidth,
-                child: GestureDetector(
-                  onTap: () async {
-                    final result = await showDialog<Set<Map<String, dynamic>>>(
-                      context: context,
-                      builder: (context) => _ProductSearchDialog(
-                        initialSelection: _selectedProductCodes,
+                const SizedBox(width: 8),
+                // Client Filter Button
+                SizedBox(
+                  width: filterWidth,
+                  child: GestureDetector(
+                    onTap: _openClientFilter,
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: _executiveFieldDecoration(
+                        active: _selectedClientCodes.isNotEmpty,
+                        accent: AppTheme.accentIndigo,
                       ),
-                    );
-
-                    if (result != null) {
-                      setState(() {
-                        _selectedProductCodes =
-                            result.map((m) => m['code'].toString()).toSet();
-                      });
-                      _fetchAllData();
-                    }
-                  },
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.raisedSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: _selectedProductCodes.isNotEmpty
-                              ? AppTheme.accentIndigo
-                              : Colors.transparent),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.inventory_2,
-                            color: _selectedProductCodes.isNotEmpty
-                                ? AppTheme.accentIndigo
-                                : AppTheme.textSecondary,
-                            size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _selectedProductCodes.isEmpty
-                                ? 'Productos'
-                                : '${_selectedProductCodes.length} selec.',
-                            style: TextStyle(
-                                color: _selectedProductCodes.isNotEmpty
-                                    ? Colors.white
-                                    : Colors.white54,
-                                fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
+                      child: Row(
+                        children: [
+                          Icon(Icons.people_alt,
+                              color: _selectedClientCodes.isNotEmpty
+                                  ? AppTheme.accentIndigo
+                                  : AppTheme.textSecondary,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _selectedClientCodes.isEmpty
+                                  ? 'Clientes'
+                                  : '${_selectedClientCodes.length} selec.',
+                              style: TextStyle(
+                                  color: _selectedClientCodes.isNotEmpty
+                                      ? Colors.white
+                                      : Colors.white54,
+                                  fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        const Icon(Icons.arrow_drop_down,
-                            color: Colors.white54),
-                      ],
+                          const Icon(Icons.arrow_drop_down,
+                              color: Colors.white54),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                // FI Filters Button
+                SizedBox(
+                  width: filterWidth,
+                  child: GestureDetector(
+                    onTap: _openFiFiltersDialog,
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: _executiveFieldDecoration(
+                        active: _fiFilters.isNotEmpty,
+                        accent: AppTheme.info,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.filter_alt,
+                              color: _fiFilters.isNotEmpty
+                                  ? AppTheme.info
+                                  : AppTheme.textSecondary,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _fiFilters.isEmpty
+                                  ? 'Categorias'
+                                  : _buildFiFilterSummary(),
+                              style: TextStyle(
+                                  color: _fiFilters.isNotEmpty
+                                      ? Colors.white
+                                      : Colors.white54,
+                                  fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Icon(Icons.arrow_drop_down,
+                              color: Colors.white54),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Product Filter Button
+                SizedBox(
+                  width: filterWidth,
+                  child: GestureDetector(
+                    onTap: () async {
+                      final result =
+                          await showDialog<Set<Map<String, dynamic>>>(
+                        context: context,
+                        builder: (context) => _ProductSearchDialog(
+                          initialSelection: _selectedProductCodes,
+                        ),
+                      );
+
+                      if (result != null) {
+                        setState(() {
+                          _selectedProductCodes =
+                              result.map((m) => m['code'].toString()).toSet();
+                        });
+                        _fetchAllData();
+                      }
+                    },
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: _executiveFieldDecoration(
+                        active: _selectedProductCodes.isNotEmpty,
+                        accent: AppTheme.accentIndigo,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.inventory_2,
+                              color: _selectedProductCodes.isNotEmpty
+                                  ? AppTheme.accentIndigo
+                                  : AppTheme.textSecondary,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _selectedProductCodes.isEmpty
+                                  ? 'Productos'
+                                  : '${_selectedProductCodes.length} selec.',
+                              style: TextStyle(
+                                  color: _selectedProductCodes.isNotEmpty
+                                      ? Colors.white
+                                      : Colors.white54,
+                                  fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Icon(Icons.arrow_drop_down,
+                              color: Colors.white54),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        // Row 2: Quick Family Chips (FI1-FI5)
-        if (_fiFilters.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (_fiFilters.fi1 != null)
-                _buildFamilyChip('FI1', _fiFilters.fi1!, Icons.category, () {
-                  setState(() => _fiFilters = FiFilterState(
-                        fi2: _fiFilters.fi2,
-                        fi3: _fiFilters.fi3,
-                        fi4: _fiFilters.fi4,
-                        fi5: _fiFilters.fi5,
-                      ));
-                  _fetchAllData();
-                }),
-              if (_fiFilters.fi2 != null)
-                _buildFamilyChip(
-                    'FI2', _fiFilters.fi2!, Icons.subdirectory_arrow_right, () {
-                  setState(() => _fiFilters = FiFilterState(
-                        fi1: _fiFilters.fi1,
-                        fi3: _fiFilters.fi3,
-                        fi4: _fiFilters.fi4,
-                        fi5: _fiFilters.fi5,
-                      ));
-                  _fetchAllData();
-                }),
-              if (_fiFilters.fi5 != null)
-                _buildFamilyChip('FI5', _fiFilters.fi5!, Icons.ac_unit, () {
-                  setState(() => _fiFilters = FiFilterState(
-                        fi1: _fiFilters.fi1,
-                        fi2: _fiFilters.fi2,
-                        fi3: _fiFilters.fi3,
-                        fi4: _fiFilters.fi4,
-                      ));
-                  _fetchAllData();
-                }),
-              if (_fiFilters.fi3 != null)
-                _buildFamilyChip('FI3', _fiFilters.fi3!, Icons.tune, () {
-                  setState(() => _fiFilters = FiFilterState(
-                        fi1: _fiFilters.fi1,
-                        fi2: _fiFilters.fi2,
-                        fi4: _fiFilters.fi4,
-                        fi5: _fiFilters.fi5,
-                      ));
-                  _fetchAllData();
-                }),
-              if (_fiFilters.fi4 != null)
-                _buildFamilyChip('FI4', _fiFilters.fi4!, Icons.eco, () {
-                  setState(() => _fiFilters = FiFilterState(
-                        fi1: _fiFilters.fi1,
-                        fi2: _fiFilters.fi2,
-                        fi3: _fiFilters.fi3,
-                        fi5: _fiFilters.fi5,
-                      ));
-                  _fetchAllData();
-                }),
-            ],
-          ),
+          // Row 2: Quick Family Chips (FI1-FI5)
+          if (_fiFilters.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                if (_fiFilters.fi1 != null)
+                  _buildFamilyChip('FI1', _fiFilters.fi1!, Icons.category, () {
+                    setState(() => _fiFilters = FiFilterState(
+                          fi2: _fiFilters.fi2,
+                          fi3: _fiFilters.fi3,
+                          fi4: _fiFilters.fi4,
+                          fi5: _fiFilters.fi5,
+                        ));
+                    _fetchAllData();
+                  }),
+                if (_fiFilters.fi2 != null)
+                  _buildFamilyChip(
+                      'FI2', _fiFilters.fi2!, Icons.subdirectory_arrow_right,
+                      () {
+                    setState(() => _fiFilters = FiFilterState(
+                          fi1: _fiFilters.fi1,
+                          fi3: _fiFilters.fi3,
+                          fi4: _fiFilters.fi4,
+                          fi5: _fiFilters.fi5,
+                        ));
+                    _fetchAllData();
+                  }),
+                if (_fiFilters.fi5 != null)
+                  _buildFamilyChip('FI5', _fiFilters.fi5!, Icons.ac_unit, () {
+                    setState(() => _fiFilters = FiFilterState(
+                          fi1: _fiFilters.fi1,
+                          fi2: _fiFilters.fi2,
+                          fi3: _fiFilters.fi3,
+                          fi4: _fiFilters.fi4,
+                        ));
+                    _fetchAllData();
+                  }),
+                if (_fiFilters.fi3 != null)
+                  _buildFamilyChip('FI3', _fiFilters.fi3!, Icons.tune, () {
+                    setState(() => _fiFilters = FiFilterState(
+                          fi1: _fiFilters.fi1,
+                          fi2: _fiFilters.fi2,
+                          fi4: _fiFilters.fi4,
+                          fi5: _fiFilters.fi5,
+                        ));
+                    _fetchAllData();
+                  }),
+                if (_fiFilters.fi4 != null)
+                  _buildFamilyChip('FI4', _fiFilters.fi4!, Icons.eco, () {
+                    setState(() => _fiFilters = FiFilterState(
+                          fi1: _fiFilters.fi1,
+                          fi2: _fiFilters.fi2,
+                          fi3: _fiFilters.fi3,
+                          fi5: _fiFilters.fi5,
+                        ));
+                    _fetchAllData();
+                  }),
+              ],
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -964,28 +1104,49 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
   Widget _buildDateFilters() {
     return ExpansionTile(
+      tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
       title: Row(
         children: [
-          const Text('Filtros de Fecha',
-              style: TextStyle(color: AppTheme.info, fontSize: 14)),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.info.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            ),
+            child: const Icon(
+              Icons.date_range_outlined,
+              color: AppTheme.info,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Filtros de fecha',
+            style: TextStyle(
+              color: AppTheme.info,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           if (_hasPendingChanges) ...[
             const SizedBox(width: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                   color: AppTheme.accentAmber.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4)),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull)),
               child: const Text('Cambios pendientes',
                   style: TextStyle(color: AppTheme.accentAmber, fontSize: 10)),
             ),
           ],
         ],
       ),
-      collapsedBackgroundColor: AppTheme.raisedSurface.withValues(alpha: 0.5),
-      backgroundColor: AppTheme.raisedSurface,
+      collapsedBackgroundColor: AppTheme.softPanel.withValues(alpha: 0.76),
+      backgroundColor: AppTheme.softPanel.withValues(alpha: 0.92),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      collapsedShape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      collapsedShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppTheme.info.withValues(alpha: 0.18))),
       childrenPadding: const EdgeInsets.all(12),
       children: [
         // Years
@@ -1143,19 +1304,30 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('KPIs del periodo',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold)),
-            if (_kpiData != null)
-              Text(
-                  '${DateFormatter.getMonthName(_kpiData!['period']['month'] as int)} ${_kpiData!['period']['year']}',
-                  style: const TextStyle(color: Colors.white30, fontSize: 11)),
-          ],
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.softPanel.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.speed_outlined, color: AppTheme.info, size: 18),
+              const SizedBox(width: 8),
+              const Text('KPIs del periodo',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold)),
+              const Spacer(),
+              if (_kpiData != null)
+                Text(
+                    '${DateFormatter.getMonthName(_kpiData!['period']['month'] as int)} ${_kpiData!['period']['year']}',
+                    style:
+                        const TextStyle(color: Colors.white38, fontSize: 11)),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         LayoutBuilder(
@@ -1236,16 +1408,17 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           end: Alignment.bottomRight,
           colors: [
             AppTheme.raisedSurface,
-            color.withValues(alpha: 0.08),
+            AppTheme.softPanel.withValues(alpha: 0.86),
+            color.withValues(alpha: 0.07),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
         boxShadow: [
           BoxShadow(
               color: color.withValues(alpha: 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
+              blurRadius: 18,
+              offset: const Offset(0, 8)),
         ],
       ),
       child: Column(
@@ -1258,6 +1431,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withValues(alpha: 0.24)),
                 ),
                 child: Icon(icon, color: color, size: 16),
               ),
@@ -1288,12 +1462,24 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             fit: BoxFit.scaleDown,
             child: Text(value,
                 style: TextStyle(
-                    color: color, fontSize: 17, fontWeight: FontWeight.bold)),
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: 2,
+            width: 42,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.64),
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            ),
           ),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(subtitle,
-                style: const TextStyle(color: Colors.white38, fontSize: 9),
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.44), fontSize: 9),
                 overflow: TextOverflow.ellipsis),
           ],
         ],
@@ -1310,53 +1496,70 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
   /// Chart type toggle buttons
   Widget _buildChartTypeToggle() {
-    return Row(
-      children: [
-        const Icon(Icons.bar_chart, color: AppTheme.info, size: 16),
-        const SizedBox(width: 8),
-        const Text('Tipo de grafico:',
-            style: TextStyle(color: Colors.white70, fontSize: 12)),
-        const SizedBox(width: 12),
-        ...ChartType.values.map((type) {
-          final isSelected = _chartType == type;
-          final icon = type == ChartType.bar
-              ? Icons.bar_chart
-              : type == ChartType.pie
-                  ? Icons.pie_chart
-                  : Icons.show_chart;
-          final label = type == ChartType.bar
-              ? 'Barras'
-              : type == ChartType.pie
-                  ? 'Tarta'
-                  : 'Linea';
-          return Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: ChoiceChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon,
-                      size: 14,
-                      color: isSelected ? Colors.white : Colors.white54),
-                  const SizedBox(width: 4),
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: isSelected ? Colors.white : Colors.white54)),
-                ],
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppTheme.softPanel.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.bar_chart, color: AppTheme.info, size: 16),
+          const SizedBox(width: 8),
+          const Text('Grafico',
+              style: TextStyle(color: Colors.white70, fontSize: 12)),
+          const SizedBox(width: 12),
+          ...ChartType.values.map((type) {
+            final isSelected = _chartType == type;
+            final icon = type == ChartType.bar
+                ? Icons.bar_chart
+                : type == ChartType.pie
+                    ? Icons.pie_chart
+                    : Icons.show_chart;
+            final label = type == ChartType.bar
+                ? 'Barras'
+                : type == ChartType.pie
+                    ? 'Tarta'
+                    : 'Linea';
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon,
+                        size: 14,
+                        color: isSelected ? Colors.white : Colors.white54),
+                    const SizedBox(width: 4),
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: isSelected ? Colors.white : Colors.white54)),
+                  ],
+                ),
+                selected: isSelected,
+                onSelected: (_) {
+                  setState(() => _chartType = type);
+                },
+                selectedColor: AppTheme.info.withValues(alpha: 0.26),
+                backgroundColor: Colors.white.withValues(alpha: 0.05),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppTheme.info.withValues(alpha: 0.42)
+                        : Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                showCheckmark: false,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               ),
-              selected: isSelected,
-              onSelected: (_) {
-                setState(() => _chartType = type);
-              },
-              selectedColor: AppTheme.info.withValues(alpha: 0.3),
-              backgroundColor: Colors.white10,
-              showCheckmark: false,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            ),
-          );
-        }),
-      ],
+            );
+          }),
+        ],
+      ),
     );
   }
 
@@ -1561,23 +1764,44 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppTheme.raisedSurface,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(16),
         constraints: const BoxConstraints(maxHeight: 600, maxWidth: 500),
+        decoration: _executivePanelDecoration(accent: AppTheme.accentIndigo),
         child: Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Filtrar Productos',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                Text('${_selectedCodes.length} seleccionados',
-                    style: const TextStyle(color: AppTheme.info, fontSize: 14)),
+                const Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined,
+                        color: AppTheme.accentIndigo, size: 20),
+                    SizedBox(width: 8),
+                    Text('Filtrar Productos',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.info.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    border: Border.all(
+                      color: AppTheme.info.withValues(alpha: 0.30),
+                    ),
+                  ),
+                  child: Text('${_selectedCodes.length} seleccionados',
+                      style:
+                          const TextStyle(color: AppTheme.info, fontSize: 12)),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -1590,10 +1814,18 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                 hintStyle: const TextStyle(color: Colors.white30),
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 filled: true,
-                fillColor: AppTheme.raisedSurface,
+                fillColor: AppTheme.softPanel.withValues(alpha: 0.82),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
+                    borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.08))),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.08))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.info)),
               ),
             ),
             const SizedBox(height: 12),

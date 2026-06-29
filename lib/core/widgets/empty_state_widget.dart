@@ -24,6 +24,7 @@ class EmptyStateWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = iconColor ?? AppTheme.textTertiary;
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return Center(
       child: Padding(
@@ -35,14 +36,22 @@ class EmptyStateWidget extends StatelessWidget {
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.raisedSurface,
-                border: Border.all(color: AppTheme.borderColor),
+                gradient: AppTheme.cardGradient,
+                border: Border.all(color: color.withValues(alpha: 0.30)),
+                boxShadow: [
+                  ...AppTheme.elevation2,
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.10),
+                    blurRadius: 24,
+                  ),
+                ],
               ),
               child: Icon(icon, color: color, size: 42),
-            )
-                .animate()
-                .fadeIn(duration: 220.ms)
-                .scale(begin: const Offset(0.96, 0.96)),
+            ).animate().fadeIn(duration: reduceMotion ? 1.ms : 220.ms).scale(
+                  begin: reduceMotion
+                      ? const Offset(1, 1)
+                      : const Offset(0.96, 0.96),
+                ),
             const SizedBox(height: 18),
             Text(
               title,

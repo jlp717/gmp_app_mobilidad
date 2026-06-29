@@ -11,6 +11,7 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/personne
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/vehicles_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_config_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_dashboard_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 class WarehouseShellPage extends StatefulWidget {
   const WarehouseShellPage({super.key});
@@ -40,13 +41,11 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
         children: _pages,
       ),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          border: Border(
-            top: BorderSide(
-              color: AppTheme.info.withValues(alpha: 0.15),
-            ),
-          ),
+        decoration: WarehouseUi.executiveSurface(
+          accent: AppTheme.info,
+          radius: 0,
+          borderAlpha: 0.18,
+          accentAlpha: 0.05,
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,

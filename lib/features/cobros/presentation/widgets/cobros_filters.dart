@@ -45,9 +45,17 @@ class _CobrosFiltersState extends State<CobrosFilters> {
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        gradient: AppTheme.commandGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border:
+            Border.all(color: AppTheme.accentIndigo.withValues(alpha: 0.28)),
+        boxShadow: [
+          ...AppTheme.elevation2,
+          BoxShadow(
+            color: AppTheme.accentIndigo.withValues(alpha: 0.09),
+            blurRadius: 24,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,7 +64,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
           const Row(
             children: [
               Icon(
-                Icons.filter_list,
+                Icons.tune_rounded,
                 color: AppTheme.accentIndigo,
                 size: 18,
               ),
@@ -77,9 +85,11 @@ class _CobrosFiltersState extends State<CobrosFilters> {
           // Buscador
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              gradient: AppTheme.cardGradient,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(
+                color: AppTheme.accentIndigo.withValues(alpha: 0.18),
+              ),
             ),
             child: TextField(
               controller: _searchController,
@@ -89,8 +99,8 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                 hintStyle: TextStyle(
                     color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 prefixIcon: Icon(
-                  Icons.search,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                  Icons.manage_search_rounded,
+                  color: AppTheme.accentIndigo.withValues(alpha: 0.82),
                   size: 18,
                 ),
                 border: InputBorder.none,
@@ -127,14 +137,23 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.accentIndigo.withValues(alpha: 0.2)
-                        : Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(10),
+                        ? AppTheme.accentIndigo.withValues(alpha: 0.24)
+                        : AppTheme.surfaceCommand,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                     border: Border.all(
                       color: isSelected
                           ? AppTheme.accentIndigo.withValues(alpha: 0.5)
-                          : Colors.white.withValues(alpha: 0.1),
+                          : AppTheme.activeRing.withValues(alpha: 0.12),
                     ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color:
+                                  AppTheme.accentIndigo.withValues(alpha: 0.13),
+                              blurRadius: 16,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

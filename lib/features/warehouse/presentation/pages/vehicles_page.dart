@@ -55,78 +55,41 @@ class _VehiclesPageState extends State<VehiclesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _loading
-                ? const SkeletonList(itemHeight: 80)
-                : _error != null
-                    ? ErrorStateWidget(
-                        message: _error!,
-                        onRetry: () => _load(forceRefresh: true),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () => _load(forceRefresh: true),
-                        color: AppTheme.info,
-                        child: OptimizedListView(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _vehicles.length,
-                          itemBuilder: (_, i) => _vehicleCard(_vehicles[i]),
+    return WarehouseUi.pageShell(
+      child: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _loading
+                  ? const SkeletonList(itemHeight: 80)
+                  : _error != null
+                      ? ErrorStateWidget(
+                          message: _error!,
+                          onRetry: () => _load(forceRefresh: true),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () => _load(forceRefresh: true),
+                          color: AppTheme.info,
+                          child: OptimizedListView(
+                            padding: const EdgeInsets.all(12),
+                            itemCount: _vehicles.length,
+                            itemBuilder: (_, i) => _vehicleCard(_vehicles[i]),
+                          ),
                         ),
-                      ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-          Responsive.padding(context, small: 12, large: 16),
-          12,
-          Responsive.padding(context, small: 12, large: 16),
-          8),
-      child: Row(
-        children: [
-          Container(
-            padding:
-                EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
-            decoration: WarehouseUi.surface(
-              color: AppTheme.accentIndigo.withValues(alpha: 0.1),
-              borderColor: AppTheme.accentIndigo,
-              borderAlpha: 0.22,
-            ),
-            child: Icon(Icons.local_shipping_rounded,
-                color: AppTheme.accentIndigo,
-                size: Responsive.iconSize(context, phone: 18, desktop: 22)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'FLOTA DE VEHICULOS',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize:
-                        Responsive.fontSize(context, small: 13, large: 16),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                  ),
-                ),
-                Text(
-                  '${_vehicles.length} vehiculos registrados',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return WarehouseUi.sectionHeader(
+      icon: Icons.local_shipping_rounded,
+      title: 'FLOTA DE VEHICULOS',
+      subtitle: '${_vehicles.length} vehiculos registrados',
+      accent: AppTheme.accentIndigo,
     );
   }
 
@@ -137,11 +100,10 @@ class _VehiclesPageState extends State<VehiclesPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: WarehouseUi.surface(
-        color: AppTheme.raisedSurface,
-        borderColor: accentColor,
-        borderAlpha: 0.2,
-        radius: AppTheme.radiusLg,
+      decoration: WarehouseUi.executiveSurface(
+        accent: accentColor,
+        borderAlpha: 0.24,
+        accentAlpha: hasCustomInterior ? 0.07 : 0.1,
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),

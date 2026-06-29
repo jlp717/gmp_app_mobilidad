@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 // ─── Helper models ──────────────────────────────────────────────────────────
 
@@ -80,11 +81,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
     final sc = _statusColor(m.status);
 
     return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(
-          left: BorderSide(color: AppTheme.info.withValues(alpha: 0.15)),
-        ),
+      decoration: WarehouseUi.executiveSurface(
+        accent: AppTheme.info,
+        radius: 0,
+        borderAlpha: 0.18,
+        accentAlpha: 0.05,
       ),
       child: Column(
         children: [
@@ -120,8 +121,12 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
   Widget _buildHeader(LoadMetrics m, Color sc) {
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppTheme.info.withValues(alpha: 0.06),
+      decoration: WarehouseUi.executiveSurface(
+        accent: AppTheme.info,
+        radius: 0,
+        borderAlpha: 0.14,
+        accentAlpha: 0.06,
+        elevated: false,
       ),
       child: Column(
         children: [
@@ -267,10 +272,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: sc.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: sc.withValues(alpha: 0.3)),
+      decoration: WarehouseUi.executiveSurface(
+        accent: sc,
+        borderAlpha: 0.3,
+        accentAlpha: 0.08,
+        elevated: false,
       ),
       child: Row(
         children: [
@@ -434,9 +440,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         Container(
           padding: const EdgeInsets.all(10),
           margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: AppTheme.info.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
+          decoration: WarehouseUi.executiveSurface(
+            accent: AppTheme.info,
+            borderAlpha: 0.16,
+            accentAlpha: 0.05,
+            elevated: false,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -494,10 +502,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
     final cc = CargoColors.byClient(c.code);
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: cc.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cc.withValues(alpha: 0.1)),
+      decoration: WarehouseUi.executiveSurface(
+        accent: cc,
+        borderAlpha: 0.16,
+        accentAlpha: 0.04,
+        elevated: false,
       ),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -620,12 +629,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             curve: Curves.easeOutCubic,
             margin: const EdgeInsets.only(bottom: 2),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-            decoration: BoxDecoration(
-              color: excluded ? Colors.transparent : cc.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: excluded ? Colors.white10 : cc.withValues(alpha: 0.15),
-              ),
+            decoration: WarehouseUi.executiveSurface(
+              accent: excluded ? AppTheme.error : cc,
+              borderAlpha: excluded ? 0.18 : 0.16,
+              accentAlpha: excluded ? 0.03 : 0.05,
+              elevated: false,
             ),
             child: Row(
               children: [
@@ -788,19 +796,10 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         Container(
           padding: const EdgeInsets.all(12),
           margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: AppTheme.error.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppTheme.error.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.error.withValues(alpha: 0.08),
-                blurRadius: 8,
-              ),
-            ],
+          decoration: WarehouseUi.executiveSurface(
+            accent: AppTheme.error,
+            borderAlpha: 0.32,
+            accentAlpha: 0.1,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -977,10 +976,12 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
+        decoration: WarehouseUi.executiveSurface(
+          accent: color,
+          radius: AppTheme.radiusSm,
+          borderAlpha: 0.22,
+          accentAlpha: 0.08,
+          elevated: false,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

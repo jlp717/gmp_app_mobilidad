@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:intl/intl.dart';
 
 class RuteroDetailPayment extends StatelessWidget {
@@ -61,17 +62,9 @@ class RuteroDetailPayment extends StatelessWidget {
   }
 
   Widget _buildAmountCard(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(
-          color: _isUrgent
-              ? AppTheme.error.withValues(alpha: 0.42)
-              : AppTheme.borderColor,
-        ),
-      ),
+      accentColor: _isUrgent ? AppTheme.error : AppTheme.success,
       child: Column(
         children: [
           const Text(
@@ -172,21 +165,10 @@ class RuteroDetailPayment extends StatelessWidget {
         HapticFeedback.selectionClick();
         onPaymentMethodChanged(method);
       },
-      child: AnimatedContainer(
-        duration: AppTheme.animFast,
+      child: RepartidorExecutivePanel(
+        accentColor: AppTheme.info,
+        selected: isSelected,
         padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppTheme.info.withValues(alpha: 0.12)
-              : AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(
-            color: isSelected
-                ? AppTheme.info.withValues(alpha: 0.44)
-                : AppTheme.borderColor,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
         child: Column(
           children: [
             Icon(
@@ -216,21 +198,10 @@ class RuteroDetailPayment extends StatelessWidget {
         onPaidChanged();
       },
       borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: AppTheme.animFast,
+      child: RepartidorExecutivePanel(
+        accentColor: AppTheme.success,
+        selected: isPaid,
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isPaid
-              ? AppTheme.success.withValues(alpha: 0.12)
-              : AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(
-            color: isPaid
-                ? AppTheme.success.withValues(alpha: 0.44)
-                : AppTheme.borderColor,
-            width: isPaid ? 2 : 1,
-          ),
-        ),
         child: Row(
           children: [
             AnimatedContainer(

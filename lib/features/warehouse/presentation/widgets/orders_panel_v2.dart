@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 /// Sort options for boxes/orders
 enum BoxSortMode { none, weightDesc, weightAsc, volumeDesc, client, order }
@@ -64,13 +65,11 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       builder: (context, ref, _) {
         final planner = ref.watch(loadPlannerProvider);
         return Container(
-          decoration: BoxDecoration(
-            color: AppTheme.raisedSurface,
-            border: Border(
-              left: BorderSide(
-                color: AppTheme.borderColor.withValues(alpha: 0.9),
-              ),
-            ),
+          decoration: WarehouseUi.executiveSurface(
+            accent: AppTheme.info,
+            radius: 0,
+            borderAlpha: 0.18,
+            accentAlpha: 0.05,
           ),
           child: Column(
             children: [
@@ -90,10 +89,11 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: AppTheme.softPanel,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.borderColor),
+                decoration: WarehouseUi.executiveSurface(
+                  accent: AppTheme.info,
+                  borderAlpha: 0.16,
+                  accentAlpha: 0.035,
+                  elevated: false,
                 ),
                 child: TabBar(
                   controller: _tabController,
@@ -192,10 +192,10 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.borderColor),
-          boxShadow: AppTheme.elevation1,
+        decoration: WarehouseUi.executiveSurface(
+          accent: AppTheme.info,
+          borderAlpha: 0.16,
+          accentAlpha: 0.035,
         ),
         child: TextField(
           onChanged: (v) =>
@@ -658,14 +658,12 @@ class _MiniActionButton extends StatelessWidget {
       child: AnimatedContainer(
         duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isEnabled ? color.withValues(alpha: 0.08) : AppTheme.softPanel,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isEnabled
-                ? color.withValues(alpha: 0.25)
-                : AppTheme.borderColor,
-          ),
+        decoration: WarehouseUi.executiveSurface(
+          accent: isEnabled ? color : AppTheme.textTertiary,
+          borderAlpha: isEnabled ? 0.25 : 0.12,
+          accentAlpha: isEnabled ? 0.08 : 0.02,
+          elevated: false,
+        ).copyWith(
           boxShadow: isEnabled
               ? [
                   BoxShadow(
@@ -726,20 +724,28 @@ class _FilterChip extends StatelessWidget {
       },
       child: AnimatedContainer(
         duration: AppTheme.animFast,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          gradient: selected
+              ? LinearGradient(
+                  colors: [
+                    color.withValues(alpha: 0.26),
+                    color.withValues(alpha: 0.08),
+                  ],
+                )
+              : null,
+          color: selected ? null : AppTheme.surfaceCommand,
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           border: Border.all(
             color: selected
-                ? color.withValues(alpha: 0.4)
-                : AppTheme.borderColor.withValues(alpha: 0.2),
+                ? color.withValues(alpha: 0.48)
+                : AppTheme.activeRing.withValues(alpha: 0.14),
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: color.withValues(alpha: 0.08),
-                    blurRadius: 6,
+                    color: color.withValues(alpha: 0.14),
+                    blurRadius: 16,
                   ),
                 ]
               : null,
@@ -774,10 +780,11 @@ class _ClientRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.borderColor),
+        decoration: WarehouseUi.executiveSurface(
+          accent: weightPct > 30 ? AppTheme.warning : AppTheme.info,
+          borderAlpha: weightPct > 30 ? 0.26 : 0.16,
+          accentAlpha: weightPct > 30 ? 0.08 : 0.04,
+          elevated: false,
         ),
         child: Row(
           children: [
@@ -908,14 +915,11 @@ class _OrderRow extends StatelessWidget {
         opacity: isExcluded ? 0.35 : 1.0,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: isExcluded ? AppTheme.softPanel : AppTheme.raisedSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isExcluded
-                  ? AppTheme.error.withValues(alpha: 0.25)
-                  : AppTheme.borderColor,
-            ),
+          decoration: WarehouseUi.executiveSurface(
+            accent: isExcluded ? AppTheme.error : AppTheme.success,
+            borderAlpha: isExcluded ? 0.28 : 0.16,
+            accentAlpha: isExcluded ? 0.08 : 0.04,
+            elevated: false,
           ),
           child: Row(
             children: [

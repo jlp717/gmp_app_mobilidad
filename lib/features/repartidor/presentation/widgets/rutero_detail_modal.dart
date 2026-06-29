@@ -12,12 +12,13 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
-import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
-import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
+import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -25,14 +26,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'rutero_detail_completed.dart';
+import 'rutero_detail_finalize.dart';
 import 'rutero_detail_header.dart';
+import 'rutero_detail_payment.dart';
 import 'rutero_detail_products.dart';
 import 'rutero_detail_signature.dart';
-import 'rutero_detail_payment.dart';
-import 'rutero_detail_finalize.dart';
-import 'rutero_detail_completed.dart';
-import 'rutero_printer_config.dart';
 import 'rutero_detail_tab_bar.dart';
+import 'rutero_printer_config.dart';
 
 bool _isValidDniNie(String value) {
   final cleaned = value.trim().toUpperCase();
@@ -322,34 +323,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         parent: _slideController,
         curve: Curves.easeOutCubic,
       )),
-      child: Container(
+      child: RepartidorExecutiveSheet(
         height: Responsive.modalHeight(
           context,
           portraitFraction: _isCompleted ? 0.70 : 0.92,
           landscapeFraction: _isCompleted ? 0.80 : 0.95,
         ),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppTheme.radiusXl),
-          ),
-          border: Border.all(
-            color: _isCompleted
-                ? AppTheme.success.withValues(alpha: 0.3)
-                : AppTheme.borderColor,
-          ),
-        ),
+        accentColor: _isCompleted
+            ? AppTheme.success
+            : _isUrgent
+                ? AppTheme.obligatorio
+                : AppTheme.info,
         child: Column(
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.borderColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
             RuteroDetailHeader(
               albaran: widget.albaran,
               isCompleted: _isCompleted,
@@ -510,19 +496,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildReceiverData() {
-    return Container(
+    return RepartidorExecutivePanel(
+      accentColor: AppTheme.info,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.person, color: AppTheme.info, size: 20),
+              RepartidorExecutiveIcon(
+                icon: Icons.person,
+                color: AppTheme.info,
+                size: 20,
+              ),
               SizedBox(width: 8),
               Text(
                 'DATOS DEL RECEPTOR',
@@ -709,7 +695,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           children: [
             const Row(
               children: [
-                Icon(Icons.draw, color: AppTheme.info, size: 20),
+                RepartidorExecutiveIcon(
+                  icon: Icons.draw,
+                  color: AppTheme.info,
+                  size: 20,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'FIRMA DEL CLIENTE *',
@@ -732,24 +722,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ],
         ),
         const SizedBox(height: 8),
-        Container(
-          height: Responsive.isLandscape(context)
-              ? 120.0
-              : Responsive.value(context, phone: 120, desktop: 160),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color:
-                  _firmaError != null ? AppTheme.error : AppTheme.borderColor,
-              width: _firmaError != null ? 2 : 1,
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Signature(
-              controller: _signatureController,
-              backgroundColor: Colors.white,
+        RepartidorExecutivePanel(
+          accentColor: _firmaError != null ? AppTheme.error : AppTheme.info,
+          padding: EdgeInsets.zero,
+          child: SizedBox(
+            height: Responsive.isLandscape(context)
+                ? 120.0
+                : Responsive.value(context, phone: 120, desktop: 160),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              child: Signature(
+                controller: _signatureController,
+                backgroundColor: Colors.white,
+              ),
             ),
           ),
         ),
@@ -808,11 +793,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: BorderSide(color: AppTheme.info.withValues(alpha: 0.28)),
         ),
         title: Row(
           children: [
-            const Icon(Icons.edit, color: AppTheme.info, size: 22),
+            const RepartidorExecutiveIcon(
+              icon: Icons.edit,
+              color: AppTheme.info,
+              size: 22,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1568,11 +1558,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
           return AlertDialog(
             backgroundColor: AppTheme.raisedSurface,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              side: BorderSide(color: AppTheme.info.withValues(alpha: 0.28)),
+            ),
             title: const Row(
               children: [
-                Icon(Icons.print, color: AppTheme.info),
+                RepartidorExecutiveIcon(
+                  icon: Icons.print,
+                  color: AppTheme.info,
+                ),
                 SizedBox(width: 12),
                 Text('Imprimir Ticket',
                     style: TextStyle(color: AppTheme.textPrimary)),
@@ -1762,10 +1757,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: BorderSide(color: AppTheme.info.withValues(alpha: 0.28)),
+        ),
         title: const Row(
           children: [
-            Icon(Icons.share, color: AppTheme.info),
+            RepartidorExecutiveIcon(
+              icon: Icons.share,
+              color: AppTheme.info,
+            ),
             SizedBox(width: 12),
             Text('Compartir Nota',
                 style: TextStyle(color: AppTheme.textPrimary)),

@@ -82,10 +82,24 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     }
 
     return BoxDecoration(
-      color: AppTheme.raisedSurface,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: baseColor.withValues(alpha: 0.34), width: 1.2),
-      boxShadow: AppTheme.elevation1,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          baseColor.withValues(alpha: 0.10),
+          AppTheme.raisedSurface,
+        ],
+      ),
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      border: Border.all(color: baseColor.withValues(alpha: 0.42), width: 1.2),
+      boxShadow: [
+        ...AppTheme.elevation1,
+        BoxShadow(
+          color: baseColor.withValues(alpha: 0.06),
+          blurRadius: 16,
+          offset: const Offset(0, 8),
+        ),
+      ],
     );
   }
 

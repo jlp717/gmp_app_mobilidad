@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:signature/signature.dart';
 
 /// Modal de firma digital para captura de firma del cliente
@@ -113,29 +114,11 @@ class _SignatureModalState extends State<SignatureModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      // Responsive: use more height in landscape where screen is shorter
+    return RepartidorExecutiveSheet(
       height: Responsive.modalHeight(context),
-      decoration: const BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppTheme.radiusXl),
-        ),
-        border: Border(top: BorderSide(color: AppTheme.borderColor)),
-      ),
+      accentColor: AppTheme.info,
       child: Column(
         children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppTheme.textTertiary.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
           // Header (responsive padding)
           Padding(
             padding: EdgeInsets.all(
@@ -144,20 +127,10 @@ class _SignatureModalState extends State<SignatureModal> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.info.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        border: Border.all(
-                          color: AppTheme.info.withValues(alpha: 0.28),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.edit_note,
-                        color: AppTheme.info,
-                        size: 24,
-                      ),
+                    const RepartidorExecutiveIcon(
+                      icon: Icons.edit_note,
+                      color: AppTheme.info,
+                      size: 24,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -199,21 +172,13 @@ class _SignatureModalState extends State<SignatureModal> {
 
           // Signature Canvas
           Expanded(
-            child: Container(
+            child: RepartidorExecutivePanel(
               margin: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _isEmpty
-                      ? AppTheme.borderColor
-                      : AppTheme.success.withValues(alpha: 0.56),
-                  width: _isEmpty ? 1 : 2,
-                ),
-                boxShadow: AppTheme.elevation1,
-              ),
+              accentColor: _isEmpty ? AppTheme.info : AppTheme.success,
+              padding: EdgeInsets.zero,
+              borderRadius: AppTheme.radiusLg,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                 child: Stack(
                   children: [
                     // Signature pad
@@ -273,7 +238,7 @@ class _SignatureModalState extends State<SignatureModal> {
                       side: const BorderSide(color: AppTheme.borderColor),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                     ),
                   ),
@@ -296,7 +261,7 @@ class _SignatureModalState extends State<SignatureModal> {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                     ),
                   ),

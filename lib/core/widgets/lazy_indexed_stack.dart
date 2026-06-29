@@ -35,7 +35,7 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
         List.generate(widget.children.length, (i) => i == widget.index);
     _previousIndex = widget.index;
     _animController = AnimationController(
-      duration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 240),
       vsync: this,
     );
     if (widget.children.isNotEmpty) {
@@ -73,6 +73,7 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
     return IndexedStack(
       index: widget.index,
       alignment: widget.alignment,
@@ -89,6 +90,7 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
         );
 
         if (i == widget.index) {
+          if (reduceMotion) return child;
           return _TabEntrance(
             controller: _animController,
             child: child,
@@ -116,9 +118,13 @@ class _TabEntrance extends AnimatedWidget {
 
     return Opacity(
       opacity: curvedValue,
-      child: Transform.translate(
-        offset: Offset(0, 8 * (1 - curvedValue)),
-        child: child,
+      child: Transform.scale(
+        scale: 0.992 + (0.008 * curvedValue),
+        alignment: Alignment.topCenter,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - curvedValue)),
+          child: child,
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 /// Premium metrics bar with circular gauges, animated counters and glow accents.
 class MetricsBar extends StatelessWidget {
@@ -21,13 +22,11 @@ class MetricsBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(
-          bottom: BorderSide(
-            color: AppTheme.borderColor.withValues(alpha: 0.8),
-          ),
-        ),
+      decoration: WarehouseUi.executiveSurface(
+        accent: AppTheme.info,
+        radius: 0,
+        borderAlpha: 0.16,
+        accentAlpha: 0.04,
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -104,10 +103,11 @@ class _CircularGaugeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppTheme.softPanel,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
+      decoration: WarehouseUi.executiveSurface(
+        accent: color,
+        borderAlpha: 0.22,
+        accentAlpha: 0.06,
+        elevated: false,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -326,10 +326,8 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: color.withValues(alpha: pulseOpacity),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: color.withValues(alpha: 0.4),
-            ),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
                 color: color.withValues(alpha: 0.15),
@@ -372,10 +370,11 @@ class _BoxCountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppTheme.softPanel,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderColor),
+      decoration: WarehouseUi.executiveSurface(
+        accent: overflow > 0 ? AppTheme.error : AppTheme.success,
+        borderAlpha: overflow > 0 ? 0.28 : 0.16,
+        accentAlpha: overflow > 0 ? 0.08 : 0.04,
+        elevated: false,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

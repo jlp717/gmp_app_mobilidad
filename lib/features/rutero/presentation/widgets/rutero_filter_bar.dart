@@ -35,13 +35,29 @@ class RuteroFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildKpiFilters(context),
-        _buildSearchBar(),
-        _buildSortSelector(),
-      ],
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        gradient: AppTheme.commandGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: AppTheme.accentRose.withValues(alpha: 0.20)),
+        boxShadow: [
+          ...AppTheme.elevation2,
+          BoxShadow(
+            color: AppTheme.accentRose.withValues(alpha: 0.08),
+            blurRadius: 24,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildKpiFilters(context),
+          _buildSearchBar(),
+          _buildSortSelector(),
+        ],
+      ),
     );
   }
 
@@ -60,15 +76,20 @@ class RuteroFilterBar extends StatelessWidget {
             color: AppTheme.textSecondary.withValues(alpha: 0.7),
             fontSize: 13,
           ),
-          prefixIcon:
-              const Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
+          prefixIcon: const Icon(
+            Icons.manage_search_rounded,
+            size: 16,
+            color: AppTheme.accentRose,
+          ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           isDense: true,
           filled: true,
-          fillColor: AppTheme.raisedSurface,
+          fillColor: AppTheme.inkSurface.withValues(alpha: 0.48),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            borderSide: BorderSide(
+              color: AppTheme.accentRose.withValues(alpha: 0.18),
+            ),
           ),
         ),
       ),
@@ -92,9 +113,11 @@ class RuteroFilterBar extends StatelessWidget {
               height: 32,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: AppTheme.raisedSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
+                gradient: AppTheme.cardGradient,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(
+                  color: AppTheme.activeRing.withValues(alpha: 0.14),
+                ),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -156,13 +179,21 @@ class RuteroFilterBar extends StatelessWidget {
               height: 32,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: AppTheme.raisedSurface,
-                borderRadius: BorderRadius.circular(8),
+                gradient: AppTheme.cardGradient,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 border: Border.all(
                   color: selectedAlertType != 'ALL'
                       ? AppTheme.accentRose
-                      : AppTheme.borderColor,
+                      : AppTheme.activeRing.withValues(alpha: 0.14),
                 ),
+                boxShadow: selectedAlertType != 'ALL'
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.accentRose.withValues(alpha: 0.12),
+                          blurRadius: 16,
+                        ),
+                      ]
+                    : null,
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -209,6 +240,7 @@ class RuteroFilterBar extends StatelessWidget {
               label: const Text('Con Alertas'),
               selected: onlyWithAlerts,
               selectedColor: AppTheme.accentRose.withValues(alpha: 0.2),
+              backgroundColor: AppTheme.surfaceCommand,
               checkmarkColor: AppTheme.accentRose,
               padding: EdgeInsets.zero,
               labelStyle: TextStyle(
@@ -224,7 +256,7 @@ class RuteroFilterBar extends StatelessWidget {
                 side: BorderSide(
                   color: onlyWithAlerts
                       ? AppTheme.accentRose
-                      : AppTheme.borderColor,
+                      : AppTheme.activeRing.withValues(alpha: 0.14),
                 ),
               ),
               onSelected: onOnlyWithAlertsChanged,

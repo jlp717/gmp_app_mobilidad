@@ -15,7 +15,7 @@ void main() {
 
       expect(items.length, 5);
       expect(items.any((i) => i.label == 'Expediciones'), true);
-      expect(items.any((i) => i.label == 'Vehiculos'), true);
+      expect(items.any((i) => i.label == 'Vehículos'), true);
     });
 
     test('returns repartidor items when isRepartidor true', () {
@@ -91,9 +91,10 @@ void main() {
       expect(items.any((i) => i.label == 'Comisiones'), true);
       expect(items.any((i) => i.label == 'Facturas'), true);
       expect(items.any((i) => i.label == 'Pedidos'), true);
-      expect(items.any((i) => i.label == 'Glacius'), true);
+      expect(items.any((i) => i.label == 'Alertas'), true);
       expect(items.any((i) => i.label == 'Cobros'), true);
-      expect(items.any((i) => i.label == 'Chat IA'), true);
+      expect(items.any((i) => i.label == 'Evolución'), true);
+      expect(items.any((i) => i.label == 'Asistente'), true);
     });
   });
 

@@ -117,6 +117,7 @@ class AuthState {
 // triggering rate limiting from repeated login attempts.
 class AuthNotifier extends AsyncNotifier<AuthState> {
   static const Duration _sessionDuration = Duration(days: 1);
+  static const Duration _resumeRefreshThreshold = Duration(minutes: 5);
   static const String _sessionExpiresAtKey = 'session_expires_at';
 
   Timer? _sessionExpiryTimer;
@@ -291,39 +292,71 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return true;
   }
 
+  /// Restores the token after app resume and refreshes it only near expiry.
+  ///
+  /// Resume can happen while Android/iOS is still reconnecting sockets. Avoiding
+  /// an unconditional refresh prevents noisy endpoint failures after returning
+  /// from the launcher or recent-apps screen.
+  Future<bool> ensureSessionIsReadyForResume() async {
+    final isStillValid = await ensureSessionIsStillValid();
+    if (!isStillValid) return false;
+
+    final token = await SecureStorage.readSecureData('user_token');
+    if (token == null || token.isEmpty) return false;
+
+    if (_isTokenExpiringSoon(token)) {
+      final refreshed = await ApiClient.refreshAccessToken();
+      if (refreshed) {
+        final refreshedToken = await SecureStorage.readSecureData('user_token');
+        if (refreshedToken != null && refreshedToken.isNotEmpty) {
+          ApiClient.setAuthToken(refreshedToken);
+        }
+      }
+    }
+
+    return true;
+  }
+
   /// Returns true if the stored token is expired.
   /// The server uses a custom 2-part HMAC format: base64(JSON).hmacHex
   /// The payload contains a 'timestamp' (ms epoch) and the TTL is 24 hours.
-  bool _isTokenExpired(String token) {
+  DateTime? _tokenIssuedAt(String token) {
     try {
-      // Custom format: base64Payload.hmacHex  (NOT standard 3-part JWT)
       final dotIndex = token.indexOf('.');
-      if (dotIndex < 1) return true;
+      if (dotIndex < 1) return null;
       var dataB64 = token.substring(0, dotIndex);
-      // Add standard base64 padding if needed
       switch (dataB64.length % 4) {
         case 2:
           dataB64 += '==';
-          break;
         case 3:
           dataB64 += '=';
-          break;
         default:
-          break;
       }
       final decoded = utf8.decode(base64.decode(dataB64));
       final data = jsonDecode(decoded) as Map<String, dynamic>;
-      // Token payload uses 'timestamp' (ms since epoch), TTL = 24 hours.
       final timestamp = data['timestamp'];
-      if (timestamp == null) return true;
+      if (timestamp == null) return null;
       final ts = timestamp is int
           ? timestamp
           : int.tryParse(timestamp.toString()) ?? 0;
-      const ttlMs = 86400000; // 24 hours — matches server JWT_ACCESS_EXPIRES
-      return DateTime.now().millisecondsSinceEpoch - ts >= ttlMs;
+      if (ts <= 0) return null;
+      return DateTime.fromMillisecondsSinceEpoch(ts);
     } catch (_) {
-      return true; // can't decode → treat as expired
+      return null;
     }
+  }
+
+  bool _isTokenExpired(String token) {
+    final issuedAt = _tokenIssuedAt(token);
+    if (issuedAt == null) return true;
+    return DateTime.now().difference(issuedAt) >= _sessionDuration;
+  }
+
+  bool _isTokenExpiringSoon(String token) {
+    final issuedAt = _tokenIssuedAt(token);
+    if (issuedAt == null) return true;
+    final expiresAt = issuedAt.add(_sessionDuration);
+    return !DateTime.now().add(_resumeRefreshThreshold).isBefore(expiresAt);
   }
 
   /// Attempt to restore session from storage

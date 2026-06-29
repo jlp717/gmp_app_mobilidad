@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/truck_3d_painter.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/load_planner_panel.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 enum ViewMode { perspective, top, front }
 
@@ -621,10 +622,11 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       builder: (context) => Container(
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface.withValues(alpha: 0.98),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: cc.withValues(alpha: 0.5), width: 2),
+        decoration: WarehouseUi.executiveSurface(
+          accent: cc,
+          radius: AppTheme.radiusXl,
+          borderAlpha: 0.5,
+          accentAlpha: 0.08,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -752,8 +754,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: AppTheme.inkSurface,
+        backgroundColor: AppTheme.raisedSurface,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70),
           onPressed: () => Navigator.pop(context),
@@ -871,9 +874,11 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           // View mode toggle
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.raisedSurface.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(8),
+            decoration: WarehouseUi.executiveSurface(
+              accent: AppTheme.info,
+              borderAlpha: 0.16,
+              accentAlpha: 0.04,
+              elevated: false,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -952,23 +957,25 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           ),
         ],
       ),
-      body: _loading
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: AppTheme.info),
-                  SizedBox(height: 16),
-                  Text(
-                    'Calculando carga...',
-                    style: TextStyle(color: Colors.white54, fontSize: 14),
-                  ),
-                ],
-              ),
-            )
-          : _error != null
-              ? _buildError()
-              : _buildContent(),
+      body: WarehouseUi.pageShell(
+        child: _loading
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.info),
+                    SizedBox(height: 16),
+                    Text(
+                      'Calculando carga...',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                  ],
+                ),
+              )
+            : _error != null
+                ? _buildError()
+                : _buildContent(),
+      ),
     );
   }
 
@@ -1064,9 +1071,11 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             right: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppTheme.raisedSurface.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(8),
+              decoration: WarehouseUi.executiveSurface(
+                accent: AppTheme.info,
+                borderAlpha: 0.24,
+                accentAlpha: 0.08,
+                elevated: false,
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,

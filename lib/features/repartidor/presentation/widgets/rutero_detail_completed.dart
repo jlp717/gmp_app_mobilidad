@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 
 class RuteroDetailCompleted extends StatelessWidget {
   const RuteroDetailCompleted({
@@ -58,13 +59,9 @@ class RuteroDetailCompleted extends StatelessWidget {
   }
 
   Widget _buildSuccessBanner() {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.success.withValues(alpha: 0.34)),
-      ),
+      accentColor: AppTheme.success,
       child: Row(
         children: [
           Container(
@@ -111,13 +108,9 @@ class RuteroDetailCompleted extends StatelessWidget {
   }
 
   Widget _buildSummaryInfo(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
+      accentColor: AppTheme.info,
       child: Column(
         children: [
           _InfoRow(
@@ -289,29 +282,23 @@ class _ShareButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppTheme.raisedSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        side: BorderSide(color: color.withValues(alpha: 0.28)),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: TextStyle(color: color, fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              Icon(Icons.chevron_right, color: color.withValues(alpha: 0.6)),
-            ],
-          ),
+    return RepartidorExecutivePanel(
+      accentColor: color,
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.6)),
+          ],
         ),
       ),
     );

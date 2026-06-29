@@ -178,14 +178,16 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          _buildHeader(),
-          _buildDateFilter(),
-          _buildVehicleFilter(),
-          Expanded(child: _buildBody()),
-        ],
+    return WarehouseUi.pageShell(
+      child: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildDateFilter(),
+            _buildVehicleFilter(),
+            Expanded(child: _buildBody()),
+          ],
+        ),
       ),
     );
   }
@@ -238,12 +240,14 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
     }
 
     return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       padding: EdgeInsets.fromLTRB(
         Responsive.padding(context, small: 12, large: 16),
         12,
         Responsive.padding(context, small: 12, large: 16),
         4,
       ),
+      decoration: WarehouseUi.headerSurface(accent: AppTheme.info),
       child: Row(
         children: [
           Container(
@@ -327,10 +331,11 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
             horizontal: 10,
             vertical: 8,
           ),
-          decoration: WarehouseUi.surface(
-            color: AppTheme.raisedSurface,
-            borderColor: hasFilter ? AppTheme.info : AppTheme.borderColor,
-            borderAlpha: hasFilter ? 0.34 : 1,
+          decoration: WarehouseUi.executiveSurface(
+            accent: hasFilter ? AppTheme.info : AppTheme.textTertiary,
+            borderAlpha: hasFilter ? 0.34 : 0.16,
+            accentAlpha: hasFilter ? 0.08 : 0.03,
+            elevated: false,
           ),
           child: Row(
             children: [
@@ -431,11 +436,10 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      decoration: WarehouseUi.surface(
-        color: AppTheme.raisedSurface,
-        borderColor: sc,
-        borderAlpha: 0.16,
-        radius: AppTheme.radiusLg,
+      decoration: WarehouseUi.executiveSurface(
+        accent: sc,
+        borderAlpha: isExpanded ? 0.34 : 0.18,
+        accentAlpha: isExpanded ? 0.09 : 0.05,
       ),
       child: Column(
         children: [

@@ -102,8 +102,21 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppTheme.raisedSurface,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: AppTheme.commandGradient,
+        border: Border(
+          bottom:
+              BorderSide(color: AppTheme.activeRing.withValues(alpha: 0.18)),
+        ),
+        boxShadow: [
+          ...AppTheme.elevation2,
+          BoxShadow(
+            color: AppTheme.activeRing.withValues(alpha: 0.06),
+            blurRadius: 24,
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -114,8 +127,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
             decoration: InputDecoration(
               hintText: 'Buscar por pedido, cliente o código...',
               hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
-              prefixIcon:
-                  const Icon(Icons.search, color: AppTheme.info, size: 18),
+              prefixIcon: const Icon(
+                Icons.manage_search_rounded,
+                color: AppTheme.activeRing,
+                size: 20,
+              ),
               suffixIcon: widget.searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(
@@ -130,12 +146,23 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     )
                   : null,
               filled: true,
-              fillColor: AppTheme.raisedSurface,
+              fillColor: AppTheme.inkSurface.withValues(alpha: 0.56),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                borderSide: BorderSide(
+                    color: AppTheme.activeRing.withValues(alpha: 0.14)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                borderSide: BorderSide(
+                    color: AppTheme.activeRing.withValues(alpha: 0.14)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                borderSide:
+                    const BorderSide(color: AppTheme.activeRing, width: 1.6),
               ),
             ),
             onChanged: (v) => widget.onSearchChanged(v.trim()),
@@ -241,10 +268,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.raisedSurface,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: AppTheme.glassMorphism(),
               child: Column(
                 children: [
                   Row(
@@ -398,22 +422,40 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: isSelected
-              ? (color ?? AppTheme.info).withValues(alpha: 0.2)
-              : AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(20),
+          gradient: isSelected
+              ? LinearGradient(
+                  colors: [
+                    (color ?? AppTheme.activeRing).withValues(alpha: 0.26),
+                    (color ?? AppTheme.activeRing).withValues(alpha: 0.08),
+                  ],
+                )
+              : null,
+          color:
+              isSelected ? null : AppTheme.inkSurface.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           border: Border.all(
             color: isSelected
-                ? (color ?? AppTheme.info).withValues(alpha: 0.5)
-                : AppTheme.borderColor,
+                ? (color ?? AppTheme.activeRing).withValues(alpha: 0.55)
+                : AppTheme.activeRing.withValues(alpha: 0.12),
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color:
+                        (color ?? AppTheme.activeRing).withValues(alpha: 0.14),
+                    blurRadius: 16,
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? (color ?? Colors.white) : Colors.white70,
+            color: isSelected
+                ? (color ?? AppTheme.activeRing)
+                : AppTheme.textSecondary,
             fontSize: Responsive.fontSize(context, small: 11, large: 12),
-            fontWeight: FontWeight.w600,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
           ),
         ),
       ),
@@ -426,15 +468,16 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.borderColor),
+          gradient: AppTheme.cardGradient,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border:
+              Border.all(color: AppTheme.activeRing.withValues(alpha: 0.14)),
         ),
         child: Row(
           children: [
             Icon(
               Icons.calendar_today,
-              color: AppTheme.info.withValues(alpha: 0.7),
+              color: AppTheme.activeRing.withValues(alpha: 0.82),
               size: 14,
             ),
             const SizedBox(width: 6),
@@ -461,9 +504,10 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.borderColor),
+          color: AppTheme.surfaceCommand,
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+          border:
+              Border.all(color: AppTheme.activeRing.withValues(alpha: 0.14)),
         ),
         child: Text(
           label,

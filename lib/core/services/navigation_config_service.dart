@@ -195,6 +195,12 @@ class NavigationConfigService {
       color: AppTheme.warning,
     ),
     NavItem(
+      icon: Icons.show_chart_outlined,
+      selectedIcon: Icons.show_chart,
+      label: 'Evolución',
+      color: AppTheme.accentIndigo,
+    ),
+    NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
       label: 'Asistente',

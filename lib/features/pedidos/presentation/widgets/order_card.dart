@@ -43,10 +43,24 @@ class OrderCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.92),
+            theme.primary.withValues(alpha: 0.055),
+          ],
+        ),
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(color: theme.primary.withValues(alpha: 0.32)),
-        boxShadow: AppTheme.elevation1,
+        boxShadow: [
+          ...AppTheme.elevation1,
+          BoxShadow(
+            color: theme.primary.withValues(alpha: 0.06),
+            blurRadius: 16,
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -93,6 +107,12 @@ class OrderCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         border: Border.all(
                             color: theme.primary.withValues(alpha: 0.3)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: theme.primary.withValues(alpha: 0.10),
+                            blurRadius: 12,
+                          ),
+                        ],
                       ),
                       child: Icon(
                         theme.icon,
@@ -145,8 +165,11 @@ class OrderCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppTheme.textPrimary.withValues(alpha: 0.03),
+                    color: AppTheme.inkSurface.withValues(alpha: 0.36),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,

@@ -38,11 +38,19 @@ class SimpleClientListPage extends ConsumerStatefulWidget {
       _SimpleClientListPageState();
 }
 
+enum _ClientSortOrder {
+  salesDesc,
+  salesAsc,
+  nameAsc,
+  cityAsc,
+}
+
 class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   List<Map<String, dynamic>> _clients = [];
   bool _isLoading = true;
   String? _error;
   String _searchQuery = '';
+  _ClientSortOrder _sortOrder = _ClientSortOrder.salesDesc;
   DateTime? _lastFetchTime; // Track last sync
   // final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 0);
   Timer? _debounceTimer;
@@ -109,6 +117,95 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 250), () {
       _loadClients(query: query);
+    });
+  }
+
+  List<Map<String, dynamic>> _sortClients(
+    Iterable<Map<String, dynamic>> clients,
+  ) {
+    final sorted = List<Map<String, dynamic>>.from(clients);
+    sorted.sort((a, b) {
+      switch (_sortOrder) {
+        case _ClientSortOrder.salesDesc:
+          return _compareAmountDescThenName(a, b);
+        case _ClientSortOrder.salesAsc:
+          return _compareAmountAscThenName(a, b);
+        case _ClientSortOrder.nameAsc:
+          return _compareNameThenCity(a, b);
+        case _ClientSortOrder.cityAsc:
+          return _compareCityThenName(a, b);
+      }
+    });
+    return sorted;
+  }
+
+  int _compareAmountDescThenName(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+  ) {
+    final amountCompare = _clientAmount(b).compareTo(_clientAmount(a));
+    if (amountCompare != 0) return amountCompare;
+    return _compareClientText(a, b, 'name');
+  }
+
+  int _compareAmountAscThenName(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+  ) {
+    final amountCompare = _clientAmount(a).compareTo(_clientAmount(b));
+    if (amountCompare != 0) return amountCompare;
+    return _compareClientText(a, b, 'name');
+  }
+
+  int _compareNameThenCity(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final nameCompare = _compareClientText(a, b, 'name');
+    if (nameCompare != 0) return nameCompare;
+    return _compareClientText(a, b, 'city');
+  }
+
+  int _compareCityThenName(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final cityCompare = _compareClientText(a, b, 'city', emptyLast: true);
+    if (cityCompare != 0) return cityCompare;
+    return _compareClientText(a, b, 'name');
+  }
+
+  int _compareClientText(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+    String key, {
+    bool emptyLast = false,
+  }) {
+    final left = _clientText(a, key);
+    final right = _clientText(b, key);
+    if (emptyLast) {
+      if (left.isEmpty && right.isNotEmpty) return 1;
+      if (left.isNotEmpty && right.isEmpty) return -1;
+    }
+    return left.compareTo(right);
+  }
+
+  double _clientAmount(Map<String, dynamic> client) {
+    final value = client['totalPurchases'];
+    if (value is num) return value.toDouble();
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return 0;
+    var cleaned = raw.replaceAll(RegExp(r'[^0-9,.-]'), '');
+    if (cleaned.contains(',') &&
+        cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+      cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+    }
+    return double.tryParse(cleaned) ?? 0;
+  }
+
+  String _clientText(Map<String, dynamic> client, String key) {
+    return (client[key]?.toString() ?? '').trim().toUpperCase();
+  }
+
+  void _onSortChanged(_ClientSortOrder? value) {
+    if (value == null || value == _sortOrder) return;
+    setState(() {
+      _sortOrder = value;
+      _clients = _sortClients(_clients);
     });
   }
 
@@ -199,7 +296,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _clients = filteredResults;
+        _clients = _sortClients(filteredResults);
         _clientsWithAlertsCodes = alertCodesSet;
         _alertsPrefetchLoaded = alertsPrefetchLoaded;
         _isLoading = false;
@@ -413,9 +510,18 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           child: Container(
             padding: EdgeInsets.all(pagePadding),
             decoration: BoxDecoration(
-              color: AppTheme.raisedSurface,
+              gradient: AppTheme.commandGradient,
               borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              border: Border.all(color: AppTheme.borderColor),
+              border: Border.all(
+                color: AppTheme.success.withValues(alpha: 0.24),
+              ),
+              boxShadow: [
+                ...AppTheme.elevation2,
+                BoxShadow(
+                  color: AppTheme.success.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                ),
+              ],
             ),
             child: Column(
               children: [
@@ -426,7 +532,12 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: AppTheme.softPanel,
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.success.withValues(alpha: 0.22),
+                              AppTheme.success.withValues(alpha: 0.07),
+                            ],
+                          ),
                           borderRadius:
                               BorderRadius.circular(AppTheme.radiusMd),
                           border: Border.all(
@@ -471,6 +582,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         // KPI Filters Bar
         _buildKpiFilters(),
 
+        _buildSortSelector(pagePadding),
+
         // Search Bar
         Padding(
           padding: EdgeInsets.symmetric(horizontal: pagePadding),
@@ -479,18 +592,25 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
               hintText: 'Buscar cliente, NIF, Ciudad, Código...',
               prefixIcon: const Icon(Icons.search),
               filled: true,
-              fillColor: AppTheme.raisedSurface,
+              fillColor: AppTheme.surfaceCommand,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppTheme.borderColor),
+                borderSide: BorderSide(
+                  color: AppTheme.success.withValues(alpha: 0.18),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppTheme.borderColor),
+                borderSide: BorderSide(
+                  color: AppTheme.success.withValues(alpha: 0.18),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppTheme.success),
+                borderSide: const BorderSide(
+                  color: AppTheme.success,
+                  width: 1.6,
+                ),
               ),
             ),
             controller: _searchController,
@@ -604,13 +724,21 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                   height: 40,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: AppTheme.raisedSurface,
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: AppTheme.cardGradient,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     border: Border.all(
                       color: _selectedAlertType != 'ALL'
                           ? AppTheme.warning
-                          : AppTheme.borderColor,
+                          : AppTheme.activeRing.withValues(alpha: 0.14),
                     ),
+                    boxShadow: _selectedAlertType != 'ALL'
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.warning.withValues(alpha: 0.12),
+                              blurRadius: 16,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
@@ -649,7 +777,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
               FilterChip(
                 label: const Text('Con Alertas'),
                 selected: _onlyWithAlerts,
-                selectedColor: AppTheme.warning.withValues(alpha: 0.16),
+                selectedColor: AppTheme.warning.withValues(alpha: 0.24),
+                backgroundColor: AppTheme.surfaceCommand,
                 checkmarkColor: AppTheme.warning,
                 labelStyle: TextStyle(
                   fontSize: 12,
@@ -664,7 +793,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                   side: BorderSide(
                     color: _onlyWithAlerts
                         ? AppTheme.warning
-                        : AppTheme.borderColor,
+                        : AppTheme.activeRing.withValues(alpha: 0.14),
                   ),
                 ),
                 onSelected: (val) {
@@ -699,6 +828,62 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       ),
     );
   }
+
+  Widget _buildSortSelector(double pagePadding) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pagePadding, 0, pagePadding, 10),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          gradient: AppTheme.cardGradient,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.success.withValues(alpha: 0.18)),
+          boxShadow: AppTheme.elevation1,
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.sort, size: 20, color: AppTheme.textSecondary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<_ClientSortOrder>(
+                  value: _sortOrder,
+                  isExpanded: true,
+                  dropdownColor: AppTheme.raisedSurface,
+                  icon: const Icon(Icons.expand_more, size: 20),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: _ClientSortOrder.salesDesc,
+                      child: Text('Importe: mayor a menor'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClientSortOrder.salesAsc,
+                      child: Text('Importe: menor a mayor'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClientSortOrder.nameAsc,
+                      child: Text('Orden alfabetico'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClientSortOrder.cityAsc,
+                      child: Text('Localidad'),
+                    ),
+                  ],
+                  onChanged: _onSortChanged,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ClientCountPill extends StatelessWidget {
@@ -711,9 +896,14 @@ class _ClientCountPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.softPanel,
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.success.withValues(alpha: 0.18),
+            AppTheme.success.withValues(alpha: 0.06),
+          ],
+        ),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(color: AppTheme.borderColor),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.30)),
       ),
       child: Text(
         '$count clientes',
@@ -756,11 +946,15 @@ class _ClientCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.raisedSurface,
-      elevation: 0,
+      color: AppTheme.surfaceCommand,
+      elevation: 4,
+      shadowColor: AppTheme.success.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.88)),
+        side: BorderSide(
+          color: (hasPrefetchedAlerts ? AppTheme.warning : AppTheme.success)
+              .withValues(alpha: hasPrefetchedAlerts ? 0.42 : 0.20),
+        ),
       ),
       child: InkWell(
         onTap: onTap,
@@ -780,10 +974,24 @@ class _ClientCard extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppTheme.softPanel,
-                      border: Border.all(
-                        color: AppTheme.success.withValues(alpha: 0.28),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.success.withValues(alpha: 0.24),
+                          AppTheme.surfaceCommand,
+                          AppTheme.success.withValues(alpha: 0.08),
+                        ],
                       ),
+                      border: Border.all(
+                        color: AppTheme.success.withValues(alpha: 0.42),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.success.withValues(alpha: 0.10),
+                          blurRadius: 16,
+                        ),
+                      ],
                     ),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'C',

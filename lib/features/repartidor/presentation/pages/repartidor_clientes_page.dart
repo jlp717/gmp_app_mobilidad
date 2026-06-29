@@ -266,14 +266,31 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       color: AppTheme.raisedSurface,
-      child: Row(
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
         children: [
-          Text('${_filteredClients.length} resultados',
-              style:
-                  const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-          const Spacer(),
-          const Text('Ordenar: ',
-              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.softPanel,
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Text(
+              '${_filteredClients.length} resultados',
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          const Text(
+            'Ordenar:',
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+          ),
           _sortChip('Visita', _SortBy.lastVisit),
           _sortChip('Nombre', _SortBy.name),
           _sortChip('Docs', _SortBy.totalDocs),
@@ -286,7 +303,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   Widget _sortChip(String label, _SortBy sort) {
     final selected = _sortBy == sort;
     return Padding(
-      padding: const EdgeInsets.only(left: 4),
+      padding: EdgeInsets.zero,
       child: InkWell(
         onTap: () {
           setState(() {

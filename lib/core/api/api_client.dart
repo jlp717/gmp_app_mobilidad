@@ -348,7 +348,17 @@ class ApiClient {
             final isStaleRequest =
                 requestAuth != null && requestAuth != currentAuth;
 
-            if (!isStaleRequest && await refreshAccessToken()) {
+            if (isStaleRequest && currentAuth != null) {
+              try {
+                error.requestOptions.extra['authRetried'] = true;
+                error.requestOptions.headers['Authorization'] = currentAuth;
+                final response = await dio.fetch<dynamic>(error.requestOptions);
+                handler.resolve(response);
+                return;
+              } catch (_) {
+                // Fall through to normal 401 handling below.
+              }
+            } else if (!isStaleRequest && await refreshAccessToken()) {
               try {
                 error.requestOptions.extra['authRetried'] = true;
                 error.requestOptions.headers['Authorization'] =
@@ -506,6 +516,20 @@ class ApiClient {
     } finally {
       _isLoggingIn = false;
     }
+  }
+
+  /// Clears static client state between unit tests.
+  @visibleForTesting
+  static void resetForTesting() {
+    _dio = null;
+    _isInitialized = false;
+    _savedAuthToken = null;
+    _refreshInFlight = null;
+    authSessionExpiresAt = null;
+    _pendingRequests.clear();
+    onUnauthorized = null;
+    _isLoggingOut = false;
+    _isLoggingIn = false;
   }
 
   static String _buildRequestKey(

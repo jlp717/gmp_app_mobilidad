@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-/// Legacy card API restyled as an operational surface.
-class HolographicCard extends StatelessWidget {
+/// Legacy card API restyled as an executive data surface.
+class HolographicCard extends StatefulWidget {
   const HolographicCard({
     required this.child,
     super.key,
@@ -29,27 +29,85 @@ class HolographicCard extends StatelessWidget {
   final bool showHolographicEffect;
 
   @override
+  State<HolographicCard> createState() => _HolographicCardState();
+}
+
+class _HolographicCardState extends State<HolographicCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final card = Container(
-      width: width,
-      height: height,
-      margin: margin,
-      padding: padding ?? const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.84)),
-        boxShadow: AppTheme.elevation1,
+    final accent = (widget.gradientColors?.isNotEmpty ?? false)
+        ? widget.gradientColors!.first
+        : AppTheme.activeRing;
+    final radius = BorderRadius.circular(AppTheme.radiusLg);
+    final card = AnimatedScale(
+      duration: AppTheme.animFast,
+      curve: Curves.easeOutCubic,
+      scale: widget.animateOnHover && _hovered ? 1.012 : 1,
+      child: Container(
+        width: widget.width,
+        height: widget.height,
+        margin: widget.margin,
+        decoration: AppTheme.holoCard(glowColor: accent),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Stack(
+            children: [
+              if (widget.showHolographicEffect)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.060),
+                            Colors.transparent,
+                            accent.withValues(alpha: 0.050),
+                          ],
+                          stops: const [0.0, 0.45, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: Container(
+                  height: 1.2,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        accent.withValues(alpha: 0.66),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: widget.padding ?? const EdgeInsets.all(16),
+                child: widget.child,
+              ),
+            ],
+          ),
+        ),
       ),
-      child: child,
     );
 
-    if (!isInteractive || onTap == null) return card;
+    if (!widget.isInteractive || widget.onTap == null) return card;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         child: card,
       ),
@@ -57,7 +115,7 @@ class HolographicCard extends StatelessWidget {
   }
 }
 
-/// Legacy button API restyled as a normal primary action.
+/// Legacy button API restyled as a command action.
 class NeonButton extends StatelessWidget {
   const NeonButton({
     required this.text,
@@ -83,51 +141,64 @@ class NeonButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEnabled = !isDisabled && !isLoading && onPressed != null;
-    final color = primaryColor ?? AppTheme.info;
+    final color = primaryColor ?? AppTheme.activeRing;
 
-    return ElevatedButton(
-      onPressed: isEnabled ? onPressed : null,
-      style: (style ??
-              ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        boxShadow: isEnabled
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.22),
+                  blurRadius: 18,
                 ),
-              ))
-          .copyWith(
-        elevation: WidgetStateProperty.all(0),
-        shadowColor: WidgetStateProperty.all(Colors.transparent),
+              ]
+            : null,
       ),
-      child: isLoading
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                ],
-                Text(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: 0,
+      child: ElevatedButton(
+        onPressed: isEnabled ? onPressed : null,
+        style: (style ??
+                ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: const Color(0xFF061014),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
+                ))
+            .copyWith(
+          elevation: WidgetStateProperty.all(0),
+          shadowColor: WidgetStateProperty.all(Colors.transparent),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF061014)),
                 ),
-              ],
-            ),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, color: const Color(0xFF061014), size: 18),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF061014),
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -171,9 +242,22 @@ class DataVizCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      color.withValues(alpha: 0.22),
+                      color.withValues(alpha: 0.07),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  border: Border.all(color: color.withValues(alpha: 0.18)),
+                  border: Border.all(color: color.withValues(alpha: 0.28)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.10),
+                      blurRadius: 16,
+                    ),
+                  ],
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
@@ -298,11 +382,19 @@ class HolographicProgressIndicator extends StatelessWidget {
           ),
         ClipRRect(
           borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-          child: LinearProgressIndicator(
-            minHeight: 8,
-            value: value.clamp(0, 1),
-            backgroundColor: AppTheme.raisedSurface,
-            valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppTheme.inkSurface,
+              border: Border.all(
+                color: progressColor.withValues(alpha: 0.18),
+              ),
+            ),
+            child: LinearProgressIndicator(
+              minHeight: 9,
+              value: value.clamp(0, 1),
+              backgroundColor: AppTheme.inkSurface,
+              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+            ),
           ),
         ),
       ],
@@ -335,11 +427,7 @@ class FuturisticTabBar extends StatelessWidget {
     return Container(
       height: 46,
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
+      decoration: AppTheme.glassMorphism(),
       child: Row(
         children: List.generate(tabs.length, (index) {
           final isActive = index == selectedIndex;
@@ -350,15 +438,28 @@ class FuturisticTabBar extends StatelessWidget {
               child: AnimatedContainer(
                 duration: AppTheme.animFast,
                 decoration: BoxDecoration(
-                  color: isActive
-                      ? active.withValues(alpha: 0.12)
-                      : Colors.transparent,
+                  gradient: isActive
+                      ? LinearGradient(
+                          colors: [
+                            active.withValues(alpha: 0.24),
+                            active.withValues(alpha: 0.08),
+                          ],
+                        )
+                      : null,
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                   border: Border.all(
                     color: isActive
-                        ? active.withValues(alpha: 0.25)
+                        ? active.withValues(alpha: 0.42)
                         : Colors.transparent,
                   ),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: active.withValues(alpha: 0.12),
+                            blurRadius: 16,
+                          ),
+                        ]
+                      : null,
                 ),
                 child: Center(
                   child: Text(

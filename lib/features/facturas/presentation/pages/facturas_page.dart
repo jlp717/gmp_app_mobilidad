@@ -293,20 +293,33 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark
-            ? AppTheme.raisedSurface
-            : Colors.white, // Slighly lighter navy
+        gradient: isDark
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.raisedSurface,
+                  AppTheme.softPanel.withValues(alpha: 0.92),
+                  documentColor.withValues(alpha: 0.045),
+                ],
+              )
+            : null,
+        color: isDark ? null : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
+          ),
+          BoxShadow(
+            color: documentColor.withValues(alpha: 0.06),
+            blurRadius: 18,
           ),
         ],
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
+              ? documentColor.withValues(alpha: 0.22)
               : Colors.grey.shade200,
         ),
       ),
@@ -1266,11 +1279,23 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.raisedSurface : Colors.white,
+        gradient: isDark
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.raisedSurface,
+                  AppTheme.softPanel.withValues(alpha: 0.90),
+                  color.withValues(alpha: 0.045),
+                ],
+              )
+            : null,
+        color: isDark ? null : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? Colors.white10 : Colors.grey.shade100,
+          color: isDark ? color.withValues(alpha: 0.20) : Colors.grey.shade100,
         ),
+        boxShadow: isDark ? AppTheme.elevation1 : null,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1327,13 +1352,25 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.softPanel : Colors.grey.shade50,
+        gradient: isDark
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.raisedSurface,
+                  AppTheme.softPanel.withValues(alpha: 0.92),
+                  AppTheme.accentMint.withValues(alpha: 0.04),
+                ],
+              )
+            : null,
+        color: isDark ? null : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
+              ? AppTheme.accentMint.withValues(alpha: 0.18)
               : Colors.grey.shade200,
         ),
+        boxShadow: isDark ? AppTheme.elevation1 : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1494,7 +1531,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         decoration: BoxDecoration(
           color: isActive
               ? accentColor.withValues(alpha: 0.08)
-              : (isDark ? AppTheme.raisedSurface : Colors.white),
+              : (isDark
+                  ? AppTheme.inkSurface.withValues(alpha: 0.34)
+                  : Colors.white),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
@@ -1541,7 +1580,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.raisedSurface : Colors.white,
+        color:
+            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1611,7 +1651,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.raisedSurface : Colors.white,
+        color:
+            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1658,7 +1699,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.raisedSurface : Colors.white,
+        color:
+            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark

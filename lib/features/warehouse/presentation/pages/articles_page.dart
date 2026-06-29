@@ -203,56 +203,61 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          _buildHeader(),
-          _buildStatsRow(),
-          _buildSearchBar(),
-          Expanded(
-            child: _loading && _articles.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppTheme.info))
-                : _error != null
-                    ? Center(
-                        child: Text(_error!,
-                            style:
-                                const TextStyle(color: AppTheme.textTertiary)))
-                    : _articles.isEmpty
-                        ? Center(
-                            child: Text(
-                              _searchC.text.isEmpty
-                                  ? 'Cargando articulos...'
-                                  : 'Sin resultados',
+    return WarehouseUi.pageShell(
+      child: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildStatsRow(),
+            _buildSearchBar(),
+            Expanded(
+              child: _loading && _articles.isEmpty
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppTheme.info))
+                  : _error != null
+                      ? Center(
+                          child: Text(_error!,
                               style: const TextStyle(
-                                  color: AppTheme.textTertiary, fontSize: 13),
+                                  color: AppTheme.textTertiary)))
+                      : _articles.isEmpty
+                          ? Center(
+                              child: Text(
+                                _searchC.text.isEmpty
+                                    ? 'Cargando articulos...'
+                                    : 'Sin resultados',
+                                style: const TextStyle(
+                                    color: AppTheme.textTertiary, fontSize: 13),
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () =>
+                                  _search(_searchC.text, forceRefresh: true),
+                              color: AppTheme.info,
+                              child: ListView.builder(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                itemCount: _articles.length,
+                                itemBuilder: (_, i) =>
+                                    _articleCard(_articles[i]),
+                              ),
                             ),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: () =>
-                                _search(_searchC.text, forceRefresh: true),
-                            color: AppTheme.info,
-                            child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              itemCount: _articles.length,
-                              itemBuilder: (_, i) => _articleCard(_articles[i]),
-                            ),
-                          ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       padding: EdgeInsets.fromLTRB(
         Responsive.padding(context, small: 12, large: 16),
         12,
         Responsive.padding(context, small: 12, large: 16),
         4,
       ),
+      decoration: WarehouseUi.headerSurface(accent: AppTheme.success),
       child: Row(
         children: [
           Container(
@@ -307,6 +312,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                         color: AppTheme.error, size: 20),
                     tooltip: 'Resetear TODAS las dimensiones reales',
                     onPressed: _bulkReset,
+                    style: WarehouseUi.iconButtonStyle(AppTheme.error),
                   ),
           if (_bulkEstimating)
             const SizedBox(
@@ -321,6 +327,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   color: AppTheme.success, size: 20),
               tooltip: 'Auto-estimar dimensiones',
               onPressed: _bulkEstimate,
+              style: WarehouseUi.iconButtonStyle(AppTheme.success),
             ),
         ],
       ),
@@ -353,7 +360,15 @@ class _ArticlesPageState extends State<ArticlesPage> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.inkSurface.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Text(
         text,
@@ -392,10 +407,18 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     )
                   : null,
               filled: true,
-              fillColor: AppTheme.raisedSurface,
+              fillColor: AppTheme.softPanel,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+                borderSide: BorderSide(
+                  color: AppTheme.borderColor.withValues(alpha: 0.5),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: AppTheme.success.withValues(alpha: 0.45),
+                ),
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -477,11 +500,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
-      decoration: WarehouseUi.surface(
-        color: AppTheme.raisedSurface,
-        borderColor: dimColor,
-        borderAlpha: 0.16,
-        boxShadow: AppTheme.elevation1,
+      decoration: WarehouseUi.executiveSurface(
+        accent: dimColor,
+        borderAlpha: 0.18,
+        accentAlpha: hasReal ? 0.07 : 0.05,
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),

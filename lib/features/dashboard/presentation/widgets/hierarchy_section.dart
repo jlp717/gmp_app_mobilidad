@@ -36,21 +36,54 @@ class HierarchySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Section Header
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            border: Border(left: BorderSide(color: color, width: 4)),
-          ),
-          child: Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              letterSpacing: 0,
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                color.withValues(alpha: 0.16),
+                AppTheme.softPanel.withValues(alpha: 0.72),
+              ],
             ),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(color: color.withValues(alpha: 0.24)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: color.withValues(alpha: 0.34)),
+                ),
+                child: Icon(Icons.stacked_bar_chart, color: color, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    letterSpacing: 0,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '${data.length} registros',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.42),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),

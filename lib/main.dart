@@ -145,6 +145,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   final ValueNotifier<int> _authChangeSignal = ValueNotifier<int>(0);
   StreamSubscription<ConnectivityStatus>? _connectivitySubscription;
   bool _autoSyncInProgress = false;
+  bool _resumeInProgress = false;
 
   @override
   void initState() {
@@ -185,12 +186,19 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   }
 
   Future<void> _handleAppResumed() async {
-    final isSessionValid = await _validateSessionOnResume();
-    if (isSessionValid) {
-      await _runAutoSync();
-      await NotificationOrchestrator.instance.refreshAll(
-        reason: 'app_resumed',
-      );
+    if (_resumeInProgress) return;
+
+    _resumeInProgress = true;
+    try {
+      final isSessionValid = await _validateSessionOnResume();
+      if (isSessionValid) {
+        await _runAutoSync();
+        await NotificationOrchestrator.instance.refreshAll(
+          reason: 'app_resumed',
+        );
+      }
+    } finally {
+      _resumeInProgress = false;
     }
   }
 
@@ -240,10 +248,9 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
       if (!(authState.value?.isAuthenticated ?? false)) return false;
 
       final isStillValid =
-          await ref.read(authProvider.notifier).ensureSessionIsStillValid();
+          await ref.read(authProvider.notifier).ensureSessionIsReadyForResume();
       if (!isStillValid) return false;
 
-      await ApiClient.refreshAccessToken();
       debugPrint('[AppLifecycle] Session validated successfully on resume');
       return true;
     } catch (e) {

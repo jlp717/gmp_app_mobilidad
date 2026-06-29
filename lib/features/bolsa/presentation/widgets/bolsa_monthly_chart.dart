@@ -47,11 +47,20 @@ class BolsaMonthlyChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppTheme.info.withValues(alpha: 0.18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.92),
+            AppTheme.info.withValues(alpha: 0.045),
+          ],
         ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: AppTheme.info.withValues(alpha: 0.22),
+        ),
+        boxShadow: AppTheme.elevation1,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,7 +214,7 @@ class BolsaMonthlyChart extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         decoration: BoxDecoration(
-          color: AppTheme.raisedSurface.withValues(alpha: 0.5),
+          color: AppTheme.inkSurface.withValues(alpha: 0.34),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),

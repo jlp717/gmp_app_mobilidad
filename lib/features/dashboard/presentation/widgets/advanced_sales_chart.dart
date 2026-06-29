@@ -41,14 +41,26 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.92),
+            widget.color.withValues(alpha: 0.045),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: widget.color.withValues(alpha: 0.20)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 20,
             offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: widget.color.withValues(alpha: 0.06),
+            blurRadius: 28,
           ),
         ],
       ),
@@ -94,7 +106,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: widget.color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                   border:
                       Border.all(color: widget.color.withValues(alpha: 0.3)),
                 ),
@@ -121,8 +133,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 maxY: maxY,
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
-                    tooltipBgColor: AppTheme.raisedSurface,
-                    tooltipRoundedRadius: 8,
+                    tooltipBgColor: AppTheme.softPanel,
+                    tooltipRoundedRadius: 10,
                     tooltipPadding: const EdgeInsets.all(12),
                     tooltipMargin: 8,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
@@ -222,7 +234,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 gridData: FlGridData(
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: Colors.white.withValues(alpha: 0.06),
                       strokeWidth: 1),
                 ),
                 borderData: FlBorderData(show: false),
@@ -238,15 +250,16 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         toY: node.sales,
                         gradient: LinearGradient(
                           colors: [
-                            widget.color.withValues(alpha: 0.7),
-                            widget.color
+                            widget.color.withValues(alpha: 0.38),
+                            widget.color.withValues(alpha: 0.92),
+                            Colors.white.withValues(alpha: 0.72),
                           ],
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                         ),
                         width: 16,
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(6)),
+                            top: Radius.circular(8)),
                         backDrawRodData: BackgroundBarChartRodData(
                           show: true,
                           toY: maxY,

@@ -11,6 +11,7 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/load_c
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/metrics_bar.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/orders_panel_v2.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/planner_toolbar.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 /// Load Planner V2 – Premium redesign.
 ///
@@ -67,59 +68,61 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
-      body: Column(
-        children: [
-          // Premium gradient header
-          _buildHeader(context),
+      body: WarehouseUi.pageShell(
+        child: Column(
+          children: [
+            // Premium gradient header
+            _buildHeader(context),
 
-          // Toolbar
-          PlannerToolbar(
-            onToggleWalls: () {
-              HapticFeedback.lightImpact();
-              setState(() => _wallsVisible = !_wallsVisible);
-              _canvasKey.currentState?.toggleWalls(_wallsVisible);
-            },
-            onRepack: () {
-              HapticFeedback.mediumImpact();
-              _canvasKey.currentState?.repackBoxes();
-            },
-          ),
-
-          // Metrics
-          RepaintBoundary(
-            child: Consumer(
-              builder: (_, ref, __) {
-                final planner = ref.watch(loadPlannerProvider);
-                return MetricsBar(
-                  metrics: planner.metrics,
-                  saveState: planner.saveState,
-                );
+            // Toolbar
+            PlannerToolbar(
+              onToggleWalls: () {
+                HapticFeedback.lightImpact();
+                setState(() => _wallsVisible = !_wallsVisible);
+                _canvasKey.currentState?.toggleWalls(_wallsVisible);
+              },
+              onRepack: () {
+                HapticFeedback.mediumImpact();
+                _canvasKey.currentState?.repackBoxes();
               },
             ),
-          ),
 
-          // Main content
-          Expanded(
-            child: Consumer(
-              builder: (context, ref, _) {
-                final planner = ref.watch(loadPlannerProvider);
-                if (planner.isLoading) {
-                  return _buildShimmerLoading();
-                }
-
-                if (planner.error != null) {
-                  return _buildError(planner.error!);
-                }
-
-                if (isWide) {
-                  return _buildTabletLayout(planner);
-                } else {
-                  return _buildPhoneLayout(planner);
-                }
-              },
+            // Metrics
+            RepaintBoundary(
+              child: Consumer(
+                builder: (_, ref, __) {
+                  final planner = ref.watch(loadPlannerProvider);
+                  return MetricsBar(
+                    metrics: planner.metrics,
+                    saveState: planner.saveState,
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+
+            // Main content
+            Expanded(
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final planner = ref.watch(loadPlannerProvider);
+                  if (planner.isLoading) {
+                    return _buildShimmerLoading();
+                  }
+
+                  if (planner.error != null) {
+                    return _buildError(planner.error!);
+                  }
+
+                  if (isWide) {
+                    return _buildTabletLayout(planner);
+                  } else {
+                    return _buildPhoneLayout(planner);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -136,15 +139,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
         right: 12,
         bottom: 10,
       ),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(
-          bottom: BorderSide(
-            color: AppTheme.borderColor.withValues(alpha: 0.8),
-          ),
-        ),
-        boxShadow: AppTheme.elevation1,
-      ),
+      decoration: WarehouseUi.headerSurface(accent: AppTheme.info, radius: 0),
       child: Row(
         children: [
           // Glassmorphism back button
@@ -593,24 +588,12 @@ class _GlassIconButton extends StatelessWidget {
         duration: AppTheme.animFast,
         width: 36,
         height: 36,
-        decoration: BoxDecoration(
-          color: isActive
-              ? AppTheme.info.withValues(alpha: 0.14)
-              : AppTheme.softPanel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isActive
-                ? AppTheme.info.withValues(alpha: 0.34)
-                : AppTheme.borderColor,
-          ),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: AppTheme.info.withValues(alpha: 0.12),
-                    blurRadius: 8,
-                  ),
-                ]
-              : null,
+        decoration: WarehouseUi.executiveSurface(
+          accent: isActive ? AppTheme.info : AppTheme.textTertiary,
+          radius: AppTheme.radiusMd,
+          borderAlpha: isActive ? 0.34 : 0.16,
+          accentAlpha: isActive ? 0.12 : 0.03,
+          elevated: isActive,
         ),
         child: Icon(
           icon,

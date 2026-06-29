@@ -14,6 +14,7 @@ import 'package:intl/intl.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
@@ -44,7 +45,12 @@ class _MonthNames {
 }
 
 class BolsaPage extends ConsumerStatefulWidget {
-  const BolsaPage({super.key});
+  const BolsaPage({
+    super.key,
+    this.forceShowVendorSelector = false,
+  });
+
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<BolsaPage> createState() => _BolsaPageState();
@@ -65,11 +71,15 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     final user = authState?.user;
     final vendor = _resolveVendor();
     final normalized = vendor?.trim();
-    if (user?.isJefeVentas == true &&
-        (normalized == null ||
-            normalized.isEmpty ||
-            normalized.toUpperCase() == 'ALL')) {
-      final codes = authState?.vendedorCodes ?? const <String>[];
+    final shouldLoadGrouped = _shouldLoadGrouped(
+      vendor: normalized,
+      authState: authState,
+    );
+    if (shouldLoadGrouped) {
+      final codes = _groupedVendorCodes(
+        vendor: normalized,
+        authState: authState,
+      );
       final key = 'GROUPED:${codes.join(',')}';
       if (_lastLoadedVendor != key) {
         _lastLoadedVendor = key;
@@ -92,12 +102,65 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
     if (user == null) return null;
+    final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
+    final fallbackCodes = authVendorCodes.isNotEmpty
+        ? authVendorCodes.join(',')
+        : (user.vendedorCode?.trim().isNotEmpty == true
+            ? user.vendedorCode!.trim()
+            : user.code.trim());
+    if (hasCommercial80VendorScope(
+      userCode: user.code,
+      vendorCodes: authVendorCodes,
+    )) {
+      return resolveScopedVendorCodes(
+        userCode: user.code,
+        authVendorCodes: authVendorCodes,
+        selectedVendor: ref.read(selectedVendorProvider),
+        fallbackVendorCodes: fallbackCodes,
+      );
+    }
     if (user.isJefeVentas) {
       final selected = ref.read(selectedVendorProvider);
       return selected;
     }
-    final codes = authState?.vendedorCodes ?? [];
-    return codes.isNotEmpty ? codes.first : null;
+    return authVendorCodes.isNotEmpty ? authVendorCodes.first : null;
+  }
+
+  bool _shouldLoadGrouped({
+    required String? vendor,
+    required AuthState? authState,
+  }) {
+    final user = authState?.user;
+    if (user == null) return false;
+    final normalized = vendor?.trim();
+    if (user.isJefeVentas &&
+        (normalized == null ||
+            normalized.isEmpty ||
+            normalized.toUpperCase() == 'ALL')) {
+      return true;
+    }
+    final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
+    return hasCommercial80VendorScope(
+          userCode: user.code,
+          vendorCodes: authVendorCodes,
+        ) &&
+        normalized != null &&
+        normalized.contains(',');
+  }
+
+  List<String> _groupedVendorCodes({
+    required String? vendor,
+    required AuthState? authState,
+  }) {
+    final normalized = vendor?.trim() ?? '';
+    if (normalized.isNotEmpty && normalized.toUpperCase() != 'ALL') {
+      return normalized
+          .split(',')
+          .map((code) => code.trim())
+          .where((code) => code.isNotEmpty)
+          .toList(growable: false);
+    }
+    return authState?.vendedorCodes ?? const <String>[];
   }
 
   @override
@@ -134,11 +197,13 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         decoration: AppTheme.appBackground(),
         child: Column(
           children: [
-            // Selector "Ver como" para que JEFE_VENTAS pueda inspeccionar la
-            // bolsa de cada comercial. Para COMERCIAL no se renderiza (forceShow
-            // es false y isJefeVentas es false).
-            if (user?.isJefeVentas == true)
-              const GlobalVendorSelector(isJefeVentas: true),
+            // Selector "Ver como" para JEFE_VENTAS y perfiles comerciales
+            // con alcance de equipo, como Comercial 80.
+            if (user?.isJefeVentas == true || widget.forceShowVendorSelector)
+              GlobalVendorSelector(
+                isJefeVentas: user?.isJefeVentas == true,
+                forceShow: widget.forceShowVendorSelector,
+              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: provider.refresh,
@@ -390,14 +455,26 @@ class _BolsaSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = status.isDeficit
+        ? AppTheme.error
+        : status.isLow
+            ? AppTheme.accentAmber
+            : AppTheme.success;
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: AppTheme.premiumPanel(
-        accentColor: status.isDeficit
-            ? AppTheme.error
-            : status.isLow
-                ? AppTheme.accentAmber
-                : AppTheme.success,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.92),
+            accent.withValues(alpha: 0.045),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: accent.withValues(alpha: 0.24)),
+        boxShadow: AppTheme.elevation2,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,7 +638,7 @@ class _PeriodDropdown<T> extends StatelessWidget {
         isDense: true,
         prefixIcon: Icon(icon, color: AppTheme.info, size: 17),
         filled: true,
-        fillColor: AppTheme.raisedSurface,
+        fillColor: AppTheme.inkSurface.withValues(alpha: 0.34),
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -662,9 +739,18 @@ class _GroupedSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.92),
+            AppTheme.info.withValues(alpha: 0.045),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
         border: Border.all(color: AppTheme.info.withValues(alpha: 0.25)),
+        boxShadow: AppTheme.elevation1,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -731,12 +817,20 @@ class _GroupedVendorTile extends StatelessWidget {
         : status.isLow
             ? AppTheme.warning
             : AppTheme.success;
-    return Card(
-      color: AppTheme.raisedSurface,
+    return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: color.withValues(alpha: 0.18)),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            AppTheme.raisedSurface,
+            AppTheme.softPanel.withValues(alpha: 0.88),
+            color.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
       ),
       child: ListTile(
         onTap: onTap,
@@ -952,8 +1046,8 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
         child: ChoiceChip(
           selected: selected,
           onSelected: (_) => p.setTipoFilter(tipo),
-          backgroundColor: AppTheme.raisedSurface,
-          selectedColor: AppTheme.info.withValues(alpha: 0.25),
+          backgroundColor: AppTheme.inkSurface.withValues(alpha: 0.34),
+          selectedColor: AppTheme.info.withValues(alpha: 0.20),
           side: BorderSide(
             color:
                 selected ? AppTheme.info : Colors.white.withValues(alpha: 0.15),
@@ -1039,7 +1133,7 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
               fontSize: 12,
             ),
             filled: true,
-            fillColor: AppTheme.raisedSurface,
+            fillColor: AppTheme.inkSurface.withValues(alpha: 0.34),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             border: OutlineInputBorder(
@@ -1258,7 +1352,6 @@ class _MovimientoTile extends StatelessWidget {
     final clienteLabel = movimiento.displayCliente;
 
     return Card(
-      color: AppTheme.softPanel,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       margin: const EdgeInsets.only(bottom: 8),
@@ -1266,7 +1359,12 @@ class _MovimientoTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         side: BorderSide(color: color.withValues(alpha: 0.24), width: 0.8),
       ),
+      color: Colors.transparent,
       child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        ),
+        tileColor: AppTheme.softPanel.withValues(alpha: 0.88),
         isThreeLine: extraDetail != null || movimiento.descripcion.isNotEmpty,
         leading: Icon(icon, color: color),
         title: Text(

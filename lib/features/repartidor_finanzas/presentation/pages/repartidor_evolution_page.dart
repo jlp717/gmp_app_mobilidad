@@ -1,10 +1,11 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
-import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 
 class RepartidorEvolutionPage extends StatefulWidget {
   final String repartidorId;
@@ -159,72 +160,74 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
           entry.key.toDouble(), (entry.value['totalSales'] as num).toDouble());
     }).toList();
 
-    return Container(
-      height: 250,
+    return RepartidorExecutivePanel(
+      accentColor: AppTheme.info,
       padding: const EdgeInsets.all(16),
-      decoration: _panelDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Evolución Mensual',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              )),
-          const SizedBox(height: 20),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: const FlGridData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: const AxisTitles(),
-                  rightTitles: const AxisTitles(),
-                  topTitles: const AxisTitles(),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        int idx = value.toInt();
-                        if (idx < 0 || idx >= evolution.length)
-                          return const SizedBox.shrink();
-                        final period = evolution[idx]['period'].toString();
-                        return Text(period.substring(5),
-                            style: const TextStyle(
-                                fontSize: 10, color: AppTheme.textSecondary));
-                      },
+      child: SizedBox(
+        height: 250,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Evolución Mensual',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                )),
+            const SizedBox(height: 20),
+            Expanded(
+              child: LineChart(
+                LineChartData(
+                  gridData: const FlGridData(show: false),
+                  titlesData: FlTitlesData(
+                    leftTitles: const AxisTitles(),
+                    rightTitles: const AxisTitles(),
+                    topTitles: const AxisTitles(),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          int idx = value.toInt();
+                          if (idx < 0 || idx >= evolution.length)
+                            return const SizedBox.shrink();
+                          final period = evolution[idx]['period'].toString();
+                          return Text(period.substring(5),
+                              style: const TextStyle(
+                                  fontSize: 10, color: AppTheme.textSecondary));
+                        },
+                      ),
                     ),
                   ),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      color: AppTheme.info,
+                      barWidth: 4,
+                      isStrokeCapRound: true,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: AppTheme.info.withValues(alpha: 0.12),
+                      ),
+                    ),
+                  ],
                 ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: AppTheme.info,
-                    barWidth: 4,
-                    isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppTheme.info.withValues(alpha: 0.12),
-                    ),
-                  ),
-                ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildTopProducts(List topProducts) {
     if (topProducts.isEmpty) {
-      return Container(
+      return const RepartidorExecutivePanel(
+        accentColor: AppTheme.info,
         padding: const EdgeInsets.all(20),
-        decoration: _panelDecoration(),
-        child: const Center(
+        child: Center(
             child: Text('No hay datos de productos',
                 style: TextStyle(color: AppTheme.textSecondary))),
       );
@@ -253,9 +256,9 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.all(16),
-      decoration: _panelDecoration(accentColor: color),
+      accentColor: color,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -289,9 +292,10 @@ class _ProductTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: _panelDecoration(),
+      accentColor: AppTheme.accentIndigo,
+      padding: EdgeInsets.zero,
       child: ListTile(
         leading: Container(
           width: 40,
@@ -322,14 +326,4 @@ class _ProductTile extends StatelessWidget {
       ),
     );
   }
-}
-
-BoxDecoration _panelDecoration({Color? accentColor}) {
-  return BoxDecoration(
-    color: AppTheme.raisedSurface,
-    borderRadius: BorderRadius.circular(8),
-    border: Border.all(
-      color: (accentColor ?? AppTheme.borderColor).withValues(alpha: 0.8),
-    ),
-  );
 }

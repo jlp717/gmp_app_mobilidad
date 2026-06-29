@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/futuristic_week_navigator.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/holographic_kpi_dashboard.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/smart_delivery_card.dart';
 
@@ -356,109 +357,109 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
           final repartidores = snapshot.data!;
 
-          return Container(
-            height: 42,
+          return RepartidorExecutivePanel(
+            accentColor: AppTheme.info,
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: AppTheme.raisedSurface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.borderColor),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.person_search,
-                  color: AppTheme.info,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedVendor,
-                      hint: const Text(
-                        'Ver como repartidor...',
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 13,
-                        ),
-                      ),
-                      icon: const Icon(
-                        Icons.arrow_drop_down,
-                        color: AppTheme.info,
-                      ),
-                      dropdownColor: AppTheme.raisedSurface,
-                      isExpanded: true,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 13,
-                      ),
-                      items: repartidores.map((r) {
-                        final code = r['code'].toString().trim();
-                        final name = r['name'].toString().trim();
-                        // Format requested: R. 44: NOMBRE
-                        final displayName =
-                            'R. $code: ${name.startsWith('$code ') ? name.replaceFirst('$code ', '') : name}';
-
-                        return DropdownMenuItem(
-                          value: code,
-                          child: Text(
-                            displayName,
-                            style: const TextStyle(fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          HapticFeedback.selectionClick();
-                          filterNotifier.setVendor(val);
-
-                          // Manually trigger reload and pivot _lastLoadedId to prevent
-                          // duplicate/conflicting loads from didChangeDependencies
-                          if (mounted) {
-                            setState(() => _lastLoadedId = val);
-                          }
-
-                          // Force immediate reload
-                          ref
-                              .read(entregasProvider.notifier)
-                              .setRepartidor(val, forceReload: true);
-                          ref.read(entregasProvider.notifier).seleccionarFecha(
-                                _selectedDate,
-                                forceRefresh: true,
-                              );
-                          _loadWeekData(val, forceRefresh: true);
-                        }
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(
-                    Icons.refresh,
+            child: SizedBox(
+              height: 42,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.person_search,
                     color: AppTheme.info,
                     size: 20,
                   ),
-                  tooltip: 'Recargar datos',
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    if (selectedVendor != null) {
-                      ref
-                          .read(entregasProvider.notifier)
-                          .setRepartidor(selectedVendor, forceReload: true);
-                      ref.read(entregasProvider.notifier).seleccionarFecha(
-                            _selectedDate,
-                            forceRefresh: true,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedVendor,
+                        hint: const Text(
+                          'Ver como repartidor...',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                          color: AppTheme.info,
+                        ),
+                        dropdownColor: AppTheme.raisedSurface,
+                        isExpanded: true,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                        ),
+                        items: repartidores.map((r) {
+                          final code = r['code'].toString().trim();
+                          final name = r['name'].toString().trim();
+                          // Format requested: R. 44: NOMBRE
+                          final displayName =
+                              'R. $code: ${name.startsWith('$code ') ? name.replaceFirst('$code ', '') : name}';
+
+                          return DropdownMenuItem(
+                            value: code,
+                            child: Text(
+                              displayName,
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           );
-                      _loadWeekData(selectedVendor, forceRefresh: true);
-                    }
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            HapticFeedback.selectionClick();
+                            filterNotifier.setVendor(val);
+
+                            // Manually trigger reload and pivot _lastLoadedId to prevent
+                            // duplicate/conflicting loads from didChangeDependencies
+                            if (mounted) {
+                              setState(() => _lastLoadedId = val);
+                            }
+
+                            // Force immediate reload
+                            ref
+                                .read(entregasProvider.notifier)
+                                .setRepartidor(val, forceReload: true);
+                            ref
+                                .read(entregasProvider.notifier)
+                                .seleccionarFecha(
+                                  _selectedDate,
+                                  forceRefresh: true,
+                                );
+                            _loadWeekData(val, forceRefresh: true);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.refresh,
+                      color: AppTheme.info,
+                      size: 20,
+                    ),
+                    tooltip: 'Recargar datos',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      if (selectedVendor != null) {
+                        ref
+                            .read(entregasProvider.notifier)
+                            .setRepartidor(selectedVendor, forceReload: true);
+                        ref.read(entregasProvider.notifier).seleccionarFecha(
+                              _selectedDate,
+                              forceRefresh: true,
+                            );
+                        _loadWeekData(selectedVendor, forceRefresh: true);
+                      }
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -474,217 +475,223 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        children: [
-          // Clients Filter (responsive - flex instead of fixed width)
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: 100,
-              maxWidth: Responsive.value(context, phone: 130, desktop: 160),
-            ),
-            child: Container(
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
+      child: RepartidorExecutivePanel(
+        accentColor: AppTheme.accentIndigo,
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            // Clients Filter (responsive - flex instead of fixed width)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: 100,
+                maxWidth: Responsive.value(context, phone: 130, desktop: 160),
               ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.person_outline,
-                    size: 14,
-                    color: AppTheme.textSecondary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchClientController,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textPrimary,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'Cliente...',
-                        hintStyle: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textSecondary,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onChanged: (v) => ref
-                          .read(entregasProvider.notifier)
-                          .setSearchClient(v),
-                    ),
-                  ),
-                  if (_searchClientController.text.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.clear, size: 14),
-                      onPressed: () {
-                        _searchClientController.clear();
-                        ref.read(entregasProvider.notifier).setSearchClient('');
-                      },
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 6),
-
-          // Albaranes Filter (responsive - flex instead of fixed width)
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: 90,
-              maxWidth: Responsive.value(context, phone: 110, desktop: 130),
-            ),
-            child: Container(
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.description_outlined,
-                    size: 14,
-                    color: AppTheme.textSecondary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchAlbaranController,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textPrimary,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'Nº Alb/Fac...',
-                        hintStyle: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textSecondary,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onChanged: (v) => ref
-                          .read(entregasProvider.notifier)
-                          .setSearchAlbaran(v),
-                    ),
-                  ),
-                  if (_searchAlbaranController.text.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.clear, size: 14),
-                      onPressed: () {
-                        _searchAlbaranController.clear();
-                        ref
-                            .read(entregasProvider.notifier)
-                            .setSearchAlbaran('');
-                      },
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Quick filter chips
-          _buildQuickFilterChip(
-            label: 'Cobrar',
-            isSelected: filterDebeCobrar == 'S',
-            color: AppTheme.obligatorio,
-            icon: Icons.euro,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              ref.read(entregasProvider.notifier).setFilterDebeCobrar(
-                    filterDebeCobrar == 'S' ? '' : 'S',
-                  );
-            },
-          ),
-
-          const SizedBox(width: 6),
-
-          _buildQuickFilterChip(
-            label: 'Crédito',
-            isSelected: filterTipoPago == 'CREDITO',
-            color: AppTheme.credito,
-            icon: Icons.credit_card,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              ref.read(entregasProvider.notifier).setFilterTipoPago(
-                    filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
-                  );
-            },
-          ),
-
-          const SizedBox(width: 6),
-
-          // Sort dropdown
-          Container(
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.softPanel,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.borderColor),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: sortBy,
-                icon: const Icon(
-                  Icons.sort,
-                  color: AppTheme.info,
-                  size: 18,
+              child: Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.softPanel,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.borderColor),
                 ),
-                dropdownColor: AppTheme.raisedSurface,
-                items: const [
-                  DropdownMenuItem(
-                    value: 'default',
-                    child: Text(
-                      '↕ Orden',
-                      style:
-                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.person_outline,
+                      size: 14,
+                      color: AppTheme.textSecondary,
                     ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'importe_desc',
-                    child: Text(
-                      '↓ Mayor €',
-                      style:
-                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchClientController,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Cliente...',
+                          hintStyle: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onChanged: (v) => ref
+                            .read(entregasProvider.notifier)
+                            .setSearchClient(v),
+                      ),
                     ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'importe_asc',
-                    child: Text(
-                      '↑ Menor €',
-                      style:
-                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
-                    ),
-                  ),
-                ],
-                onChanged: (val) {
-                  if (val != null) {
-                    HapticFeedback.selectionClick();
-                    ref.read(entregasProvider.notifier).setSortBy(val);
-                  }
-                },
+                    if (_searchClientController.text.isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.clear, size: 14),
+                        onPressed: () {
+                          _searchClientController.clear();
+                          ref
+                              .read(entregasProvider.notifier)
+                              .setSearchClient('');
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+
+            const SizedBox(width: 6),
+
+            // Albaranes Filter (responsive - flex instead of fixed width)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: 90,
+                maxWidth: Responsive.value(context, phone: 110, desktop: 130),
+              ),
+              child: Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.softPanel,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.description_outlined,
+                      size: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchAlbaranController,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Nº Alb/Fac...',
+                          hintStyle: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onChanged: (v) => ref
+                            .read(entregasProvider.notifier)
+                            .setSearchAlbaran(v),
+                      ),
+                    ),
+                    if (_searchAlbaranController.text.isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.clear, size: 14),
+                        onPressed: () {
+                          _searchAlbaranController.clear();
+                          ref
+                              .read(entregasProvider.notifier)
+                              .setSearchAlbaran('');
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // Quick filter chips
+            _buildQuickFilterChip(
+              label: 'Cobrar',
+              isSelected: filterDebeCobrar == 'S',
+              color: AppTheme.obligatorio,
+              icon: Icons.euro,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                ref.read(entregasProvider.notifier).setFilterDebeCobrar(
+                      filterDebeCobrar == 'S' ? '' : 'S',
+                    );
+              },
+            ),
+
+            const SizedBox(width: 6),
+
+            _buildQuickFilterChip(
+              label: 'Crédito',
+              isSelected: filterTipoPago == 'CREDITO',
+              color: AppTheme.credito,
+              icon: Icons.credit_card,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                ref.read(entregasProvider.notifier).setFilterTipoPago(
+                      filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
+                    );
+              },
+            ),
+
+            const SizedBox(width: 6),
+
+            // Sort dropdown
+            Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.softPanel,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: sortBy,
+                  icon: const Icon(
+                    Icons.sort,
+                    color: AppTheme.info,
+                    size: 18,
+                  ),
+                  dropdownColor: AppTheme.raisedSurface,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'default',
+                      child: Text(
+                        '↕ Orden',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 11),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'importe_desc',
+                      child: Text(
+                        '↓ Mayor €',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 11),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'importe_asc',
+                      child: Text(
+                        '↑ Menor €',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      HapticFeedback.selectionClick();
+                      ref.read(entregasProvider.notifier).setSortBy(val);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -696,40 +703,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return RepartidorExecutivePill(
+      label: label,
+      icon: icon,
+      color: color,
+      selected: isSelected,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: AppTheme.animFast,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color:
-              isSelected ? color.withValues(alpha: 0.16) : AppTheme.softPanel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? color : AppTheme.borderColor,
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isSelected ? color : AppTheme.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? color : AppTheme.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -827,16 +806,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
+          RepartidorExecutivePanel(
+            accentColor: AppTheme.info,
             padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: AppTheme.raisedSurface,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppTheme.borderColor,
-                width: 2,
-              ),
-            ),
+            borderRadius: AppTheme.radiusXl,
             child: Icon(
               Icons.inventory_2_outlined,
               size: 56,
@@ -1002,21 +975,14 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.info.withValues(alpha: 0.32)),
         ),
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.info.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.note_add,
-                color: AppTheme.info,
-                size: 20,
-              ),
+            const RepartidorExecutiveIcon(
+              icon: Icons.note_add,
+              color: AppTheme.info,
+              size: 20,
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 
 class RuteroDetailProducts extends StatelessWidget {
   const RuteroDetailProducts({
@@ -180,14 +181,10 @@ class RuteroDetailProducts extends StatelessWidget {
     final checked = productChecked.values.where((v) => v).length;
     final total = items.length;
 
-    return Container(
+    return RepartidorExecutivePanel(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
+      accentColor: checked == total ? AppTheme.success : AppTheme.warning,
       child: Column(
         children: [
           Row(
@@ -315,40 +312,28 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(
-          color: isChecked
-              ? AppTheme.success.withValues(alpha: 0.3)
-              : AppTheme.warning.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            onCheckedChanged(!isChecked);
-          },
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                _buildCheckbox(),
-                const SizedBox(width: 10),
-                _buildThumbnail(),
-                const SizedBox(width: 10),
-                Expanded(child: _buildProductInfo(context)),
-                _buildQuantityControls(context),
-                const SizedBox(width: 6),
-                _buildEditIcon(),
-              ],
-            ),
-          ),
+      accentColor: isChecked ? AppTheme.success : AppTheme.warning,
+      selected: isChecked,
+      padding: EdgeInsets.zero,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onCheckedChanged(!isChecked);
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            _buildCheckbox(),
+            const SizedBox(width: 10),
+            _buildThumbnail(),
+            const SizedBox(width: 10),
+            Expanded(child: _buildProductInfo(context)),
+            _buildQuantityControls(context),
+            const SizedBox(width: 6),
+            _buildEditIcon(),
+          ],
         ),
       ),
     );

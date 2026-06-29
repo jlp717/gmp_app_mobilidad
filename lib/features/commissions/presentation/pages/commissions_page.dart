@@ -18,10 +18,31 @@ BoxDecoration _commissionSurfaceDecoration({
   double borderAlpha = 1,
   double radius = AppTheme.radiusMd,
 }) {
+  final hasVisibleSurface = color != Colors.transparent;
   return BoxDecoration(
     color: color,
+    gradient: hasVisibleSurface
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color,
+              AppTheme.softPanel.withValues(alpha: 0.88),
+              borderColor.withValues(alpha: 0.035),
+            ],
+          )
+        : null,
     borderRadius: BorderRadius.circular(radius),
     border: Border.all(color: borderColor.withValues(alpha: borderAlpha)),
+    boxShadow: hasVisibleSurface
+        ? [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ]
+        : null,
   );
 }
 

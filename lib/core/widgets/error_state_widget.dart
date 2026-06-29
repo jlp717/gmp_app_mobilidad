@@ -19,6 +19,8 @@ class ErrorStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -29,20 +31,28 @@ class ErrorStateWidget extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.error.withValues(alpha: 0.10),
+                gradient: AppTheme.cardGradient,
                 border: Border.all(
-                  color: AppTheme.error.withValues(alpha: 0.34),
+                  color: AppTheme.error.withValues(alpha: 0.48),
                 ),
+                boxShadow: [
+                  ...AppTheme.elevation2,
+                  BoxShadow(
+                    color: AppTheme.error.withValues(alpha: 0.14),
+                    blurRadius: 26,
+                  ),
+                ],
               ),
               child: Icon(
                 Icons.error_outline_rounded,
                 color: AppTheme.error,
                 size: iconSize,
               ),
-            )
-                .animate()
-                .fadeIn(duration: 220.ms)
-                .scale(begin: const Offset(0.96, 0.96)),
+            ).animate().fadeIn(duration: reduceMotion ? 1.ms : 220.ms).scale(
+                  begin: reduceMotion
+                      ? const Offset(1, 1)
+                      : const Offset(0.96, 0.96),
+                ),
             const SizedBox(height: 16),
             Text(
               message,

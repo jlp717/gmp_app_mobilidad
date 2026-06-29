@@ -20,6 +20,7 @@ import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -566,15 +567,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Widget _buildClientCard(_ClientItem client) {
     return GestureDetector(
       onTap: () => _loadClientDocuments(client.id, client.name),
-      child: Container(
+      child: RepartidorExecutivePanel(
         margin: const EdgeInsets.only(bottom: 10),
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        ),
+        accentColor: AppTheme.accentIndigo,
         child: Row(
           children: [
             // Avatar
@@ -707,8 +704,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final currentYear = DateTime.now().year;
     final years = List.generate(5, (i) => currentYear - i);
 
-    return Container(
+    return RepartidorExecutivePanel(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      accentColor: AppTheme.accentIndigo,
+      padding: const EdgeInsets.all(10),
       child: Column(
         children: [
           // Row 1: Year selector + Document number search
@@ -1110,14 +1109,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final withSignature =
         filtered.where((d) => d.hasSignature || d.hasLegacySignature).length;
 
-    return Container(
+    return RepartidorExecutivePanel(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
+      accentColor: AppTheme.success,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -1348,17 +1343,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     return GestureDetector(
       onTap: () => _showDocumentActions(doc),
-      child: Container(
+      child: RepartidorExecutivePanel(
         margin: const EdgeInsets.only(bottom: 8),
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border(
-            left: BorderSide(color: statusColor, width: 3),
-          ),
-        ),
+        accentColor: statusColor,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1531,25 +1520,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+      builder: (ctx) => RepartidorExecutiveSheet(
+        accentColor: isFactura ? AppTheme.accentIndigo : AppTheme.info,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
             // Header
             Padding(
               padding: const EdgeInsets.all(20),
@@ -1643,26 +1618,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-        ),
+      builder: (context) => RepartidorExecutiveSheet(
+        accentColor: AppTheme.accentIndigo,
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 20),
                 child: Text(
@@ -1747,15 +1708,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     required VoidCallback onTap,
     String? subtitle,
   }) {
-    return GestureDetector(
+    return RepartidorExecutivePanel(
+      accentColor: color,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      padding: EdgeInsets.zero,
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Padding(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.softPanel,
-          borderRadius: BorderRadius.circular(12),
-        ),
         child: Row(
           children: [
             Container(
@@ -2466,10 +2425,16 @@ class _SignatureDialogState extends State<_SignatureDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppTheme.raisedSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        side: BorderSide(color: AppTheme.accentIndigo.withValues(alpha: 0.28)),
+      ),
       title: Row(
         children: [
-          const Icon(Icons.draw, color: AppTheme.accentIndigo),
+          const RepartidorExecutiveIcon(
+            icon: Icons.draw,
+            color: AppTheme.accentIndigo,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

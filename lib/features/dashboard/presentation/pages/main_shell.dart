@@ -377,6 +377,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         'Alertas',
         'Bolsa',
         'Evolución',
+        'Evolución',
         'Asistente',
       ];
       mappedItems.sort((a, b) {
@@ -483,17 +484,21 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
+          gradient: AppTheme.commandGradient,
           border: Border(
             top: BorderSide(
-              color: AppTheme.borderColor.withValues(alpha: 0.72),
+              color: AppTheme.activeRing.withValues(alpha: 0.16),
             ),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 12,
-              offset: const Offset(0, -4),
+              color: Colors.black.withValues(alpha: 0.42),
+              blurRadius: 24,
+              offset: const Offset(0, -10),
+            ),
+            BoxShadow(
+              color: AppTheme.activeRing.withValues(alpha: 0.06),
+              blurRadius: 28,
             ),
           ],
         ),
@@ -570,15 +575,33 @@ class _MainShellState extends ConsumerState<MainShell> {
         margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
         padding: const EdgeInsets.fromLTRB(4, 5, 4, 6),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppTheme.softPanel.withValues(alpha: 0.92)
-              : Colors.transparent,
+          gradient: isSelected
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    item.color.withValues(alpha: 0.24),
+                    AppTheme.surfaceCommand,
+                    item.color.withValues(alpha: 0.08),
+                  ],
+                  stops: const [0.0, 0.58, 1.0],
+                )
+              : null,
+          color: isSelected ? null : Colors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           border: Border.all(
             color: isSelected
-                ? item.color.withValues(alpha: 0.38)
+                ? item.color.withValues(alpha: 0.48)
                 : Colors.transparent,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: item.color.withValues(alpha: 0.14),
+                    blurRadius: 16,
+                  ),
+                ]
+              : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -589,6 +612,14 @@ class _MainShellState extends ConsumerState<MainShell> {
               height: 2,
               decoration: BoxDecoration(
                 color: isSelected ? item.color : Colors.transparent,
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: item.color.withValues(alpha: 0.32),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
                 borderRadius: BorderRadius.circular(AppTheme.radiusFull),
               ),
             ),
@@ -664,7 +695,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   void _showOverflowMenu(List<_NavItem> navItems, int startIndex) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.raisedSurface,
+      backgroundColor: AppTheme.surfaceCommand,
       shape: RoundedRectangleBorder(
         borderRadius: const BorderRadius.vertical(
           top: Radius.circular(AppTheme.radiusLg),
@@ -724,7 +755,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// Drawer for phone layout with user info, mode switcher, and actions
   Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas) {
     return Drawer(
-      backgroundColor: AppTheme.raisedSurface,
+      backgroundColor: AppTheme.surfaceCommand,
       width: MediaQuery.of(context).size.width * 0.72,
       child: SafeArea(
         child: Column(
@@ -804,18 +835,23 @@ class _MainShellState extends ConsumerState<MainShell> {
                 child: _isNavExpanded
                     ? Container(
                         decoration: BoxDecoration(
-                          color: AppTheme.raisedSurface,
+                          gradient: AppTheme.commandGradient,
                           border: Border(
                             right: BorderSide(
                               color:
-                                  AppTheme.borderColor.withValues(alpha: 0.72),
+                                  AppTheme.activeRing.withValues(alpha: 0.16),
                             ),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.16),
-                              blurRadius: 14,
-                              offset: const Offset(4, 0),
+                              color: Colors.black.withValues(alpha: 0.40),
+                              blurRadius: 24,
+                              offset: const Offset(10, 0),
+                            ),
+                            BoxShadow(
+                              color:
+                                  AppTheme.activeRing.withValues(alpha: 0.05),
+                              blurRadius: 28,
                             ),
                           ],
                         ),
@@ -940,9 +976,24 @@ class _MainShellState extends ConsumerState<MainShell> {
           vertical: compact ? 8 : 4,
         ),
         decoration: BoxDecoration(
-          color: AppTheme.softPanel.withValues(alpha: 0.86),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              activeColor.withValues(alpha: 0.22),
+              AppTheme.surfaceCommand,
+              activeColor.withValues(alpha: 0.06),
+            ],
+            stops: const [0.0, 0.58, 1.0],
+          ),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(color: activeColor.withValues(alpha: 0.32)),
+          border: Border.all(color: activeColor.withValues(alpha: 0.42)),
+          boxShadow: [
+            BoxShadow(
+              color: activeColor.withValues(alpha: 0.10),
+              blurRadius: 18,
+            ),
+          ],
         ),
         child: PopupMenuButton<String>(
           tooltip: 'Cambiar Perfil',
@@ -1081,8 +1132,22 @@ class _MainShellState extends ConsumerState<MainShell> {
           height: 48,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppTheme.softPanel,
-            border: Border.all(color: roleColor.withValues(alpha: 0.44)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                roleColor.withValues(alpha: 0.22),
+                AppTheme.surfaceCommand,
+                roleColor.withValues(alpha: 0.08),
+              ],
+            ),
+            border: Border.all(color: roleColor.withValues(alpha: 0.52)),
+            boxShadow: [
+              BoxShadow(
+                color: roleColor.withValues(alpha: 0.14),
+                blurRadius: 18,
+              ),
+            ],
           ),
           child: Center(
             child: Text(
@@ -1116,8 +1181,13 @@ class _MainShellState extends ConsumerState<MainShell> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            color: roleColor.withValues(alpha: 0.12),
-            border: Border.all(color: roleColor.withValues(alpha: 0.28)),
+            gradient: LinearGradient(
+              colors: [
+                roleColor.withValues(alpha: 0.20),
+                roleColor.withValues(alpha: 0.07),
+              ],
+            ),
+            border: Border.all(color: roleColor.withValues(alpha: 0.34)),
           ),
           child: Text(
             roleLabel,
@@ -1149,12 +1219,32 @@ class _MainShellState extends ConsumerState<MainShell> {
             EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: isSelected ? AppTheme.softPanel : Colors.transparent,
+          gradient: isSelected
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    item.color.withValues(alpha: 0.22),
+                    AppTheme.surfaceCommand,
+                    item.color.withValues(alpha: 0.06),
+                  ],
+                  stops: const [0.0, 0.60, 1.0],
+                )
+              : null,
+          color: isSelected ? null : Colors.transparent,
           border: Border.all(
             color: isSelected
-                ? item.color.withValues(alpha: 0.38)
+                ? item.color.withValues(alpha: 0.48)
                 : Colors.transparent,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: item.color.withValues(alpha: 0.12),
+                    blurRadius: 18,
+                  ),
+                ]
+              : null,
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -1168,6 +1258,12 @@ class _MainShellState extends ConsumerState<MainShell> {
                   width: 3,
                   decoration: BoxDecoration(
                     color: item.color,
+                    boxShadow: [
+                      BoxShadow(
+                        color: item.color.withValues(alpha: 0.34),
+                        blurRadius: 9,
+                      ),
+                    ],
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -1593,6 +1689,11 @@ class _MainShellState extends ConsumerState<MainShell> {
           KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const BolsaPage(),
+          ClientEvolutionPage(
+            employeeCode: employeeCode,
+            isJefeVentas: true,
+            forceShowVendorSelector: true,
+          ),
           ChatbotPage(vendedorCodes: vendedorCodes),
         ],
       );
@@ -1692,7 +1793,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             forceShowVendorSelector: isCommercial80,
           );
         case 'Bolsa':
-          return const BolsaPage();
+          return BolsaPage(forceShowVendorSelector: isCommercial80);
         case 'Evolución':
           return ClientEvolutionPage(
             employeeCode: apiAggregateCode,

@@ -15,8 +15,8 @@ void main() {
 
       expect(items.length, 5);
       expect(items[0].label, 'Expediciones');
-      expect(items[1].label, 'Vehiculos');
-      expect(items[2].label, 'Articulos');
+      expect(items[1].label, 'Vehículos');
+      expect(items[2].label, 'Artículos');
       expect(items[3].label, 'Historial');
       expect(items[4].label, 'Personal');
     });
@@ -32,7 +32,7 @@ void main() {
       expect(items.length, 8);
       expect(items.any((i) => i.label == 'Panel'), false);
       expect(items[0].label, 'Clientes');
-      expect(items.any((i) => i.label == 'Liquidacion Diaria'), true);
+      expect(items.any((i) => i.label == 'Liquidación'), true);
       expect(items.any((i) => i.label == 'Vencimientos'), true);
       expect(items.any((i) => i.label == 'Comisiones'), true);
       expect(items.any((i) => i.label == 'Cobros'), false);
@@ -58,9 +58,10 @@ void main() {
         showCommissions: true,
       );
 
-      expect(items.length, 11);
+      expect(items.length, 12);
       expect(items[0].label, 'Panel');
       expect(items.any((i) => i.label == 'Bolsa'), true);
+      expect(items.any((i) => i.label == 'Evolución'), true);
     });
 
     test('Comercial shows Comisiones when showCommissions is true', () {

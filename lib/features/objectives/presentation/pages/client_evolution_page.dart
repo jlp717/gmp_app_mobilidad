@@ -16,6 +16,36 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+BoxDecoration _evolutionPanelDecoration({
+  Color accent = AppTheme.info,
+  double radius = AppTheme.radiusXl,
+}) {
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        AppTheme.raisedSurface,
+        AppTheme.softPanel.withValues(alpha: 0.92),
+        accent.withValues(alpha: 0.045),
+      ],
+    ),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: accent.withValues(alpha: 0.20)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.18),
+        blurRadius: 18,
+        offset: const Offset(0, 8),
+      ),
+      BoxShadow(
+        color: accent.withValues(alpha: 0.06),
+        blurRadius: 24,
+      ),
+    ],
+  );
+}
+
 /// Client Evolution Page - Allows selection of client and displays sales evolution
 class ClientEvolutionPage extends ConsumerStatefulWidget {
   const ClientEvolutionPage({
@@ -344,18 +374,46 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Card(
-        color: AppTheme.raisedSurface,
+      child: Container(
+        decoration: _evolutionPanelDecoration(accent: AppTheme.info),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Seleccionar Cliente',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.info.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      border: Border.all(
+                          color: AppTheme.info.withValues(alpha: 0.28)),
+                    ),
+                    child: const Icon(Icons.manage_search_outlined,
+                        color: AppTheme.info, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Seleccionar Cliente',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (visibleClients.isNotEmpty)
+                    Text(
+                      '${visibleClients.length} sugeridos',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.42),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               TextField(
                 controller: _clientSearchController,
                 onChanged: _onClientSearchChanged,
@@ -383,8 +441,21 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                                 setState(() {});
                               },
                             ),
+                  filled: true,
+                  fillColor: AppTheme.inkSurface.withValues(alpha: 0.38),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    borderSide:
+                        BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    borderSide:
+                        BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    borderSide: const BorderSide(color: AppTheme.info),
                   ),
                 ),
               ),
@@ -414,24 +485,43 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                       final name = _clientName(client);
                       final town = _clientTown(client);
                       final selected = code == _selectedClientCode;
-                      return ListTile(
-                        dense: true,
-                        selected: selected,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          name.isEmpty ? code : name,
-                          style: const TextStyle(color: Colors.white),
-                          overflow: TextOverflow.ellipsis,
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 3),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppTheme.info.withValues(alpha: 0.10)
+                              : AppTheme.inkSurface.withValues(alpha: 0.20),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                            color: selected
+                                ? AppTheme.info.withValues(alpha: 0.34)
+                                : Colors.white.withValues(alpha: 0.06),
+                          ),
                         ),
-                        subtitle: Text(
-                          town.isEmpty ? code : '$code · $town',
-                          style: const TextStyle(color: AppTheme.textSecondary),
-                          overflow: TextOverflow.ellipsis,
+                        child: ListTile(
+                          dense: true,
+                          selected: selected,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10),
+                          title: Text(
+                            name.isEmpty ? code : name,
+                            style: const TextStyle(color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            town.isEmpty ? code : '$code · $town',
+                            style:
+                                const TextStyle(color: AppTheme.textSecondary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: selected
+                              ? const Icon(Icons.check_circle,
+                                  color: AppTheme.info)
+                              : const Icon(Icons.chevron_right,
+                                  color: Colors.white24),
+                          onTap: () => _selectClient(client),
                         ),
-                        trailing: selected
-                            ? const Icon(Icons.check, color: AppTheme.info)
-                            : null,
-                        onTap: () => _selectClient(client),
                       );
                     },
                   ),
@@ -481,6 +571,13 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
       );
     }
 
+    final totalSales = _monthlySales.fold<double>(
+      0,
+      (sum, item) => sum + ((item['sales'] as num?)?.toDouble() ?? 0.0),
+    );
+    final averageSales =
+        _monthlySales.isEmpty ? 0.0 : totalSales / _monthlySales.length;
+
     return SingleChildScrollView(
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
@@ -488,8 +585,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header with client info
-          Card(
-            color: AppTheme.raisedSurface,
+          Container(
+            decoration:
+                _evolutionPanelDecoration(accent: AppTheme.accentIndigo),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -504,6 +602,34 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                           '$_selectedClientName ($_selectedClientCode)',
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _EvolutionMetric(
+                          label: 'Ventas periodo',
+                          value: _formatCurrency(totalSales),
+                          color: AppTheme.success,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _EvolutionMetric(
+                          label: 'Media mensual',
+                          value: _formatCurrency(averageSales),
+                          color: AppTheme.info,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _EvolutionMetric(
+                          label: 'Productos top',
+                          value: '${_topProducts.length}',
+                          color: AppTheme.accentIndigo,
                         ),
                       ),
                     ],
@@ -524,15 +650,22 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                   ),
             ),
             const SizedBox(height: 12),
-            Card(
-              color: AppTheme.raisedSurface,
+            Container(
+              decoration: _evolutionPanelDecoration(accent: AppTheme.info),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: SizedBox(
                   height: 300,
                   child: LineChart(
                     LineChartData(
-                      gridData: const FlGridData(show: true),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (value) => FlLine(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          strokeWidth: 1,
+                        ),
+                      ),
                       titlesData: FlTitlesData(
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
@@ -578,7 +711,12 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                         rightTitles: const AxisTitles(
                             sideTitles: SideTitles(showTitles: false)),
                       ),
-                      borderData: FlBorderData(show: true),
+                      borderData: FlBorderData(
+                        show: true,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
                       minX: 0,
                       maxX: _monthlySales.length.toDouble() - 1,
                       minY: 0,
@@ -599,12 +737,19 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                           }).toList(),
                           isCurved: true,
                           color: AppTheme.accentIndigo,
-                          barWidth: 2,
+                          barWidth: 3,
                           isStrokeCapRound: true,
                           dotData: const FlDotData(show: true),
                           belowBarData: BarAreaData(
                             show: true,
-                            color: AppTheme.accentIndigo.withOpacity(0.3),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                AppTheme.accentIndigo.withValues(alpha: 0.30),
+                                AppTheme.accentIndigo.withValues(alpha: 0.02),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -626,18 +771,42 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                   ),
             ),
             const SizedBox(height: 12),
-            Card(
-              color: AppTheme.raisedSurface,
+            Container(
+              decoration: _evolutionPanelDecoration(accent: AppTheme.success),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: _topProducts.take(10).map((product) {
-                    return ListTile(
-                      title: Text(product['name'] ?? 'Producto desconocido'),
-                      subtitle: Text('Código: ${product['code']}'),
-                      trailing: Text(
-                        _formatCurrency(product['sales'] ?? 0),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.inkSurface.withValues(alpha: 0.24),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: AppTheme.success.withValues(alpha: 0.12),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusMd),
+                          ),
+                          child: const Icon(Icons.inventory_2_outlined,
+                              color: AppTheme.success, size: 18),
+                        ),
+                        title: Text(product['name'] ?? 'Producto desconocido'),
+                        subtitle: Text('Código: ${product['code']}'),
+                        trailing: Text(
+                          _formatCurrency(product['sales'] ?? 0),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.success,
+                          ),
+                        ),
                       ),
                     );
                   }).toList(),
@@ -645,6 +814,58 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EvolutionMetric extends StatelessWidget {
+  const _EvolutionMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppTheme.inkSurface.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.50),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
         ],
       ),
     );

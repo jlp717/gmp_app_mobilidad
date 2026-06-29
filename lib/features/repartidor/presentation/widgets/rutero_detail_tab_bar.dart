@@ -14,16 +14,23 @@ class RuteroDetailTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
-          bottom: BorderSide(color: AppTheme.borderColor),
+          bottom:
+              BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.8)),
         ),
       ),
       child: TabBar(
         controller: tabController,
-        indicatorColor: AppTheme.info,
-        indicatorWeight: 2,
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          color: AppTheme.info.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.info.withValues(alpha: 0.28)),
+        ),
         labelColor: AppTheme.info,
         unselectedLabelColor: AppTheme.textSecondary,
         labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),

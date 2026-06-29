@@ -73,44 +73,41 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
-      body: Column(
-        children: [
-          _buildHeader(),
-          _buildDateSelector(),
-          if (!_loading && _error == null && _trucks.isNotEmpty)
-            _buildKpiStrip(),
-          Expanded(
-            child: _loading
-                ? const SkeletonList(itemCount: 4)
-                : _error != null
-                    ? ErrorStateWidget(
-                        message: _error!,
-                        onRetry: () => _loadDashboard(forceRefresh: true),
-                      )
-                    : _trucks.isEmpty
-                        ? _buildEmpty()
-                        : _buildTruckGrid(),
-          ),
-        ],
+      body: WarehouseUi.pageShell(
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildDateSelector(),
+            if (!_loading && _error == null && _trucks.isNotEmpty)
+              _buildKpiStrip(),
+            Expanded(
+              child: _loading
+                  ? const SkeletonList(itemCount: 4)
+                  : _error != null
+                      ? ErrorStateWidget(
+                          message: _error!,
+                          onRetry: () => _loadDashboard(forceRefresh: true),
+                        )
+                      : _trucks.isEmpty
+                          ? _buildEmpty()
+                          : _buildTruckGrid(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       padding: EdgeInsets.fromLTRB(
         Responsive.padding(context, small: 14, large: 20),
         14,
         Responsive.padding(context, small: 14, large: 20),
         10,
       ),
-      decoration: BoxDecoration(
-        color: AppTheme.inkSurface,
-        border: Border(
-          bottom:
-              BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.7)),
-        ),
-      ),
+      decoration: WarehouseUi.headerSurface(accent: AppTheme.info),
       child: Row(
         children: [
           Container(
@@ -158,15 +155,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
               color: AppTheme.success,
               size: 24,
             ),
-            style: IconButton.styleFrom(
-              backgroundColor: AppTheme.success.withValues(alpha: 0.1),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                side: BorderSide(
-                  color: AppTheme.success.withValues(alpha: 0.24),
-                ),
-              ),
-            ),
+            style: WarehouseUi.iconButtonStyle(AppTheme.success),
           ),
         ],
       ),
@@ -198,12 +187,12 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: WarehouseUi.surface(
-        color: AppTheme.raisedSurface,
-        radius: AppTheme.radiusLg,
+      decoration: WarehouseUi.executiveSurface(
+        accent: isToday ? AppTheme.success : AppTheme.info,
+        borderAlpha: isToday ? 0.28 : 0.18,
+        accentAlpha: 0.06,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
             onPressed: () => _changeDate(-1),
@@ -212,65 +201,77 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
               color: AppTheme.textSecondary,
               size: 28,
             ),
+            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
           ),
-          GestureDetector(
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2030),
-                builder: (ctx, child) => Theme(
-                  data: ThemeData.dark().copyWith(
-                    colorScheme: const ColorScheme.dark(
-                      primary: AppTheme.info,
-                      surface: AppTheme.raisedSurface,
-                    ),
-                  ),
-                  child: child!,
-                ),
-              );
-              if (picked != null) {
-                setState(() => _selectedDate = picked);
-                _loadDashboard();
-              }
-            },
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.calendar_today_rounded,
-                  color: AppTheme.info,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$dayName ${_selectedDate.day} ${months[_selectedDate.month]} ${_selectedDate.year}',
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (isToday) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                    child: const Text(
-                      'HOY',
-                      style: TextStyle(
-                        color: AppTheme.success,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+          Expanded(
+            child: Center(
+              child: GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                    builder: (ctx, child) => Theme(
+                      data: ThemeData.dark().copyWith(
+                        colorScheme: const ColorScheme.dark(
+                          primary: AppTheme.info,
+                          surface: AppTheme.raisedSurface,
+                        ),
                       ),
+                      child: child!,
                     ),
+                  );
+                  if (picked != null) {
+                    setState(() => _selectedDate = picked);
+                    _loadDashboard();
+                  }
+                },
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_rounded,
+                        color: AppTheme.info,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$dayName ${_selectedDate.day} ${months[_selectedDate.month]} ${_selectedDate.year}',
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (isToday) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.success.withValues(alpha: 0.14),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusSm),
+                          ),
+                          child: const Text(
+                            'HOY',
+                            style: TextStyle(
+                              color: AppTheme.success,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
           ),
           IconButton(
@@ -280,6 +281,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
               color: AppTheme.textSecondary,
               size: 28,
             ),
+            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
           ),
         ],
       ),
@@ -332,16 +334,10 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           padding: EdgeInsets.all(
             Responsive.padding(context, small: 10, large: 14),
           ),
-          decoration: WarehouseUi.surface(
-            color: AppTheme.raisedSurface,
-            radius: AppTheme.radiusLg,
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.inkSurface.withValues(alpha: 0.26),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
+          decoration: WarehouseUi.executiveSurface(
+            accent: AppTheme.info,
+            borderAlpha: 0.22,
+            accentAlpha: 0.08,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -529,10 +525,10 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.borderColor),
+      decoration: WarehouseUi.executiveSurface(
+        accent: AppTheme.success,
+        borderAlpha: 0.18,
+        accentAlpha: 0.05,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,

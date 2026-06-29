@@ -30,7 +30,16 @@ class AlbaranCard extends StatelessWidget {
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
         decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.raisedSurface,
+              AppTheme.softPanel.withValues(alpha: 0.92),
+              (albaran.esCTR ? AppTheme.error : albaran.estado.color)
+                  .withValues(alpha: 0.045),
+            ],
+          ),
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           border: Border.all(
             color: albaran.esCTR
@@ -41,8 +50,13 @@ class AlbaranCard extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: (albaran.esCTR ? AppTheme.error : albaran.estado.color)
+                  .withValues(alpha: 0.07),
+              blurRadius: 18,
             ),
             if (albaran.esCTR)
               BoxShadow(
@@ -64,6 +78,9 @@ class AlbaranCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppTheme.info.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.info.withValues(alpha: 0.26),
+                    ),
                   ),
                   child: Text(
                     '#${albaran.numeroAlbaran}',
@@ -181,6 +198,9 @@ class AlbaranCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppTheme.success.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.success.withValues(alpha: 0.22),
+                    ),
                   ),
                   child: const Icon(
                     Icons.store,

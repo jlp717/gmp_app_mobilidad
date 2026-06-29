@@ -62,8 +62,21 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     final provider = ref.watch(pedidosProvider);
     final pad = Responsive.contentPadding(context);
 
-    return ColoredBox(
-      color: AppTheme.inkSurface,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppTheme.commandGradient,
+        border: Border(
+          bottom:
+              BorderSide(color: AppTheme.activeRing.withValues(alpha: 0.18)),
+        ),
+        boxShadow: [
+          ...AppTheme.elevation2,
+          BoxShadow(
+            color: AppTheme.activeRing.withValues(alpha: 0.06),
+            blurRadius: 24,
+          ),
+        ],
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -83,8 +96,11 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
               decoration: InputDecoration(
                 hintText: 'Buscar producto...',
                 hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon:
-                    const Icon(Icons.search, color: AppTheme.info, size: 20),
+                prefixIcon: const Icon(
+                  Icons.manage_search_rounded,
+                  color: AppTheme.activeRing,
+                  size: 20,
+                ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(
@@ -99,20 +115,25 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                       )
                     : null,
                 filled: true,
-                fillColor: AppTheme.softPanel,
+                fillColor: AppTheme.inkSurface.withValues(alpha: 0.56),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.borderColor),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  borderSide: BorderSide(
+                    color: AppTheme.activeRing.withValues(alpha: 0.14),
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.borderColor),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  borderSide: BorderSide(
+                    color: AppTheme.activeRing.withValues(alpha: 0.14),
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.info),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  borderSide:
+                      const BorderSide(color: AppTheme.activeRing, width: 1.6),
                 ),
               ),
             ),
@@ -137,8 +158,9 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     ),
                     label: const Text('Solo con stock'),
                     selected: provider.onlyWithStock,
-                    selectedColor: AppTheme.success.withValues(alpha: 0.2),
-                    backgroundColor: AppTheme.softPanel,
+                    selectedColor: AppTheme.success.withValues(alpha: 0.24),
+                    backgroundColor:
+                        AppTheme.surfaceCommand.withValues(alpha: 0.94),
                     labelStyle: TextStyle(
                       color: provider.onlyWithStock
                           ? AppTheme.success
@@ -149,7 +171,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     side: BorderSide(
                       color: provider.onlyWithStock
                           ? AppTheme.success
-                          : AppTheme.borderColor,
+                          : AppTheme.activeRing.withValues(alpha: 0.14),
                     ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
@@ -178,8 +200,9 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     ),
                     label: const Text('Nestlé'),
                     selected: provider.selectedPrefamily == 'NESTLE',
-                    selectedColor: AppTheme.accentAmber.withValues(alpha: 0.22),
-                    backgroundColor: AppTheme.softPanel,
+                    selectedColor: AppTheme.accentAmber.withValues(alpha: 0.26),
+                    backgroundColor:
+                        AppTheme.surfaceCommand.withValues(alpha: 0.94),
                     labelStyle: TextStyle(
                       color: provider.selectedPrefamily == 'NESTLE'
                           ? AppTheme.accentAmber
@@ -194,7 +217,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     side: BorderSide(
                       color: provider.selectedPrefamily == 'NESTLE'
                           ? AppTheme.accentAmber
-                          : AppTheme.borderColor,
+                          : AppTheme.activeRing.withValues(alpha: 0.14),
                     ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
@@ -221,15 +244,18 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     child: FilterChip(
                       label: Text(family),
                       selected: selected,
-                      selectedColor: AppTheme.info.withValues(alpha: 0.2),
-                      backgroundColor: AppTheme.softPanel,
+                      selectedColor: AppTheme.info.withValues(alpha: 0.24),
+                      backgroundColor:
+                          AppTheme.surfaceCommand.withValues(alpha: 0.94),
                       labelStyle: TextStyle(
                         color: selected ? AppTheme.info : Colors.white70,
                         fontSize:
                             Responsive.fontSize(context, small: 11, large: 13),
                       ),
                       side: BorderSide(
-                        color: selected ? AppTheme.info : AppTheme.borderColor,
+                        color: selected
+                            ? AppTheme.info
+                            : AppTheme.activeRing.withValues(alpha: 0.14),
                       ),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,

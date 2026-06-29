@@ -114,17 +114,25 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     }
 
     return Card(
-      elevation: 8,
-      shadowColor: Colors.black45,
+      elevation: 0,
+      shadowColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        side: BorderSide(color: AppTheme.info.withValues(alpha: 0.16)),
       ),
-      color: AppTheme.raisedSurface,
+      color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: AppTheme.raisedSurface,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.raisedSurface,
+              AppTheme.softPanel.withValues(alpha: 0.90),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          boxShadow: AppTheme.elevation2,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -136,7 +144,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                 border: Border(
                     bottom: BorderSide(
                         color: AppTheme.info.withValues(alpha: 0.2))),
-                color: Colors.white.withValues(alpha: 0.02),
+                color: AppTheme.info.withValues(alpha: 0.06),
               ),
               child: const Row(
                 children: [
@@ -212,7 +220,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.warning.withValues(alpha: 0.15),
+        color: AppTheme.warning.withValues(alpha: 0.12),
         border: Border(
             top: BorderSide(
                 color: AppTheme.warning.withValues(alpha: 0.5), width: 2)),
@@ -334,15 +342,16 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? levelColor.withValues(alpha: 0.15)
+              ? levelColor.withValues(alpha: 0.16)
               : (level > 0
-                  ? Colors.white.withValues(alpha: 0.02 * level)
-                  : Colors.transparent),
+                  ? Colors.white.withValues(alpha: 0.025 * level)
+                  : Colors.white.withValues(alpha: 0.01)),
           border: Border(
             bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-            left: level > 0
-                ? BorderSide(color: levelColor.withValues(alpha: 0.3), width: 2)
-                : BorderSide.none,
+            left: BorderSide(
+              color: levelColor.withValues(alpha: level == 0 ? 0.26 : 0.38),
+              width: level == 0 ? 3 : 2,
+            ),
           ),
         ),
         child: Row(

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -374,17 +375,10 @@ class _ModernHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.account_balance_wallet,
-              color: AppColors.info,
-              size: 24,
-            ),
+          const RepartidorExecutiveIcon(
+            icon: Icons.account_balance_wallet,
+            color: AppColors.info,
+            size: 24,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -457,13 +451,9 @@ class _PaymentMethodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.raisedSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.8)),
-      ),
+      accentColor: color,
       child: Row(
         children: [
           Icon(icon, color: color, size: 22),
@@ -513,13 +503,10 @@ class _BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accentColor = highlight ? AppColors.warning : AppColors.info;
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: highlight ? AppColors.mutedPanel : AppColors.raisedSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
-      ),
+      accentColor: accentColor,
+      selected: highlight,
       child: Row(
         children: [
           Container(
@@ -575,13 +562,9 @@ class _MoneyInputLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return RepartidorExecutivePanel(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.raisedSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.8)),
-      ),
+      accentColor: AppColors.info,
       child: Row(
         children: [
           Icon(icon, color: AppColors.info, size: 20),
@@ -658,131 +641,131 @@ class _CobrosPreview extends ConsumerWidget {
     // Req #16: bottomSheet con detalle del cobro del día.
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.raisedSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
+        return RepartidorExecutiveSheet(
+          accentColor: AppColors.success,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.receipt_long,
+                          color: AppColors.success,
+                          size: 22,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.receipt_long,
-                        color: AppColors.success,
-                        size: 22,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              cobro.nombreCliente.isNotEmpty
+                                  ? cobro.nombreCliente
+                                  : cobro.codigoCliente,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              'Cliente ${cobro.codigoCliente}',
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  _DetailRow(
+                    icon: Icons.payments,
+                    label: 'Importe',
+                    value: _money(cobro.importe),
+                    valueColor: AppColors.success,
+                  ),
+                  if (cobro.cobrado > 0)
+                    _DetailRow(
+                      icon: Icons.check_circle_outline,
+                      label: 'Cobrado',
+                      value: _money(cobro.cobrado),
+                    ),
+                  if (cobro.pendiente > 0)
+                    _DetailRow(
+                      icon: Icons.hourglass_bottom,
+                      label: 'Pendiente',
+                      value: _money(cobro.pendiente),
+                      valueColor: AppColors.warning,
+                    ),
+                  if (cobro.tipoCobro.isNotEmpty)
+                    _DetailRow(
+                      icon: Icons.credit_card,
+                      label: 'Tipo cobro',
+                      value: cobro.tipoCobro,
+                    ),
+                  if (cobro.documento.isNotEmpty)
+                    _DetailRow(
+                      icon: Icons.description,
+                      label: 'Documento',
+                      value: cobro.documento,
+                    ),
+                  if (cobro.tipoDocumento.isNotEmpty)
+                    _DetailRow(
+                      icon: Icons.folder_open,
+                      label: 'Tipo doc.',
+                      value: cobro.tipoDocumento,
+                    ),
+                  if (cobro.fecha.isNotEmpty)
+                    _DetailRow(
+                      icon: Icons.calendar_today,
+                      label: 'Fecha',
+                      value: cobro.fecha,
+                    ),
+                  const SizedBox(height: 12),
+                  // Req #16: botón Anular cobro (solo si tenemos token + repartidor).
+                  if (cobro.canBeReversed && (repartidorId ?? '').isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: const BorderSide(color: AppColors.error),
+                        ),
+                        icon: const Icon(Icons.undo, size: 18),
+                        label: const Text('Anular este cobro'),
+                        onPressed: () async {
+                          Navigator.of(sheetCtx).pop();
+                          await _confirmAndReverse(context, ref, cobro);
+                        },
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            cobro.nombreCliente.isNotEmpty
-                                ? cobro.nombreCliente
-                                : cobro.codigoCliente,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                            ),
-                          ),
-                          Text(
-                            'Cliente ${cobro.codigoCliente}',
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _DetailRow(
-                  icon: Icons.payments,
-                  label: 'Importe',
-                  value: _money(cobro.importe),
-                  valueColor: AppColors.success,
-                ),
-                if (cobro.cobrado > 0)
-                  _DetailRow(
-                    icon: Icons.check_circle_outline,
-                    label: 'Cobrado',
-                    value: _money(cobro.cobrado),
-                  ),
-                if (cobro.pendiente > 0)
-                  _DetailRow(
-                    icon: Icons.hourglass_bottom,
-                    label: 'Pendiente',
-                    value: _money(cobro.pendiente),
-                    valueColor: AppColors.warning,
-                  ),
-                if (cobro.tipoCobro.isNotEmpty)
-                  _DetailRow(
-                    icon: Icons.credit_card,
-                    label: 'Tipo cobro',
-                    value: cobro.tipoCobro,
-                  ),
-                if (cobro.documento.isNotEmpty)
-                  _DetailRow(
-                    icon: Icons.description,
-                    label: 'Documento',
-                    value: cobro.documento,
-                  ),
-                if (cobro.tipoDocumento.isNotEmpty)
-                  _DetailRow(
-                    icon: Icons.folder_open,
-                    label: 'Tipo doc.',
-                    value: cobro.tipoDocumento,
-                  ),
-                if (cobro.fecha.isNotEmpty)
-                  _DetailRow(
-                    icon: Icons.calendar_today,
-                    label: 'Fecha',
-                    value: cobro.fecha,
-                  ),
-                const SizedBox(height: 12),
-                // Req #16: botón Anular cobro (solo si tenemos token + repartidor).
-                if (cobro.canBeReversed && (repartidorId ?? '').isNotEmpty)
+                  if (cobro.canBeReversed && (repartidorId ?? '').isNotEmpty)
+                    const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.error,
-                        side: const BorderSide(color: AppColors.error),
-                      ),
-                      icon: const Icon(Icons.undo, size: 18),
-                      label: const Text('Anular este cobro'),
-                      onPressed: () async {
-                        Navigator.of(sheetCtx).pop();
-                        await _confirmAndReverse(context, ref, cobro);
-                      },
+                    child: TextButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Cerrar'),
                     ),
                   ),
-                if (cobro.canBeReversed && (repartidorId ?? '').isNotEmpty)
-                  const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(sheetCtx).pop(),
-                    child: const Text('Cerrar'),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -802,6 +785,10 @@ class _CobrosPreview extends ConsumerWidget {
       builder: (dialogCtx) {
         return AlertDialog(
           backgroundColor: AppColors.raisedSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: AppColors.error.withValues(alpha: 0.28)),
+          ),
           title: const Text(
             'Anular cobro',
             style: TextStyle(color: AppColors.textPrimary),
@@ -885,12 +872,9 @@ class _CobrosPreview extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.raisedSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.8)),
-      ),
+    return RepartidorExecutivePanel(
+      accentColor: AppColors.success,
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
           for (final cobro in cobros.take(8))

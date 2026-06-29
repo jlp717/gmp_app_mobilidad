@@ -184,130 +184,136 @@ class _PersonnelPageState extends State<PersonnelPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
-      body: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.fromLTRB(
-                Responsive.padding(context, small: 14, large: 20),
-                12,
-                Responsive.padding(context, small: 14, large: 20),
-                10),
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(
-                      Responsive.padding(context, small: 8, large: 10)),
-                  decoration: WarehouseUi.surface(
-                    color: AppTheme.accentIndigo.withValues(alpha: 0.15),
-                    borderColor: AppTheme.accentIndigo,
-                    borderAlpha: 0.3,
-                  ),
-                  child: Icon(Icons.groups_rounded,
-                      color: AppTheme.accentIndigo,
-                      size:
-                          Responsive.iconSize(context, phone: 20, desktop: 24)),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PERSONAL DE ALMACÉN',
-                        style: TextStyle(
-                          color: AppTheme.accentIndigo,
-                          fontSize: Responsive.fontSize(context,
-                              small: 13, large: 16),
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      Text(
-                        '${_personnel.length} operarios activos',
-                        style: const TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (kDebugMode)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.cleaning_services_rounded,
-                      color: AppTheme.warning,
-                      size: 20,
+      body: WarehouseUi.pageShell(
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+              padding: EdgeInsets.fromLTRB(
+                  Responsive.padding(context, small: 14, large: 20),
+                  12,
+                  Responsive.padding(context, small: 14, large: 20),
+                  10),
+              decoration:
+                  WarehouseUi.headerSurface(accent: AppTheme.accentIndigo),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(
+                        Responsive.padding(context, small: 8, large: 10)),
+                    decoration: WarehouseUi.surface(
+                      color: AppTheme.accentIndigo.withValues(alpha: 0.15),
+                      borderColor: AppTheme.accentIndigo,
+                      borderAlpha: 0.3,
                     ),
-                    tooltip: 'Limpiar entradas de test',
-                    onPressed: () async {
-                      try {
-                        await WarehouseDataService.cleanupTestPersonnel();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Entradas de test limpiadas'),
-                              backgroundColor: AppTheme.warning,
-                            ),
-                          );
-                          _load(forceRefresh: true);
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e'),
-                              backgroundColor: AppTheme.error,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                FloatingActionButton.small(
-                  heroTag: 'add_person',
-                  backgroundColor: AppTheme.accentIndigo,
-                  foregroundColor: AppTheme.textPrimary,
-                  onPressed: _showAddDialog,
-                  child: const Icon(Icons.person_add_rounded, size: 20),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const SkeletonList(itemCount: 4, itemHeight: 80)
-                : _personnel.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.person_off_outlined,
-                              color: AppTheme.textTertiary,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Sin personal registrado',
-                              style: const TextStyle(
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () => _load(forceRefresh: true),
+                    child: Icon(Icons.groups_rounded,
                         color: AppTheme.accentIndigo,
-                        child: OptimizedListView(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          itemCount: _personnel.length,
-                          itemBuilder: (ctx, i) => _personCard(_personnel[i]),
+                        size: Responsive.iconSize(context,
+                            phone: 20, desktop: 24)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PERSONAL DE ALMACÉN',
+                          style: TextStyle(
+                            color: AppTheme.accentIndigo,
+                            fontSize: Responsive.fontSize(context,
+                                small: 13, large: 16),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0,
+                          ),
                         ),
+                        Text(
+                          '${_personnel.length} operarios activos',
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (kDebugMode)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.cleaning_services_rounded,
+                        color: AppTheme.warning,
+                        size: 20,
                       ),
-          ),
-        ],
+                      tooltip: 'Limpiar entradas de test',
+                      style: WarehouseUi.iconButtonStyle(AppTheme.warning),
+                      onPressed: () async {
+                        try {
+                          await WarehouseDataService.cleanupTestPersonnel();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Entradas de test limpiadas'),
+                                backgroundColor: AppTheme.warning,
+                              ),
+                            );
+                            _load(forceRefresh: true);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: $e'),
+                                backgroundColor: AppTheme.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  FloatingActionButton.small(
+                    heroTag: 'add_person',
+                    backgroundColor: AppTheme.accentIndigo,
+                    foregroundColor: AppTheme.textPrimary,
+                    onPressed: _showAddDialog,
+                    child: const Icon(Icons.person_add_rounded, size: 20),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const SkeletonList(itemCount: 4, itemHeight: 80)
+                  : _personnel.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person_off_outlined,
+                                color: AppTheme.textTertiary,
+                                size: 48,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Sin personal registrado',
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () => _load(forceRefresh: true),
+                          color: AppTheme.accentIndigo,
+                          child: OptimizedListView(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            itemCount: _personnel.length,
+                            itemBuilder: (ctx, i) => _personCard(_personnel[i]),
+                          ),
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -321,11 +327,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
         margin: const EdgeInsets.only(bottom: 8),
         padding:
             EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: roleColor.withValues(alpha: 0.15)),
-          boxShadow: AppTheme.elevation1,
+        decoration: WarehouseUi.executiveSurface(
+          accent: roleColor,
+          borderAlpha: isCustom ? 0.26 : 0.16,
+          accentAlpha: isCustom ? 0.08 : 0.04,
         ),
         child: Row(
           children: [

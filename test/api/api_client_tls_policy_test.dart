@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 
@@ -63,4 +67,64 @@ void main() {
       expect(ApiClient.isAuthSessionExpired, isFalse);
     });
   });
+
+  group('ApiClient stale auth requests', () {
+    tearDown(ApiClient.resetForTesting);
+
+    test('retries a stale 401 once with the current token', () async {
+      ApiClient.resetForTesting();
+      ApiClient.setAuthToken('old-token');
+
+      var unauthorizedCalled = false;
+      ApiClient.onUnauthorized = () => unauthorizedCalled = true;
+
+      final adapter = _StaleTokenAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      final response = await ApiClient.get('/protected');
+
+      expect(response['ok'], isTrue);
+      expect(
+        adapter.authorizationHeaders,
+        equals(['Bearer old-token', 'Bearer new-token']),
+      );
+      expect(unauthorizedCalled, isFalse);
+    });
+  });
+}
+
+class _StaleTokenAdapter implements HttpClientAdapter {
+  final authorizationHeaders = <String?>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final authorization = options.headers['Authorization']?.toString();
+    authorizationHeaders.add(authorization);
+
+    if (authorization == 'Bearer old-token') {
+      ApiClient.setAuthToken('new-token');
+      return ResponseBody.fromString(
+        jsonEncode({'error': 'expired'}),
+        401,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      );
+    }
+
+    return ResponseBody.fromString(
+      jsonEncode({'ok': true}),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
