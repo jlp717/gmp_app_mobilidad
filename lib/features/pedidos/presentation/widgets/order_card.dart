@@ -328,9 +328,18 @@ class OrderCard extends StatelessWidget {
           : neto < 0
               ? 'Bolsa usada$netoLabel'
               : 'Bolsa compensada';
-      final color = neto >= 0 ? AppTheme.success : AppTheme.warning;
+      final color = neto > 0
+          ? AppTheme.success
+          : neto < 0
+              ? AppTheme.error
+              : AppTheme.warning;
+      final icon = neto > 0
+          ? Icons.trending_up
+          : neto < 0
+              ? Icons.trending_down
+              : Icons.compare_arrows;
       return _bolsaStatusChip(
-        Icons.account_balance_wallet,
+        icon,
         label,
         color,
       );

@@ -526,7 +526,7 @@ class _BolsaSummaryCard extends StatelessWidget {
                 child: _MetricBox(
                   label: 'Consumido',
                   value: _bolsaMoney(status.consumido),
-                  color: AppTheme.warning,
+                  color: AppTheme.error,
                   icon: Icons.trending_down,
                 ),
               ),
@@ -793,7 +793,7 @@ class _GroupedSummaryCard extends StatelessWidget {
                 child: _MetricBox(
                   label: 'Consumido',
                   value: _bolsaMoney(summary.consumido),
-                  color: AppTheme.warning,
+                  color: AppTheme.error,
                   icon: Icons.trending_down,
                 ),
               ),
@@ -1338,7 +1338,7 @@ class _MovimientoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCredit = movimiento.tipo.isCredit;
-    final color = isCredit ? AppTheme.success : AppTheme.warning;
+    final color = isCredit ? AppTheme.success : AppTheme.error;
     final icon =
         isCredit ? Icons.add_circle_outline : Icons.remove_circle_outline;
     final dateStr = movimiento.fecha != null

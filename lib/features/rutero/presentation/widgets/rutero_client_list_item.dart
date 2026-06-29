@@ -3,6 +3,70 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
+class _RuteroOrderVisualState {
+  const _RuteroOrderVisualState({
+    required this.label,
+    required this.semanticLabel,
+    required this.color,
+    required this.icon,
+    required this.backgroundAlpha,
+    required this.bannerAlpha,
+  });
+
+  factory _RuteroOrderVisualState.fromClient(Map<String, dynamic> client) {
+    final raw = client['orderStatus'];
+    final data = raw is Map ? Map<String, dynamic>.from(raw) : const {};
+    final state = (data['state'] ?? data['estado'] ?? data['status'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+
+    switch (state) {
+      case 'CONFIRMADO':
+      case 'ENVIADO':
+      case 'ENTREGADO':
+      case 'FACTURADO':
+        return const _RuteroOrderVisualState(
+          label: 'VENTA CONFIRMADA',
+          semanticLabel: 'Venta confirmada',
+          color: AppTheme.success,
+          icon: Icons.check_circle_rounded,
+          backgroundAlpha: 0.16,
+          bannerAlpha: 0.24,
+        );
+      case 'BORRADOR':
+      case 'CONFIRMANDO':
+      case 'PENDIENTE':
+      case 'PEND_APROB':
+      case 'PENDIENTE_APROBACION':
+        return const _RuteroOrderVisualState(
+          label: 'PEDIDO BORRADOR',
+          semanticLabel: 'Pedido en borrador',
+          color: Color(0xFFF97316),
+          icon: Icons.edit_note_rounded,
+          backgroundAlpha: 0.16,
+          bannerAlpha: 0.25,
+        );
+      default:
+        return const _RuteroOrderVisualState(
+          label: 'SIN VENTA',
+          semanticLabel: 'Sin venta. No se ha pasado pedido',
+          color: AppTheme.error,
+          icon: Icons.cancel_rounded,
+          backgroundAlpha: 0.14,
+          bannerAlpha: 0.22,
+        );
+    }
+  }
+
+  final String label;
+  final String semanticLabel;
+  final Color color;
+  final IconData icon;
+  final double backgroundAlpha;
+  final double bannerAlpha;
+}
+
 class RuteroClientListItem extends StatelessWidget {
   const RuteroClientListItem({
     super.key,
@@ -67,6 +131,7 @@ class RuteroClientListItem extends StatelessWidget {
 
     final isInactive = noSalesThisPeriod && noSalesLastPeriod;
     final isNewClient = !noSalesThisPeriod && noSalesEntireLastYear;
+    final orderVisual = _RuteroOrderVisualState.fromClient(client);
 
     Color accentColor;
     if (isInactive) {
@@ -85,20 +150,21 @@ class RuteroClientListItem extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
+        color: Color.alphaBlend(
+          orderVisual.color.withValues(alpha: orderVisual.backgroundAlpha),
+          AppTheme.raisedSurface,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: hasObservaciones
-              ? AppTheme.warning.withValues(alpha: 0.8)
-              : accentColor.withValues(alpha: 0.5),
-          width: hasObservaciones ? 2 : 1.5,
+          color: orderVisual.color.withValues(alpha: 0.68),
+          width: 1.6,
         ),
         boxShadow: [
           BoxShadow(
-            color: (hasObservaciones ? AppTheme.warning : accentColor)
-                .withValues(alpha: 0.1),
-            blurRadius: 8,
+            color: orderVisual.color.withValues(alpha: 0.16),
+            blurRadius: 14,
             offset: const Offset(0, 2),
           ),
         ],
@@ -152,6 +218,7 @@ class RuteroClientListItem extends StatelessWidget {
                   ),
                 ),
               ),
+            _buildOrderStatusBanner(orderVisual, hasObservaciones, context),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -178,6 +245,59 @@ class RuteroClientListItem extends StatelessWidget {
                   ),
                   _buildActionButtons(phones),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderStatusBanner(
+    _RuteroOrderVisualState visual,
+    bool hasObservaciones,
+    BuildContext context,
+  ) {
+    final borderRadius = hasObservaciones
+        ? BorderRadius.zero
+        : const BorderRadius.only(
+            topLeft: Radius.circular(14),
+            topRight: Radius.circular(14),
+          );
+
+    return Semantics(
+      label: visual.semanticLabel,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: visual.color.withValues(alpha: visual.bannerAlpha),
+          borderRadius: borderRadius,
+          border: Border(
+            bottom: BorderSide(
+              color: visual.color.withValues(alpha: 0.32),
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              visual.icon,
+              color: visual.color,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                visual.label,
+                style: TextStyle(
+                  color: visual.color,
+                  fontSize: Responsive.isSmall(context) ? 12 : 13,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -441,15 +561,20 @@ class RuteroClientListItem extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Text(
-              formatCurrency(ytdSales),
-              style: TextStyle(
-                fontSize: Responsive.isSmall(context) ? 13 : 14,
-                fontWeight: FontWeight.bold,
+            Flexible(
+              flex: 2,
+              child: Text(
+                formatCurrency(ytdSales),
+                style: TextStyle(
+                  fontSize: Responsive.isSmall(context) ? 13 : 14,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 12),
             if (ytdPrevYear > 0) ...[
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 6,
@@ -469,11 +594,15 @@ class RuteroClientListItem extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Text(
-                formatCurrency(ytdPrevYear),
-                style: TextStyle(
-                  fontSize: Responsive.isSmall(context) ? 11 : 12,
-                  color: AppTheme.textSecondary,
+              Flexible(
+                child: Text(
+                  formatCurrency(ytdPrevYear),
+                  style: TextStyle(
+                    fontSize: Responsive.isSmall(context) ? 11 : 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ] else if (selectedYear == DateTime.now().year &&

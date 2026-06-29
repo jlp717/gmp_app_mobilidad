@@ -187,6 +187,12 @@ class NavigationConfigService {
       label: 'Cobros',
       color: AppTheme.info,
     ),
+    NavItem(
+      icon: Icons.point_of_sale_outlined,
+      selectedIcon: Icons.point_of_sale,
+      label: 'Liquidación',
+      color: AppTheme.success,
+    ),
     // Req #3: Bolsa Comercial
     NavItem(
       icon: Icons.account_balance_wallet_outlined,

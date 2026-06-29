@@ -1386,6 +1386,7 @@ router.post('/create', async (req, res) => {
         }
 
         const idempotencyKey = pedidosService.ensurePedidoIdempotencyKeyFromRequest(req);
+        const normalizedSaleType = pedidosService.normalizePedidoSaleType(tipoventa || 'CC');
         const createOrderT0 = Date.now();
         let order;
         try {
@@ -1393,7 +1394,7 @@ router.post('/create', async (req, res) => {
                 clientCode: clientAccess.clientCode,
                 clientName: clientName ? String(clientName).trim() : '',
                 vendedorCode: vendorAccess.vendedorCode,
-                tipoventa: tipoventa ? String(tipoventa).trim() : undefined,
+                tipoventa: normalizedSaleType,
                 almacen: almacen ? String(almacen).trim() : undefined,
                 tarifa: tarifa ? String(tarifa).trim() : undefined,
                 formaPago: formaPago ? String(formaPago).trim() : undefined,
@@ -1431,6 +1432,10 @@ router.post('/create', async (req, res) => {
         if (error.code === 'IDEMPOTENCY_UNAVAILABLE') {
             logRouteTotal('idempotency_unavailable');
             return res.status(503).json({ success: false, code: error.code, error: error.message });
+        }
+        if (error.code === 'INVALID_SALE_TYPE') {
+            logRouteTotal('invalid_sale_type');
+            return res.status(400).json({ success: false, code: error.code, error: error.message });
         }
         logRouteTotal('error');
         logger.error(`[PEDIDOS] Error in POST /create: ${error.message}`);
@@ -1584,8 +1589,11 @@ router.put('/:id/confirm', async (req, res) => {
         }
 
         const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
-        if (!saleType || !['CC', 'VC', 'NV'].includes(saleType)) {
-            return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV' });
+        let normalizedSaleType;
+        try {
+            normalizedSaleType = pedidosService.normalizePedidoSaleType(saleType);
+        } catch (saleTypeErr) {
+            return res.status(400).json({ success: false, code: saleTypeErr.code || 'INVALID_SALE_TYPE', error: saleTypeErr.message });
         }
 
         const options = {
@@ -1599,7 +1607,7 @@ router.put('/:id/confirm', async (req, res) => {
             driverCode: driverCode ? String(driverCode).trim() : undefined,
             routeCode: routeCode ? String(routeCode).trim() : undefined,
         };
-        const order = await pedidosService.confirmOrder(id, saleType, options);
+        const order = await pedidosService.confirmOrder(id, normalizedSaleType, options);
 
         // P0-C / P0-BOLSA: If validation blocked the order, return typed 409 payload.
         if (order.blocked) {

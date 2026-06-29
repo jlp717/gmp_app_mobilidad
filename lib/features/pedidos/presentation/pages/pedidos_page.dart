@@ -1667,6 +1667,31 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             );
             if (!mounted) return;
             if (result == null || result['cleared'] == true) return;
+            if (result['outOfStock'] == true) {
+              final remainingQty =
+                  (result['remainingQuantity'] as num?)?.toDouble();
+              final snackText = remainingQty != null && remainingQty > 0
+                  ? 'No hay stock suficiente. Faltan '
+                      '${_formatQtyForMessage(remainingQty)} de ${product.name}.'
+                  : 'No hay stock disponible para ${product.name}.';
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(snackText),
+                  backgroundColor: AppTheme.warning,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+              await showStockAlternativesSheet(
+                context: context,
+                outOfStockProduct: product,
+                provider: provider,
+                remainingQty: remainingQty,
+              );
+              return;
+            }
+            final adjustedToStock = result['adjustedToStock'] == true;
+            final requestedQuantity =
+                (result['requestedQuantity'] as num?)?.toDouble();
             final unit = result['unit'] as String;
             final qty = (result['quantity'] as double?) ?? 0;
             if (qty <= 0) return;
@@ -1745,11 +1770,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                           .replaceAll(RegExp(r'0+$'), '')
                           .replaceAll(RegExp(r'\.$'), ''))
                   : qty.toStringAsFixed(0);
+              final snackText = adjustedToStock && requestedQuantity != null
+                  ? 'Ajustado al maximo disponible: +$fmtQty $unitLabel '
+                      'de ${product.name}'
+                  : '+$fmtQty $unitLabel de ${product.name}';
               messenger.showSnackBar(
                 SnackBar(
-                  content: Text('+$fmtQty $unitLabel de ${product.name}'),
-                  backgroundColor: AppTheme.success,
-                  duration: const Duration(seconds: 1),
+                  content: Text(snackText),
+                  backgroundColor:
+                      adjustedToStock ? AppTheme.warning : AppTheme.success,
+                  duration: Duration(seconds: adjustedToStock ? 3 : 1),
                 ),
               );
             }

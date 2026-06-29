@@ -20,6 +20,7 @@ import 'package:gmp_app_mobilidad/features/commissions/presentation/pages/commis
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboard_content.dart';
 import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
+import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/client_evolution_page.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/pages/bolsa_page.dart';
@@ -370,6 +371,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         'Pedidos',
         'Clientes',
         'Cobros',
+        'Liquidación',
         'Ruta',
         'Objetivos',
         'Comisiones',
@@ -1688,6 +1690,10 @@ class _MainShellState extends ConsumerState<MainShell> {
           PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
           KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
+          ComercialLiquidacionDiariaPage(
+            employeeCode: employeeCode,
+            isJefeVentas: true,
+          ),
           const BolsaPage(),
           ClientEvolutionPage(
             employeeCode: employeeCode,
@@ -1790,6 +1796,12 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Cobros':
           return CobrosPage(
             employeeCode: empCode,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Liquidación':
+          return ComercialLiquidacionDiariaPage(
+            employeeCode: empCode,
+            isJefeVentas: isTeamAggregateView,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Bolsa':

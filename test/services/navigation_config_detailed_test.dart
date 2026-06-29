@@ -58,10 +58,29 @@ void main() {
         showCommissions: true,
       );
 
-      expect(items.length, 12);
+      expect(items.length, 13);
       expect(items[0].label, 'Panel');
+      expect(items.any((i) => i.label == 'Liquidación'), true);
       expect(items.any((i) => i.label == 'Bolsa'), true);
       expect(items.any((i) => i.label == 'Evolución'), true);
+    });
+
+    test('Ventas puts liquidacion between cobros and bolsa', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: false,
+        isJefeVentas: false,
+        showCommissions: true,
+      );
+
+      expect(
+        items[items.indexWhere((i) => i.label == 'Cobros') + 1].label,
+        'Liquidación',
+      );
+      expect(
+        items[items.indexWhere((i) => i.label == 'Liquidación') + 1].label,
+        'Bolsa',
+      );
     });
 
     test('Comercial shows Comisiones when showCommissions is true', () {

@@ -592,7 +592,15 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
   Widget _buildLineBolsaImpact(OrderLine line) {
     final impact = line.bolsaImpact;
-    final color = impact.neto >= 0 ? AppTheme.success : AppTheme.warning;
+    final isPureConsumption = impact.consumo > 0 && impact.acumulacion == 0;
+    final isPureGeneration = impact.acumulacion > 0 && impact.consumo == 0;
+    final color = isPureConsumption
+        ? AppTheme.error
+        : isPureGeneration
+            ? AppTheme.success
+            : impact.neto < 0
+                ? AppTheme.error
+                : AppTheme.warning;
     final label = impact.consumo > 0 && impact.acumulacion == 0
         ? 'Bolsa usada'
         : impact.acumulacion > 0 && impact.consumo == 0
@@ -603,6 +611,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         : impact.acumulacion > 0 && impact.consumo == 0
             ? '+${PedidosFormatters.money(impact.acumulacion)}'
             : '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}';
+    final icon = isPureConsumption
+        ? Icons.trending_down
+        : isPureGeneration
+            ? Icons.trending_up
+            : Icons.compare_arrows;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -613,7 +626,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       ),
       child: Row(
         children: [
-          Icon(Icons.account_balance_wallet_outlined, color: color, size: 15),
+          Icon(icon, color: color, size: 15),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -774,12 +787,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           _buildTotalItem(
             'Bolsa -',
             PedidosFormatters.money(impact.consumo),
-            AppTheme.warning,
+            AppTheme.error,
           ),
         _buildTotalItem(
           'Bolsa neta',
           '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
-          impact.neto >= 0 ? AppTheme.success : AppTheme.warning,
+          impact.neto >= 0 ? AppTheme.success : AppTheme.error,
         ),
       ],
     );

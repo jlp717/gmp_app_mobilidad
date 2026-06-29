@@ -277,6 +277,16 @@ function normalizePedidoCodeList(value) {
   return sanitizeCodeListForParams(String(value || ''), 2);
 }
 
+function normalizePedidoMutationVendorCode(value, fallback = '') {
+  const requested = normalizePedidoCodeList(value);
+  if (requested.length > 0) return requested[0];
+  const fallbackCodes = normalizePedidoCodeList(fallback);
+  if (fallbackCodes.length > 0) return fallbackCodes[0];
+  const raw = normalizePedidoCode(value || fallback);
+  if (!raw || raw.toUpperCase() === 'ALL') return '';
+  return raw.split(',')[0].trim().substring(0, 2);
+}
+
 function normalizeCobrosVendorCodeList(value) {
   const values = Array.isArray(value) ? value : String(value || '').split(',');
   return values
@@ -403,7 +413,7 @@ function validateDddOrderLinePayload(body = {}) {
 
 function authorizePedidoVendorCode(req, vendedorCode, action = 'operar') {
   const context = getPedidoUserContext(req);
-  const vendor = normalizePedidoCode(vendedorCode);
+  const vendor = normalizePedidoMutationVendorCode(vendedorCode, context.code);
   if (!vendor) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_VENDOR', 'vendedorCode invalido') };
   if (context.isManager) {
     if (context.visibleVendorCodes.length === 0 || context.visibleVendorCodes.some((code) => salesCodesMatch(code, vendor))) {
@@ -1818,7 +1828,7 @@ function createPedidosRoutes() {
 
       const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa, formaPago } = req.body;
       // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
-      const actualVendedor = vendedorCode || userId;
+      const actualVendedor = normalizePedidoMutationVendorCode(vendedorCode, userId);
 
       if (!canAccessVendedorCodes(req, actualVendedor)) {
         return res.status(403).json({ success: false, error: 'No autorizado para crear pedidos de otro vendedor', code: 'FORBIDDEN_VENDOR' });
@@ -1834,12 +1844,13 @@ function createPedidosRoutes() {
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
       const pedidosService = require('../../../services/pedidos.service');
+      const normalizedSaleType = pedidosService.normalizePedidoSaleType(tipoventa || 'CC');
       const idempotencyKey = pedidosService.ensurePedidoIdempotencyKeyFromRequest(req);
       const result = await pedidosService.createOrder({
         clientCode: clientAccess.clientCode,
         clientName: clientName ? String(clientName).trim() : '',
         vendedorCode: vendorAccess.vendedorCode,
-        tipoventa: tipoventa || 'CC',
+        tipoventa: normalizedSaleType,
         almacen: almacen == null || String(almacen || '').trim() === '' ? undefined : parseInt(almacen, 10),
         tarifa: tarifa == null || String(tarifa || '').trim() === '' ? undefined : parseInt(tarifa, 10),
         formaPago: formaPago == null ? undefined : String(formaPago).trim(),
@@ -1865,6 +1876,12 @@ function createPedidosRoutes() {
       if (error.code === 'IDEMPOTENCY_CONFLICT') {
         return res.status(409).json({ success: false, code: error.code, error: error.message });
       }
+      if (error.code === 'IDEMPOTENCY_UNAVAILABLE') {
+        return res.status(503).json({ success: false, code: error.code, error: error.message });
+      }
+      if (error.code === 'INVALID_SALE_TYPE') {
+        return res.status(400).json({ success: false, code: error.code, error: error.message });
+      }
       logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
       sendInternalServerError(res);
     }
@@ -1878,14 +1895,17 @@ function createPedidosRoutes() {
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
       const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body || {};
-      if (!saleType || !['CC', 'VC', 'NV'].includes(String(saleType).trim())) {
-        return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV', code: 'INVALID_SALE_TYPE' });
+      const pedidosService = require('../../../services/pedidos.service');
+      let normalizedSaleType;
+      try {
+        normalizedSaleType = pedidosService.normalizePedidoSaleType(saleType);
+      } catch (saleTypeErr) {
+        return res.status(400).json({ success: false, error: saleTypeErr.message, code: saleTypeErr.code || 'INVALID_SALE_TYPE' });
       }
       const ownership = await authorizePedidoMutation(req, id, 'confirmar');
       if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
 
-      const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.confirmOrder(parseInt(id), String(saleType).trim(), {
+      const result = await pedidosService.confirmOrder(parseInt(id), normalizedSaleType, {
         forceConfirm: canUseServerForceConfirm(req, req.body || {}),
         forceConfirmReason: String(req.body?.forceConfirmReason || req.body?.auditReason || '').trim(),
         adminOverride: canUseServerForceConfirm(req, req.body || {}),

@@ -401,6 +401,52 @@ function ensurePedidoIdempotencyKeyFromRequest(req) {
     return normalizePedidoIdempotencyKey(raw);
 }
 
+const PEDIDO_SALE_TYPE_LABELS = Object.freeze({
+    CC: 'Venta',
+    VC: 'Venta sin nombre',
+    NV: 'No venta',
+});
+
+function normalizePedidoSaleType(value = 'CC') {
+    const rawValue = value === undefined || value === null || trimString(value) === ''
+        ? 'CC'
+        : trimString(value);
+    const canonical = rawValue
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+    if (canonical === 'CC' || canonical === 'VENTA') return 'CC';
+    if (
+        canonical === 'VC' ||
+        canonical === 'VENTA_SIN_NOMBRE' ||
+        canonical === 'VENTA_SIN_NOMBRES' ||
+        canonical === 'SIN_NOMBRE' ||
+        canonical === 'SIN_NOMBRES'
+    ) {
+        return 'VC';
+    }
+    if (
+        canonical === 'NV' ||
+        canonical === 'NO_VENTA' ||
+        canonical === 'NO_VENTAS' ||
+        canonical === 'NOVENTA'
+    ) {
+        return 'NV';
+    }
+
+    const err = new Error('tipoventa/saleType debe ser CC (Venta), VC (Venta sin nombre) o NV (No venta)');
+    err.code = 'INVALID_SALE_TYPE';
+    err.status = 400;
+    throw err;
+}
+
+function getPedidoSaleTypeLabel(value = 'CC') {
+    return PEDIDO_SALE_TYPE_LABELS[normalizePedidoSaleType(value)];
+}
+
 function buildCreateOrderPayloadHash({
     clientCode,
     vendedorCode,
@@ -420,9 +466,9 @@ function buildCreateOrderPayloadHash({
     })).sort((a, b) => a.codigoArticulo.localeCompare(b.codigoArticulo));
 
     const payload = {
-        clientCode: trimString(clientCode),
-        vendedorCode: trimString(vendedorCode),
-        tipoventa: trimString(tipoventa || 'CC'),
+        clientCode: truncate(clientCode, 10),
+        vendedorCode: resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }).vendedor,
+        tipoventa: normalizePedidoSaleType(tipoventa),
         observaciones: trimString(observaciones),
         descuentoGlobal: Number(parseFloat(descuentoGlobal) || 0).toFixed(2),
         lines: canonicalLines,
@@ -463,11 +509,19 @@ async function storePedidoIdempotency({
     clientCode,
     vendedorCode,
 }) {
+    const storedClientCode = truncate(clientCode, 10);
+    const storedVendedorCode = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }).vendedor;
     await queryWithParams(
         `INSERT INTO ${ERP_SCHEMA}.PEDIDO_IDEMPOTENCY
             (IDEMPOTENCY_KEY, PEDIDO_ID, PAYLOAD_HASH, CLIENT_CODE, VENDEDOR_CODE)
          VALUES (?, ?, ?, ?, ?)`,
-        [idempotencyKey, pedidoId, payloadHash, trimString(clientCode), trimString(vendedorCode)],
+        [
+            truncate(idempotencyKey, 128),
+            pedidoId,
+            truncate(payloadHash, 64),
+            storedClientCode,
+            storedVendedorCode,
+        ],
         false,
         false,
     );
@@ -1664,7 +1718,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
     const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
     const actor = resolvePedidoActorCodes(header);
     const cliente = truncate(header.CODIGOCLIENTE, 10);
-    const effectiveSaleType = truncate(saleType || line.TIPOVENTA || header.TIPOVENTA || 'CC', 2) || 'CC';
+    const effectiveSaleType = normalizePedidoSaleType(saleType || line.TIPOVENTA || header.TIPOVENTA || 'CC');
     const iva = resolveIvaFromLine(line);
 
     const columns = [
@@ -2984,7 +3038,15 @@ async function createOrder({
         throw new Error(`Un pedido no puede tener mas de ${MAX_ORDER_LINES} lineas`);
     }
 
-    const clientDefaults = await getClientOrderDefaults(clientCode);
+    const effectiveClientCode = truncate(clientCode, 10);
+    const effectiveActorCodes = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }, userId);
+    const effectiveVendedorCode = effectiveActorCodes.vendedor;
+    const effectiveSaleType = normalizePedidoSaleType(tipoventa);
+    if (!effectiveClientCode || !effectiveVendedorCode) {
+        throw new Error('clientCode and vendedorCode are required');
+    }
+
+    const clientDefaults = await getClientOrderDefaults(effectiveClientCode);
     const effectiveClientName = trimString(clientName) || clientDefaults.clientName || '';
     const effectiveFormaPago = truncate(trimString(formaPago) || clientDefaults.formaPago || '02', 2);
     const effectiveTarifa = integerValue(tarifa) || clientDefaults.tarifa || 1;
@@ -2999,9 +3061,9 @@ async function createOrder({
     const idempotencyT0 = Date.now();
     const idempotencyState = await resolveIdempotentCreateOrder({
         idempotencyKey: normalizedIdempotencyKey,
-        clientCode,
-        vendedorCode,
-        tipoventa,
+        clientCode: effectiveClientCode,
+        vendedorCode: effectiveVendedorCode,
+        tipoventa: effectiveSaleType,
         observaciones,
         descuentoGlobal,
         lines,
@@ -3024,7 +3086,7 @@ async function createOrder({
 
     const nextOrderT0 = Date.now();
     const numeroPedido = await getNextOrderNumber(ejercicio);
-    const terminal = resolvePedidoTerminal(vendedorCode, userId);
+    const terminal = resolvePedidoTerminal(effectiveVendedorCode, userId);
     logger.info(`[PEDIDOS] createOrder stage=getNextOrderNumber lineCount=${lineCount} durationMs=${Date.now() - nextOrderT0}`);
 
     // Insert header; ORIGEN column may not exist in older installs
@@ -3038,13 +3100,13 @@ async function createOrder({
             mes,
             ano,
             hora,
-            clientCode,
+            clientCode: effectiveClientCode,
             clientName: effectiveClientName,
-            vendedorCode,
+            vendedorCode: effectiveVendedorCode,
             formaPago: effectiveFormaPago,
             tarifa: effectiveTarifa,
             almacen: effectiveAlmacen,
-            tipoventa,
+            tipoventa: effectiveSaleType,
             observaciones,
             descuentoGlobal,
             origen,
@@ -3062,13 +3124,13 @@ async function createOrder({
                 mes,
                 ano,
                 hora,
-                clientCode,
+                clientCode: effectiveClientCode,
                 clientName: effectiveClientName,
-                vendedorCode,
+                vendedorCode: effectiveVendedorCode,
                 formaPago: effectiveFormaPago,
                 tarifa: effectiveTarifa,
                 almacen: effectiveAlmacen,
-                tipoventa,
+                tipoventa: effectiveSaleType,
                 observaciones,
                 descuentoGlobal,
                 origen,
@@ -3093,7 +3155,7 @@ async function createOrder({
 
     const tariffT0 = Date.now();
     const [clientTariffs, articleIvaCodes] = await Promise.all([
-        getClientTariffsForLines(clientCode, lines),
+        getClientTariffsForLines(effectiveClientCode, lines),
         getArticleIvaCodesForLines(lines),
     ]);
     logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
@@ -3167,12 +3229,12 @@ async function createOrder({
             mes,
             ano,
             hora,
-            clientCode,
-            vendedorCode,
+            clientCode: effectiveClientCode,
+            vendedorCode: effectiveVendedorCode,
             formaPago: effectiveFormaPago,
             tarifa: effectiveTarifa,
             almacen: effectiveAlmacen,
-            tipoventa,
+            tipoventa: effectiveSaleType,
             line,
             amounts,
             terminal,
@@ -3190,7 +3252,7 @@ async function createOrder({
             const legacyLineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLegacyPedidoLineInsert({
                 pedidoId,
                 sequence,
-                tipoventa,
+                tipoventa: effectiveSaleType,
                 line,
                 amounts,
             }));
@@ -3266,8 +3328,8 @@ async function createOrder({
                 idempotencyKey: normalizedIdempotencyKey,
                 pedidoId,
                 payloadHash: idempotencyState.payloadHash,
-                clientCode,
-                vendedorCode,
+                clientCode: effectiveClientCode,
+                vendedorCode: effectiveVendedorCode,
             });
             logger.info(`[PEDIDOS] createOrder stage=idempotency_store pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - storeT0}`);
         } catch (storeErr) {
@@ -4170,6 +4232,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         err.status = 409;
         throw err;
     }
+    const effectiveSaleType = normalizePedidoSaleType(saleType || currentRows[0].TIPOVENTA || 'CC');
 
     // Helper: revierte CONFIRMANDO -> BORRADOR cuando un retorno temprano o un
     // fallo deja el pedido bloqueado en estado intermedio. Best-effort: si falla
@@ -4328,7 +4391,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     lines,
                     deliveryPlan,
                     routeCode,
-                    saleType,
+                    saleType: effectiveSaleType,
                     vehicleCode,
                     driverCode,
                     userId: options.userId,
@@ -4339,7 +4402,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     vehicleCode,
                     driverCode,
                     routeCode,
-                    saleType,
+                    saleType: effectiveSaleType,
                     syncResult,
                 });
                 await conn.query(update.sql, update.params);
@@ -4360,7 +4423,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             vehicleCode,
             driverCode,
             routeCode,
-            saleType,
+            saleType: effectiveSaleType,
             syncResult,
         });
         await queryWithParams(update.sql, update.params, false);
@@ -4399,7 +4462,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             clientName: order?.header?.clienteNombre,
             vendedorCode: order?.header?.vendedor,
             total: order?.header?.total,
-            saleType: saleType || order?.header?.tipoventa,
+            saleType: effectiveSaleType || order?.header?.tipoventa,
             deliveryDate: deliveryPlan.date.iso,
             deliveryDays: deliveryPlan.allowedDays,
             vehicleCode,
@@ -6366,6 +6429,8 @@ module.exports = {
     ensurePedidoIdempotencyKeyFromRequest,
     generatePedidoIdempotencyKey,
     normalizePedidoIdempotencyKey,
+    normalizePedidoSaleType,
+    getPedidoSaleTypeLabel,
     resolveIvaFromCodigo,
     applyProductPriceView,
     buildCreateOrderPayloadHash,

@@ -628,27 +628,44 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     PedidosProvider provider,
   ) {
     final impact = provider.estimatedBolsaImpact;
-    final netColor = impact.neto >= 0 ? AppTheme.success : AppTheme.warning;
+    final isPureConsumption = impact.consumo > 0 && impact.acumulacion == 0;
+    final isPureGeneration = impact.acumulacion > 0 && impact.consumo == 0;
+    final netColor = isPureConsumption
+        ? AppTheme.error
+        : isPureGeneration
+            ? AppTheme.success
+            : impact.neto < 0
+                ? AppTheme.error
+                : AppTheme.warning;
+    final title = isPureConsumption
+        ? 'Consume bolsa'
+        : isPureGeneration
+            ? 'Genera bolsa'
+            : 'Bolsa compensada';
+    final icon = isPureConsumption
+        ? Icons.trending_down
+        : isPureGeneration
+            ? Icons.trending_up
+            : Icons.compare_arrows;
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.softPanel,
+        color: netColor.withValues(alpha: 0.09),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: netColor.withValues(alpha: 0.35)),
+        border: Border.all(color: netColor.withValues(alpha: 0.42)),
       ),
       child: Row(
         children: [
-          Icon(Icons.account_balance_wallet_outlined,
-              color: netColor, size: 16),
+          Icon(icon, color: netColor, size: 17),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Bolsa estimada',
+              title,
               style: TextStyle(
-                color: Colors.white70,
+                color: netColor,
                 fontSize: Responsive.fontSize(context, small: 11, large: 12),
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
@@ -661,7 +678,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             const SizedBox(width: 8),
             _buildBolsaMiniStat(
               '-${PedidosFormatters.money(impact.consumo)}',
-              AppTheme.warning,
+              AppTheme.error,
             ),
           ],
           const SizedBox(width: 8),

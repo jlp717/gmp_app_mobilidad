@@ -14,6 +14,7 @@ const {
     getVendorVisibilityScope,
     handleRouteError
 } = require('../utils/common');
+const { db2WriteTable } = require('../utils/db2-schemas');
 
 // Imports from laclae service
 const {
@@ -29,6 +30,176 @@ const {
 const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
 
 const DAY_NAMES = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+const RUTERO_WEEKDAY_INDEX = {
+    lunes: 0,
+    martes: 1,
+    miercoles: 2,
+    jueves: 3,
+    viernes: 4,
+    sabado: 5,
+    domingo: 6
+};
+const ORDER_CONFIRMED_STATES = ['CONFIRMADO', 'ENVIADO', 'ENTREGADO', 'FACTURADO'];
+const ORDER_DRAFT_STATES = ['BORRADOR', 'CONFIRMANDO', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION'];
+const ORDER_STATUS_EMPTY_LABEL = 'SIN VENTA';
+
+function dateParts(dateValue) {
+    const year = dateValue.getFullYear();
+    const month = dateValue.getMonth() + 1;
+    const day = dateValue.getDate();
+    return {
+        year,
+        month,
+        day,
+        iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    };
+}
+
+function parseIsoDateOnly(value) {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    const parsed = new Date(year, month - 1, day);
+    if (
+        parsed.getFullYear() !== year ||
+        parsed.getMonth() !== month - 1 ||
+        parsed.getDate() !== day
+    ) {
+        return null;
+    }
+    return dateParts(parsed);
+}
+
+function resolveRuteroOrderDate({ date, year, month, week, normalizedDay, now }) {
+    const explicitDate = parseIsoDateOnly(date);
+    if (explicitDate) return explicitDate;
+
+    const currentYear = parseInt(year, 10) || now.getFullYear();
+    const currentMonth = parseInt(month, 10) || (now.getMonth() + 1);
+    const selectedWeek = parseInt(week, 10);
+    const dayIndex = RUTERO_WEEKDAY_INDEX[normalizedDay];
+
+    if (!Number.isFinite(selectedWeek) || selectedWeek < 1 || dayIndex === undefined) {
+        return dateParts(now);
+    }
+
+    const firstOfMonth = new Date(currentYear, currentMonth - 1, 1);
+    const lastOfMonth = new Date(currentYear, currentMonth, 0);
+    const firstWeekday = firstOfMonth.getDay() === 0 ? 7 : firstOfMonth.getDay();
+    const mondayDay = 1 + (selectedWeek - 1) * 7 - (firstWeekday - 1);
+    const selectedDay = mondayDay + dayIndex;
+    const clampedDay = Math.min(Math.max(selectedDay, 1), lastOfMonth.getDate());
+
+    return dateParts(new Date(currentYear, currentMonth - 1, clampedDay));
+}
+
+function emptyRuteroOrderStatus(orderDate) {
+    return {
+        state: 'SIN_PEDIDO',
+        label: ORDER_STATUS_EMPTY_LABEL,
+        hasOrder: false,
+        confirmedCount: 0,
+        draftCount: 0,
+        totalCount: 0,
+        date: orderDate.iso
+    };
+}
+
+function normalizeRuteroVendorCodes(vendedorCodes) {
+    const raw = String(vendedorCodes || '').trim();
+    if (!raw || raw.toUpperCase() === 'ALL') return [];
+    return raw
+        .split(',')
+        .map(code => code.trim())
+        .filter(Boolean);
+}
+
+async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }) {
+    const statusMap = new Map();
+    clientCodes.forEach(code => {
+        statusMap.set(code, emptyRuteroOrderStatus(orderDate));
+    });
+
+    if (!clientCodes.length) return statusMap;
+
+    const clientPlaceholders = clientCodes.map(() => '?').join(',');
+    const confirmedPlaceholders = ORDER_CONFIRMED_STATES.map(() => '?').join(',');
+    const draftPlaceholders = ORDER_DRAFT_STATES.map(() => '?').join(',');
+    const vendorCodes = normalizeRuteroVendorCodes(vendedorCodes);
+    const useVendorFilter = vendorCodes.length > 0 && vendorCodes.length <= 50;
+    const vendorFilterSql = useVendorFilter
+        ? ` AND TRIM(C.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
+        : '';
+
+    const sql = `
+        SELECT
+            TRIM(C.CODIGOCLIENTE) AS CODE,
+            SUM(CASE WHEN TRIM(C.ESTADO) IN (${confirmedPlaceholders}) THEN 1 ELSE 0 END) AS CONFIRMED_COUNT,
+            SUM(CASE WHEN TRIM(C.ESTADO) IN (${draftPlaceholders}) THEN 1 ELSE 0 END) AS DRAFT_COUNT,
+            COUNT(*) AS TOTAL_COUNT,
+            MAX(C.ID) AS LAST_ORDER_ID,
+            MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
+        FROM ${db2WriteTable('PEDIDOS_CAB')} C
+        WHERE TRIM(C.CODIGOCLIENTE) IN (${clientPlaceholders})
+          AND C.ANODOCUMENTO = ?
+          AND C.MESDOCUMENTO = ?
+          AND C.DIADOCUMENTO = ?
+          ${vendorFilterSql}
+        GROUP BY TRIM(C.CODIGOCLIENTE)
+    `;
+
+    const params = [
+        ...ORDER_CONFIRMED_STATES,
+        ...ORDER_DRAFT_STATES,
+        ...clientCodes,
+        orderDate.year,
+        orderDate.month,
+        orderDate.day,
+        ...(useVendorFilter ? vendorCodes : [])
+    ];
+
+    try {
+        const rows = await queryWithParams(sql, params, false, false);
+        (rows || []).forEach(row => {
+            const code = (row.CODE ?? row.code ?? '').toString().trim();
+            if (!code) return;
+            const confirmedCount = parseInt(row.CONFIRMED_COUNT ?? row.confirmed_count, 10) || 0;
+            const draftCount = parseInt(row.DRAFT_COUNT ?? row.draft_count, 10) || 0;
+            const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
+            const lastOrderId = parseInt(row.LAST_ORDER_ID ?? row.last_order_id, 10) || null;
+            const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
+
+            let state = 'SIN_PEDIDO';
+            let label = ORDER_STATUS_EMPTY_LABEL;
+            if (confirmedCount > 0) {
+                state = 'CONFIRMADO';
+                label = 'VENTA CONFIRMADA';
+            } else if (draftCount > 0) {
+                state = 'BORRADOR';
+                label = 'PEDIDO BORRADOR';
+            }
+
+            statusMap.set(code, {
+                state,
+                label,
+                hasOrder: totalCount > 0,
+                confirmedCount,
+                draftCount,
+                totalCount,
+                lastOrderId,
+                lastOrderNumber,
+                date: orderDate.iso
+            });
+        });
+    } catch (error) {
+        logger.warn(`[RUTERO DAY] Order status enrichment skipped: ${error.message}`);
+    }
+
+    return statusMap;
+}
 
 // =============================================================================
 // ROUTER CALENDAR
@@ -1037,7 +1208,7 @@ router.post('/rutero/reload-cache-old', async (req, res) => {
 router.get('/rutero/day/:day', async (req, res) => {
     try {
         const { day } = req.params;
-        const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query; // Added ignoreOverrides
+        const { vendedorCodes, year, role, month, week, ignoreOverrides, date } = req.query; // Added ignoreOverrides
         
         // SECURITY: Validate day parameter
         const normalizedDay = day ? day.toLowerCase() : '';
@@ -1054,6 +1225,14 @@ router.get('/rutero/day/:day', async (req, res) => {
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
         const previousYear = currentYear - 1;
+        const orderDate = resolveRuteroOrderDate({
+            date,
+            year,
+            month,
+            week,
+            normalizedDay,
+            now
+        });
 
         // Determine the reference date (The "End Date" for calculation)
         // IMPORTANT: We want to compare COMPLETED weeks only.
@@ -1265,14 +1444,16 @@ router.get('/rutero/day/:day', async (req, res) => {
             prevYearRowsResult,
             prevYearTotalRows,
             gpsResult,
-            notesResult
+            notesResult,
+            orderStatusMap
         ] = await Promise.all([
             cachedQuery(queryWithParams, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG, clientBatch),
             cachedQuery(queryWithParams, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL, [...clientBatch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent]),
             prevSalesSql ? cachedQuery(queryWithParams, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL, [...clientBatch, previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious]) : Promise.resolve([]),
             cachedQuery(queryWithParams, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG, [...clientBatch, previousYear]),
             cachedQuery(queryWithParams, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG, clientBatch).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
-            cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; })
+            cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
+            getRuteroOrderStatusMap(clientBatch, { vendedorCodes, orderDate })
         ]);
 
         // Build maps from results - use safe accessor to handle both uppercase/lowercase columns
@@ -1365,6 +1546,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             const prevYearTotalSales = prevYearTotalMap.get(code) || 0; // Total sales in entire previous year
             const gps = gpsMap.get(code) || { lat: null, lon: null };
             const note = notesMap.get(code);
+            const orderStatus = orderStatusMap.get(code) || emptyRuteroOrderStatus(orderDate);
 
             const salesCurrent = r.SALES || 0;
             const salesPrev = prevSales.sales || 0; // Sales in equivalent period of prev year
@@ -1421,6 +1603,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 },
                 lat: gps.lat,
                 lon: gps.lon,
+                orderStatus,
                 observation: note ? note.text : null,
                 observationBy: note ? note.modifiedBy : null,
                 order: clientOrder
@@ -1445,6 +1628,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             day,
             year: currentYear,
             compareYear: previousYear,
+            orderDate: orderDate.iso,
             period: {
                 weeks: completedWeeks, // Number of completed weeks being compared
                 current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',

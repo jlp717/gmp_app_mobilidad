@@ -532,6 +532,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Stock insuficiente'), findsOneWidget);
       expect(find.text('Seleccionar unidad y cantidad'), findsOneWidget);
+      expect(find.text('Alternativas'), findsOneWidget);
+    });
+
+    testWidgets(
+        'UnitSelectorModal returns stock alternatives intent when requested quantity exceeds stock',
+        (tester) async {
+      Future<Map<String, dynamic>?>? modalResult;
+      await tester.pumpWidget(MaterialApp(
+          home: Builder(
+              builder: (context) => ElevatedButton(
+                  onPressed: () {
+                    modalResult = UnitSelectorModal.show(context,
+                        product: Product(
+                            code: 'MODAL-STOCK-2',
+                            name: 'Producto modal alternativo',
+                            stockEnvases: 1,
+                            unitsPerBox: 12,
+                            precioTarifa1: 10),
+                        initialUnit: 'CAJAS',
+                        initialQuantity: 2,
+                        availableUnits: const ['CAJAS']);
+                  },
+                  child: const Text('open alternatives')))));
+      await tester.tap(find.text('open alternatives'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ACEPTAR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Alternativas'));
+      await tester.pumpAndSettle();
+
+      final result = await modalResult;
+      expect(result, isNotNull);
+      expect(result!['outOfStock'], isTrue);
+      expect(result['requestedQuantity'], 2.0);
+      expect(result['availableQuantity'], 1.0);
+      expect(result['remainingQuantity'], 1.0);
     });
 
     testWidgets('UnitSelectorModal blocks normal accept when quantity is zero',

@@ -253,6 +253,24 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     return (startDay, endDay);
   }
 
+  String _selectedRouteDateIso() {
+    final firstOfMonth = DateTime(_selectedYear, _selectedMonth);
+    final lastDay = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
+    final firstWeekday = firstOfMonth.weekday;
+    final mondayDay = 1 + (_selectedWeek - 1) * 7 - (firstWeekday - 1);
+    final dayOffset = _weekdays.indexOf(_selectedDay);
+    final rawSelectedDay = mondayDay + (dayOffset < 0 ? 0 : dayOffset);
+    final selectedDay = rawSelectedDay < 1
+        ? 1
+        : rawSelectedDay > lastDay
+            ? lastDay
+            : rawSelectedDay;
+    final date = DateTime(_selectedYear, _selectedMonth, selectedDay);
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
   void _changeMonth(int delta) {
     setState(() {
       _selectedMonth += delta;
@@ -461,6 +479,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       final endpoint = useDirectEndpoint
           ? '${ApiConfig.ruteroDay}-direct/$_selectedDay'
           : '${ApiConfig.ruteroDay}/$_selectedDay';
+      final routeDateIso = _selectedRouteDateIso();
 
       final result = await OfflineAwareApi.get(
         endpoint,
@@ -470,6 +489,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'year': _selectedYear,
           'month': _selectedMonth,
           'week': _selectedWeek,
+          'date': routeDateIso,
           'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
         cacheKey: [
@@ -477,6 +497,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           cacheScope,
           _selectedRole,
           _selectedDay,
+          routeDateIso,
           _selectedYear,
           _selectedMonth,
           _selectedWeek,
@@ -562,6 +583,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     try {
       final activeVendedorCode = _activeVendedorCode;
       final cacheScope = _ruteroCacheScopeFor(activeVendedorCode);
+      final routeDateIso = _selectedRouteDateIso();
       final result = await OfflineAwareApi.get(
         '${ApiConfig.ruteroDay}/$_selectedDay',
         queryParameters: {
@@ -570,6 +592,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'year': _selectedYear,
           'month': _selectedMonth,
           'week': _selectedWeek,
+          'date': routeDateIso,
           'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
         cacheKey: [
@@ -577,11 +600,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           cacheScope,
           _selectedRole,
           _selectedDay,
+          routeDateIso,
           _selectedYear,
           _selectedMonth,
           _selectedWeek,
           _sortMode,
         ].join('_'),
+        forceRefresh: true,
       );
 
       final normalResponse = result.data;
@@ -593,12 +618,17 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
       // Merge sales data into existing clients
       final salesMap = <String, Map<String, dynamic>>{};
+      final orderStatusMap = <String, Map<String, dynamic>>{};
       for (final item in enrichedClients) {
         final client = item as Map<String, dynamic>;
         final code = client['code'] as String?;
         final status = client['status'] as Map<String, dynamic>?;
+        final orderStatus = client['orderStatus'] as Map<String, dynamic>?;
         if (code != null && status != null) {
           salesMap[code] = status;
+        }
+        if (code != null && orderStatus != null) {
+          orderStatusMap[code] = orderStatus;
         }
       }
 
@@ -608,6 +638,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           final code = _dayClients[i]['code'] as String?;
           if (code != null && salesMap.containsKey(code)) {
             _dayClients[i]['status'] = salesMap[code];
+          }
+          if (code != null && orderStatusMap.containsKey(code)) {
+            _dayClients[i]['orderStatus'] = orderStatusMap[code];
           }
         }
       });
@@ -955,7 +988,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             index: index + 1,
             formatCurrency: _formatCurrency,
             formatVariation: _formatVariation,
-            onTap: () => _navigateToMatrix(client),
+            onTap: () => unawaited(_navigateToMatrix(client)),
             onMapTap: () => _openMaps(client),
             onCallTap: () => _makeCall(client),
             onWhatsAppTap: () => _openWhatsApp(client),
@@ -970,8 +1003,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     );
   }
 
-  void _navigateToMatrix(Map<String, dynamic> client) {
-    Navigator.push(
+  Future<void> _navigateToMatrix(Map<String, dynamic> client) async {
+    await Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (context) => PedidosPage(
@@ -982,6 +1015,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         ),
       ),
     );
+    if (!mounted) return;
+    await _loadDayClients(useDirectEndpoint: true, forceRefresh: true);
   }
 
   Future<void> _openMaps(Map<String, dynamic> client) async {

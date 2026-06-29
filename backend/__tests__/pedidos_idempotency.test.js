@@ -362,6 +362,7 @@ describe('pedidos create idempotency', () => {
     const mockService = {
       ensurePedidoIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offlinesynckey002'),
       extractIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offlinesynckey002'),
+      normalizePedidoSaleType: jest.fn().mockReturnValue('CC'),
       createOrder: jest.fn().mockResolvedValue({
         header: { id: 88, estado: 'BORRADOR' },
         lines: [{ id: 1 }],
@@ -416,6 +417,50 @@ describe('pedidos create idempotency', () => {
     expect(result.header).toMatchObject({ id: 77, estado: 'BORRADOR' });
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(true);
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql))).toBe(false);
+  });
+
+  test('createOrder stores normalized client and vendor scope in idempotency table', async () => {
+    setupCreateMocks();
+
+    await pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientCode: '4300007781_EXTRA',
+      vendedorCode: '95,02,03,27',
+      userId: '98',
+      clientRequestId: 'offlinesynckey011',
+    });
+
+    const idempotencyInsert = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /INSERT INTO\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(sql),
+    );
+    expect(idempotencyInsert).toBeDefined();
+    expect(idempotencyInsert[1][3]).toBe('4300007781');
+    expect(idempotencyInsert[1][4]).toBe('95');
+  });
+
+  test.each([
+    ['Venta', 'CC'],
+    ['Venta sin nombres', 'VC'],
+    ['No venta', 'NV'],
+  ])('createOrder persists sale state %s as %s in header and lines', async (saleLabel, expectedCode) => {
+    setupCreateMocks();
+
+    await pedidosService.createOrder({
+      ...baseCreatePayload,
+      tipoventa: saleLabel,
+      clientRequestId: `salestate${expectedCode.toLowerCase()}01`,
+    });
+
+    const cabInsert = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql),
+    );
+    const lineInsert = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /INSERT INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql),
+    );
+    expect(cabInsert).toBeDefined();
+    expect(lineInsert).toBeDefined();
+    expect(cabInsert[1]).toContain(expectedCode);
+    expect(lineInsert[1]).toContain(expectedCode);
   });
 
   test('createOrder uses client master payment and tariff when request omits them', async () => {

@@ -66,6 +66,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   final TextEditingController _qtyController = TextEditingController();
   late List<String> _units;
   String? _validationMessage;
+  bool _showStockActions = false;
+  double _lastRequestedQty = 0;
+  double _lastAvailableQty = 0;
 
   @override
   void initState() {
@@ -224,6 +227,12 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     return v.toStringAsFixed(decimals > 0 ? decimals : 2);
   }
 
+  bool _isWeightUnit(String unit) =>
+      unit.toUpperCase() == 'KILOGRAMOS' || unit.toUpperCase() == 'LITROS';
+
+  double _parseQuantity() =>
+      double.tryParse(_qtyController.text.replaceAll(',', '.')) ?? 0;
+
   double _stockValueForUnit(String unit) {
     final p = widget.product;
     if (p == null) return double.infinity;
@@ -235,18 +244,28 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   }
 
   void _acceptSelection() {
-    final qty = double.tryParse(_qtyController.text.replaceAll(',', '.')) ?? 0;
+    final qty = _parseQuantity();
     final stock = _stockValueForUnit(_selectedUnit);
 
     if (qty <= 0) {
-      setState(() => _validationMessage = 'Indica una cantidad valida.');
+      setState(() {
+        _validationMessage = 'Indica una cantidad valida.';
+        _showStockActions = false;
+      });
       return;
     }
 
     if (qty > stock) {
+      final decimals = _isWeightUnit(_selectedUnit) ? 1 : 0;
+      final requestedLabel = _fmtNum(qty, decimals: decimals);
+      final stockLabel = _fmtNum(stock, decimals: decimals);
+      final unitLabel = _unitAbbr(_selectedUnit);
       setState(() {
+        _lastRequestedQty = qty;
+        _lastAvailableQty = stock;
+        _showStockActions = true;
         _validationMessage =
-            'Stock insuficiente: disponible ${_fmtNum(stock, decimals: _selectedUnit == 'KILOGRAMOS' || _selectedUnit == 'LITROS' ? 1 : 0)} ${_unitAbbr(_selectedUnit)}.';
+            'Stock insuficiente: has pedido $requestedLabel $unitLabel y hay $stockLabel $unitLabel.';
       });
       return;
     }
@@ -255,6 +274,98 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
       'unit': _selectedUnit,
       'quantity': qty,
     });
+  }
+
+  void _acceptMaxAvailable() {
+    final stock = _stockValueForUnit(_selectedUnit);
+    if (stock <= 0) {
+      _showAlternatives();
+      return;
+    }
+    Navigator.pop(context, {
+      'unit': _selectedUnit,
+      'quantity': stock,
+      'adjustedToStock': true,
+      'requestedQuantity': _lastRequestedQty > 0 ? _lastRequestedQty : stock,
+      'availableQuantity': stock,
+      'remainingQuantity':
+          (_lastRequestedQty - stock) > 0 ? _lastRequestedQty - stock : 0.0,
+    });
+  }
+
+  void _showAlternatives() {
+    final requested =
+        _lastRequestedQty > 0 ? _lastRequestedQty : _parseQuantity();
+    final available = _lastAvailableQty > 0
+        ? _lastAvailableQty
+        : _stockValueForUnit(_selectedUnit);
+    Navigator.pop(context, {
+      'unit': _selectedUnit,
+      'quantity': 0.0,
+      'outOfStock': true,
+      'requestedQuantity': requested,
+      'availableQuantity': available,
+      'remainingQuantity':
+          (requested - available) > 0 ? requested - available : requested,
+    });
+  }
+
+  Widget _buildStockActions() {
+    if (!_showStockActions) return const SizedBox.shrink();
+    final canAdjust = _lastAvailableQty > 0;
+    final decimals = _isWeightUnit(_selectedUnit) ? 1 : 0;
+    final availableValue = _fmtNum(_lastAvailableQty, decimals: decimals);
+    final availableLabel = '$availableValue ${_unitAbbr(_selectedUnit)}';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          if (canAdjust) ...[
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: OutlinedButton.icon(
+                  onPressed: _acceptMaxAvailable,
+                  icon: const Icon(Icons.tune, size: 16),
+                  label: Text(
+                    'Usar $availableLabel',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.success,
+                    side: const BorderSide(color: AppTheme.success),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: ElevatedButton.icon(
+                onPressed: _showAlternatives,
+                icon: const Icon(Icons.auto_awesome, size: 16),
+                label: const Text(
+                  'Alternativas',
+                  overflow: TextOverflow.ellipsis,
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.warning,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -372,6 +483,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                     onTap: () => setState(() {
                       _selectedUnit = unit;
                       _validationMessage = null;
+                      _showStockActions = false;
                     }),
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
@@ -475,6 +587,14 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               ),
               textAlign: TextAlign.center,
               autofocus: true,
+              onChanged: (_) {
+                if (_validationMessage != null || _showStockActions) {
+                  setState(() {
+                    _validationMessage = null;
+                    _showStockActions = false;
+                  });
+                }
+              },
               decoration: InputDecoration(
                 labelText: 'Cantidad (${_unitLabel(_selectedUnit)})',
                 labelStyle:
@@ -508,6 +628,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              _buildStockActions(),
             ],
             const SizedBox(height: 16),
 

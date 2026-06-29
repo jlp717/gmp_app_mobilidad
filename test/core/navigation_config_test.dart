@@ -93,8 +93,29 @@ void main() {
       expect(items.any((i) => i.label == 'Pedidos'), true);
       expect(items.any((i) => i.label == 'Alertas'), true);
       expect(items.any((i) => i.label == 'Cobros'), true);
+      expect(items.any((i) => i.label == 'Liquidación'), true);
       expect(items.any((i) => i.label == 'Evolución'), true);
       expect(items.any((i) => i.label == 'Asistente'), true);
+    });
+
+    test('places liquidacion after cobros and before bolsa', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: false,
+        isJefeVentas: false,
+        showCommissions: true,
+      );
+
+      final cobrosIndex = items.indexWhere((i) => i.label == 'Cobros');
+      final liquidacionIndex =
+          items.indexWhere((i) => i.label == 'Liquidación');
+      final bolsaIndex = items.indexWhere((i) => i.label == 'Bolsa');
+
+      expect(cobrosIndex, isNonNegative);
+      expect(liquidacionIndex, isNonNegative);
+      expect(bolsaIndex, isNonNegative);
+      expect(liquidacionIndex, cobrosIndex + 1);
+      expect(liquidacionIndex, lessThan(bolsaIndex));
     });
   });
 

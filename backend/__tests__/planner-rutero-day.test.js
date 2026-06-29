@@ -103,6 +103,27 @@ describe('Planner rutero/day route', () => {
         return [];
       }
 
+      if (sql.includes('FROM JAVIER.PEDIDOS_CAB')) {
+        return [
+          {
+            CODE: '4300000001',
+            CONFIRMED_COUNT: 1,
+            DRAFT_COUNT: 1,
+            TOTAL_COUNT: 2,
+            LAST_ORDER_ID: 42,
+            LAST_ORDER_NUMBER: 1001,
+          },
+          {
+            CODE: '4300000002',
+            CONFIRMED_COUNT: 0,
+            DRAFT_COUNT: 1,
+            TOTAL_COUNT: 1,
+            LAST_ORDER_ID: 43,
+            LAST_ORDER_NUMBER: 1002,
+          },
+        ];
+      }
+
       return [];
     });
   });
@@ -126,5 +147,16 @@ describe('Planner rutero/day route', () => {
 
     expect(detailsSql).toContain('TELEFONO1 as PHONE');
     expect(detailsSql).not.toContain('TELEFON1 as PHONE');
+
+    const firstClient = res.body.clients.find(c => c.code === '4300000001');
+    const secondClient = res.body.clients.find(c => c.code === '4300000002');
+    expect(firstClient.orderStatus.state).toBe('CONFIRMADO');
+    expect(firstClient.orderStatus.label).toBe('VENTA CONFIRMADA');
+    expect(secondClient.orderStatus.state).toBe('BORRADOR');
+    expect(secondClient.orderStatus.label).toBe('PEDIDO BORRADOR');
+
+    const orderStatusQueries = executedSql.filter(sql => sql.includes('FROM JAVIER.PEDIDOS_CAB'));
+    expect(orderStatusQueries).toHaveLength(1);
+    expect(orderStatusQueries[0]).toContain('GROUP BY TRIM(C.CODIGOCLIENTE)');
   });
 });
