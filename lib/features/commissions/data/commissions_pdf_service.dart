@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,12 +12,13 @@ import 'package:path_provider/path_provider.dart';
 /// Commissions PDF Service - DIEGO ONLY
 /// Downloads and opens commission PDF reports with robust error handling
 class CommissionsPdfService {
-  static const int _maxRetries = 2;
+  // PDF generation is DB2-heavy; backend single-flight coordinates duplicates.
+  static const int _maxRetries = 0;
   static const Duration _retryDelay = Duration(seconds: 1);
+  static const Duration _openPdfTimeout = Duration(seconds: 12);
 
   /// Downloads the commissions PDF and opens it with the platform handler.
   static Future<void> generateAndDownloadPdf({
-    required BuildContext context,
     required String vendorCode,
     required VoidCallback onLoading,
     required VoidCallback onSuccess,
@@ -38,7 +40,6 @@ class CommissionsPdfService {
         }
 
         await _downloadAndOpenPdf(
-          context: context,
           vendorCode: vendorCode,
           year: year,
           range: range,
@@ -66,7 +67,6 @@ class CommissionsPdfService {
   }
 
   static Future<void> _downloadAndOpenPdf({
-    required BuildContext context,
     required String vendorCode,
     required VoidCallback onSuccess,
     required Function(String) onError,
@@ -148,13 +148,17 @@ class CommissionsPdfService {
         '(${(pdfBytes.length / 1024).toStringAsFixed(2)} KB)',
       );
 
-      // Open PDF with error handling
-      final result = await OpenFilex.open(filePath);
+      // Open PDF with error handling. Some Android file handlers can hang here,
+      // so timeout avoids leaving the dialog spinner active after download.
+      final result = await OpenFilex.open(filePath).timeout(_openPdfTimeout);
       if (result.type != ResultType.done) {
         debugPrint('[CommissionsPDF] Failed to open PDF: ${result.message}');
         throw Exception('No se pudo abrir el PDF: ${result.message}');
       }
 
+      onSuccess();
+    } on TimeoutException {
+      debugPrint('[CommissionsPDF] PDF open handler timed out');
       onSuccess();
     } on DioException catch (e) {
       // Handle Dio-specific errors

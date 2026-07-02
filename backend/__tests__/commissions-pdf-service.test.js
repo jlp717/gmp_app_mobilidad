@@ -245,6 +245,10 @@ describe('Commissions PDF route helpers', () => {
     function loadRoute({
         resolveAllModeVendorCodes = jest.fn(async () => []),
         redisGet = jest.fn(async () => null),
+        redisSet = jest.fn(async () => undefined),
+        redisAcquireLock = jest.fn(async () => null),
+        redisReleaseLock = jest.fn(async () => undefined),
+        redisIsConnected = false,
     } = {}) {
         jest.resetModules();
 
@@ -296,7 +300,10 @@ describe('Commissions PDF route helpers', () => {
         jest.doMock('../services/redis-cache', () => ({
             redisCache: {
                 get: redisGet,
-                set: jest.fn(async () => undefined),
+                set: redisSet,
+                acquireLock: redisAcquireLock,
+                releaseLock: redisReleaseLock,
+                isConnected: redisIsConnected,
             },
             TTL: {
                 SHORT: 60,
@@ -321,6 +328,9 @@ describe('Commissions PDF route helpers', () => {
             queryWithParams,
             resolveAllModeVendorCodes,
             redisGet,
+            redisSet,
+            redisAcquireLock,
+            redisReleaseLock,
         };
     }
 
@@ -382,5 +392,83 @@ describe('Commissions PDF route helpers', () => {
         expect(resolveAllModeVendorCodes).not.toHaveBeenCalled();
         expect(query).not.toHaveBeenCalled();
         expect(queryWithParams).not.toHaveBeenCalled();
+    });
+
+    test('PDF payload cache stores base64 buffers with short TTL', async () => {
+        const redisSet = jest.fn(async () => true);
+        const { routeModule } = loadRoute({ redisSet });
+        const pdfBuffer = Buffer.from('%PDF-1.4 cached');
+
+        await routeModule._private.setCachedPdfPayload('pdf:key', {
+            pdfBuffer,
+            vendorCount: 3,
+            fileName: 'cached.pdf',
+            generatedAt: '2026-07-02T07:00:00.000Z',
+        });
+
+        expect(redisSet).toHaveBeenCalledWith(
+            'route',
+            'pdf:key',
+            expect.objectContaining({
+                pdfBase64: pdfBuffer.toString('base64'),
+                vendorCount: 3,
+                fileName: 'cached.pdf',
+            }),
+            600,
+        );
+    });
+
+    test('PDF generation uses Redis lock and releases it after caching', async () => {
+        const redisSet = jest.fn(async () => true);
+        const redisAcquireLock = jest.fn(async () => 'lock-token');
+        const redisReleaseLock = jest.fn(async () => true);
+        const { routeModule } = loadRoute({
+            redisSet,
+            redisAcquireLock,
+            redisReleaseLock,
+            redisIsConnected: true,
+        });
+        const pdfBuffer = Buffer.from('%PDF-1.4 fresh');
+        const generator = jest.fn(async () => ({
+            pdfBuffer,
+            vendorCount: 2,
+            fileName: 'fresh.pdf',
+        }));
+
+        const result = await routeModule._private.getOrGeneratePdfPayload('pdf:key', generator);
+
+        expect(generator).toHaveBeenCalledTimes(1);
+        expect(redisAcquireLock).toHaveBeenCalledWith('route', 'pdf:key:generate', expect.any(Number));
+        expect(redisSet).toHaveBeenCalledWith(
+            'route',
+            'pdf:key',
+            expect.objectContaining({ pdfBase64: pdfBuffer.toString('base64') }),
+            600,
+        );
+        expect(redisReleaseLock).toHaveBeenCalledWith('route', 'pdf:key:generate', 'lock-token');
+        expect(result.pdfBuffer).toEqual(pdfBuffer);
+    });
+
+    test('PDF generation returns cached payload without acquiring a lock', async () => {
+        const pdfBuffer = Buffer.from('%PDF-1.4 cached');
+        const redisGet = jest.fn(async () => ({
+            pdfBase64: pdfBuffer.toString('base64'),
+            vendorCount: 1,
+            fileName: 'cached.pdf',
+        }));
+        const redisAcquireLock = jest.fn();
+        const { routeModule } = loadRoute({
+            redisGet,
+            redisAcquireLock,
+            redisIsConnected: true,
+        });
+        const generator = jest.fn();
+
+        const result = await routeModule._private.getOrGeneratePdfPayload('pdf:key', generator);
+
+        expect(generator).not.toHaveBeenCalled();
+        expect(redisAcquireLock).not.toHaveBeenCalled();
+        expect(result.fromCache).toBe(true);
+        expect(result.pdfBuffer).toEqual(pdfBuffer);
     });
 });

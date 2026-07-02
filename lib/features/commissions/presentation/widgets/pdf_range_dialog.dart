@@ -43,6 +43,11 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
     }
   }
 
+  void _setLoading(bool value) {
+    if (!mounted) return;
+    setState(() => _isLoading = value);
+  }
+
   void _toggleMonth(int month) {
     setState(() {
       if (_selectedMonths.contains(month)) {
@@ -86,16 +91,16 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    _setLoading(true);
     final monthsParam = _selectedMonths.toList()..sort();
     await CommissionsPdfService.generateAndDownloadPdf(
-      context: context,
       vendorCode: widget.vendorCode,
       year: DateTime.now().year,
       months: monthsParam.join(','),
-      onLoading: () => setState(() => _isLoading = true),
+      onLoading: () => _setLoading(true),
       onSuccess: () {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+        _setLoading(false);
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -104,7 +109,8 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         );
       },
       onError: (e) {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+        _setLoading(false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );

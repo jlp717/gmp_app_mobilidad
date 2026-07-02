@@ -2333,6 +2333,165 @@ function normalizeVendorCodeForPdf(code) {
     return raw.replace(/^0+/, '') || raw;
 }
 
+const PDF_RESULT_CACHE_TTL_SECONDS = parseInt(process.env.PDF_RESULT_CACHE_TTL_SECONDS, 10) || 600;
+const PDF_GENERATION_LOCK_TTL_MS = parseInt(process.env.PDF_GENERATION_LOCK_TTL_MS, 10) || 180000;
+const PDF_SINGLE_FLIGHT_WAIT_MS = parseInt(process.env.PDF_SINGLE_FLIGHT_WAIT_MS, 10) || 170000;
+const PDF_SINGLE_FLIGHT_POLL_MS = parseInt(process.env.PDF_SINGLE_FLIGHT_POLL_MS, 10) || 1000;
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function normalizePdfCachePart(value, fallback = 'none') {
+    const normalized = String(value || '')
+        .trim()
+        .replace(/[^a-zA-Z0-9,_-]/g, '')
+        .substring(0, 120);
+    return normalized || fallback;
+}
+
+function normalizePdfMonthsPart(months, startMonth, endMonth) {
+    if (!months) return `${startMonth}-${endMonth}`;
+    const selected = [...new Set(
+        String(months)
+            .split(',')
+            .map(month => parseInt(month.trim(), 10))
+            .filter(month => Number.isInteger(month) && month >= 1 && month <= 12)
+    )].sort((a, b) => a - b);
+    return selected.length ? selected.join(',') : `${startMonth}-${endMonth}`;
+}
+
+function buildPdfGenerationCacheKey({ vendorCode, userCode, targetYear, startMonth, endMonth, months }) {
+    const scope = normalizePdfCachePart(vendorCode || 'ALL', 'ALL');
+    const user = normalizePdfCachePart(userCode || 'unknown', 'unknown');
+    const monthsPart = normalizePdfMonthsPart(months, startMonth, endMonth);
+    return `comm:pdf:${COMMISSIONS_CACHE_VERSION}:${user}:${scope}:${targetYear}:${monthsPart}`;
+}
+
+function encodePdfPayload(payload) {
+    return {
+        pdfBase64: payload.pdfBuffer.toString('base64'),
+        vendorCount: payload.vendorCount || 0,
+        fileName: payload.fileName || 'comisiones.pdf',
+        generatedAt: payload.generatedAt || new Date().toISOString(),
+    };
+}
+
+function decodePdfPayload(payload) {
+    if (!payload?.pdfBase64) return null;
+    return {
+        pdfBuffer: Buffer.from(payload.pdfBase64, 'base64'),
+        vendorCount: payload.vendorCount || 0,
+        fileName: payload.fileName || 'comisiones.pdf',
+        generatedAt: payload.generatedAt,
+        fromCache: true,
+    };
+}
+
+async function getCachedPdfPayload(cacheKey) {
+    try {
+        return decodePdfPayload(await redisCache.get('route', cacheKey));
+    } catch (e) {
+        logger.warn(`[PDF] PDF cache lookup failed: ${e.message}`);
+        return null;
+    }
+}
+
+async function setCachedPdfPayload(cacheKey, payload) {
+    try {
+        await redisCache.set('route', cacheKey, encodePdfPayload(payload), PDF_RESULT_CACHE_TTL_SECONDS);
+    } catch (e) {
+        logger.warn(`[PDF] PDF cache store failed: ${e.message}`);
+    }
+}
+
+function createPdfRouteError(publicError, error, statusCode = 500) {
+    const wrapped = new Error(error?.message || publicError);
+    wrapped.publicError = publicError;
+    wrapped.statusCode = statusCode;
+    if (error?.stack) wrapped.stack = error.stack;
+    return wrapped;
+}
+
+async function getPdfErrorMarker(cacheKey) {
+    try {
+        const marker = await redisCache.get('route', `${cacheKey}:error`);
+        if (!marker?.message) return null;
+        return createPdfRouteError(
+            marker.publicError || 'Error generando PDF',
+            new Error(marker.message),
+            marker.statusCode || 500
+        );
+    } catch (e) {
+        logger.warn(`[PDF] PDF error marker lookup failed: ${e.message}`);
+        return null;
+    }
+}
+
+async function setPdfErrorMarker(cacheKey, error) {
+    try {
+        await redisCache.set('route', `${cacheKey}:error`, {
+            publicError: error.publicError || 'Error generando PDF',
+            message: error.message,
+            statusCode: error.statusCode || 500,
+            generatedAt: new Date().toISOString(),
+        }, 30);
+    } catch (e) {
+        logger.warn(`[PDF] PDF error marker store failed: ${e.message}`);
+    }
+}
+
+async function waitForPdfPayload(cacheKey) {
+    const deadline = Date.now() + PDF_SINGLE_FLIGHT_WAIT_MS;
+    while (Date.now() < deadline) {
+        await sleep(Math.min(PDF_SINGLE_FLIGHT_POLL_MS, Math.max(25, deadline - Date.now())));
+        const cached = await getCachedPdfPayload(cacheKey);
+        if (cached) return cached;
+        const marker = await getPdfErrorMarker(cacheKey);
+        if (marker) throw marker;
+    }
+
+    throw createPdfRouteError(
+        'PDF en curso',
+        new Error('Ya hay una generacion de PDF en curso. Reintenta en unos segundos.'),
+        503
+    );
+}
+
+async function getOrGeneratePdfPayload(cacheKey, generator) {
+    const cached = await getCachedPdfPayload(cacheKey);
+    if (cached) {
+        logger.info(`[PDF] Returning cached PDF result (${cacheKey})`);
+        return cached;
+    }
+
+    const canCoordinate = redisCache?.isConnected && typeof redisCache.acquireLock === 'function';
+    if (!canCoordinate) {
+        logger.warn(`[PDF] Redis lock unavailable; generating without cross-worker single-flight (${cacheKey})`);
+        return generator();
+    }
+
+    const lockKey = `${cacheKey}:generate`;
+    const lockToken = await redisCache.acquireLock('route', lockKey, PDF_GENERATION_LOCK_TTL_MS);
+    if (!lockToken) {
+        logger.info(`[PDF] Waiting for in-flight PDF generation (${cacheKey})`);
+        return waitForPdfPayload(cacheKey);
+    }
+
+    try {
+        const fresh = await generator();
+        await setCachedPdfPayload(cacheKey, fresh);
+        return fresh;
+    } catch (error) {
+        await setPdfErrorMarker(cacheKey, error);
+        throw error;
+    } finally {
+        if (typeof redisCache.releaseLock === 'function') {
+            await redisCache.releaseLock('route', lockKey, lockToken);
+        }
+    }
+}
+
 router.get('/pdf', verifyToken, async (req, res) => {
     try {
         const { year, months, range, vendorCode } = req.query;
@@ -2394,88 +2553,119 @@ router.get('/pdf', verifyToken, async (req, res) => {
 
         logger.info(`[PDF] Generating for DIEGO: year=${targetYear}, months ${startMonth}-${endMonth}`);
 
-        // Fetch data with same calculation path as /summary.
-        let vendorData, condorData, pdfConfig;
+        const pdfCacheKey = buildPdfGenerationCacheKey({
+            vendorCode: vendorCode || 'ALL',
+            userCode,
+            targetYear,
+            startMonth,
+            endMonth,
+            months,
+        });
+
+        let pdfPayload;
         try {
-            pdfConfig = await loadCommissionConfigForPdf(targetYear);
-            [vendorData, condorData] = await Promise.all([
-                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, pdfConfig, userCode),
-                pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
-            ]);
-            
-            logger.info(`[PDF] Summary data fetched successfully: ${vendorData.length} vendors, ${condorData.size} B-sales vendors`);
-        } catch (dataError) {
-            logger.error(`[PDF] Error fetching sales data: ${dataError.message}`);
-            return res.status(500).json({ 
-                success: false, 
-                error: 'Error obteniendo datos de ventas', 
-                details: dataError.message 
+            pdfPayload = await getOrGeneratePdfPayload(pdfCacheKey, async () => {
+                // Fetch data with same calculation path as /summary.
+                let vendorData, condorData, pdfConfig;
+                try {
+                    pdfConfig = await loadCommissionConfigForPdf(targetYear);
+                    [vendorData, condorData] = await Promise.all([
+                        buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, pdfConfig, userCode),
+                        pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
+                    ]);
+
+                    logger.info(`[PDF] Summary data fetched successfully: ${vendorData.length} vendors, ${condorData.size} B-sales vendors`);
+                } catch (dataError) {
+                    logger.error(`[PDF] Error fetching sales data: ${dataError.message}`);
+                    throw createPdfRouteError('Error obteniendo datos de ventas', dataError);
+                }
+
+                let teamCommissionPdf = null;
+                const pdfVendorNorm = normalizeVendorCodeForPdf(vendorCode);
+                const pdfVendorDataByCode = new Map();
+                (vendorData || []).forEach((vendor) => {
+                    const normalized = normalizeVendorCodeForPdf(vendor.vendedorCode || vendor.code);
+                    if (normalized) {
+                        pdfVendorDataByCode.set(normalized, vendor);
+                    }
+                });
+                const calculateVendorDataForPdf = async (code, y, cfg) => {
+                    const normalized = normalizeVendorCodeForPdf(code);
+                    if (parseInt(y, 10) === targetYear && pdfVendorDataByCode.has(normalized)) {
+                        return pdfVendorDataByCode.get(normalized);
+                    }
+                    return calculateVendorData(code, y, cfg);
+                };
+                if (isTeamLeader(pdfVendorNorm) || (vendorData || []).some((v) => isTeamLeader(normalizeVendorCodeForPdf(v.vendedorCode || v.code)))) {
+                    try {
+                        await ensureExcludedVendorsLoaded();
+                        teamCommissionPdf = await getTeamCommission(
+                            '80',
+                            targetYear,
+                            calculateVendorDataForPdf,
+                            pdfConfig,
+                        );
+                    } catch (teamErr) {
+                        logger.warn(`[PDF] Team commission section skipped: ${teamErr.message}`);
+                    }
+                }
+
+                // Generate PDF with error handling
+                let pdfBuffer;
+                try {
+                    pdfBuffer = await pdfService.generateCommissionsPdfFromSummary(
+                        vendorData,
+                        condorData,
+                        targetYear,
+                        startMonth,
+                        endMonth,
+                        teamCommissionPdf,
+                        pdfConfig,
+                    );
+                    logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
+                } catch (pdfError) {
+                    logger.error(`[PDF] Error generating PDF: ${pdfError.message}`);
+                    logger.error(`[PDF] Stack trace: ${pdfError.stack}`);
+                    throw createPdfRouteError('Error generando PDF', pdfError);
+                }
+
+                return {
+                    pdfBuffer,
+                    vendorCount: vendorData.length,
+                    fileName: `comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`,
+                    generatedAt: new Date().toISOString(),
+                };
+            });
+        } catch (pdfError) {
+            const statusCode = pdfError.statusCode || 500;
+            logger.error(`[PDF] Request failed: ${pdfError.message}`);
+            return res.status(statusCode).json({
+                success: false,
+                error: pdfError.publicError || 'Error generando PDF',
+                details: pdfError.message
             });
         }
 
-        let teamCommissionPdf = null;
-        const pdfVendorNorm = normalizeVendorCodeForPdf(vendorCode);
-        const pdfVendorDataByCode = new Map();
-        (vendorData || []).forEach((vendor) => {
-            const normalized = normalizeVendorCodeForPdf(vendor.vendedorCode || vendor.code);
-            if (normalized) {
-                pdfVendorDataByCode.set(normalized, vendor);
-            }
-        });
-        const calculateVendorDataForPdf = async (code, y, cfg) => {
-            const normalized = normalizeVendorCodeForPdf(code);
-            if (parseInt(y, 10) === targetYear && pdfVendorDataByCode.has(normalized)) {
-                return pdfVendorDataByCode.get(normalized);
-            }
-            return calculateVendorData(code, y, cfg);
-        };
-        if (isTeamLeader(pdfVendorNorm) || (vendorData || []).some((v) => isTeamLeader(normalizeVendorCodeForPdf(v.vendedorCode || v.code)))) {
-            try {
-                await ensureExcludedVendorsLoaded();
-                teamCommissionPdf = await getTeamCommission(
-                    '80',
-                    targetYear,
-                    calculateVendorDataForPdf,
-                    pdfConfig,
-                );
-            } catch (teamErr) {
-                logger.warn(`[PDF] Team commission section skipped: ${teamErr.message}`);
-            }
-        }
-
-        // Generate PDF with error handling
-        let pdfBuffer;
-        try {
-            pdfBuffer = await pdfService.generateCommissionsPdfFromSummary(
-                vendorData,
-                condorData,
-                targetYear,
-                startMonth,
-                endMonth,
-                teamCommissionPdf,
-                pdfConfig,
-            );
-            logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
-        } catch (pdfError) {
-            logger.error(`[PDF] Error generating PDF: ${pdfError.message}`);
-            logger.error(`[PDF] Stack trace: ${pdfError.stack}`);
-            return res.status(500).json({ 
-                success: false, 
-                error: 'Error generando PDF', 
-                details: pdfError.message 
+        const { pdfBuffer, fileName, vendorCount, fromCache } = pdfPayload;
+        if (!pdfBuffer?.length) {
+            logger.error('[PDF] Empty PDF payload after generation/cache');
+            return res.status(500).json({
+                success: false,
+                error: 'Error generando PDF',
+                details: 'El PDF generado esta vacio'
             });
         }
 
         // Send PDF with proper headers
         try {
             res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename=comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`);
+            res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
             res.setHeader('Content-Length', pdfBuffer.length);
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
             res.send(pdfBuffer);
 
-            logger.info(`[PDF] PDF sent successfully for DIEGO (${vendorData.length} vendors)`);
+            logger.info(`[PDF] PDF sent successfully for DIEGO (${vendorCount} vendors${fromCache ? ', cached' : ''})`);
         } catch (sendError) {
             logger.error(`[PDF] Error sending PDF: ${sendError.message}`);
             // Don't throw error here as response may already be partially sent
@@ -2571,5 +2761,9 @@ module.exports = {
         loadCommissionConfig,
         buildPdfSummaryVendors,
         loadCommissionConfigForPdf,
+        buildPdfGenerationCacheKey,
+        decodePdfPayload,
+        setCachedPdfPayload,
+        getOrGeneratePdfPayload,
     },
 };
