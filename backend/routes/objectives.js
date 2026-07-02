@@ -231,7 +231,8 @@ function parseVendorCodes(vendedorCodes) {
     if (!vendedorCodes || vendedorCodes === 'ALL') return [];
     return vendedorCodes
         .split(',')
-        .map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim())
+        .map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase())
+        .filter(code => code !== 'UNK' && code.length <= 2)
         .filter(Boolean);
 }
 
@@ -622,10 +623,11 @@ function mergeVendorObjectiveTargets(targetSets, yearsArray) {
 async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears) {
     const yearPlaceholders = uniqueYears.map(() => '?').join(',');
     const safeVendorCodes = [...new Set((vendorCodesArray || [])
-        .map(code => sanitizeForSQL(code))
+        .map(code => sanitizeForSQL(code).trim().toUpperCase())
+        .filter(code => code !== 'UNK' && code.length <= 2)
         .filter(Boolean))];
 
-    if (safeVendorCodes.length === 0 || !effectiveVendorCodes || effectiveVendorCodes === 'ALL') {
+    if (!effectiveVendorCodes || effectiveVendorCodes === 'ALL') {
         return queryWithParams(`
             SELECT 
                 L.LCAADC as YEAR,
@@ -639,6 +641,11 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY YEAR, MONTH
         `, uniqueYears);
+    }
+
+    if (safeVendorCodes.length === 0) {
+        logger.warn(`[OBJECTIVES] Ignoring evolution request with no valid vendor codes: ${effectiveVendorCodes}`);
+        return [];
     }
 
     if (safeVendorCodes.length === 1) {
