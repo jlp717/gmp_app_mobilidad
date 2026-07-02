@@ -41,10 +41,10 @@ pm2 logs gmp-api --lines 50
 pm2 logs gmp-api --err --lines 100
 
 # 3. Test de humo - comisiones
-curl -s "http://localhost:3334/api/commissions/summary?vendedorCodes=33&year=2026" | head -200
+curl -s "http://localhost:3335/api/commissions/summary?vendedorCodes=33&year=2026" | head -200
 
 # 4. Test de humo - objetivos
-curl -s "http://localhost:3334/api/objectives/evolution?vendedorCodes=33&years=2026" | head -200
+curl -s "http://localhost:3335/api/objectives/evolution?vendedorCodes=33&years=2026" | head -200
 ```
 
 ## Paso 4: Monitoreo 24h

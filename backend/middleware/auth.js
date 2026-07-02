@@ -69,11 +69,40 @@ const REFRESH_TTL_MS = parseTtlMs(process.env.JWT_REFRESH_EXPIRES, 604_800_000, 
 const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10);
 const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const AUTH_REDIS_TIMEOUT_MS = parseInt(process.env.AUTH_REDIS_TIMEOUT_MS || process.env.REDIS_COMMAND_TIMEOUT_MS || '1000', 10);
-const AUTH_ALLOW_STATELESS_REFRESH_FALLBACK = process.env.AUTH_ALLOW_STATELESS_REFRESH_FALLBACK === 'true'
-    || (isProduction && process.env.PM2_EXEC_MODE === 'cluster');
+function isStatelessRefreshFallbackAllowed() {
+    if (process.env.AUTH_ALLOW_STATELESS_REFRESH_FALLBACK !== 'true') return false;
+    if (!isProduction) return true;
+
+    const rawUntil = process.env.AUTH_STATELESS_REFRESH_FALLBACK_UNTIL;
+    const until = rawUntil ? Date.parse(rawUntil) : NaN;
+    if (!Number.isFinite(until) || until <= Date.now()) {
+        logger.error('[AUTH] Stateless refresh fallback requested in production without a future AUTH_STATELESS_REFRESH_FALLBACK_UNTIL; disabling fallback');
+        return false;
+    }
+
+    logger.warn(`[AUTH] Stateless refresh fallback enabled temporarily until ${new Date(until).toISOString()}`);
+    return true;
+}
+
+const AUTH_ALLOW_STATELESS_REFRESH_FALLBACK = isStatelessRefreshFallbackAllowed();
 const AUTH_SESSION_PREFIX = 'gmp:auth:session:';
 const AUTH_USER_PREFIX = 'gmp:auth:user:';
 const AUTH_REVOKED_PREFIX = 'gmp:auth:revoked:';
+
+function allowPlaintextPinAuth() {
+    if (!isProduction) return true;
+    if (process.env.AUTH_ALLOW_PLAINTEXT_PIN !== 'true') return false;
+
+    const rawUntil = process.env.AUTH_PLAINTEXT_PIN_AUTH_UNTIL;
+    const until = rawUntil ? Date.parse(rawUntil) : NaN;
+    if (!Number.isFinite(until) || until <= Date.now()) {
+        logger.error('[AUTH] Plaintext PIN auth requested in production without a future AUTH_PLAINTEXT_PIN_AUTH_UNTIL; denying plaintext PINs');
+        return false;
+    }
+
+    logger.warn(`[AUTH] Plaintext PIN auth enabled temporarily until ${new Date(until).toISOString()}`);
+    return true;
+}
 
 logger.info(`[AUTH] Access TTL: ${ACCESS_TTL_MS}ms (${Math.round(ACCESS_TTL_MS / 60000)}min), Refresh TTL: ${REFRESH_TTL_MS}ms (${Math.round(REFRESH_TTL_MS / 86400000)}d)`);
 
@@ -521,6 +550,8 @@ exports.verifyPassword = async (password, hash) => {
     return bcrypt.compare(password, hash);
 };
 
+exports.allowPlaintextPinAuth = allowPlaintextPinAuth;
+
 exports.validatePasswordStrength = (password) => {
     const errors = [];
     
@@ -666,6 +697,7 @@ exports.handleRefreshToken = async (req, res) => {
         const newAccessToken = exports.signAccessToken({
             id: userId,
             user: userCode,
+            name: payload.name,
             role: payload.role,
             isJefeVentas: payload.isJefeVentas,
             vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
@@ -675,6 +707,7 @@ exports.handleRefreshToken = async (req, res) => {
         const newRefreshToken = exports.signRefreshToken({
             id: userId,
             user: userCode,
+            name: payload.name,
             role: payload.role,
             isJefeVentas: payload.isJefeVentas,
             vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
@@ -689,7 +722,9 @@ exports.handleRefreshToken = async (req, res) => {
             success: true,
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
-            expiresIn: ACCESS_TTL_MS / 1000
+            expiresIn: ACCESS_TTL_MS / 1000,
+            tokenExpiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+            refreshExpiresIn: Math.floor(REFRESH_TTL_MS / 1000)
         });
         
     } catch (error) {

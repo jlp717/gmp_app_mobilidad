@@ -155,7 +155,9 @@ app.use(errorHandler);
 
 function parseCorsOrigin(origins: string[]): cors.CorsOptions['origin'] {
   if (config.env === 'production') {
-    if (origins.includes('*') || origins.includes('true')) return false;
+    if (origins.length === 0 || origins.includes('*') || origins.includes('true')) {
+      throw new Error('[SECURITY] CORS_ORIGIN must list explicit origins in production');
+    }
     return origins.map(o => o.trim()).filter(Boolean);
   }
   if (origins.includes('*') || origins.includes('true')) return true;

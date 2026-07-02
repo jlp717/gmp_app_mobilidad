@@ -116,7 +116,8 @@ class AuthState {
 // the provider and force re-initialization, causing session loss and
 // triggering rate limiting from repeated login attempts.
 class AuthNotifier extends AsyncNotifier<AuthState> {
-  static const Duration _sessionDuration = Duration(days: 1);
+  static const Duration _localSessionDuration = Duration(days: 7);
+  static const Duration _accessTokenDuration = Duration(hours: 1);
   static const Duration _resumeRefreshThreshold = Duration(minutes: 5);
   static const String _sessionExpiresAtKey = 'session_expires_at';
 
@@ -133,6 +134,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       debugPrint('[AuthNotifier] 401 detected — logging out');
       logout(sessionExpired: true);
     };
+    ApiClient.onTokenRefreshed = () => _persistNewSessionDeadline();
 
     final visualQaRole = _visualQaRoleOverride();
     if (visualQaRole.isNotEmpty) {
@@ -247,7 +249,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> _persistNewSessionDeadline() async {
-    final expiresAt = DateTime.now().add(_sessionDuration);
+    final expiresAt = DateTime.now().add(_localSessionDuration);
     await SecureStorage.writeSecureData(
       _sessionExpiresAtKey,
       expiresAt.millisecondsSinceEpoch.toString(),
@@ -311,6 +313,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         if (refreshedToken != null && refreshedToken.isNotEmpty) {
           ApiClient.setAuthToken(refreshedToken);
         }
+      } else if (ApiClient.isAuthSessionExpired) {
+        await logout(sessionExpired: true);
+        return false;
       }
     }
 
@@ -319,7 +324,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   /// Returns true if the stored token is expired.
   /// The server uses a custom 2-part HMAC format: base64(JSON).hmacHex
-  /// The payload contains a 'timestamp' (ms epoch) and the TTL is 24 hours.
+  /// The payload contains a 'timestamp' (ms epoch); access tokens are short
+  /// lived and renewed by the refresh session.
   DateTime? _tokenIssuedAt(String token) {
     try {
       final dotIndex = token.indexOf('.');
@@ -349,13 +355,13 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   bool _isTokenExpired(String token) {
     final issuedAt = _tokenIssuedAt(token);
     if (issuedAt == null) return true;
-    return DateTime.now().difference(issuedAt) >= _sessionDuration;
+    return DateTime.now().difference(issuedAt) >= _accessTokenDuration;
   }
 
   bool _isTokenExpiringSoon(String token) {
     final issuedAt = _tokenIssuedAt(token);
     if (issuedAt == null) return true;
-    final expiresAt = issuedAt.add(_sessionDuration);
+    final expiresAt = issuedAt.add(_accessTokenDuration);
     return !DateTime.now().add(_resumeRefreshThreshold).isBefore(expiresAt);
   }
 
@@ -392,6 +398,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           token = await SecureStorage.readSecureData('user_token');
           if (refreshed && token != null && token.isNotEmpty) {
             debugPrint('[AuthNotifier] Stored token refreshed');
+          } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity &&
+              !_isSessionExpired(expiresAt)) {
+            debugPrint(
+              '[AuthNotifier] Stored token expired but refresh is offline - restoring local session',
+            );
           } else {
             debugPrint(
                 '[AuthNotifier] Stored token expired — clearing session');

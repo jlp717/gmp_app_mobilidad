@@ -48,12 +48,7 @@ class NotificationOrchestrator {
   }) async {
     await initialize();
     if (user == null) {
-      _activeProfile = await NotificationSessionStore.loadLastKnownProfile();
-      if (_activeProfile == null) {
-        await _local.cancelAllGmpNotifications();
-        return;
-      }
-      await refreshAll(reason: '$reason:last_known_profile');
+      await clearForLogout();
       return;
     }
 

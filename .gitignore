@@ -71,6 +71,7 @@ backend/db_probe_results.json
 
 # Logs and temp files
 *.log
+logs/local/
 nul
 ~$*.docx
 *.docx

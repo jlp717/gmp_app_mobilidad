@@ -12,23 +12,23 @@ services:
     container_name: gmp-backend
     restart: unless-stopped
     ports:
-      - "${PORT:-3334}:${PORT:-3334}"
+      - "${PORT:-3335}:${PORT:-3335}"
     environment:
       - NODE_ENV=production
-      - PORT=${PORT:-3334}
+      - PORT=${PORT:-3335}
       - ODBC_DSN=${ODBC_DSN:-GMP}
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - JWT_SECRET=${JWT_SECRET}
-      - REDIS_URL=redis://redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - CORS_ORIGINS=${CORS_ORIGINS}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispassword}
+      - CORS_ORIGIN=${CORS_ORIGIN}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:${PORT:-3334}/api/health"]
+      test: ["CMD", "curl", "-fsS", "-A", "GMP-SRE-HealthCheck/1.0", "http://localhost:${PORT:-3335}/api/ready"]
       interval: 30s
       timeout: 10s
       retries: 3

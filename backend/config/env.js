@@ -4,15 +4,10 @@
  * JavaScript version for production use (no TypeScript compilation needed)
  */
 
-const dotenv = require('dotenv');
 const path = require('path');
+const { loadEnv } = require('./load-env');
 
-// Load .env based on environment
-const envFile = process.env.NODE_ENV === 'production'
-  ? '.env.production'
-  : '.env';
-
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+loadEnv(path.resolve(__dirname, '..'));
 
 // Helper function to get numbers
 function getNumber(key, defaultValue) {
@@ -87,7 +82,10 @@ const config = {
 
   // CORS
   cors: {
-    origins: getArray('CORS_ORIGINS', ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8081']),
+    origins: getArray(
+      'CORS_ORIGIN',
+      getArray('CORS_ORIGINS', ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8081'])
+    ),
   },
 
   // Security

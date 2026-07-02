@@ -99,6 +99,7 @@ void main() {
         attempts: 5,
         lastError: 'timeout',
         failedAt: failedAt,
+        sessionScope: 'user=V1|role=COMERCIAL|jefe=false|vendors=V1',
       );
 
       final restored = SyncOperation.fromJson(op.toJson());
@@ -107,6 +108,10 @@ void main() {
       expect(restored.attempts, 5);
       expect(restored.lastError, 'timeout');
       expect(restored.failedAt, failedAt);
+      expect(
+        restored.sessionScope,
+        'user=V1|role=COMERCIAL|jefe=false|vendors=V1',
+      );
     });
   });
 }

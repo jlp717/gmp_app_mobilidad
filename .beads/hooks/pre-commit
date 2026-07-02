@@ -18,15 +18,21 @@ FOUND=0
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
 DART_FILES=$(echo "$STAGED_FILES" | grep -E "\.dart$" || true)
 JS_FILES=$(echo "$STAGED_FILES" | grep -E "backend/.*\.js$" || true)
+DART_BIN="${DART_BIN:-dart}"
+if [ -x "/c/flutter/bin/cache/dart-sdk/bin/dart.exe" ]; then
+  DART_BIN="/c/flutter/bin/cache/dart-sdk/bin/dart.exe"
+elif [ -x "C:/flutter/bin/cache/dart-sdk/bin/dart.exe" ]; then
+  DART_BIN="C:/flutter/bin/cache/dart-sdk/bin/dart.exe"
+fi
 
 # ==========================================================================
 # 1. Flutter: dart format check
 # ==========================================================================
 if [ -n "$DART_FILES" ]; then
   echo "  📝 Checking Dart formatting..."
-  if ! dart format --output=none --set-exit-if-changed $DART_FILES >/dev/null 2>&1; then
+  if ! "$DART_BIN" format --output=none --set-exit-if-changed $DART_FILES >/dev/null 2>&1; then
     echo -e "${RED}❌ Unformatted Dart files:${NC}"
-    dart format --output=none $DART_FILES 2>/dev/null | grep "^Changed " || true
+    "$DART_BIN" format --output=none $DART_FILES 2>/dev/null | grep "^Changed " || true
     echo -e "${YELLOW}   Fix: dart format lib/ test/${NC}"
     FOUND=1
   else
@@ -97,7 +103,7 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
 done
 
 # Check for .env files
-ENV_FILES=$(echo "$STAGED_FILES" | grep -E "\.env$|\.env\." || true)
+ENV_FILES=$(echo "$STAGED_FILES" | grep -E "\.env$|\.env\." | grep -Ev '(^|/)\.env\.example$|(^|/)backend/\.env\.example$' || true)
 if [ -n "$ENV_FILES" ]; then
   echo -e "${RED}❌ Attempting to commit .env files:${NC}"
   echo "$ENV_FILES"
@@ -141,14 +147,12 @@ if [ "$FOUND" -eq 1 ]; then
 fi
 
 echo -e "${GREEN}✅ All pre-commit checks passed${NC}"
-exit 0
-
 # --- BEGIN BEADS INTEGRATION v1.0.4 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then
   export BD_GIT_HOOK=1
   _bd_timeout=${BEADS_HOOK_TIMEOUT:-300}
-  if command -v timeout >/dev/null 2>&1; then
+  if command -v timeout >/dev/null 2>&1 && timeout --version >/dev/null 2>&1; then
     timeout "$_bd_timeout" bd hooks run pre-commit "$@"
     _bd_exit=$?
     if [ $_bd_exit -eq 124 ]; then

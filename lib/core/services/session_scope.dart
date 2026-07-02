@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
+import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 
@@ -40,6 +41,7 @@ class SessionScope {
   static void apply(UserModel user, List<String> vendedorCodes) {
     final scope = build(user, vendedorCodes);
     CacheService.setScope(scope);
+    SyncQueueService.instance.setScope(scope);
     PedidosOfflineService.setScope(scope);
     PedidosFavoritesService.setScope(scope);
   }
@@ -57,12 +59,14 @@ class SessionScope {
       vendedorCodes: vendedorCodes,
     );
     CacheService.setScope(scope);
+    SyncQueueService.instance.setScope(scope);
     PedidosOfflineService.setScope(scope);
     PedidosFavoritesService.setScope(scope);
   }
 
   static void clear() {
     CacheService.clearScope();
+    SyncQueueService.instance.clearScope();
     PedidosOfflineService.clearScope();
     PedidosFavoritesService.clearScope();
     debugPrint('[SessionScope] Cleared');

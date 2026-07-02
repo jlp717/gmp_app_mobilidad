@@ -5,12 +5,19 @@
  * Query optimization, and Performance monitoring
  */
 
-// Load environment variables FIRST, before any other module
-// Use explicit path to ensure .env is found regardless of CWD
 const path = require('path');
-require('dotenv').config({
-  path: path.resolve(__dirname, '.env')
-});
+// Load environment variables FIRST, before any other module.
+// Production accepts GMP_ENV_FILE, .env.production, .env.produccion, then .env.
+require('./config/load-env').loadEnv(__dirname);
+
+if (process.env.NODE_ENV === 'production' &&
+  process.env.SKIP_PRODUCTION_CONFIG_VALIDATION !== 'true') {
+  const { validateProductionConfig } = require('./scripts/validate_production_config');
+  const validation = validateProductionConfig({ exit: false });
+  if (!validation.ok) {
+    process.exit(1);
+  }
+}
 
 const Sentry = require('./instrument');
 const express = require('express');
@@ -274,9 +281,15 @@ function requestTimeoutMiddleware(req, res, next) {
 }
 
 // Middleware â€” Security
+function configuredCorsOrigin() {
+    return process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || '';
+}
+
 function parseCorsOrigin(value) {
     if (process.env.NODE_ENV === 'production') {
-        if (!value || value === 'true' || value === '*') return false;
+        if (!value || value === 'true' || value === '*') {
+            throw new Error('[SECURITY] CORS_ORIGIN must list explicit origins in production');
+        }
         return value.split(',').map(o => o.trim()).filter(Boolean);
     }
     if (value === 'true' || value === '*') return true;
@@ -285,7 +298,7 @@ function parseCorsOrigin(value) {
 }
 
 app.use(cors({
-    origin: parseCorsOrigin(process.env.CORS_ORIGIN),
+    origin: parseCorsOrigin(configuredCorsOrigin()),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'X-Force-Refresh', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent', 'X-Internal-Token', 'X-Metrics-Token', 'X-Healthcheck-Token'],
     exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'X-Cache-Status', 'ETag', 'Cache-Control'],
@@ -298,6 +311,7 @@ app.use((req, res, next) => runWithDbRequestContext({
   requestId: req.requestId,
   method: req.method,
   path: req.path,
+  dbDeadlineAt: Date.now() + Math.max(1000, resolveRequestTimeoutMs(req) - 1000),
   req,
 }, next));
 app.use(detectScannerProbes);
@@ -457,6 +471,39 @@ async function checkDbHealth() {
   return dbHealthCache;
 }
 
+function getRedisHealth() {
+  try {
+    const { redisCache } = require('./services/redis-cache');
+    const stats = redisCache.getStats();
+    return {
+      status: stats.isConnected ? 'connected' : 'L1_only',
+      connected: Boolean(stats.isConnected),
+      cacheHitRate: parseFloat(stats.hitRate || 0),
+      stats,
+    };
+  } catch (e) {
+    return {
+      status: 'error',
+      connected: false,
+      cacheHitRate: 0,
+      stats: {},
+      error: e.message,
+    };
+  }
+}
+
+function authRequiresSharedSessionStore() {
+  return process.env.NODE_ENV === 'production'
+    && (process.env.PM2_EXEC_MODE === 'cluster' || process.env.NODE_APP_INSTANCE !== undefined);
+}
+
+app.get('/api/live', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Health check (public minimal; SRE/internal gets detailed diagnostics)
 app.get('/api/health', async (req, res) => {
   const start = Date.now();
@@ -474,19 +521,7 @@ app.get('/api/health', async (req, res) => {
   const poolMetrics = dbHealth.poolMetrics;
   const status = dbStatus === 'connected' ? 'ok' : 'degraded';
 
-  // Get Redis status with detailed stats
-  let redisStatus = 'disconnected';
-  let cacheHitRate = 0;
-  let redisStats = {};
-  try {
-    const { redisCache } = require('./services/redis-cache');
-    const stats = redisCache.getStats();
-    redisStats = stats;
-    redisStatus = stats.isConnected ? 'connected' : 'L1_only';
-    cacheHitRate = parseFloat(stats.hitRate || 0);
-  } catch (e) {
-    redisStatus = 'error';
-  }
+  const redisHealth = getRedisHealth();
 
   // Get query optimizer stats
   let queryStats = {};
@@ -523,11 +558,11 @@ app.get('/api/health', async (req, res) => {
       queryTime: `${dbQueryTime}ms`
     },
     redis: {
-      status: redisStatus,
-      ...redisStats
+      status: redisHealth.status,
+      ...redisHealth.stats
     },
     cache: {
-      hitRate: `${cacheHitRate}%`,
+      hitRate: `${redisHealth.cacheHitRate}%`,
       ...queryStats
     },
     memory: {
@@ -551,6 +586,34 @@ app.get('/api/health', async (req, res) => {
     dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
   });
 });
+
+app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
+  const start = Date.now();
+  const dbHealth = await checkDbHealth();
+  const redisHealth = getRedisHealth();
+  const redisRequired = authRequiresSharedSessionStore();
+  const ready = dbHealth.status === 'connected'
+    && (!redisRequired || redisHealth.connected);
+
+  res.status(ready ? 200 : 503).json({
+    status: ready ? 'ready' : 'not_ready',
+    database: {
+      status: dbHealth.status,
+      queryTime: `${dbHealth.queryTime}ms`,
+      poolMetrics: dbHealth.poolMetrics,
+      error: dbHealth.error,
+    },
+    redis: {
+      status: redisHealth.status,
+      required: redisRequired,
+      error: redisHealth.error,
+      ...redisHealth.stats,
+    },
+    timestamp: new Date().toISOString(),
+    responseTime: `${Date.now() - start}ms`,
+  });
+});
+
 // Version check (Public for mobile app updates)
 app.get('/health/version-check', (req, res) => {
   res.json({
@@ -933,15 +996,7 @@ process.on('uncaughtException', (err) => {
     console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
   }
 
-  // Only exit for truly critical errors; otherwise log and continue
-  const criticalCodes = ['ERR_OUT_OF_RANGE', 'ERR_MEMORY'];
-  if (criticalCodes.includes(err.code)) {
-    if (typeof logger !== 'undefined') {
-      logger.error('💀 Critical error — exiting (PM2 will restart)');
-    }
-    process.exit(1);
-  }
-  // Non-critical: log and keep running (avoids 181 restarts from transient errors)
+  setImmediate(() => gracefulShutdown('uncaughtException', 1));
 });
 
 // Handle unhandled rejections gracefully — DO NOT exit on every rejected promise
@@ -955,14 +1010,21 @@ process.on('unhandledRejection', (reason, promise) => {
   } else {
     console.warn(`⚠️ Unhandled promise rejection: ${msg}`);
   }
-  // Do NOT process.exit(1) — let the request error handler deal with it
-  // Only exit if it's a truly fatal error (out of memory, etc.)
+  if (process.env.EXIT_ON_UNHANDLED_REJECTION === 'true' ||
+      isFatalRuntimeError(reason)) {
+    setImmediate(() => gracefulShutdown('unhandledRejection', 1));
+  }
 });
 
 // ==================== GRACEFUL SHUTDOWN ====================
 let isShuttingDown = false;
 
-const gracefulShutdown = async (signal) => {
+function isFatalRuntimeError(error) {
+  const code = error && typeof error === 'object' ? error.code : undefined;
+  return ['ERR_OUT_OF_MEMORY', 'ERR_MEMORY', 'ERR_OUT_OF_RANGE'].includes(code);
+}
+
+const gracefulShutdown = async (signal, exitCode = 0) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   
@@ -1041,7 +1103,7 @@ const gracefulShutdown = async (signal) => {
   // 6. Rate limiter (security.js globalLimiter is express-rate-limit, no stopCleanup needed)
   
   logger.info('📴 Graceful shutdown complete');
-  process.exit(0);
+  process.exit(exitCode);
 };
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

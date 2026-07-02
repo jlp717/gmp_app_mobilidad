@@ -684,7 +684,7 @@ function createAuthRoutes() {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
 
-      const { verifyPassword } = require('../../../middleware/auth');
+      const { verifyPassword, allowPlaintextPinAuth } = require('../../../middleware/auth');
       if (!user._passwordHash) {
         logger.warn(`[DDD-AUTH] User ${username} has no password hash - login denied`);
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
@@ -697,26 +697,16 @@ function createAuthRoutes() {
       if (dbPin.startsWith('$2b$')) {
         passwordValid = await verifyPassword(password, dbPin);
       } else {
+        if (!allowPlaintextPinAuth()) {
+          logger.warn(`[DDD-AUTH] Plaintext PIN auth denied for user ${username}; PIN hash migration required`);
+          return res.status(401).json({ error: 'Credenciales invÃ¡lidas', code: 'INVALID_CREDENTIALS' });
+        }
         passwordValid = (dbPin === password.trim());
       }
 
       if (!passwordValid) {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
-
-      const { signAccessToken, signRefreshToken, registerSession } = require('../../../middleware/auth');
-      const accessToken = signAccessToken({
-        id: user.id, user: user.code, role: user.role, isJefeVentas: user.isJefeVentas
-      });
-      const refreshToken = signRefreshToken({
-        id: user.id, user: user.code, role: user.role, isJefeVentas: user.isJefeVentas
-      });
-      await registerSession(
-        user.id,
-        refreshToken,
-        req.get('user-agent') || 'unknown',
-        req.ip || 'unknown'
-      );
 
       await repo.logLoginAttempt(user.id, true, req.ip);
 
@@ -738,6 +728,31 @@ function createAuthRoutes() {
         vendedorCodes = getVendorVisibilityScope(user.code);
       }
 
+      const {
+        signAccessToken,
+        signRefreshToken,
+        registerSession,
+        ACCESS_TTL_MS,
+        REFRESH_TTL_MS
+      } = require('../../../middleware/auth');
+      const tokenPayload = {
+        id: user.id,
+        user: user.code,
+        name: user.name,
+        role: user.role,
+        isJefeVentas: user.isJefeVentas,
+        vendorCodes: vendedorCodes,
+        vendedorCodes
+      };
+      const accessToken = signAccessToken(tokenPayload);
+      const refreshToken = signRefreshToken(tokenPayload);
+      await registerSession(
+        user.id,
+        refreshToken,
+        req.get('user-agent') || 'unknown',
+        req.ip || 'unknown'
+      );
+
       // Response format must match legacy auth routes (Flutter expects 'token', not 'accessToken')
       res.json({
         success: true,
@@ -755,8 +770,8 @@ function createAuthRoutes() {
         vendedorCodes,
         token: accessToken,
         refreshToken,
-        tokenExpiresIn: 3600,
-        refreshExpiresIn: 604800
+        tokenExpiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+        refreshExpiresIn: Math.floor(REFRESH_TTL_MS / 1000)
       });
     } catch (error) {
       logger.error(`[DDD-AUTH] Login error: ${error.message}`);

@@ -63,7 +63,7 @@ redis-cli ping
 pm2 start ecosystem.config.js --env production
 
 # Verificar health
-curl http://localhost:3197/api/health
+curl -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready
 ```
 
 ### Health Check - Debe mostrar:
@@ -82,7 +82,7 @@ curl http://localhost:3197/api/health
 
 ```
 NODE_ENV=production
-PORT=3334
+PORT=3335
 HOST=0.0.0.0
 
 # DB2
@@ -124,12 +124,12 @@ LOG_LEVEL=info
 
 ### 1. Health Check
 ```bash
-curl http://localhost:3197/api/health
+curl -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready
 ```
 
 ### 2. Security Headers
 ```bash
-curl -I http://localhost:3197/api/health
+curl -I -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready
 # Debe incluir:
 # - X-Content-Type-Options: nosniff
 # - X-Frame-Options: DENY
@@ -147,10 +147,10 @@ curl -I http://localhost:3197/api/health
 ### 4. SQL Injection Protection
 ```bash
 # Probar con payloads maliciosos en params
-curl "http://localhost:3197/api/clients?search=DROP%20TABLE"
+curl "http://localhost:3335/api/clients?search=DROP%20TABLE"
 # Debe retornar 400
 
-curl -X POST http://localhost:3197/api/auth/login \
+curl -X POST http://localhost:3335/api/auth/login \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"' OR '1'='1\"}"
 # Debe sanitizear o rechazar

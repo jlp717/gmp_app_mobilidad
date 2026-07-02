@@ -30,7 +30,8 @@ export interface EnvConfig {
   REDIS_TTL_PROMOTIONS: number;
 
   // CORS
-  CORS_ORIGINS: string[];
+  CORS_ORIGIN: string[];
+  CORS_ORIGINS?: string[];
 
   // Seguridad
   BCRYPT_ROUNDS: number;

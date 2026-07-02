@@ -179,8 +179,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     }
   }
 
+  Future<void> _flushDraftIfDirty() async {
+    if (!mounted) return;
+    final prov = ref.read(pedidosProvider);
+    if (!prov.isDirty) return;
+    await prov.saveDraft(_vendedorCodes, isAutoSave: true);
+  }
+
   @override
   void dispose() {
+    unawaited(_flushDraftIfDirty());
     _vendorSubscription?.close();
     _stockRefreshTimer?.cancel();
     _autoSaveTimer?.cancel();
@@ -2638,6 +2646,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Future<void> _showOrderDetail(OrderSummary order) async {
+    if (order.id < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Pedido local pendiente de sincronizacion. Estara disponible al recuperar conexion.',
+          ),
+          backgroundColor: AppTheme.info,
+        ),
+      );
+      return;
+    }
     final result = await OrderDetailSheet.show(context, orderId: order.id);
     if (result == 'deleted' && mounted) {
       await _loadOrdersWithFilters(
@@ -2747,6 +2766,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Future<void> _duplicateOrder(OrderSummary order) async {
+    if (order.id < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Pedido local pendiente de sincronizacion. No se puede duplicar todavia.',
+          ),
+          backgroundColor: AppTheme.info,
+        ),
+      );
+      return;
+    }
     final prov = ref.read(pedidosProvider);
     await prov.cloneOrderIntoCart(order.id);
     if (!mounted) return;

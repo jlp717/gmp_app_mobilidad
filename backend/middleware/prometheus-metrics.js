@@ -128,12 +128,8 @@ function isInternalRequest(req) {
         || hasInternalToken(req);
 }
 
-function isSreHealthCheck(req) {
-    return getHeader(req, 'user-agent') === 'GMP-SRE-HealthCheck/1.0';
-}
-
 function canSeeInternalDetails(req) {
-    return isSreHealthCheck(req) || isInternalRequest(req);
+    return isInternalRequest(req);
 }
 
 function requireInternalMetricsAccess(req, res, next) {
@@ -466,7 +462,6 @@ module.exports = {
     metricsHandler,
     requireInternalMetricsAccess,
     isInternalRequest,
-    isSreHealthCheck,
     canSeeInternalDetails,
     resetMetrics,
     stopPeriodicCleanup,

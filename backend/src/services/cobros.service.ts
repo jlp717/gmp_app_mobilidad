@@ -3,7 +3,7 @@
  * Gestión de cobros, tipos de venta y presupuestos
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
 import { sanitizeCode } from '../utils/validators';
@@ -154,7 +154,7 @@ class CobrosService {
 
       logger.info(`[PRESUPUESTO] Creando para cliente: ${codigoCliente}`);
 
-      const id = uuidv4();
+      const id = randomUUID();
       const importeTotal = lineas.reduce((sum, l) => sum + l.importeTotal, 0);
 
       // Intentar insertar en tabla de presupuestos
@@ -315,7 +315,7 @@ class CobrosService {
           OBSERVACIONES, FECHA
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [
-          uuidv4(),
+          randomUUID(),
           sanitizeCode(codigoCliente),
           referencia,
           importe,

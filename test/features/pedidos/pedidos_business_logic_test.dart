@@ -866,7 +866,7 @@ void main() {
       expect(
           api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
     });
-    test('reports queued create as pending and does not confirm offline draft',
+    test('keeps queued create as a local draft and does not confirm offline',
         () async {
       final api = _QueuedCreateOrderApi();
       final provider =
@@ -888,13 +888,44 @@ void main() {
       expect(result, isNotNull);
       expect(result!['queued'], isTrue);
       expect(result['pendingConfirmation'], isTrue);
-      expect(result['estado'], 'PENDIENTE_SINCRONIZACION');
+      expect(result['localDraft'], isTrue);
+      expect(result['estado'], 'BORRADOR_LOCAL');
       expect(isConfirmedOrderResultForProvider(result), isFalse);
       expect(api.createOrderCalls, 1);
       expect(api.confirmOrderCalls, 0);
       expect(
           api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
       expect(provider.lines, isEmpty);
+    });
+
+    test('queues globally discounted lines for offline confirmation', () async {
+      final api = _QueuedCreateOrderApi();
+      final provider =
+          PedidosProvider(orderApi: api, refreshAfterConfirm: false);
+      provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
+      provider.addLine(
+        Product(
+          code: 'ART-DISCOUNT',
+          name: 'Producto descuento',
+          stockEnvases: 10,
+          precioTarifa1: 20,
+        ),
+        1,
+        0,
+        'CAJAS',
+        20,
+      );
+      provider.setGlobalDiscount(10);
+
+      final result = await provider.confirmOrder('57');
+      final pending = PedidosOfflineService.getPendingSyncs().single as Map;
+      final lines = pending['lines'] as List;
+      final queuedLine = lines.single as Map;
+
+      expect(result?['queued'], isTrue);
+      expect(pending['globalDiscountPct'], 10);
+      expect(queuedLine['precioVenta'], 18);
+      expect(pending['observaciones'].toString(), contains('[DTO 10.0%]'));
     });
 
     test('guards reentrant confirmation while a save is already in progress',
@@ -947,6 +978,21 @@ void main() {
         precioVenta: 10,
       );
     }
+
+    test("persists draft global discount metadata", () async {
+      await PedidosOfflineService.saveDraft(
+        clientCode: "C-DRAFT",
+        clientName: "Cliente draft",
+        vendedorCode: "57",
+        saleType: "CC",
+        lines: [line("ART-DRAFT")],
+        globalDiscountPct: 12.5,
+      );
+
+      final draft = PedidosOfflineService.getDrafts().single;
+
+      expect(draft["globalDiscountPct"], 12.5);
+    });
 
     test("syncs only the configured batch and preserves clientRequestId",
         () async {

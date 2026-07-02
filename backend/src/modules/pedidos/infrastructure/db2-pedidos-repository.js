@@ -6,6 +6,7 @@ const { PedidosRepository } = require('../domain/pedidos-repository');
 const { Product } = require('../domain/product');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { getCurrentDate, VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
+const { randomUUID } = require('crypto');
 
 class Db2PedidosRepository extends PedidosRepository {
   constructor(dbPool) {
@@ -60,8 +61,7 @@ class Db2PedidosRepository extends PedidosRepository {
    * If any line insert fails, everything is rolled back.
    */
   async confirmOrder({ userId, clientCode, lines, observations = '' }) {
-    const { v4: uuidv4 } = require('uuid');
-    const orderId = uuidv4();
+    const orderId = randomUUID();
     const currentDate = getCurrentDate();
     const year = currentDate.substring(0, 4);
 
@@ -76,7 +76,7 @@ class Db2PedidosRepository extends PedidosRepository {
       await conn.query(cabSql, [orderId, year, clientCode, observations, userId]);
 
       for (const line of lines) {
-        const lineId = uuidv4();
+        const lineId = randomUUID();
         const linSql = `
           INSERT INTO JAVIER.PEDIDOS_LIN (
             ID, PEDIDO_ID, CODIGOARTICULO, CANTIDAD, UNIDAD, PRECIO

@@ -60,11 +60,11 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Expose port
-EXPOSE 3334
+EXPOSE 3335
 
-# Health check (uses curl, not wget)
+# Readiness check (uses curl, not wget)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:3334/api/health || exit 1
+  CMD curl -fsS -A "GMP-SRE-HealthCheck/1.0" "http://localhost:${PORT:-3335}/api/ready" || exit 1
 
 # Start command
 CMD ["node", "server.js"]
@@ -81,6 +81,6 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 
-EXPOSE 3334
+EXPOSE 3335
 
 CMD ["npm", "run", "dev"]

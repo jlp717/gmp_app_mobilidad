@@ -161,15 +161,7 @@ if [ "$CATEGORY" = "dependency" ]; then
       FIXED=true
       FIX_DESCRIPTION="Applied npm audit fix"
     else
-      # Try with force
-      log_info "Trying: npm audit fix --force"
-      if npm audit fix --force 2>&1; then
-        log_ok "npm audit fix --force applied"
-        FIXED=true
-        FIX_DESCRIPTION="Applied npm audit fix --force"
-      else
-        log_warn "npm audit fix failed"
-      fi
+      log_warn "npm audit fix failed; refusing automatic --force because it can introduce breaking dependency changes"
     fi
   fi
   

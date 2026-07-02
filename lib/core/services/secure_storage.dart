@@ -14,43 +14,54 @@ class SecureStorage {
     ),
   );
   static const String _fallbackPrefix = 'gmp_secure_fallback_';
-  static const Set<String> _fallbackEligibleKeys = {
+  static const Set<String> _sensitiveKeys = {
     'user_token',
     'refresh_token',
     'user_data',
+  };
+  static const Set<String> _fallbackEligibleKeys = {
     'session_expires_at',
   };
 
-  static bool _canUseFallback(String key) => _fallbackEligibleKeys.contains(key);
+  static bool _canUseFallback(String key) =>
+      _fallbackEligibleKeys.contains(key);
+  static bool _isSensitive(String key) => _sensitiveKeys.contains(key);
+  static String _fallbackKey(String key) => '$_fallbackPrefix$key';
 
   static Future<void> _writeFallback(String key, String value) async {
     if (!_canUseFallback(key)) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_fallbackPrefix$key', value);
+    await prefs.setString(_fallbackKey(key), value);
   }
 
   static Future<String?> _readFallback(String key) async {
     if (!_canUseFallback(key)) return null;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('$_fallbackPrefix$key');
+    return prefs.getString(_fallbackKey(key));
   }
 
   static Future<void> _deleteFallback(String key) async {
-    if (!_canUseFallback(key)) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('$_fallbackPrefix$key');
+    await prefs.remove(_fallbackKey(key));
   }
 
   /// Write data to secure storage with error handling
   static Future<void> writeSecureData(String key, String value) async {
     try {
       await _storage.write(key: key, value: value);
-      await _writeFallback(key, value);
+      if (_canUseFallback(key)) {
+        await _writeFallback(key, value);
+      } else {
+        await _deleteFallback(key);
+      }
       if (kDebugMode) {
         debugPrint('[SecureStorage] Wrote: $key');
       }
     } catch (e) {
       debugPrint('[SecureStorage] Error writing $key: $e');
+      if (_isSensitive(key)) {
+        throw StateError('Secure storage unavailable for sensitive key: $key');
+      }
       try {
         await _writeFallback(key, value);
         if (kDebugMode && _canUseFallback(key)) {
@@ -68,6 +79,9 @@ class SecureStorage {
   static Future<String?> readSecureData(String key) async {
     try {
       final value = await _storage.read(key: key);
+      if (value != null && _isSensitive(key)) {
+        await _deleteFallback(key);
+      }
       if (value == null) {
         final fallback = await _readFallback(key);
         if (fallback != null) {
@@ -79,15 +93,21 @@ class SecureStorage {
       }
       if (kDebugMode) {
         debugPrint(
-            '[SecureStorage] Read: $key = ${value != null ? "exists" : "null"}');
+          '[SecureStorage] Read: $key = ${value != null ? "exists" : "null"}',
+        );
       }
       return value;
     } catch (e) {
       debugPrint('[SecureStorage] Error reading $key: $e');
+      if (_isSensitive(key)) {
+        return null;
+      }
       try {
         final fallback = await _readFallback(key);
         if (fallback != null && kDebugMode) {
-          debugPrint('[SecureStorage] Read fallback after error: $key = exists');
+          debugPrint(
+            '[SecureStorage] Read fallback after error: $key = exists',
+          );
         }
         return fallback;
       } catch (fallbackError) {

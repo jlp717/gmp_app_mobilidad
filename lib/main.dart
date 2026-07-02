@@ -17,6 +17,7 @@ import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -57,14 +58,10 @@ void main() async {
                   style: TextStyle(color: Colors.white, fontSize: 16),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Error: ${details.exceptionAsString()}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                const SizedBox(height: 8),
                 const Text(
                   'Vuelve atrás o reinicia la app',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -156,6 +153,8 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     _connectivitySubscription =
         ConnectivityService.instance.stream.listen((status) {
       if (status == ConnectivityStatus.online) {
+        final authState = ref.read(authProvider).value;
+        if (!(authState?.isAuthenticated ?? false)) return;
         _runAutoSync();
         unawaited(
           NotificationOrchestrator.instance.refreshAll(
@@ -182,6 +181,10 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
 
     if (state == AppLifecycleState.resumed) {
       unawaited(_handleAppResumed());
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_flushPendingPedidoDraft());
     }
   }
 
@@ -190,15 +193,42 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
 
     _resumeInProgress = true;
     try {
+      await ConnectivityService.instance.forceRecheck();
+      await ApiClient.checkConnectivity();
       final isSessionValid = await _validateSessionOnResume();
       if (isSessionValid) {
         await _runAutoSync();
-        await NotificationOrchestrator.instance.refreshAll(
-          reason: 'app_resumed',
-        );
+        if (ConnectivityService.instance.currentStatus ==
+            ConnectivityStatus.online) {
+          await NotificationOrchestrator.instance.refreshAll(
+            reason: 'app_resumed',
+          );
+        } else {
+          await NotificationOrchestrator.instance.refreshOrderReminders(
+            reason: 'app_resumed_offline',
+          );
+        }
       }
     } finally {
       _resumeInProgress = false;
+    }
+  }
+
+  Future<void> _flushPendingPedidoDraft() async {
+    try {
+      final pedidos = ref.read(pedidosProvider);
+      if (!pedidos.isDirty) return;
+      final authState = ref.read(authProvider).value;
+      final vendedorCodes = authState?.vendedorCodes ?? const <String>[];
+      final vendedorCode = vendedorCodes.isNotEmpty
+          ? vendedorCodes.join(',')
+          : authState?.user?.code;
+      if (vendedorCode == null || vendedorCode.trim().isEmpty) return;
+      await pedidos.saveDraft(vendedorCode, isAutoSave: true);
+      debugPrint('[AppLifecycle] Pending pedido draft flushed');
+    } catch (e, stack) {
+      debugPrint('[AppLifecycle] Draft flush skipped: $e');
+      await Sentry.captureException(e, stackTrace: stack);
     }
   }
 
@@ -302,15 +332,25 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     ref.listen(authProvider, (previous, next) {
       _authChangeSignal.value++;
       final authState = next.value;
-      unawaited(
-        NotificationOrchestrator.instance.syncForUser(
-          user: authState?.user,
-          vendedorCodes: authState?.vendedorCodes ?? const <String>[],
-          reason: 'auth_provider',
-        ),
-      );
-      if (authState?.isAuthenticated ?? false) {
-        _runAutoSync();
+      if (next.isLoading || authState == null || !authState.isInitialized) {
+        return;
+      }
+
+      if (authState.isAuthenticated) {
+        unawaited(
+          NotificationOrchestrator.instance.syncForUser(
+            user: authState.user,
+            vendedorCodes: authState.vendedorCodes,
+            reason: 'auth_provider',
+          ),
+        );
+        unawaited(_runAutoSync());
+        return;
+      }
+
+      final wasAuthenticated = previous?.value?.isAuthenticated ?? false;
+      if (wasAuthenticated) {
+        unawaited(NotificationOrchestrator.instance.clearForLogout());
       }
     });
 

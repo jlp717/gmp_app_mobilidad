@@ -92,9 +92,6 @@ class Db2EntregasRepository extends EntregasRepository {
   }
 
   async markDelivered({ albaranId, observations, signaturePath, latitude, longitude, repartidorId }) {
-    const { v4: uuidv4 } = require('uuid');
-    const id = uuidv4();
-
     const sql = `
       INSERT INTO JAVIER.DELIVERY_STATUS (
         ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD,

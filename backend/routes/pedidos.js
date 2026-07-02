@@ -69,6 +69,18 @@ function canUseServerForceConfirm(req, body = {}) {
     const reason = String(body.forceConfirmReason || body.auditReason || '').trim();
     return isAdmin && reason.length >= 8;
 }
+
+function normalizePedidoSaleTypeForRoute(value) {
+    if (typeof pedidosService.normalizePedidoSaleType === 'function') {
+        return pedidosService.normalizePedidoSaleType(value);
+    }
+    const normalized = String(value || 'CC').trim().toUpperCase();
+    if (['CC', 'VC', 'NV'].includes(normalized)) return normalized;
+    const error = new Error('Tipo de venta invalido');
+    error.code = 'INVALID_SALE_TYPE';
+    throw error;
+}
+
 function stripMarginFromOrder(order, user) {
     if (canSeeMargin(user)) return order;
     const clean = { ...order };
@@ -1386,7 +1398,7 @@ router.post('/create', async (req, res) => {
         }
 
         const idempotencyKey = pedidosService.ensurePedidoIdempotencyKeyFromRequest(req);
-        const normalizedSaleType = pedidosService.normalizePedidoSaleType(tipoventa || 'CC');
+        const normalizedSaleType = normalizePedidoSaleTypeForRoute(tipoventa || 'CC');
         const createOrderT0 = Date.now();
         let order;
         try {
@@ -1591,7 +1603,7 @@ router.put('/:id/confirm', async (req, res) => {
         const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
         let normalizedSaleType;
         try {
-            normalizedSaleType = pedidosService.normalizePedidoSaleType(saleType);
+            normalizedSaleType = normalizePedidoSaleTypeForRoute(saleType);
         } catch (saleTypeErr) {
             return res.status(400).json({ success: false, code: saleTypeErr.code || 'INVALID_SALE_TYPE', error: saleTypeErr.message });
         }

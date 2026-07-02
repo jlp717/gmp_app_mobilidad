@@ -3,7 +3,7 @@
  * Gestión de entregas parciales, fotos, firmas y cobros en campo
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
 import { sanitizeCode } from '../utils/validators';
@@ -246,7 +246,7 @@ class EntregasService {
         try {
             logger.info(`[ENTREGAS] Actualizando entrega: ${params.itemId} -> ${params.status}`);
 
-            const registroId = uuidv4();
+            const registroId = randomUUID();
             const ahora = new Date().toISOString();
 
             // Intentar registrar en tabla de log
@@ -384,7 +384,7 @@ class EntregasService {
             await odbcPool.query(
                 `INSERT INTO JAVIER.COBROS_DOCS (ID, ENTREGA_ID, TIPO, PATH, FECHA)
          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-                [uuidv4(), entregaId, tipo, path]
+                [randomUUID(), entregaId, tipo, path]
             );
         } catch {
             // Tabla puede no existir

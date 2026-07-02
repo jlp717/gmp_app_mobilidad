@@ -56,7 +56,8 @@ if command -v pm2 &> /dev/null; then
         
         # Wait and check health
         sleep 3
-        HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3334/api/health 2>/dev/null || echo "000")
+        HEALTH_PORT="${PORT:-3335}"
+        HEALTH=$(curl -s -A "GMP-SRE-HealthCheck/1.0" -o /dev/null -w "%{http_code}" "http://localhost:${HEALTH_PORT}/api/ready" 2>/dev/null || echo "000")
         
         if [ "$HEALTH" = "200" ]; then
             echo "✅ Server is healthy after rollback!"

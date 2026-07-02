@@ -32,7 +32,7 @@ Hard rules:
 - After modifying Dart models/providers, run dart run build_runner build --delete-conflicting-outputs.
 - DB2 DSN is GMP; primary schemas are JAVIER and DSEDAC.
 - DB2/AS400 server is 192.168.1.22.
-- Backend/application server is 192.168.1.230; backend path is /opt/gmp-api; PM2 production port is 3335. Health checks must call `/api/health` with `User-Agent: GMP-SRE-HealthCheck/1.0`.
+- Backend/application server is 192.168.1.230; backend path is /opt/gmp-api; PM2 production port is 3335. Liveness calls `/api/health`; production readiness must call `/api/ready` over SSH localhost with `User-Agent: GMP-SRE-HealthCheck/1.0`.
 - Runtime health source is .opencode/config/runtime-health.yaml. The old 3197 backend port was verified not listening on 2026-06-07; do not use it for readiness decisions unless SRE verifies a later change.
 - Remote Granja canonical path is `/var/www/mari-pepa`; `/var/www/granjamaripepa` was verified missing and must not be assumed.
 - Image server is 192.168.1.191.
@@ -49,7 +49,7 @@ Hard rules:
 - Layer 2 remains the specialist team in .opencode/agents; direct specialist routing requires explicit @agent mention.
 - Before design or implementation, Layer 1 must run rag-query against codebase plus user_corrections/lessons/anti_patterns.
 - Tier 2 and Tier 3 work goes to staging first. Production requires QA pass, AppSec pass, SRE health check, and Javier saying "adelante".
-- SRE owns production health for 192.168.1.230:3335/api/health and mari-pepa.com; failed post-deploy health at 60 seconds triggers rollback.
+- SRE owns production readiness for 192.168.1.230 localhost:3335/api/ready and mari-pepa.com health; failed post-deploy readiness at 60 seconds triggers rollback.
 - Repeated errors are tracked by same-error-detector; the second matching error in 30 days triggers a retrospective.
 - Explicit corrections from Javier are captured by `correction-capture` and `user-correction-capture`; phrases like "aprende esto", "te corrijo", "no vuelvas a", "recuerda que", "prefiero que" or `/teach` must be stored before continuing and override generic memory.
 - OpenCode Web must never listen on the network without `OPENCODE_SERVER_PASSWORD`; the GMP launcher auto-creates it in `%USERPROFILE%\.config\opencode\.env` if missing.
@@ -70,6 +70,13 @@ Hard rules:
 
 ## Elite Code Quality Bar
 
+- Politec is mandatory before delivery: Purpose, Organization, Legibility, Integration, Tests, Efficiency/error handling, and Compliance/security.
+- Run or require `scripts/politec-quality-gate.ps1` for architecture/security/session-sensitive changes. A failure blocks delivery; warnings require explicit review notes.
+- Directory architecture is part of the product contract: Flutter uses `lib/core` for shared infrastructure and `lib/features/<feature>` for feature modules; backend routes validate/delegate, services hold business rules, repositories/adapters own DB2 access.
+- Repository root must stay operational, not documentary: keep only core project contracts/configuration in root; historical plans, reports, audits, SQL notes and changelogs live under `docs/`.
+- Flutter feature Dart files must live below a standard feature layer (`data`, `domain`, `providers`, `presentation`, or a deliberately documented equivalent); do not place Dart files directly under `lib/features/<feature>/`.
+- Large source files are architectural debt, not a pattern: files above roughly 1,800 lines require an explicit split plan before substantial edits in that area.
+- OpenCode and Codex must preserve client-server boundaries: Flutter never talks directly to DB2 or internal production services.
 - N+1 is a blocking defect: no DB/API/file/network call inside loops over records unless cardinality is proven tiny and documented.
 - DB2 list endpoints must batch, join, prefetch into maps, paginate, and use explicit ordering; broad queries require Performance-Analyst review.
 - Business-critical flows (facturas, pedidos, cobros, stock, auth, checkout, DB2 writes) require regression tests, idempotency analysis, and rollback plan.
@@ -98,4 +105,3 @@ Hard rules:
 - Runtime health: .opencode/config/runtime-health.yaml
 - Lessons learned: .agent/nhallucinate/lessons-learned.md
 - Beads docs: CLAUDE.md section "Beads Issue Tracker"
-

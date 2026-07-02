@@ -185,17 +185,14 @@ class CacheServiceOptimized {
       processedValue = _quantizeMap(value);
     }
 
-    // Compress large payloads
-    var isCompressed = false;
+    // Compression is intentionally disabled until there is a real codec and a
+    // matching read path. Storing JSON strings as "compressed" corrupts generic
+    // cache reads because callers expect the original value type.
+    const isCompressed = false;
     if (compress ||
         (processedValue is String &&
             processedValue.length > _compressionThreshold)) {
-      try {
-        processedValue = _compressData(processedValue);
-        isCompressed = true;
-      } catch (e) {
-        debugPrint('[CacheService] Compression failed: $e');
-      }
+      debugPrint('[CacheService] Compression disabled for cache key: $key');
     }
 
     try {
@@ -318,19 +315,6 @@ class CacheServiceOptimized {
       }
       return item;
     }).toList();
-  }
-
-  /// Compress data using GZip (for large payloads)
-  static String _compressData(dynamic data) {
-    final jsonString = jsonEncode(data);
-    // Note: For actual compression, use archive package
-    // This is a placeholder - implement with dart:io or archive package
-    return jsonString; // TODO: Implement actual compression
-  }
-
-  static dynamic _decompressData(String compressedData) {
-    // TODO: Implement actual decompression
-    return jsonDecode(compressedData);
   }
 
   /// Update LRU access order

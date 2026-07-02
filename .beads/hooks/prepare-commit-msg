@@ -4,7 +4,7 @@
 if command -v bd >/dev/null 2>&1; then
   export BD_GIT_HOOK=1
   _bd_timeout=${BEADS_HOOK_TIMEOUT:-300}
-  if command -v timeout >/dev/null 2>&1; then
+  if command -v timeout >/dev/null 2>&1 && timeout --version >/dev/null 2>&1; then
     timeout "$_bd_timeout" bd hooks run prepare-commit-msg "$@"
     _bd_exit=$?
     if [ $_bd_exit -eq 124 ]; then

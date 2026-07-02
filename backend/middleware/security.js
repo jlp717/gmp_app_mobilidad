@@ -7,6 +7,7 @@
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const cors = require('cors');
+const crypto = require('crypto');
 const logger = require('./logger');
 
 // Try to import zod, but make it optional for backward compatibility
@@ -28,6 +29,7 @@ const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '90000
 const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '30000', 10); // 30k for production
 const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '10', 10);
 const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '30000', 10); // 30k for mobile apps
+const RATE_LIMIT_REDIS_TIMEOUT_MS = parseInt(process.env.RATE_LIMIT_REDIS_TIMEOUT_MS || '500', 10);
 
 // CORS configuration
 const parseCorsOrigin = (value) => {
@@ -44,11 +46,111 @@ const parseCorsOrigin = (value) => {
     return true;
 };
 
+class RedisRateLimitStore {
+    constructor(prefix) {
+        this.prefix = prefix;
+        this.windowMs = 60_000;
+        this.fallback = new rateLimit.MemoryStore();
+    }
+
+    init(options) {
+        this.windowMs = options.windowMs;
+        if (typeof this.fallback.init === 'function') {
+            this.fallback.init(options);
+        }
+    }
+
+    _client() {
+        try {
+            const { redisCache } = require('../services/redis-cache');
+            if (redisCache?.isConnected && redisCache.client) {
+                return redisCache.client;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    _key(key) {
+        const hash = crypto.createHash('sha256').update(String(key)).digest('hex');
+        return `gmp:rate-limit:${this.prefix}:${hash}`;
+    }
+
+    async _withTimeout(promise, operation) {
+        let timer = null;
+        try {
+            return await Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    timer = setTimeout(
+                        () => reject(new Error(`Redis rate-limit ${operation} timeout`)),
+                        RATE_LIMIT_REDIS_TIMEOUT_MS
+                    );
+                }),
+            ]);
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    }
+
+    async increment(key) {
+        const client = this._client();
+        if (!client) return this.fallback.increment(key);
+
+        try {
+            const redisKey = this._key(key);
+            const totalHits = await this._withTimeout(client.incr(redisKey), 'incr');
+            if (totalHits === 1) {
+                if (typeof client.pExpire === 'function') {
+                    await this._withTimeout(client.pExpire(redisKey, this.windowMs), 'pExpire');
+                } else {
+                    await this._withTimeout(client.expire(redisKey, Math.ceil(this.windowMs / 1000)), 'expire');
+                }
+            }
+            return {
+                totalHits,
+                resetTime: new Date(Date.now() + this.windowMs),
+            };
+        } catch (error) {
+            logger.warn(`[Security] Redis rate-limit store fallback for ${this.prefix}: ${error.message}`);
+            return this.fallback.increment(key);
+        }
+    }
+
+    async decrement(key) {
+        const client = this._client();
+        if (!client) return this.fallback.decrement(key);
+        try {
+            const redisKey = this._key(key);
+            const current = parseInt(await this._withTimeout(client.get(redisKey), 'get'), 10) || 0;
+            if (current > 0) {
+                await this._withTimeout(client.decr(redisKey), 'decr');
+            }
+        } catch (_) {
+            await this.fallback.decrement(key);
+        }
+    }
+
+    async resetKey(key) {
+        const client = this._client();
+        if (!client) return this.fallback.resetKey(key);
+        try {
+            await this._withTimeout(client.del(this._key(key)), 'del');
+        } catch (_) {
+            await this.fallback.resetKey(key);
+        }
+    }
+}
+
+function sharedRateLimitStore(prefix) {
+    return new RedisRateLimitStore(prefix);
+}
+
 // =============================================================================
 // RATE LIMITERS
 // =============================================================================
 
 exports.globalLimiter = rateLimit({
+    store: sharedRateLimitStore('global'),
     windowMs: RATE_LIMIT_WINDOW_MS,
     max: RATE_LIMIT_MAX_REQUESTS,
     message: {
@@ -62,6 +164,7 @@ exports.globalLimiter = rateLimit({
 });
 
 exports.loginLimiter = rateLimit({
+    store: sharedRateLimitStore('login'),
     windowMs: 5 * 60 * 1000, // 5 minutes (reduced from 15)
     max: LOGIN_RATE_LIMIT_MAX,
     message: {
@@ -74,6 +177,7 @@ exports.loginLimiter = rateLimit({
 });
 
 exports.apiLimiter = rateLimit({
+    store: sharedRateLimitStore('api'),
     windowMs: 15 * 60 * 1000,
     max: API_RATE_LIMIT_MAX,
     message: { 
@@ -87,6 +191,7 @@ exports.apiLimiter = rateLimit({
 });
 
 exports.uploadLimiter = rateLimit({
+    store: sharedRateLimitStore('upload'),
     windowMs: 15 * 60 * 1000,
     max: 10,
     message: { error: 'Demasiadas subidas de archivos. Intente más tarde.' },
@@ -95,6 +200,7 @@ exports.uploadLimiter = rateLimit({
 });
 
 exports.emailLimiter = rateLimit({
+    store: sharedRateLimitStore('email'),
     windowMs: 60 * 60 * 1000,
     max: 5,
     message: { error: 'Demasiados envíos de email. Intente en una hora.' },
@@ -107,6 +213,7 @@ exports.emailLimiter = rateLimit({
 // masivos y rompen la UI. Limites RESTRICTIVOS solo en POST/PUT/DELETE
 // (escritura), no en GET de lectura.
 exports.cobrosLimiter = rateLimit({
+    store: sharedRateLimitStore('cobros'),
     windowMs: 60 * 1000,         // 1 minuto
     max: 240,                    // 240 req/min/usuario (lectura GET intensiva OK)
     message: {
@@ -121,6 +228,7 @@ exports.cobrosLimiter = rateLimit({
 });
 
 exports.pedidosLimiter = rateLimit({
+    store: sharedRateLimitStore('pedidos'),
     windowMs: 60 * 1000,
     max: 300,                    // 300 req/min/usuario para pedidos
     message: {
@@ -133,6 +241,7 @@ exports.pedidosLimiter = rateLimit({
 });
 
 exports.bolsaLimiter = rateLimit({
+    store: sharedRateLimitStore('bolsa'),
     windowMs: 60 * 1000,
     max: 120,                    // 120 req/min/usuario
     message: {
@@ -144,6 +253,7 @@ exports.bolsaLimiter = rateLimit({
 });
 
 exports.evolutionLimiter = rateLimit({
+    store: sharedRateLimitStore('evolution'),
     windowMs: 60 * 1000,
     max: 120,                    // 120 req/min/usuario (era 40)
     message: {

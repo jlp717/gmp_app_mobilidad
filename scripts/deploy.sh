@@ -49,6 +49,7 @@ echo -e "${GREEN}✅ Configuration valid${NC}"
 echo -e "${GREEN}📦 Installing backend dependencies...${NC}"
 cd backend
 npm ci --production
+NODE_ENV=production node scripts/validate_production_config.js
 npm run build
 cd ..
 
@@ -65,14 +66,14 @@ docker compose up -d
 echo -e "${GREEN}⏳ Waiting for services to be ready...${NC}"
 sleep 10
 
-HEALTH=$(curl -s http://localhost:3334/api/health || echo '{"status":"error"}')
+HEALTH=$(curl -s -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready || echo '{"status":"error"}')
 STATUS=$(echo "$HEALTH" | grep -o '"status":"[^"]*"' | head -1)
 
-if echo "$STATUS" | grep -q "healthy\|ok"; then
+if echo "$STATUS" | grep -q "ready\|healthy\|ok"; then
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║  ✅ GMP App Mobilidad v4.0.0 is RUNNING                  ║${NC}"
-    echo -e "${GREEN}║  Backend: http://localhost:3334                          ║${NC}"
-    echo -e "${GREEN}║  Health:  http://localhost:3334/api/health               ║${NC}"
+    echo -e "${GREEN}║  Backend: http://localhost:3335                          ║${NC}"
+    echo -e "${GREEN}║  Ready:   http://localhost:3335/api/ready                ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
 else
     echo -e "${RED}❌ Health check failed. Check logs: docker compose logs backend${NC}"

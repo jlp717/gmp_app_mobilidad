@@ -5,7 +5,7 @@
  *
  * Usage:
  *   node scripts/benchmark-endpoints.js              # simulation mode
- *   node scripts/benchmark-endpoints.js --live       # hits http://localhost:3334/api/health
+ *   node scripts/benchmark-endpoints.js --live       # hits http://localhost:3335/api/health
  */
 
 'use strict';
@@ -16,7 +16,7 @@ const fs = require('fs');
 // ─── Config ──────────────────────────────────────────────────────────────────
 const ROUTES_DIR = path.resolve(__dirname, '..', 'routes');
 const SERVICES_DIR = path.resolve(__dirname, '..', 'services');
-const SERVER_PORT = process.env.SERVER_PORT || 3334;
+const SERVER_PORT = process.env.SERVER_PORT || process.env.PORT || 3335;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function pad(str, len) {

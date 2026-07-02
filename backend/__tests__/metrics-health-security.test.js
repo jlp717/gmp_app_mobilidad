@@ -93,8 +93,11 @@ describe('metrics and health internal access gates', () => {
     expect(res.text).toContain('process_uptime_seconds');
   });
 
-  test('health details are hidden publicly but visible to SRE user agent', () => {
+  test('health details require loopback or internal token, not user agent alone', () => {
     expect(canSeeInternalDetails(makeReq())).toBe(false);
-    expect(canSeeInternalDetails(makeReq({ headers: { 'user-agent': 'GMP-SRE-HealthCheck/1.0' } }))).toBe(true);
+    expect(canSeeInternalDetails(makeReq({ headers: { 'user-agent': 'GMP-SRE-HealthCheck/1.0' } }))).toBe(false);
+    expect(canSeeInternalDetails(makeReq({ ip: '127.0.0.1' }))).toBe(true);
+    process['env'].INTERNAL_HEALTH_TOKEN = 'secret-token';
+    expect(canSeeInternalDetails(makeReq({ headers: { 'x-healthcheck-token': 'secret-token' } }))).toBe(true);
   });
 });

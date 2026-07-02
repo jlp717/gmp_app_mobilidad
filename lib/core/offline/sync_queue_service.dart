@@ -1,8 +1,9 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 /// Represents an offline mutation (write operation) that needs to be
 /// synced when connectivity is restored.
@@ -17,6 +18,7 @@ class SyncOperation {
     this.createdAt,
     this.lastError,
     this.failedAt,
+    this.sessionScope,
   });
 
   final String id;
@@ -28,6 +30,7 @@ class SyncOperation {
   DateTime? createdAt;
   String? lastError;
   DateTime? failedAt;
+  String? sessionScope;
 
   bool get isFailed => failedAt != null;
 
@@ -41,6 +44,7 @@ class SyncOperation {
         'createdAt': createdAt?.toIso8601String(),
         'lastError': lastError,
         'failedAt': failedAt?.toIso8601String(),
+        'sessionScope': sessionScope,
       };
 
   factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
@@ -57,6 +61,7 @@ class SyncOperation {
         failedAt: json['failedAt'] != null
             ? DateTime.parse(json['failedAt'] as String)
             : null,
+        sessionScope: json['sessionScope'] as String?,
       );
 }
 
@@ -67,10 +72,12 @@ class SyncQueueService {
   static const int _maxAttempts = 5;
   static const Duration _baseDelay = Duration(seconds: 2);
   static const Duration _maxAge =
-      Duration(days: 7); // Stale operations auto-purge
+      Duration(days: 7); // Stale operations require manual review.
+  static const String _anonymousScope = 'anonymous';
 
   static SyncQueueService? _instance;
   Box<String>? _box;
+  String _sessionScope = _anonymousScope;
 
   SyncQueueService._();
 
@@ -84,9 +91,10 @@ class SyncQueueService {
       _boxName,
       migrateUnencryptedLegacy: true,
     );
-    _purgeStale(); // Clean up expired operations on startup
+    await _purgeStale();
     debugPrint(
-        '[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations');
+      '[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations',
+    );
   }
 
   int get pendingCount => pending.length;
@@ -95,10 +103,22 @@ class SyncQueueService {
   List<SyncOperation> get failed =>
       pending.where((operation) => operation.isFailed).toList(growable: false);
 
+  void setScope(String rawScope) {
+    final normalized = rawScope.trim();
+    _sessionScope = normalized.isEmpty ? _anonymousScope : normalized;
+    debugPrint('[SyncQueue] Session scope changed');
+  }
+
+  void clearScope() {
+    _sessionScope = _anonymousScope;
+    debugPrint('[SyncQueue] Session scope cleared');
+  }
+
   /// Enqueue a new sync operation.
   Future<void> enqueue(SyncOperation operation) async {
     if (_box == null) return;
     operation.createdAt ??= DateTime.now();
+    operation.sessionScope ??= _sessionScope;
     await _box!.put(operation.id, jsonEncode(operation.toJson()));
     debugPrint('[SyncQueue] Enqueued: ${operation.type}');
   }
@@ -116,9 +136,11 @@ class SyncQueueService {
           final raw = _box!.get(key);
           if (raw == null) return null;
           return SyncOperation.fromJson(
-              jsonDecode(raw) as Map<String, dynamic>);
+            jsonDecode(raw) as Map<String, dynamic>,
+          );
         })
         .whereType<SyncOperation>()
+        .where((operation) => operation.sessionScope == _sessionScope)
         .toList()
       ..sort((a, b) => (a.createdAt ?? DateTime.now())
           .compareTo(b.createdAt ?? DateTime.now()));
@@ -142,7 +164,8 @@ class SyncQueueService {
       final nextRetry = (op.createdAt ?? DateTime.now()).add(backoff);
       if (DateTime.now().isBefore(nextRetry) && op.attempts > 0) {
         debugPrint(
-            '[SyncQueue] Operation in backoff, retry at ${nextRetry.toIso8601String()}');
+          '[SyncQueue] Operation in backoff, retry at ${nextRetry.toIso8601String()}',
+        );
         continue;
       }
 
@@ -187,11 +210,12 @@ class SyncQueueService {
         (error.statusCode == 409 || error.statusCode == 412);
   }
 
-  /// Remove operations older than _maxAge.
-  void _purgeStale() {
+  /// Move old operations to manual review instead of deleting business writes.
+  Future<void> _purgeStale() async {
     if (_box == null) return;
     final cutoff = DateTime.now().subtract(_maxAge);
-    final stale = <String>[];
+    var stale = 0;
+    final corrupt = <String>[];
     for (final key in _box!.keys) {
       final raw = _box!.get(key);
       if (raw == null) continue;
@@ -199,18 +223,23 @@ class SyncQueueService {
         final op =
             SyncOperation.fromJson(jsonDecode(raw) as Map<String, dynamic>);
         if (!op.isFailed && (op.createdAt ?? DateTime.now()).isBefore(cutoff)) {
-          stale.add(key);
+          op.failedAt = DateTime.now();
+          op.lastError ??=
+              'Operacion offline antigua preservada para revision manual';
+          await _box!.put(key, jsonEncode(op.toJson()));
+          stale++;
         }
       } catch (_) {
-        stale.add(key); // Corrupted entry, remove it
+        corrupt.add(key); // Corrupted entry cannot be recovered safely.
       }
     }
-    for (final key in stale) {
-      _box!.delete(key);
+    for (final key in corrupt) {
+      await _box!.delete(key);
     }
-    if (stale.isNotEmpty) {
+    if (stale > 0 || corrupt.isNotEmpty) {
       debugPrint(
-          '[SyncQueue] Purged ${stale.length} stale operations (>${_maxAge.inDays} days old)');
+        '[SyncQueue] Marked $stale stale operations for manual review and removed ${corrupt.length} corrupt entries',
+      );
     }
   }
 
@@ -218,14 +247,16 @@ class SyncQueueService {
     switch (op.method) {
       case 'POST':
         await ApiClient.post(op.endpoint, op.payload);
-        break;
+        return;
       case 'PUT':
         await ApiClient.put(op.endpoint, data: op.payload);
-        break;
+        return;
       case 'DELETE':
-        await ApiClient.delete(op.endpoint,
-            data: op.payload.isNotEmpty ? op.payload : null);
-        break;
+        await ApiClient.delete(
+          op.endpoint,
+          data: op.payload.isNotEmpty ? op.payload : null,
+        );
+        return;
       default:
         throw UnsupportedError('Method ${op.method} not supported for sync');
     }

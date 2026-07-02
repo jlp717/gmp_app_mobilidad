@@ -8,6 +8,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -20,6 +21,7 @@ class PedidosOfflineService {
   static const _maxBatchSize = 50;
   static const _maxConcurrentSyncs = 1;
   static const _defaultYieldEvery = 5;
+  static const _maxTransientAttempts = 8;
   static const String _anonymousScope = 'anon';
 
   static Box<dynamic>? _draftsBox;
@@ -130,6 +132,7 @@ class PedidosOfflineService {
     required String saleType,
     required String vendedorCode,
     required List<OrderLine> lines,
+    double globalDiscountPct = 0,
     String? draftKey,
   }) async {
     final box = await _drafts();
@@ -143,6 +146,7 @@ class PedidosOfflineService {
       'clientName': clientName,
       'saleType': saleType,
       'vendedorCode': vendedorCode,
+      'globalDiscountPct': globalDiscountPct,
       'lines': lines.map((l) => l.toJson()).toList(),
       'savedAt': DateTime.now().toIso8601String(),
     };
@@ -159,6 +163,7 @@ class PedidosOfflineService {
     required String saleType,
     required String vendedorCode,
     required List<OrderLine> lines,
+    double globalDiscountPct = 0,
   }) async {
     await saveDraft(
       draftKey: _scopedKey('draft_auto_$clientCode'),
@@ -167,6 +172,7 @@ class PedidosOfflineService {
       saleType: saleType,
       vendedorCode: vendedorCode,
       lines: lines,
+      globalDiscountPct: globalDiscountPct,
     );
   }
 
@@ -222,6 +228,7 @@ class PedidosOfflineService {
     String? driverCode,
     String? routeCode,
     String? clientRequestId,
+    double globalDiscountPct = 0,
     bool notifyQueued = true,
   }) async {
     final box = await _syncQueue();
@@ -237,6 +244,7 @@ class PedidosOfflineService {
       "vendedorCode": vendedorCode,
       "saleType": saleType,
       "observaciones": observaciones,
+      "globalDiscountPct": globalDiscountPct,
       "lines": lineJson,
       "deliveryDate": deliveryDate,
       "vehicleCode": vehicleCode,
@@ -323,6 +331,7 @@ class PedidosOfflineService {
         maxConcurrency.clamp(1, _maxConcurrentSyncs).toInt();
     final selected = pending.take(batchLimit).toList(growable: false);
     final failures = [];
+    var transientFailures = 0;
     var processed = 0;
     var synced = 0;
 
@@ -371,7 +380,12 @@ class PedidosOfflineService {
         await box.delete(syncKey);
         synced++;
       } catch (e) {
-        failures.add(await _markSyncFailed(box, syncKey, e));
+        final failure = await _markSyncAttemptFailed(box, syncKey, e);
+        if (failure is Map && failure["transient"] == true) {
+          transientFailures++;
+        } else {
+          failures.add(failure);
+        }
       }
       processed++;
       if (yieldEvery == 0) {
@@ -391,6 +405,7 @@ class PedidosOfflineService {
       "processed": processed,
       "synced": synced,
       "failed": failures.length,
+      "transientFailed": transientFailures,
       "remainingPending": remainingPending,
       "preservedFailures": preservedFailures,
       "batchLimit": batchLimit,
@@ -547,11 +562,57 @@ class PedidosOfflineService {
     throw const FormatException("Pedido offline sin lineas validas.");
   }
 
-  static Future _markSyncFailed(Box box, String syncKey, Object error) async {
+  static bool _isTransientSyncError(Object error) {
+    if (error is ApiException) {
+      final status = error.statusCode ?? 0;
+      return status == 0 || status == 408 || status == 429 || status >= 500;
+    }
+    final text = error.toString().toLowerCase();
+    return text.contains("connection") ||
+        text.contains("timeout") ||
+        text.contains("socket") ||
+        text.contains("offline") ||
+        text.contains("network");
+  }
+
+  static Future _markSyncAttemptFailed(
+    Box box,
+    String syncKey,
+    Object error,
+  ) async {
     final data = _decodeSyncItem(box, syncKey) ?? {};
     final attempts = _asInt(data["attempts"]) + 1;
+    if (_isTransientSyncError(error) && attempts < _maxTransientAttempts) {
+      data["status"] = "pending";
+      data["attempts"] = attempts;
+      data["lastTransientError"] = error.toString();
+      data["lastAttemptAt"] = DateTime.now().toIso8601String();
+      if (!_isValidClientRequestId(data["clientRequestId"]?.toString())) {
+        data["clientRequestId"] = _clientRequestIdForSyncKey(syncKey);
+      }
+      await box.put(syncKey, jsonEncode(data));
+      debugPrint("[PedidosOffline] Transient sync error; kept pending: $error");
+      return {
+        "syncKey": syncKey,
+        "clientRequestId": data["clientRequestId"],
+        "error": error.toString(),
+        "attempts": attempts,
+        "transient": true,
+      };
+    }
+    return _markSyncFailed(box, syncKey, error, attempts: attempts);
+  }
+
+  static Future _markSyncFailed(
+    Box box,
+    String syncKey,
+    Object error, {
+    int? attempts,
+  }) async {
+    final data = _decodeSyncItem(box, syncKey) ?? {};
+    final nextAttempts = attempts ?? _asInt(data["attempts"]) + 1;
     data["status"] = "failed";
-    data["attempts"] = attempts;
+    data["attempts"] = nextAttempts;
     data["error"] = error.toString();
     data["failedAt"] = DateTime.now().toIso8601String();
     if (!_isValidClientRequestId(data["clientRequestId"]?.toString())) {
@@ -563,7 +624,7 @@ class PedidosOfflineService {
       "syncKey": syncKey,
       "clientRequestId": data["clientRequestId"],
       "error": error.toString(),
-      "attempts": attempts,
+      "attempts": nextAttempts,
     };
   }
 

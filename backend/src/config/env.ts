@@ -4,14 +4,27 @@
  */
 
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
 // Cargar .env según entorno
-const envFile = process.env.NODE_ENV === 'production' 
-  ? '.env.production' 
-  : '.env';
+function candidateEnvFiles(): string[] {
+  if (process.env.GMP_ENV_FILE) return [process.env.GMP_ENV_FILE];
+  if (process.env.NODE_ENV === 'production') {
+    return ['.env.production', '.env.produccion', '.env'];
+  }
+  return ['.env'];
+}
 
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+for (const envFile of candidateEnvFiles()) {
+  const fullPath = path.isAbsolute(envFile)
+    ? envFile
+    : path.resolve(process.cwd(), envFile);
+  if (!fs.existsSync(fullPath)) continue;
+  dotenv.config({ path: fullPath });
+  process.env.GMP_LOADED_ENV_FILE = fullPath;
+  break;
+}
 
 // Función helper para obtener números
 function getNumber(key: string, defaultValue: number): number {
@@ -99,7 +112,10 @@ export const config = {
 
   // CORS
   cors: {
-    origins: getArray('CORS_ORIGINS', ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8081']),
+    origins: getArray(
+      'CORS_ORIGIN',
+      getArray('CORS_ORIGINS', ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8081'])
+    ),
   },
 
   // Seguridad

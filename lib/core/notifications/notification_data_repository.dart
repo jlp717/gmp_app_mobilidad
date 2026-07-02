@@ -48,14 +48,16 @@ class NotificationSessionStore {
     );
   }
 
-  static Future<NotificationUserProfile?> loadStoredProfile() async {
+  static Future<NotificationUserProfile?> loadStoredProfile({
+    bool allowLastKnownProfile = false,
+  }) async {
     final token = await SecureStorage.readSecureData('user_token');
     final userDataStr = await SecureStorage.readSecureData('user_data');
     if (token == null ||
         token.isEmpty ||
         userDataStr == null ||
         userDataStr.isEmpty) {
-      return loadLastKnownProfile();
+      return allowLastKnownProfile ? loadLastKnownProfile() : null;
     }
 
     try {
@@ -71,7 +73,7 @@ class NotificationSessionStore {
       return profile;
     } catch (e) {
       debugPrint('[Notifications] Stored profile unavailable: $e');
-      return loadLastKnownProfile();
+      return allowLastKnownProfile ? loadLastKnownProfile() : null;
     }
   }
 
@@ -504,7 +506,7 @@ class NotificationDataRepository {
         monthTarget: _toDouble(month['target']),
         monthCommission: _toDouble(ctx['commission']),
         paidThisMonth: _toDouble(
-          monthlyPaid[now.month] ?? monthlyPaid[now.month.toString()],
+          monthlyPaid[now.month.toString()],
         ),
       );
     } catch (e) {

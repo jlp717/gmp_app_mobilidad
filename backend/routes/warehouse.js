@@ -648,7 +648,7 @@ router.get('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
  * PUT /warehouse/truck-config/:vehicleCode
  * Body: { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas }
  */
-router.put('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
+router.put('/truck-config/:vehicleCode', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode);
         const { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas } = req.body;
@@ -745,7 +745,7 @@ router.get('/personnel', verifyToken, async (req, res) => {
  * POST /warehouse/personnel
  * Body: { nombre, codigoVendedor?, rol?, telefono?, email? }
  */
-router.post('/personnel', verifyToken, async (req, res) => {
+router.post('/personnel', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const { nombre, codigoVendedor, rol, telefono, email } = req.body;
         if (!nombre) return res.status(400).json({ error: 'nombre es obligatorio' });
@@ -771,7 +771,7 @@ router.post('/personnel', verifyToken, async (req, res) => {
 /**
  * PUT /warehouse/personnel/:id
  */
-router.put('/personnel/:id', verifyToken, async (req, res) => {
+router.put('/personnel/:id', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { nombre, codigoVendedor, rol, telefono, email, activo } = req.body;
@@ -798,7 +798,7 @@ router.put('/personnel/:id', verifyToken, async (req, res) => {
 /**
  * POST /warehouse/personnel/:id/delete — Soft delete (ACTIVO = 'N')
  */
-router.post('/personnel/:id/delete', verifyToken, async (req, res) => {
+router.post('/personnel/:id/delete', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         await queryWithParams(`UPDATE JAVIER.ALMACEN_PERSONAL SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`, [id]);
@@ -982,7 +982,7 @@ router.get('/article-dimensions/:code', verifyToken, async (req, res) => {
  * PUT /warehouse/article-dimensions/:code
  * Body: { largoCm, anchoCm, altoCm, pesoCajaKg?, notas? }
  */
-router.put('/article-dimensions/:code', verifyToken, async (req, res) => {
+router.put('/article-dimensions/:code', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         const { largoCm, anchoCm, altoCm, pesoCajaKg, notas } = req.body;
@@ -1017,7 +1017,7 @@ router.put('/article-dimensions/:code', verifyToken, async (req, res) => {
  * POST /warehouse/article-dimensions/:code/delete
  * Elimina dimensiones reales de un artículo (vuelve a estimado)
  */
-router.post('/article-dimensions/:code/delete', verifyToken, async (req, res) => {
+router.post('/article-dimensions/:code/delete', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]);
@@ -1033,7 +1033,7 @@ router.post('/article-dimensions/:code/delete', verifyToken, async (req, res) =>
  * Elimina TODAS las dimensiones reales guardadas (vuelve todo a estimado)
  * Útil cuando se confirmaron dimensiones por error en masa
  */
-router.post('/articles/reset-all-dimensions', verifyToken, async (req, res) => {
+router.post('/articles/reset-all-dimensions', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const countResult = await query(`SELECT COUNT(*) AS CNT FROM JAVIER.ALMACEN_ART_DIMENSIONES`);
         const total = parseInt(countResult[0]?.CNT) || 0;
@@ -1118,7 +1118,7 @@ router.get('/vehicle-photo/:code', verifyToken, async (req, res) => {
  * POST /warehouse/personnel/cleanup-test
  * Remove test personnel entries (like test_operario_script)
  */
-router.post('/personnel/cleanup-test', verifyToken, async (req, res) => {
+router.post('/personnel/cleanup-test', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const result = await query(`
             UPDATE JAVIER.ALMACEN_PERSONAL
@@ -1137,7 +1137,7 @@ router.post('/personnel/cleanup-test', verifyToken, async (req, res) => {
  * POST /warehouse/articles/bulk-estimate
  * Auto-estimate and save dimensions for articles without real dimensions
  */
-router.post('/articles/bulk-estimate', verifyToken, async (req, res) => {
+router.post('/articles/bulk-estimate', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const estimateFn = estimateBoxDimensions;
         const rows = await query(`
@@ -1549,7 +1549,7 @@ router.get('/config', verifyToken, async (req, res) => {
  * Body: { updates: { CLAVE: VALOR, ... } }
  * Actualiza configuración global (upsert por clave)
  */
-router.put('/config', verifyToken, async (req, res) => {
+router.put('/config', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const { updates } = req.body;
         if (!updates || typeof updates !== 'object') {
@@ -1596,7 +1596,7 @@ router.put('/config', verifyToken, async (req, res) => {
  * POST /warehouse/config/seed
  * Inserta valores por defecto si no existen (idempotente)
  */
-router.post('/config/seed', verifyToken, async (req, res) => {
+router.post('/config/seed', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const defaults = [
             { key: 'MAX_ALTURA_APILADO_CM', value: '150', desc: 'Altura máxima de apilado en cm' },

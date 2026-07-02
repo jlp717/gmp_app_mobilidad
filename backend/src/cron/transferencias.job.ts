@@ -6,9 +6,9 @@
  */
 
 import schedule from 'node-schedule';
+import { randomUUID } from 'crypto';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
 
 // ============================================
 // CONFIGURACIÓN
@@ -71,7 +71,7 @@ async function procesarTransferenciasProgramadas(): Promise<void> {
         for (const trans of transferencias) {
             try {
                 // Crear registro de cobro por transferencia
-                const cobroId = uuidv4();
+                const cobroId = randomUUID();
 
                 await odbcPool.query(
                     `INSERT INTO JAVIER.COBROS (
@@ -197,7 +197,7 @@ async function alertarCTRVencidos(): Promise<void> {
                     `INSERT INTO JAVIER.ALERTAS_COBROS (
             ID, TIPO, FECHA, DETALLE
           ) VALUES (?, 'CTR_VENCIDO', CURRENT_TIMESTAMP, ?)`,
-                    [uuidv4(), JSON.stringify(alertas)]
+                    [randomUUID(), JSON.stringify(alertas)]
                 );
             } catch { /* tabla puede no existir */ }
         } else {

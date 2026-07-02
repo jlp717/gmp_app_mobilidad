@@ -4,8 +4,8 @@
  */
 
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config/env';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
@@ -190,7 +190,7 @@ class AuthService {
    * Genera par de tokens JWT
    */
   generarTokens(vendedor: Vendedor): TokenPair {
-    const jti = uuidv4();
+    const jti = randomUUID();
 
     const accessPayload: TokenPayload = { 
       codigoVendedor: vendedor.codigoVendedor,

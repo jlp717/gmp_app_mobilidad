@@ -23,6 +23,11 @@ const defaultDbConcurrency = isMultiInstance
 const defaultThreadPoolSize = '128';
 const defaultOldSpaceMb = '512';
 const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
+const enablePm2Deploy = process.env.ENABLE_PM2_DEPLOY === 'true';
+
+if (enablePm2Deploy && !process.env.PM2_DEPLOY_REPO) {
+    throw new Error('ENABLE_PM2_DEPLOY=true requires PM2_DEPLOY_REPO');
+}
 
 const runtimePerformanceEnv = {
     UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE || defaultThreadPoolSize,
@@ -45,6 +50,31 @@ const runtimePerformanceEnv = {
     QUERY_CACHE_REBUILD_WAIT_MS: process.env.QUERY_CACHE_REBUILD_WAIT_MS || '5000',
     QUERY_CACHE_STALE_MS: process.env.QUERY_CACHE_STALE_MS || '300000',
 };
+
+const deployConfig = enablePm2Deploy
+    ? {
+        production: {
+            user: process.env.PM2_DEPLOY_USER || 'gmp',
+            host: process.env.PM2_DEPLOY_HOST || '192.168.1.230',
+            ref: process.env.PM2_DEPLOY_REF || 'origin/main',
+            repo: process.env.PM2_DEPLOY_REPO,
+            path: process.env.PM2_DEPLOY_PATH || '/opt/gmp-api',
+            'pre-deploy-local': '',
+            'post-deploy': [
+                'cd backend',
+                'npm ci --omit=dev',
+                'NODE_ENV=production node scripts/validate_production_config.js',
+                'pm2 reload ecosystem.config.js --env production',
+                'sleep 10',
+                'curl -fsS -A GMP-SRE-HealthCheck/1.0 http://localhost:${PORT:-3335}/api/ready',
+            ].join(' && '),
+            'pre-setup': '',
+            env: {
+                NODE_ENV: 'production',
+            },
+        },
+    }
+    : {};
 
 module.exports = {
     apps: [
@@ -76,9 +106,8 @@ module.exports = {
                 SNAPSHOT_UNTIL_MONTH: '2',
                 // JWT secrets loaded from .env — do NOT hardcode here
                 // (wrong secrets here cause "Invalid or expired token" errors)
-                // JWT_ACCESS_EXPIRES and JWT_REFRESH_EXPIRES intentionally omitted:
-                // auth.js uses parseInt() which breaks string values like '15m' or '7d'
-                // Default: ACCESS=3600000ms (1h), REFRESH=604800000ms (7d)
+                // JWT_ACCESS_EXPIRES and JWT_REFRESH_EXPIRES are loaded from .env.
+                // auth.js accepts numeric milliseconds and values like 1h/7d.
                 ...runtimePerformanceEnv,
             },
             env_ts: {
@@ -108,7 +137,7 @@ module.exports = {
             ignore_watch: ['node_modules', 'logs', '.validation-baselines', 'coverage'],
 
             // ==================== HEALTH CHECK ====================
-            listen_timeout: 30000, // Time to wait for app to be ready (LACLAE cache preload)
+            listen_timeout: parseInt(process.env.PM2_LISTEN_TIMEOUT_MS, 10) || 120000,
             kill_timeout: parseInt(process.env.PM2_KILL_TIMEOUT_MS, 10) || 5000,
 
             // ==================== AUTO RESTART ON FILE CHANGE ====================
@@ -129,8 +158,11 @@ module.exports = {
             instance_var: 'INSTANCE_ID',
 
             // ==================== CRON RESTART ====================
-            // Restart every day at 4 AM to clear memory
-            cron_restart: '0 4 * * *',
+            // Disabled by default; max_memory_restart handles leaks without
+            // forcing a full-cluster session disruption every morning.
+            ...(process.env.PM2_CRON_RESTART
+                ? { cron_restart: process.env.PM2_CRON_RESTART }
+                : {}),
         },
 
         // ==================== OPTIMIZATION SCRIPTS ====================
@@ -164,19 +196,7 @@ module.exports = {
     ],
 
     // ==================== DEPLOYMENT ====================
-    deploy: {
-        production: {
-            user: 'deploy',
-            host: '192.168.1.230',
-            ref: 'origin/main',
-            repo: 'git@github.com:user/gmp_app_mobilidad.git',
-            path: '/var/www/gmp-api',
-            'pre-deploy-local': '',
-            'post-deploy': 'npm ci && npm run build:ts && pm2 reload ecosystem.config.js --env production',
-            'pre-setup': '',
-            env: {
-                NODE_ENV: 'production',
-            },
-        },
-    },
+    // Disabled unless ENABLE_PM2_DEPLOY=true and PM2_DEPLOY_REPO is explicit.
+    // Normal production changes still go through staging/QA/AppSec/SRE gates.
+    deploy: deployConfig,
 };

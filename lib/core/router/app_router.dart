@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
-import 'package:gmp_app_mobilidad/features/real_dashboard/real_dashboard_page.dart';
+import 'package:gmp_app_mobilidad/features/real_dashboard/presentation/pages/real_dashboard_page.dart';
 import 'package:go_router/go_router.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();

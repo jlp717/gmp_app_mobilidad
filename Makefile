@@ -38,7 +38,7 @@ start:
 	docker compose up -d
 	@echo "⏳ Waiting for services..."
 	@sleep 5
-	@curl -s http://localhost:3334/api/health | jq . || echo "Health check pending..."
+	@curl -s -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready | jq . || echo "Readiness check pending..."
 
 # ─── Stop ───────────────────────────────────────────────────────
 stop:
@@ -58,7 +58,7 @@ logs-redis:
 
 # ─── Health Check ───────────────────────────────────────────────
 health:
-	@curl -s http://localhost:3334/api/health | jq .
+	@curl -s -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready | jq .
 
 # ─── Test ───────────────────────────────────────────────────────
 test:

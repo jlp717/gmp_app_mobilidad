@@ -90,6 +90,26 @@ void main() {
       );
       expect(unauthorizedCalled, isFalse);
     });
+
+    test('does not logout when a pre-login request returns 401 after login',
+        () async {
+      ApiClient.resetForTesting();
+
+      var unauthorizedCalled = false;
+      ApiClient.onUnauthorized = () => unauthorizedCalled = true;
+
+      final adapter = _NoTokenThenLoginAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      final response = await ApiClient.get('/protected/no-token-first');
+
+      expect(response['ok'], isTrue);
+      expect(
+        adapter.authorizationHeaders,
+        equals([null, 'Bearer fresh-token']),
+      );
+      expect(unauthorizedCalled, isFalse);
+    });
   });
 }
 
@@ -109,6 +129,42 @@ class _StaleTokenAdapter implements HttpClientAdapter {
       ApiClient.setAuthToken('new-token');
       return ResponseBody.fromString(
         jsonEncode({'error': 'expired'}),
+        401,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      );
+    }
+
+    return ResponseBody.fromString(
+      jsonEncode({'ok': true}),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _NoTokenThenLoginAdapter implements HttpClientAdapter {
+  final authorizationHeaders = <String?>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final authorization = options.headers['Authorization']?.toString();
+    authorizationHeaders.add(authorization);
+
+    if (authorization == null) {
+      ApiClient.setAuthToken('fresh-token');
+      return ResponseBody.fromString(
+        jsonEncode({'error': 'missing token'}),
         401,
         headers: {
           Headers.contentTypeHeader: ['application/json'],

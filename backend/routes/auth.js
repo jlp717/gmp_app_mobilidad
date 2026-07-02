@@ -13,6 +13,7 @@ const {
     signRefreshToken, 
     hashPassword, 
     verifyPassword,
+    allowPlaintextPinAuth,
     handleRefreshToken,
     handleLogout,
     registerSession
@@ -198,7 +199,7 @@ router.post('/login',
 
             if (pinRecord.length === 0) {
                 logger.warn(`[${requestId}] User not found: ${safeUser}`);
-                return handleFailedLogin(res, safeUser, requestId, 'Usuario no encontrado');
+                return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
             }
 
             const vendor = pinRecord[0];
@@ -243,6 +244,10 @@ router.post('/login',
                 pinValid = await verifyPassword(trimmedPwd, dbPin);
                 logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via legacy bcrypt`);
             } else if (dbPin === trimmedPwd) {
+                if (!allowPlaintextPinAuth()) {
+                    logger.warn(`[${requestId}] Plaintext PIN auth denied for vendor ${vendedorCode}; PIN hash migration required`);
+                    return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
+                }
                 // Step 2c: Plaintext PIN match (legacy)
                 pinValid = true;
                 logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via plaintext PIN`);
@@ -271,7 +276,7 @@ router.post('/login',
 
             if (!pinValid) {
                 logger.warn(`[${requestId}] PIN mismatch for vendor ${vendedorCode}`);
-                return handleFailedLogin(res, safeUser, requestId, 'PIN incorrecto');
+                return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
             }
 
             // Check Repartidor role

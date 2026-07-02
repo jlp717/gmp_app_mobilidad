@@ -75,7 +75,7 @@ echo 📝 NEXT STEPS:
 echo.
 echo 1. Review and update %ENV_FILE% with your actual credentials:
 echo    - ODBC_UID / ODBC_PWD (IBM i database)
-echo    - CORS_ORIGINS (your production domain)
+echo    - CORS_ORIGIN (your production domain)
 echo    - SMTP credentials (if sending emails)
 echo    - Google Maps API key
 echo.

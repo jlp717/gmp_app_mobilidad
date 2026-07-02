@@ -8,9 +8,9 @@
 
 'use strict';
 
-// Auto-load dotenv if available
+// Auto-load the same env file as the server if available
 try {
-    require('dotenv').config();
+    require('../config/load-env').loadEnv(require('path').resolve(__dirname, '..'));
 } catch (e) {
     // dotenv not installed, continue anyway
 }
@@ -35,7 +35,8 @@ const WARNING_PRODUCTION_VARS = [
     { name: 'LOGIN_RATE_LIMIT', max: 10 },
 ];
 
-function validateProductionConfig() {
+function validateProductionConfig(options = {}) {
+    const shouldExit = options.exit !== false;
     let errors = 0;
     let warnings = 0;
     const isProduction = process.env.NODE_ENV === 'production';
@@ -92,13 +93,33 @@ function validateProductionConfig() {
         logger.info('✅ JWT_REFRESH_SECRET: Strong');
     }
 
-    // CORS - WARNING only, not error (allow 'true' in production with warning)
-    const corsOrigin = process.env.CORS_ORIGIN || '';
-    if (corsOrigin === '*') {
+    if (process.env.AUTH_ALLOW_PLAINTEXT_PIN === 'true') {
+        const until = Date.parse(process.env.AUTH_PLAINTEXT_PIN_AUTH_UNTIL || '');
+        if (!Number.isFinite(until) || until <= Date.now()) {
+            logger.error('❌ AUTH_ALLOW_PLAINTEXT_PIN=true requires future AUTH_PLAINTEXT_PIN_AUTH_UNTIL');
+            errors++;
+        } else {
+            logger.warn(`⚠️  Plaintext PIN auth temporarily allowed until ${new Date(until).toISOString()}`);
+            warnings++;
+        }
+    }
+
+    // CORS must be explicit in production. `true` and `*` both allow every
+    // origin, which is unsafe for a credentialed commercial app.
+    const corsOrigin = process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || '';
+    if (!corsOrigin && isProduction) {
+        logger.error('❌ CORS_ORIGIN: explicit origins are required in production!');
+        errors++;
+    } else if (corsOrigin === '*') {
         logger.error('❌ CORS_ORIGIN: Wildcard (*) NOT allowed in production!');
         errors++;
     } else if (corsOrigin === 'true') {
-        logger.warn('⚠️  CORS_ORIGIN=true: Allows all origins (OK for dev, WARN for prod)');
+        if (isProduction) {
+            logger.error('❌ CORS_ORIGIN=true: Allows all origins and is NOT allowed in production!');
+            errors++;
+        } else {
+            logger.warn('⚠️  CORS_ORIGIN=true: Allows all origins (development only)');
+        }
     } else if (corsOrigin && !corsOrigin.includes('*')) {
         logger.info(`✅ CORS_ORIGIN: ${corsOrigin}`);
     }
@@ -130,7 +151,8 @@ function validateProductionConfig() {
 
     if (errors > 0) {
         logger.error('\n❌ Configuration NOT ready for production!');
-        process.exit(1);
+        if (shouldExit) process.exit(1);
+        return { ok: false, errors, warnings };
     }
 
     if (warnings > 0) {
@@ -138,7 +160,8 @@ function validateProductionConfig() {
     }
 
     logger.info('\n✅ Configuration ready for production!');
-    process.exit(0);
+    if (shouldExit) process.exit(0);
+    return { ok: true, errors, warnings };
 }
 
 if (require.main === module) {

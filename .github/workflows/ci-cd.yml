@@ -89,6 +89,10 @@ jobs:
           echo "lib=$LIB" >> "$GITHUB_OUTPUT"
           echo "::debug::Changed files: [$CHANGED]"
 
+      - name: Politec architecture and quality gate
+        shell: pwsh
+        run: ./scripts/politec-quality-gate.ps1
+
   # ==========================================================================
   # PHASE 1a: FLUTTER LINT & ANALYZE (Parallel-safe)
   # ==========================================================================
@@ -387,15 +391,7 @@ jobs:
         id: scan
         run: |
           cd backend
-          AUDIT=$(npm audit --audit-level=high 2>&1 || true)
-          echo "$AUDIT"
-          # grep -c outputs "0" on stdout even with exit code 1; use || true to avoid double output
-          VULNS=$(echo "$AUDIT" | grep -c "vulnerability" || true)
-          echo "vulns=$VULNS" >> "$GITHUB_OUTPUT"
-          
-          if [ "$VULNS" -gt 0 ] 2>/dev/null; then
-            echo "::warning::Found $VULNS vulnerability(ies)"
-          fi
+          npm audit --audit-level=high --omit=dev
 
       - name: Scan for hardcoded secrets
         run: |

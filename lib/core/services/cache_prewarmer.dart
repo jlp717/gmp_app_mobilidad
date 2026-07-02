@@ -9,6 +9,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 /// Service to pre-warm cache with critical data
 class CachePreWarmer {
@@ -30,6 +32,8 @@ class CachePreWarmer {
       final currentMonth = DateTime.now().month;
       await Future.wait([
         _preWarmFacturas(codes, currentYear, currentMonth),
+        _preWarmClients(codes),
+        _preWarmPedidos(codes),
         if (isJefeVentas) _preWarmVendedores(),
         _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ]);
@@ -96,6 +100,33 @@ class CachePreWarmer {
       debugPrint('[CachePreWarmer] Commissions pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] Commissions pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmClients(String vendorCodes) async {
+    try {
+      await ClientsService.getClientsList(
+        vendedorCodes: vendorCodes,
+        limit: 100,
+      );
+      debugPrint('[CachePreWarmer] Clients pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Clients pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmPedidos(String vendorCodes) async {
+    try {
+      await Future.wait([
+        PedidosService.getFamilies(),
+        PedidosService.getBrands(),
+        PedidosService.getOrders(vendedorCodes: vendorCodes, limit: 20),
+        PedidosService.getOrderStats(vendedorCodes: vendorCodes),
+        PedidosService.getProducts(vendedorCodes: vendorCodes, limit: 50),
+      ]);
+      debugPrint('[CachePreWarmer] Pedidos pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Pedidos pre-warm failed: $e');
     }
   }
 

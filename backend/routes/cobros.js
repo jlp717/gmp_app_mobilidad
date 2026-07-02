@@ -9,7 +9,6 @@ const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
-const { v4: uuidv4 } = require('uuid');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
 const {

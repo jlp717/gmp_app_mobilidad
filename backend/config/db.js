@@ -1,9 +1,8 @@
 const odbc = require('odbc');
-const dotenv = require('dotenv');
 const { AsyncLocalStorage } = require('async_hooks');
 const logger = require('../middleware/logger');
 
-dotenv.config();
+require('./load-env').loadEnv(require('path').resolve(__dirname, '..'));
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const dbRequestContext = new AsyncLocalStorage();
@@ -587,6 +586,18 @@ function getRequestContext() {
     return dbRequestContext.getStore() || {};
 }
 
+function getContextQueryTimeoutMs() {
+    const ctx = getRequestContext();
+    const deadlineAt = Number(ctx.dbDeadlineAt);
+    if (!Number.isFinite(deadlineAt) || deadlineAt <= 0) {
+        return QUERY_TIMEOUT_MS;
+    }
+
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return 1;
+    return Math.max(1, Math.min(QUERY_TIMEOUT_MS, remainingMs));
+}
+
 function runWithDbRequestContext(context, fn) {
     return dbRequestContext.run(context || {}, fn);
 }
@@ -697,7 +708,7 @@ async function query(sql, logQuery = true, logError = true) {
             await ensureUtf8(conn);
 
             const start = Date.now();
-            const result = await queryWithTimeout(conn, sql);
+            const result = await queryWithTimeout(conn, sql, undefined, getContextQueryTimeoutMs());
             const duration = Date.now() - start;
             dbCircuit.recordSuccess();
             logQueryPerformance({ sql, params: [], duration, rowCount: result.length, paramQuery: false });
@@ -783,7 +794,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             await ensureUtf8(conn);
 
             const start = Date.now();
-            const result = await queryWithTimeout(conn, sql, params);
+            const result = await queryWithTimeout(conn, sql, params, getContextQueryTimeoutMs());
             const duration = Date.now() - start;
             dbCircuit.recordSuccess();
             logQueryPerformance({ sql, params, duration, rowCount: result.length, paramQuery: true });

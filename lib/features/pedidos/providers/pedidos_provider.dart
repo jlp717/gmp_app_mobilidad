@@ -1330,7 +1330,8 @@ class PedidosProvider with ChangeNotifier {
         clientName: _clientName ?? '',
         vendedorCode: vendedorCode,
         saleType: _saleType,
-        lines: _lines,
+        lines: linesForSubmit,
+        globalDiscountPct: _globalDiscountPct,
         observaciones: fullObservaciones,
         deliveryDate: deliveryDate,
         vehicleCode: vehicleCode,
@@ -1339,6 +1340,25 @@ class PedidosProvider with ChangeNotifier {
         clientRequestId: clientRequestId,
         notifyQueued: false,
       );
+
+      final connectivityStatus = ConnectivityService.instance.currentStatus;
+      if (connectivityStatus != ConnectivityStatus.online) {
+        _debugLog(
+          '[confirmOrder] offline/limited connectivity; order kept local',
+        );
+        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
+        _clearSubmittedCart();
+        _activeCheckoutClientRequestId = null;
+        return {
+          'queued': true,
+          'pendingConfirmation': true,
+          'localDraft': true,
+          'estado': 'BORRADOR_LOCAL',
+          'message': connectivityStatus == ConnectivityStatus.limited
+              ? 'Pedido guardado como borrador local. Se enviara al recuperar conexion con el servidor.'
+              : 'Pedido guardado como borrador local. Se enviara cuando vuelva internet.',
+        };
+      }
 
       // Step 1: Create the order
       _debugLog(
@@ -1357,7 +1377,8 @@ class PedidosProvider with ChangeNotifier {
       if (createResult['queued'] == true) {
         final pending = Map<String, dynamic>.from(createResult);
         pending['pendingConfirmation'] = true;
-        pending['estado'] ??= 'PENDIENTE_SINCRONIZACION';
+        pending['localDraft'] = true;
+        pending['estado'] ??= 'BORRADOR_LOCAL';
         pending['message'] ??=
             'Pedido guardado para sincronizar. No esta confirmado todavia.';
         PedidosOfflineService.notifyQueuedOrder(queuedSyncKey!);
@@ -1422,7 +1443,8 @@ class PedidosProvider with ChangeNotifier {
         return {
           'queued': true,
           'pendingConfirmation': true,
-          'estado': 'PENDIENTE_SINCRONIZACION',
+          'localDraft': true,
+          'estado': 'BORRADOR_LOCAL',
           'message':
               'Pedido guardado localmente. Se enviara al recuperar conexion.',
         };
@@ -1462,6 +1484,86 @@ class PedidosProvider with ChangeNotifier {
             .where((o) => o.estado.toUpperCase() == status.toUpperCase())
             .toList(growable: false);
     }
+  }
+
+  static double _asLocalDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static int _localOrderId(String syncKey, int index) {
+    var hash = 0;
+    for (final unit in syncKey.codeUnits) {
+      hash = ((hash * 31) + unit) & 0x3fffffff;
+    }
+    return -1000000000 - hash - index;
+  }
+
+  static List<OrderSummary> _localQueuedOrders({String? status}) {
+    final desiredStatus = status?.trim().toUpperCase();
+    if (desiredStatus != null &&
+        desiredStatus.isNotEmpty &&
+        desiredStatus != 'BORRADOR' &&
+        desiredStatus != 'BORRADOR_LOCAL' &&
+        desiredStatus != 'PENDIENTE' &&
+        desiredStatus != 'ERROR_SYNC') {
+      return const <OrderSummary>[];
+    }
+
+    final items = [
+      ...PedidosOfflineService.getPendingSyncs(),
+      ...PedidosOfflineService.getFailedSyncs(),
+    ];
+    final summaries = <OrderSummary>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = Map<String, dynamic>.from(items[i] as Map);
+      final syncKey = item['syncKey']?.toString() ?? 'local_$i';
+      final lines = item['lines'] as List? ?? const [];
+      var total = 0.0;
+      for (final rawLine in lines) {
+        if (rawLine is! Map) continue;
+        final line = Map<String, dynamic>.from(rawLine);
+        final lineTotal = _asLocalDouble(line['importeVenta']);
+        if (lineTotal > 0) {
+          total += lineTotal;
+        } else {
+          final qty = _asLocalDouble(line['cantidadEnvases']) > 0
+              ? _asLocalDouble(line['cantidadEnvases'])
+              : _asLocalDouble(line['cantidadUnidades']);
+          total += qty * _asLocalDouble(line['precioVenta']);
+        }
+      }
+      final queuedAt = item['queuedAt']?.toString() ?? '';
+      final isFailed = item['status']?.toString() == 'failed';
+      final localStatus = isFailed ? 'ERROR_SYNC' : 'BORRADOR_LOCAL';
+      if (desiredStatus != null &&
+          desiredStatus.isNotEmpty &&
+          desiredStatus != localStatus &&
+          !(desiredStatus == 'BORRADOR' && localStatus == 'BORRADOR_LOCAL') &&
+          !(desiredStatus == 'PENDIENTE' && localStatus == 'BORRADOR_LOCAL')) {
+        continue;
+      }
+      summaries.add(
+        OrderSummary(
+          id: _localOrderId(syncKey, i),
+          numeroPedido: 0,
+          clienteCode: item['clientCode']?.toString() ?? '',
+          clienteName: item['clientName']?.toString() ?? 'Pedido local',
+          vendedorCode: item['vendedorCode']?.toString() ?? '',
+          fecha: queuedAt,
+          estado: localStatus,
+          tipoVenta: item['saleType']?.toString() ?? 'CC',
+          total: total,
+          lineCount: lines.length,
+          numeroPedidoFormatted: 'Local',
+          fechaFormatted:
+              queuedAt.length >= 10 ? queuedAt.substring(0, 10) : queuedAt,
+          observaciones: item['observaciones']?.toString() ?? '',
+          origen: 'LOCAL',
+        ),
+      );
+    }
+    return summaries;
   }
 
   Future<void> loadOrders({
@@ -1510,6 +1612,10 @@ class PedidosProvider with ChangeNotifier {
           status.isNotEmpty &&
           _isGroupedOrderStatusFilter(status)) {
         orders = _filterOrdersByGroupedStatus(orders, status);
+      }
+      final localOrders = _localQueuedOrders(status: status);
+      if (localOrders.isNotEmpty) {
+        orders = [...localOrders, ...orders];
       }
       if (generation != _ordersLoadGeneration) return;
       _orders = orders;
@@ -1683,6 +1789,7 @@ class PedidosProvider with ChangeNotifier {
           saleType: _saleType,
           vendedorCode: vendedorCode,
           lines: _lines,
+          globalDiscountPct: _globalDiscountPct,
         );
         _lastAutoSaved = DateTime.now();
         _isDirty = false;
@@ -1695,6 +1802,7 @@ class PedidosProvider with ChangeNotifier {
           saleType: _saleType,
           vendedorCode: vendedorCode,
           lines: _lines,
+          globalDiscountPct: _globalDiscountPct,
         );
         _isDirty = false;
         _lastAutoSaved = DateTime.now();
@@ -1709,7 +1817,7 @@ class PedidosProvider with ChangeNotifier {
     _clientCode = draft['clientCode'] as String?;
     _clientName = draft['clientName'] as String?;
     _saleType = (draft['saleType'] as String?) ?? 'CC';
-    _globalDiscountPct = 0;
+    _globalDiscountPct = (draft['globalDiscountPct'] as num?)?.toDouble() ?? 0;
     _complementaryProducts = [];
     _lines.clear();
     final linesData = draft['lines'] as List? ?? [];

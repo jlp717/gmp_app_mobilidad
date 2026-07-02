@@ -21,6 +21,8 @@ class ApiClient {
   static bool _isInitialized = false;
   static String? _savedAuthToken;
   static Future<bool>? _refreshInFlight;
+  static int _authEpoch = 0;
+  static bool _lastTokenRefreshFailedDueToConnectivity = false;
 
   /// Absolute local deadline for the current authenticated session.
   static DateTime? authSessionExpiresAt;
@@ -32,6 +34,9 @@ class ApiClient {
   /// Callback for 401 Unauthorized events (Global Logout)
   /// This is called when the server returns 401, indicating session expired
   static VoidCallback? onUnauthorized;
+
+  /// Callback invoked after a successful refresh-token rotation.
+  static FutureOr<void> Function()? onTokenRefreshed;
 
   /// Flag to prevent duplicate logout calls
   static bool _isLoggingOut = false;
@@ -108,7 +113,11 @@ class ApiClient {
   // ── End Connectivity Monitoring ──────────────────────────────────────
 
   /// Call before sending login credentials to block concurrent 401→logout.
-  static void startLogin() => _isLoggingIn = true;
+  static void startLogin() {
+    _isLoggingIn = true;
+    _pendingRequests.clear();
+    _authEpoch++;
+  }
 
   /// Call when login completes (success or failure) to re-enable 401→logout.
   static void endLogin() => _isLoggingIn = false;
@@ -299,9 +308,12 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) {
           final token = _savedAuthToken;
+          options.extra['authEpoch'] = _authEpoch;
+          options.extra['hadAuthToken'] = token != null;
           if (token != null) {
             if (isAuthSessionExpired) {
               _savedAuthToken = null;
+              _authEpoch++;
               options.headers.remove('Authorization');
               handler.reject(
                 DioException(
@@ -341,12 +353,9 @@ class ApiClient {
               !isAuthEndpoint &&
               !alreadyRetried &&
               !isAuthSessionExpired) {
-            final requestAuth =
-                error.requestOptions.headers['Authorization']?.toString();
             final currentAuth =
                 _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
-            final isStaleRequest =
-                requestAuth != null && requestAuth != currentAuth;
+            final isStaleRequest = _isStaleUnauthorized(error);
 
             if (isStaleRequest && currentAuth != null) {
               try {
@@ -436,8 +445,13 @@ class ApiClient {
 
   /// Set authentication token
   static void setAuthToken(String token) {
+    final changed = _savedAuthToken != token;
     _savedAuthToken = token;
     dio.options.headers['Authorization'] = 'Bearer $token';
+    if (changed) {
+      _authEpoch++;
+      _pendingRequests.clear();
+    }
   }
 
   /// Whether the current local auth session deadline has elapsed.
@@ -447,11 +461,19 @@ class ApiClient {
     return !DateTime.now().isBefore(expiresAt);
   }
 
+  static bool get lastTokenRefreshFailedDueToConnectivity =>
+      _lastTokenRefreshFailedDueToConnectivity;
+
   /// Clear authentication token
   static void clearAuthToken() {
+    final changed = _savedAuthToken != null || authSessionExpiresAt != null;
     _savedAuthToken = null;
     authSessionExpiresAt = null;
     dio.options.headers.remove('Authorization');
+    if (changed) {
+      _authEpoch++;
+      _pendingRequests.clear();
+    }
   }
 
   static void clearPendingRequests() {
@@ -479,6 +501,7 @@ class ApiClient {
   }
 
   static Future<bool> _refreshAccessTokenInternal() async {
+    _lastTokenRefreshFailedDueToConnectivity = false;
     if (isAuthSessionExpired) {
       debugPrint('[ApiClient] Token refresh blocked: local session expired');
       return false;
@@ -508,8 +531,16 @@ class ApiClient {
       setAuthToken(accessToken);
       await SecureStorage.writeSecureData('user_token', accessToken);
       await SecureStorage.writeSecureData('refresh_token', nextRefreshToken);
+      final callback = onTokenRefreshed;
+      if (callback != null) {
+        await callback();
+      }
       debugPrint('[ApiClient] Access token refreshed');
       return true;
+    } on DioException catch (e) {
+      _lastTokenRefreshFailedDueToConnectivity = _isNetworkError(e);
+      debugPrint('[ApiClient] Token refresh failed: $e');
+      return false;
     } catch (e) {
       debugPrint('[ApiClient] Token refresh failed: $e');
       return false;
@@ -525,9 +556,12 @@ class ApiClient {
     _isInitialized = false;
     _savedAuthToken = null;
     _refreshInFlight = null;
+    _authEpoch = 0;
+    _lastTokenRefreshFailedDueToConnectivity = false;
     authSessionExpiresAt = null;
     _pendingRequests.clear();
     onUnauthorized = null;
+    onTokenRefreshed = null;
     _isLoggingOut = false;
     _isLoggingIn = false;
   }
@@ -537,8 +571,9 @@ class ApiClient {
     String endpoint,
     Map<String, dynamic>? queryParameters,
   ) {
+    final authScope = 'auth=$_authEpoch';
     if (queryParameters == null || queryParameters.isEmpty) {
-      return '$method:$endpoint';
+      return '$method:$authScope:$endpoint';
     }
 
     final normalized = queryParameters.entries.toList()
@@ -547,7 +582,63 @@ class ApiClient {
     final queryString =
         normalized.map((entry) => '${entry.key}=${entry.value}').join('&');
 
-    return '$method:$endpoint?$queryString';
+    return '$method:$authScope:$endpoint?$queryString';
+  }
+
+  static String? _autoCacheKey(
+    String endpoint,
+    Map<String, dynamic>? queryParameters,
+  ) {
+    final lower = endpoint.toLowerCase();
+    final nonCacheable = lower.contains('/auth') ||
+        lower.contains('/health') ||
+        lower.contains('/metrics') ||
+        lower.contains('/optimization') ||
+        lower.contains('/admin');
+    if (nonCacheable) return null;
+
+    final queryString = _normalizedQueryString(queryParameters);
+    return queryString.isEmpty
+        ? 'api:auto:$endpoint'
+        : 'api:auto:$endpoint?$queryString';
+  }
+
+  static String _normalizedQueryString(Map<String, dynamic>? queryParameters) {
+    if (queryParameters == null || queryParameters.isEmpty) return '';
+    final normalized = queryParameters.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return normalized
+        .map((entry) => '${entry.key}=${_normalizeQueryValue(entry.value)}')
+        .join('&');
+  }
+
+  static String _normalizeQueryValue(Object? value) {
+    if (value == null) return '';
+    if (value is Iterable) {
+      return value.map(_normalizeQueryValue).join(',');
+    }
+    if (value is Map) {
+      final entries = value.entries.toList()
+        ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+      return entries
+          .map((entry) => '${entry.key}:${_normalizeQueryValue(entry.value)}')
+          .join(',');
+    }
+    return value.toString();
+  }
+
+  static bool _isStaleUnauthorized(DioException e) {
+    final currentAuth =
+        _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
+    if (currentAuth == null) return false;
+
+    final requestAuth = e.requestOptions.headers['Authorization']?.toString();
+    if (requestAuth == null || requestAuth != currentAuth) {
+      return true;
+    }
+
+    final requestEpoch = e.requestOptions.extra['authEpoch'];
+    return requestEpoch is int && requestEpoch != _authEpoch;
   }
 
   /// Recursively converts all nested Map<dynamic,dynamic> to Map<String,dynamic>.
@@ -598,6 +689,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final requestKey = _buildRequestKey('GET_MAP', endpoint, queryParameters);
+    final effectiveCacheKey = cacheKey ??
+        _autoCacheKey(
+          endpoint,
+          queryParameters,
+        );
     final canDeduplicate = !forceRefresh && cancelToken == null;
 
     if (canDeduplicate) {
@@ -609,14 +705,14 @@ class ApiClient {
     }
 
     final future = () async {
-      if (cacheKey != null && forceRefresh) {
-        await CacheService.invalidate(cacheKey);
+      if (effectiveCacheKey != null && forceRefresh) {
+        await CacheService.invalidate(effectiveCacheKey);
       }
 
       // Try cache first if cacheKey provided and not forcing refresh
-      if (cacheKey != null && !forceRefresh) {
+      if (effectiveCacheKey != null && !forceRefresh) {
         try {
-          final cached = CacheService.get(cacheKey);
+          final cached = CacheService.get(effectiveCacheKey);
           if (cached != null && cached is Map) {
             return _deepCastMap(cached);
           }
@@ -647,18 +743,21 @@ class ApiClient {
         final data = _deepCastMap(rawData);
 
         // Cache the response if cacheKey provided
-        if (cacheKey != null) {
-          await CacheService.set(cacheKey, data, ttl: cacheTTL);
+        if (effectiveCacheKey != null) {
+          await CacheService.set(effectiveCacheKey, data, ttl: cacheTTL);
         }
 
         return data;
       } on DioException catch (e) {
-        if (cacheKey != null &&
+        if (effectiveCacheKey != null &&
             !forceRefresh &&
             allowStale &&
             _isNetworkError(e)) {
           try {
-            final cached = CacheService.getStale(cacheKey, maxStale: maxStale);
+            final cached = CacheService.getStale(
+              effectiveCacheKey,
+              maxStale: maxStale,
+            );
             if (cached != null && cached is Map) {
               return _deepCastMap(cached);
             }
@@ -693,6 +792,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final requestKey = _buildRequestKey('GET_LIST', endpoint, queryParameters);
+    final effectiveCacheKey = cacheKey ??
+        _autoCacheKey(
+          endpoint,
+          queryParameters,
+        );
     final canDeduplicate = !forceRefresh && cancelToken == null;
 
     if (canDeduplicate) {
@@ -704,14 +808,14 @@ class ApiClient {
     }
 
     final future = () async {
-      if (cacheKey != null && forceRefresh) {
-        await CacheService.invalidate(cacheKey);
+      if (effectiveCacheKey != null && forceRefresh) {
+        await CacheService.invalidate(effectiveCacheKey);
       }
 
       // Try cache first if cacheKey provided and not forcing refresh
-      if (cacheKey != null && !forceRefresh) {
+      if (effectiveCacheKey != null && !forceRefresh) {
         try {
-          final cached = CacheService.get(cacheKey);
+          final cached = CacheService.get(effectiveCacheKey);
           if (cached != null && cached is List) {
             return cached;
           }
@@ -740,18 +844,20 @@ class ApiClient {
         }
 
         // Cache the response if cacheKey provided
-        if (cacheKey != null) {
-          await CacheService.set(cacheKey, result, ttl: cacheTTL);
+        if (effectiveCacheKey != null) {
+          await CacheService.set(effectiveCacheKey, result, ttl: cacheTTL);
         }
 
         return result;
       } on DioException catch (e) {
-        if (cacheKey != null &&
+        if (effectiveCacheKey != null &&
             !forceRefresh &&
             allowStale &&
             _isNetworkError(e)) {
-          final cached = CacheService.getStale<List<dynamic>>(cacheKey,
-              maxStale: maxStale);
+          final cached = CacheService.getStale<List<dynamic>>(
+            effectiveCacheKey,
+            maxStale: maxStale,
+          );
           if (cached != null) {
             return cached;
           }
@@ -882,6 +988,7 @@ class ApiClient {
     return e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
         e.type == DioExceptionType.unknown;
   }
 
@@ -960,12 +1067,7 @@ class ApiClient {
         // Compare the token used in THIS request vs the currently stored token.
         // If they differ, this 401 is from a STALE request (previous session)
         // and must NOT trigger a logout that would wipe the fresh new token.
-        final requestAuth =
-            e.requestOptions.headers['Authorization']?.toString();
-        final currentAuth =
-            _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
-        final isStaleRequest =
-            requestAuth != null && requestAuth != currentAuth;
+        final isStaleRequest = _isStaleUnauthorized(e);
         if (!isLoginRequest &&
             !_isLoggingOut &&
             !_isLoggingIn &&
