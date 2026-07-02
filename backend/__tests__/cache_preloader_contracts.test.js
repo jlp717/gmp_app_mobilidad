@@ -3,6 +3,13 @@
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockCachedQuery = jest.fn((fn, sql, options, ...args) => fn(sql, ...args));
+const mockRedisCache = {
+  isConnected: false,
+  get: jest.fn(),
+  set: jest.fn(),
+  acquireLock: jest.fn(),
+  releaseLock: jest.fn(),
+};
 
 jest.mock('../config/db', () => ({
   query: mockQuery,
@@ -31,6 +38,7 @@ jest.mock('../utils/common', () => ({
 }));
 
 jest.mock('../services/redis-cache', () => ({
+  redisCache: mockRedisCache,
   TTL: { SHORT: 60, MEDIUM: 300, LONG: 86400, STATIC: 3600 },
 }));
 
@@ -41,6 +49,10 @@ beforeEach(() => {
   mockQuery.mockReset();
   mockQueryWithParams.mockReset();
   mockCachedQuery.mockClear();
+  Object.values(mockRedisCache).forEach((mockFn) => {
+    if (typeof mockFn?.mockReset === 'function') mockFn.mockReset();
+  });
+  mockRedisCache.isConnected = false;
 });
 
 describe('cache preloader DB2 contracts', () => {

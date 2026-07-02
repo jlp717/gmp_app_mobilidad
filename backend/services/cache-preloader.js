@@ -15,9 +15,37 @@ const logger = require('../middleware/logger');
 const { getCurrentDate, LACLAE_SALES_FILTER, MIN_YEAR } = require('../utils/common');
 const { cachedQuery } = require('./query-optimizer');
 const { query, queryWithParams } = require('../config/db');
-const { TTL } = require('./redis-cache');
+const { redisCache, TTL } = require('./redis-cache');
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
+const SHARED_STARTUP_WARMUP_KEY = 'shared-startup-warmups-v1';
+const SHARED_STARTUP_WARMUP_MARKER = `${SHARED_STARTUP_WARMUP_KEY}:scheduled`;
+const SHARED_STARTUP_WARMUP_TTL_SECONDS =
+    parseInt(process.env.CACHE_PRELOAD_SHARED_MARKER_TTL_SECONDS, 10) || 300;
+const SHARED_STARTUP_WARMUP_LOCK_TTL_MS =
+    parseInt(process.env.CACHE_PRELOAD_SHARED_LOCK_TTL_MS, 10) || 300000;
+const SHARED_STARTUP_WARMUP_DELAY_MS =
+    parseInt(process.env.CACHE_PRELOAD_SHARED_DELAY_MS, 10) || 5000;
+const STARTUP_EVOLUTION_WARMUP_ENABLED =
+    process.env.CACHE_PRELOAD_EVOLUTION_ALL === 'true';
+
+function scheduleWarmup(delayMs, label, fn) {
+    setTimeout(() => {
+        fn().catch(e => logger.warn(`${label} warmup error: ${e.message}`));
+    }, delayMs);
+}
+
+async function settleSequential(tasks) {
+    const results = [];
+    for (const task of tasks) {
+        try {
+            results.push({ status: 'fulfilled', value: await task() });
+        } catch (reason) {
+            results.push({ status: 'rejected', reason });
+        }
+    }
+    return results;
+}
 
 /**
  * Pre-warm dashboard queries that ALL users will need on first load.
@@ -102,13 +130,13 @@ async function warmUpDashboardQueries() {
         const baseKey =
             `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month}:ALL`;
 
-        // Execute ALL in parallel — biggest speedup for first user
-        const results = await Promise.allSettled([
-            cachedQuery(query, currentMetricsSQL, `${baseKey}:curr`, allVendorTTL),
-            cachedQuery(query, prevMetricsSQL, `${baseKey}:prev`, prevTTL),
-            cachedQuery(query, todaySQL, `${baseKey}:today`, todayTTL),
-            cachedQuery(query, evolutionSQL, `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:default:month:false:ALL:monthly`, allVendorTTL),
-            cachedQuery(query, recentSalesSQL, `dashboard:recent_sales:ALL:20`, allVendorTTL),
+        // Keep startup warmups sequential so DB2 stays available for live requests.
+        const results = await settleSequential([
+            () => cachedQuery(query, currentMetricsSQL, `${baseKey}:curr`, allVendorTTL),
+            () => cachedQuery(query, prevMetricsSQL, `${baseKey}:prev`, prevTTL),
+            () => cachedQuery(query, todaySQL, `${baseKey}:today`, todayTTL),
+            () => cachedQuery(query, evolutionSQL, `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:default:month:false:ALL:monthly`, allVendorTTL),
+            () => cachedQuery(query, recentSalesSQL, `dashboard:recent_sales:ALL:20`, allVendorTTL),
         ]);
 
         const succeeded = results.filter(r => r.status === 'fulfilled').length;
@@ -193,10 +221,8 @@ async function warmUpClientsList(vendedorCodes = 'ALL', limit = 100, offset = 0)
 async function warmUpClientsAll() {
     try {
         // JEFE_VENTAS: dashboard uses limit=50; browse tabs often use 100
-        await Promise.all([
-            warmUpClientsList('ALL', 50, 0),
-            warmUpClientsList('ALL', 100, 0),
-        ]);
+        await warmUpClientsList('ALL', 50, 0);
+        await warmUpClientsList('ALL', 100, 0);
     } catch (e) {
         logger.warn(`[CachePreWarmer] Clients pre-warm error (non-fatal): ${e.message}`);
     }
@@ -223,6 +249,68 @@ async function warmUpCommissionsAll() {
     }
 }
 
+async function runSharedStartupWarmups() {
+    logger.info('[CachePreWarmer] Shared startup warmups starting sequentially');
+    const start = Date.now();
+
+    await warmUpDashboardQueries();
+    await warmUpCommissionsAll();
+    await warmUpClientsAll();
+
+    if (STARTUP_EVOLUTION_WARMUP_ENABLED) {
+        await warmUpEvolutionAll();
+    } else {
+        logger.info('[CachePreWarmer] Evolution ALL startup warmup skipped (set CACHE_PRELOAD_EVOLUTION_ALL=true to enable)');
+    }
+
+    logger.info(`[CachePreWarmer] Shared startup warmups completed in ${Date.now() - start}ms`);
+}
+
+async function scheduleSharedStartupWarmups() {
+    let lockToken = null;
+
+    if (!redisCache?.isConnected) {
+        const instanceId = process.env.NODE_APP_INSTANCE || process.env.pm_id || '0';
+        if (String(instanceId) !== '0') {
+            logger.info('[CachePreWarmer] Redis unavailable; startup warmups limited to PM2 instance 0');
+            return;
+        }
+    }
+
+    if (redisCache?.isConnected) {
+        const scheduled = await redisCache.get('startup', SHARED_STARTUP_WARMUP_MARKER);
+        if (scheduled) {
+            logger.info('[CachePreWarmer] Shared startup warmups already scheduled by another worker');
+            return;
+        }
+
+        lockToken = await redisCache.acquireLock(
+            'startup',
+            SHARED_STARTUP_WARMUP_KEY,
+            SHARED_STARTUP_WARMUP_LOCK_TTL_MS
+        );
+        if (!lockToken) {
+            logger.info('[CachePreWarmer] Another worker owns shared startup warmups');
+            return;
+        }
+
+        await redisCache.set(
+            'startup',
+            SHARED_STARTUP_WARMUP_MARKER,
+            { pid: process.pid, at: new Date().toISOString() },
+            SHARED_STARTUP_WARMUP_TTL_SECONDS
+        );
+    }
+
+    try {
+        scheduleWarmup(SHARED_STARTUP_WARMUP_DELAY_MS, 'Shared startup', runSharedStartupWarmups);
+    } finally {
+        if (lockToken) {
+            await redisCache.releaseLock('startup', SHARED_STARTUP_WARMUP_KEY, lockToken);
+        }
+    }
+}
+
 async function preloadCache(port = 3000) {
     logger.info('🚀 Starting System Preload...');
 
@@ -239,27 +327,7 @@ async function preloadCache(port = 3000) {
 
         // 1. Critical: Load LACLAE Memory Cache (blocking — Rutero depends on it)
         await loadLaclaeCache();
-
-        // 2. Background: Warm up dashboard DB queries (non-blocking, 2s delay)
-        setTimeout(() => {
-            warmUpDashboardQueries().catch(e => logger.warn(`Warmup error: ${e.message}`));
-        }, 2000);
-
-        // 2b. Warm up evolution monthly for ALL (heaviest endpoint ~15s)
-        setTimeout(() => {
-            warmUpEvolutionAll().catch(e => logger.warn(`Evolution warmup error: ${e.message}`));
-        }, 4000);
-
-        // 3. Background warm clients ALL (v6 CTE) — ~2min DB2 but non-blocking.
-        //    Dashboard JV default limit=50 + common browse limit=100.
-        setTimeout(() => {
-            warmUpClientsAll().catch((e) => logger.warn(`Clients warmup error: ${e.message}`));
-        }, 3000);
-
-        // 4. Pre-warm commissions ALL (non-blocking, 5s delay, runs only if needed)
-        setTimeout(() => {
-            warmUpCommissionsAll().catch(e => logger.warn(`Commissions warmup error: ${e.message}`));
-        }, 5000);
+        await scheduleSharedStartupWarmups();
 
     } catch (e) {
         logger.error(`Fatal Preload Error: ${e.message}`);
@@ -268,7 +336,7 @@ async function preloadCache(port = 3000) {
 
 async function warmUpEvolutionAll() {
     try {
-        const now = new Date();
+        const now = getCurrentDate();
         const year = now.getFullYear();
         const month = now.getMonth() + 1;
         const startPeriod = new Date(year, month - 24, 1);
@@ -308,4 +376,4 @@ async function warmUpEvolutionAll() {
     }
 }
 
-module.exports = { preloadCache, _internal: { warmUpEvolutionAll, warmUpClientsAll, warmUpClientsList, buildClientsListV6Sql } };
+module.exports = { preloadCache, _internal: { warmUpEvolutionAll, warmUpClientsAll, warmUpClientsList, buildClientsListV6Sql, runSharedStartupWarmups } };

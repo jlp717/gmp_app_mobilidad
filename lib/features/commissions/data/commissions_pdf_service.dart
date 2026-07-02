@@ -96,7 +96,7 @@ class CommissionsPdfService {
           responseType: ResponseType.bytes,
           followRedirects: true,
           receiveTimeout:
-              const Duration(seconds: 60), // PDF generation can be slow
+              const Duration(seconds: 180), // PDF generation can be slow
         ),
       );
 

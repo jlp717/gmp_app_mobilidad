@@ -242,6 +242,19 @@ function isCoalescingBypass(req) {
     return forceHeader === 'true' || forceHeader === '1' || forceHeader === 'yes';
 }
 
+function isJsonCoalescibleRequest(req) {
+    const path = `${req.path || ''} ${req.originalUrl || ''}`.toLowerCase();
+    const accept = String(req.get?.('accept') || req.headers?.accept || '').toLowerCase();
+
+    if (path.includes('/pdf') || path.includes('/download') || path.includes('/export')) {
+        return false;
+    }
+    if (accept.includes('application/pdf') || accept.includes('application/octet-stream')) {
+        return false;
+    }
+    return true;
+}
+
 function stableQueryString(query = {}) {
     return JSON.stringify(
         Object.keys(query)
@@ -260,6 +273,10 @@ function responseCoalescing(req, res, next) {
 
     // Only coalesce GET requests
     if (req.method !== 'GET') {
+        return next();
+    }
+
+    if (!isJsonCoalescibleRequest(req)) {
         return next();
     }
 
@@ -365,6 +382,10 @@ function requestDeduplication(req, res, next) {
         return next();
     }
 
+    if (!isJsonCoalescibleRequest(req)) {
+        return next();
+    }
+
     const signature = `${req.ip}:${req.path}:${JSON.stringify(req.query)}`;
 
     if (recentRequests.has(signature)) {
@@ -452,6 +473,7 @@ module.exports = {
     responseCoalescing,
     requestDeduplication,
     compressionStats,
+    isJsonCoalescibleRequest,
     getFeatureFlags,
     setFeatureFlag,
     COMPRESSION_CONFIG,

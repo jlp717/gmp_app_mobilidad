@@ -242,7 +242,10 @@ describe('Commissions PDF historical months', () => {
 });
 
 describe('Commissions PDF route helpers', () => {
-    function loadRoute({ resolveAllModeVendorCodes = jest.fn(async () => []) } = {}) {
+    function loadRoute({
+        resolveAllModeVendorCodes = jest.fn(async () => []),
+        redisGet = jest.fn(async () => null),
+    } = {}) {
         jest.resetModules();
 
         const query = jest.fn(async () => []);
@@ -292,7 +295,7 @@ describe('Commissions PDF route helpers', () => {
         }));
         jest.doMock('../services/redis-cache', () => ({
             redisCache: {
-                get: jest.fn(async () => null),
+                get: redisGet,
                 set: jest.fn(async () => undefined),
             },
             TTL: {
@@ -317,6 +320,7 @@ describe('Commissions PDF route helpers', () => {
             query,
             queryWithParams,
             resolveAllModeVendorCodes,
+            redisGet,
         };
     }
 
@@ -346,6 +350,36 @@ describe('Commissions PDF route helpers', () => {
 
         expect(result).toEqual([]);
         expect(resolveAllModeVendorCodes).toHaveBeenCalledTimes(1);
+        expect(query).not.toHaveBeenCalled();
+        expect(queryWithParams).not.toHaveBeenCalled();
+    });
+
+    test('ALL PDF summary reuses grouped summary cache before DB work', async () => {
+        const cachedVendor = {
+            vendedorCode: '80',
+            name: 'Vendor 80',
+            months: [],
+            quarters: [],
+            grandTotalCommission: 0,
+        };
+        const redisGet = jest.fn(async () => ({ breakdown: [cachedVendor] }));
+        const { routeModule, query, queryWithParams, resolveAllModeVendorCodes } = loadRoute({
+            redisGet,
+        });
+
+        const result = await routeModule._private.buildPdfSummaryVendors(
+            'ALL',
+            2026,
+            { ipc: 3 },
+            '98',
+        );
+
+        expect(result).toEqual([cachedVendor]);
+        expect(redisGet).toHaveBeenCalledWith(
+            'route',
+            'comm:summary:v20260604-final-commission-sources:ALL:2026',
+        );
+        expect(resolveAllModeVendorCodes).not.toHaveBeenCalled();
         expect(query).not.toHaveBeenCalled();
         expect(queryWithParams).not.toHaveBeenCalled();
     });

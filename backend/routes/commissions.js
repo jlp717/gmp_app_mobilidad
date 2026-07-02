@@ -2225,6 +2225,38 @@ async function loadCommissionConfigForPdf(year) {
     };
 }
 
+function buildGroupedSummaryCacheKeyForPdf(safeVendorCode, requestedVendorCodes, userCode, year) {
+    if (safeVendorCode === 'ALL') {
+        const allScope = allModeCacheScope(userCode, safeVendorCode) || 'ALL';
+        return `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${year}`;
+    }
+    if (requestedVendorCodes.length > 1) {
+        const groupHash = crypto
+            .createHash('md5')
+            .update(requestedVendorCodes.slice().sort().join(','))
+            .digest('hex')
+            .substring(0, 12);
+        return `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${year}`;
+    }
+    return null;
+}
+
+async function getCachedPdfSummaryVendors(safeVendorCode, requestedVendorCodes, userCode, year) {
+    const cacheKey = buildGroupedSummaryCacheKeyForPdf(safeVendorCode, requestedVendorCodes, userCode, year);
+    if (!cacheKey) return null;
+
+    try {
+        const cachedSummary = await redisCache.get('route', cacheKey);
+        if (cachedSummary?.breakdown?.length) {
+            logger.info(`[PDF] Reusing grouped summary cache for PDF (${cacheKey})`);
+            return cachedSummary.breakdown;
+        }
+    } catch (e) {
+        logger.warn(`[PDF] Grouped summary cache lookup failed: ${e.message}`);
+    }
+    return null;
+}
+
 async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
     const safeVendorCode = (vendorCode || 'ALL').toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50) || 'ALL';
     const requestedVendorCodes = safeVendorCode === 'ALL'
@@ -2241,6 +2273,16 @@ async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
         return [await calculateVendorData(safeVendorCode, year, config)];
     }
 
+    const cachedVendors = await getCachedPdfSummaryVendors(
+        safeVendorCode,
+        requestedVendorCodes,
+        userCode,
+        year
+    );
+    if (cachedVendors) {
+        return cachedVendors;
+    }
+
     const resolvedVendorCodes = safeVendorCode === 'ALL'
         ? await resolveAllModeVendorCodes(userCode, year, discoverVendorCodesForYear)
         : requestedVendorCodes;
@@ -2255,6 +2297,7 @@ async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
         return [];
     }
 
+    const batchStart = Date.now();
     const [allVendorData, allSnapshotResult] = await Promise.all([
         batchFetchAllVendorData(vendorCodes, year),
         getVendorSalesSnapshot(vendorCodes, year)
@@ -2278,9 +2321,11 @@ async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
         logger.warn(`[PDF] ${failed.length} vendor(s) failed building PDF summary: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
     }
 
-    return settled
+    const vendors = settled
         .filter(result => result.status === 'fulfilled')
         .map(result => result.value);
+    logger.info(`[PDF] Built grouped vendor summary in ${Date.now() - batchStart}ms for ${vendors.length}/${vendorCodes.length} vendors`);
+    return vendors;
 }
 
 function normalizeVendorCodeForPdf(code) {
@@ -2370,13 +2415,27 @@ router.get('/pdf', verifyToken, async (req, res) => {
 
         let teamCommissionPdf = null;
         const pdfVendorNorm = normalizeVendorCodeForPdf(vendorCode);
-        if (isTeamLeader(pdfVendorNorm) || (vendorData || []).some((v) => isTeamLeader(normalizeVendorCodeForPdf(v.vendedorCode)))) {
+        const pdfVendorDataByCode = new Map();
+        (vendorData || []).forEach((vendor) => {
+            const normalized = normalizeVendorCodeForPdf(vendor.vendedorCode || vendor.code);
+            if (normalized) {
+                pdfVendorDataByCode.set(normalized, vendor);
+            }
+        });
+        const calculateVendorDataForPdf = async (code, y, cfg) => {
+            const normalized = normalizeVendorCodeForPdf(code);
+            if (parseInt(y, 10) === targetYear && pdfVendorDataByCode.has(normalized)) {
+                return pdfVendorDataByCode.get(normalized);
+            }
+            return calculateVendorData(code, y, cfg);
+        };
+        if (isTeamLeader(pdfVendorNorm) || (vendorData || []).some((v) => isTeamLeader(normalizeVendorCodeForPdf(v.vendedorCode || v.code)))) {
             try {
                 await ensureExcludedVendorsLoaded();
                 teamCommissionPdf = await getTeamCommission(
                     '80',
                     targetYear,
-                    (code, y, cfg) => calculateVendorData(code, y, cfg),
+                    calculateVendorDataForPdf,
                     pdfConfig,
                 );
             } catch (teamErr) {

@@ -8,7 +8,12 @@ jest.mock('../middleware/logger', () => ({
 }));
 
 const { cacheMiddleware, invalidateAll } = require('../middleware/http-cache');
-const { networkOptimizer, responseCoalescing } = require('../middleware/network-optimizer');
+const {
+  networkOptimizer,
+  responseCoalescing,
+  requestDeduplication,
+  isJsonCoalescibleRequest,
+} = require('../middleware/network-optimizer');
 
 function makeRes() {
   const headers = {};
@@ -275,6 +280,38 @@ describe('network optimizer cache headers', () => {
 
     responseCoalescing(req, makeEventedRes(), firstNext);
     responseCoalescing(req, makeEventedRes(), secondNext);
+
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(secondNext).toHaveBeenCalledTimes(1);
+  });
+
+  test('PDF downloads bypass JSON response coalescing', () => {
+    const req = makeGetReq({
+      path: '/api/commissions/pdf',
+      headers: { accept: 'application/pdf' },
+    });
+    const firstNext = jest.fn();
+    const secondNext = jest.fn();
+
+    expect(isJsonCoalescibleRequest(req)).toBe(false);
+
+    responseCoalescing(req, makeEventedRes(), firstNext);
+    responseCoalescing(req, makeEventedRes(), secondNext);
+
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(secondNext).toHaveBeenCalledTimes(1);
+  });
+
+  test('PDF downloads bypass request deduplication', () => {
+    const req = makeGetReq({
+      path: '/api/commissions/pdf',
+      headers: { accept: 'application/pdf' },
+    });
+    const firstNext = jest.fn();
+    const secondNext = jest.fn();
+
+    requestDeduplication(req, makeEventedRes(), firstNext);
+    requestDeduplication(req, makeEventedRes(), secondNext);
 
     expect(firstNext).toHaveBeenCalledTimes(1);
     expect(secondNext).toHaveBeenCalledTimes(1);

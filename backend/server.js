@@ -189,6 +189,7 @@ const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10
 const HTTP_LIST_TIMEOUT_MS = parseInt(process.env.HTTP_LIST_TIMEOUT_MS, 10) || HTTP_REQUEST_TIMEOUT_MS;
 const HTTP_ACTION_TIMEOUT_MS = parseInt(process.env.HTTP_ACTION_TIMEOUT_MS, 10) || 20000;
 const HTTP_REPORT_TIMEOUT_MS = parseInt(process.env.HTTP_REPORT_TIMEOUT_MS, 10) || 60000;
+const HTTP_PDF_TIMEOUT_MS = parseInt(process.env.HTTP_PDF_TIMEOUT_MS, 10) || 180000;
 const HEALTH_DB_TIMEOUT_MS = parseInt(process.env.HEALTH_DB_TIMEOUT_MS, 10) || 1500;
 const HEALTH_DB_CACHE_MS = parseInt(process.env.HEALTH_DB_CACHE_MS, 10) || 5000;
 
@@ -199,10 +200,12 @@ let dbHealthCache = null;
 function resolveRequestTimeoutMs(req) {
   const path = req.path || '';
   const originalUrl = req.originalUrl || path;
+  if (path.includes('/pdf')) {
+    return HTTP_PDF_TIMEOUT_MS;
+  }
   if (
     path.includes('/report') ||
     path.includes('/export') ||
-    path.includes('/pdf') ||
     path.includes('/metrics') ||
     originalUrl.includes('/objectives/evolution') ||
     originalUrl.includes('/objectives/matrix') ||
