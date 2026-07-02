@@ -223,4 +223,130 @@ describe('Commissions PDF historical months', () => {
         expect(aggregate.commission).toBeCloseTo(0, 2);
         expect(leader.ownCommission).toBeCloseTo(12.34, 2);
     });
+
+    test('summary PDF can be generated with no vendors', async () => {
+        const service = loadService(jest.fn(async () => []));
+
+        const buffer = await service.generateCommissionsPdfFromSummary(
+            [],
+            new Map(),
+            2026,
+            1,
+            6,
+        );
+
+        expect(Buffer.isBuffer(buffer)).toBe(true);
+        expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+        expect(buffer.length).toBeGreaterThan(1000);
+    });
+});
+
+describe('Commissions PDF route helpers', () => {
+    function loadRoute({ resolveAllModeVendorCodes = jest.fn(async () => []) } = {}) {
+        jest.resetModules();
+
+        const query = jest.fn(async () => []);
+        const queryWithParams = jest.fn(async () => []);
+
+        jest.doMock('../config/db', () => ({
+            query,
+            queryWithParams,
+            getPool: jest.fn(),
+        }));
+        jest.doMock('../services/query-optimizer', () => ({
+            cachedQuery: jest.fn(),
+        }));
+        jest.doMock('../middleware/logger', () => ({
+            info: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
+            error: jest.fn(),
+        }));
+        jest.doMock('../middleware/audit', () => ({
+            auditDataAccess: jest.fn(),
+        }));
+        jest.doMock('../services/laclae', () => ({
+            getVendorActiveDaysFromCache: jest.fn(() => []),
+            getClientCodesFromCache: jest.fn(() => []),
+        }));
+        jest.doMock('../utils/common', () => ({
+            getCurrentDate: jest.fn(() => new Date('2026-07-02T00:00:00Z')),
+            LACLAE_SALES_FILTER: '1=1',
+            SNAPSHOT_UNTIL_MONTH: 2,
+            getCommissionVendorColumnExpr: jest.fn(() => 'L.VENDEDOR'),
+            getCommissionActualVendorColumnExprForYear: jest.fn(() => 'L.VENDEDOR'),
+            getCommissionActualVendorColumnExprForMonth: jest.fn(() => 'L.VENDEDOR'),
+            getVendorName: jest.fn(async code => `Vendor ${code}`),
+            calculateDaysPassed: jest.fn(() => 0),
+            getBSales: jest.fn(async () => ({})),
+            sanitizeForSQL: jest.fn(value => String(value || '')),
+            handleRouteError: jest.fn(),
+        }));
+        jest.doMock('../utils/commission-snapshot', () => ({
+            resolveCommissionTarget: jest.fn(() => 0),
+            resolveHistoricalCommissionMonth: jest.fn(() => null),
+            resolvePaymentSnapshotMonth: jest.fn(() => null),
+        }));
+        jest.doMock('../middleware/auth', () => ({
+            verifyToken: jest.fn((req, res, next) => next()),
+        }));
+        jest.doMock('../services/redis-cache', () => ({
+            redisCache: {
+                get: jest.fn(async () => null),
+                set: jest.fn(async () => undefined),
+            },
+            TTL: {
+                SHORT: 60,
+                MEDIUM: 300,
+                LONG: 3600,
+            },
+            invalidateCachePattern: jest.fn(async () => undefined),
+        }));
+        jest.doMock('../services/team-commission.service', () => ({
+            isTeamLeader: jest.fn(() => false),
+            getTeamCommission: jest.fn(),
+            buildTeamLeadSummaryPayload: jest.fn(),
+            isScopedTeamAllRequest: jest.fn(() => false),
+            resolveAllModeVendorCodes,
+            allModeCacheScope: jest.fn(() => 'ALL'),
+            isCommercial80User: jest.fn(() => false),
+        }));
+
+        return {
+            routeModule: require('../routes/commissions'),
+            query,
+            queryWithParams,
+            resolveAllModeVendorCodes,
+        };
+    }
+
+    afterEach(() => {
+        jest.dontMock('../config/db');
+        jest.dontMock('../services/query-optimizer');
+        jest.dontMock('../middleware/logger');
+        jest.dontMock('../middleware/audit');
+        jest.dontMock('../services/laclae');
+        jest.dontMock('../utils/common');
+        jest.dontMock('../utils/commission-snapshot');
+        jest.dontMock('../middleware/auth');
+        jest.dontMock('../services/redis-cache');
+        jest.dontMock('../services/team-commission.service');
+        jest.clearAllMocks();
+    });
+
+    test('ALL PDF summary returns empty data without querying DB when no vendors resolve', async () => {
+        const { routeModule, query, queryWithParams, resolveAllModeVendorCodes } = loadRoute();
+
+        const result = await routeModule._private.buildPdfSummaryVendors(
+            'ALL',
+            2026,
+            { ipc: 3 },
+            '98',
+        );
+
+        expect(result).toEqual([]);
+        expect(resolveAllModeVendorCodes).toHaveBeenCalledTimes(1);
+        expect(query).not.toHaveBeenCalled();
+        expect(queryWithParams).not.toHaveBeenCalled();
+    });
 });

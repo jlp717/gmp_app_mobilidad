@@ -1208,6 +1208,21 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
             };
             let teamSectionDrawn = false;
 
+            if (vendors.length === 0) {
+                doc.rect(margin, yPos, tableWidth, 54).fill('#F9FAFB').stroke(COLORS.grid);
+                doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.text)
+                    .text('Sin datos de comisiones para el periodo seleccionado', margin + 10, yPos + 12, {
+                        width: tableWidth - 20,
+                        align: 'left',
+                    });
+                doc.font('Helvetica').fontSize(8).fillColor(COLORS.muted)
+                    .text('El informe se ha generado correctamente, pero no hay vendedores con datos para ese filtro.', margin + 10, yPos + 30, {
+                        width: tableWidth - 20,
+                        align: 'left',
+                    });
+                yPos += 68;
+            }
+
             vendors.forEach(vendor => {
                 const monthsInRange = endMonth - startMonth + 1;
                 const estimatedHeight = 18 * 3 + 15 * monthsInRange + 18;

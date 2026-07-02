@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/commissions/data/pdf_error_parser.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -13,6 +14,7 @@ class CommissionsPdfService {
   static const int _maxRetries = 2;
   static const Duration _retryDelay = Duration(seconds: 1);
 
+  /// Downloads the commissions PDF and opens it with the platform handler.
   static Future<void> generateAndDownloadPdf({
     required BuildContext context,
     required String vendorCode,
@@ -103,9 +105,10 @@ class CommissionsPdfService {
       }
 
       if (response.statusCode != 200) {
-        final errorMsg = response.data is String
-            ? response.data
-            : 'Error del servidor: ${response.statusCode}';
+        final serverError = extractServerErrorMessage(response.data);
+        final errorMsg = serverError.isNotEmpty
+            ? serverError
+            : 'HTTP ${response.statusCode ?? "desconocido"}';
         throw Exception('Error al generar PDF: $errorMsg');
       }
 
@@ -127,8 +130,9 @@ class CommissionsPdfService {
 
       // Save PDF to temp directory with unique filename
       final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName =
-          'comisiones_${year ?? DateTime.now().year}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          'comisiones_${year ?? DateTime.now().year}_$timestamp.pdf';
       final filePath = '${tempDir.path}/$fileName';
       final file = File(filePath);
 
@@ -140,7 +144,9 @@ class CommissionsPdfService {
       }
 
       debugPrint(
-          '[CommissionsPDF] PDF saved to: $filePath (${(pdfBytes.length / 1024).toStringAsFixed(2)} KB)');
+        '[CommissionsPDF] PDF saved to: $filePath '
+        '(${(pdfBytes.length / 1024).toStringAsFixed(2)} KB)',
+      );
 
       // Open PDF with error handling
       final result = await OpenFilex.open(filePath);
@@ -161,10 +167,9 @@ class CommissionsPdfService {
       } else if (e.type == DioExceptionType.badResponse) {
         if (e.response?.statusCode == 403) {
           throw Exception('Solo DIEGO puede generar este informe');
-        } else if (e.response?.statusCode == 500) {
-          final details = e.response?.data is Map
-              ? (e.response!.data['details'] ?? '')
-              : '';
+        }
+        final details = extractServerErrorMessage(e.response?.data);
+        if (details.isNotEmpty) {
           throw Exception('Error del servidor: $details');
         }
         throw Exception(

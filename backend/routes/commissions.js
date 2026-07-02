@@ -636,7 +636,13 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
     const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
     const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
-    const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+    const safeCodes = (vendorCodes || [])
+        .map(c => String(c || '').replace(/[^a-zA-Z0-9]/g, ''))
+        .filter(Boolean);
+    if (safeCodes.length === 0) {
+        logger.warn(`[COMMISSIONS] batchFetchAllVendorData called without vendor codes for ${year}`);
+        return {};
+    }
     const placeholders = safeCodes.map(() => '?').join(',');
 
     // Build code variants (both padded "05" and unpadded "5") for VENTAS_B and COMMISSION_PAYMENTS.
@@ -2235,9 +2241,19 @@ async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
         return [await calculateVendorData(safeVendorCode, year, config)];
     }
 
-    const vendorCodes = safeVendorCode === 'ALL'
+    const resolvedVendorCodes = safeVendorCode === 'ALL'
         ? await resolveAllModeVendorCodes(userCode, year, discoverVendorCodesForYear)
         : requestedVendorCodes;
+    const vendorCodes = [...new Set(
+        (resolvedVendorCodes || [])
+            .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
+            .filter(Boolean)
+    )];
+
+    if (vendorCodes.length === 0) {
+        logger.warn(`[PDF] No vendor codes resolved for PDF request vendorCode=${safeVendorCode}, year=${year}, user=${userCode || 'unknown'}`);
+        return [];
+    }
 
     const [allVendorData, allSnapshotResult] = await Promise.all([
         batchFetchAllVendorData(vendorCodes, year),
