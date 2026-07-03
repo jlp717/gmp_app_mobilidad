@@ -48,6 +48,7 @@ const {
   normalizeCvcTipoDocumentoFilter,
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
+const { verifyVendorPin } = require('../../../services/vendor-pin-auth');
 
 // TTL constants (milliseconds)
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Error interno del servidor';
@@ -684,29 +685,30 @@ function createAuthRoutes() {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
 
-      const { verifyPassword, allowPlaintextPinAuth } = require('../../../middleware/auth');
       if (!user._passwordHash) {
         logger.warn(`[DDD-AUTH] User ${username} has no password hash - login denied`);
+        await repo.logLoginAttempt(user.id, false, req.ip);
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
 
-      // PIN auth: DB2 CODIGOPIN is plaintext (bcrypt migration pending DB schema change)
-      // If hash starts with $2b$ it's bcrypt, otherwise compare as plaintext
-      const dbPin = user._passwordHash.trim();
-      let passwordValid = false;
-      if (dbPin.startsWith('$2b$')) {
-        passwordValid = await verifyPassword(password, dbPin);
-      } else {
-        if (!allowPlaintextPinAuth()) {
+      const pinVerification = await verifyVendorPin({
+        vendedorCode: user.code,
+        candidatePin: password,
+        dbPin: user._passwordHash,
+        requestId: 'DDD-AUTH',
+      });
+
+      if (!pinVerification.valid) {
+        await repo.logLoginAttempt(user.id, false, req.ip);
+        if (pinVerification.reason === 'plaintext_pin_denied') {
           logger.warn(`[DDD-AUTH] Plaintext PIN auth denied for user ${username}; PIN hash migration required`);
-          return res.status(401).json({ error: 'Credenciales invÃ¡lidas', code: 'INVALID_CREDENTIALS' });
+        } else {
+          logger.warn(`[DDD-AUTH] PIN verification failed for user ${username}: ${pinVerification.reason}`);
         }
-        passwordValid = (dbPin === password.trim());
-      }
-
-      if (!passwordValid) {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
+
+      logger.info(`[DDD-AUTH] Vendor ${user.code} authenticated via ${pinVerification.method}`);
 
       await repo.logLoginAttempt(user.id, true, req.ip);
 

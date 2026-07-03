@@ -11,20 +11,17 @@ const {
     verifyToken, 
     signAccessToken, 
     signRefreshToken, 
-    hashPassword, 
-    verifyPassword,
-    allowPlaintextPinAuth,
     handleRefreshToken,
     handleLogout,
     registerSession
 } = require('../middleware/auth');
 const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection, bruteForceIpTracker } = require('../middleware/security');
 const { auditLogin, getClientIP } = require('../middleware/audit');
-const bcrypt = require('bcrypt');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const { getVendorVisibilityScope } = require('../utils/common');
+const { verifyVendorPin } = require('../services/vendor-pin-auth');
 
 // =============================================================================
 // CONFIGURATION
@@ -58,7 +55,6 @@ async function saveLockouts(lockouts) {
 
 const MAX_FAILED_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
 const LOCKOUT_TIME_MS = parseInt(process.env.LOCK_TIME_MINUTES || '30', 10) * 60 * 1000;
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
 // =============================================================================
 // HELPERS
@@ -216,68 +212,22 @@ router.post('/login',
             const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
 
             // Verify PIN with migration support
-            let pinValid = false;
+            const pinVerification = await verifyVendorPin({
+                vendedorCode,
+                candidatePin: trimmedPwd,
+                dbPin,
+                requestId,
+            });
 
-            // Step 1: Check JAVIER.VENDOR_PIN_HASHES for bcrypt hash
-            let storedHash = null;
-            try {
-                const hashResult = await queryWithParams(`
-                    SELECT PIN_HASH 
-                    FROM JAVIER.VENDOR_PIN_HASHES 
-                    WHERE CODIGOVENDEDOR = ?
-                `, [vendedorCode], false);
-                
-                if (hashResult.length > 0) {
-                    storedHash = hashResult[0].PIN_HASH?.toString().trim();
-                }
-            } catch (e) {
-                // Table may not exist yet (migration not run) - fallback to plaintext
-                logger.debug(`[${requestId}] PIN_HASHES table unavailable: ${e.message}`);
-            }
-
-            if (storedHash) {
-                // Step 2a: Hash exists - verify against bcrypt
-                pinValid = await verifyPassword(trimmedPwd, storedHash);
-                logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via bcrypt hash`);
-            } else if (dbPin && dbPin.startsWith('$2b$')) {
-                // Step 2b: Legacy bcrypt in DSEDAC.VDPL1.CODIGOPIN
-                pinValid = await verifyPassword(trimmedPwd, dbPin);
-                logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via legacy bcrypt`);
-            } else if (dbPin === trimmedPwd) {
-                if (!allowPlaintextPinAuth()) {
+            if (!pinVerification.valid) {
+                if (pinVerification.reason === 'plaintext_pin_denied') {
                     logger.warn(`[${requestId}] Plaintext PIN auth denied for vendor ${vendedorCode}; PIN hash migration required`);
-                    return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
+                } else {
+                    logger.warn(`[${requestId}] PIN verification failed for vendor ${vendedorCode}: ${pinVerification.reason}`);
                 }
-                // Step 2c: Plaintext PIN match (legacy)
-                pinValid = true;
-                logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via plaintext PIN`);
-
-                // MIGRATION: Hash the plaintext PIN and store in JAVIER.VENDOR_PIN_HASHES
-                try {
-                    const newHash = await hashPassword(trimmedPwd, BCRYPT_ROUNDS);
-                    // DB2 for i doesn't support ON DUPLICATE KEY UPDATE, use MERGE
-                    await queryWithParams(`
-                        MERGE INTO JAVIER.VENDOR_PIN_HASHES AS target
-                        USING (VALUES(CAST(? AS VARCHAR(20)), CAST(? AS VARCHAR(100)))) 
-                            AS source(CODIGOVENDEDOR, PIN_HASH)
-                        ON target.CODIGOVENDEDOR = source.CODIGOVENDEDOR
-                        WHEN MATCHED THEN 
-                            UPDATE SET PIN_HASH = source.PIN_HASH, UPDATED_AT = CURRENT_TIMESTAMP
-                        WHEN NOT MATCHED THEN 
-                            INSERT (CODIGOVENDEDOR, PIN_HASH, UPDATED_AT) 
-                            VALUES (source.CODIGOVENDEDOR, source.PIN_HASH, CURRENT_TIMESTAMP)
-                    `, [vendedorCode, newHash], false);
-                    logger.info(`[${requestId}] Migrated vendor ${vendedorCode} PIN to bcrypt hash`);
-                } catch (e) {
-                    // Non-critical: login succeeded, migration is best-effort
-                    logger.warn(`[${requestId}] Failed to migrate PIN hash for ${vendedorCode}: ${e.message}`);
-                }
-            }
-
-            if (!pinValid) {
-                logger.warn(`[${requestId}] PIN mismatch for vendor ${vendedorCode}`);
                 return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
             }
+            logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via ${pinVerification.method}`);
 
             // Check Repartidor role
             let isRepartidor = false;
