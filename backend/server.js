@@ -54,6 +54,7 @@ const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
 const { createCompressionMiddleware } = require('./middleware/compression');
 const { prometheusMetrics, metricsHandler, requireInternalMetricsAccess, canSeeInternalDetails } = require('./middleware/prometheus-metrics');
+const { checkAuthPinHashReadiness } = require('./services/auth-pin-readiness');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -592,8 +593,12 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
   const dbHealth = await checkDbHealth();
   const redisHealth = getRedisHealth();
   const redisRequired = authRequiresSharedSessionStore();
+  const authPinHashes = dbHealth.status === 'connected'
+    ? await checkAuthPinHashReadiness()
+    : { status: 'skipped', reason: 'database_not_connected' };
   const ready = dbHealth.status === 'connected'
-    && (!redisRequired || redisHealth.connected);
+    && (!redisRequired || redisHealth.connected)
+    && authPinHashes.status === 'ready';
 
   res.status(ready ? 200 : 503).json({
     status: ready ? 'ready' : 'not_ready',
@@ -608,6 +613,9 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
       required: redisRequired,
       error: redisHealth.error,
       ...redisHealth.stats,
+    },
+    auth: {
+      pinHashes: authPinHashes,
     },
     timestamp: new Date().toISOString(),
     responseTime: `${Date.now() - start}ms`,

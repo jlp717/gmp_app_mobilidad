@@ -11,6 +11,8 @@ LOCK_FILE="${GMP_SELF_HEAL_LOCK_FILE:-/tmp/gmp-api-self-heal.lock}"
 READY_ATTEMPTS="${GMP_SELF_HEAL_READY_ATTEMPTS:-30}"
 READY_SLEEP_SECONDS="${GMP_SELF_HEAL_READY_SLEEP_SECONDS:-5}"
 RELOAD_ATTEMPTS="${GMP_SELF_HEAL_RELOAD_ATTEMPTS:-12}"
+AUTH_PIN_BACKFILL_ENABLED="${GMP_SELF_HEAL_AUTH_PIN_BACKFILL:-true}"
+AUTH_PIN_CHECK_SCRIPT="${GMP_AUTH_PIN_CHECK_SCRIPT:-scripts/check-auth-pin-readiness.js}"
 
 mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
 LOG_FILE="${LOG_DIR}/gmp-api-self-heal-$(date +%Y%m%d).log"
@@ -83,6 +85,28 @@ save_if_ready() {
   return 1
 }
 
+ensure_auth_pin_hashes() {
+  if [ "$AUTH_PIN_BACKFILL_ENABLED" != "true" ]; then
+    log "auth_pin_hashes=skip reason=disabled"
+    return 0
+  fi
+
+  cd "$BACKEND_DIR"
+  if [ ! -f "$AUTH_PIN_CHECK_SCRIPT" ]; then
+    log "auth_pin_hashes=skip reason=script_missing path=${AUTH_PIN_CHECK_SCRIPT}"
+    return 0
+  fi
+
+  log "auth_pin_hashes=checking"
+  if node "$AUTH_PIN_CHECK_SCRIPT" --json --backfill-if-needed 2>&1 | tee -a "$LOG_FILE"; then
+    log "auth_pin_hashes=ready"
+    return 0
+  fi
+
+  log "auth_pin_hashes=not_ready"
+  return 1
+}
+
 recover() {
   local total live ghost
   read -r total live ghost <<<"$(pm2_count)"
@@ -125,6 +149,15 @@ if ready; then
     exit 0
   fi
   log "ready=true_but_pm2_not_live total=${total} live=${live} ghost=${ghost}"
+fi
+
+if ensure_auth_pin_hashes && ready; then
+  read -r total live ghost <<<"$(pm2_count)"
+  if [ "$live" -gt 0 ]; then
+    log "ready=true_after_auth_pin_hash_check total=${total} live=${live} ghost=${ghost}"
+    exit 0
+  fi
+  log "ready=true_after_auth_pin_hash_check_but_pm2_not_live total=${total} live=${live} ghost=${ghost}"
 fi
 
 recover
