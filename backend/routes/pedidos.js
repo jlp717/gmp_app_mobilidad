@@ -159,7 +159,7 @@ function normalizePedidoCode(value) {
 }
 
 function normalizePedidoCodeList(value) {
-    return sanitizeCodeListForParams(String(value || ''), 2);
+    return sanitizeCodeListForParams(String(value || ''), 10);
 }
 
 function pedidoCodesMatch(left, right) {

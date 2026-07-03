@@ -197,6 +197,33 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.count).toBe(1);
   });
 
+  test('GET /history allows JEFE_VENTAS CSV returned by login including special vendor codes', async () => {
+    mockPedidosRepo.getOrderHistory.mockResolvedValue({
+      orders: [{ id: 12, estado: 'CONFIRMADO' }],
+      count: 1,
+    });
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      vendorCodes: ['01', '02', 'UNK'],
+    }))
+      .get('/history')
+      .query({ vendedorCodes: '01,02,UNK', limit: 10, offset: 0 });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosRepo.getOrderHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendedorCodes: '01,02,UNK',
+        limit: 10,
+        offset: 0,
+      }),
+    );
+    expect(res.body.orders).toEqual([{ id: 12, estado: 'CONFIRMADO' }]);
+  });
+
   test('POST /create returns created order header at top level', async () => {
     mockPedidosService.createOrder.mockResolvedValue({
       header: { id: 22, estado: 'BORRADOR' },
