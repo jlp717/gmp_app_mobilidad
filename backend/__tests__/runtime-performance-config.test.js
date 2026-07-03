@@ -92,12 +92,14 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/UNION ALL/);
     expect(source).toMatch(/CASE predicate caused full scans/);
     expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
-    expect(source).toMatch(/getClientCodesFromCache/);
-    expect(source).toMatch(/getCommissionSalesRowsFromClientCache/);
-    expect(source).toMatch(/L\.LCCDCL IN \(\$\{placeholders\}\)/);
+    expect(source).toMatch(/batchFetchVendorDataChunked/);
+    expect(source).toMatch(/COMMISSION_ALL_VENDOR_CHUNK_SIZE/);
+    expect(source).toMatch(/returning stale cached summary/);
+    expect(source).not.toMatch(/getCommissionSalesRowsFromClientCache/);
     expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);
     expect(calculateVendorDataBlock).toMatch(/previousMarDecVendorCol/);
-    expect(calculateVendorDataBlock).toMatch(/usedClientScopeSalesRows/);
+    expect(calculateVendorDataBlock).not.toMatch(/getClientCodesFromCache/);
+    expect(calculateVendorDataBlock).not.toMatch(/usedClientScopeSalesRows/);
     expect(calculateVendorDataBlock).not.toMatch(/buildCommissionVendorFilter\(vendedorCode, safeYear, 'L'\)/);
   });
 
@@ -136,12 +138,12 @@ describe('runtime performance configuration', () => {
       commonSource.indexOf('function expandVendorCodesForSql'),
     );
 
-    expect(legacyRoutes).toMatch(/managerOwnVendorScope/);
-    expect(dddRoutes).toMatch(/managerOwnVendorScope/);
+    expect(legacyRoutes).toMatch(/broadManagerScope/);
+    expect(dddRoutes).toMatch(/broadManagerScope/);
     expect(clientFilterBlock).toMatch(/LAC\.LCMMDC < \$\{TRANSITION_MONTH\}/);
     expect(clientFilterBlock).toMatch(/LAC\.\$\{VENDOR_COLUMN\} IN/);
     expect(clientFilterBlock).not.toMatch(/TRIM\(\$\{laclaeVendorCol\}\)/);
-    expect(dddRoutes).toMatch(/managerOwnVendorScope[\s\S]*vendorCodes: vendorScope\.codes/);
+    expect(dddRoutes).toMatch(/broadManagerScope[\s\S]*vendorCodes: assignedVendors\.length > 0 \? assignedVendors : vendorScope\.codes/);
   });
 
   test('pedido order analytics uses qualified vendor filters without TRIM', () => {
@@ -201,14 +203,12 @@ describe('runtime performance configuration', () => {
 
     expect(source).toMatch(/function buildLaclaeDateRangeFilter/);
     expect(purchaseHistoryBlock).toMatch(/buildLaclaeDateRangeFilter\('L', from, to\)/);
-    expect(purchaseHistoryBlock).toMatch(/L\.LCCDVD IN/);
-    expect(purchaseHistoryBlock).toMatch(/L\.LCCDCL = \?/);
-    expect(purchaseHistoryBlock).toMatch(/L\.LCCDRF = \?/);
+    expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDVD\) IN/);
+    expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDCL\) = \?/);
+    expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDRF\) = \?/);
     expect(purchaseHistoryBlock).toMatch(/C\.CODIGOCLIENTE = L\.LCCDCL/);
     expect(purchaseHistoryBlock).not.toMatch(/LCAADC \* 10000/);
-    expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDVD\) IN/);
-    expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDCL\) =/);
-    expect(purchaseHistoryBlock).not.toMatch(/TRIM\(L\.LCCDRF\) =/);
+    expect(purchaseHistoryBlock).not.toMatch(/CASE WHEN/);
     expect(dddCommissionsBlock).toMatch(/require\('\.\.\/\.\.\/\.\.\/routes\/commissions'\)/);
     expect(dddCommissionsBlock).toMatch(/calculateVendorData\(safeVendedorCode, selectedYear, config\)/);
     expect(dddCommissionsBlock).not.toMatch(/FROM DSED\.LACLAE L/);

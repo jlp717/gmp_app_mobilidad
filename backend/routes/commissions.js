@@ -4,7 +4,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
-const { getVendorActiveDaysFromCache, getClientCodesFromCache } = require('../services/laclae');
+const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getCommissionActualVendorColumnExprForYear, getCommissionActualVendorColumnExprForMonth, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
 const {
     resolveCommissionTarget,
@@ -84,7 +84,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'WHERE YEAR = ?',
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
-const COMMISSIONS_CACHE_VERSION = 'v20260604-final-commission-sources';
+const COMMISSIONS_CACHE_VERSION = 'v20260703-db2-commission-source';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -392,61 +392,6 @@ async function getClientsMonthlySales(clientCodes, year) {
     });
 
     return monthlyMap;
-}
-
-function aggregateCommissionSalesRows(rows) {
-    const byMonth = new Map();
-    (rows || []).forEach((row) => {
-        const year = parseInt(row.YEAR, 10);
-        const month = parseInt(row.MONTH, 10);
-        if (!year || !month) return;
-        const key = `${year}:${month}`;
-        const current = byMonth.get(key) || { YEAR: year, MONTH: month, SALES: 0 };
-        current.SALES += parseFloat(row.SALES) || 0;
-        byMonth.set(key, current);
-    });
-    return Array.from(byMonth.values()).sort((a, b) => (a.YEAR - b.YEAR) || (a.MONTH - b.MONTH));
-}
-
-async function getCommissionSalesRowsFromClientCache(vendedorCode, selectedYear, prevYear) {
-    const cachedCodes = getClientCodesFromCache(vendedorCode);
-    if (!Array.isArray(cachedCodes) || cachedCodes.length === 0) return null;
-
-    const safeClientCodes = [...new Set(
-        cachedCodes
-            .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10))
-            .filter(Boolean)
-    )];
-    const maxCodes = Math.max(1, Math.min(parseInt(process.env.COMMISSION_CLIENT_SCOPE_MAX_CODES || '2000', 10), 5000));
-    if (safeClientCodes.length === 0 || safeClientCodes.length > maxCodes) return null;
-
-    const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:${vendedorCode}:${selectedYear}:${safeClientCodes.length}`;
-    const cachedRows = await redisCache.get('route', cacheKey);
-    if (cachedRows) return cachedRows;
-
-    const chunkSize = 250;
-    const chunks = [];
-    for (let index = 0; index < safeClientCodes.length; index += chunkSize) {
-        chunks.push(safeClientCodes.slice(index, index + chunkSize));
-    }
-
-    const chunkRows = await Promise.all(chunks.map((chunk) => {
-        const placeholders = chunk.map(() => '?').join(',');
-        return queryWithParams(`
-            SELECT L.LCAADC as YEAR,
-                   L.LCMMDC as MONTH,
-                   SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC IN (?, ?)
-              AND ${LACLAE_SALES_FILTER}
-              AND L.LCCDCL IN (${placeholders})
-            GROUP BY L.LCAADC, L.LCMMDC
-        `, [selectedYear, prevYear, ...chunk], false);
-    }));
-
-    const rows = aggregateCommissionSalesRows(chunkRows.flat());
-    await redisCache.set('route', cacheKey, rows, TTL.SHORT).catch(() => {});
-    return rows;
 }
 
 // getBSales is now imported from ../utils/common.js
@@ -838,6 +783,47 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     return dataByVendor;
 }
 
+function chunkArray(items, size) {
+    const chunks = [];
+    for (let index = 0; index < items.length; index += size) {
+        chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
+}
+
+function getCommissionBatchChunkSize() {
+    const configured = parseInt(process.env.COMMISSION_ALL_VENDOR_CHUNK_SIZE || '24', 10);
+    if (!Number.isFinite(configured)) return 24;
+    return Math.max(8, Math.min(configured, 40));
+}
+
+async function batchFetchVendorDataChunked(vendorCodes, year) {
+    const safeCodes = [...new Set((vendorCodes || [])
+        .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
+        .filter(Boolean))];
+
+    if (safeCodes.length === 0) return {};
+
+    const chunkSize = getCommissionBatchChunkSize();
+    if (safeCodes.length <= chunkSize) {
+        return batchFetchAllVendorData(safeCodes, year);
+    }
+
+    const chunks = chunkArray(safeCodes, chunkSize);
+    const merged = {};
+    logger.info(`[COMMISSIONS] Chunked batch fetch: ${safeCodes.length} vendors in ${chunks.length} chunk(s) of ${chunkSize}`);
+
+    for (let index = 0; index < chunks.length; index++) {
+        const chunk = chunks[index];
+        const startedAt = Date.now();
+        const partial = await batchFetchAllVendorData(chunk, year);
+        Object.assign(merged, partial);
+        logger.info(`[COMMISSIONS] Chunk ${index + 1}/${chunks.length} loaded ${chunk.length} vendors in ${Date.now() - startedAt}ms`);
+    }
+
+    return merged;
+}
+
 /**
  * Calculates working days for a specific month based on vendor's active route days.
  * Holidays are excluded.
@@ -995,7 +981,6 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
 
     // D. Fetch Sales Data — use preloaded or query DB
     let salesRows, bSalesCurrYear, bSalesPrevYear, fixedCommissionBase, fixedTargets, payments;
-    let usedClientScopeSalesRows = false;
 
     if (preloadedData) {
         // Use batch-fetched data (no DB queries)
@@ -1058,13 +1043,6 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         `;
         const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales:${vendedorCode}:${safeYear}`;
         salesRows = await redisCache.get('route', cacheKey);
-        if (!salesRows) {
-            const clientScopeSalesRows = await getCommissionSalesRowsFromClientCache(vendedorCode, safeYear, safePrevYear);
-            if (clientScopeSalesRows) {
-                salesRows = clientScopeSalesRows;
-                usedClientScopeSalesRows = true;
-            }
-        }
         if (!salesRows) {
             salesRows = safeVendorCodes.length > 0
                 ? await queryWithParams(salesQuery, [
@@ -1137,7 +1115,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
     const monthsWithData = salesRows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
     const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
 
-    if (!preloadedData && !usedClientScopeSalesRows && missingMonths.length > 0) {
+    if (!preloadedData && missingMonths.length > 0) {
         const currentClients = await getVendorCurrentClients(vendedorCode, selectedYear);
         if (currentClients.length > 0) {
             inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
@@ -1876,13 +1854,28 @@ router.get('/summary', verifyToken, async (req, res) => {
                     logger.info(`[COMMISSIONS] Scoped team ALL for commercial 80 → [${vendorCodes.join(',')}]`);
                 }
 
-                // PERF: Batch fetch ALL vendor data in 5 queries instead of N×7
+                // PERF: Batch fetch grouped vendor data in bounded chunks instead of N×7.
                 const batchStart = Date.now();
                 // Also pre-load sales snapshot once for all vendors (1 query instead of N)
-                const [allVendorData, allSnapshotResult] = await Promise.all([
-                    batchFetchAllVendorData(vendorCodes, yr),
-                    getVendorSalesSnapshot(vendorCodes, yr)
-                ]);
+                let allVendorData;
+                let allSnapshotResult;
+                try {
+                    [allVendorData, allSnapshotResult] = await Promise.all([
+                        batchFetchVendorDataChunked(vendorCodes, yr),
+                        getVendorSalesSnapshot(vendorCodes, yr)
+                    ]);
+                } catch (fetchError) {
+                    if (cachedResult) {
+                        logger.warn(`[COMMISSIONS] Grouped refresh failed for ${allSummaryCacheKey}; returning stale cached summary: ${fetchError.message}`);
+                        return {
+                            ...cachedResult,
+                            stale: true,
+                            degraded: true,
+                            warning: 'Resumen de comisiones servido desde cache por incidencia temporal en DB2.',
+                        };
+                    }
+                    throw fetchError;
+                }
                 // allSnapshotResult = { snapshotMap, monthsWithData }
                 const { snapshotMap: allSnapshotMap, monthsWithData: allMonthsWithData } = allSnapshotResult;
                 // Attach each vendor's snapshot slice + shared monthsWithData to their preloaded data object
@@ -2018,11 +2011,11 @@ router.get('/summary', verifyToken, async (req, res) => {
             }
         }
 
-        if (aggregatedCacheKey && aggregatedResult) {
+        if (aggregatedCacheKey && aggregatedResult && !aggregatedResult.degraded) {
             await redisCache.set('route', aggregatedCacheKey, aggregatedResult, 900);
             logger.info(`[COMMISSIONS] Cached grouped summary for 15min (${aggregatedCacheKey})`);
         }
-        if (singleSummaryCacheKey && aggregatedResult) {
+        if (singleSummaryCacheKey && aggregatedResult && !aggregatedResult.degraded) {
             await redisCache.set('route', singleSummaryCacheKey, aggregatedResult, 300);
             logger.debug(`[COMMISSIONS] Cached vendor summary for 5min (${singleSummaryCacheKey})`);
         }
@@ -2299,7 +2292,7 @@ async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
 
     const batchStart = Date.now();
     const [allVendorData, allSnapshotResult] = await Promise.all([
-        batchFetchAllVendorData(vendorCodes, year),
+        batchFetchVendorDataChunked(vendorCodes, year),
         getVendorSalesSnapshot(vendorCodes, year)
     ]);
 
