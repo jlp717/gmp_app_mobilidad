@@ -2,6 +2,8 @@
 param(
   [string]$Command = "all",
   [string]$PuttySession = "",
+  [ValidateRange(1, 500)]
+  [int]$LogLines = 200,
   [switch]$SkipPm2,
   [switch]$SkipGit
 )
@@ -100,6 +102,9 @@ Import-OpenCodeEnv
 $HealthCommand = 'status=$(curl -sS -A GMP-SRE-HealthCheck/1.0 -o /tmp/gmp-health.$$ -w "%{http_code}" http://localhost:3335/api/health); cat /tmp/gmp-health.$$; rm -f /tmp/gmp-health.$$; echo; echo HTTP $status; test "$status" = "200"'
 $ReadyCommand = 'status=$(curl -sS -A GMP-SRE-HealthCheck/1.0 -o /tmp/gmp-ready.$$ -w "%{http_code}" http://localhost:3335/api/ready); cat /tmp/gmp-ready.$$; rm -f /tmp/gmp-ready.$$; echo; echo HTTP $status; test "$status" = "200"'
 $EnvAuditCommand = 'cd /opt/gmp-api/backend || exit 2; f=; if [ -f .env.production ]; then f=.env.production; elif [ -f .env.produccion ]; then f=.env.produccion; elif [ -f .env ]; then f=.env; else echo env_file=MISSING; exit 1; fi; echo env_file=$f; for k in NODE_ENV PORT CORS_ORIGIN CORS_ORIGINS JWT_ACCESS_SECRET JWT_REFRESH_SECRET ODBC_UID ODBC_PWD SMTP_HOST SMTP_USER SMTP_PASS REDIS_URL; do if grep -q ^${k}= $f; then echo ${k}=set; else echo ${k}=missing; fi; done'
+$Pm2EnvRuntimeCommand = 'pm2 env 25 | grep -e "^PORT:" -e "^NODE_ENV:" -e "^PM2_CRON_RESTART:" -e "^PM2_INSTANCES:" -e "^PM2_EXEC_MODE:" -e "^PM2_MAX_RESTARTS:" -e "^PM2_LISTEN_TIMEOUT_MS:" -e "^PM2_KILL_TIMEOUT_MS:" -e "^PM2_EXP_BACKOFF_RESTART_DELAY_MS:" || true'
+$PortsCommand = 'ss -ltnp 2>/dev/null | grep ":333" || true'
+$RecentLogsCommand = 'for f in /opt/gmp-api/backend/logs/error.log /opt/gmp-api/backend/logs/out.log /home/gmp/.pm2/logs/gmp-api-error.log /home/gmp/.pm2/logs/gmp-api-out.log; do [ -f "$f" ] && echo "-- $f --" && tail -n 120 "$f"; done'
 
 switch ($Command) {
   "whoami" { Run-Check "whoami" "whoami"; break }
@@ -107,9 +112,21 @@ switch ($Command) {
   "ready-status" { Run-Check "ready-status" $ReadyCommand; break }
   "liveness" { Run-Check "liveness" $HealthCommand; break }
   "env-audit" { Run-Check "env-audit" $EnvAuditCommand; break }
+  "pm2-env-runtime" { Run-Check "pm2-env-runtime" $Pm2EnvRuntimeCommand; break }
   "pm2" { Run-Check "pm2" "pm2 status gmp-api --no-color"; break }
+  "pm2-describe" { Run-Check "pm2-describe" "pm2 describe gmp-api --no-color"; break }
+  "ports" { Run-Check "ports" $PortsCommand; break }
+  "logs" { Run-Check "logs" "pm2 logs gmp-api --lines $LogLines --nostream"; break }
+  "recent-logs" { Run-Check "recent-logs" $RecentLogsCommand; break }
   "git" { Run-Check "git" "cd /opt/gmp-api && git status --short"; break }
   "git-head" { Run-Check "git-head" "cd /opt/gmp-api && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD"; break }
+  "diagnostics" {
+    Run-Check "pm2" "pm2 status gmp-api --no-color"
+    Run-Check "pm2-describe" "pm2 describe gmp-api --no-color"
+    Run-Check "ports" $PortsCommand
+    Run-Check "recent-logs" $RecentLogsCommand
+    break
+  }
   "all" {
     Run-Check "whoami" "whoami"
     Run-Check "hostname" "hostname"
@@ -120,7 +137,7 @@ switch ($Command) {
     break
   }
   default {
-    throw "Unknown command '$Command'. Use all, whoami, health, ready-status, liveness, env-audit, pm2, git, or git-head."
+    throw "Unknown command '$Command'. Use all, whoami, health, ready-status, liveness, env-audit, pm2-env-runtime, pm2, pm2-describe, ports, logs, recent-logs, diagnostics, git, or git-head."
   }
 }
 
