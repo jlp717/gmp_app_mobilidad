@@ -48,6 +48,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { verifyToken } = require('../middleware/auth');
 const { TTL } = require('../services/redis-cache');
 const { db2WriteTable } = require('../utils/db2-schemas');
+const BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD = 50;
 
 // =============================================================================
 // ALL ROUTES REQUIRE AUTHENTICATION
@@ -244,11 +245,22 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
         return { ok: false, status: 403, body: pedidoForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
     }
     const context = getPedidoUserContext(req);
-    const managerOwnVendorScope = context.isManager
-        && context.code
-        && vendorScope.codes.length === 1
-        && pedidoCodesMatch(vendorScope.codes[0], context.code);
-    if (managerOwnVendorScope) {
+    const broadManagerScope = context.isManager
+        && (vendorScope.codes.length === 0 || vendorScope.codes.length > BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD);
+    if (broadManagerScope) {
+        const assignedVendors = await lookupClientAssignedVendorCodes(client);
+        if (
+            assignedVendors.length > 0
+            && vendorScope.codes.length > 0
+            && !assignedVendors.some((assigned) => vendorScope.codes.some((allowed) => pedidoCodesMatch(assigned, allowed)))
+        ) {
+            return {
+                ok: false,
+                status: 403,
+                body: pedidoForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`),
+            };
+        }
+
         const existsRows = await cachedQuery(
             (sql, params = []) => queryWithParams(sql, params),
             `SELECT 1
@@ -271,13 +283,13 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
                 body: pedidoForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`),
             };
         }
-        const assignedVendors = await lookupClientAssignedVendorCodes(client);
         return {
             ok: true,
             clientCode: client,
             vendorCodes: assignedVendors.length > 0 ? assignedVendors : vendorScope.codes,
         };
     }
+
     const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
     let rows = await queryWithParams(
         `SELECT 1

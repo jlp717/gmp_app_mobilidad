@@ -91,14 +91,14 @@ class Db2PedidosRepository extends PedidosRepository {
     });
   }
 
-  async getOrderHistory({ userId, limit = 20, offset = 0, estado = undefined }) {
+  async getOrderHistory({ userId, vendedorCodes = undefined, limit = 20, offset = 0, estado = undefined }) {
     // Delegate to legacy service which has correct SQL
     const pedidosService = require('../../../../services/pedidos.service');
     return await pedidosService.getOrders({
-      vendedorCode: userId,
+      vendedorCodes: vendedorCodes || userId,
       limit,
       offset,
-      estado
+      status: estado
     });
   }
 

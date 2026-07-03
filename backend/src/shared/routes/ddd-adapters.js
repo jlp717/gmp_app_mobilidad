@@ -77,6 +77,7 @@ const TTL_MS = {
   PENDIENTES: 2 * 60 * 1000,
   COBROS_HISTORICO: 5 * 60 * 1000
 };
+const BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD = 50;
 
 // Shared instances
 let dbPool = null;
@@ -453,11 +454,18 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
   const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
   if (!vendorScope.ok) return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
 
-  const managerOwnVendorScope = context.isManager
-    && context.code
-    && vendorScope.codes.length === 1
-    && salesCodesMatch(vendorScope.codes[0], context.code);
-  if (managerOwnVendorScope) {
+  const broadManagerScope = context.isManager
+    && (vendorScope.codes.length === 0 || vendorScope.codes.length > BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD);
+  if (broadManagerScope) {
+    const assignedVendors = await lookupClientAssignedVendorCodes(client);
+    if (
+      assignedVendors.length > 0
+      && vendorScope.codes.length > 0
+      && !assignedVendors.some((assigned) => vendorScope.codes.some((allowed) => salesCodesMatch(assigned, allowed)))
+    ) {
+      return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`) };
+    }
+
     const existsRows = await cachedQuery(
       (sql, params = []) => queryWithParams(sql, params),
       `SELECT 1
@@ -479,7 +487,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     return {
       ok: true,
       clientCode: client,
-      vendorCodes: vendorScope.codes,
+      vendorCodes: assignedVendors.length > 0 ? assignedVendors : vendorScope.codes,
     };
   }
 
@@ -919,12 +927,32 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { limit, offset } = req.query;
-      const cacheKey = `ddd:history:${userId}:${limit || 20}:${offset || 0}`;
+      const { limit, offset, vendedorCodes, estado, status } = req.query;
+      const requestedVendedorCodes = vendedorCodes || userId;
+      const vendorScope = resolvePedidoVendorScope(req, requestedVendedorCodes);
+      if (!vendorScope.ok) {
+        return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      }
+      const scopedVendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
+      const requestedStatus = status || estado;
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const safeLimit = parseInt(limit, 10) || 20;
+      const safeOffset = offset != null
+        ? parseInt(offset, 10) || 0
+        : (page - 1) * safeLimit;
+      const cacheKey = `ddd:history:${userId}:${scopedVendedorCodes}:${safeLimit}:${safeOffset}:${requestedStatus || 'all'}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
-        const orders = await repo.getOrderHistory({ userId, limit: parseInt(limit) || 20, offset: parseInt(offset) || 0 });
-        return { success: true, orders };
-      }, res);
+        const result = await repo.getOrderHistory({
+          userId,
+          vendedorCodes: scopedVendedorCodes,
+          limit: safeLimit,
+          offset: safeOffset,
+          estado: requestedStatus ? String(requestedStatus).trim() : undefined,
+        });
+        const orders = Array.isArray(result) ? result : (result.orders || []);
+        const count = Array.isArray(result) ? result.length : (result.count || orders.length);
+        return { success: true, orders: orders.map((order) => stripMarginFromOrder(order, req.user)), count };
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /history: ${error.message}`);
       sendInternalServerError(res);
@@ -1546,20 +1574,20 @@ function createPedidosRoutes() {
       if (!isAllVendor) {
         const vendors = vendor.split(',').map(v => v.trim()).filter(Boolean);
         if (vendors.length > 0 && vendors.length <= 50) {
-          filters.push(`L.LCCDVD IN (${vendors.map(() => '?').join(',')})`);
+          filters.push(`TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`);
           filterParams.push(...vendors);
         } else if (vendors.length > 50) {
           const safe = vendors
             .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
             .map(v => `'${v.replace(/'/g, "''")}'`)
             .join(',');
-          if (safe) filters.push(`L.LCCDVD IN (${safe})`);
+          if (safe) filters.push(`TRIM(L.LCCDVD) IN (${safe})`);
         }
       }
-      if (clientCode) { filters.push(`L.LCCDCL = ?`); filterParams.push(clientCode); }
-      if (productCode) { filters.push(`L.LCCDRF = ?`); filterParams.push(productCode); }
-      if (familia) { filters.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE CODIGOFAMILIA = ?)`); filterParams.push(familia); }
-      if (marca) { filters.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE CODIGOMARCA = ?)`); filterParams.push(marca); }
+      if (clientCode) { filters.push(`TRIM(L.LCCDCL) = ?`); filterParams.push(clientCode); }
+      if (productCode) { filters.push(`TRIM(L.LCCDRF) = ?`); filterParams.push(productCode); }
+      if (familia) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM DSEDAC.ART WHERE TRIM(CODIGOFAMILIA) = ?)`); filterParams.push(familia); }
+      if (marca) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM DSEDAC.ART WHERE TRIM(CODIGOMARCA) = ?)`); filterParams.push(marca); }
 
       const whereSql = [dateRange.sql, ...filters].join(' AND ');
       const params = [...dateRange.params, ...filterParams];

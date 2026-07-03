@@ -93,6 +93,72 @@ describe('Business audit — pedidos / promos / bolsa', () => {
         expect(result).toEqual([]);
     });
 
+    test('getActivePromotions combines PMRC/PMP gift lines and CPES price promos', async () => {
+        mockQuery.mockImplementation(async (sql, params) => {
+            const text = String(sql || '');
+            const table = String(params?.[1] || '').toUpperCase();
+            const schema = String(params?.[0] || '').toUpperCase();
+            if (text.includes('SYSCOLUMNS') && schema === 'DSEDAC') {
+                return ['PMR', 'PMRC', 'PMP', 'CPES'].includes(table)
+                    ? [{ COLUMN_NAME: 'CODIGOPROMOCIONREGALO' }]
+                    : [];
+            }
+            if (text.includes('FROM DSEDAC.PMRC C')) {
+                return [
+                    {
+                        PROMO_CODE: 'NST_010101',
+                        PROMO_NAME: 'NST 3+1 PASTELERIA',
+                        PRODUCT_CODE: '2952',
+                        PRODUCT_NAME: 'TARTA TIRAMISU',
+                        CANTIDADMINIMAPROMOCION: 3,
+                        CANTIDADMAXIMAREGALO: 1,
+                        PROMOCIONACUMULATIVASN: 'N',
+                        ASSIGNMENT_SOURCE: 'PMRC',
+                    },
+                    {
+                        PROMO_CODE: 'NST_010101',
+                        PROMO_NAME: 'NST 3+1 PASTELERIA',
+                        PRODUCT_CODE: '3160',
+                        PRODUCT_NAME: 'TARTA FRESA',
+                        CANTIDADMINIMAPROMOCION: 3,
+                        CANTIDADMAXIMAREGALO: 1,
+                        PROMOCIONACUMULATIVASN: 'N',
+                        ASSIGNMENT_SOURCE: 'PMRC',
+                    },
+                ];
+            }
+            if (text.includes('FROM DSEDAC.CPES C')) {
+                return [{
+                    PRODUCT_CODE: '1111',
+                    PRODUCT_NAME: 'PRECIO ESPECIAL',
+                    PROMO_PRICE: 4.25,
+                    SECUENCIA: 7,
+                }];
+            }
+            if (text.includes('FROM DSEDAC.PMR P')) return [];
+            return [];
+        });
+
+        const result = await pedidosService.getActivePromotions('4300009324');
+
+        expect(result).toHaveLength(3);
+        expect(result).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                source: 'PMR',
+                promoCode: 'NST_010101',
+                code: '2952',
+                productCode: '2952',
+                giftSkus: expect.arrayContaining(['2952', '3160']),
+            }),
+            expect.objectContaining({
+                source: 'CPES',
+                promoType: 'PRICE',
+                code: '1111',
+                promoPrice: 4.25,
+            }),
+        ]));
+    });
+
     test('bolsa differential uses precioTarifaCliente not legacy precioMinimo label', async () => {
         mockQuery.mockResolvedValueOnce([{
             ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 6,

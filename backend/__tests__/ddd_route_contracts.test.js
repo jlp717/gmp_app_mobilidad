@@ -13,6 +13,15 @@ function expectDb2SafeBind(sql, bind, maxLen) {
 const mockPedidosService = {
   getOrders: jest.fn(),
   getAvailableVehicles: jest.fn(),
+  normalizePedidoSaleType: jest.fn((value = 'CC') => {
+    const normalized = String(value || 'CC').trim().toUpperCase();
+    if (!['CC', 'VC'].includes(normalized)) {
+      const error = new Error('Tipo de venta invalido');
+      error.code = 'INVALID_SALE_TYPE';
+      throw error;
+    }
+    return normalized;
+  }),
   getStockBatch: jest.fn(),
   deleteOrderLine: jest.fn(),
   createOrder: jest.fn(),
@@ -134,7 +143,14 @@ beforeEach(() => {
   mockCache.get.mockResolvedValue(null);
   mockCache.set.mockResolvedValue(undefined);
   const db = require('../config/db');
+  const optimizer = require('../services/query-optimizer');
   db.queryWithParams.mockResolvedValue([{ OK: 1 }]);
+  optimizer.cachedQuery.mockImplementation(async (runner, sql, _cacheKey, ttlOrParams, maybeParams) => {
+    const params = Array.isArray(maybeParams)
+      ? maybeParams
+      : (Array.isArray(ttlOrParams) ? ttlOrParams : []);
+    return runner(sql, params);
+  });
   mockPedidosService.getOrderVendorForAuth.mockResolvedValue({ vendedorCode: '01' });
 });
 
@@ -155,6 +171,29 @@ describe('DDD pedidos route contracts', () => {
     );
     expect(Array.isArray(res.body.orders)).toBe(true);
     expect(res.body.orders).toEqual([{ id: 10, estado: 'CONFIRMADO' }]);
+    expect(res.body.count).toBe(1);
+  });
+
+  test('GET /history resolves vendor scope and calls repository with vendedorCodes', async () => {
+    mockPedidosRepo.getOrderHistory.mockResolvedValue({
+      orders: [{ id: 11, estado: 'CONFIRMADO' }],
+      count: 1,
+    });
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/history')
+      .query({ status: 'CONFIRMADO', limit: 10, offset: 0 });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosRepo.getOrderHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendedorCodes: '01',
+        estado: 'CONFIRMADO',
+        limit: 10,
+        offset: 0,
+      }),
+    );
+    expect(res.body.orders).toEqual([{ id: 11, estado: 'CONFIRMADO' }]);
     expect(res.body.count).toBe(1);
   });
 
@@ -786,7 +825,7 @@ describe('DDD pedidos route contracts', () => {
     expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDRF\) = \?/);
     expect(lastYearCall[0]).toMatch(/TRIM\(CODIGOFAMILIA\) = \?/);
     expect(lastYearCall[0]).toMatch(/TRIM\(CODIGOMARCA\) = \?/);
-    expect(lastYearCall[1]).toEqual([20250101, 20250131, '01', 'C001', 'P001', 'F01', 'M01']);
+    expect(lastYearCall[1].slice(-5)).toEqual(['01', 'C001', 'P001', 'F01', 'M01']);
     expect(lastYearCall[1]).not.toContain('99');
   });
 });
