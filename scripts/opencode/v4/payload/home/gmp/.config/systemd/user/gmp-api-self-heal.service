@@ -1,0 +1,12 @@
+[Unit]
+Description=GMP API self-heal watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/gmp-tools
+EnvironmentFile=-/opt/gmp-tools/.env
+ExecStart=/bin/bash /opt/gmp-tools/gmp-api-self-heal.sh
+TimeoutStartSec=240
+StandardOutput=journal
+StandardError=journal
