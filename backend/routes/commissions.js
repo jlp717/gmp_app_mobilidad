@@ -394,6 +394,94 @@ async function getClientsMonthlySales(clientCodes, year) {
     return monthlyMap;
 }
 
+function aggregateCommissionSalesRows(rows) {
+    const byMonth = new Map();
+    (rows || []).forEach((row) => {
+        const year = parseInt(row.YEAR, 10);
+        const month = parseInt(row.MONTH, 10);
+        if (!year || !month) return;
+        const key = `${year}:${month}`;
+        const current = byMonth.get(key) || { YEAR: year, MONTH: month, SALES: 0 };
+        current.SALES += parseFloat(row.SALES) || 0;
+        byMonth.set(key, current);
+    });
+    return Array.from(byMonth.values()).sort((a, b) => (a.YEAR - b.YEAR) || (a.MONTH - b.MONTH));
+}
+
+function aggregateVendorCommissionSalesRows(rows) {
+    const byVendorMonth = new Map();
+    (rows || []).forEach((row) => {
+        const vendorCode = String(row.VENDOR_CODE || '').trim();
+        const year = parseInt(row.YEAR, 10);
+        const month = parseInt(row.MONTH, 10);
+        if (!vendorCode || !year || !month) return;
+        const key = `${vendorCode}:${year}:${month}`;
+        const current = byVendorMonth.get(key) || {
+            VENDOR_CODE: vendorCode,
+            YEAR: year,
+            MONTH: month,
+            SALES: 0,
+        };
+        current.SALES += parseFloat(row.SALES) || 0;
+        byVendorMonth.set(key, current);
+    });
+    return Array.from(byVendorMonth.values()).sort((a, b) =>
+        String(a.VENDOR_CODE).localeCompare(String(b.VENDOR_CODE))
+        || (a.YEAR - b.YEAR)
+        || (a.MONTH - b.MONTH)
+    );
+}
+
+async function fetchSingleVendorCommissionSalesRows(safeVendorCodes, selectedYear, prevYear) {
+    if (!Array.isArray(safeVendorCodes) || safeVendorCodes.length === 0) return [];
+
+    const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
+    const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+    const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
+    const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
+
+    const [currentRows, previousJanFebRows, previousMarDecRows] = await Promise.all([
+        queryWithParams(`
+            SELECT L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND ${LACLAE_SALES_FILTER}
+              AND ${currentSalesVendorCol} IN (${vendorPlaceholders})
+            GROUP BY L.LCAADC, L.LCMMDC
+        `, [selectedYear, ...safeVendorCodes], false),
+        queryWithParams(`
+            SELECT L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC < 3
+              AND ${LACLAE_SALES_FILTER}
+              AND ${previousJanFebVendorCol} IN (${vendorPlaceholders})
+            GROUP BY L.LCAADC, L.LCMMDC
+        `, [prevYear, ...safeVendorCodes], false),
+        queryWithParams(`
+            SELECT L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC >= 3
+              AND ${LACLAE_SALES_FILTER}
+              AND ${previousMarDecVendorCol} IN (${vendorPlaceholders})
+            GROUP BY L.LCAADC, L.LCMMDC
+        `, [prevYear, ...safeVendorCodes], false),
+    ]);
+
+    return aggregateCommissionSalesRows([
+        ...currentRows,
+        ...previousJanFebRows,
+        ...previousMarDecRows,
+    ]);
+}
+
 // getBSales is now imported from ../utils/common.js
 
 /**
@@ -600,54 +688,57 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     }))];
     const variantPlaceholders = codeVariants.map(() => '?').join(',');
 
-    const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
-        // 1. LACLAE sales for ALL vendors (current + prev year).
-        // Split by direct vendor columns instead of TRIM(CASE...) in the WHERE
-        // clause; the CASE predicate caused full scans and 30-40s dashboard loads.
+    const [
+        currentSalesRows,
+        previousJanFebSalesRows,
+        previousMarDecSalesRows,
+        allBSalesRows,
+        allPaymentsRows,
+        allFixedTargets,
+        allVendorNames,
+    ] = await Promise.all([
+        // 1a. Current-year LACLAE sales.
+        // Keep each source as a separate SELECT; DB2 regressed badly when the
+        // same work was expressed as one UNION ALL statement for broad scopes.
         queryWithParams(`
-            SELECT S.VENDOR_CODE as VENDOR_CODE,
-                   S.SALES_YEAR as YEAR,
-                   S.SALES_MONTH as MONTH,
-                   SUM(S.SALES) as SALES
-            FROM (
-                SELECT TRIM(${currentSalesVendorCol}) as VENDOR_CODE,
-                       L.LCAADC as SALES_YEAR,
-                       L.LCMMDC as SALES_MONTH,
-                       SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
-                WHERE L.LCAADC = ?
-                  AND ${LACLAE_SALES_FILTER}
-                  AND TRIM(${currentSalesVendorCol}) IN (${placeholders})
-                GROUP BY TRIM(${currentSalesVendorCol}), L.LCAADC, L.LCMMDC
+            SELECT TRIM(${currentSalesVendorCol}) as VENDOR_CODE,
+                   L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(${currentSalesVendorCol}) IN (${placeholders})
+            GROUP BY TRIM(${currentSalesVendorCol}), L.LCAADC, L.LCMMDC
+        `, [year, ...safeCodes], false),
 
-                UNION ALL
+        // 1b. Previous-year Jan/Feb baseline by sales seller.
+        queryWithParams(`
+            SELECT TRIM(${previousJanFebVendorCol}) as VENDOR_CODE,
+                   L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC < 3
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(${previousJanFebVendorCol}) IN (${placeholders})
+            GROUP BY TRIM(${previousJanFebVendorCol}), L.LCAADC, L.LCMMDC
+        `, [year - 1, ...safeCodes], false),
 
-                SELECT TRIM(${previousJanFebVendorCol}) as VENDOR_CODE,
-                       L.LCAADC as SALES_YEAR,
-                       L.LCMMDC as SALES_MONTH,
-                       SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
-                WHERE L.LCAADC = ?
-                  AND L.LCMMDC < 3
-                  AND ${LACLAE_SALES_FILTER}
-                  AND TRIM(${previousJanFebVendorCol}) IN (${placeholders})
-                GROUP BY TRIM(${previousJanFebVendorCol}), L.LCAADC, L.LCMMDC
-
-                UNION ALL
-
-                SELECT TRIM(${previousMarDecVendorCol}) as VENDOR_CODE,
-                       L.LCAADC as SALES_YEAR,
-                       L.LCMMDC as SALES_MONTH,
-                       SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
-                WHERE L.LCAADC = ?
-                  AND L.LCMMDC >= 3
-                  AND ${LACLAE_SALES_FILTER}
-                  AND TRIM(${previousMarDecVendorCol}) IN (${placeholders})
-                GROUP BY TRIM(${previousMarDecVendorCol}), L.LCAADC, L.LCMMDC
-            ) S
-            GROUP BY S.VENDOR_CODE, S.SALES_YEAR, S.SALES_MONTH
-        `, [year, ...safeCodes, year - 1, ...safeCodes, year - 1, ...safeCodes], false),
+        // 1c. Previous-year Mar-Dec objective baseline by assigned seller.
+        queryWithParams(`
+            SELECT TRIM(${previousMarDecVendorCol}) as VENDOR_CODE,
+                   L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC >= 3
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(${previousMarDecVendorCol}) IN (${placeholders})
+            GROUP BY TRIM(${previousMarDecVendorCol}), L.LCAADC, L.LCMMDC
+        `, [year - 1, ...safeCodes], false),
 
         // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
         // Use codeVariants (both padded + unpadded) to match however codes are stored in VENTAS_B.
@@ -686,6 +777,11 @@ async function batchFetchAllVendorData(vendorCodes, year) {
             FROM DSEDAC.VDD
             WHERE TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
         `, [...codeVariants], false),
+    ]);
+    const allSalesRows = aggregateVendorCommissionSalesRows([
+        ...currentSalesRows,
+        ...previousJanFebSalesRows,
+        ...previousMarDecSalesRows,
     ]);
 
     // Partition data by vendor in memory
@@ -792,8 +888,8 @@ function chunkArray(items, size) {
 }
 
 function getCommissionBatchChunkSize() {
-    const configured = parseInt(process.env.COMMISSION_ALL_VENDOR_CHUNK_SIZE || '24', 10);
-    if (!Number.isFinite(configured)) return 24;
+    const configured = parseInt(process.env.COMMISSION_ALL_VENDOR_CHUNK_SIZE || '8', 10);
+    if (!Number.isFinite(configured)) return 8;
     return Math.max(8, Math.min(configured, 40));
 }
 
@@ -996,63 +1092,11 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         const safeYear = parseInt(selectedYear);
         const safePrevYear = parseInt(prevYear);
         const safeVendorCodes = getCodeVariants(vendedorCode);
-        const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
-        const currentSalesVendorCol = getCommissionVendorColumnExpr('L', 'sales');
-        const previousJanFebVendorCol = getCommissionVendorColumnExpr('L', 'sales');
-        const previousMarDecVendorCol = getCommissionVendorColumnExpr('L', 'objective');
-        const salesQuery = `
-            SELECT S.SALES_YEAR as YEAR,
-                   S.SALES_MONTH as MONTH,
-                   SUM(S.SALES) as SALES
-            FROM (
-                SELECT L.LCAADC as SALES_YEAR,
-                       L.LCMMDC as SALES_MONTH,
-                       SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
-                WHERE L.LCAADC = ?
-                  AND ${LACLAE_SALES_FILTER}
-                  AND ${currentSalesVendorCol} IN (${vendorPlaceholders})
-                GROUP BY L.LCAADC, L.LCMMDC
-
-                UNION ALL
-
-                SELECT L.LCAADC as SALES_YEAR,
-                       L.LCMMDC as SALES_MONTH,
-                       SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
-                WHERE L.LCAADC = ?
-                  AND L.LCMMDC < 3
-                  AND ${LACLAE_SALES_FILTER}
-                  AND ${previousJanFebVendorCol} IN (${vendorPlaceholders})
-                GROUP BY L.LCAADC, L.LCMMDC
-
-                UNION ALL
-
-                SELECT L.LCAADC as SALES_YEAR,
-                       L.LCMMDC as SALES_MONTH,
-                       SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
-                WHERE L.LCAADC = ?
-                  AND L.LCMMDC >= 3
-                  AND ${LACLAE_SALES_FILTER}
-                  AND ${previousMarDecVendorCol} IN (${vendorPlaceholders})
-                GROUP BY L.LCAADC, L.LCMMDC
-            ) S
-            GROUP BY S.SALES_YEAR, S.SALES_MONTH
-            ORDER BY YEAR, MONTH
-        `;
         const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales:${vendedorCode}:${safeYear}`;
         salesRows = await redisCache.get('route', cacheKey);
         if (!salesRows) {
             salesRows = safeVendorCodes.length > 0
-                ? await queryWithParams(salesQuery, [
-                    safeYear,
-                    ...safeVendorCodes,
-                    safePrevYear,
-                    ...safeVendorCodes,
-                    safePrevYear,
-                    ...safeVendorCodes
-                ], false)
+                ? await fetchSingleVendorCommissionSalesRows(safeVendorCodes, safeYear, safePrevYear)
                 : [];
             if (salesRows.length > 0) {
                 redisCache.set('route', cacheKey, salesRows, TTL.SHORT).catch(() => {});

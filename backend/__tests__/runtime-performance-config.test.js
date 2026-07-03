@@ -89,15 +89,16 @@ describe('runtime performance configuration', () => {
       source.indexOf('async function getCurrentPaymentSnapshot'),
     );
 
-    expect(source).toMatch(/UNION ALL/);
-    expect(source).toMatch(/CASE predicate caused full scans/);
+    expect(source).toMatch(/fetchSingleVendorCommissionSalesRows/);
+    expect(source).toMatch(/DB2 regressed badly/);
+    expect(source).not.toMatch(/SELECT S\.VENDOR_CODE/);
     expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
     expect(source).toMatch(/batchFetchVendorDataChunked/);
     expect(source).toMatch(/COMMISSION_ALL_VENDOR_CHUNK_SIZE/);
     expect(source).toMatch(/returning stale cached summary/);
     expect(source).not.toMatch(/getCommissionSalesRowsFromClientCache/);
+    expect(source).toMatch(/previousMarDecVendorCol/);
     expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);
-    expect(calculateVendorDataBlock).toMatch(/previousMarDecVendorCol/);
     expect(calculateVendorDataBlock).not.toMatch(/getClientCodesFromCache/);
     expect(calculateVendorDataBlock).not.toMatch(/usedClientScopeSalesRows/);
     expect(calculateVendorDataBlock).not.toMatch(/buildCommissionVendorFilter\(vendedorCode, safeYear, 'L'\)/);
