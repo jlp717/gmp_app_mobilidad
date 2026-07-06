@@ -34,7 +34,7 @@ describe('Commissions PDF historical months', () => {
         jest.clearAllMocks();
     });
 
-    test('Jan/Feb snapshots are audit records and do not override live PDF metrics', async () => {
+    test('Jan/Feb snapshots override live PDF metrics for closed commission months', async () => {
         const queryWithParams = jest.fn(async (sql) => {
             if (sql.includes('JAVIER.COMM_CONFIG')) return [];
             if (sql.includes('JAVIER.COMMERCIAL_TARGETS')) return [];
@@ -81,15 +81,15 @@ describe('Commissions PDF historical months', () => {
         expect(targetMap.get('5')[1]).toEqual(expect.objectContaining({
             objetivo: 1030,
             totalVentas: 1300,
-            comisionGenerada: 5.4,
+            comisionGenerada: 0,
             importePagadoOverride: 0,
             snapshotStatus: 'not_commissioned',
         }));
 
         expect(targetMap.get('6')[1]).toEqual(expect.objectContaining({
-            objetivo: 1236,
-            totalVentas: 1099,
-            comisionGenerada: 0,
+            objetivo: 1500,
+            totalVentas: 2000,
+            comisionGenerada: 50,
             importePagadoOverride: 25,
             snapshotStatus: 'recorded',
         }));
@@ -126,7 +126,7 @@ describe('Commissions PDF historical months', () => {
         expect(targetMap.get('16')[6].objetivo).toBeCloseTo(134948.231, 3);
     });
 
-    test('payment snapshot records paid amount without overriding live PDF metrics', async () => {
+    test('payment snapshot locks paid PDF metrics instead of recalculating live values', async () => {
         const queryWithParams = jest.fn(async (sql) => {
             if (sql.includes('JAVIER.COMM_CONFIG')) return [];
             if (sql.includes('JAVIER.COMMERCIAL_TARGETS')) return [];
@@ -169,9 +169,9 @@ describe('Commissions PDF historical months', () => {
         );
 
         expect(targetMap.get('16')[1]).toEqual(expect.objectContaining({
-            objetivo: 1030,
-            totalVentas: 1,
-            comisionGenerada: 0,
+            objetivo: 35686.57,
+            totalVentas: 39053.02,
+            comisionGenerada: 53.86,
             importePagadoOverride: 53.86,
             snapshotStatus: 'payment_recorded',
         }));
@@ -387,7 +387,7 @@ describe('Commissions PDF route helpers', () => {
         expect(result).toEqual([cachedVendor]);
         expect(redisGet).toHaveBeenCalledWith(
             'route',
-            'comm:summary:v20260706-client-scope-sales:ALL:2026',
+            'comm:summary:v20260706-paid-month-lock:ALL:2026',
         );
         expect(resolveAllModeVendorCodes).not.toHaveBeenCalled();
         expect(query).not.toHaveBeenCalled();

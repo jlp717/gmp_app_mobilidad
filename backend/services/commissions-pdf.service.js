@@ -624,9 +624,6 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
                 paidOverride = 0;
                 status = 'not_commissioned';
             }
-            target = liveTarget;
-            totalSales = liveTotalSales;
-            commission = liveCommission;
 
             const paymentSnapshot = resolvePaymentSnapshotMonth({
                 paymentDetail: paymentMonths[month] || null,
@@ -645,15 +642,15 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
                 paidOverride = toNumber(paymentMonths[month]?.importePagado);
                 status = 'payment_recorded';
             }
-            target = liveTarget;
-            totalSales = liveTotalSales;
-            commission = liveCommission;
 
             setNestedMonthValue(targetMap, normalized, month, {
                 objetivo: target,
                 totalVentas: totalSales,
                 comisionGenerada: commission,
                 importePagadoOverride: paidOverride,
+                liveObjetivo: liveTarget,
+                liveTotalVentas: liveTotalSales,
+                liveComisionGenerada: liveCommission,
                 isHistoricalCommissionMonth: coveredHistoricalMonth,
                 snapshotStatus: status,
             });

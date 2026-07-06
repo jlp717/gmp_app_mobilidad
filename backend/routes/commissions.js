@@ -84,7 +84,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'WHERE YEAR = ?',
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
-const COMMISSIONS_CACHE_VERSION = 'v20260706-client-scope-sales';
+const COMMISSIONS_CACHE_VERSION = 'v20260706-paid-month-lock';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -1429,6 +1429,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 target = historicalMonth.target;
                 commValue = historicalMonth.commission;
                 snapshotSource = historicalMonth.snapshotSource;
+                targetSource = 'historical_snapshot';
                 currentLacSales = Math.max(currentSales - currentBSales, 0);
                 logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: total=${snap.ventasTotales.toFixed(2)} obj=${snap.objetivo.toFixed(2)} comm=${snap.comisionGenerada.toFixed(2)} (live was ${result.commission.toFixed(2)})`);
             } else {
@@ -1439,6 +1440,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 target = historicalMonth.target;
                 commValue = historicalMonth.commission;
                 snapshotSource = historicalMonth.snapshotSource;
+                targetSource = 'historical_snapshot';
                 currentLacSales = Math.max(currentSales - currentBSales, 0);
                 logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026: vendor ${vendedorCode} not in snapshot → commission forced to 0`);
             }
@@ -1448,6 +1450,17 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
         }
 
+        const liveMetrics = {
+            actual: liveBeforeHistoricalSnapshot.currentSales,
+            target: liveBeforeHistoricalSnapshot.target,
+            commission: liveBeforeHistoricalSnapshot.commValue,
+            lacSales: liveBeforeHistoricalSnapshot.currentLacSales,
+            bSales: currentBSales,
+            totalSales: liveBeforeHistoricalSnapshot.currentSales,
+            targetSource: liveBeforeHistoricalSnapshot.targetSource,
+            snapshotSource: null,
+        };
+
         const historicalSnapshot = historicalMonth.isHistoricalSnapshot ? {
             status: historicalMonth.status,
             actual: historicalMonth.actual,
@@ -1455,14 +1468,6 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             commission: historicalMonth.commission,
             source: historicalMonth.snapshotSource,
         } : null;
-        currentSales = liveBeforeHistoricalSnapshot.currentSales;
-        target = liveBeforeHistoricalSnapshot.target;
-        commValue = liveBeforeHistoricalSnapshot.commValue;
-        currentLacSales = liveBeforeHistoricalSnapshot.currentLacSales;
-        result = liveBeforeHistoricalSnapshot.result;
-        targetSource = liveBeforeHistoricalSnapshot.targetSource;
-        snapshotSource = liveBeforeHistoricalSnapshot.snapshotSource;
-        snapshotApplied = false;
 
         const paymentDetail = payments?.details?.[m] || payments?.details?.[String(m)] || null;
         const paymentSnapshot = resolvePaymentSnapshotMonth({
@@ -1476,15 +1481,6 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         });
 
         let paymentSnapshotInfo = null;
-        const liveBeforePaymentSnapshot = {
-            currentSales,
-            target,
-            commValue,
-            currentLacSales,
-            result,
-            targetSource,
-            snapshotSource,
-        };
         if (paymentSnapshot.isPaymentSnapshot) {
             paymentSnapshotInfo = {
                 status: paymentSnapshot.status,
@@ -1503,14 +1499,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             result = calculateCommission(currentSales, target, config);
             logger.debug(`[COMMISSIONS] PAYMENT SNAPSHOT month ${m}/${selectedYear} for ${vendedorCode}: venta=${currentSales.toFixed(2)} obj=${target.toFixed(2)} comm=${commValue.toFixed(2)}`);
         }
-        currentSales = liveBeforePaymentSnapshot.currentSales;
-        target = liveBeforePaymentSnapshot.target;
-        commValue = liveBeforePaymentSnapshot.commValue;
-        currentLacSales = liveBeforePaymentSnapshot.currentLacSales;
-        result = liveBeforePaymentSnapshot.result;
-        targetSource = liveBeforePaymentSnapshot.targetSource;
-        snapshotSource = liveBeforePaymentSnapshot.snapshotSource;
-        snapshotApplied = false;
+        const paymentSnapshotApplied = Boolean(paymentSnapshotInfo);
 
         // Add to totals
         grandTotalCommission += commValue;
@@ -1574,10 +1563,11 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             snapshotApplied: snapshotApplied,
             snapshotSource: snapshotSource,
             targetSource: targetSource,
+            liveMetrics,
             historicalSnapshot,
             paymentSnapshot: paymentSnapshotInfo,
             snapshotRecorded: Boolean(historicalSnapshot || paymentSnapshotInfo),
-            paymentSnapshotApplied: false,
+            paymentSnapshotApplied,
             paymentSnapshotRecorded: Boolean(paymentSnapshotInfo),
             complianceCtx: {
                 pct: (target > 0) ? (currentSales / target) * 100 : 0,
@@ -1590,6 +1580,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 snapshotSource: snapshotSource,
                 snapshotRecorded: Boolean(historicalSnapshot || paymentSnapshotInfo),
                 paymentSnapshotRecorded: Boolean(paymentSnapshotInfo),
+                paymentSnapshotApplied,
                 targetSource: targetSource
             },
             dailyComplianceCtx: {
