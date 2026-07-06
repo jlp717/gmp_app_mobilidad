@@ -126,6 +126,45 @@ describe('Commissions PDF historical months', () => {
         expect(targetMap.get('16')[6].objetivo).toBeCloseTo(134948.231, 3);
     });
 
+    test('summary month metrics are the PDF source for live commission months', async () => {
+        const queryWithParams = jest.fn(async (sql) => {
+            if (sql.includes('JAVIER.COMM_CONFIG')) return [];
+            if (sql.includes('JAVIER.COMMERCIAL_TARGETS')) return [];
+            if (sql.includes('DSED.LACLAE')) {
+                return [{ VENDEDOR_CODIGO: '35', MES: 6, VENTAS_LAC: 131017.70 }];
+            }
+            if (sql.includes('JAVIER.VENTAS_B')) return [];
+            if (sql.includes('JAVIER.COMMISSION_SNAPSHOT_2026_0102')) return [];
+            if (sql.includes('JAVIER.COMMISSION_PAYMENTS')) return [];
+            return [];
+        });
+
+        const service = loadService(queryWithParams);
+        const targetMap = await service._private.buildMonthlyTargetsAndCommissions(
+            [{
+                code: '35',
+                name: 'Vendor 35',
+                months: [{
+                    month: 6,
+                    target: 110693.10,
+                    actual: 126950.76,
+                    complianceCtx: { commission: 325.15 },
+                }],
+            }],
+            new Map(),
+            2026,
+            6,
+            6
+        );
+
+        expect(targetMap.get('35')[6]).toEqual(expect.objectContaining({
+            objetivo: 110693.10,
+            totalVentas: 126950.76,
+            comisionGenerada: 325.15,
+            snapshotStatus: 'summary',
+        }));
+    });
+
     test('payment snapshot locks paid PDF metrics instead of recalculating live values', async () => {
         const queryWithParams = jest.fn(async (sql) => {
             if (sql.includes('JAVIER.COMM_CONFIG')) return [];

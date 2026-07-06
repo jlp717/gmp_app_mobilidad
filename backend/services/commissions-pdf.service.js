@@ -564,6 +564,23 @@ function getSnapshotEntry(snapshotData, code, month) {
     return months ? months[month] || null : null;
 }
 
+function getSummaryMonthMetric(vendor, month) {
+    const months = vendor?.months;
+    if (!months) return null;
+
+    const entry = Array.isArray(months)
+        ? months.find(item => parseInt(item?.month, 10) === month)
+        : months[month] || months[String(month)];
+
+    if (!entry) return null;
+    const hasSummaryMetric = entry.target !== undefined
+        || entry.actual !== undefined
+        || entry.totalSales !== undefined
+        || entry.complianceCtx?.commission !== undefined;
+
+    return hasSummaryMetric ? entry : null;
+}
+
 async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year, startMonth, endMonth) {
     const vendorCodes = getVendorCodesFromData(vendorData, condorDataMap);
     const [config, fixedTargets, prevLac, prevCondor, snapshotData, paymentsData] = await Promise.all([
@@ -603,6 +620,15 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
             let commission = calculateCommission(totalSales, target, config).commission;
             let paidOverride = null;
             let status = 'live';
+            const summaryMetric = getSummaryMonthMetric(vendor, month);
+
+            if (summaryMetric) {
+                target = toNumber(summaryMetric.target);
+                totalSales = toNumber(summaryMetric.actual ?? summaryMetric.totalSales);
+                commission = toNumber(summaryMetric.complianceCtx?.commission ?? summaryMetric.commission);
+                status = summaryMetric.snapshotApplied ? 'summary_snapshot' : 'summary';
+            }
+
             const liveTarget = target;
             const liveTotalSales = totalSales;
             const liveCommission = commission;
