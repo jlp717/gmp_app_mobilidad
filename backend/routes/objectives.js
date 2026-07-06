@@ -40,6 +40,11 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 const { CircuitBreaker } = require('../services/circuit-breaker');
+const {
+    DEFAULT_PORCENTAJE_MEJORA,
+    getAlignedVendorSalesForObjectives,
+    resolveObjectiveSalesTarget,
+} = require('../utils/objectives-source');
 
 const OBJECTIVES_CACHE_VERSION = 'v20260603-june-rebalance';
 const objectivesByClientBreaker = new CircuitBreaker({
@@ -780,79 +785,40 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
             }
         }
 
-        // Parallelize 3 independent sales queries
-        const [currentSales, lastYearSales, prevYearAnnual] = await Promise.all([
+        const [alignedCurrent, currentMetrics, lastYearSales] = await Promise.all([
+            getAlignedVendorSalesForObjectives(vendedorCodes, targetYear, targetMonth),
             queryWithParams(`
-                SELECT 
-                    COALESCE(SUM(IMPORTEVENTA), 0) as sales,
+                SELECT
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
                     COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
                 FROM DSEDAC.LAC L
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
             `, [targetYear, targetMonth]),
             queryWithParams(`
-                SELECT 
+                SELECT
                     COALESCE(SUM(IMPORTEVENTA), 0) as sales,
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
                     COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
                 FROM DSEDAC.LAC
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
             `, [targetYear - 1, targetMonth]),
-            queryWithParams(`
-                SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
-                FROM DSEDAC.LAC
-                WHERE ANODOCUMENTO = ? ${vendedorFilter}
-            `, [targetYear - 1], false)
         ]);
 
-        const curr = currentSales[0] || {};
+        const curr = currentMetrics[0] || {};
         const last = lastYearSales[0] || {};
 
-        const salesCurrent = parseFloat(curr.SALES) || 0;
+        const salesCurrent = parseFloat(alignedCurrent.sales) || 0;
         const salesLast = parseFloat(last.SALES) || 0;
-        const totalPrevYear = prevYearAnnual[0] ? parseFloat(prevYearAnnual[0].TOTAL_SALES) : 0;
 
-        // Si no encontramos objetivo en BD, calcular con Lógica Estacional
         if (salesObjective === 0) {
-            // Default flat if no history
-            let calculatedTarget = salesLast * (1 + targetPct / 100);
-
-            // Apply Seasonality if we have annual history
-            if (totalPrevYear > 0) {
-                const avgMonthlySales = totalPrevYear / 12;
-
-                // Calculate Growth Factor for THIS month
-                // Formula: Target% * (1 + Sensitivity * (Deviation))
-                // Deviation = (LastYearMonth - Avg) / Avg
-
-                const deviationRatio = avgMonthlySales > 0 ? (salesLast - avgMonthlySales) / avgMonthlySales : 0;
-
-                // Variable Growth Percentage for this month
-                // e.g. if Target is 10%, and month is high (+50% vs avg), Growth might be 10% * (1 + 0.5*0.5) = 12.5%
-                const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
-
-                // Initial Raw Target
-                const rawTarget = salesLast * (1 + variableGrowthPct);
-
-                // NOTE: To be mathematically perfect and ensure Sum(MonthTargets) == AnnualTarget,
-                // we should normalize. But for a single month lookup without calculating all 12, 
-                // the raw formula is a very good approximation (+/- 1-2%). 
-                // For exact precision, we'd need to calculate all 12 months here.
-                // Given the requirement for "dynamic" and "more or less", this approximation is acceptable 
-                // and much faster than querying 12 months of daily data on every refresh.
-
-                salesObjective = rawTarget;
-                objectiveSource = 'seasonality_dynamic';
-
-            } else {
-                // Fallback to simple % if no previous annual data
-                // If no last year data at all, maybe based on current?
-                if (salesLast === 0 && salesCurrent > 0) {
-                    salesObjective = salesCurrent * (1 + targetPct / 100);
-                } else {
-                    salesObjective = calculatedTarget;
-                }
-            }
+            salesObjective = resolveObjectiveSalesTarget(
+                salesCurrent,
+                alignedCurrent.rawTarget,
+                DEFAULT_PORCENTAJE_MEJORA,
+            );
+            objectiveSource = alignedCurrent.rawTarget != null && alignedCurrent.rawTarget > 0
+                ? 'commercial_targets'
+                : 'calculated';
         }
 
         const salesProgress = salesObjective > 0 ? (salesCurrent / salesObjective) * 100 : 0;
