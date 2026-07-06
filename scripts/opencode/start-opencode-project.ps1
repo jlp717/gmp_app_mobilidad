@@ -122,6 +122,62 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $Text, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Test-OpenCodeCliConfig([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) { return $false }
+  try {
+    $cfg = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -ErrorAction Stop
+    $keys = @($cfg.PSObject.Properties.Name)
+    $manifestOnlyKeys = @(
+      "project",
+      "agents",
+      "config",
+      "memory",
+      "state",
+      "rules",
+      "fallback_models",
+      "proposals",
+      "workflow_states",
+      "automation"
+    )
+    foreach ($key in $manifestOnlyKeys) {
+      if ($keys -contains $key) { return $false }
+    }
+    foreach ($key in @("model", "default_agent", "mcp", "provider", "plugin", "tools", "command", "agent")) {
+      if ($keys -contains $key) { return $true }
+    }
+    return $false
+  } catch {
+    return $false
+  }
+}
+
+function Resolve-OpenCodeConfigSource([string]$ProjectRoot, [string]$HomeDir) {
+  $candidates = @(
+    (Join-Path $ProjectRoot ".opencode\opencode.json"),
+    (Join-Path $ProjectRoot "opencode.json"),
+    (Join-Path $ConfigDir "opencode.json")
+  )
+  $backupRoot = Join-Path $ProjectRoot ".opencode\backups"
+  if (Test-Path -LiteralPath $backupRoot -ErrorAction SilentlyContinue) {
+    $backupCandidates = @(Get-ChildItem -LiteralPath $backupRoot -Recurse -Filter opencode.json -File -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      ForEach-Object { $_.FullName })
+    $candidates += $backupCandidates
+  }
+  foreach ($path in $candidates) {
+    if (Test-OpenCodeCliConfig $path) { return $path }
+  }
+  throw "No se encontro una config valida para OpenCode CLI en $ProjectRoot ni en backups."
+}
+
+function Copy-OpenCodeConfigToRuntime([string]$ProjectRoot, [string]$RuntimeConfig, [string]$HomeDir) {
+  $source = Resolve-OpenCodeConfigSource -ProjectRoot $ProjectRoot -HomeDir $HomeDir
+  New-Item -ItemType Directory -Path (Split-Path -Path $RuntimeConfig -Parent) -Force | Out-Null
+  Copy-Item -LiteralPath $source -Destination $RuntimeConfig -Force
+  Repair-McpCommandArrays $RuntimeConfig
+  return $source
+}
+
 function Repair-McpCommandArrays([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) { return }
   $text = Get-Content -LiteralPath $Path -Raw
@@ -402,15 +458,7 @@ function Set-CursorRuntimeAvailability([bool]$Enabled) {
   $runtimeConfig = Join-Path $runtimeRoot "opencode\opencode.json"
   if (-not (Test-Path -LiteralPath $runtimeConfig)) { return "runtime_config_missing" }
   try {
-    $projectConfig = if ($ProjectDir) { Join-Path $ProjectDir "opencode.json" } else { $null }
-    $canonicalConfig = if ($projectConfig -and (Test-Path -LiteralPath $projectConfig)) {
-      $projectConfig
-    } else {
-      Join-Path $ConfigDir "opencode.json"
-    }
-    if (Test-Path -LiteralPath $canonicalConfig) {
-      Copy-Item -LiteralPath $canonicalConfig -Destination $runtimeConfig -Force
-    }
+    [void](Copy-OpenCodeConfigToRuntime -ProjectRoot $ProjectDir -RuntimeConfig $runtimeConfig -HomeDir $HomeDir)
     if ($Enabled) { return "cursor_acp_available" }
     return "cursor_acp_standby_no_active_primary_agents"
   } catch {
@@ -1260,12 +1308,12 @@ $env:XDG_CACHE_HOME = $ProjectRuntimeHome
 $accountAuthStatus = Sync-OpenCodeAccountAuth $ProjectRuntimeHome
 $runtimeConfigDir = Join-Path $ProjectRuntimeHome "opencode"
 $runtimeConfig = Join-Path $runtimeConfigDir "opencode.json"
-$projectConfig = Join-Path $ProjectDir "opencode.json"
 New-Item -ItemType Directory -Path $runtimeConfigDir -Force | Out-Null
-if (Test-Path -LiteralPath $projectConfig) {
-  Copy-Item -LiteralPath $projectConfig -Destination $runtimeConfig -Force
+$configSource = Copy-OpenCodeConfigToRuntime -ProjectRoot $ProjectDir -RuntimeConfig $runtimeConfig -HomeDir $HomeDir
+$env:OPENCODE_CONFIG = $runtimeConfig
+if ($configSource -eq (Join-Path $ProjectDir "opencode.json")) {
+  Repair-McpCommandArrays $configSource
 }
-Repair-McpCommandArrays (Join-Path $ProjectDir "opencode.json")
 Repair-McpCommandArrays (Join-Path $ProjectDir ".opencode\opencode.json")
 Repair-McpCommandArrays $runtimeConfig
 $db2OdbcStatus = if ($Project -eq "gmp") { Ensure-GmpDb2Odbc $ProjectDir } else { "no_aplica" }

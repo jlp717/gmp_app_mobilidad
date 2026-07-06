@@ -16,7 +16,7 @@ class CommissionsService {
       final resolvedYear = year ?? DateTime.now().year;
       // Bust cache when the commission sales payload changes.
       final cacheKey = [
-        'commissions_v15_db2_commission_source',
+        'commissions_v16_client_scope_sales',
         vendedorCode,
         resolvedYear,
       ].join('_');
@@ -124,6 +124,11 @@ class CommissionsService {
 
       // Force cache clear for this vendor AND the ALL view after payment
       await Future.wait([
+        CacheService.invalidate(
+          'commissions_v16_client_scope_sales_${vendedorCode}_$year',
+        ),
+        CacheService.invalidate('commissions_v16_client_scope_sales_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v16_client_scope_sales_'),
         CacheService.invalidate(
           'commissions_v15_db2_commission_source_${vendedorCode}_$year',
         ),

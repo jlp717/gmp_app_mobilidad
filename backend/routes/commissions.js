@@ -4,7 +4,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
-const { getVendorActiveDaysFromCache } = require('../services/laclae');
+const { getVendorActiveDaysFromCache, getClientCodesFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getCommissionActualVendorColumnExprForYear, getCommissionActualVendorColumnExprForMonth, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
 const {
     resolveCommissionTarget,
@@ -84,7 +84,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'WHERE YEAR = ?',
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
-const COMMISSIONS_CACHE_VERSION = 'v20260703-db2-commission-source';
+const COMMISSIONS_CACHE_VERSION = 'v20260706-client-scope-sales';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -406,6 +406,47 @@ function aggregateCommissionSalesRows(rows) {
         byMonth.set(key, current);
     });
     return Array.from(byMonth.values()).sort((a, b) => (a.YEAR - b.YEAR) || (a.MONTH - b.MONTH));
+}
+
+async function getCommissionSalesRowsFromClientCache(vendedorCode, selectedYear, prevYear) {
+    const cachedCodes = getClientCodesFromCache(vendedorCode);
+    if (!Array.isArray(cachedCodes) || cachedCodes.length === 0) return null;
+
+    const safeClientCodes = [...new Set(
+        cachedCodes
+            .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10))
+            .filter(Boolean)
+    )];
+    const maxCodes = Math.max(1, Math.min(parseInt(process.env.COMMISSION_CLIENT_SCOPE_MAX_CODES || '2000', 10), 5000));
+    if (safeClientCodes.length === 0 || safeClientCodes.length > maxCodes) return null;
+
+    const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:${vendedorCode}:${selectedYear}:${safeClientCodes.length}`;
+    const cachedRows = await redisCache.get('route', cacheKey);
+    if (cachedRows) return cachedRows;
+
+    const chunkSize = 250;
+    const chunks = [];
+    for (let index = 0; index < safeClientCodes.length; index += chunkSize) {
+        chunks.push(safeClientCodes.slice(index, index + chunkSize));
+    }
+
+    const chunkRows = await Promise.all(chunks.map((chunk) => {
+        const placeholders = chunk.map(() => '?').join(',');
+        return queryWithParams(`
+            SELECT L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (?, ?)
+              AND ${LACLAE_SALES_FILTER}
+              AND L.LCCDCL IN (${placeholders})
+            GROUP BY L.LCAADC, L.LCMMDC
+        `, [selectedYear, prevYear, ...chunk], false);
+    }));
+
+    const rows = aggregateCommissionSalesRows(chunkRows.flat());
+    await redisCache.set('route', cacheKey, rows, TTL.SHORT).catch(() => {});
+    return rows;
 }
 
 function aggregateVendorCommissionSalesRows(rows) {
@@ -1077,6 +1118,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
 
     // D. Fetch Sales Data — use preloaded or query DB
     let salesRows, bSalesCurrYear, bSalesPrevYear, fixedCommissionBase, fixedTargets, payments;
+    let usedClientScopeSalesRows = false;
 
     if (preloadedData) {
         // Use batch-fetched data (no DB queries)
@@ -1092,14 +1134,24 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         const safeYear = parseInt(selectedYear);
         const safePrevYear = parseInt(prevYear);
         const safeVendorCodes = getCodeVariants(vendedorCode);
-        const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales:${vendedorCode}:${safeYear}`;
-        salesRows = await redisCache.get('route', cacheKey);
+        const fallbackCacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales-db2-fallback:${vendedorCode}:${safeYear}`;
+        salesRows = null;
+        if (vendedorCode && vendedorCode.indexOf(',') === -1) {
+            const clientScopeSalesRows = await getCommissionSalesRowsFromClientCache(vendedorCode, safeYear, safePrevYear);
+            if (clientScopeSalesRows) {
+                salesRows = clientScopeSalesRows;
+                usedClientScopeSalesRows = true;
+            }
+        }
+        if (!salesRows) {
+            salesRows = await redisCache.get('route', fallbackCacheKey);
+        }
         if (!salesRows) {
             salesRows = safeVendorCodes.length > 0
                 ? await fetchSingleVendorCommissionSalesRows(safeVendorCodes, safeYear, safePrevYear)
                 : [];
             if (salesRows.length > 0) {
-                redisCache.set('route', cacheKey, salesRows, TTL.SHORT).catch(() => {});
+                redisCache.set('route', fallbackCacheKey, salesRows, TTL.SHORT).catch(() => {});
             }
         }
 
@@ -1159,7 +1211,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
     const monthsWithData = salesRows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
     const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
 
-    if (!preloadedData && missingMonths.length > 0) {
+    if (!preloadedData && !usedClientScopeSalesRows && missingMonths.length > 0) {
         const currentClients = await getVendorCurrentClients(vendedorCode, selectedYear);
         if (currentClients.length > 0) {
             inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);

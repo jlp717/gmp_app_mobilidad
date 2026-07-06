@@ -82,7 +82,7 @@ describe('runtime performance configuration', () => {
     expect(source).not.toMatch(/vendorCodesArray\.map\(code => buildVendorObjectiveTargets/);
   });
 
-  test('commissions batch sales query avoids CASE predicates in vendor filters', () => {
+  test('commissions single-vendor uses client scope while batch query avoids CASE predicates', () => {
     const source = fs.readFileSync(path.join(backendRoot, 'routes/commissions.js'), 'utf8');
     const calculateVendorDataBlock = source.slice(
       source.indexOf('async function calculateVendorData'),
@@ -96,11 +96,11 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/batchFetchVendorDataChunked/);
     expect(source).toMatch(/COMMISSION_ALL_VENDOR_CHUNK_SIZE/);
     expect(source).toMatch(/returning stale cached summary/);
-    expect(source).not.toMatch(/getCommissionSalesRowsFromClientCache/);
+    expect(source).toMatch(/getCommissionSalesRowsFromClientCache/);
+    expect(source).toMatch(/sales-by-client-scope/);
     expect(source).toMatch(/previousMarDecVendorCol/);
     expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);
-    expect(calculateVendorDataBlock).not.toMatch(/getClientCodesFromCache/);
-    expect(calculateVendorDataBlock).not.toMatch(/usedClientScopeSalesRows/);
+    expect(calculateVendorDataBlock).toMatch(/usedClientScopeSalesRows/);
     expect(calculateVendorDataBlock).not.toMatch(/buildCommissionVendorFilter\(vendedorCode, safeYear, 'L'\)/);
   });
 
