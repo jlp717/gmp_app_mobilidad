@@ -1,79 +1,728 @@
 {
-  "$schema": "https://opencode.ai/config.schema.json",
-  "project": {
-    "name": "GMP App Mobilidad",
-    "description": "App de movilidad comercial GMP — Flutter + Node.js + IBM DB2/AS400"
-  },
-  "agents": {
-    "dir": ".opencode/agents",
-    "count": 41,
-    "new_agents": ["mcp-tool-miner", "memory-cleaner"]
-  },
-  "config": {
-    "dir": ".opencode/config",
-    "files": [
-      "chief-protocol.yaml",
-      "model-routing.yaml",
-      "task-classification.yaml",
-      "workflow-state-machine.yaml",
-      "autonomous-flow.yaml",
-      "handoff-contract.yaml",
-      "orchestrator-decision-tree.yaml",
-      "runtime-health.yaml",
-      "hybrid-interaction.yaml",
-      "goal-loops.yaml",
-      "learning-loop.yaml",
-      "production-safety.yaml",
-      "response-verification.yaml",
-      "mobile-mode.yaml",
-      "mobile-productivity.yaml",
-      "context-compaction.yaml",
-      "model-update-policy.yaml",
-      "security-gate.yaml",
-      "telegram-hitl-gateway.yaml",
-      "semantic-memory-pruner.yaml",
-      "automation-schedule.json",
-      "daily-digest.yaml",
-      "github-watchlist.yaml",
-      "team-curator.yaml",
-      "tech-radar.yaml",
-      "fallback-models.json"
-    ]
-  },
-  "memory": {
-    "dir": ".opencode/memory"
-  },
-  "state": {
-    "dir": ".opencode/state",
-    "key_files": [
-      "session-cost-accumulator.json",
-      "provider-health.json",
-      "model-routing-live.json",
-      "same-error-counts.json"
-    ]
-  },
-  "rules": ".opencode/rules.json",
-  "fallback_models": ".opencode/fallback-models.json",
-  "skills": {
-    "dir": ".opencode/skills"
-  },
-  "plugins": {
-    "dir": ".opencode/plugins"
-  },
-  "proposals": {
-    "dir": ".opencode/proposals",
-    "flow": "telegram-hitl-gateway"
-  },
-  "mcp": {
-    "configured": ["ibm-db2-mcp", "gmp-deploy-ssh", "context7", "ddg-search", "fetch", "github", "memory", "sequential-thinking", "time", "pub-mcp", "playwright", "chrome-devtools"],
-    "config_file": ".opencode/mcp.json"
-  },
-  "workflow_states": {
-    "standard": ["INTAKE", "ROUTED", "DISCOVERY", "PLAN_READY", "WAITING_PLAN_APPROVAL", "WAITING_CLARIFICATION", "IMPLEMENTING", "GOAL_LOOPING", "VERIFYING", "STAGING", "WAITING_PRODUCTION_APPROVAL", "PRODUCTION_DEPLOY", "REPORTING", "BLOCKED", "DONE"],
-    "advanced": ["CONTEXT_COMPACTION", "COLD_STORAGE", "WAITING_FOR_USER_APPROVAL", "EXECUTE_APPROVED_CHANGE", "PROPOSAL_REJECTED"]
-  },
-  "automation": {
-    "schedule_file": ".opencode/config/automation-schedule.json",
-    "jobs": ["tech_radar", "github_watchlist", "mcp_tool_miner", "model_catalog", "model_update_proposer", "daily_digest", "team_curator", "morning_briefing", "state_cleanup", "memory_garbage_collector"]
-  }
+    "$schema":  "https://opencode.ai/config.json",
+    "model":  "openai/gpt-5.5",
+    "small_model":  "opencode-go/deepseek-v4-flash",
+    "default_agent":  "chief-engineer-assistant",
+    "username":  "Javier",
+    "share":  "disabled",
+    "autoupdate":  "notify",
+    "snapshot":  false,
+    "instructions":  [
+                         ".opencode/config/chief-protocol.yaml",
+                         ".opencode/config/mobile-productivity.yaml",
+                         ".opencode/AGENTS.md",
+                         "AGENTS.md",
+                         "CLAUDE.md"
+                     ],
+    "skills":  {
+                   "paths":  [
+                                 ".opencode/skills"
+                             ]
+               },
+    "server":  {
+                   "port":  3090,
+                   "hostname":  "0.0.0.0",
+                   "mdns":  false,
+                   "cors":  [
+                                "http://localhost:3090",
+                                "http://100.107.11.80:3090",
+                                "app://opencode.ai"
+                            ]
+               },
+    "watcher":  {
+                    "ignore":  [
+                                   "node_modules/**",
+                                   ".dart_tool/**",
+                                   "build/**",
+                                   ".next/**",
+                                   ".swarm/**",
+                                   ".opencode-runtime/**",
+                                   ".opencode/snapshots/**",
+                                   ".opencode/chromadb/**",
+                                   ".beads/dolt/**",
+                                   "**/*.log",
+                                   ".git-rewrite/**"
+                               ]
+                },
+    "tool_output":  {
+                        "max_lines":  300,
+                        "max_bytes":  20000
+                    },
+    "compaction":  {
+                       "auto":  true,
+                       "prune":  true,
+                       "reserved":  30000,
+                       "tail_turns":  8
+                   },
+    "enabled_providers":  [
+                              "openai",
+                              "cursor-acp",
+                              "opencode-go",
+                              "opencode"
+                          ],
+    "disabled_providers":  [
+                               "nvidia",
+                               "google",
+                               "amazon-bedrock"
+                           ],
+    "experimental":  {
+                         "mcp_timeout":  30000,
+                         "policies":  [
+                                          {
+                                              "effect":  "deny",
+                                              "action":  "provider.use",
+                                              "resource":  "*"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "openai"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "cursor-acp"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "opencode-go"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "opencode"
+                                          }
+                                      ]
+                     },
+    "permission":  {
+                       "read":  {
+                                    "*":  "allow",
+                                    "*.env":  "deny",
+                                    "*.env.*":  "deny",
+                                    "*.pem":  "deny",
+                                    "*.key":  "deny"
+                                },
+                       "edit":  {
+                                    "*":  "ask"
+                                },
+                       "bash":  {
+                                    "*":  "ask",
+                                    "git status*":  "allow",
+                                    "git diff*":  "allow",
+                                    "git log*":  "allow",
+                                    "bd ready*":  "allow"
+                                },
+                       "external_directory":  "ask",
+                       "doom_loop":  "ask",
+                       "skill":  {
+                                     "*":  "allow"
+                                 },
+                       "lsp":  "allow"
+                   },
+    "plugin":  [
+                   "./.opencode/plugins/model-fallback-forward.ts",
+                   "./.opencode/plugins/flow-observability.ts",
+                   "./.opencode/plugins/execution-visibility.ts",
+                   "./.opencode/plugins/env-protection.ts",
+                   "./.opencode/plugins/context-compaction.ts",
+                   "./.opencode/plugins/session-resilience.ts",
+                   "./.opencode/plugins/session-lifecycle.ts",
+                   "./.opencode/plugins/goal-loop-idle-hint.ts",
+                   "./.opencode/plugins/task-tracer.ts",
+                   "./.opencode/plugins/anti-hallucination-guard.ts",
+                   "./.opencode/plugins/rate-limit-handler.ts",
+                   "./.opencode/plugins/anti-doom-loop.ts",
+                   "./.opencode/plugins/mobile-mode-detector.ts",
+                   "./.opencode/plugins/same-error-detector.ts",
+                   "./.opencode/plugins/production-safety-guard.ts",
+                   "./.opencode/plugins/user-correction-capture.ts",
+                   "file:///C:/Users/Javier/.config/opencode/ponytail/.opencode/plugins/ponytail.mjs"
+               ],
+    "tools":  {
+                  "voice-synthesis":  true,
+                  "telegram-notify":  true,
+                  "rag-query":  true,
+                  "memory-save":  true,
+                  "staging-deploy":  true,
+                  "snapshot-create":  true,
+                  "snapshot-restore":  true,
+                  "tech-radar-fetch":  true,
+                  "retrospective-trigger":  true,
+                  "github-advanced":  true,
+                  "parallel-dispatch":  true,
+                  "file-gate-check":  true,
+                  "metrics-push":  true,
+                  "production-approval-gate":  true,
+                  "elite-quality-gate":  true,
+                  "decision-router":  true,
+                  "state-manager":  true,
+                  "project-context":  true,
+                  "agent-roster-audit":  true,
+                  "flow-policy-check":  true,
+                  "team-curator-report":  true,
+                  "model-assignment-audit":  true,
+                  "workflow-state-audit":  true,
+                  "plan-approval-gate":  true,
+                  "readiness-smoke":  true,
+                  "correction-capture":  true,
+                  "handoff-ledger":  true,
+                  "daily-digest-summary":  true,
+                  "model-provider-health":  true,
+                  "flow-status":  true,
+                  "flow-trace":  true,
+                  "mobile-ops-status":  true,
+                  "repo-intake-gate":  true,
+                  "mobile-autopilot":  true,
+                  "continuous-improvement-loop":  true,
+                  "mobile-safety-net":  true,
+                  "obsidian-capture":  true,
+                  "team-ci":  true,
+                  "team-backup":  true,
+                  "retro-auto":  true,
+                  "mobile-briefing":  true,
+                  "model-roster-view":  true,
+                  "autonomous-capability-audit":  true,
+                  "honors-grade-audit":  true,
+                  "goal-loop-manager":  true,
+                  "clarification-gate":  true,
+                  "scheduled-automation-runner":  true,
+                  "github-watchlist-sync":  true,
+                  "model-catalog-watch":  true,
+                  "state-cleanup":  true
+              },
+    "command":  {
+                    "quality":  {
+                                    "description":  "Ejecuta el gate de calidad senior sobre cambios actuales.",
+                                    "agent":  "chief-engineer-assistant",
+                                    "template":  "Ejecuta elite-quality-gate y corrige o delega cualquier bloqueo. Argumentos: $ARGUMENTS"
+                                },
+                    "route":  {
+                                  "description":  "Calcula tier, agentes, MCPs, gates y evidencias antes de ejecutar una peticion.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta prompt-optimizer y decision-router sobre esta peticion. No implementes todavia; devuelve ruta, riesgos, gates y evidencias: $ARGUMENTS"
+                              },
+                    "flow-check":  {
+                                       "description":  "Valida la ruta V4 contra politicas de agentes, MCPs, skills, gates y evidencias.",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta flow-policy-check sobre la ruta actual o task_id. Si hay BLOCK, corrige la ruta antes de delegar. Argumentos: $ARGUMENTS"
+                                   },
+                    "classify":  {
+                                     "description":  "Clasifica una peticion sin ejecutar: workflow, riesgo, modelo, autonomia y verificacion.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Ejecuta prompt-optimizer, decision-router y flow-policy-check sin implementar. Devuelve classification, agentes, MCPs, gates y stop_conditions: $ARGUMENTS"
+                                 },
+                    "route-eval":  {
+                                       "description":  "Ejecuta escenarios de regresion del decision-router.",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta decision-router con self_test=true. Si falla, no implementes nada y muestra diferencias: $ARGUMENTS"
+                                   },
+                    "team-curator":  {
+                                         "description":  "Genera reporte curador semanal del equipo y opcionalmente lo envia a Telegram.",
+                                         "agent":  "team-curator",
+                                         "template":  "Ejecuta team-curator-report. Si ARGUMENTS contiene telegram, envia resumen a Telegram. Argumentos: $ARGUMENTS"
+                                     },
+                    "model-audit":  {
+                                        "description":  "Audita modelos pinneados por agente y fallback policy.",
+                                        "agent":  "team-curator",
+                                        "template":  "Ejecuta model-assignment-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                    },
+                    "state-audit":  {
+                                        "description":  "Audita maquina de estados, transiciones y gates de aprobacion.",
+                                        "agent":  "team-curator",
+                                        "template":  "Ejecuta workflow-state-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                    },
+                    "approve-plan":  {
+                                         "description":  "Aprueba explicitamente el plan de una tarea antes de editar codigo.",
+                                         "agent":  "chief-engineer-assistant",
+                                         "template":  "Ejecuta plan-approval-gate con action=approve para el task_id indicado. Solo acepta frases como \u0027apruebo el plan\u0027 o \u0027adelante con el plan\u0027. Argumentos: $ARGUMENTS"
+                                     },
+                    "readiness":  {
+                                      "description":  "Smoke test barato de proveedores, Cursor, MCPs, skills, tools, comandos y ultimo preflight.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta readiness-smoke. Si hay BLOCK, no inicies Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                  },
+                    "flow":  {
+                                 "description":  "Muestra ejecucion reciente: tools, errores, fallback y salud de proveedores.",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Ejecuta flow-status con limit=20. Si ARGUMENTS trae session_id, filtra por esa sesion. Resume en lenguaje claro que se ejecuto y si hay fallback activo."
+                             },
+                    "models":  {
+                                   "description":  "Estado de fallback de modelos y proveedores bloqueados.",
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Ejecuta model-provider-health. Si ARGUMENTS trae un agente, pasalo como agent. Explica modelo efectivo y bloqueos activos."
+                               },
+                    "trace":  {
+                                  "description":  "Resumen legible paso a paso del flujo reciente (fases, tools, modelos).",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta flow-trace mode=summary limit=20. Si ARGUMENTS trae session_id, filtralo. Explica que se ejecuto en lenguaje claro."
+                              },
+                    "teach":  {
+                                  "description":  "Guarda una correccion de Javier como memoria prioritaria.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta correction-capture con correction_text=$ARGUMENTS, source=slash:/teach y severity=correction. Confirma en una frase que queda guardado."
+                              },
+                    "workflow":  {
+                                     "description":  "Ejecuta o inspecciona el flujo V4 faseado con state, TEAM_TRACE y gates.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Aplica el flujo V4 completo con prompt-optimizer, decision-router, autonomous-flow, state y TEAM_TRACE. Argumentos: $ARGUMENTS"
+                                 },
+                    "verify":  {
+                                   "description":  "Verifica cambios con QA, AppSec, SRE, elite-quality-gate y evidencia de release.",
+                                   "agent":  "qa-automation-lead",
+                                   "template":  "Ejecuta verificacion integral segun decision-router y autonomous-flow. Argumentos: $ARGUMENTS"
+                               },
+                    "voice":  {
+                                  "description":  "Activa o desactiva modo voz Chief Engineer.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Gestiona modo voz con los argumentos: $ARGUMENTS"
+                              },
+                    "simulate":  {
+                                     "description":  "Simula carga, picos, failover o latencia contra staging.",
+                                     "agent":  "sre-engineer",
+                                     "template":  "Ejecuta simulacion segura con argumentos: $ARGUMENTS"
+                                 },
+                    "digest":  {
+                                   "description":  "Genera Daily Digest manual.",
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Ejecuta daily-digest-summary. Devuelve solo el resumen operativo accionable; no uses N/A, no Telegram salvo que ARGUMENTS lo pida explicitamente. Argumentos: $ARGUMENTS"
+                               },
+                    "retro":  {
+                                  "description":  "Lanza o consulta retrospectivas.",
+                                  "agent":  "sre-engineer",
+                                  "template":  "Gestiona retrospectiva con argumentos: $ARGUMENTS"
+                              },
+                    "ponytail":  {
+                                     "description":  "Activa criterio senior minimalista: YAGNI, stdlib/nativo primero y menor diff correcto.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Aplica Ponytail con nivel ARGUMENTS (lite/full/ultra/off; full si vacio). Antes de escribir codigo, cuestiona YAGNI, stdlib, nativo, dependencia existente y menor diff correcto. Argumentos: $ARGUMENTS"
+                                 },
+                    "ponytail-review":  {
+                                            "description":  "Revisa cambios solo por sobreingenieria y oportunidades de borrar codigo.",
+                                            "agent":  "chief-engineer-assistant",
+                                            "template":  "Usa la skill ponytail-review sobre los cambios actuales. Solo complejidad: delete, stdlib, native, yagni, shrink. No corrijas bugs aqui. Argumentos: $ARGUMENTS"
+                                        },
+                    "ponytail-audit":  {
+                                           "description":  "Audita el repo completo para detectar sobreingenieria, bloat y dependencias evitables.",
+                                           "agent":  "team-curator",
+                                           "template":  "Usa la skill ponytail-audit sobre el repositorio completo. Devuelve acciones rankeadas para subir el score del equipo. Argumentos: $ARGUMENTS"
+                                       },
+                    "ponytail-debt":  {
+                                          "description":  "Recolecta marcadores inline ponytail: deuda tecnica intencional y triggers de upgrade.",
+                                          "agent":  "team-curator",
+                                          "template":  "Usa la skill ponytail-debt y resume marcadores, riesgos sin trigger y acciones pendientes. Argumentos: $ARGUMENTS"
+                                      },
+                    "adelante":  {
+                                     "description":  "Confirma promocion a produccion durante una ventana auditada.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Gestiona confirmacion de produccion con argumentos: $ARGUMENTS"
+                                 },
+                    "mobile-status":  {
+                                          "description":  "Estado operativo corto para usar desde movil: Web, Cursor ACP, readiness, proveedores, trazas y git dirty.",
+                                          "agent":  "chief-engineer-assistant",
+                                          "template":  "Ejecuta mobile-ops-status detail=false. Devuelve mobile_summary y acciones concretas. Argumentos: $ARGUMENTS"
+                                      },
+                    "rescue":  {
+                                   "description":  "Rescate remoto bajo demanda: diagnostica Web/Cursor/readiness/proveedores/trazas y propone la siguiente accion segura.",
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Ejecuta mobile-ops-status detail=true, flow-status limit=20, model-provider-health y readiness-smoke. Si hay BLOCK, prioriza restaurar acceso remoto y no toques produccion. Argumentos: $ARGUMENTS"
+                               },
+                    "ops":  {
+                                "description":  "Panel operativo compacto: salud, runtime, trazas y bloqueos sin ruido.",
+                                "agent":  "chief-engineer-assistant",
+                                "template":  "Ejecuta mobile-ops-status detail=true y flow-trace mode=summary limit=20. Devuelve estado ejecutivo para movil. Argumentos: $ARGUMENTS"
+                            },
+                    "radar":  {
+                                  "description":  "Busca novedades externas accionables: repos recientes, MCPs, agents, releases y herramientas AI para mejorar el equipo.",
+                                  "agent":  "tech-radar-agent",
+                                  "template":  "Ejecuta tech-radar-fetch con sources github_recent,mcp_registry,awesome_copilot,github_trending,hn max_items_per_source=8. Devuelve maximo 8 items con accion: EVALUAR/OBSERVAR/DESCARTAR. No instales nada. Argumentos: $ARGUMENTS"
+                              },
+                    "repo-check":  {
+                                       "description":  "Evalua un repo de GitHub encontrado en Twitter antes de instalarlo o integrarlo.",
+                                       "agent":  "tech-radar-agent",
+                                       "template":  "Ejecuta repo-intake-gate con url=$ARGUMENTS. Devuelve PASS/WARN/BLOCK, riesgos, licencia, mantenimiento, relevancia y siguiente paso seguro. No instales nada."
+                                   },
+                    "autopilot":  {
+                                      "description":  "Autopilot operativo para movil: salud, fallback, ruta efectiva y siguiente accion segura.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta mobile-autopilot mode=status. Si hay DEGRADED_READY, explica el modelo efectivo y como reintentar sin diagnostico manual. Argumentos: $ARGUMENTS"
+                                  },
+                    "failover":  {
+                                     "description":  "Fuerza o limpia failover de proveedores desde movil.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Si ARGUMENTS contiene openai, ejecuta mobile-autopilot mode=mark-openai-down reason=$ARGUMENTS. Si contiene clear, ejecuta mobile-autopilot mode=clear-provider-blocks. Luego muestra rutas efectivas y siguiente reintento seguro."
+                                 },
+                    "improve":  {
+                                    "description":  "Loop de mejora continua: readiness, fallback, errores repetidos, radar y acciones priorizadas.",
+                                    "agent":  "team-curator",
+                                    "template":  "Ejecuta continuous-improvement-loop include_radar=true max_actions=8. Devuelve P0/P1/P2 y no instales nada externo sin repo-check y sandbox. Argumentos: $ARGUMENTS"
+                                },
+                    "safety":  {
+                                   "description":  "Safety net movil: bloqueos operativos antes de Tier 2/3, produccion o tareas serias.",
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Ejecuta mobile-safety-net strict=false. Si devuelve BLOCK, no inicies Tier 2/3 y ejecuta /rescue o la accion indicada. Argumentos: $ARGUMENTS"
+                               },
+                    "obsidian":  {
+                                     "description":  "Guarda una decision, runbook, retro, radar o nota en el vault local de Obsidian.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Ejecuta obsidian-capture. Usa kind=inbox salvo que ARGUMENTS indique decision/runbook/retro/radar/team. No guardes secretos. Argumentos: $ARGUMENTS"
+                                 },
+                    "team-ci":  {
+                                    "description":  "CI completo del equipo antes de trabajo serio desde movil.",
+                                    "agent":  "team-curator",
+                                    "template":  "Ejecuta team-ci include_agnix=true notify_telegram=false. Si BLOCK, no iniciar Tier 2/3. Argumentos: $ARGUMENTS"
+                                },
+                    "backup-team":  {
+                                        "description":  "Backup local restaurable de configuracion OpenCode del equipo.",
+                                        "agent":  "chief-engineer-assistant",
+                                        "template":  "Ejecuta team-backup label=$ARGUMENTS y resume ruta del backup."
+                                    },
+                    "retro-auto":  {
+                                       "description":  "Agrupa errores repetidos y genera retro accionable en Obsidian.",
+                                       "agent":  "sre-engineer",
+                                       "template":  "Ejecuta retro-auto max_groups=5 notify_telegram=false. Devuelve grupos y acciones."
+                                   },
+                    "briefing":  {
+                                     "description":  "Briefing corto para movil/Telegram con estado, riesgos y siguiente accion.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Ejecuta mobile-briefing send_telegram=false save_obsidian=true. Si ARGUMENTS contiene telegram, usa send_telegram=true."
+                                 },
+                    "models-roster":  {
+                                          "description":  "Muestra en Web/TUI la tabla completa de los 40 agentes con modelo primario, efectivo y fallback.",
+                                          "agent":  "chief-engineer-assistant",
+                                          "template":  "Ejecuta model-roster-view format=table. Devuelve la tabla completa y destaca fallback activo. Argumentos: $ARGUMENTS"
+                                      },
+                    "autonomy-audit":  {
+                                           "description":  "Audita que comandos, tools, permisos, MCPs y fallback automatico esten conectados para uso autonomo del Chief.",
+                                           "agent":  "team-curator",
+                                           "template":  "Ejecuta autonomous-capability-audit fail_on_warn=false. Si hay BLOCK, no iniciar Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                       },
+                    "matricula":  {
+                                      "description":  "Auditoria matricula de honor del equipo y paquete de revision externa sin secretos.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta honors-grade-audit write_packet=true fail_below=95. Si no llega a SOBRESALIENTE/MATRICULA, lista acciones concretas hasta 100. Argumentos: $ARGUMENTS"
+                                  },
+                    "goal":  {
+                                 "description":  "Define objetivo con criterios verificables y loop hasta completarlo (Claude /goal).",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Usa skill goal-driven-loop y goal-loop-manager operation=create. Luego itera resume-tick hasta complete o bloqueo. Argumentos: $ARGUMENTS"
+                             },
+                    "loop":  {
+                                 "description":  "Loop iterativo o recurrente hasta cumplir objetivo (Claude /loop + Ralph).",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Usa skill goal-driven-loop. Parsea intervalo si existe; crea o continua goal; ejecuta primera iteracion ya. Argumentos: $ARGUMENTS"
+                             },
+                    "loop-stop":  {
+                                      "description":  "Detiene un goal-loop activo.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta goal-loop-manager operation=cancel para el goal indicado o el activo mas reciente. Argumentos: $ARGUMENTS"
+                                  },
+                    "handoff":  {
+                                    "description":  "Cierra sesion con git, beads, verificacion y resumen (session-handoff).",
+                                    "agent":  "chief-engineer-assistant",
+                                    "template":  "Usa skill session-handoff. Ejecuta state-manager list_interrupted, handoff-ledger summarize, git status; crea issues pendientes con bd; commit/push solo si Javier lo pidio explicitamente en ARGUMENTS. Argumentos: $ARGUMENTS"
+                                },
+                    "goals":  {
+                                  "description":  "Lista goals activos y estado de loops.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta goal-loop-manager operation=list. Resume objetivos activos, iteracion, criterios pendientes y siguiente accion. Argumentos: $ARGUMENTS"
+                              },
+                    "automation":  {
+                                       "description":  "Estado de jobs automaticos (radar, watchlist, modelos, digest).",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta scheduled-automation-runner operation=status. Si ARGUMENTS contiene force, usa operation=force job_id=... Argumentos: $ARGUMENTS"
+                                   }
+                },
+    "mcp":  {
+                "context7-local":  {
+                                       "enabled":  true,
+                                       "type":  "local",
+                                       "command":  [
+                                                   "C:/nvm4w/nodejs/context7-mcp.cmd"
+                                               ],
+                                       "timeout":  30000
+                                   },
+                "ddg-search":  {
+                                   "enabled":  true,
+                                   "type":  "local",
+                                   "command":  [
+                                                   "C:/nvm4w/nodejs/duckduckgo-mcp-server.cmd"
+                                               ],
+                                   "timeout":  30000
+                               },
+                "fetch-local":  {
+                                    "enabled":  true,
+                                    "type":  "local",
+                                    "command":  [
+                                                   "C:/nvm4w/nodejs/fetch-mcp.cmd"
+                                               ],
+                                    "timeout":  30000
+                                },
+                "git-local":  {
+                                  "enabled":  false,
+                                  "type":  "local",
+                                  "command":  [
+                                                   "C:/nvm4w/nodejs/git-mcp-server.cmd"
+                                               ],
+                                  "timeout":  30000
+                              },
+                "beads":  {
+                              "enabled":  false,
+                              "type":  "local",
+                              "command":  [
+                                              "C:/Users/Javier/AppData/Local/Programs/Python/Python311/Scripts/beads-mcp.exe"
+                                          ],
+                              "timeout":  5000
+                          },
+                "memory":  {
+                               "enabled":  true,
+                               "type":  "local",
+                               "command":  [
+                                               "C:/nvm4w/nodejs/mcp-server-memory.cmd"
+                                           ],
+                               "timeout":  30000
+                           },
+                "sequential-thinking":  {
+                                            "enabled":  true,
+                                            "type":  "local",
+                                            "command":  [
+                                                            "C:/nvm4w/nodejs/mcp-server-sequential-thinking.cmd"
+                                                        ],
+                                            "timeout":  30000
+                                        },
+                "dart-flutter-mcp":  {
+                                         "enabled":  true,
+                                         "type":  "local",
+                                         "command":  [
+                                                         "C:/flutter/bin/dart.bat",
+                                                         "mcp-server"
+                                                     ],
+                                         "timeout":  30000
+                                     },
+                "pub-mcp":  {
+                                "enabled":  true,
+                                "type":  "local",
+                                "command":  [
+                                                "C:/nvm4w/nodejs/pub-mcp.cmd",
+                                                "--stdio"
+                                            ],
+                                "timeout":  30000
+                            },
+                "ibm-db2-mcp":  {
+                                    "type":  "local",
+                                    "command":  [
+                                                    "C:\\Program Files\\nodejs\\node.exe",
+                                                    "C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/scripts/opencode/mcp/ibm-odbc-mcp.cjs"
+                                                ],
+                                    "environment":  {
+                                                        "ODBC_DSN":  "GMP",
+                                                        "ODBC_SCHEMA":  "JAVIER"
+                                                    },
+                                    "enabled":  true,
+                                    "timeout":  30000,
+                                    "env":  {
+                                                "ODBC_DSN":  "GMP",
+                                                "ODBC_SCHEMA":  "JAVIER"
+                                            }
+                                },
+                "gmp-deploy-ssh":  {
+                                       "type":  "local",
+                                       "command":  [
+                                                       "C:\\Program Files\\nodejs\\node.exe",
+                                                       "C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/scripts/opencode/mcp/gmp-deploy-ssh-mcp.cjs"
+                                                   ],
+                                       "environment":  {
+                                                           "SSH_GMP_HOST":  "192.168.1.230",
+                                                           "SSH_GMP_USER":  "gmp"
+                                                       },
+                                       "enabled":  true,
+                                       "timeout":  30000
+                                   },
+                "playwright":  {
+                                   "enabled":  true,
+                                   "type":  "local",
+                                   "command":  [
+                                                   "C:/nvm4w/nodejs/playwright-mcp.cmd"
+                                               ],
+                                   "timeout":  30000
+                               },
+                "chrome-devtools":  {
+                                        "enabled":  true,
+                                        "type":  "local",
+                                        "command":  [
+                                                   "C:/nvm4w/nodejs/chrome-devtools-mcp.cmd"
+                                               ],
+                                        "timeout":  30000
+                                    },
+                "github":  {
+                               "enabled":  true,
+                               "type":  "local",
+                               "command":  [
+                                               "C:/nvm4w/nodejs/mcp-server-github.cmd"
+                                           ],
+                               "environment":  {
+                                                   "GITHUB_TOKEN":  "${env.GITHUB_TOKEN}"
+                                               },
+                               "timeout":  30000
+                           },
+                "firecrawl":  {
+                                  "enabled":  false,
+                                  "type":  "local",
+                                  "command":  [
+                                                   "C:/nvm4w/nodejs/firecrawl-mcp.cmd"
+                                               ],
+                                  "timeout":  30000
+                              },
+                "sentry":  {
+                               "enabled":  false,
+                               "type":  "local",
+                               "command":  [
+                                                   "C:/nvm4w/nodejs/mcp-server-sentry.cmd"
+                                               ],
+                               "timeout":  30000
+                           },
+                "filesystem":  {
+                                   "enabled":  false,
+                                   "type":  "local",
+                                   "command":  [
+                                                   "C:/nvm4w/nodejs/mcp-server-filesystem.cmd"
+                                               ],
+                                   "timeout":  30000
+                               },
+                "context7":  {
+                                 "enabled":  true,
+                                 "type":  "local",
+                                 "command":  [
+                                                   "C:/nvm4w/nodejs/context7-mcp.cmd"
+                                               ],
+                                 "timeout":  30000
+                             },
+                "fetch":  {
+                              "enabled":  true,
+                              "type":  "local",
+                              "command":  [
+                                                   "C:/nvm4w/nodejs/fetch-mcp.cmd"
+                                               ],
+                              "timeout":  30000
+                          },
+                "git":  {
+                            "enabled":  false,
+                            "type":  "local",
+                            "command":  [
+                                                   "C:/nvm4w/nodejs/git-mcp-server.cmd"
+                                               ],
+                            "timeout":  30000
+                        },
+                "time":  {
+                             "enabled":  true,
+                             "type":  "local",
+                             "command":  [
+                                             "C:/Users/Javier/.local/bin/uvx.exe",
+                                             "mcp-server-time",
+                                             "--local-timezone",
+                                             "Europe/Madrid"
+                                         ],
+                             "timeout":  30000
+                         },
+                "gh_grep":  {
+                                "enabled":  true,
+                                "type":  "local",
+                                "command":  [
+                                                   "C:/nvm4w/nodejs/mcp-server-github.cmd"
+                                               ],
+                                "environment":  {
+                                                    "GITHUB_TOKEN":  "${env.GITHUB_TOKEN}"
+                                                },
+                                "timeout":  30000
+                            }
+            },
+    "provider":  {
+                     "openai":  {
+                                    "options":  {
+                                                    "timeout":  600000,
+                                                    "chunkTimeout":  60000
+                                                },
+                                    "models":  {
+                                                   "gpt-5.5":  {
+                                                                   "options":  {
+                                                                                   "reasoningEffort":  "high"
+                                                                               },
+                                                                   "variants":  {
+                                                                                    "medium":  {
+                                                                                                   "reasoningEffort":  "medium"
+                                                                                               },
+                                                                                    "high":  {
+                                                                                                 "reasoningEffort":  "high"
+                                                                                             },
+                                                                                    "xhigh":  {
+                                                                                                  "reasoningEffort":  "high"
+                                                                                              }
+                                                                                }
+                                                               }
+                                               }
+                                },
+                     "opencode":  {
+                                      "models":  {
+                                                     "deepseek-v4-flash-free":  {
+                                                                                    "name":  "DeepSeek V4 Flash Free"
+                                                                                },
+                                                     "mimo-v2.5-free":  {
+                                                                            "name":  "MiMo V2.5 Free"
+                                                                        },
+                                                     "minimax-m3-free":  {
+                                                                             "name":  "MiniMax M3 Free"
+                                                                         },
+                                                     "nemotron-3-super-free":  {
+                                                                                   "name":  "Nemotron 3 Super Free"
+                                                                               },
+                                                     "big-pickle":  {
+                                                                        "name":  "Big Pickle"
+                                                                    }
+                                                 }
+                                  },
+                     "cursor-acp":  {
+                                        "npm":  "@ai-sdk/openai-compatible",
+                                        "name":  "Cursor ACP",
+                                        "options":  {
+                                                        "baseURL":  "http://127.0.0.1:32124/v1",
+                                                        "apiKey":  "${env.CURSOR_API_KEY}",
+                                                        "timeout":  240000,
+                                                        "chunkTimeout":  30000
+                                                    },
+                                        "models":  {
+                                                       "auto":  {
+                                                                    "name":  "auto",
+                                                                    "tool_call":  true,
+                                                                    "reasoning":  true,
+                                                                    "options":  {
+
+                                                                                }
+                                                                },
+                                                       "composer-2-fast":  {
+                                                                               "name":  "composer-2-fast",
+                                                                               "tool_call":  true,
+                                                                               "reasoning":  true,
+                                                                               "options":  {
+
+                                                                                           }
+                                                                           },
+                                                       "composer-2":  {
+                                                                          "name":  "composer-2",
+                                                                          "tool_call":  true,
+                                                                          "reasoning":  true,
+                                                                          "options":  {
+
+                                                                                      }
+                                                                      },
+                                                       "composer-2.5":  {
+                                                                            "name":  "composer-2.5",
+                                                                            "tool_call":  true,
+                                                                            "reasoning":  true,
+                                                                            "options":  {
+
+                                                                                        }
+                                                                        }
+                                                   }
+                                    }
+                 }
 }
