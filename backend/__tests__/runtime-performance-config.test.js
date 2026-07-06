@@ -74,7 +74,9 @@ describe('runtime performance configuration', () => {
 
     expect(source).toMatch(/scoped aggregate/);
     expect(source).toMatch(/fetchObjectiveEvolutionRows/);
-    expect(source).toMatch(/getClientCodesFromCache\(safeVendorCodes\[0\]\)/);
+    expect(source).toMatch(/fetchObjectiveEvolutionRowsByClientScope/);
+    expect(source).toMatch(/getClientCodesFromCache\(vendorCode\)/);
+    expect(source).toMatch(/COMMISSION_CLIENT_SCOPE_MAX_CODES/);
     expect(source).toMatch(/TRIM\(L\.R1_T8CDVD\) IN/);
     expect(source).toMatch(/code !== 'UNK'/);
     expect(source).toMatch(/code\.length <= 2/);
@@ -90,13 +92,16 @@ describe('runtime performance configuration', () => {
     );
 
     expect(source).toMatch(/fetchSingleVendorCommissionSalesRows/);
-    expect(source).toMatch(/DB2 regressed badly/);
+    expect(source).toMatch(/salesFallbackPromise/);
+    expect(source).toMatch(/Normal commission\/objective views must use client scope/);
     expect(source).not.toMatch(/SELECT S\.VENDOR_CODE/);
     expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
     expect(source).toMatch(/batchFetchVendorDataChunked/);
     expect(source).toMatch(/COMMISSION_ALL_VENDOR_CHUNK_SIZE/);
     expect(source).toMatch(/returning stale cached summary/);
     expect(source).toMatch(/getCommissionSalesRowsFromClientCache/);
+    expect(source).toMatch(/getCommissionSalesRowsByClientScopeForVendors/);
+    expect(source).toMatch(/sales-by-client-scope:GROUP/);
     expect(source).toMatch(/sales-by-client-scope/);
     expect(source).toMatch(/previousMarDecVendorCol/);
     expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);

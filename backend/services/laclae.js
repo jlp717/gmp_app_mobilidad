@@ -30,6 +30,15 @@ function normalizeCodeList(value) {
         .filter(v => v && !['undefined', 'null', 'N/A', 'ALL'].includes(v.toUpperCase()) && v.length <= 10);
 }
 
+function expandVendorCacheCodes(value) {
+    return [...new Set(normalizeCodeList(value).flatMap(code => {
+        const raw = String(code || '').trim();
+        const unpadded = raw.replace(/^0+/, '') || raw;
+        const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : raw;
+        return [raw, unpadded, padded].filter(Boolean);
+    }))];
+}
+
 // Evict oldest entries when cache exceeds limit
 function evictLaclaeCache(maxEntries) {
     while (laclaeCacheAccessOrder.length > maxEntries) {
@@ -491,7 +500,7 @@ function getClientCodesFromCache(vendedorCodes) {
         return Array.from(allClients);
     }
 
-    const vendedors = normalizeCodeList(vendedorCodes);
+    const vendedors = expandVendorCacheCodes(vendedorCodes);
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
@@ -523,7 +532,7 @@ function getVendorActiveDaysFromCache(vendedorCode) {
     }
 
     // P7: Split comma-separated codes and process each
-    const codes = String(vendedorCode).split(',').map(c => c.trim()).filter(Boolean);
+    const codes = expandVendorCacheCodes(vendedorCode);
     const daysSet = new Set();
     let totalClients = 0;
 
@@ -553,7 +562,7 @@ function getVendorDeliveryDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) return [];
 
     // P7: Split comma-separated codes and process each
-    const codes = String(vendedorCode).split(',').map(c => c.trim()).filter(Boolean);
+    const codes = expandVendorCacheCodes(vendedorCode);
     const daysSet = new Set();
 
     codes.forEach(code => {

@@ -46,7 +46,7 @@ const {
     resolveObjectiveSalesTarget,
 } = require('../utils/objectives-source');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260603-june-rebalance';
+const OBJECTIVES_CACHE_VERSION = 'v20260706-live-sales-alignment';
 const objectivesByClientBreaker = new CircuitBreaker({
     name: 'objectives-by-client',
     failureThreshold: 2,
@@ -270,6 +270,64 @@ async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
             }
         }
     }
+}
+
+function aggregateObjectiveRows(rows) {
+    const byMonth = new Map();
+    (rows || []).forEach(row => {
+        const year = parseInt(row.YEAR, 10);
+        const month = parseInt(row.MONTH, 10);
+        if (!year || !month) return;
+
+        const key = `${year}:${month}`;
+        const current = byMonth.get(key) || {
+            YEAR: year,
+            MONTH: month,
+            SALES: 0,
+            COST: 0,
+            CLIENTS: 0,
+        };
+        current.SALES += parseFloat(row.SALES) || 0;
+        current.COST += parseFloat(row.COST) || 0;
+        current.CLIENTS += parseInt(row.CLIENTS, 10) || 0;
+        byMonth.set(key, current);
+    });
+    return Array.from(byMonth.values()).sort((a, b) => (a.YEAR - b.YEAR) || (a.MONTH - b.MONTH));
+}
+
+async function fetchObjectiveEvolutionRowsByClientScope(vendorCode, uniqueYears) {
+    const cachedClientCodes = getClientCodesFromCache(vendorCode);
+    if (!Array.isArray(cachedClientCodes) || cachedClientCodes.length === 0) return null;
+
+    const safeClientCodes = [...new Set(
+        cachedClientCodes
+            .map(code => sanitizeForSQL(code))
+            .filter(Boolean)
+    )].sort();
+    const maxCodes = Math.max(1, Math.min(parseInt(process.env.COMMISSION_CLIENT_SCOPE_MAX_CODES || '5000', 10), 5000));
+    if (safeClientCodes.length === 0 || safeClientCodes.length > maxCodes) return null;
+
+    const yearPlaceholders = uniqueYears.map(() => '?').join(',');
+    const chunkSize = 250;
+    const chunks = chunkArray(safeClientCodes, chunkSize);
+    const chunkRows = await mapChunksWithConcurrency(chunks, 3, async (chunk) => {
+        const clientPlaceholders = chunk.map(() => '?').join(',');
+        return queryWithParams(`
+            SELECT
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                COUNT(DISTINCT L.LCCDCL) as CLIENTS
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${yearPlaceholders})
+              AND ${LACLAE_SALES_FILTER}
+              AND L.LCCDCL IN (${clientPlaceholders})
+            GROUP BY L.LCAADC, L.LCMMDC
+        `, [...uniqueYears, ...chunk], false);
+    });
+
+    return aggregateObjectiveRows(chunkRows.flat());
 }
 
 async function getFixedMonthlyObjectiveTarget(vendorCode, year, month) {
@@ -654,27 +712,8 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
     }
 
     if (safeVendorCodes.length === 1) {
-        const cachedClientCodes = getClientCodesFromCache(safeVendorCodes[0]);
-        if (Array.isArray(cachedClientCodes) && cachedClientCodes.length > 0 && cachedClientCodes.length <= 300) {
-            const safeClientCodes = cachedClientCodes.map(code => sanitizeForSQL(code)).filter(Boolean);
-            if (safeClientCodes.length > 0) {
-                const clientPlaceholders = safeClientCodes.map(() => '?').join(',');
-                return queryWithParams(`
-                    SELECT
-                        L.LCAADC as YEAR,
-                        L.LCMMDC as MONTH,
-                        SUM(L.LCIMVT) as SALES,
-                        SUM(L.LCIMCT) as COST,
-                        COUNT(DISTINCT L.LCCDCL) as CLIENTS
-                    FROM DSED.LACLAE L
-                    WHERE L.LCAADC IN (${yearPlaceholders})
-                      AND ${LACLAE_SALES_FILTER}
-                      AND L.LCCDCL IN (${clientPlaceholders})
-                    GROUP BY L.LCAADC, L.LCMMDC
-                    ORDER BY L.LCAADC, L.LCMMDC
-                `, [...uniqueYears, ...safeClientCodes], false);
-            }
-        }
+        const clientScopeRows = await fetchObjectiveEvolutionRowsByClientScope(safeVendorCodes[0], uniqueYears);
+        if (clientScopeRows) return clientScopeRows;
     }
 
     const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');

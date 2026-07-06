@@ -416,11 +416,16 @@ async function getCommissionSalesRowsFromClientCache(vendedorCode, selectedYear,
         cachedCodes
             .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10))
             .filter(Boolean)
-    )];
+    )].sort();
     const maxCodes = Math.max(1, Math.min(parseInt(process.env.COMMISSION_CLIENT_SCOPE_MAX_CODES || '2000', 10), 5000));
     if (safeClientCodes.length === 0 || safeClientCodes.length > maxCodes) return null;
 
-    const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:${vendedorCode}:${selectedYear}:${safeClientCodes.length}`;
+    const clientHash = crypto
+        .createHash('sha1')
+        .update(safeClientCodes.join(','))
+        .digest('hex')
+        .substring(0, 12);
+    const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:${vendedorCode}:${selectedYear}:${clientHash}:${safeClientCodes.length}`;
     const cachedRows = await redisCache.get('route', cacheKey);
     if (cachedRows) return cachedRows;
 
@@ -445,6 +450,78 @@ async function getCommissionSalesRowsFromClientCache(vendedorCode, selectedYear,
     }));
 
     const rows = aggregateCommissionSalesRows(chunkRows.flat());
+    await redisCache.set('route', cacheKey, rows, TTL.SHORT).catch(() => {});
+    return rows;
+}
+
+async function getCommissionSalesRowsByClientScopeForVendors(vendorCodes, selectedYear, prevYear) {
+    const clientToVendors = new Map();
+    for (const vendorCode of vendorCodes || []) {
+        const cachedCodes = getClientCodesFromCache(vendorCode);
+        if (!Array.isArray(cachedCodes) || cachedCodes.length === 0) continue;
+
+        const normalizedVendor = String(vendorCode || '').trim().replace(/^0+/, '') || String(vendorCode || '').trim();
+        cachedCodes
+            .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10))
+            .filter(Boolean)
+            .forEach(clientCode => {
+                if (!clientToVendors.has(clientCode)) clientToVendors.set(clientCode, new Set());
+                clientToVendors.get(clientCode).add(normalizedVendor);
+            });
+    }
+
+    const safeClientCodes = Array.from(clientToVendors.keys()).sort();
+    const maxCodes = Math.max(1, Math.min(parseInt(process.env.COMMISSION_CLIENT_SCOPE_MAX_CODES || '5000', 10), 5000));
+    if (safeClientCodes.length === 0 || safeClientCodes.length > maxCodes) return [];
+
+    const scopeHash = crypto
+        .createHash('sha1')
+        .update(JSON.stringify({
+            vendors: (vendorCodes || []).map(code => String(code || '').trim()).sort(),
+            clients: safeClientCodes,
+        }))
+        .digest('hex')
+        .substring(0, 12);
+    const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:GROUP:${scopeHash}:${selectedYear}:${safeClientCodes.length}`;
+    const cachedRows = await redisCache.get('route', cacheKey);
+    if (cachedRows) return cachedRows;
+
+    const chunkSize = 250;
+    const chunks = [];
+    for (let index = 0; index < safeClientCodes.length; index += chunkSize) {
+        chunks.push(safeClientCodes.slice(index, index + chunkSize));
+    }
+
+    const chunkRows = await Promise.all(chunks.map((chunk) => {
+        const placeholders = chunk.map(() => '?').join(',');
+        return queryWithParams(`
+            SELECT TRIM(L.LCCDCL) as CLIENT_CODE,
+                   L.LCAADC as YEAR,
+                   L.LCMMDC as MONTH,
+                   SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (?, ?)
+              AND ${LACLAE_SALES_FILTER}
+              AND L.LCCDCL IN (${placeholders})
+            GROUP BY TRIM(L.LCCDCL), L.LCAADC, L.LCMMDC
+        `, [selectedYear, prevYear, ...chunk], false);
+    }));
+
+    const expandedRows = [];
+    chunkRows.flat().forEach(row => {
+        const vendors = clientToVendors.get(String(row.CLIENT_CODE || '').trim());
+        if (!vendors) return;
+        vendors.forEach(vendorCode => {
+            expandedRows.push({
+                VENDOR_CODE: vendorCode,
+                YEAR: row.YEAR,
+                MONTH: row.MONTH,
+                SALES: row.SALES,
+            });
+        });
+    });
+
+    const rows = aggregateVendorCommissionSalesRows(expandedRows);
     await redisCache.set('route', cacheKey, rows, TTL.SHORT).catch(() => {});
     return rows;
 }
@@ -717,8 +794,6 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         logger.warn(`[COMMISSIONS] batchFetchAllVendorData called without vendor codes for ${year}`);
         return {};
     }
-    const placeholders = safeCodes.map(() => '?').join(',');
-
     // Build code variants (both padded "05" and unpadded "5") for VENTAS_B and COMMISSION_PAYMENTS.
     // These tables may store vendor codes in a different format than LACLAE.
     // getBSales (single-vendor mode) uses OR clause for both formats — replicate that here.
@@ -729,57 +804,68 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     }))];
     const variantPlaceholders = codeVariants.map(() => '?').join(',');
 
+    const clientScopeSalesRows = await getCommissionSalesRowsByClientScopeForVendors(safeCodes, year, year - 1);
+    const clientScopedVendors = new Set(
+        clientScopeSalesRows.map(row => (String(row.VENDOR_CODE || '').trim().replace(/^0+/, '') || String(row.VENDOR_CODE || '').trim()))
+    );
+    const fallbackCodes = safeCodes.filter(code => {
+        const normalized = String(code || '').trim().replace(/^0+/, '') || String(code || '').trim();
+        return !clientScopedVendors.has(normalized);
+    });
+    const fallbackPlaceholders = fallbackCodes.map(() => '?').join(',');
+
+    const salesFallbackPromise = fallbackCodes.length > 0
+        ? Promise.all([
+            // Current-year and previous-year document-vendor sales are fallback
+            // only. Normal commission/objective views must use client scope.
+            queryWithParams(`
+                SELECT TRIM(${currentSalesVendorCol}) as VENDOR_CODE,
+                       L.LCAADC as YEAR,
+                       L.LCMMDC as MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND ${LACLAE_SALES_FILTER}
+                  AND TRIM(${currentSalesVendorCol}) IN (${fallbackPlaceholders})
+                GROUP BY TRIM(${currentSalesVendorCol}), L.LCAADC, L.LCMMDC
+            `, [year, ...fallbackCodes], false),
+
+            queryWithParams(`
+                SELECT TRIM(${previousJanFebVendorCol}) as VENDOR_CODE,
+                       L.LCAADC as YEAR,
+                       L.LCMMDC as MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND L.LCMMDC < 3
+                  AND ${LACLAE_SALES_FILTER}
+                  AND TRIM(${previousJanFebVendorCol}) IN (${fallbackPlaceholders})
+                GROUP BY TRIM(${previousJanFebVendorCol}), L.LCAADC, L.LCMMDC
+            `, [year - 1, ...fallbackCodes], false),
+
+            queryWithParams(`
+                SELECT TRIM(${previousMarDecVendorCol}) as VENDOR_CODE,
+                       L.LCAADC as YEAR,
+                       L.LCMMDC as MONTH,
+                       SUM(L.LCIMVT) as SALES
+                FROM DSED.LACLAE L
+                WHERE L.LCAADC = ?
+                  AND L.LCMMDC >= 3
+                  AND ${LACLAE_SALES_FILTER}
+                  AND TRIM(${previousMarDecVendorCol}) IN (${fallbackPlaceholders})
+                GROUP BY TRIM(${previousMarDecVendorCol}), L.LCAADC, L.LCMMDC
+            `, [year - 1, ...fallbackCodes], false),
+        ])
+        : Promise.resolve([[], [], []]);
+
     const [
-        currentSalesRows,
-        previousJanFebSalesRows,
-        previousMarDecSalesRows,
+        [currentSalesRows, previousJanFebSalesRows, previousMarDecSalesRows],
         allBSalesRows,
         allPaymentsRows,
         allFixedTargets,
         allVendorNames,
     ] = await Promise.all([
-        // 1a. Current-year LACLAE sales.
-        // Keep each source as a separate SELECT; DB2 regressed badly when the
-        // same work was expressed as one UNION ALL statement for broad scopes.
-        queryWithParams(`
-            SELECT TRIM(${currentSalesVendorCol}) as VENDOR_CODE,
-                   L.LCAADC as YEAR,
-                   L.LCMMDC as MONTH,
-                   SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC = ?
-              AND ${LACLAE_SALES_FILTER}
-              AND TRIM(${currentSalesVendorCol}) IN (${placeholders})
-            GROUP BY TRIM(${currentSalesVendorCol}), L.LCAADC, L.LCMMDC
-        `, [year, ...safeCodes], false),
-
-        // 1b. Previous-year Jan/Feb baseline by sales seller.
-        queryWithParams(`
-            SELECT TRIM(${previousJanFebVendorCol}) as VENDOR_CODE,
-                   L.LCAADC as YEAR,
-                   L.LCMMDC as MONTH,
-                   SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC = ?
-              AND L.LCMMDC < 3
-              AND ${LACLAE_SALES_FILTER}
-              AND TRIM(${previousJanFebVendorCol}) IN (${placeholders})
-            GROUP BY TRIM(${previousJanFebVendorCol}), L.LCAADC, L.LCMMDC
-        `, [year - 1, ...safeCodes], false),
-
-        // 1c. Previous-year Mar-Dec objective baseline by assigned seller.
-        queryWithParams(`
-            SELECT TRIM(${previousMarDecVendorCol}) as VENDOR_CODE,
-                   L.LCAADC as YEAR,
-                   L.LCMMDC as MONTH,
-                   SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCAADC = ?
-              AND L.LCMMDC >= 3
-              AND ${LACLAE_SALES_FILTER}
-              AND TRIM(${previousMarDecVendorCol}) IN (${placeholders})
-            GROUP BY TRIM(${previousMarDecVendorCol}), L.LCAADC, L.LCMMDC
-        `, [year - 1, ...safeCodes], false),
+        salesFallbackPromise,
 
         // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
         // Use codeVariants (both padded + unpadded) to match however codes are stored in VENTAS_B.
@@ -819,10 +905,17 @@ async function batchFetchAllVendorData(vendorCodes, year) {
             WHERE TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
         `, [...codeVariants], false),
     ]);
-    const allSalesRows = aggregateVendorCommissionSalesRows([
+    const db2SalesRows = aggregateVendorCommissionSalesRows([
         ...currentSalesRows,
         ...previousJanFebSalesRows,
         ...previousMarDecSalesRows,
+    ]);
+    const allSalesRows = aggregateVendorCommissionSalesRows([
+        ...clientScopeSalesRows,
+        ...db2SalesRows.filter(row => {
+            const normalized = String(row.VENDOR_CODE || '').trim().replace(/^0+/, '') || String(row.VENDOR_CODE || '').trim();
+            return !clientScopedVendors.has(normalized);
+        }),
     ]);
 
     // Partition data by vendor in memory
@@ -1315,6 +1408,15 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             },
             isExcluded,
         });
+        const liveBeforeHistoricalSnapshot = {
+            currentSales,
+            target,
+            commValue,
+            currentLacSales,
+            result,
+            targetSource,
+            snapshotSource: null,
+        };
 
         const isSnapshotMonth = (selectedYear === 2026 && m <= SNAPSHOT_UNTIL_MONTH && SNAPSHOT_UNTIL_MONTH > 0);
         let snapshotApplied = historicalMonth.isHistoricalSnapshot;
@@ -1346,6 +1448,22 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
         }
 
+        const historicalSnapshot = historicalMonth.isHistoricalSnapshot ? {
+            status: historicalMonth.status,
+            actual: historicalMonth.actual,
+            target: historicalMonth.target,
+            commission: historicalMonth.commission,
+            source: historicalMonth.snapshotSource,
+        } : null;
+        currentSales = liveBeforeHistoricalSnapshot.currentSales;
+        target = liveBeforeHistoricalSnapshot.target;
+        commValue = liveBeforeHistoricalSnapshot.commValue;
+        currentLacSales = liveBeforeHistoricalSnapshot.currentLacSales;
+        result = liveBeforeHistoricalSnapshot.result;
+        targetSource = liveBeforeHistoricalSnapshot.targetSource;
+        snapshotSource = liveBeforeHistoricalSnapshot.snapshotSource;
+        snapshotApplied = false;
+
         const paymentDetail = payments?.details?.[m] || payments?.details?.[String(m)] || null;
         const paymentSnapshot = resolvePaymentSnapshotMonth({
             paymentDetail,
@@ -1357,7 +1475,24 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             isExcluded,
         });
 
+        let paymentSnapshotInfo = null;
+        const liveBeforePaymentSnapshot = {
+            currentSales,
+            target,
+            commValue,
+            currentLacSales,
+            result,
+            targetSource,
+            snapshotSource,
+        };
         if (paymentSnapshot.isPaymentSnapshot) {
+            paymentSnapshotInfo = {
+                status: paymentSnapshot.status,
+                actual: paymentSnapshot.actual,
+                target: paymentSnapshot.target,
+                commission: paymentSnapshot.commission,
+                source: paymentSnapshot.snapshotSource,
+            };
             currentSales = paymentSnapshot.actual;
             target = paymentSnapshot.target;
             commValue = paymentSnapshot.commission;
@@ -1368,6 +1503,14 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             result = calculateCommission(currentSales, target, config);
             logger.debug(`[COMMISSIONS] PAYMENT SNAPSHOT month ${m}/${selectedYear} for ${vendedorCode}: venta=${currentSales.toFixed(2)} obj=${target.toFixed(2)} comm=${commValue.toFixed(2)}`);
         }
+        currentSales = liveBeforePaymentSnapshot.currentSales;
+        target = liveBeforePaymentSnapshot.target;
+        commValue = liveBeforePaymentSnapshot.commValue;
+        currentLacSales = liveBeforePaymentSnapshot.currentLacSales;
+        result = liveBeforePaymentSnapshot.result;
+        targetSource = liveBeforePaymentSnapshot.targetSource;
+        snapshotSource = liveBeforePaymentSnapshot.snapshotSource;
+        snapshotApplied = false;
 
         // Add to totals
         grandTotalCommission += commValue;
@@ -1431,7 +1574,11 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             snapshotApplied: snapshotApplied,
             snapshotSource: snapshotSource,
             targetSource: targetSource,
-            paymentSnapshotApplied: snapshotSource === 'JAVIER.COMMISSION_PAYMENTS',
+            historicalSnapshot,
+            paymentSnapshot: paymentSnapshotInfo,
+            snapshotRecorded: Boolean(historicalSnapshot || paymentSnapshotInfo),
+            paymentSnapshotApplied: false,
+            paymentSnapshotRecorded: Boolean(paymentSnapshotInfo),
             complianceCtx: {
                 pct: (target > 0) ? (currentSales / target) * 100 : 0,
                 increment: result.increment,
@@ -1441,6 +1588,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 isExcluded: isExcluded,
                 snapshotApplied: snapshotApplied,
                 snapshotSource: snapshotSource,
+                snapshotRecorded: Boolean(historicalSnapshot || paymentSnapshotInfo),
+                paymentSnapshotRecorded: Boolean(paymentSnapshotInfo),
                 targetSource: targetSource
             },
             dailyComplianceCtx: {

@@ -3,13 +3,10 @@
 /**
  * Commissions PDF report service.
  *
- * The PDF must follow the same historical rule as the commissions screen:
- * - Jan/Feb 2026 are covered by JAVIER.COMMISSION_SNAPSHOT_2026_0102.
- * - If a vendor has a row there, sales/target/generated/paid come from it.
- * - If a vendor is absent in a covered month, sales and target stay calculated
- *   with the historical vendor criterion, but generated and paid commission are 0.
- * - If JAVIER.COMMISSION_PAYMENTS has a closed month, that stored payment
- *   snapshot wins over historical/live calculations.
+ * The PDF must follow the same rule as the commissions screen:
+ * - Current sales and targets come from the live commission calculation.
+ * - Historical/payment rows are kept as audit and paid-amount metadata.
+ * - Stored snapshots must not overwrite live sales, targets, or generated commission.
  */
 
 const PDFDocument = require('pdfkit');
@@ -606,6 +603,9 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
             let commission = calculateCommission(totalSales, target, config).commission;
             let paidOverride = null;
             let status = 'live';
+            const liveTarget = target;
+            const liveTotalSales = totalSales;
+            const liveCommission = commission;
 
             const snapshotEntry = getSnapshotEntry(snapshotData, normalized, month);
             const coveredHistoricalMonth = parseInt(year, 10) === 2026 &&
@@ -624,6 +624,9 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
                 paidOverride = 0;
                 status = 'not_commissioned';
             }
+            target = liveTarget;
+            totalSales = liveTotalSales;
+            commission = liveCommission;
 
             const paymentSnapshot = resolvePaymentSnapshotMonth({
                 paymentDetail: paymentMonths[month] || null,
@@ -642,6 +645,9 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
                 paidOverride = toNumber(paymentMonths[month]?.importePagado);
                 status = 'payment_recorded';
             }
+            target = liveTarget;
+            totalSales = liveTotalSales;
+            commission = liveCommission;
 
             setNestedMonthValue(targetMap, normalized, month, {
                 objetivo: target,

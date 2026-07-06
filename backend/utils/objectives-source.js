@@ -1,8 +1,12 @@
 'use strict';
 
 /**
- * Align objectives sales with commissions: COMMISSION_SNAPSHOT first, then
- * client-scope LACLAE (same as commissions.js), then DSEDAC.LAC fallback.
+ * Align objectives sales with commissions: client-scope LACLAE first
+ * (same as commissions.js), then live document-vendor LACLAE fallback, then
+ * DSEDAC.LAC fallback.
+ *
+ * Commission snapshots/payment rows are audit records. They must not overwrite
+ * current sales shown in Objectives.
  * Never use V_FACT_VENTAS / V_FACT_RESUMEN_VENTAS / V_STG_LAC.
  */
 const { queryWithParams } = require('../config/db');
@@ -175,11 +179,6 @@ async function queryFallbackLacMonthSales(vendorCodes, year, month) {
 
 async function getAlignedVendorSalesForObjectives(vendorCodes, year, month) {
     const rawTarget = await lookupCommercialTarget(vendorCodes, year, month);
-
-    const snapshotSales = await lookupSnapshotSales(vendorCodes, year, month);
-    if (snapshotSales != null) {
-        return { sales: snapshotSales, source: 'snapshot', rawTarget };
-    }
 
     const singleVendor = parseSingleVendorCode(vendorCodes);
     if (singleVendor) {

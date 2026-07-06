@@ -9,7 +9,7 @@ import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
 /// API facade for objectives screens.
 class ObjectivesService {
-  static const _cacheVersion = 'v20260529_hybrid_jefe_all';
+  static const _cacheVersion = 'v20260706_live_sales_alignment';
 
   /// Fetch list of distinct populations/cities
   static Future<List<String>> getPopulations() async {

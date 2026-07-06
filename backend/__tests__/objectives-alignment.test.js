@@ -31,19 +31,21 @@ describe('objectives alignment with commissions sales source', () => {
         getClientCodesFromCache.mockReturnValue(null);
     });
 
-    test('test_snapshot_takes_priority', async () => {
+    test('live client-scope sales take priority over stored snapshots', async () => {
+        getClientCodesFromCache.mockReturnValue(['C0001']);
         queryWithParams.mockImplementation(async (sql) => {
             if (sql.includes('COMMERCIAL_TARGETS')) return [];
             if (sql.includes('COMMISSION_SNAPSHOT_2026_0102')) {
                 return [{ SALES: 46849.80 }];
             }
-            return [{ SALES: 99999 }];
+            if (sql.includes('DSED.LACLAE')) return [{ SALES: 52347.18 }];
+            return [];
         });
 
         const result = await getAlignedVendorSalesForObjectives('35', 2026, 1);
 
-        expect(result.sales).toBe(46849.80);
-        expect(result.source).toBe('snapshot');
+        expect(result.sales).toBe(52347.18);
+        expect(result.source).toBe('live_client_scope');
     });
 
     test('test_commercial_targets_takes_priority_for_target', async () => {
