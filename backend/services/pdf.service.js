@@ -49,6 +49,10 @@ const EMPRESA = {
     registro: 'Inscrita en el registro mercantil de Murcia. Libro 140, Sección 3ª, Folio 142, Hoja 5657, Inscripción 2ª. CIF: B04008710'
 };
 
+const FOOTER_Y = 770;
+// Keep body content clear of the fixed legal footer and PDFKit's bottom margin.
+const CONTENT_BOTTOM_Y = 735;
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // FUNCIONES AUXILIARES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -132,11 +136,9 @@ function drawHeader(doc, yStart = 10) {
 }
 
 function drawFooter(doc, pageNum, totalPages) {
-    const footerY = 770;
-
     // Línea separadora elegante
-    doc.moveTo(40, footerY)
-        .lineTo(555, footerY)
+    doc.moveTo(40, FOOTER_Y)
+        .lineTo(555, FOOTER_Y)
         .strokeColor(COLORS.lightGray)
         .lineWidth(0.5)
         .stroke();
@@ -145,7 +147,7 @@ function drawFooter(doc, pageNum, totalPages) {
     doc.fontSize(6)
         .font('Helvetica')
         .fillColor(COLORS.mediumGray)
-        .text(EMPRESA.registro, 40, footerY + 5, {
+        .text(EMPRESA.registro, 40, FOOTER_Y + 5, {
             align: 'center',
             width: 515
         });
@@ -153,10 +155,19 @@ function drawFooter(doc, pageNum, totalPages) {
     // Número de página
     doc.fontSize(7)
         .fillColor(COLORS.mediumGray)
-        .text(`Página ${pageNum} de ${totalPages}`, 40, footerY + 13, {
+        .text(`Página ${pageNum} de ${totalPages}`, 40, FOOTER_Y + 13, {
             align: 'center',
             width: 515
         });
+}
+
+function ensureContentSpace(doc, y, requiredHeight) {
+    if (y + requiredHeight <= CONTENT_BOTTOM_Y) {
+        return y;
+    }
+
+    doc.addPage();
+    return drawHeader(doc, 10) + 10;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -427,15 +438,19 @@ async function generateInvoicePDF(facturaData) {
                 });
             }
 
+            // TOTALES usando header.bases
+            const bases = header.bases || [];
+            const taxRows = bases.length > 0 ? Math.max(bases.length, 1) : 0;
+            const taxTableHeight = taxRows > 0 ? 16 + (taxRows * 14) : 0;
+            const totalsBlockHeight = 12 + (taxTableHeight > 0 ? taxTableHeight + 18 : 0) + 22 + 24 + 28;
+
+            y = ensureContentSpace(doc, y, totalsBlockHeight);
+
             doc.moveTo(40, y).lineTo(555, y).strokeColor(COLORS.lightGray).lineWidth(1).stroke();
             y += 12;
 
-            // TOTALES usando header.bases
-            const bases = header.bases || [];
-
             if (bases.length > 0) {
-                const numFilas = Math.max(bases.length, 1);
-                const alturaTabla = 16 + (numFilas * 14);
+                const alturaTabla = taxTableHeight;
 
                 doc.rect(40, y, 515, alturaTabla).strokeColor(COLORS.border).lineWidth(1).stroke();
                 // Vertical lines

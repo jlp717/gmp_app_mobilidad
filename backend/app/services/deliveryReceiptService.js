@@ -232,11 +232,12 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
         try {
             // Calcular altura dinámica con más espacio para cada elemento
             const lineHeight = 12; // More spacing between product lines
+            const estimatedLineHeight = 18;
             const headerHeight = 135;
             const footerHeight = hasSignature ? 150 : 80; // More space for signature
             const ivaGroups = Object.keys(gruposIVA).length;
-            const minHeight = headerHeight + (lines.length * lineHeight) + (ivaGroups * 14) + footerHeight + 100;
-            const docHeight = Math.max(300, Math.min(1200, minHeight));
+            const minHeight = headerHeight + (lines.length * estimatedLineHeight) + (ivaGroups * 14) + footerHeight + 100;
+            const docHeight = Math.max(300, minHeight);
 
             const doc = new PDFDocument({
                 size: [226, docHeight],

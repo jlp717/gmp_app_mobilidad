@@ -14,7 +14,7 @@ const logger = require('../middleware/logger');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 const { verifyToken } = require('../middleware/auth');
 
-const FACTURA_PDF_CACHE_VERSION = 'v3';
+const FACTURA_PDF_CACHE_VERSION = 'v4';
 const FACTURA_DEFAULT_LIMIT = 250;
 const FACTURA_MAX_LIMIT = 500;
 const FACTURA_MAX_OFFSET = 5000;

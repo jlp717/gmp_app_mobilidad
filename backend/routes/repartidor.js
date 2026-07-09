@@ -30,6 +30,7 @@ const repartidorBreaker = new RepartidorCircuitBreaker({
 });
 const REPARTIDOR_LINES_INSERT_CHUNK_SIZE = Math.max(1, parseInt(process.env.REPARTIDOR_LINES_INSERT_CHUNK_SIZE, 10) || 100);
 const REPARTIDOR_LINES_MAX_PER_REQUEST = Math.max(1, parseInt(process.env.REPARTIDOR_LINES_MAX_PER_REQUEST, 10) || 1000);
+const REPARTIDOR_PDF_CACHE_VERSION = 'v2';
 const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
 const facturasService = require('../services/facturas.service');
 const pdfService = require('../services/pdf.service');
@@ -2492,7 +2493,7 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
         const typeLabel = isFactura ? 'Factura' : 'Albarán';
 
         // Generate or retrieve cached PDF
-        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}`;
+        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}_${REPARTIDOR_PDF_CACHE_VERSION}`;
         let pdfBuffer = getCachedPdf(cacheKey);
 
         if (!pdfBuffer) {
@@ -2586,7 +2587,7 @@ router.post('/document/share/whatsapp', verifyToken, async (req, res) => {
         const typeLabel = isFactura ? 'Factura' : 'Albarán';
 
         // Generate or retrieve cached PDF
-        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}`;
+        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}_${REPARTIDOR_PDF_CACHE_VERSION}`;
         let pdfBuffer = getCachedPdf(cacheKey);
 
         if (!pdfBuffer) {
