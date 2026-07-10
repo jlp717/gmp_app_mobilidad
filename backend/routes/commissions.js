@@ -84,7 +84,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'WHERE YEAR = ?',
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
-const COMMISSIONS_CACHE_VERSION = 'v20260706-paid-month-lock';
+const COMMISSIONS_CACHE_VERSION = 'v20260709-pdf-summary-match';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).

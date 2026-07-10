@@ -736,6 +736,32 @@ function getSummaryPayment(vendor, month) {
     return detailPaid || monthlyPaid;
 }
 
+function getSummaryPdfMonthValues(vendor, condorDataMap, normalizedVendorCode, month) {
+    const monthData = (vendor?.months || []).find(item => parseInt(item.month, 10) === month) || {};
+    const actual = toNumber(monthData.actual ?? monthData.totalSales);
+    const objective = toNumber(monthData.target ?? monthData.objective);
+    const condorAmount = monthData.bSales !== undefined
+        ? toNumber(monthData.bSales)
+        : getVendorCondorMonth(condorDataMap, normalizedVendorCode, month);
+    const lacAmount = monthData.lacSales !== undefined
+        ? toNumber(monthData.lacSales)
+        : Math.max(actual - condorAmount, 0);
+    const generated = toNumber(monthData.complianceCtx?.commission ?? monthData.commission);
+    const paid = getSummaryPayment(vendor, month);
+    const pct = objective > 0 ? (actual / objective) * 100 : 0;
+
+    return {
+        monthData,
+        actual,
+        objective,
+        condorAmount,
+        lacAmount,
+        generated,
+        paid,
+        pct,
+    };
+}
+
 function drawSummaryPdfTable({
     doc,
     vendor,
@@ -790,14 +816,16 @@ function drawSummaryPdfTable({
     };
 
     for (let month = startMonth; month <= endMonth; month++) {
-        const monthData = (vendor.months || []).find(item => parseInt(item.month, 10) === month) || {};
-        const actual = toNumber(monthData.actual);
-        const objective = toNumber(monthData.target);
-        const condorAmount = getVendorCondorMonth(condorDataMap, normalized, month);
-        const lacAmount = Math.max(actual - condorAmount, 0);
-        const generated = toNumber(monthData.complianceCtx?.commission);
-        const paid = getSummaryPayment(vendor, month);
-        const pct = objective > 0 ? (actual / objective) * 100 : 0;
+        const {
+            monthData,
+            actual,
+            objective,
+            condorAmount,
+            lacAmount,
+            generated,
+            paid,
+            pct,
+        } = getSummaryPdfMonthValues(vendor, condorDataMap, normalized, month);
 
         totals.objective += objective;
         totals.lac += lacAmount;
@@ -1608,6 +1636,7 @@ module.exports = {
         calculateCommission,
         buildMonthlyTargetsAndCommissions,
         generateCommissionsPdfFromSummary,
+        getSummaryPdfMonthValues,
         getSnapshotCommissionData,
         buildTeamLeadAccumulatedRows,
         normalizeVendorCode,

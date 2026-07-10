@@ -165,6 +165,40 @@ describe('Commissions PDF historical months', () => {
         }));
     });
 
+    test('summary PDF row uses the commission tab values without recalculating the split', () => {
+        const service = loadService(jest.fn(async () => []));
+        const values = service._private.getSummaryPdfMonthValues(
+            {
+                code: '02',
+                name: 'BARTOLO',
+                months: [{
+                    month: 6,
+                    target: 93749.97,
+                    actual: 108853.73,
+                    lacSales: 108853.73,
+                    bSales: 0,
+                    complianceCtx: { commission: 302.08 },
+                }],
+                payments: { monthly: {}, details: {} },
+            },
+            new Map([
+                ['2', {
+                    code: '02',
+                    months: { 6: { condor: 347.31 } },
+                }],
+            ]),
+            '2',
+            6,
+        );
+
+        expect(values.objective).toBeCloseTo(93749.97, 2);
+        expect(values.actual).toBeCloseTo(108853.73, 2);
+        expect(values.lacAmount).toBeCloseTo(108853.73, 2);
+        expect(values.condorAmount).toBeCloseTo(0, 2);
+        expect(values.generated).toBeCloseTo(302.08, 2);
+        expect(values.paid).toBeCloseTo(0, 2);
+    });
+
     test('payment snapshot locks paid PDF metrics instead of recalculating live values', async () => {
         const queryWithParams = jest.fn(async (sql) => {
             if (sql.includes('JAVIER.COMM_CONFIG')) return [];
@@ -426,7 +460,7 @@ describe('Commissions PDF route helpers', () => {
         expect(result).toEqual([cachedVendor]);
         expect(redisGet).toHaveBeenCalledWith(
             'route',
-            'comm:summary:v20260706-paid-month-lock:ALL:2026',
+            'comm:summary:v20260709-pdf-summary-match:ALL:2026',
         );
         expect(resolveAllModeVendorCodes).not.toHaveBeenCalled();
         expect(query).not.toHaveBeenCalled();
