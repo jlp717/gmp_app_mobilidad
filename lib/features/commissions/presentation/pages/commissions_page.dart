@@ -312,7 +312,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     };
   }
 
-  /// Returns a Set of months (1-12) already paid for a vendor
+  /// Returns a Set of months (1-12) already fully paid for a vendor.
+  /// Partial or trivial payments (< 1 EUR) do not lock the month.
   Set<int> _getPaidMonthsForVendor(String vendorCode) {
     final paidMonths = <int>{};
     Map? paymentsMap;
@@ -333,8 +334,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final monthly = (paymentsMap['monthly'] as Map?) ?? {};
       for (final entry in monthly.entries) {
         final monthNum = int.tryParse(entry.key.toString()) ?? 0;
-        final amount = (entry.value as num?)?.toDouble() ?? 0;
-        if (monthNum > 0 && amount > 0) {
+        final paidAmount = (entry.value as num?)?.toDouble() ?? 0;
+        if (monthNum <= 0 || paidAmount < 1.0) continue;
+
+        final monthData = _getMonthDataForVendor(vendorCode, monthNum);
+        final commission =
+            (monthData['commissionMes'] as num?)?.toDouble() ?? 0;
+        // Lock only when payment covers the generated commission (1 cent tolerance).
+        if (commission <= 0 || paidAmount >= commission - 0.01) {
           paidMonths.add(monthNum);
         }
       }
@@ -342,10 +349,41 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     return paidMonths;
   }
 
+  /// Months with any prior payment (including partial/trivial) for warning UI.
+  Set<int> _getMonthsWithAnyPayment(String vendorCode) {
+    final monthsWithPayment = <int>{};
+    Map? paymentsMap;
+
+    final breakdown =
+        (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (breakdown.isNotEmpty) {
+      final vendorData = breakdown.firstWhere(
+        (v) => v['vendedorCode']?.toString() == vendorCode,
+        orElse: () => <String, dynamic>{},
+      );
+      paymentsMap = vendorData['payments'] as Map?;
+    } else {
+      paymentsMap = _data?['payments'] as Map?;
+    }
+
+    if (paymentsMap != null) {
+      final monthly = (paymentsMap['monthly'] as Map?) ?? {};
+      for (final entry in monthly.entries) {
+        final monthNum = int.tryParse(entry.key.toString()) ?? 0;
+        final amount = (entry.value as num?)?.toDouble() ?? 0;
+        if (monthNum > 0 && amount > 0) {
+          monthsWithPayment.add(monthNum);
+        }
+      }
+    }
+    return monthsWithPayment;
+  }
+
   Future<void> _showPayDialog(
       String vendorCode, String vendorName, double currentGenerated) async {
     // Get already-paid months and per-month commissions
     final paidMonths = _getPaidMonthsForVendor(vendorCode);
+    final monthsWithAnyPayment = _getMonthsWithAnyPayment(vendorCode);
 
     // Find first unpaid, non-future month as default selection
     final now = DateTime.now();
@@ -387,6 +425,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           final observacionesRequired =
               (monthCommission - currentAmount) > 0.01 && currentAmount > 0;
           final isMonthPaid = paidMonths.contains(selectedMonth);
+          final hasPriorPayment = monthsWithAnyPayment.contains(selectedMonth);
           final isMonthFuture = selectedMonth > now.month;
 
           return AlertDialog(
@@ -415,9 +454,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     items: List.generate(12, (index) {
                       final m = index + 1;
                       final isPaid = paidMonths.contains(m);
+                      final hasPayment = monthsWithAnyPayment.contains(m);
                       final isFuture = m > now.month;
                       var label = _getMonthName(m);
-                      if (isPaid) label += '  ✓ PAGADO';
+                      if (isPaid) {
+                        label += '  ✓ PAGADO';
+                      } else if (hasPayment) {
+                        label += '  ◐ PAGO PARCIAL';
+                      }
                       if (isFuture) label += '  (Futuro)';
                       return DropdownMenuItem(
                         value: m,
@@ -426,11 +470,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           style: TextStyle(
                             color: isPaid
                                 ? AppTheme.success
-                                : (isFuture
-                                    ? AppTheme.textTertiary
-                                    : AppTheme.textPrimary),
-                            fontWeight:
-                                isPaid ? FontWeight.bold : FontWeight.normal,
+                                : (hasPayment
+                                    ? AppTheme.warning
+                                    : (isFuture
+                                        ? AppTheme.textTertiary
+                                        : AppTheme.textPrimary)),
+                            fontWeight: (isPaid || hasPayment)
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
                       );
@@ -450,7 +497,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Warning if month already paid
+                  // Warning if month already paid or has prior partial payment
                   if (isMonthPaid)
                     Container(
                       width: double.infinity,
@@ -468,9 +515,34 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${_getMonthName(selectedMonth)} ya tiene un pago registrado. No se recomienda pagar dos veces el mismo mes.',
+                              '${_getMonthName(selectedMonth)} ya esta pagado. Puedes registrar un ajuste adicional si necesitas corregir el importe.',
                               style: const TextStyle(
                                   color: AppTheme.warning, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (hasPriorPayment)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: _commissionSurfaceDecoration(
+                        color: AppTheme.info.withValues(alpha: 0.1),
+                        borderColor: AppTheme.info,
+                        borderAlpha: 0.35,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline,
+                              color: AppTheme.info, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_getMonthName(selectedMonth)} tiene un pago parcial registrado. Puedes completar o corregir el importe.',
+                              style: const TextStyle(
+                                  color: AppTheme.info, fontSize: 11),
                             ),
                           ),
                         ],
@@ -630,8 +702,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 },
                 child: Text(
                   isMonthPaid
-                      ? 'Revisar (Mes ya pagado)'
-                      : 'Revisar y Confirmar',
+                      ? 'Registrar ajuste'
+                      : (hasPriorPayment
+                          ? 'Completar pago'
+                          : 'Revisar y Confirmar'),
                   style: const TextStyle(
                       color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
                 ),

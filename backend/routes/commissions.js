@@ -84,7 +84,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'WHERE YEAR = ?',
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
-const COMMISSIONS_CACHE_VERSION = 'v20260709-pdf-summary-match';
+const COMMISSIONS_CACHE_VERSION = 'v20260713-pdf-fresh-payments';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -2403,6 +2403,8 @@ router.post('/pay', verifyToken, async (req, res) => {
             await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`);
             await invalidateCachePattern('comm:summary:ALL:*');
             await invalidateCachePattern('comm:summary:GROUP:*');
+            await invalidateCachePattern(`comm:pdf:${COMMISSIONS_CACHE_VERSION}:*`);
+            await invalidateCachePattern('comm:pdf:*');
             logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);
         } catch (cacheErr) {
             logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
@@ -2502,15 +2504,7 @@ async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
         return [await calculateVendorData(safeVendorCode, year, config)];
     }
 
-    const cachedVendors = await getCachedPdfSummaryVendors(
-        safeVendorCode,
-        requestedVendorCodes,
-        userCode,
-        year
-    );
-    if (cachedVendors) {
-        return cachedVendors;
-    }
+    // PDF must always reflect latest COMMISSION_PAYMENTS — never reuse UI summary cache.
 
     const resolvedVendorCodes = safeVendorCode === 'ALL'
         ? await resolveAllModeVendorCodes(userCode, year, discoverVendorCodesForYear)
@@ -2562,7 +2556,11 @@ function normalizeVendorCodeForPdf(code) {
     return raw.replace(/^0+/, '') || raw;
 }
 
-const PDF_RESULT_CACHE_TTL_SECONDS = parseInt(process.env.PDF_RESULT_CACHE_TTL_SECONDS, 10) || 600;
+// Default 0: PDF binary cache caused stale reports (same file hours later). Opt-in via env only.
+const PDF_RESULT_CACHE_TTL_SECONDS = (() => {
+    const parsed = parseInt(process.env.PDF_RESULT_CACHE_TTL_SECONDS, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+})();
 const PDF_GENERATION_LOCK_TTL_MS = parseInt(process.env.PDF_GENERATION_LOCK_TTL_MS, 10) || 180000;
 const PDF_SINGLE_FLIGHT_WAIT_MS = parseInt(process.env.PDF_SINGLE_FLIGHT_WAIT_MS, 10) || 170000;
 const PDF_SINGLE_FLIGHT_POLL_MS = parseInt(process.env.PDF_SINGLE_FLIGHT_POLL_MS, 10) || 1000;
@@ -2687,29 +2685,38 @@ async function waitForPdfPayload(cacheKey) {
     );
 }
 
-async function getOrGeneratePdfPayload(cacheKey, generator) {
-    const cached = await getCachedPdfPayload(cacheKey);
-    if (cached) {
-        logger.info(`[PDF] Returning cached PDF result (${cacheKey})`);
-        return cached;
+async function getOrGeneratePdfPayload(cacheKey, generator, { skipCache = false } = {}) {
+    const cacheEnabled = PDF_RESULT_CACHE_TTL_SECONDS > 0 && !skipCache;
+    if (cacheEnabled) {
+        const cached = await getCachedPdfPayload(cacheKey);
+        if (cached) {
+            logger.info(`[PDF] Returning cached PDF result (${cacheKey})`);
+            return cached;
+        }
     }
 
     const canCoordinate = redisCache?.isConnected && typeof redisCache.acquireLock === 'function';
     if (!canCoordinate) {
         logger.warn(`[PDF] Redis lock unavailable; generating without cross-worker single-flight (${cacheKey})`);
-        return generator();
+        const fresh = await generator();
+        if (cacheEnabled) await setCachedPdfPayload(cacheKey, fresh);
+        return fresh;
     }
 
     const lockKey = `${cacheKey}:generate`;
     const lockToken = await redisCache.acquireLock('route', lockKey, PDF_GENERATION_LOCK_TTL_MS);
     if (!lockToken) {
+        if (!cacheEnabled) {
+            logger.warn(`[PDF] Lock busy without PDF cache; retrying generation (${cacheKey})`);
+            return generator();
+        }
         logger.info(`[PDF] Waiting for in-flight PDF generation (${cacheKey})`);
         return waitForPdfPayload(cacheKey);
     }
 
     try {
         const fresh = await generator();
-        await setCachedPdfPayload(cacheKey, fresh);
+        if (cacheEnabled) await setCachedPdfPayload(cacheKey, fresh);
         return fresh;
     } catch (error) {
         await setPdfErrorMarker(cacheKey, error);
@@ -2723,7 +2730,8 @@ async function getOrGeneratePdfPayload(cacheKey, generator) {
 
 router.get('/pdf', verifyToken, async (req, res) => {
     try {
-        const { year, months, range, vendorCode } = req.query;
+        const { year, months, range, vendorCode, forceRefresh } = req.query;
+        const skipPdfCache = forceRefresh === 'true' || forceRefresh === '1';
         
         // FIX: Use user code (req.user.code) instead of name, as name is not in JWT payload
         // The middleware auth.js sets: req.user = { id, code, role, isJefeVentas }
@@ -2864,7 +2872,7 @@ router.get('/pdf', verifyToken, async (req, res) => {
                     fileName: `comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`,
                     generatedAt: new Date().toISOString(),
                 };
-            });
+            }, { skipCache: skipPdfCache });
         } catch (pdfError) {
             const statusCode = pdfError.statusCode || 500;
             logger.error(`[PDF] Request failed: ${pdfError.message}`);

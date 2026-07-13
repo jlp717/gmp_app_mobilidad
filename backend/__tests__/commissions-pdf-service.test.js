@@ -437,7 +437,7 @@ describe('Commissions PDF route helpers', () => {
         expect(queryWithParams).not.toHaveBeenCalled();
     });
 
-    test('ALL PDF summary reuses grouped summary cache before DB work', async () => {
+    test('ALL PDF summary always fetches fresh data (no grouped summary cache)', async () => {
         const cachedVendor = {
             vendedorCode: '80',
             name: 'Vendor 80',
@@ -457,17 +457,17 @@ describe('Commissions PDF route helpers', () => {
             '98',
         );
 
-        expect(result).toEqual([cachedVendor]);
-        expect(redisGet).toHaveBeenCalledWith(
-            'route',
-            'comm:summary:v20260709-pdf-summary-match:ALL:2026',
-        );
-        expect(resolveAllModeVendorCodes).not.toHaveBeenCalled();
+        expect(result).toEqual([]);
+        expect(redisGet).not.toHaveBeenCalled();
+        expect(resolveAllModeVendorCodes).toHaveBeenCalledTimes(1);
         expect(query).not.toHaveBeenCalled();
         expect(queryWithParams).not.toHaveBeenCalled();
     });
 
-    test('PDF payload cache stores base64 buffers with short TTL', async () => {
+    test('PDF payload cache stores base64 buffers when TTL is enabled', async () => {
+        const previousTtl = process.env.PDF_RESULT_CACHE_TTL_SECONDS;
+        process.env.PDF_RESULT_CACHE_TTL_SECONDS = '600';
+        jest.resetModules();
         const redisSet = jest.fn(async () => true);
         const { routeModule } = loadRoute({ redisSet });
         const pdfBuffer = Buffer.from('%PDF-1.4 cached');
@@ -489,9 +489,13 @@ describe('Commissions PDF route helpers', () => {
             }),
             600,
         );
+
+        if (previousTtl === undefined) delete process.env.PDF_RESULT_CACHE_TTL_SECONDS;
+        else process.env.PDF_RESULT_CACHE_TTL_SECONDS = previousTtl;
+        jest.resetModules();
     });
 
-    test('PDF generation uses Redis lock and releases it after caching', async () => {
+    test('PDF generation uses Redis lock and skips binary cache by default', async () => {
         const redisSet = jest.fn(async () => true);
         const redisAcquireLock = jest.fn(async () => 'lock-token');
         const redisReleaseLock = jest.fn(async () => true);
@@ -512,17 +516,16 @@ describe('Commissions PDF route helpers', () => {
 
         expect(generator).toHaveBeenCalledTimes(1);
         expect(redisAcquireLock).toHaveBeenCalledWith('route', 'pdf:key:generate', expect.any(Number));
-        expect(redisSet).toHaveBeenCalledWith(
-            'route',
-            'pdf:key',
-            expect.objectContaining({ pdfBase64: pdfBuffer.toString('base64') }),
-            600,
-        );
+        expect(redisSet).not.toHaveBeenCalled();
         expect(redisReleaseLock).toHaveBeenCalledWith('route', 'pdf:key:generate', 'lock-token');
         expect(result.pdfBuffer).toEqual(pdfBuffer);
     });
 
-    test('PDF generation returns cached payload without acquiring a lock', async () => {
+    test('PDF generation returns cached payload only when cache TTL is enabled', async () => {
+        const previousTtl = process.env.PDF_RESULT_CACHE_TTL_SECONDS;
+        process.env.PDF_RESULT_CACHE_TTL_SECONDS = '600';
+        jest.resetModules();
+
         const pdfBuffer = Buffer.from('%PDF-1.4 cached');
         const redisGet = jest.fn(async () => ({
             pdfBase64: pdfBuffer.toString('base64'),
@@ -543,5 +546,9 @@ describe('Commissions PDF route helpers', () => {
         expect(redisAcquireLock).not.toHaveBeenCalled();
         expect(result.fromCache).toBe(true);
         expect(result.pdfBuffer).toEqual(pdfBuffer);
+
+        if (previousTtl === undefined) delete process.env.PDF_RESULT_CACHE_TTL_SECONDS;
+        else process.env.PDF_RESULT_CACHE_TTL_SECONDS = previousTtl;
+        jest.resetModules();
     });
 });

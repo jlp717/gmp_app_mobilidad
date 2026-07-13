@@ -60,12 +60,9 @@ function resolveCommissionTarget({
 
 function hasPaymentSnapshotData(paymentDetail) {
     if (!paymentDetail) return false;
-    return Boolean(paymentDetail.ultimaFecha)
-        || toNumber(paymentDetail.totalPaid) > 0
-        || toNumber(paymentDetail.ventaComision) > 0
-        || toNumber(paymentDetail.objetivoReal) > 0
-        || toNumber(paymentDetail.comisionGenerada) > 0
-        || toNumber(paymentDetail.comisionGeneradaSnapshot) > 0;
+    // Only freeze month metrics when money was actually paid.
+    const paid = toNumber(paymentDetail.totalPaid) || toNumber(paymentDetail.importePagado);
+    return paid > 0;
 }
 
 function resolvePaymentSnapshotMonth({

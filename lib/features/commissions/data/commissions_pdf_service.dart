@@ -85,6 +85,7 @@ class CommissionsPdfService {
           if (months != null) 'months': months, // New: comma-separated months
           if (range != null && months == null)
             'range': range, // Fallback for old API
+          'forceRefresh': '1',
         },
       );
 

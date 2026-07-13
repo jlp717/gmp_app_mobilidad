@@ -99,6 +99,7 @@ describe('commission historical snapshot handling', () => {
     test('payment snapshot overrides live month metrics when month is paid', () => {
         const result = resolvePaymentSnapshotMonth({
             paymentDetail: {
+                totalPaid: 613.21,
                 ventaComision: 72869.35,
                 objetivoReal: 42208.99,
                 comisionGeneradaSnapshot: 613.21,
@@ -117,5 +118,26 @@ describe('commission historical snapshot handling', () => {
         expect(result.target).toBe(42208.99);
         expect(result.commission).toBe(613.21);
         expect(result.status).toBe('payment_recorded');
+    });
+
+    test('stored venta/comision without paid importe does not lock month', () => {
+        const result = resolvePaymentSnapshotMonth({
+            paymentDetail: {
+                ventaComision: 72869.35,
+                objetivoReal: 42208.99,
+                comisionGeneradaSnapshot: 613.21,
+                ultimaFecha: '2026-04-26 21:13:01.755947',
+            },
+            liveMetrics: {
+                actual: 70069.52,
+                target: 42208.99,
+                commission: 557.21,
+            },
+            isExcluded: false,
+        });
+
+        expect(result.isPaymentSnapshot).toBe(false);
+        expect(result.commission).toBe(557.21);
+        expect(result.status).toBe('live');
     });
 });
