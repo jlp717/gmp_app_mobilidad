@@ -65,6 +65,22 @@ function hasPaymentSnapshotData(paymentDetail) {
     return paid > 0;
 }
 
+function requiresPartialPaymentObservaciones({
+    generatedAmount,
+    alreadyPaid = 0,
+    paymentAmount,
+    observaciones,
+}) {
+    const remainingDue = Math.max(0, toNumber(generatedAmount) - toNumber(alreadyPaid));
+    const payment = toNumber(paymentAmount);
+    if ((remainingDue - payment) <= 0.01) return false;
+    return !String(observaciones || '').trim();
+}
+
+function getRemainingCommissionDue(generatedAmount, alreadyPaid = 0) {
+    return Math.max(0, toNumber(generatedAmount) - toNumber(alreadyPaid));
+}
+
 function resolvePaymentSnapshotMonth({
     paymentDetail,
     liveMetrics,
@@ -174,4 +190,6 @@ module.exports = {
     resolveCommissionTarget,
     resolveHistoricalCommissionMonth,
     resolvePaymentSnapshotMonth,
+    requiresPartialPaymentObservaciones,
+    getRemainingCommissionDue,
 };

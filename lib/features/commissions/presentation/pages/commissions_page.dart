@@ -379,6 +379,48 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     return monthsWithPayment;
   }
 
+  double _getPaidAmountForMonth(String vendorCode, int month) {
+    Map? paymentsMap;
+
+    final breakdown =
+        (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (breakdown.isNotEmpty) {
+      final vendorData = breakdown.firstWhere(
+        (v) => v['vendedorCode']?.toString() == vendorCode,
+        orElse: () => <String, dynamic>{},
+      );
+      paymentsMap = vendorData['payments'] as Map?;
+    } else {
+      paymentsMap = _data?['payments'] as Map?;
+    }
+
+    if (paymentsMap == null) return 0;
+    final monthly = (paymentsMap['monthly'] as Map?) ?? {};
+    return (monthly['$month'] as num?)?.toDouble() ??
+        (monthly[month] as num?)?.toDouble() ??
+        0;
+  }
+
+  double _getRemainingDueForMonth(String vendorCode, int month) {
+    final monthData = _getMonthDataForVendor(vendorCode, month);
+    final commission = (monthData['commissionMes'] as num?)?.toDouble() ?? 0;
+    final alreadyPaid = _getPaidAmountForMonth(vendorCode, month);
+    final remaining = commission - alreadyPaid;
+    if (remaining > 0.01) return remaining;
+    return commission > 0 ? commission : 0;
+  }
+
+  String _buildPayHelperText(String vendorCode, int month, double commission) {
+    final alreadyPaid = _getPaidAmountForMonth(vendorCode, month);
+    if (alreadyPaid > 0.01) {
+      final remaining = (commission - alreadyPaid).clamp(0.0, double.infinity);
+      return 'Comision ${_getMonthName(month)}: ${commission.toStringAsFixed(2)} € | '
+          'Pagado: ${alreadyPaid.toStringAsFixed(2)} € | '
+          'Pendiente: ${remaining.toStringAsFixed(2)} €';
+    }
+    return 'Comision ${_getMonthName(month)}: ${commission.toStringAsFixed(2)} €';
+  }
+
   Future<void> _showPayDialog(
       String vendorCode, String vendorName, double currentGenerated) async {
     // Get already-paid months and per-month commissions
@@ -402,9 +444,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     // Get commission for the initially selected month
     final initialMonthData = _getMonthDataForVendor(vendorCode, selectedMonth);
     var monthCommission = initialMonthData['commissionMes'] ?? 0;
+    final initialSuggestedAmount =
+        _getRemainingDueForMonth(vendorCode, selectedMonth);
 
     final amountController =
-        TextEditingController(text: monthCommission.toStringAsFixed(2));
+        TextEditingController(text: initialSuggestedAmount.toStringAsFixed(2));
     final conceptController = TextEditingController(text: 'Pago Comisiones');
     final observacionesController = TextEditingController();
 
@@ -420,10 +464,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          // FIX: Use epsilon tolerance (0.01€) to avoid floating-point false positives
-          // e.g. 165.88 < 165.88000000000001 would wrongly mark observations as mandatory
+          final alreadyPaid = _getPaidAmountForMonth(vendorCode, selectedMonth);
+          final remainingDue =
+              (monthCommission - alreadyPaid).clamp(0.0, double.infinity);
+          // Require observaciones only when paying less than what is still pending.
           final observacionesRequired =
-              (monthCommission - currentAmount) > 0.01 && currentAmount > 0;
+              (remainingDue - currentAmount) > 0.01 && currentAmount > 0;
           final isMonthPaid = paidMonths.contains(selectedMonth);
           final hasPriorPayment = monthsWithAnyPayment.contains(selectedMonth);
           final isMonthFuture = selectedMonth > now.month;
@@ -487,8 +533,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       final newMonthData =
                           _getMonthDataForVendor(vendorCode, val);
                       monthCommission = newMonthData['commissionMes'] ?? 0;
+                      final suggestedAmount =
+                          _getRemainingDueForMonth(vendorCode, val);
                       amountController.text =
-                          monthCommission.toStringAsFixed(2);
+                          suggestedAmount.toStringAsFixed(2);
                       setStateDialog(() => selectedMonth = val);
                     },
                     decoration: _payFieldDecoration(
@@ -540,7 +588,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${_getMonthName(selectedMonth)} tiene un pago parcial registrado. Puedes completar o corregir el importe.',
+                              '${_getMonthName(selectedMonth)} tiene un pago parcial (${alreadyPaid.toStringAsFixed(2)} €). '
+                              'Puedes completar el pendiente (${remainingDue.toStringAsFixed(2)} €).',
                               style: const TextStyle(
                                   color: AppTheme.info, fontSize: 11),
                             ),
@@ -583,9 +632,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: _payFieldDecoration(
                       labelText: 'Importe (\u20ac) *',
-                      helperText:
-                          'Comisión ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
-                      helperColor: AppTheme.success,
+                      helperText: _buildPayHelperText(
+                          vendorCode, selectedMonth, monthCommission),
+                      helperColor: hasPriorPayment && !isMonthPaid
+                          ? AppTheme.warning
+                          : AppTheme.success,
                     ),
                     onChanged: (val) => setStateDialog(() {}),
                   ),
@@ -600,7 +651,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ? 'Observaciones * (OBLIGATORIO)'
                           : 'Observaciones (Opcional)',
                       helperText: observacionesRequired
-                          ? 'Debes explicar por que se paga menos de lo correspondiente'
+                          ? 'Debes explicar por que se paga menos de lo pendiente'
                           : 'Notas adicionales sobre este pago',
                       labelColor: observacionesRequired
                           ? AppTheme.warning
@@ -684,6 +735,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
                   final monthSnapshot =
                       _getMonthDataForVendor(vendorCode, capturedMonth);
+                  final alreadyPaidAtConfirm =
+                      _getPaidAmountForMonth(vendorCode, capturedMonth);
 
                   _showPayConfirmation(
                     vendorCode: vendorCode,
@@ -691,6 +744,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     month: capturedMonth,
                     amount: capturedAmount,
                     generatedAmount: monthSnapshot['commissionMes'] ?? 0,
+                    alreadyPaidAmount: alreadyPaidAtConfirm,
                     concept: capturedConcept,
                     observaciones: capturedObs,
                     adminCode: adminCode,
@@ -725,6 +779,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     required int month,
     required double amount,
     required double generatedAmount,
+    required double alreadyPaidAmount,
     required String concept,
     required String observaciones,
     required String adminCode,
@@ -732,7 +787,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     required double ventaActual,
     required double ventasSobreObjetivo,
   }) async {
-    final isPartialPay = amount < generatedAmount && amount > 0;
+    final remainingBefore =
+        (generatedAmount - alreadyPaidAmount).clamp(0.0, double.infinity);
+    final isPartialPay = (remainingBefore - amount) > 0.01 && amount > 0;
+    final isCompletionPay = alreadyPaidAmount > 0.01 && amount > 0;
 
     showDialog(
       context: context,
@@ -786,6 +844,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               const Divider(color: AppTheme.borderColor, height: 16),
               _confirmRow('Comision generada',
                   CurrencyFormatter.format(generatedAmount)),
+              if (alreadyPaidAmount > 0.01) ...[
+                _confirmRow('Ya pagado este mes',
+                    CurrencyFormatter.format(alreadyPaidAmount)),
+                _confirmRow('Pendiente antes de este pago',
+                    CurrencyFormatter.format(remainingBefore)),
+              ],
               _confirmRow(
                 'Importe a pagar',
                 CurrencyFormatter.format(amount),
@@ -794,6 +858,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               _confirmRow('Observaciones',
                   observaciones.isEmpty ? 'Ninguna' : observaciones),
               const SizedBox(height: 12),
+              if (isCompletionPay && !isPartialPay)
+                _commissionNotice(
+                  icon: Icons.payments_rounded,
+                  color: AppTheme.success,
+                  text: 'COMPLETAR PAGO PENDIENTE del mes',
+                  strong: true,
+                ),
               if (isPartialPay)
                 _commissionNotice(
                   icon: Icons.warning,

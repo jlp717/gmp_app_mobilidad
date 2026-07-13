@@ -4,6 +4,8 @@ const {
     resolveCommissionTarget,
     resolveHistoricalCommissionMonth,
     resolvePaymentSnapshotMonth,
+    requiresPartialPaymentObservaciones,
+    getRemainingCommissionDue,
 } = require('../utils/commission-snapshot');
 
 describe('commission historical snapshot handling', () => {
@@ -139,5 +141,28 @@ describe('commission historical snapshot handling', () => {
         expect(result.isPaymentSnapshot).toBe(false);
         expect(result.commission).toBe(557.21);
         expect(result.status).toBe('live');
+    });
+
+    test('partial payment completion does not require observaciones for remaining due', () => {
+        expect(requiresPartialPaymentObservaciones({
+            generatedAmount: 219.54,
+            alreadyPaid: 11.58,
+            paymentAmount: 207.96,
+            observaciones: '',
+        })).toBe(false);
+
+        expect(requiresPartialPaymentObservaciones({
+            generatedAmount: 219.54,
+            alreadyPaid: 11.58,
+            paymentAmount: 200,
+            observaciones: '',
+        })).toBe(true);
+
+        expect(requiresPartialPaymentObservaciones({
+            generatedAmount: 219.54,
+            alreadyPaid: 0,
+            paymentAmount: 11.58,
+            observaciones: '',
+        })).toBe(true);
     });
 });

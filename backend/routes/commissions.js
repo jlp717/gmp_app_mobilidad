@@ -10,6 +10,7 @@ const {
     resolveCommissionTarget,
     resolveHistoricalCommissionMonth,
     resolvePaymentSnapshotMonth,
+    requiresPartialPaymentObservaciones,
 } = require('../utils/commission-snapshot');
 const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
@@ -2375,13 +2376,20 @@ router.post('/pay', verifyToken, async (req, res) => {
             }
         }
 
-        // Validate observaciones if paying less than generated amount.
-        // Use epsilon tolerance (0.01 EUR = 1 cent) to avoid floating-point false positives.
-        if ((generatedNum - amountNum) > 0.01 && (!observaciones || observaciones.trim() === '')) {
-            logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
+        // Validate observaciones against remaining due (supports completing partial months).
+        const existingPaid = safeMonthNum > 0
+            ? roundMoney((await getVendorPayments(vendedorCode, safeYearNum)).monthly[safeMonthNum] || 0)
+            : 0;
+        if (requiresPartialPaymentObservaciones({
+            generatedAmount: generatedNum,
+            alreadyPaid: existingPaid,
+            paymentAmount: amountNum,
+            observaciones,
+        })) {
+            logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode} (paid=${existingPaid.toFixed(2)}, due=${(generatedNum - existingPaid).toFixed(2)}, amount=${amountNum.toFixed(2)})`);
             return res.status(400).json({
                 success: false,
-                error: 'Debes indicar una observación explicando por qué se paga menos de lo correspondiente'
+                error: 'Debes indicar una observación explicando por qué se paga menos de lo pendiente'
             });
         }
 
