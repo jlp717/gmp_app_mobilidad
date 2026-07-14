@@ -352,6 +352,35 @@ async function deleteMonthCommissionPayments(vendorCode, year, month) {
     return result?.length || 0;
 }
 
+/**
+ * Invalidate all commission route caches after payment mutations.
+ * Keys are stored as gmp:route:comm:* via redisCache.get/set('route', key).
+ */
+async function invalidateCommissionPaymentCaches(vendorCode, year) {
+    const safeVendor = String(vendorCode || '').trim().replace(/[^a-zA-Z0-9]/g, '');
+    const safeYear = String(year || '').trim();
+    const codeVariants = getCodeVariants(safeVendor);
+
+    const patterns = [
+        'route:comm:summary:*',
+        'route:comm:pdf:*',
+        `route:commissions:${COMMISSIONS_CACHE_VERSION}:*`,
+        'route:comm:*',
+    ];
+
+    for (const variant of codeVariants) {
+        patterns.push(`route:comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${variant}:*`);
+    }
+    if (safeVendor && safeYear) {
+        patterns.push(`route:comm:summary:${safeVendor}:${safeYear}`);
+    }
+
+    const uniquePatterns = [...new Set(patterns)];
+    for (const pattern of uniquePatterns) {
+        await invalidateCachePattern(pattern);
+    }
+}
+
 function buildCommissionVendorFilter(vendedorCodes, selectedYear, tableAlias = 'L') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
 
@@ -2475,17 +2504,10 @@ router.post('/pay', verifyToken, async (req, res) => {
             logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${actorCode}${observaciones ? ' [with observaciones]' : ''}`);
         }
 
-        // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
+        // INVALIDATE CACHE: bust route-scoped Redis + HTTP commission caches after payment writes.
         try {
-            await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
-            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${vendedorCode.trim()}:*`);
-            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:*`);
-            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`);
-            await invalidateCachePattern('comm:summary:ALL:*');
-            await invalidateCachePattern('comm:summary:GROUP:*');
-            await invalidateCachePattern(`comm:pdf:${COMMISSIONS_CACHE_VERSION}:*`);
-            await invalidateCachePattern('comm:pdf:*');
-            logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);
+            await invalidateCommissionPaymentCaches(vendedorCode, year);
+            logger.info(`[COMMISSIONS] Route cache invalidated for ${vendedorCode}:${year}`);
         } catch (cacheErr) {
             logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
         }
@@ -3078,6 +3100,8 @@ module.exports = {
     _private: {
         calculateVendorData,
         getCurrentPaymentSnapshot,
+        getVendorPayments,
+        invalidateCommissionPaymentCaches,
         loadCommissionConfig,
         buildPdfSummaryVendors,
         loadCommissionConfigForPdf,

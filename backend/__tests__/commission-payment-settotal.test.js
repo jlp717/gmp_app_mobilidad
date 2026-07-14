@@ -234,4 +234,29 @@ describe('commission payment setTotal mode', () => {
         expect(sqlCalls.some((call) => call.sql.includes('DELETE FROM JAVIER.COMMISSION_PAYMENTS'))).toBe(true);
         expect(sqlCalls.some((call) => call.sql.includes('INSERT INTO JAVIER.COMMISSION_PAYMENTS'))).toBe(false);
     });
+
+    test('setTotal invalidates route-scoped redis cache keys', async () => {
+        mockQueryWithParams.mockImplementation(async (sql) => defaultQueryMock(sql));
+
+        const app = makeApp();
+        const response = await request(app)
+            .post('/pay')
+            .send({
+                vendedorCode: '02',
+                year: 2026,
+                month: 5,
+                amount: 295.53,
+                generatedAmount: 295.53,
+                observaciones: 'Correccion mayo',
+                setTotal: true,
+            });
+
+        expect(response.status).toBe(200);
+        expect(mockInvalidateCachePattern).toHaveBeenCalled();
+        const patterns = mockInvalidateCachePattern.mock.calls.map(call => call[0]);
+        expect(patterns.some(pattern => pattern.startsWith('route:comm:summary:'))).toBe(true);
+        expect(patterns.some(pattern => pattern.startsWith('route:comm:pdf:'))).toBe(true);
+        expect(patterns.some(pattern => pattern.includes('SINGLE:02:'))).toBe(true);
+        expect(patterns.some(pattern => pattern === 'route:comm:summary:*')).toBe(true);
+    });
 });

@@ -3,7 +3,7 @@
 name: gmp_app_mobilidad
 description: "Ultimate Sales Analytics - Ultra-Modern Tablet App for Sales Directors & Representatives"
 publish_to: 'none'
-version: 4.1.12+64
+version: 4.1.12+65
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

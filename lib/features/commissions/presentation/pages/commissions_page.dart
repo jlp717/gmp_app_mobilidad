@@ -379,6 +379,22 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     return monthsWithPayment;
   }
 
+  double _getSuggestedPayAmount({
+    required String vendorCode,
+    required int month,
+    required double commission,
+    required double alreadyPaid,
+  }) {
+    if (alreadyPaid <= 0.01) {
+      return _getRemainingDueForMonth(vendorCode, month);
+    }
+    // Correction mode: when overpaid, default to commission — not the inflated total.
+    if (alreadyPaid > commission + 0.01) {
+      return commission > 0 ? commission : alreadyPaid;
+    }
+    return alreadyPaid;
+  }
+
   double _getPaidAmountForMonth(String vendorCode, int month) {
     Map? paymentsMap;
 
@@ -622,7 +638,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         _getPaidAmountForMonth(vendorCode, selectedMonth);
     final useSetTotalInitially = initialAlreadyPaid > 0.01;
     final initialSuggestedAmount = useSetTotalInitially
-        ? initialAlreadyPaid
+        ? _getSuggestedPayAmount(
+            vendorCode: vendorCode,
+            month: selectedMonth,
+            commission: monthCommission,
+            alreadyPaid: initialAlreadyPaid,
+          )
         : _getRemainingDueForMonth(vendorCode, selectedMonth);
 
     final amountController =
@@ -726,9 +747,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       monthCommission = newMonthData['commissionMes'] ?? 0;
                       final paidForMonth =
                           _getPaidAmountForMonth(vendorCode, val);
-                      final suggestedAmount = paidForMonth > 0.01
-                          ? paidForMonth
-                          : _getRemainingDueForMonth(vendorCode, val);
+                      final monthCommissionValue =
+                          (newMonthData['commissionMes'] as num?)?.toDouble() ??
+                              0;
+                      final suggestedAmount = _getSuggestedPayAmount(
+                        vendorCode: vendorCode,
+                        month: val,
+                        commission: monthCommissionValue,
+                        alreadyPaid: paidForMonth,
+                      );
                       amountController.text =
                           suggestedAmount.toStringAsFixed(2);
                       setStateDialog(() => selectedMonth = val);
@@ -3513,11 +3540,16 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             builder: (context) {
               final payments = widget.data['payments'] as Map?;
               final detailsMap = payments?['details'] as Map?;
+              final monthlyMap = payments?['monthly'] as Map?;
               final details = detailsMap?[monthNum] ??
                   detailsMap?['$monthNum'] ??
                   detailsMap?[monthNum.toString()];
               final importePagado =
-                  ((details as Map?)?['totalPaid'] as num?)?.toDouble() ?? 0;
+                  ((details as Map?)?['totalPaid'] as num?)?.toDouble() ??
+                      (monthlyMap?[monthNum] as num?)?.toDouble() ??
+                      (monthlyMap?['$monthNum'] as num?)?.toDouble() ??
+                      (monthlyMap?[monthNum.toString()] as num?)?.toDouble() ??
+                      0;
               return importePagado > 0
                   ? Text(
                       CurrencyFormatter.format(importePagado),
