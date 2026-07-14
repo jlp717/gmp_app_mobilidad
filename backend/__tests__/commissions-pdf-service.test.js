@@ -552,3 +552,11 @@ describe('Commissions PDF route helpers', () => {
         jest.resetModules();
     });
 });
+
+describe('Commissions PDF timestamp formatting', () => {
+    test('formatCommissionPdfTimestamp uses Europe/Madrid timezone', () => {
+        const service = require('../services/commissions-pdf.service');
+        const utcMorning = new Date('2026-07-13T08:30:00.000Z');
+        expect(service.formatCommissionPdfTimestamp(utcMorning)).toBe('13/07/2026 10:30');
+    });
+});

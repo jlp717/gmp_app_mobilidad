@@ -407,7 +407,181 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     final alreadyPaid = _getPaidAmountForMonth(vendorCode, month);
     final remaining = commission - alreadyPaid;
     if (remaining > 0.01) return remaining;
+    if (alreadyPaid > 0.01) return 0;
     return commission > 0 ? commission : 0;
+  }
+
+  Map<String, dynamic>? _getPaymentDetailsForMonth(
+      String vendorCode, int month) {
+    Map? paymentsMap;
+    final breakdown =
+        (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (breakdown.isNotEmpty) {
+      final vendorData = breakdown.firstWhere(
+        (v) => v['vendedorCode']?.toString() == vendorCode,
+        orElse: () => <String, dynamic>{},
+      );
+      paymentsMap = vendorData['payments'] as Map?;
+    } else {
+      paymentsMap = _data?['payments'] as Map?;
+    }
+    if (paymentsMap == null) return null;
+    final details = paymentsMap['details'] as Map?;
+    if (details == null) return null;
+    final detail = details['$month'] ?? details[month];
+    return detail is Map ? Map<String, dynamic>.from(detail) : null;
+  }
+
+  List<Map<String, dynamic>> _getPaymentHistoryForMonth(
+      String vendorCode, int month) {
+    final detail = _getPaymentDetailsForMonth(vendorCode, month);
+    final entries = detail?['entries'];
+    if (entries is! List) return [];
+    return entries
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+  }
+
+  String _describeMonthPaymentStatus(double commission, double alreadyPaid) {
+    if (alreadyPaid <= 0.01) return 'Sin pago registrado';
+    if (commission <= 0.01) return 'Con pago registrado';
+    if ((alreadyPaid - commission).abs() <= 0.01) return 'Pagado completo';
+    if (alreadyPaid < commission - 0.01) return 'Pago parcial';
+    return 'Pagado de mas';
+  }
+
+  String _buildMonthDropdownLabel(
+    String vendorCode,
+    int month,
+    double commission,
+    bool isPaid,
+    bool hasPayment,
+    bool isFuture,
+  ) {
+    var label = _getMonthName(month);
+    final alreadyPaid = _getPaidAmountForMonth(vendorCode, month);
+    if (hasPayment) {
+      label += '  |  Pagado: ${alreadyPaid.toStringAsFixed(2)} €';
+      if (commission > 0.01) {
+        label += ' / Com: ${commission.toStringAsFixed(2)} €';
+      }
+    }
+    if (isPaid) {
+      label += '  ✓';
+    } else if (hasPayment) {
+      label += '  ◐';
+    }
+    if (isFuture) label += '  (Futuro)';
+    return label;
+  }
+
+  Widget _buildPaymentSummaryCard({
+    required double commission,
+    required double alreadyPaid,
+    required double remainingDue,
+    required double overpaid,
+    required String statusLabel,
+  }) {
+    Color statusColor = AppTheme.info;
+    if (statusLabel == 'Pagado completo') statusColor = AppTheme.success;
+    if (statusLabel == 'Pago parcial') statusColor = AppTheme.warning;
+    if (statusLabel == 'Pagado de mas') statusColor = AppTheme.error;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: _commissionSurfaceDecoration(
+        color: statusColor.withValues(alpha: 0.08),
+        borderColor: statusColor,
+        borderAlpha: 0.35,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Resumen del mes',
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _confirmRow(
+              'Comision generada', CurrencyFormatter.format(commission)),
+          _confirmRow('Ya pagado', CurrencyFormatter.format(alreadyPaid)),
+          if (remainingDue > 0.01)
+            _confirmRow(
+              'Pendiente',
+              CurrencyFormatter.format(remainingDue),
+              valueColor: AppTheme.warning,
+            ),
+          if (overpaid > 0.01)
+            _confirmRow(
+              'Sobrante',
+              CurrencyFormatter.format(overpaid),
+              valueColor: AppTheme.error,
+            ),
+          const SizedBox(height: 4),
+          Text(
+            'Estado: $statusLabel',
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentHistoryList(List<Map<String, dynamic>> history) {
+    if (history.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: _commissionSurfaceDecoration(
+        color: AppTheme.raisedSurface,
+        borderColor: AppTheme.borderColor,
+        borderAlpha: 0.6,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Historial de pagos',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 6),
+          ...history.asMap().entries.map((entry) {
+            final item = entry.value;
+            final amount = (item['amount'] as num?)?.toDouble() ?? 0;
+            final fecha = item['fecha']?.toString() ?? '';
+            final obs = item['observaciones']?.toString() ?? '';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${entry.key + 1}. ${CurrencyFormatter.format(amount)}'
+                '${fecha.isNotEmpty ? '  ($fecha)' : ''}'
+                '${obs.isNotEmpty ? '  - $obs' : ''}',
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 10,
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 
   String _buildPayHelperText(String vendorCode, int month, double commission) {
@@ -444,8 +618,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     // Get commission for the initially selected month
     final initialMonthData = _getMonthDataForVendor(vendorCode, selectedMonth);
     var monthCommission = initialMonthData['commissionMes'] ?? 0;
-    final initialSuggestedAmount =
-        _getRemainingDueForMonth(vendorCode, selectedMonth);
+    final initialAlreadyPaid =
+        _getPaidAmountForMonth(vendorCode, selectedMonth);
+    final useSetTotalInitially = initialAlreadyPaid > 0.01;
+    final initialSuggestedAmount = useSetTotalInitially
+        ? initialAlreadyPaid
+        : _getRemainingDueForMonth(vendorCode, selectedMonth);
 
     final amountController =
         TextEditingController(text: initialSuggestedAmount.toStringAsFixed(2));
@@ -467,9 +645,18 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           final alreadyPaid = _getPaidAmountForMonth(vendorCode, selectedMonth);
           final remainingDue =
               (monthCommission - alreadyPaid).clamp(0.0, double.infinity);
-          // Require observaciones only when paying less than what is still pending.
-          final observacionesRequired =
-              (remainingDue - currentAmount) > 0.01 && currentAmount > 0;
+          final overpaid =
+              (alreadyPaid - monthCommission).clamp(0.0, double.infinity);
+          final useSetTotalMode = alreadyPaid > 0.01;
+          final paymentHistory =
+              _getPaymentHistoryForMonth(vendorCode, selectedMonth);
+          final statusLabel =
+              _describeMonthPaymentStatus(monthCommission, alreadyPaid);
+          final observacionesRequired = useSetTotalMode
+              ? ((double.tryParse(amountController.text) ?? 0) - alreadyPaid)
+                      .abs() >
+                  0.01
+              : (remainingDue - currentAmount) > 0.01 && currentAmount > 0;
           final isMonthPaid = paidMonths.contains(selectedMonth);
           final hasPriorPayment = monthsWithAnyPayment.contains(selectedMonth);
           final isMonthFuture = selectedMonth > now.month;
@@ -502,13 +689,17 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       final isPaid = paidMonths.contains(m);
                       final hasPayment = monthsWithAnyPayment.contains(m);
                       final isFuture = m > now.month;
-                      var label = _getMonthName(m);
-                      if (isPaid) {
-                        label += '  ✓ PAGADO';
-                      } else if (hasPayment) {
-                        label += '  ◐ PAGO PARCIAL';
-                      }
-                      if (isFuture) label += '  (Futuro)';
+                      final monthData = _getMonthDataForVendor(vendorCode, m);
+                      final monthCommissionLabel =
+                          (monthData['commissionMes'] as num?)?.toDouble() ?? 0;
+                      final label = _buildMonthDropdownLabel(
+                        vendorCode,
+                        m,
+                        monthCommissionLabel,
+                        isPaid,
+                        hasPayment,
+                        isFuture,
+                      );
                       return DropdownMenuItem(
                         value: m,
                         child: Text(
@@ -533,8 +724,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       final newMonthData =
                           _getMonthDataForVendor(vendorCode, val);
                       monthCommission = newMonthData['commissionMes'] ?? 0;
-                      final suggestedAmount =
-                          _getRemainingDueForMonth(vendorCode, val);
+                      final paidForMonth =
+                          _getPaidAmountForMonth(vendorCode, val);
+                      final suggestedAmount = paidForMonth > 0.01
+                          ? paidForMonth
+                          : _getRemainingDueForMonth(vendorCode, val);
                       amountController.text =
                           suggestedAmount.toStringAsFixed(2);
                       setStateDialog(() => selectedMonth = val);
@@ -545,8 +739,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Warning if month already paid or has prior partial payment
-                  if (isMonthPaid)
+                  _buildPaymentSummaryCard(
+                    commission: monthCommission,
+                    alreadyPaid: alreadyPaid,
+                    remainingDue: remainingDue,
+                    overpaid: overpaid,
+                    statusLabel: statusLabel,
+                  ),
+                  _buildPaymentHistoryList(paymentHistory),
+
+                  if (useSetTotalMode)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
@@ -556,15 +758,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                         borderColor: AppTheme.warning,
                         borderAlpha: 0.35,
                       ),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.warning_amber_rounded,
+                          Icon(Icons.edit_note_rounded,
                               color: AppTheme.warning, size: 18),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${_getMonthName(selectedMonth)} ya esta pagado. Puedes registrar un ajuste adicional si necesitas corregir el importe.',
-                              style: const TextStyle(
+                              'Modo correccion: el importe que indiques sera el TOTAL pagado del mes. La ultima cantidad es la que vale.',
+                              style: TextStyle(
                                   color: AppTheme.warning, fontSize: 11),
                             ),
                           ),
@@ -631,12 +833,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: _payFieldDecoration(
-                      labelText: 'Importe (\u20ac) *',
+                      labelText: useSetTotalMode
+                          ? 'Total pagado del mes (\u20ac) *'
+                          : 'Importe de este pago (\u20ac) *',
                       helperText: _buildPayHelperText(
                           vendorCode, selectedMonth, monthCommission),
-                      helperColor: hasPriorPayment && !isMonthPaid
+                      helperColor: useSetTotalMode
                           ? AppTheme.warning
-                          : AppTheme.success,
+                          : (hasPriorPayment
+                              ? AppTheme.warning
+                              : AppTheme.success),
                     ),
                     onChanged: (val) => setStateDialog(() {}),
                   ),
@@ -651,7 +857,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ? 'Observaciones * (OBLIGATORIO)'
                           : 'Observaciones (Opcional)',
                       helperText: observacionesRequired
-                          ? 'Debes explicar por que se paga menos de lo pendiente'
+                          ? (useSetTotalMode
+                              ? 'Debes explicar por que cambias el total pagado del mes'
+                              : 'Debes explicar por que se paga menos de lo pendiente')
                           : 'Notas adicionales sobre este pago',
                       labelColor: observacionesRequired
                           ? AppTheme.warning
@@ -700,10 +908,19 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     )),
                 onPressed: () {
                   final amount = double.tryParse(amountController.text) ?? 0;
-                  if (amount <= 0) {
+                  if (!useSetTotalMode && amount <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                           content: Text('El importe debe ser mayor que 0'),
+                          backgroundColor: AppTheme.error),
+                    );
+                    return;
+                  }
+                  if (useSetTotalMode && amount < 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content:
+                              Text('El total pagado no puede ser negativo'),
                           backgroundColor: AppTheme.error),
                     );
                     return;
@@ -737,6 +954,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       _getMonthDataForVendor(vendorCode, capturedMonth);
                   final alreadyPaidAtConfirm =
                       _getPaidAmountForMonth(vendorCode, capturedMonth);
+                  final useSetTotalAtConfirm = alreadyPaidAtConfirm > 0.01;
 
                   _showPayConfirmation(
                     vendorCode: vendorCode,
@@ -745,6 +963,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     amount: capturedAmount,
                     generatedAmount: monthSnapshot['commissionMes'] ?? 0,
                     alreadyPaidAmount: alreadyPaidAtConfirm,
+                    setTotal: useSetTotalAtConfirm,
                     concept: capturedConcept,
                     observaciones: capturedObs,
                     adminCode: adminCode,
@@ -755,8 +974,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   );
                 },
                 child: Text(
-                  isMonthPaid
-                      ? 'Registrar ajuste'
+                  useSetTotalMode
+                      ? 'Corregir total'
                       : (hasPriorPayment
                           ? 'Completar pago'
                           : 'Revisar y Confirmar'),
@@ -780,6 +999,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     required double amount,
     required double generatedAmount,
     required double alreadyPaidAmount,
+    required bool setTotal,
     required String concept,
     required String observaciones,
     required String adminCode,
@@ -789,8 +1009,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   }) async {
     final remainingBefore =
         (generatedAmount - alreadyPaidAmount).clamp(0.0, double.infinity);
-    final isPartialPay = (remainingBefore - amount) > 0.01 && amount > 0;
-    final isCompletionPay = alreadyPaidAmount > 0.01 && amount > 0;
+    final isPartialPay = setTotal
+        ? (generatedAmount - amount).abs() > 0.01 && amount > 0
+        : (remainingBefore - amount) > 0.01 && amount > 0;
+    final isCorrectionPay = setTotal &&
+        alreadyPaidAmount > 0.01 &&
+        (amount - alreadyPaidAmount).abs() > 0.01;
 
     showDialog(
       context: context,
@@ -847,18 +1071,30 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               if (alreadyPaidAmount > 0.01) ...[
                 _confirmRow('Ya pagado este mes',
                     CurrencyFormatter.format(alreadyPaidAmount)),
-                _confirmRow('Pendiente antes de este pago',
-                    CurrencyFormatter.format(remainingBefore)),
+                if (!setTotal)
+                  _confirmRow('Pendiente antes de este pago',
+                      CurrencyFormatter.format(remainingBefore)),
               ],
               _confirmRow(
-                'Importe a pagar',
+                setTotal ? 'Nuevo total del mes' : 'Importe a pagar',
                 CurrencyFormatter.format(amount),
                 valueColor: isPartialPay ? AppTheme.warning : AppTheme.success,
               ),
               _confirmRow('Observaciones',
                   observaciones.isEmpty ? 'Ninguna' : observaciones),
               const SizedBox(height: 12),
-              if (isCompletionPay && !isPartialPay)
+              if (isCorrectionPay)
+                _commissionNotice(
+                  icon: Icons.edit_note_rounded,
+                  color: AppTheme.warning,
+                  text:
+                      'CORRECCION TOTAL DEL MES: la ultima cantidad sera la valida',
+                  strong: true,
+                ),
+              if (!setTotal &&
+                  alreadyPaidAmount > 0.01 &&
+                  !isPartialPay &&
+                  amount > 0)
                 _commissionNotice(
                   icon: Icons.payments_rounded,
                   color: AppTheme.success,
@@ -873,12 +1109,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   strong: true,
                 ),
               const SizedBox(height: 12),
-              _commissionNotice(
-                icon: Icons.history_rounded,
-                color: AppTheme.info,
-                text: 'Este pago se guardara como un nuevo registro historico. '
-                    'No se puede modificar despues.',
-              ),
+              if (setTotal)
+                _commissionNotice(
+                  icon: Icons.edit_note_rounded,
+                  color: AppTheme.warning,
+                  text:
+                      'Se reemplazara el total pagado del mes. Los pagos anteriores de este mes se sustituyen por el nuevo total.',
+                )
+              else
+                _commissionNotice(
+                  icon: Icons.history_rounded,
+                  color: AppTheme.info,
+                  text:
+                      'Este pago se guardara como un nuevo registro historico. '
+                      'No se puede modificar despues.',
+                ),
               const SizedBox(height: 8),
               _commissionNotice(
                 icon: Icons.lock_clock_rounded,
@@ -940,12 +1185,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           objetivoMes: objetivoMes,
                           ventaActual: ventaActual,
                           ventasSobreObjetivo: ventasSobreObjetivo,
+                          setTotal: setTotal,
                         );
 
                         if (mounted && res['success'] == true) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Pago registrado correctamente'),
+                            SnackBar(
+                                content: Text(setTotal
+                                    ? 'Total del mes actualizado correctamente'
+                                    : 'Pago registrado correctamente'),
                                 backgroundColor: AppTheme.success),
                           );
                           _loadData(forceRefresh: true);
@@ -962,9 +1210,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                         }
                       }
                     },
-                    child: const Text(
-                      'CONFIRMAR Y REGISTRAR PAGO',
-                      style: TextStyle(
+                    child: Text(
+                      setTotal
+                          ? 'CONFIRMAR CORRECCION'
+                          : 'CONFIRMAR Y REGISTRAR PAGO',
+                      style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 13),

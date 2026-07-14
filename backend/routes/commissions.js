@@ -317,6 +317,41 @@ function getCodeVariants(code) {
     return [...new Set([safe, unpadded, padded].filter(Boolean))];
 }
 
+function appendPaymentDetailRow(detail, row) {
+    const amount = parseFloat(row.IMPORTE_PAGADO) || 0;
+    const rowDate = row.FECHA_PAGO ? new Date(row.FECHA_PAGO) : null;
+    if (!detail.entries) detail.entries = [];
+    detail.entries.push({
+        amount: roundMoney(amount),
+        fecha: row.FECHA_PAGO || null,
+        observaciones: (row.OBSERVACIONES || '').trim(),
+    });
+    detail.totalPaid = roundMoney((detail.totalPaid || 0) + amount);
+    detail.comisionGenerada = roundMoney((detail.comisionGenerada || 0) + (parseFloat(row.COMISION_GENERADA) || 0));
+    if (row.OBSERVACIONES && row.OBSERVACIONES.trim()) {
+        detail.observaciones.push(row.OBSERVACIONES.trim());
+    }
+    if (!detail.ultimaFecha || (rowDate && rowDate >= new Date(detail.ultimaFecha || 0))) {
+        detail.ventaComision = parseFloat(row.VENTAS_REAL) || 0;
+        detail.objetivoReal = parseFloat(row.OBJETIVO_MES) || 0;
+        detail.comisionGeneradaSnapshot = parseFloat(row.COMISION_GENERADA) || 0;
+        detail.ultimaFecha = row.FECHA_PAGO;
+    }
+}
+
+async function deleteMonthCommissionPayments(vendorCode, year, month) {
+    const codeVariants = getCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return 0;
+    const placeholders = codeVariants.map(() => '?').join(',');
+    const result = await queryWithParams(`
+        DELETE FROM JAVIER.COMMISSION_PAYMENTS
+        WHERE ANIO = ?
+          AND MES = ?
+          AND VENDEDOR_CODIGO IN (${placeholders})
+    `, [parseInt(year, 10), parseInt(month, 10), ...codeVariants], false, false);
+    return result?.length || 0;
+}
+
 function buildCommissionVendorFilter(vendedorCodes, selectedYear, tableAlias = 'L') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
 
@@ -640,12 +675,11 @@ async function getVendorPayments(vendorCode, year) {
         rows.forEach(r => {
             const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
             const mes = r.MES;
-            const rowDate = r.FECHA_PAGO ? new Date(r.FECHA_PAGO) : null;
 
             payments.total += amount;
 
             if (mes > 0) {
-                payments.monthly[mes] = (payments.monthly[mes] || 0) + amount;
+                payments.monthly[mes] = roundMoney((payments.monthly[mes] || 0) + amount);
 
                 if (!payments.details[mes]) {
                     payments.details[mes] = {
@@ -655,20 +689,11 @@ async function getVendorPayments(vendorCode, year) {
                         ventaComision: 0,
                         objetivoReal: 0,
                         observaciones: [],
+                        entries: [],
                         ultimaFecha: null
                     };
                 }
-                payments.details[mes].totalPaid += amount;
-                payments.details[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
-                if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
-                    payments.details[mes].observaciones.push(r.OBSERVACIONES.trim());
-                }
-                if (!payments.details[mes].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[mes].ultimaFecha || 0))) {
-                    payments.details[mes].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
-                    payments.details[mes].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
-                    payments.details[mes].comisionGeneradaSnapshot = parseFloat(r.COMISION_GENERADA) || 0;
-                    payments.details[mes].ultimaFecha = r.FECHA_PAGO;
-                }
+                appendPaymentDetailRow(payments.details[mes], r);
             }
         });
     } catch (e) {
@@ -962,7 +987,6 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         const payments = { monthly: {}, quarterly: {}, total: 0, details: {} };
         paymentRows.forEach(r => {
             const m = r.MES;
-            const rowDate = r.FECHA_PAGO ? new Date(r.FECHA_PAGO) : null;
             if (!payments.details[m]) {
                 payments.details[m] = {
                     totalPaid: 0,
@@ -971,22 +995,13 @@ async function batchFetchAllVendorData(vendorCodes, year) {
                     observaciones: [],
                     ventaComision: 0,
                     objetivoReal: 0,
+                    entries: [],
                     ultimaFecha: null
                 };
             }
-            payments.details[m].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
-            if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
-                payments.details[m].observaciones.push(r.OBSERVACIONES.trim());
-            }
-            if (!payments.details[m].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[m].ultimaFecha || 0))) {
-                payments.details[m].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
-                payments.details[m].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
-                payments.details[m].comisionGeneradaSnapshot = parseFloat(r.COMISION_GENERADA) || 0;
-                payments.details[m].ultimaFecha = r.FECHA_PAGO;
-            }
-            payments.monthly[m] = (payments.monthly[m] || 0) + (parseFloat(r.IMPORTE_PAGADO) || 0);
+            appendPaymentDetailRow(payments.details[m], r);
+            payments.monthly[m] = roundMoney(payments.details[m].totalPaid);
             payments.total += parseFloat(r.IMPORTE_PAGADO) || 0;
-            payments.details[m].totalPaid += parseFloat(r.IMPORTE_PAGADO) || 0;
         });
 
         // Build fixed target map: keep ALL rows so the month loop can pick the
@@ -2297,7 +2312,21 @@ router.get('/summary', verifyToken, async (req, res) => {
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
 // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
 router.post('/pay', verifyToken, async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, observaciones, objetivoMes, ventaActual, ventasSobreObjetivo } = req.body;
+    const {
+        vendedorCode,
+        year,
+        month,
+        quarter,
+        amount,
+        generatedAmount,
+        concept,
+        observaciones,
+        objetivoMes,
+        ventaActual,
+        ventasSobreObjetivo,
+        setTotal,
+    } = req.body;
+    const setTotalMode = setTotal === true || setTotal === 'true' || setTotal === 1 || setTotal === '1';
 
     const actorCode = String(req.user?.code || req.user?.id || '').trim();
     const actorRole = String(req.user?.role || '').trim().toUpperCase();
@@ -2316,7 +2345,7 @@ router.post('/pay', verifyToken, async (req, res) => {
         return res.status(403).json({ success: false, error: 'No tienes permisos para registrar pagos.' });
     }
 
-    if (!vendedorCode || !year || !amount) {
+    if (!vendedorCode || !year || amount === undefined || amount === null || amount === '') {
         return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (Comercial, Año, Importe)' });
     }
 
@@ -2380,28 +2409,71 @@ router.post('/pay', verifyToken, async (req, res) => {
         const existingPaid = safeMonthNum > 0
             ? roundMoney((await getVendorPayments(vendedorCode, safeYearNum)).monthly[safeMonthNum] || 0)
             : 0;
-        if (requiresPartialPaymentObservaciones({
-            generatedAmount: generatedNum,
-            alreadyPaid: existingPaid,
-            paymentAmount: amountNum,
-            observaciones,
-        })) {
-            logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode} (paid=${existingPaid.toFixed(2)}, due=${(generatedNum - existingPaid).toFixed(2)}, amount=${amountNum.toFixed(2)})`);
-            return res.status(400).json({
-                success: false,
-                error: 'Debes indicar una observación explicando por qué se paga menos de lo pendiente'
-            });
-        }
 
-        // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
         const safePayVendor = sanitizeForSQL(vendedorCode.trim());
-        const safePayObs = sanitizeForSQL((observaciones || '').substring(0, 1000));
         const safePayAdmin = sanitizeForSQL(actorCode.substring(0, 50));
-        await queryWithParams(`
-            INSERT INTO JAVIER.COMMISSION_PAYMENTS
-            (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-        `, [safePayVendor, safeYearNum, safeMonthNum, roundMoney(ventaComision), roundMoney(objetivoMesNum), roundMoney(ventasSobreObjetivoNum), roundMoney(generatedNum), roundMoney(amountNum), safePayObs, safePayAdmin]);
+
+        if (setTotalMode) {
+            if (safeMonthNum <= 0) {
+                return res.status(400).json({ success: false, error: 'Debes indicar el mes para corregir el importe total' });
+            }
+            const targetTotal = roundMoney(amountNum);
+            if (targetTotal < 0) {
+                return res.status(400).json({ success: false, error: 'El importe total no puede ser negativo' });
+            }
+            if (Math.abs(targetTotal - existingPaid) <= 0.01) {
+                return res.json({ success: true, message: 'El importe total ya coincide con el registrado' });
+            }
+            if (existingPaid > 0.01 && (!observaciones || observaciones.trim() === '')) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Debes indicar una observación explicando la corrección del importe total'
+                });
+            }
+
+            await deleteMonthCommissionPayments(vendedorCode, safeYearNum, safeMonthNum);
+
+            if (targetTotal > 0) {
+                const correctionPrefix = existingPaid > 0.01
+                    ? `Correccion total mes: ${existingPaid.toFixed(2)}€ -> ${targetTotal.toFixed(2)}€. `
+                    : '';
+                const safePayObs = sanitizeForSQL(
+                    `${correctionPrefix}${(observaciones || '').trim()}`.substring(0, 1000)
+                );
+                await queryWithParams(`
+                    INSERT INTO JAVIER.COMMISSION_PAYMENTS
+                    (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+                `, [safePayVendor, safeYearNum, safeMonthNum, roundMoney(ventaComision), roundMoney(objetivoMesNum), roundMoney(ventasSobreObjetivoNum), roundMoney(generatedNum), targetTotal, safePayObs, safePayAdmin]);
+            }
+
+            logger.info(`[COMMISSIONS] Payment total corrected for ${vendedorCode} ${safeYearNum}/${safeMonthNum}: ${existingPaid.toFixed(2)}€ -> ${targetTotal.toFixed(2)}€ by ${actorCode}`);
+        } else {
+            if (amountNum <= 0) {
+                return res.status(400).json({ success: false, error: 'El importe debe ser mayor que 0' });
+            }
+            if (requiresPartialPaymentObservaciones({
+                generatedAmount: generatedNum,
+                alreadyPaid: existingPaid,
+                paymentAmount: amountNum,
+                observaciones,
+            })) {
+                logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode} (paid=${existingPaid.toFixed(2)}, due=${(generatedNum - existingPaid).toFixed(2)}, amount=${amountNum.toFixed(2)})`);
+                return res.status(400).json({
+                    success: false,
+                    error: 'Debes indicar una observación explicando por qué se paga menos de lo pendiente'
+                });
+            }
+
+            const safePayObs = sanitizeForSQL((observaciones || '').substring(0, 1000));
+            await queryWithParams(`
+                INSERT INTO JAVIER.COMMISSION_PAYMENTS
+                (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+            `, [safePayVendor, safeYearNum, safeMonthNum, roundMoney(ventaComision), roundMoney(objetivoMesNum), roundMoney(ventasSobreObjetivoNum), roundMoney(generatedNum), roundMoney(amountNum), safePayObs, safePayAdmin]);
+
+            logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${actorCode}${observaciones ? ' [with observaciones]' : ''}`);
+        }
 
         // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
         try {
@@ -2418,8 +2490,11 @@ router.post('/pay', verifyToken, async (req, res) => {
             logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
         }
 
-        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${actorCode}${observaciones ? ' [with observaciones]' : ''}`);
-        res.json({ success: true, message: 'Pago registrado correctamente' });
+        logger.info(`[COMMISSIONS] Payment ${setTotalMode ? 'total corrected' : 'registered'} for ${vendedorCode}:${year}`);
+        res.json({
+            success: true,
+            message: setTotalMode ? 'Importe total del mes actualizado correctamente' : 'Pago registrado correctamente'
+        });
     } catch (e) {
         logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Error al registrar el pago en DB', details: e.message });

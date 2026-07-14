@@ -34,6 +34,20 @@ const commissionsPdfBreaker = new CircuitBreaker({
     timeout: 30000
 });
 
+function formatCommissionPdfTimestamp(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('es-ES', {
+        timeZone: 'Europe/Madrid',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${lookup.day}/${lookup.month}/${lookup.year} ${lookup.hour}:${lookup.minute}`;
+}
+
 const SNAPSHOT_TABLE = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
 
 const DEFAULT_CONFIG = {
@@ -1224,8 +1238,7 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
             const periodLabel = startMonth === endMonth
                 ? `${getMonthName(startMonth)} ${year}`
                 : `${getMonthName(startMonth)} - ${getMonthName(endMonth)} ${year}`;
-            const now = new Date();
-            const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const dateStr = formatCommissionPdfTimestamp();
 
             const cols = [
                 { key: 'mes', label: 'Mes', width: 48 },
@@ -1415,8 +1428,7 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                 ? `${getMonthName(startMonth)} ${year}`
                 : `${getMonthName(startMonth)} - ${getMonthName(endMonth)} ${year}`;
 
-            const now = new Date();
-            const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const dateStr = formatCommissionPdfTimestamp();
 
             const cols = [
                 { key: 'mes', label: 'Mes', width: 48 },
@@ -1632,6 +1644,7 @@ module.exports = {
     getCondorSalesData,
     generateCommissionsPdf,
     generateCommissionsPdfFromSummary,
+    formatCommissionPdfTimestamp,
     _private: {
         calculateCommission,
         buildMonthlyTargetsAndCommissions,

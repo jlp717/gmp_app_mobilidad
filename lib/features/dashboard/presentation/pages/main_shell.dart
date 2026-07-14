@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/app_version_badge.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/pages/chatbot_page.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_shell_navigation.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
@@ -769,6 +770,11 @@ class _MainShellState extends ConsumerState<MainShell> {
             if (isJefeVentas) _buildModeSwitcher(),
             // Network settings removed for user restriction
             const Spacer(),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: AppVersionBadge(),
+            ),
+            const SizedBox(height: 8),
             const Divider(color: AppTheme.borderColor),
             ListTile(
               leading: const Icon(
@@ -896,6 +902,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                               padding: const EdgeInsets.all(12),
                               child: Column(
                                 children: [
+                                  const AppVersionBadge(),
+                                  const SizedBox(height: 8),
                                   _buildNotificationSettingsButton(),
                                   const SizedBox(height: 8),
                                   _buildCollapseButton(),

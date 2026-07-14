@@ -101,6 +101,7 @@ class CommissionsService {
     double? objetivoMes,
     double? ventaActual,
     double? ventasSobreObjetivo,
+    bool setTotal = false,
   }) async {
     try {
       final response = await OfflineAwareApi.post(
@@ -118,6 +119,7 @@ class CommissionsService {
           'objetivoMes': objetivoMes ?? 0,
           'ventaActual': ventaActual ?? 0,
           'ventasSobreObjetivo': ventasSobreObjetivo ?? 0,
+          'setTotal': setTotal,
         },
         syncType: 'pay_commission',
       );
