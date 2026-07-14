@@ -178,7 +178,7 @@ void main() {
       expect(labels, contains('Alertas'));
       expect(labels, contains('Cobros'));
       expect(labels, contains('Bolsa'));
-      expect(labels, contains('Evolución'));
+      expect(labels, isNot(contains('Evolución')));
       expect(labels, contains('Asistente'));
     });
   });

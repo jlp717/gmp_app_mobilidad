@@ -221,7 +221,7 @@ describe('runtime performance configuration', () => {
     expect(dddCommissionsBlock).not.toMatch(/L\.LCAADC IN \(\?, \?\)/);
   });
 
-  test('cobros pending summary uses client aggregation instead of document-wide CVC rebuild', () => {
+  test('cobros pending summary keeps DB2-side aggregate totals without JS portfolio materialization', () => {
     const source = fs.readFileSync(
       path.join(backendRoot, 'src/modules/cobros/infrastructure/db2-cobros-repository.js'),
       'utf8',
@@ -231,14 +231,13 @@ describe('runtime performance configuration', () => {
       source.indexOf('async getAppSideCobrosByDocForVendorScope'),
     );
 
-    expect(pendingSummaryBlock).toMatch(/CVC_CLIENTS AS/);
     expect(pendingSummaryBlock).toMatch(/getClientCodesFromCache\(vendorCodes\.join\(','\)\)/);
     expect(pendingSummaryBlock).toMatch(/buildCvcClientScopeFilter/);
-    expect(pendingSummaryBlock).toMatch(/FETCH FIRST \$\{clientFetchLimit\} ROWS ONLY/);
-    expect(pendingSummaryBlock).toMatch(/getAppSideCobrosByClient\(vendorClause, vendorParams\)/);
+    expect(pendingSummaryBlock).toMatch(/COBROS_LIN_TABLE/);
+    expect(pendingSummaryBlock).toMatch(/CLIENT_NET AS/);
+    expect(pendingSummaryBlock).toMatch(/SCOPE_TOTALS AS/);
+    expect(pendingSummaryBlock).toMatch(/LEFT JOIN CLIENT_RANKED R ON R\.RN > \$\{pageOffset\} AND R\.RN <= \$\{maxRank\}/);
     expect(pendingSummaryBlock).not.toMatch(/CVC_DOCS_RAW/);
-    expect(pendingSummaryBlock).not.toMatch(/APP_COBROS AS/);
-    expect(pendingSummaryBlock).not.toMatch(/DOC_NET AS/);
-    expect(source).toMatch(/groupedRows\.length > 0 && adjustmentVendorCodes\.length > 0/);
+    expect(pendingSummaryBlock).not.toMatch(/pending-summary-portfolio/);
   });
 });

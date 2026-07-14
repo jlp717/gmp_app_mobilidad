@@ -59,7 +59,27 @@ function mockLegacyPendingSummaryDb({
   portfolioQueryError = null,
 } = {}) {
   const portfolio = portfolioRows == null ? pageRows : portfolioRows;
+  const toNumber = (value) => parseFloat(value) || 0;
+  const makeAggregateRows = () => {
+    const grandTotal = portfolio.reduce((sum, row) => sum + toNumber(row.TOTAL_PENDIENTE), 0);
+    const grandTotalVencido = portfolio.reduce((sum, row) => sum + toNumber(row.TOTAL_VENCIDO), 0);
+    const clientCount = new Set(portfolio.map((row) => String(row.CLIENTE || '').trim()).filter(Boolean)).size;
+    return (pageRows || []).map((row) => ({
+      CLIENTE: row.CLIENTE,
+      NOMBRE: row.NOMBRE || row.NOMBRE_ALT || row.NOMBRE_CLI || row.CLIENTE,
+      DOC_COUNT: row.DOC_COUNT || 1,
+      TOTAL_PENDIENTE: row.TOTAL_PENDIENTE,
+      TOTAL_VENCIDO: row.TOTAL_VENCIDO,
+      GRAND_TOTAL: grandTotal,
+      GRAND_TOTAL_VENCIDO: grandTotalVencido,
+      CVC_GRAND_TOTAL: grandTotal,
+      CVC_GRAND_TOTAL_VENCIDO: grandTotalVencido,
+      CLIENT_COUNT: clientCount,
+      VENCIDO_CLIENT_COUNT: portfolio.filter((row) => toNumber(row.TOTAL_VENCIDO) > 0).length,
+    }));
+  };
   const routeSql = async (sql) => {
+    if (/CLIENT_RANKED/i.test(sql)) return makeAggregateRows();
     if (portfolioQueryError && /FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)) {
       throw portfolioQueryError;
     }
@@ -144,12 +164,9 @@ describe('legacy cobros route hardening', () => {
     expect(res.status).toBe(200);
     const sql = mockCachedQuery.mock.calls[0][1];
     const normalizedSql = sql.replace(/\s+/g, ' ').trim();
-    const orderBy = normalizedSql.match(/ORDER BY (.*?)(?: FETCH FIRST| OFFSET|$)/i)?.[1] || '';
-    expect(orderBy).toMatch(/^TOTAL_PENDIENTE DESC\b/i);
-    expect(orderBy).toMatch(/(?:CLIENTE|CODIGOCLIENTEALBARAN)/i);
-    expect(orderBy).toMatch(/(?:SERIE_DOCUMENTO|SERIEDOCUMENTO)/i);
-    expect(orderBy).toMatch(/(?:NUMERO_DOCUMENTO|NUMERODOCUMENTO)/i);
-    expect(normalizedSql).toMatch(/FETCH FIRST (?:\?|\d+) ROWS ONLY/i);
+    expect(normalizedSql).toMatch(/ROW_NUMBER\(\) OVER \(ORDER BY C\.TOTAL_PENDIENTE DESC, C\.CLIENTE ASC\) AS RN/i);
+    expect(normalizedSql).toMatch(/R\.RN > 0 AND R\.RN <= 50/i);
+    expect(normalizedSql).toMatch(/SCOPE_TOTALS/i);
   });
 
   test('pending-summary ALL without vendor scope excludes empty client CVC rows (B7)', async () => {
@@ -164,7 +181,7 @@ describe('legacy cobros route hardening', () => {
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
   });
 
-  test('registrar derives codigoUsuario from authenticated user when present', async () => {
+  test('registrar does not fall back to legacy JAVIER.COBROS writes when runtime order auth fails', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       return [];
@@ -180,21 +197,18 @@ describe('legacy cobros route hardening', () => {
         idempotencyToken: 'legacy-token-001',
       });
 
-    expect(res.status).toBe(200);
-    const insertCall = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql));
-    expect(insertCall).toBeDefined();
-    expect(insertCall[1]).toContain('01');
-    expect(insertCall[1]).not.toContain('99');
+    expect(res.status).toBe(403);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS\b/i.test(sql))).toBe(false);
   });
 
-  test('pending-summary subtracts app-side COBROS from raw CVC totals', async () => {
+  test('pending-summary uses COBROS_LIN cutover aggregate totals from DB2', async () => {
     mockLegacyPendingSummaryDb({
       pageRows: [{
         CLIENTE: 'C001',
         SERIE_DOCUMENTO: 'M',
         NUMERO_DOCUMENTO: 1,
-        TOTAL_PENDIENTE: '200.00',
-        TOTAL_VENCIDO: '50.00',
+        TOTAL_PENDIENTE: '90.00',
+        TOTAL_VENCIDO: '0.00',
         NOMBRE_ALT: 'Cliente Uno',
         NOMBRE_CLI: 'Cliente Uno SL',
       }],
@@ -211,25 +225,16 @@ describe('legacy cobros route hardening', () => {
     expect(res.status).toBe(200);
     const entry = res.body.summary['C001'];
     expect(entry).toBeDefined();
-    // 200 raw - 80 COBROS - 30 REPARTIDOR = 90 adjusted
     expect(entry.total).toBeCloseTo(90, 1);
-    // vencido proportionally reduced
-    expect(entry.vencido).toBeGreaterThanOrEqual(0);
-    expect(entry.vencido).toBeLessThanOrEqual(50);
+    expect(entry.vencido).toBe(0);
     expect(res.body.grandTotal).toBeCloseTo(90, 1);
+    expect(mockCachedQuery.mock.calls[0][1]).toMatch(/COBROS_LIN/i);
   });
 
-  test('pending-summary total does not go below zero after app-side subtraction', async () => {
+  test('pending-summary returns empty portfolio when DB2 cutover aggregate has no net pending rows', async () => {
     mockLegacyPendingSummaryDb({
-      pageRows: [{
-        CLIENTE: 'C002',
-        SERIE_DOCUMENTO: 'M',
-        NUMERO_DOCUMENTO: 2,
-        TOTAL_PENDIENTE: '50.00',
-        TOTAL_VENCIDO: '50.00',
-        NOMBRE_ALT: '',
-        NOMBRE_CLI: 'Cliente Dos',
-      }],
+      pageRows: [],
+      portfolioRows: [],
       pageCobros: [{ CLIENTE: 'C002', REF: 'CVC:M-2', TOTAL_APP: '70.00' }],
       pageRepartidor: [{ CLIENTE: 'C002', DOC_KEY: 'M-2', TOTAL_REP: '30.00' }],
       portfolioCobros: [{ CLIENTE: 'C002', REF: 'CVC:M-2', TOTAL_APP: '70.00' }],
@@ -243,7 +248,6 @@ describe('legacy cobros route hardening', () => {
     expect(res.status).toBe(200);
     const entry = res.body.summary['C002'];
     expect(entry).toBeUndefined();
-    // 50 - 70 - 30 = -50 → clamped to 0
     expect(res.body.grandTotal).toBe(0);
     expect(res.body.clientCount).toBe(0);
   });
@@ -340,17 +344,13 @@ describe('legacy cobros route hardening', () => {
     })).get('/pending-summary/ALL?limit=1&page=1');
 
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body.summary).sort()).toEqual(['C001', 'C002']);
+    expect(Object.keys(res.body.summary).sort()).toEqual(['C001']);
     expect(res.body.summary.C001.total).toBeCloseTo(100, 1);
-    expect(res.body.summary.C002.total).toBeCloseTo(200, 1);
+    expect(res.body.summary.C002).toBeUndefined();
     expect(res.body.grandTotal).toBeCloseTo(300, 1);
     expect(res.body.grandTotalVencido).toBeCloseTo(50, 1);
     expect(res.body.clientCount).toBe(2);
-    const portfolioSql = mockCachedQuery.mock.calls.find(([, sql]) => (
-      /FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)
-    ))?.[1];
-    expect(portfolioSql).toBeDefined();
-    expect(portfolioSql).not.toMatch(/FETCH FIRST/i);
+    expect(mockCachedQuery.mock.calls[0][1]).toMatch(/SCOPE_TOTALS/i);
   });
 });
 

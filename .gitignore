@@ -267,3 +267,12 @@ acouz/
 .mcp.json
 CLAUDE.md
 .guardvibe/
+
+# Graphify (local knowledge graph artifacts)
+docs/graphify/
+
+# Release APK binaries (built locally, not tracked)
+docs/releases/*.apk
+
+# Beads temp lock files
+.beads/.~issues.jsonl.*

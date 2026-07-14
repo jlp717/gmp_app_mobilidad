@@ -271,8 +271,8 @@ describe('demo regression: REPARTIDOR_COBROS GROUP BY raw columns', () => {
     const adjustments = await repo.getAppSideCobrosByDoc('C001');
 
     const [sql, params] = mockQueryWithParamsCobros.mock.calls[0];
-    expect(sql).toMatch(/FROM JAVIER\.COBROS/i);
-    expect(sql).toMatch(/GROUP BY TRIM\(REFERENCIA\)/i);
+    expect(sql).toMatch(/FROM JAVIER\.COBROS_LIN/i);
+    expect(sql).toMatch(/GROUP BY TRIM\(DOCUMENTOSERIE\), TRIM\(CAST\(DOCUMENTONUMERO AS VARCHAR\(20\)\)\)/i);
     expect(params).toEqual(['C001']);
     expect(adjustments.get('M-123')).toBe(30);
   });

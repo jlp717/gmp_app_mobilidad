@@ -38,12 +38,12 @@ function orderRow(overrides = {}) {
 
 function setupRegisterPaymentMocks({ existingToken = [], paid = '0.00', order = orderRow(), repartidorPaid = '0.00' } = {}) {
   return async (sql) => {
+    if (/QSYS2\.SYSTABLES/i.test(sql)) return [{ N: 4 }];
     if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return order ? [order] : [];
     if (/FROM DSEDAC\.CVC C/i.test(sql)) return [];
-    if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return existingToken;
-    if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: paid }];
+    if (/FROM JAVIER\.COBROS_IDEMPOTENCY/i.test(sql)) return existingToken;
+    if (/COALESCE\(SUM\(IMPORTECOBRADO\)/i.test(sql)) return [{ TOTAL_COBRADO: paid }];
     if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: repartidorPaid }];
-    if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) return [];
     return [];
   };
 }
@@ -58,6 +58,27 @@ function paymentIdForTest(value) {
   return `CBR-${crypto.createHash('sha256').update(value).digest('hex').slice(0, 32)}`;
 }
 
+function requestHashForTest({
+  clientCode = 'C001',
+  reference = 'PEDIDO:22:M-1',
+  amount = 30,
+  paymentMethod = 'CONTADO',
+  userId = '01',
+} = {}) {
+  return crypto.createHash('sha256').update(JSON.stringify({
+    clientCode,
+    reference,
+    amountCents: Math.round(amount * 100),
+    paymentMethod,
+    userId,
+  })).digest('hex');
+}
+
+function mockNextNumeroRows(start = 123) {
+  let next = start;
+  return () => [{ NEXT_NUMERO: next++ }];
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockQuery.mockReset();
@@ -65,21 +86,28 @@ beforeEach(() => {
   mockPoolConnect.mockReset();
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
+  mockPoolConnect.mockResolvedValue({ query: mockConnQuery, close: mockConnClose });
+  const counterRows = mockNextNumeroRows();
+  mockConnQuery.mockImplementation(async (sql) => {
+    if (/SELECT NEXT_NUMERO/i.test(sql)) return counterRows();
+    if (/UPDATE\s+JAVIER\.COBROS_NUMERO_COUNTER/i.test(sql)) return [];
+    return [];
+  });
 });
 
 describe('Db2CobrosRepository ensureCobrosTable', () => {
-  test('rejects typed COBROS_TABLE_UNAVAILABLE and does not issue CREATE TABLE', async () => {
-    mockQuery.mockRejectedValueOnce(new Error('SQL0204 Table JAVIER.COBROS not found'));
+  test('rejects typed COBROS_RUNTIME_SUPPORT_UNAVAILABLE and does not issue CREATE TABLE', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{ N: 3 }]);
     const repo = new Db2CobrosRepository();
 
     await expect(repo.ensureCobrosTable()).rejects.toMatchObject({
-      code: 'COBROS_TABLE_UNAVAILABLE',
+      code: 'COBROS_RUNTIME_SUPPORT_UNAVAILABLE',
       status: 503,
-      message: 'Servicio de cobros no disponible: tabla de cobros no configurada',
+      message: 'Servicio de cobros no disponible: soporte runtime no configurado',
     });
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockQuery.mock.calls[0][0]).toMatch(/SELECT 1 FROM/i);
-    expect(mockQuery.mock.calls.some(([sql]) => /CREATE TABLE/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/QSYS2\.SYSTABLES/i);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /CREATE TABLE/i.test(sql))).toBe(false);
   });
 });
 
@@ -550,6 +578,59 @@ describe('commercial cobros hardening', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
+  test('getPendingSummary keeps 400-client portfolio aggregated in DB2 and returns one bounded page', async () => {
+    mockQuery.mockImplementation(async (sql) => {
+      if (/QSYS2\.SYSCOLUMNS2/i.test(sql)) return [];
+      if (/WITH\s+CVC_DOCS/i.test(sql)) {
+        return [{
+          CLIENTE: 'C001', NOMBRE: 'Cliente Uno', DOC_COUNT: 2,
+          TOTAL_PENDIENTE: '125.00', TOTAL_VENCIDO: '25.00',
+          GRAND_TOTAL: '40000.00', GRAND_TOTAL_VENCIDO: '5000.00',
+          CVC_GRAND_TOTAL: '41000.00', CVC_GRAND_TOTAL_VENCIDO: '5100.00',
+          CLIENT_COUNT: 400, VENCIDO_CLIENT_COUNT: 80,
+        }];
+      }
+      return [];
+    });
+    mockQueryWithParams.mockResolvedValue([]);
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendingSummary('ALL', {
+      userId: '98',
+      userRole: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      limit: 999,
+      page: 1,
+    });
+
+    expect(result.clientCount).toBe(400);
+    expect(result.grandTotal).toBe(40000);
+    expect(result.cvcGrandTotal).toBe(41000);
+    expect(result.appAdjustmentsTotal).toBe(1000);
+    expect(result.pagination).toEqual({ limit: 200, page: 1, offset: 0, returnedDocuments: 1 });
+    const cvcCalls = mockQuery.mock.calls.filter(([sql]) => /WITH\s+CVC_DOCS/i.test(sql));
+    expect(cvcCalls).toHaveLength(1);
+    expect(cvcCalls[0][0]).toMatch(/R\.RN\s*>\s*0\s+AND\s+R\.RN\s*<=\s*200/i);
+    expect(cvcCalls[0][0]).toMatch(/SCOPE_TOTALS/i);
+  });
+
+  test('getCommercialMinimumObligation scopes registered cobros by date like legacy route', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{ COLLECTABLE_CENTS: 12500, REGISTERED_CENTS: 4000 }]);
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getCommercialMinimumObligation('72', {
+      userId: '72',
+      userRole: 'COMERCIAL',
+      date: '2026-06-27',
+    });
+
+    expect(result.remainingCents).toBe(3500);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/FROM JAVIER\.COBROS_CAB/i);
+    expect(sql).toMatch(/FECHAEMISIONANO \* 10000 \+ FECHAEMISIONMES \* 100 \+ FECHAEMISIONDIA/i);
+    expect(params).toEqual(expect.arrayContaining(['72', '2026-06-27', '2026-06-27']));
+  });
+
   test('getPendientes subtracts repartidor collections from pending total', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
@@ -864,20 +945,42 @@ describe('commercial cobros hardening', () => {
     expect(result.status).toBe('PARCIAL');
     expect(result.pendingBefore).toBe(80);
     expect(result.pendingAfter).toBe(50);
-    const insertCall = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql));
+    const insertCall = mockConnQuery.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS_CAB/i.test(sql));
     expect(insertCall).toBeDefined();
     expect(insertCall[1]).toEqual(expect.arrayContaining([
-      'cobro-token-partial-001',
       'C001',
-      'PEDIDO:22:M-1',
       30,
-      'CONTADO',
-      'COMERCIAL',
       '01',
     ]));
   });
 
-  test('registerPayment does not use LOCK TABLE or manual pool transaction', async () => {
+  test('registerPayment targets production COBROS_CAB/LIN and idempotency support tables', async () => {
+    const repo = setupRepository({ paid: '20.00' });
+
+    await repo.registerPayment({
+      clientCode: 'C001',
+      amount: 30,
+      paymentMethod: 'CONTADO',
+      reference: 'M-1',
+      observations: 'runtime cutover contract',
+      userId: '01',
+      userRole: 'COMERCIAL',
+      idempotencyToken: 'cobro-runtime-cutover-001',
+    });
+
+    const sql = [
+      ...mockQuery.mock.calls.map(([text]) => text),
+      ...mockQueryWithParams.mock.calls.map(([text]) => text),
+      ...mockConnQuery.mock.calls.map(([text]) => text),
+    ].join('\n');
+
+    expect(sql).toMatch(/JAVIER\.COBROS_IDEMPOTENCY\b/i);
+    expect(sql).toMatch(/INSERT\s+INTO\s+JAVIER\.COBROS_CAB\b/i);
+    expect(sql).toMatch(/INSERT\s+INTO\s+JAVIER\.COBROS_LIN\b/i);
+    expect(sql).not.toMatch(/INSERT\s+INTO\s+JAVIER\.COBROS\b/i);
+  });
+
+  test('registerPayment uses pool transaction without LOCK TABLE', async () => {
     const repo = setupRepository({ paid: '0.00' });
 
     await repo.registerPayment({
@@ -891,14 +994,50 @@ describe('commercial cobros hardening', () => {
       idempotencyToken: 'cobro-token-no-lock-001',
     });
 
-    expect(mockPoolConnect).not.toHaveBeenCalled();
+    expect(mockPoolConnect).toHaveBeenCalledTimes(1);
     const allSql = [
       ...mockQuery.mock.calls.map(([sql]) => sql),
       ...mockQueryWithParams.mock.calls.map(([sql]) => sql),
+      ...mockConnQuery.mock.calls.map(([sql]) => sql),
     ];
     expect(allSql.some((sql) => /LOCK TABLE/i.test(sql))).toBe(false);
-    expect(allSql.some((sql) => /^BEGIN WORK$/i.test(sql))).toBe(false);
-    expect(allSql.some((sql) => /^COMMIT$/i.test(sql))).toBe(false);
+    expect(allSql.some((sql) => /^SET TRANSACTION ISOLATION LEVEL READ COMMITTED$/i.test(sql))).toBe(true);
+    expect(allSql.some((sql) => /^COMMIT$/i.test(sql))).toBe(true);
+  });
+
+  test('registerPayment rolls back when counter reservation fails', async () => {
+    const repo = setupRepository({ paid: '0.00' });
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/SELECT NEXT_NUMERO/i.test(sql)) return [{ NEXT_NUMERO: 123 }];
+      if (/UPDATE\s+JAVIER\.COBROS_NUMERO_COUNTER/i.test(sql)) return [];
+      return [];
+    });
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001',
+      amount: 30,
+      paymentMethod: 'CONTADO',
+      reference: 'M-1',
+      userId: '01',
+      userRole: 'COMERCIAL',
+      idempotencyToken: 'cobro-token-counter-fail-001',
+    })).rejects.toMatchObject({
+      code: 'COBROS_RUNTIME_SUPPORT_UNAVAILABLE',
+      status: 503,
+    });
+
+    const connSql = mockConnQuery.mock.calls.map(([sql]) => sql);
+    const allSql = [
+      ...mockQuery.mock.calls.map(([sql]) => sql),
+      ...mockQueryWithParams.mock.calls.map(([sql]) => sql),
+      ...connSql,
+    ];
+    expect(connSql.filter((sql) => /SELECT NEXT_NUMERO/i.test(sql))).toHaveLength(2);
+    expect(connSql.some((sql) => /^ROLLBACK$/i.test(sql))).toBe(true);
+    expect(connSql.some((sql) => /^COMMIT$/i.test(sql))).toBe(false);
+    expect(allSql.some((sql) => /INSERT\s+INTO\s+JAVIER\.COBROS_IDEMPOTENCY/i.test(sql))).toBe(false);
+    expect(allSql.some((sql) => /INSERT\s+INTO\s+JAVIER\.COBROS_CAB/i.test(sql))).toBe(false);
+    expect(allSql.some((sql) => /INSERT\s+INTO\s+JAVIER\.COBROS_LIN/i.test(sql))).toBe(false);
   });
 
   test('registerPayment stores a DB2-safe ID and the idempotency token separately', async () => {
@@ -917,13 +1056,11 @@ describe('commercial cobros hardening', () => {
       idempotencyToken: token,
     });
 
-    const lookupCall = mockQueryWithParams.mock.calls.find(([sql]) => /FROM JAVIER\.COBROS\s+WHERE ID = \? OR IDEMPOTENCY_TOKEN = \?/i.test(sql));
+    const lookupCall = mockQueryWithParams.mock.calls.find(([sql]) => /FROM JAVIER\.COBROS_IDEMPOTENCY/i.test(sql));
     expect(lookupCall[1]).toEqual([expectedId, token]);
-    const insertCall = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql));
-    expect(insertCall[0]).toContain('IDEMPOTENCY_TOKEN');
-    expect(insertCall[1][0]).toBe(expectedId);
-    expect(insertCall[1][0].length).toBeLessThanOrEqual(36);
-    expect(insertCall[1][10]).toBe(token);
+    const insertCall = mockConnQuery.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS_IDEMPOTENCY/i.test(sql));
+    expect(insertCall[1][0]).toBe(token);
+    expect(expectedId.length).toBeLessThanOrEqual(36);
   });
 
   test('registerPayment sums previous payments by exact normalized reference only', async () => {
@@ -941,22 +1078,19 @@ describe('commercial cobros hardening', () => {
     });
 
     const previousPaymentsCall = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /COALESCE\(SUM\(IMPORTE\)/i.test(sql),
+      /COALESCE\(SUM\(IMPORTECOBRADO\)/i.test(sql),
     );
     expect(previousPaymentsCall).toBeDefined();
     expect(previousPaymentsCall[0]).not.toMatch(/LIKE/i);
-    expect(previousPaymentsCall[1]).toEqual(['C001', 'PEDIDO:22:M-1', 'M-1']);
+    expect(previousPaymentsCall[0]).toMatch(/FROM JAVIER\.COBROS_LIN/i);
+    expect(previousPaymentsCall[1]).toEqual(['C001', 'GMP', 2026, 'M', 10, 1]);
   });
 
   test('registerPayment replays same idempotency token without duplicate insert', async () => {
     const repo = setupRepository({
       existingToken: [{
-        ID: 'cobro-token-replay-001',
-        CODIGO_CLIENTE: 'C001',
-        REFERENCIA: 'PEDIDO:22:M-1',
-        IMPORTE: '30.00',
-        FORMA_PAGO: 'CONTADO',
-        CODIGO_USUARIO: '01',
+        IDEMPOTENCY_TOKEN: 'cobro-token-replay-001',
+        REQUEST_HASH: requestHashForTest(),
       }],
       paid: '30.00',
     });
@@ -972,7 +1106,7 @@ describe('commercial cobros hardening', () => {
     });
 
     expect(result.idempotent).toBe(true);
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
+    expect(mockConnQuery.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS_CAB/i.test(sql))).toBe(false);
   });
 
   test('registerPayment replays idempotency after duplicate insert race', async () => {
@@ -983,22 +1117,25 @@ describe('commercial cobros hardening', () => {
     mockQueryWithParams.mockImplementation(async (sql, params) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [orderRow()];
       if (/FROM DSEDAC\.CVC C/i.test(sql)) return [];
-      if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) {
+      if (/FROM JAVIER\.COBROS_IDEMPOTENCY/i.test(sql)) {
         if (insertAttempts > 0) {
           return [{
-            ID: expectedId,
-            CODIGO_CLIENTE: 'C001',
-            REFERENCIA: 'PEDIDO:22:M-1',
-            IMPORTE: '30.00',
-            FORMA_PAGO: 'CONTADO',
-            CODIGO_USUARIO: '01',
+            IDEMPOTENCY_TOKEN: token,
+            REQUEST_HASH: requestHashForTest(),
           }];
         }
         return [];
       }
-      if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: '0.00' }];
+      if (/COALESCE\(SUM\(IMPORTECOBRADO\)/i.test(sql)) return [{ TOTAL_COBRADO: '0.00' }];
       if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: '0.00' }];
-      if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) {
+      if (/QSYS2\.SYSTABLES/i.test(sql)) return [{ N: 4 }];
+      return [];
+    });
+    const counterRows = mockNextNumeroRows();
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/SELECT NEXT_NUMERO/i.test(sql)) return counterRows();
+      if (/UPDATE\s+JAVIER\.COBROS_NUMERO_COUNTER/i.test(sql)) return [];
+      if (/INSERT INTO JAVIER\.COBROS_IDEMPOTENCY/i.test(sql)) {
         insertAttempts += 1;
         throw new Error('SQL0803 Duplicate key on JAVIER.COBROS');
       }
@@ -1023,12 +1160,8 @@ describe('commercial cobros hardening', () => {
   test('registerPayment rejects same idempotency token with different payload', async () => {
     const repo = setupRepository({
       existingToken: [{
-        ID: 'cobro-token-conflict-001',
-        CODIGO_CLIENTE: 'C001',
-        REFERENCIA: 'PEDIDO:22:M-1',
-        IMPORTE: '30.00',
-        FORMA_PAGO: 'CONTADO',
-        CODIGO_USUARIO: '01',
+        IDEMPOTENCY_TOKEN: 'cobro-token-conflict-001',
+        REQUEST_HASH: requestHashForTest({ amount: 30 }),
       }],
     });
 
@@ -1112,8 +1245,8 @@ describe('commercial cobros hardening', () => {
     const adjustments = await repo.getAppSideCobrosByDoc('C001');
 
     const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toMatch(/FROM JAVIER\.COBROS/i);
-    expect(sql).toMatch(/GROUP BY TRIM\(REFERENCIA\)/i);
+    expect(sql).toMatch(/FROM JAVIER\.COBROS_LIN/i);
+    expect(sql).toMatch(/GROUP BY TRIM\(DOCUMENTOSERIE\)/i);
     expect(params).toEqual(['C001']);
     expect(adjustments.get('M-123')).toBe(30);
   });
@@ -1122,6 +1255,7 @@ describe('commercial cobros hardening', () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
+      if (/QSYS2\.SYSTABLES/i.test(sql)) return [{ N: 4 }];
       if (/FROM DSEDAC\.CVC C/i.test(sql)) {
         return [{
           ID: 'CVC:M-123',
@@ -1134,10 +1268,9 @@ describe('commercial cobros hardening', () => {
           ESTADO: 'PENDIENTE',
         }];
       }
-      if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return [];
-      if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: '30.00' }];
+      if (/FROM JAVIER\.COBROS_IDEMPOTENCY/i.test(sql)) return [];
+      if (/COALESCE\(SUM\(IMPORTECOBRADO\)/i.test(sql)) return [{ TOTAL_COBRADO: '30.00' }];
       if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: '0.00' }];
-      if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) return [];
       return [];
     });
     const repo = new Db2CobrosRepository();
@@ -1157,14 +1290,10 @@ describe('commercial cobros hardening', () => {
     expect(result.reference).toBe('CVC:M-123');
     expect(result.pendingBefore).toBe(50);
     expect(result.pendingAfter).toBe(30);
-    const insertCall = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql));
+    const insertCall = mockConnQuery.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS_CAB/i.test(sql));
     expect(insertCall[1]).toEqual(expect.arrayContaining([
-      'cobro-token-cvc-ref-001',
       'C001',
-      'CVC:M-123',
       20,
-      'CONTADO',
-      'COMERCIAL',
       '01',
     ]));
     const repartidorCall = mockQueryWithParams.mock.calls.find(([sql]) =>

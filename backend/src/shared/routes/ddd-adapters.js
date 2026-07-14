@@ -2237,7 +2237,7 @@ function createCobrosRoutes() {
 
   const parseCobrosPagination = (queryParams = {}) => {
     const requestedLimit = parseInt(queryParams.limit, 10);
-    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 2000) : 100;
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 100;
     const requestedOffset = parseInt(queryParams.offset, 10);
     const hasOffset = Number.isFinite(requestedOffset);
     const offset = hasOffset ? Math.max(requestedOffset, 0) : null;
@@ -2485,6 +2485,79 @@ function createCobrosRoutes() {
       });
     } catch (error) {
       logger.error(`[COBROS] Error pending-summary: ${error.message}`);
+      sendCobrosError(res, error);
+    }
+  });
+
+  router.get('/vencimientos-pendientes/:vendorCode', async (req, res) => {
+    try {
+      const vendorScope = resolveCobrosVendorScope(req, req.params.vendorCode);
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      const pagination = parseCobrosPagination(req.query);
+      const scoped = vendorScope.codes.length > 0
+        ? buildCvcVendorScopeFilter(vendorScope.codes)
+        : { clause: '', params: [] };
+      const tab = String(req.query.tab || '').trim().toUpperCase();
+      const tabClause = tab ? 'AND TAB = ?' : '';
+      const rows = await queryWithParams(`
+        WITH BASE AS (
+          SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+                 TRIM(MIN(CLI.NOMBREALTERNATIVO)) AS NOMBRE,
+                 TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+                 CVC.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
+                 SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                     < (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO,
+                 DAYS(CURRENT_DATE) - DAYS(DATE(TIMESTAMP_FORMAT(CHAR(CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO), 'YYYYMMDD'))) AS DAYS_OVERDUE,
+                 DAYS(DATE(TIMESTAMP_FORMAT(CHAR(CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO), 'YYYYMMDD'))) - DAYS(CURRENT_DATE) AS DAYS_REMAINING,
+                 TRIM(CVC.CODIGOFORMAPAGO) AS FORMA_PAGO,
+                 CASE WHEN TRIM(CVC.CODIGOFORMAPAGO) IN ('01','CO','CTR','EF') THEN 'CONTADO'
+                      WHEN UPPER(TRIM(CVC.CODIGOFORMAPAGO)) LIKE '%TAL%' OR UPPER(TRIM(CVC.CODIGOFORMAPAGO)) LIKE '%CHEQ%' THEN 'TALONES'
+                      ELSE 'CREDITO' END AS TAB
+            FROM DSEDAC.CVC CVC
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+           WHERE CVC.IMPORTEPENDIENTE > 0.01
+             AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+             AND (? = ?)
+             ${scoped.clause}
+           GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO,
+                    CVC.ANOVENCIMIENTO, CVC.MESVENCIMIENTO, CVC.DIAVENCIMIENTO, TRIM(CVC.CODIGOFORMAPAGO)
+        )
+        SELECT CLIENTE, NOMBRE, SERIE_DOCUMENTO, NUMERO_DOCUMENTO, TOTAL_PENDIENTE,
+               TOTAL_VENCIDO, DAYS_OVERDUE, DAYS_REMAINING, FORMA_PAGO, TAB
+          FROM BASE WHERE 1 = 1 ${tabClause}
+        ORDER BY DAYS_OVERDUE DESC, DAYS_REMAINING ASC, CLIENTE ASC
+        OFFSET ${pagination.offset} ROWS FETCH FIRST ${pagination.limit} ROWS ONLY`,
+        [req.params.vendorCode, req.params.vendorCode, ...scoped.params, ...(tab ? [tab] : [])],
+      );
+      const items = (rows || []).map((row) => ({
+        codigoCliente: String(row.CLIENTE || '').trim(),
+        nombre: String(row.NOMBRE || '').trim(),
+        referencia: `${String(row.SERIE_DOCUMENTO || '').trim()}-${String(row.NUMERO_DOCUMENTO || '').trim()}`,
+        tab: String(row.TAB || '').trim() || 'CREDITO',
+        amountPendingCents: Math.round((Number(row.TOTAL_PENDIENTE) || 0) * 100),
+        amountOverdueCents: Math.round((Number(row.TOTAL_VENCIDO) || 0) * 100),
+        daysRemaining: parseInt(row.DAYS_REMAINING, 10) || 0,
+        daysOverdue: parseInt(row.DAYS_OVERDUE, 10) || 0,
+      }));
+      return res.json({ success: true, tabs: ['CONTADO', 'CREDITO', 'TALONES'], items, pagination });
+    } catch (error) {
+      logger.error(`[COBROS] Error vencimientos-pendientes: ${error.message}`);
+      sendCobrosError(res, error);
+    }
+  });
+
+  router.get('/minimum-obligation/:vendorCode', async (req, res) => {
+    try {
+      const vendorScope = resolveCobrosVendorScope(req, req.params.vendorCode);
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      const obligation = await repo.getCommercialMinimumObligation(req.params.vendorCode, cobrosContext(req, vendorScope.codes, {
+        date: String(req.query.date || '').trim(),
+      }));
+      return res.json({ success: true, vendorCode: req.params.vendorCode, ...obligation });
+    } catch (error) {
+      logger.error(`[COBROS] Error minimum-obligation: ${error.message}`);
       sendCobrosError(res, error);
     }
   });

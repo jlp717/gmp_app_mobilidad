@@ -110,14 +110,14 @@ void main() {
       );
       expect(repartidor.length, 8);
 
-      // Jefe Ventas: 13 items (Panel + 12)
+      // Jefe Ventas: 12 items (Panel + 11 ventas, sin Evolución)
       final jefe = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: false,
         isJefeVentas: true,
         showCommissions: true,
       );
-      expect(jefe.length, 13);
+      expect(jefe.length, 12);
       expect(jefe.any((i) => i.label == 'Liquidación'), true);
     });
   });

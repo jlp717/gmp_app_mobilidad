@@ -39,6 +39,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   /// Por defecto 'pendiente' para que al abrir veas SOLO los clientes con
   /// algun pendiente, en vez de todos en verde que es confuso.
   String _estadoFilter = 'pendiente';
+  String _tipoCobroFilter = 'todos';
   DateTime? _summaryFechaDesde;
   DateTime? _summaryFechaHasta;
   Timer? _debounceTimer;
@@ -343,6 +344,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 _buildSummaryCard(cobros),
                 _buildSearchArea(),
                 _buildEstadoFilterChips(),
+                _buildTipoCobroTabs(cobros),
                 Expanded(
                   child: visibleClients.isEmpty && !_isSearchingClients
                       ? _buildNoClientsState(cobros, search)
@@ -384,6 +386,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       final vencido = (entry.value['vencido'] as num?)?.toDouble() ?? 0;
       final estado =
           vencido > 0 ? 'vencido' : (total > 0 ? 'pendiente' : 'aldia');
+      if (!_matchesTipoCobroFilter(entry.value)) return false;
       switch (_estadoFilter) {
         case 'vencido':
           return estado == 'vencido';
@@ -420,6 +423,29 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         'fromErpDebt': existing.isEmpty && apiName != null,
       };
     }).toList();
+  }
+
+  bool _matchesTipoCobroFilter(Map<String, dynamic> entry) {
+    if (_tipoCobroFilter == 'todos') return true;
+    if (!_hasTipoCobroBuckets(entry)) return true;
+    return _tipoCobroAmount(entry, _tipoCobroFilter) > 0;
+  }
+
+  bool _hasTipoCobroBuckets(Map<String, dynamic> entry) {
+    return _tipoCobroAmount(entry, 'contado') > 0 ||
+        _tipoCobroAmount(entry, 'credito') > 0 ||
+        _tipoCobroAmount(entry, 'talones') > 0;
+  }
+
+  double _tipoCobroAmount(Map<String, dynamic> entry, String tipo) {
+    final key = switch (tipo) {
+      'contado' => 'contado',
+      'credito' => 'credito',
+      'talones' => 'talones',
+      _ => '',
+    };
+    final value = entry[key] ?? entry['total_$key'];
+    return (value as num?)?.toDouble() ?? 0;
   }
 
   /// Card resumen agregada en la cabecera: total pendiente, total vencido,
@@ -624,6 +650,59 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     );
   }
 
+  Widget _buildTipoCobroTabs(CobrosProvider cobros) {
+    final tabs = const [
+      _CommercialTabDef('todos', 'Todos', Icons.all_inbox, Colors.white70),
+      _CommercialTabDef('contado', 'Contado', Icons.payments, AppTheme.success),
+      _CommercialTabDef('credito', 'Credito', Icons.schedule, AppTheme.warning),
+      _CommercialTabDef(
+          'talones', 'Talones', Icons.receipt_long, AppTheme.info),
+    ];
+    final hasBuckets = cobros.pendingSummary.values.any(_hasTipoCobroBuckets);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      color: AppTheme.inkSurface.withValues(alpha: 0.58),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: tabs.map((tab) {
+            final selected = _tipoCobroFilter == tab.value;
+            final enabled = tab.value == 'todos' || hasBuckets;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                avatar: Icon(
+                  tab.icon,
+                  size: 16,
+                  color: selected ? Colors.white : tab.color,
+                ),
+                label: Text(tab.label),
+                selected: selected,
+                onSelected: enabled
+                    ? (_) => setState(() => _tipoCobroFilter = tab.value)
+                    : null,
+                backgroundColor: AppTheme.softPanel,
+                selectedColor: tab.color.withValues(alpha: 0.25),
+                disabledColor: AppTheme.softPanel.withValues(alpha: 0.4),
+                labelStyle: TextStyle(
+                  color: enabled
+                      ? (selected ? Colors.white : Colors.white70)
+                      : AppTheme.textSecondary.withValues(alpha: 0.5),
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                side: BorderSide(
+                  color: selected
+                      ? tab.color.withValues(alpha: 0.6)
+                      : Colors.white.withValues(alpha: 0.1),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSummaryDateFilters() {
     final hasPeriod = _summaryFechaDesde != null || _summaryFechaHasta != null;
     return Align(
@@ -777,6 +856,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final hasDebt = cobros.grandTotal > 0;
     final hasSummaryData = cobros.pendingSummary.isNotEmpty;
     final isFiltering = searchQuery.isNotEmpty || _estadoFilter != 'pendiente';
+    final isTipoFiltering = _tipoCobroFilter != 'todos';
 
     return Center(
       child: Padding(
@@ -785,7 +865,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isFiltering
+              isFiltering || isTipoFiltering
                   ? Icons.search_off
                   : (hasSummaryData
                       ? Icons.check_circle_outline
@@ -798,7 +878,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              isFiltering
+              isFiltering || isTipoFiltering
                   ? 'No se encontraron resultados'
                   : (hasDebt
                       ? 'No hay clientes con deuda'
@@ -814,7 +894,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              isFiltering
+              isFiltering || isTipoFiltering
                   ? 'Prueba con otro termino de busqueda o filtro'
                   : (hasDebt
                       ? 'Los clientes con deuda no coinciden con el filtro actual'
@@ -838,13 +918,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 ),
               ),
             ],
-            if (isFiltering) ...[
+            if (isFiltering || isTipoFiltering) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: () async {
                   _searchController.clear();
                   setState(() {
                     _estadoFilter = 'pendiente';
+                    _tipoCobroFilter = 'todos';
                     _summaryFechaDesde = null;
                     _summaryFechaHasta = null;
                   });
@@ -1095,6 +1176,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 /// Definicion de un chip de filtro de estado.
 class _FilterDef {
   const _FilterDef(this.value, this.label, this.icon, this.color);
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+class _CommercialTabDef {
+  const _CommercialTabDef(this.value, this.label, this.icon, this.color);
   final String value;
   final String label;
   final IconData icon;

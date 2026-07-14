@@ -85,7 +85,7 @@ function requireOperationalAdmin(req, res, next) {
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  repartidorFinanzasRoutes, userActionsRoutes, facturasRoutes, warehouseRoutes,
+  repartidorFinanzasRoutes, comercialLiquidacionesRoutes, userActionsRoutes, facturasRoutes, warehouseRoutes,
   productsRoutes, bolsaRoutes, evolutionRoutes,
   pedidosRoutes, cobrosRoutes, kpiModule;
 
@@ -153,6 +153,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   entregasRoutes = require('./routes/entregas');
   repartidorRoutes = require('./routes/repartidor');
   repartidorFinanzasRoutes = require('./routes/repartidor-finanzas');
+  comercialLiquidacionesRoutes = require('./routes/comercial-liquidaciones');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
@@ -685,6 +686,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/filters', filtersRoutes);
   app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/repartidor-finanzas', repartidorFinanzasRoutes);
+  app.use('/api/comercial-liquidaciones', comercialLiquidacionesRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);

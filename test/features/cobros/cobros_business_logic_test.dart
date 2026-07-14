@@ -144,7 +144,7 @@ void main() {
 
       expect(paths, hasLength(1));
       expect(paths.single, contains('/cobros/pending-summary/ALL'));
-      expect(paths.single, contains('limit=2000'));
+      expect(paths.single, contains('limit=200'));
       expect(paths.single, contains('page=1'));
       expect(paths.single, contains('offset=0'));
       expect(paths.single, contains('tipoDocumento=COB'));
@@ -397,6 +397,64 @@ void main() {
 
       expect(nextSelection, {'failed': 'PARCIAL'});
     });
+
+    test('runs cobro registration tasks with bounded concurrency', () async {
+      var active = 0;
+      var maxActive = 0;
+      final results = await runBoundedCobroTasks<int>(
+        concurrency: 2,
+        tasks: List.generate(5, (index) {
+          return () async {
+            active++;
+            if (active > maxActive) maxActive = active;
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+            active--;
+            return index;
+          };
+        }),
+      );
+
+      expect(results, [0, 1, 2, 3, 4]);
+      expect(maxActive, 2);
+    });
+
+    test(
+        'handles 400-record business lists with stable tab and payable filtering',
+        () {
+      final cobros = List<CobroPendiente>.generate(400, (index) {
+        final pending = index % 5 == 0
+            ? 0.0
+            : index % 7 == 0
+                ? cobroPayableEpsilon
+                : 10.0 + index;
+
+        return CobroPendiente.fromJson({
+          'id': 'doc_$index',
+          'referencia': 'M-$index',
+          'tipo': 'factura',
+          'fecha': '2026-06-23T00:00:00.000Z',
+          'importeTotal': 100 + index,
+          'importePendiente': pending,
+          'tab': const ['CONTADO', 'CREDITO', 'TALONES', 'CREDITO'][index % 4],
+        });
+      });
+
+      expect(cobros, hasLength(400));
+      expect(filterCobrosPendientesByTab(cobros, CobroPendienteTab.todos),
+          hasLength(400));
+      expect(filterCobrosPendientesByTab(cobros, CobroPendienteTab.contado),
+          hasLength(100));
+      expect(filterCobrosPendientesByTab(cobros, CobroPendienteTab.credito),
+          hasLength(200));
+      expect(filterCobrosPendientesByTab(cobros, CobroPendienteTab.talones),
+          hasLength(100));
+
+      final payableIds = cobrosPayableItems(cobros).map((cobro) => cobro.id);
+      expect(payableIds, hasLength(274));
+      expect(payableIds, contains('doc_1'));
+      expect(payableIds, isNot(contains('doc_0')));
+      expect(cobrosNonPayableItems(cobros), hasLength(126));
+    });
   });
 
   group('Cobros online retry idempotency', () {
@@ -461,6 +519,76 @@ void main() {
         requestBodies[1]['idempotencyToken'],
         requestBodies[0]['idempotencyToken'],
       );
+    });
+  });
+
+  group('Commercial daily collection contracts', () {
+    test('CobroPendiente parses optional maturity fields from backend', () {
+      final cobro = CobroPendiente.fromJson({
+        'id': 'cvc_M_123',
+        'referencia': 'M-123',
+        'tipo': 'factura',
+        'fecha': '2026-06-23T00:00:00.000Z',
+        'fechaVencimiento': '2026-06-30T00:00:00.000Z',
+        'importeTotal': 200,
+        'importePendiente': 123.45,
+        'amountPendingCents': 12345,
+        'daysRemaining': 7,
+        'daysOverdue': 0,
+        'tab': 'CREDITO',
+      });
+
+      expect(cobro.amountPendingCents, 12345);
+      expect(cobro.daysRemaining, 7);
+      expect(cobro.daysOverdue, 0);
+      expect(cobro.commercialTab, CobroPendienteTab.credito);
+    });
+
+    test('filters pending documents by commercial tab', () {
+      CobroPendiente item(String id, String tab) => CobroPendiente.fromJson({
+            'id': id,
+            'referencia': id,
+            'tipo': 'factura',
+            'fecha': '2026-06-23T00:00:00.000Z',
+            'importeTotal': 100,
+            'importePendiente': 50,
+            'amountPendingCents': 5000,
+            'tab': tab,
+          });
+
+      final items = [
+        item('contado', 'CONTADO'),
+        item('credito', 'CREDITO'),
+        item('talon', 'TALONES'),
+      ];
+
+      expect(
+        filterCobrosPendientesByTab(items, CobroPendienteTab.contado)
+            .map((c) => c.id),
+        ['contado'],
+      );
+      expect(
+        filterCobrosPendientesByTab(items, CobroPendienteTab.todos)
+            .map((c) => c.id),
+        ['contado', 'credito', 'talon'],
+      );
+    });
+
+    test(
+        'derives minimum obligation progress and banner when obligation exists',
+        () {
+      final obligation = MinimumCobroObligation.fromJson({
+        'minimumPercent': 60,
+        'collectableCents': 10000,
+        'registeredCents': 4500,
+        'remainingCents': 1500,
+        'met': false,
+      });
+
+      expect(obligation.requiredCents, 6000);
+      expect(obligation.progress, closeTo(0.75, 0.001));
+      expect(obligation.bannerLevel, MinimumCobroObligationBanner.warning);
+      expect(obligation.bannerText, contains('1.500'));
     });
   });
 }
