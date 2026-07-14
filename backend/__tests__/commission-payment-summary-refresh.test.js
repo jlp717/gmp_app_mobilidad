@@ -125,6 +125,8 @@ describe('commission payment summary refresh', () => {
             'route:comm:summary:*',
             'route:comm:pdf:*',
             expect.stringMatching(/route:comm:summary:.*:SINGLE:02:\*/),
+            expect.stringMatching(/route:commissions:.*:sales-by-client-scope:02:\*/),
+            expect.stringMatching(/route:commissions:.*:sales-by-client-scope:\*/),
         ]));
     });
 });

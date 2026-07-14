@@ -26,6 +26,7 @@ class CommissionsPdfService {
     int? year,
     String? range, // '1', '2', '3', 'all' (deprecated)
     String? months, // '1,2,3' (new multi-month selector)
+    String pdfType = 'commissions', // commissions | payment_record
   }) async {
     onLoading();
 
@@ -44,6 +45,7 @@ class CommissionsPdfService {
           year: year,
           range: range,
           months: months,
+          pdfType: pdfType,
           onSuccess: onSuccess,
           onError: onError,
         );
@@ -73,6 +75,7 @@ class CommissionsPdfService {
     int? year,
     String? range,
     String? months,
+    String pdfType = 'commissions',
   }) async {
     try {
       // Build URL with query params
@@ -85,6 +88,7 @@ class CommissionsPdfService {
           if (months != null) 'months': months, // New: comma-separated months
           if (range != null && months == null)
             'range': range, // Fallback for old API
+          'pdfType': pdfType,
           'forceRefresh': '1',
         },
       );
@@ -132,8 +136,9 @@ class CommissionsPdfService {
       // Save PDF to temp directory with unique filename
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName =
-          'comisiones_${year ?? DateTime.now().year}_$timestamp.pdf';
+      final fileName = pdfType == 'payment_record'
+          ? 'registro_pagos_${year ?? DateTime.now().year}_$timestamp.pdf'
+          : 'comisiones_${year ?? DateTime.now().year}_$timestamp.pdf';
       final filePath = '${tempDir.path}/$fileName';
       final file = File(filePath);
 

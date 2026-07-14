@@ -553,6 +553,87 @@ describe('Commissions PDF route helpers', () => {
     });
 });
 
+describe('Payment record PDF', () => {
+    const originalEnv = process.env;
+
+    function loadService(queryWithParams, clientCodes = ['C001', 'C002']) {
+        jest.resetModules();
+        process.env = { ...originalEnv, SNAPSHOT_UNTIL_MONTH: '2' };
+
+        jest.doMock('../config/db', () => ({
+            queryWithParams,
+            query: jest.fn(),
+            getPool: jest.fn(),
+        }));
+        jest.doMock('../middleware/logger', () => ({
+            info: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
+            error: jest.fn(),
+        }));
+        jest.doMock('../services/laclae', () => ({
+            getClientCodesFromCache: jest.fn(() => clientCodes),
+        }));
+        jest.doMock('../utils/common', () => ({
+            getCommissionVendorColumnExpr: jest.fn(() => 'L.VENDEDOR'),
+            getCommissionActualVendorColumnExprForYear: jest.fn(() => 'L.VENDEDOR'),
+            getVendorName: jest.fn(async (code) => `Vendor ${code}`),
+            LACLAE_SALES_FILTER: '1=1',
+            SNAPSHOT_UNTIL_MONTH: 2,
+        }));
+
+        return require('../services/commissions-pdf.service');
+    }
+
+    afterEach(() => {
+        process.env = originalEnv;
+        jest.dontMock('../config/db');
+        jest.dontMock('../middleware/logger');
+        jest.dontMock('../services/laclae');
+        jest.dontMock('../utils/common');
+        jest.clearAllMocks();
+    });
+
+    test('generatePaymentRecordPdf returns a valid PDF buffer', async () => {
+        const queryWithParams = jest.fn(async (sql) => {
+            if (sql.includes('DSED.LACLAE')) {
+                return [
+                    { CLIENT_CODE: 'C001', MONTH: 4, SALES: 1009.53 },
+                    { CLIENT_CODE: 'C002', MONTH: 4, SALES: 250 },
+                ];
+            }
+            if (sql.includes('DSEDAC.CLI')) {
+                return [
+                    { CLIENT_CODE: 'C001', NOMBRECLIENTE: 'Cliente Uno', NOMBREALTERNATIVO: 'Alt Uno' },
+                    { CLIENT_CODE: 'C002', NOMBRECLIENTE: 'Cliente Dos', NOMBREALTERNATIVO: '' },
+                ];
+            }
+            return [];
+        });
+
+        const service = loadService(queryWithParams);
+        const { rows } = await service.fetchPaymentRecordClientRows('02', 2026, [4]);
+        const buffer = await service.generatePaymentRecordPdf({
+            vendorCode: '02',
+            vendorName: 'Vendor 02',
+            year: 2026,
+            months: [4],
+            rows,
+        });
+
+        expect(Buffer.isBuffer(buffer)).toBe(true);
+        expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+        expect(buffer.length).toBeGreaterThan(500);
+    });
+
+    test('fetchPaymentRecordClientRows returns empty rows when vendor has no clients', async () => {
+        const service = loadService(jest.fn(async () => []), []);
+        const result = await service.fetchPaymentRecordClientRows('02', 2026, [4]);
+        expect(result.rows).toEqual([]);
+        expect(result.vendorCode).toBe('02');
+    });
+});
+
 describe('Commissions PDF timestamp formatting', () => {
     test('formatCommissionPdfTimestamp uses Europe/Madrid timezone', () => {
         const service = require('../services/commissions-pdf.service');

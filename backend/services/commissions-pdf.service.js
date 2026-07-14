@@ -16,9 +16,11 @@ const { CircuitBreaker } = require('./circuit-breaker');
 const {
     getCommissionVendorColumnExpr,
     getCommissionActualVendorColumnExprForYear,
+    getVendorName,
     LACLAE_SALES_FILTER,
     SNAPSHOT_UNTIL_MONTH,
 } = require('../utils/common');
+const { getClientCodesFromCache } = require('./laclae');
 const {
     resolveCommissionTarget,
     resolvePaymentSnapshotMonth,
@@ -1638,12 +1640,299 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
     });
 }
 
+/**
+ * Client-level LAC sales for payment record PDF.
+ * Uses the same client-scope portfolio as the commissions tab (LACLAE + rutero cache).
+ */
+async function fetchPaymentRecordClientRows(vendorCode, year, monthList) {
+    const months = [...new Set((monthList || [])
+        .map((m) => parseInt(m, 10))
+        .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12))]
+        .sort((a, b) => a - b);
+
+    const safeVendor = String(vendorCode || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+    if (!safeVendor || months.length === 0) {
+        return { rows: [], vendorName: '', months, vendorCode: displayVendorCode(safeVendor) };
+    }
+
+    const cachedCodes = getClientCodesFromCache(safeVendor);
+    if (!Array.isArray(cachedCodes) || cachedCodes.length === 0) {
+        return {
+            rows: [],
+            vendorName: await getVendorName(safeVendor),
+            months,
+            vendorCode: displayVendorCode(safeVendor),
+        };
+    }
+
+    const safeClientCodes = [...new Set(
+        cachedCodes
+            .map((code) => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10))
+            .filter(Boolean)
+    )].sort();
+
+    if (safeClientCodes.length === 0) {
+        return {
+            rows: [],
+            vendorName: await getVendorName(safeVendor),
+            months,
+            vendorCode: displayVendorCode(safeVendor),
+        };
+    }
+
+    const monthPlaceholders = months.map(() => '?').join(',');
+    const chunkSize = 250;
+    const salesByClientMonth = new Map();
+
+    for (let index = 0; index < safeClientCodes.length; index += chunkSize) {
+        const chunk = safeClientCodes.slice(index, index + chunkSize);
+        const clientPlaceholders = chunk.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT TRIM(L.LCCDCL) AS CLIENT_CODE,
+                   L.LCMMDC AS MONTH,
+                   COALESCE(SUM(L.LCIMVT), 0) AS SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC IN (${monthPlaceholders})
+              AND ${LACLAE_SALES_FILTER}
+              AND L.LCCDCL IN (${clientPlaceholders})
+            GROUP BY TRIM(L.LCCDCL), L.LCMMDC
+        `, [parseInt(year, 10), ...months, ...chunk], false, false);
+
+        rows.forEach((row) => {
+            const clientCode = String(row.CLIENT_CODE || '').trim();
+            if (!clientCode) return;
+            if (!salesByClientMonth.has(clientCode)) salesByClientMonth.set(clientCode, {});
+            const month = parseInt(row.MONTH, 10);
+            salesByClientMonth.get(clientCode)[month] = toNumber(row.SALES);
+        });
+    }
+
+    const clientNames = new Map();
+    for (let index = 0; index < safeClientCodes.length; index += chunkSize) {
+        const chunk = safeClientCodes.slice(index, index + chunkSize);
+        const placeholders = chunk.map(() => '?').join(',');
+        const nameRows = await queryWithParams(`
+            SELECT TRIM(C.CODIGOCLIENTE) AS CLIENT_CODE,
+                   TRIM(C.NOMBRECLIENTE) AS NOMBRECLIENTE,
+                   TRIM(C.NOMBREALTERNATIVO) AS NOMBREALTERNATIVO
+            FROM DSEDAC.CLI C
+            WHERE C.CODIGOCLIENTE IN (${placeholders})
+        `, chunk, false, false);
+
+        nameRows.forEach((row) => {
+            clientNames.set(String(row.CLIENT_CODE || '').trim(), {
+                nombreCliente: String(row.NOMBRECLIENTE || '').trim(),
+                nombreAlternativo: String(row.NOMBREALTERNATIVO || '').trim(),
+            });
+        });
+    }
+
+    const vendorName = await getVendorName(safeVendor);
+    const displayVendor = displayVendorCode(safeVendor);
+    const resultRows = [];
+
+    salesByClientMonth.forEach((monthSales, clientCode) => {
+        const hasSales = months.some((month) => (monthSales[month] || 0) !== 0);
+        if (!hasSales) return;
+        const names = clientNames.get(clientCode) || { nombreCliente: '', nombreAlternativo: '' };
+        resultRows.push({
+            vendorCode: displayVendor,
+            clientCode,
+            nombreCliente: names.nombreCliente,
+            nombreAlternativo: names.nombreAlternativo,
+            monthSales,
+        });
+    });
+
+    resultRows.sort((a, b) => {
+        const nameA = a.nombreCliente || a.clientCode;
+        const nameB = b.nombreCliente || b.clientCode;
+        const nameCmp = nameA.localeCompare(nameB, 'es');
+        if (nameCmp !== 0) return nameCmp;
+        return a.clientCode.localeCompare(b.clientCode, 'es');
+    });
+
+    return {
+        rows: resultRows,
+        vendorName,
+        months,
+        vendorCode: displayVendor,
+    };
+}
+
+/**
+ * Payment record PDF — client-level LAC sales matching commissions client scope.
+ */
+async function generatePaymentRecordPdf({
+    vendorCode,
+    vendorName,
+    year,
+    months,
+    rows = [],
+}) {
+    const monthList = [...(months || [])].sort((a, b) => a - b);
+    const displayVendor = displayVendorCode(vendorCode);
+    const vendorLabel = vendorName ? `${displayVendor} — ${vendorName}` : displayVendor;
+
+    return new Promise((resolve, reject) => {
+        try {
+            const doc = new PDFDocument({
+                size: 'A4',
+                margin: 24,
+                layout: 'landscape',
+            });
+
+            const chunks = [];
+            doc.on('data', (chunk) => chunks.push(chunk));
+            doc.on('end', () => resolve(Buffer.concat(chunks)));
+            doc.on('error', reject);
+
+            const pageWidth = doc.page.width;
+            const pageHeight = doc.page.height;
+            const margin = 24;
+            const contentWidth = pageWidth - margin * 2;
+            const ROW_H = 16;
+            const HDR_H = 18;
+            const dateStr = formatCommissionPdfTimestamp();
+            const periodLabel = monthList.length === 1
+                ? `${getMonthName(monthList[0])} ${year}`
+                : monthList.map((m) => getMonthName(m)).join(', ') + ` ${year}`;
+
+            const fixedCols = [
+                { key: 'vendor', label: 'Vendedor', width: 42 },
+                { key: 'client', label: 'Cod. cliente', width: 58 },
+                { key: 'name', label: 'Nombre cliente', width: 150 },
+                { key: 'alt', label: 'Nombre alternativo', width: 130 },
+            ];
+            const monthColWidth = Math.max(
+                58,
+                Math.floor((contentWidth - fixedCols.reduce((sum, col) => sum + col.width, 0)) / Math.max(monthList.length, 1))
+            );
+            const monthCols = monthList.map((month) => ({
+                key: `m${month}`,
+                label: `LAC ${getMonthName(month).substring(0, 3)}`,
+                month,
+                width: monthColWidth,
+            }));
+            const cols = [...fixedCols, ...monthCols];
+
+            const monthTotals = Object.fromEntries(monthList.map((month) => [month, 0]));
+
+            const drawHeader = (yPos) => {
+                doc.font('Helvetica-Bold').fontSize(12).fillColor(COLORS.header)
+                    .text('Registro de pagos — ventas LAC por cliente', margin, yPos, {
+                        width: contentWidth / 2,
+                        align: 'left',
+                    });
+                doc.font('Helvetica').fontSize(8).fillColor(COLORS.muted)
+                    .text(`${vendorLabel} | ${periodLabel} | Generado: ${dateStr}`, margin + contentWidth / 2, yPos + 2, {
+                        width: contentWidth / 2,
+                        align: 'right',
+                    });
+                return yPos + 22;
+            };
+
+            const drawTableHeader = (yPos) => {
+                let xPos = margin;
+                doc.rect(margin, yPos, contentWidth, HDR_H).fill(COLORS.columnHeader);
+                cols.forEach((col) => {
+                    doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.header)
+                        .text(col.label, xPos + 2, yPos + 5, {
+                            width: col.width - 4,
+                            align: col.key.startsWith('m') ? 'right' : 'left',
+                        });
+                    doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
+                    xPos += col.width;
+                });
+                return yPos + HDR_H;
+            };
+
+            let yPos = drawHeader(margin);
+            yPos = drawTableHeader(yPos);
+
+            rows.forEach((row, index) => {
+                if (yPos + ROW_H > pageHeight - 40) {
+                    doc.addPage({ size: 'A4', layout: 'landscape', margin });
+                    yPos = drawHeader(margin);
+                    yPos = drawTableHeader(yPos);
+                }
+
+                if (index % 2 === 1) {
+                    doc.rect(margin, yPos, contentWidth, ROW_H).fill(COLORS.rowAlt);
+                }
+
+                let xPos = margin;
+                const values = {
+                    vendor: row.vendorCode || displayVendor,
+                    client: row.clientCode || '',
+                    name: row.nombreCliente || '-',
+                    alt: row.nombreAlternativo || '-',
+                };
+                monthList.forEach((month) => {
+                    const amount = toNumber(row.monthSales?.[month]);
+                    monthTotals[month] += amount;
+                    values[`m${month}`] = amount !== 0 ? formatCurrency(amount) : '-';
+                });
+
+                cols.forEach((col) => {
+                    const isMoney = col.key.startsWith('m');
+                    const isClient = col.key === 'client';
+                    doc.font(isClient ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor(COLORS.text)
+                        .text(values[col.key] || '-', xPos + 2, yPos + 4, {
+                            width: col.width - 4,
+                            align: isMoney ? 'right' : 'left',
+                        });
+                    doc.rect(xPos, yPos, col.width, ROW_H).stroke(COLORS.grid);
+                    xPos += col.width;
+                });
+                yPos += ROW_H;
+            });
+
+            if (yPos + HDR_H + 8 > pageHeight - 30) {
+                doc.addPage({ size: 'A4', layout: 'landscape', margin });
+                yPos = drawHeader(margin);
+            }
+
+            doc.rect(margin, yPos, contentWidth, HDR_H).fill(COLORS.columnHeader);
+            let xPos = margin;
+            cols.forEach((col) => {
+                let label = '';
+                if (col.key === 'vendor') label = 'Total general';
+                else if (col.key.startsWith('m')) {
+                    const total = monthTotals[col.month] || 0;
+                    label = formatCurrency(total);
+                }
+                doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.header)
+                    .text(label, xPos + 2, yPos + 5, {
+                        width: col.width - 4,
+                        align: col.key.startsWith('m') ? 'right' : 'left',
+                    });
+                doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
+                xPos += col.width;
+            });
+
+            doc.font('Helvetica').fontSize(7).fillColor(COLORS.muted)
+                .text('GMP App Movilidad | Uso interno', margin, pageHeight - 28, {
+                    width: contentWidth,
+                    align: 'left',
+                });
+
+            doc.end();
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
 module.exports = {
     isAuthorized,
     getLacSalesData,
     getCondorSalesData,
     generateCommissionsPdf,
     generateCommissionsPdfFromSummary,
+    fetchPaymentRecordClientRows,
+    generatePaymentRecordPdf,
     formatCommissionPdfTimestamp,
     _private: {
         calculateCommission,

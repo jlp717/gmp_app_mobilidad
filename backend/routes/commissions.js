@@ -85,7 +85,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'WHERE YEAR = ?',
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
-const COMMISSIONS_CACHE_VERSION = 'v20260713-pdf-fresh-payments';
+const COMMISSIONS_CACHE_VERSION = 'v20260714-payment-record-pdf';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -366,10 +366,13 @@ async function invalidateCommissionPaymentCaches(vendorCode, year) {
         'route:comm:pdf:*',
         `route:commissions:${COMMISSIONS_CACHE_VERSION}:*`,
         'route:comm:*',
+        `route:commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:*`,
+        `route:comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`,
     ];
 
     for (const variant of codeVariants) {
         patterns.push(`route:comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${variant}:*`);
+        patterns.push(`route:commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:${variant}:*`);
     }
     if (safeVendor && safeYear) {
         patterns.push(`route:comm:summary:${safeVendor}:${safeYear}`);
@@ -2693,11 +2696,12 @@ function normalizePdfMonthsPart(months, startMonth, endMonth) {
     return selected.length ? selected.join(',') : `${startMonth}-${endMonth}`;
 }
 
-function buildPdfGenerationCacheKey({ vendorCode, userCode, targetYear, startMonth, endMonth, months }) {
+function buildPdfGenerationCacheKey({ vendorCode, userCode, targetYear, startMonth, endMonth, months, pdfType = 'commissions' }) {
     const scope = normalizePdfCachePart(vendorCode || 'ALL', 'ALL');
     const user = normalizePdfCachePart(userCode || 'unknown', 'unknown');
     const monthsPart = normalizePdfMonthsPart(months, startMonth, endMonth);
-    return `comm:pdf:${COMMISSIONS_CACHE_VERSION}:${user}:${scope}:${targetYear}:${monthsPart}`;
+    const typePart = normalizePdfCachePart(pdfType || 'commissions', 'commissions');
+    return `comm:pdf:${COMMISSIONS_CACHE_VERSION}:${typePart}:${user}:${scope}:${targetYear}:${monthsPart}`;
 }
 
 function encodePdfPayload(payload) {
@@ -2835,8 +2839,11 @@ async function getOrGeneratePdfPayload(cacheKey, generator, { skipCache = false 
 
 router.get('/pdf', verifyToken, async (req, res) => {
     try {
-        const { year, months, range, vendorCode, forceRefresh } = req.query;
+        const { year, months, range, vendorCode, forceRefresh, pdfType: rawPdfType } = req.query;
         const skipPdfCache = forceRefresh === 'true' || forceRefresh === '1';
+        const pdfType = String(rawPdfType || 'commissions').trim().toLowerCase() === 'payment_record'
+            ? 'payment_record'
+            : 'commissions';
         
         // FIX: Use user code (req.user.code) instead of name, as name is not in JWT payload
         // The middleware auth.js sets: req.user = { id, code, role, isJefeVentas }
@@ -2893,7 +2900,27 @@ router.get('/pdf', verifyToken, async (req, res) => {
             endMonth = currentMonth;
         }
 
-        logger.info(`[PDF] Generating for DIEGO: year=${targetYear}, months ${startMonth}-${endMonth}`);
+        const selectedMonthsList = months
+            ? months.split(',').map(m => parseInt(m.trim(), 10)).filter(m => !isNaN(m) && m >= 1 && m <= 12)
+            : Array.from({ length: endMonth - startMonth + 1 }, (_, index) => startMonth + index);
+
+        logger.info(`[PDF] Generating for DIEGO: type=${pdfType}, year=${targetYear}, months ${startMonth}-${endMonth}`);
+
+        if (pdfType === 'payment_record') {
+            const safeVendorCode = String(vendorCode || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+            if (!safeVendorCode || safeVendorCode === 'ALL') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El registro de pagos requiere un comercial concreto (no ALL)',
+                });
+            }
+            if (selectedMonthsList.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Selecciona al menos un mes valido',
+                });
+            }
+        }
 
         const pdfCacheKey = buildPdfGenerationCacheKey({
             vendorCode: vendorCode || 'ALL',
@@ -2902,11 +2929,53 @@ router.get('/pdf', verifyToken, async (req, res) => {
             startMonth,
             endMonth,
             months,
+            pdfType,
         });
 
         let pdfPayload;
         try {
             pdfPayload = await getOrGeneratePdfPayload(pdfCacheKey, async () => {
+                if (pdfType === 'payment_record') {
+                    const safeVendorCode = String(vendorCode || '').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+                    let paymentRecordData;
+                    try {
+                        paymentRecordData = await pdfService.fetchPaymentRecordClientRows(
+                            safeVendorCode,
+                            targetYear,
+                            selectedMonthsList,
+                        );
+                    } catch (dataError) {
+                        logger.error(`[PDF] Payment record data error: ${dataError.message}`);
+                        throw createPdfRouteError('Error obteniendo ventas por cliente', dataError);
+                    }
+
+                    let pdfBuffer;
+                    try {
+                        pdfBuffer = await pdfService.generatePaymentRecordPdf({
+                            vendorCode: safeVendorCode,
+                            vendorName: paymentRecordData.vendorName,
+                            year: targetYear,
+                            months: selectedMonthsList,
+                            rows: paymentRecordData.rows,
+                        });
+                        logger.info(`[PDF] Payment record PDF generated (${(pdfBuffer.length / 1024).toFixed(2)} KB, ${paymentRecordData.rows.length} clients)`);
+                    } catch (pdfError) {
+                        logger.error(`[PDF] Payment record PDF error: ${pdfError.message}`);
+                        throw createPdfRouteError('Error generando registro de pagos', pdfError);
+                    }
+
+                    const monthsLabel = selectedMonthsList.length === 1
+                        ? `${selectedMonthsList[0]}`
+                        : `${Math.min(...selectedMonthsList)}-${Math.max(...selectedMonthsList)}`;
+
+                    return {
+                        pdfBuffer,
+                        vendorCount: 1,
+                        fileName: `registro_pagos_${safeVendorCode}_${targetYear}_${monthsLabel}.pdf`,
+                        generatedAt: new Date().toISOString(),
+                    };
+                }
+
                 // Fetch data with same calculation path as /summary.
                 let vendorData, condorData, pdfConfig;
                 try {
