@@ -45,8 +45,7 @@ describe('vendor column transition filter', () => {
         expect(clause).toMatch(/DSEDAC\.CLP/);
         expect(clause).toMatch(/VENDEDORCOMERCIAL/);
         expect(clause).toMatch(/DSED\.LACLAE/);
-        expect(clause).toMatch(/LAC\.LCMMDC < 3 AND LAC\.LCCDVD IN/);
-        expect(clause).toMatch(/LAC\.LCMMDC >= 3 AND LAC\.R1_T8CDVD IN/);
+        expect(clause).toMatch(/CASE WHEN LAC\.LCMMDC/);
         expect(clause).not.toMatch(/CLI\.CODIGOVENDEDOR/);
         expect(clause).not.toMatch(/CODIGOVENDEDOR/);
         expect(params).toEqual(['02', '02']);

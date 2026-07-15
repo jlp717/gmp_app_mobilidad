@@ -5,7 +5,7 @@
  * The legacy implementation has proper column names and business logic
  */
 const { CobrosRepository } = require('../domain/cobros-repository');
-const { query, queryWithParams, getPool } = require('../../../../config/db');
+const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../../../../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../../../../utils/db2-schemas');
@@ -18,11 +18,8 @@ const {
 const { getClientCodesFromCache } = require('../../../../services/laclae');
 
 const APP_SCHEMA = getDb2WriteSchema();
-const COBROS_CAB_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS_CAB');
-const COBROS_LIN_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS_LIN');
-const COBROS_IDEMPOTENCY_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS_IDEMPOTENCY');
-const COBROS_COUNTER_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS_NUMERO_COUNTER');
-const cobrosNumeroTails = new Map();
+const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
+const COBROS_HEALTHCHECK_SQL = ['SELECT 1 FROM', COBROS_TABLE, 'FETCH FIRST 1 ROW ONLY'].join(' ');
 
 const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
 
@@ -120,6 +117,71 @@ function currentHhmmss(date = new Date()) {
   );
 }
 
+function buildCobroInsert({
+  id,
+  idempotencyToken,
+  normalizedClient,
+  stableReference,
+  amount,
+  paymentMethod,
+  tipoVenta,
+  tipoModo,
+  tipoUsuario,
+  codigoUsuario,
+  observations,
+  includeErpColumns,
+}) {
+  const columns = [
+    'ID', 'CODIGO_CLIENTE', 'REFERENCIA', 'IMPORTE', 'FORMA_PAGO',
+    'TIPO_VENTA', 'TIPO_MODO', 'TIPO_USUARIO', 'CODIGO_USUARIO',
+    'OBSERVACIONES', 'IDEMPOTENCY_TOKEN',
+  ];
+  const params = [
+    id,
+    normalizedClient,
+    stableReference,
+    amount,
+    paymentMethod,
+    tipoVenta,
+    tipoModo,
+    tipoUsuario,
+    codigoUsuario,
+    observations,
+    idempotencyToken,
+  ];
+
+  if (includeErpColumns) {
+    const now = new Date();
+    columns.push(
+      'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO', 'NUMERORECIBO',
+      'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR', 'TIPORECIBO',
+      'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
+      'IMPORTECOBRADO', 'IDMARCALIQUIDACION',
+    );
+    params.push(
+      String(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3),
+      now.getFullYear(),
+      String(process.env.PEDIDOS_SYSTEM_SERIE || 'R').substring(0, 1),
+      parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '10', 10),
+      0,
+      String(normalizedClient || '').padEnd(10).slice(0, 10),
+      String(codigoUsuario || '').padEnd(2).slice(0, 2),
+      'C',
+      now.getDate(),
+      now.getMonth() + 1,
+      now.getFullYear(),
+      currentHhmmss(now),
+      amount,
+      String(id).slice(0, 30),
+    );
+  }
+
+  return {
+    sql: db2InsertSql(COBROS_TABLE, columns),
+    params,
+  };
+}
+
 function isManagerContext(context = {}) {
   return context.isJefeVentas === true ||
     context.userRole === 'JEFE_VENTAS' ||
@@ -179,68 +241,6 @@ function normalizeToken(rawToken) {
 function paymentIdFromIdempotencyToken(token) {
   const crypto = require('crypto');
   return `CBR-${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
-}
-
-function requestHash(parts) {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex');
-}
-
-function cobrosScope(date = new Date()) {
-  return {
-    subempresa: String(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3),
-    ejercicio: date.getFullYear(),
-    serie: String(process.env.COBROS_SYSTEM_SERIE || process.env.PEDIDOS_SYSTEM_SERIE || 'R').substring(0, 1),
-    terminal: parseInt(process.env.COBROS_SYSTEM_TERMINAL || process.env.PEDIDOS_SYSTEM_TERMINAL || '10', 10),
-  };
-}
-
-function cobrosFormaPago(value) {
-  return (trim(value || 'C') || 'C').substring(0, 1);
-}
-
-function documentKeyForLine(order, fallbackScope) {
-  const cvcRef = parseCvcStableReference(stableOrderReference(order));
-  if (cvcRef) {
-    return {
-      subempresa: cvcRef.subempresa || fallbackScope.subempresa,
-      ejercicio: parseInt(cvcRef.ejercicioDocumento, 10) || fallbackScope.ejercicio,
-      serie: (cvcRef.serie || '').substring(0, 1) || fallbackScope.serie,
-      terminal: parseInt(cvcRef.terminalDocumento, 10) || fallbackScope.terminal,
-      numero: parseInt(cvcRef.numero, 10) || 0,
-    };
-  }
-  return {
-    subempresa: fallbackScope.subempresa,
-    ejercicio: parseInt(order.EJERCICIO, 10) || fallbackScope.ejercicio,
-    serie: trim(order.SYSTEM_SERIEPEDIDO || order.SERIEPEDIDO).substring(0, 1) || fallbackScope.serie,
-    terminal: parseInt(order.SYSTEM_TERMINALPEDIDO, 10) || fallbackScope.terminal,
-    numero: parseInt(order.SYSTEM_NUMEROPEDIDO || order.NUMEROPEDIDO, 10) || 0,
-  };
-}
-
-function supportUnavailable(message) {
-  return new CommercialCobrosError(
-    'COBROS_RUNTIME_SUPPORT_UNAVAILABLE',
-    message || 'Servicio de cobros no disponible: soporte runtime no configurado',
-    503,
-  );
-}
-
-function cobrosNumeroLockKey(scope) {
-  return [scope.subempresa, scope.ejercicio, scope.serie, scope.terminal].join('|');
-}
-
-function withCobrosNumeroLock(scope, callback) {
-  const key = cobrosNumeroLockKey(scope);
-  const tail = cobrosNumeroTails.get(key) || Promise.resolve();
-  const run = tail.then(callback, callback);
-  const nextTail = run.catch(() => {});
-  cobrosNumeroTails.set(key, nextTail);
-  nextTail.finally(() => {
-    if (cobrosNumeroTails.get(key) === nextTail) cobrosNumeroTails.delete(key);
-  }).catch(() => {});
-  return run;
 }
 
 function legacyOrderReference(order) {
@@ -954,11 +954,14 @@ class Db2CobrosRepository extends CobrosRepository {
           ${vendorAccess.clause}
       ), APP_PAID AS (
         SELECT D.CLIENTE, D.PEDIDO_ID, D.DOC_KEY, D.NOMBRE, D.IMPORTE_TOTAL,
-               COALESCE(SUM(C.IMPORTECOBRADO), 0) AS IMPORTE_COBRADO
+               COALESCE(SUM(C.IMPORTE), 0) AS IMPORTE_COBRADO
           FROM APP_DOCS D
-          LEFT JOIN ${COBROS_LIN_TABLE} C
-            ON TRIM(C.CLIENTE) = D.CLIENTE
-           AND TRIM(C.DOCUMENTOSERIE) || '-' || TRIM(CAST(C.DOCUMENTONUMERO AS VARCHAR(20))) = D.DOC_KEY
+          LEFT JOIN ${APP_SCHEMA}.COBROS C
+            ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
+           AND (
+             TRIM(C.REFERENCIA) = D.DOC_KEY
+             OR TRIM(C.REFERENCIA) = 'PEDIDO:' || TRIM(CAST(D.PEDIDO_ID AS VARCHAR(20))) || ':' || D.DOC_KEY
+           )
          GROUP BY D.CLIENTE, D.PEDIDO_ID, D.DOC_KEY, D.NOMBRE, D.IMPORTE_TOTAL
       ), APP_NET AS (
         SELECT CLIENTE, NOMBRE,
@@ -1064,7 +1067,7 @@ class Db2CobrosRepository extends CobrosRepository {
 
     const requestedLimit = parseInt(context.limit, 10);
     const safeLimit = Number.isFinite(requestedLimit)
-      ? Math.min(Math.max(requestedLimit, 1), 200)
+      ? Math.min(Math.max(requestedLimit, 1), 2000)
       : 100;
     const requestedOffset = parseInt(context.offset, 10);
     const hasOffset = Number.isFinite(requestedOffset);
@@ -1074,92 +1077,42 @@ class Db2CobrosRepository extends CobrosRepository {
       ? Math.floor(safeOffset / safeLimit) + 1
       : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
     const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
-    const maxRank = pageOffset + safeLimit;
+    const clientFetchLimit = Math.min(10000, Math.max(5000, pageOffset + safeLimit));
 
-    // The mobile summary only needs client-level debt; DB2 computes totals and
-    // returns the requested client page instead of materializing the portfolio in JS.
+    // The mobile summary only needs client-level debt. The previous version
+    // rebuilt every CVC document plus app-side document joins before paging,
+    // which made cold requests scale with the whole ERP portfolio.
     const summarySql = `
-      WITH CVC_DOCS AS (
+      WITH CVC_CLIENTS AS (
         SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
-               TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO_DOCUMENTO,
                COALESCE(
                  NULLIF(MIN(TRIM(CLI.NOMBREALTERNATIVO)), ''),
                  MIN(TRIM(CLI.NOMBRECLIENTE)),
                  MIN(TRIM(CVC.CODIGOCLIENTEALBARAN))
                ) AS NOMBRE,
+               COUNT(*) AS DOC_COUNT,
                SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+                   <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                    THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
          FROM DSEDAC.CVC CVC
          LEFT JOIN DSEDAC.CLI CLI
            ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
          WHERE CVC.IMPORTEPENDIENTE > 0.01
            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-            ${docFilters.clause}
-            ${emptyClientFilter}
-            ${vendorClause}
-          GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20)))
-       ), COBROS_APP AS (
-        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
-               COALESCE(SUM(C.IMPORTECOBRADO), 0) AS TOTAL_APP
-          FROM CVC_DOCS D
-          LEFT JOIN ${COBROS_LIN_TABLE} C
-            ON TRIM(C.CLIENTE) = D.CLIENTE
-           AND TRIM(C.DOCUMENTOSERIE) = D.SERIE_DOCUMENTO
-           AND TRIM(CAST(C.DOCUMENTONUMERO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
-         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
-       ), REPARTIDOR_APP AS (
-        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
-               COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-          FROM CVC_DOCS D
-          LEFT JOIN ${APP_SCHEMA}.REPARTIDOR_COBROS R
-            ON TRIM(R.CODIGOCLIENTEALBARAN) = D.CLIENTE
-           AND TRIM(R.SERIEDOCUMENTO) = D.SERIE_DOCUMENTO
-           AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
-         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
-       ), DOC_NET AS (
-        SELECT D.CLIENTE, D.NOMBRE, D.TOTAL_PENDIENTE, D.TOTAL_VENCIDO,
-               COALESCE(A.TOTAL_APP, 0) + COALESCE(R.TOTAL_REP, 0) AS APP_PAID,
-               CASE WHEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) > 0
-                    THEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                    ELSE 0 END AS NET_TOTAL,
-               CASE WHEN D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) > 0
-                    THEN CASE WHEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) < D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                              THEN D.TOTAL_PENDIENTE - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0)
-                              ELSE D.TOTAL_VENCIDO - COALESCE(A.TOTAL_APP, 0) - COALESCE(R.TOTAL_REP, 0) END
-                    ELSE 0 END AS NET_VENCIDO
-          FROM CVC_DOCS D
-          LEFT JOIN COBROS_APP A ON A.CLIENTE = D.CLIENTE AND A.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO AND A.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
-          LEFT JOIN REPARTIDOR_APP R ON R.CLIENTE = D.CLIENTE AND R.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO AND R.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
-       ), CLIENT_NET AS (
-        SELECT CLIENTE, COALESCE(NULLIF(TRIM(MIN(NOMBRE)), ''), CLIENTE) AS NOMBRE,
-               SUM(CASE WHEN NET_TOTAL > 0 THEN 1 ELSE 0 END) AS DOC_COUNT,
-               SUM(NET_TOTAL) AS TOTAL_PENDIENTE,
-               SUM(NET_VENCIDO) AS TOTAL_VENCIDO
-          FROM DOC_NET
-         GROUP BY CLIENTE
-        HAVING SUM(NET_TOTAL) > 0
-       ), SCOPE_TOTALS AS (
-        SELECT COALESCE(SUM(NET_TOTAL), 0) AS GRAND_TOTAL,
-               COALESCE(SUM(NET_VENCIDO), 0) AS GRAND_TOTAL_VENCIDO,
-               COALESCE(SUM(TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
-               COALESCE(SUM(TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO,
-               COUNT(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END) AS CLIENT_COUNT,
-               COUNT(DISTINCT CASE WHEN NET_VENCIDO > 0 THEN CLIENTE ELSE NULL END) AS VENCIDO_CLIENT_COUNT
-          FROM DOC_NET
-       ), CLIENT_RANKED AS (
-        SELECT C.CLIENTE, C.NOMBRE, C.DOC_COUNT, C.TOTAL_PENDIENTE, C.TOTAL_VENCIDO,
-               ROW_NUMBER() OVER (ORDER BY C.TOTAL_PENDIENTE DESC, C.CLIENTE ASC) AS RN
-          FROM CLIENT_NET C
-       )
-       SELECT R.CLIENTE, R.NOMBRE, R.DOC_COUNT, R.TOTAL_PENDIENTE, R.TOTAL_VENCIDO,
-              T.GRAND_TOTAL, T.GRAND_TOTAL_VENCIDO, T.CVC_GRAND_TOTAL,
-              T.CVC_GRAND_TOTAL_VENCIDO, T.CLIENT_COUNT, T.VENCIDO_CLIENT_COUNT
-         FROM SCOPE_TOTALS T
-         LEFT JOIN CLIENT_RANKED R ON R.RN > ${pageOffset} AND R.RN <= ${maxRank}
-        ORDER BY R.RN
+           ${docFilters.clause}
+           ${emptyClientFilter}
+           ${vendorClause}
+         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
+      )
+      SELECT CLIENTE,
+             NOMBRE,
+             DOC_COUNT,
+             TOTAL_PENDIENTE,
+             TOTAL_VENCIDO
+        FROM CVC_CLIENTS
+       ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC
+       FETCH FIRST ${clientFetchLimit} ROWS ONLY
     `;
 
     const runQuery = queryParams.length > 0
@@ -1171,29 +1124,41 @@ class Db2CobrosRepository extends CobrosRepository {
       vendedorCodes: vendorCodes,
       vendorCodes,
     };
-    const [rows, appOrderSummary] = await Promise.all([
+    const [rows, appClientAdjustments, appOrderSummary] = await Promise.all([
       runQuery(summarySql),
+      this.getAppSideCobrosByClient(vendorClause, vendorParams),
       this.getAppOrderPendingSummary(appOrderContext),
     ]);
 
     const cvcRows = Array.isArray(rows) ? rows : [];
     const cvcEntries = cvcRows.map((r) => {
       const code = trim(r.CLIENTE);
+      const paid = toCents(appClientAdjustments.get(code) || 0);
       const cvcTotalCents = toCents(r.TOTAL_PENDIENTE);
       const cvcVencidoCents = toCents(r.TOTAL_VENCIDO);
+      const netTotalCents = Math.max(0, cvcTotalCents - paid);
+      const netVencidoCents = cvcVencidoCents <= 0
+        ? 0
+        : Math.min(netTotalCents, Math.max(0, cvcVencidoCents - paid));
       return {
         code,
         nombre: trim(r.NOMBRE) || code,
         count: parseInt(r.DOC_COUNT, 10) || 0,
         cvcTotal: fromCents(cvcTotalCents),
         cvcVencido: fromCents(cvcVencidoCents),
-        total: fromCents(cvcTotalCents),
-        vencido: fromCents(cvcVencidoCents),
+        total: fromCents(netTotalCents),
+        vencido: fromCents(netVencidoCents),
       };
     }).filter((entry) => entry.code && toCents(entry.total) > 0);
 
+    cvcEntries.sort((a, b) => {
+      const totalDiff = toCents(b.total) - toCents(a.total);
+      return totalDiff !== 0 ? totalDiff : a.code.localeCompare(b.code);
+    });
+
+    const pagedEntries = cvcEntries.slice(pageOffset, pageOffset + safeLimit);
     const summary = {};
-    for (const entry of cvcEntries) {
+    for (const entry of pagedEntries) {
       const { code, total, vencido } = entry;
       summary[code] = {
         nombre: entry.nombre,
@@ -1222,20 +1187,19 @@ class Db2CobrosRepository extends CobrosRepository {
       summary[code].source = summary[code].source === 'PEDIDOS_CAB' ? 'PEDIDOS_CAB' : 'CVC+PEDIDOS_CAB';
     }
 
-    const totalsRow = cvcRows[0] || {};
-    const cvcNetTotal = parseFloat(totalsRow.GRAND_TOTAL) || 0;
-    const cvcNetVencido = parseFloat(totalsRow.GRAND_TOTAL_VENCIDO) || 0;
+    const cvcNetTotal = cvcEntries.reduce((sum, entry) => sum + (parseFloat(entry.total) || 0), 0);
+    const cvcNetVencido = cvcEntries.reduce((sum, entry) => sum + (parseFloat(entry.vencido) || 0), 0);
     const appOrdersTotal = parseFloat(appOrderSummary.grandTotal) || 0;
     const grandTotal = cvcNetTotal + appOrdersTotal;
     const grandTotalVencido = cvcNetVencido + (parseFloat(appOrderSummary.grandTotalVencido) || 0);
-    const cvcGrandTotal = parseFloat(totalsRow.CVC_GRAND_TOTAL) || cvcNetTotal;
-    const cvcGrandTotalVencido = parseFloat(totalsRow.CVC_GRAND_TOTAL_VENCIDO) || cvcNetVencido;
+    const cvcGrandTotal = cvcRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_PENDIENTE) || 0), 0);
+    const cvcGrandTotalVencido = cvcRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_VENCIDO) || 0), 0);
     const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - cvcNetTotal);
-    const cvcClientCount = parseInt(totalsRow.CLIENT_COUNT, 10) || cvcEntries.length;
-    const cvcVencidoClientCount = parseInt(totalsRow.VENCIDO_CLIENT_COUNT, 10) || cvcEntries.filter((entry) => toCents(entry.vencido) > 0).length;
+    const cvcClientCount = cvcEntries.length;
+    const cvcVencidoClientCount = cvcEntries.filter((entry) => toCents(entry.vencido) > 0).length;
     const appClientCount = parseInt(appOrderSummary.clientCount, 10) || 0;
     const mergedClientCount = Math.max(cvcClientCount, appClientCount, Object.keys(summary).length);
-    const returnedDocuments = cvcEntries.length;
+    const returnedDocuments = pagedEntries.length;
 
     return {
       summary,
@@ -1273,19 +1237,19 @@ class Db2CobrosRepository extends CobrosRepository {
 
     try {
       const comercialSql = `
-        SELECT TRIM(C.CLIENTE) AS CLIENTE,
-               TRIM(C.DOCUMENTOSERIE) || '-' || TRIM(CAST(C.DOCUMENTONUMERO AS VARCHAR(20))) AS REF,
-               COALESCE(SUM(C.IMPORTECOBRADO), 0) AS TOTAL_APP
-          FROM ${COBROS_LIN_TABLE} C
+        SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
+               TRIM(C.REFERENCIA) AS REF,
+               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
+          FROM ${APP_SCHEMA}.COBROS C
          WHERE EXISTS (
            SELECT 1
             FROM DSEDAC.CVC CVC
-             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CLIENTE)
+            WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
               AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
-         GROUP BY TRIM(C.CLIENTE), TRIM(C.DOCUMENTOSERIE), TRIM(CAST(C.DOCUMENTONUMERO AS VARCHAR(20)))`;
+         GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)`;
       const rows = await runQuery(comercialSql, queryParams);
       for (const row of rows || []) {
         add(row.CLIENTE, normalizeCobrosDocReference(row.REF), row.TOTAL_APP);
@@ -1343,18 +1307,18 @@ class Db2CobrosRepository extends CobrosRepository {
 
     try {
       const comercialSql = `
-        SELECT TRIM(C.CLIENTE) AS CLIENTE,
-               COALESCE(SUM(C.IMPORTECOBRADO), 0) AS TOTAL_APP
-          FROM ${COBROS_CAB_TABLE} C
+        SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
+               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
+          FROM ${APP_SCHEMA}.COBROS C
          WHERE EXISTS (
            SELECT 1
             FROM DSEDAC.CVC CVC
-             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CLIENTE)
+            WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
               AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
-         GROUP BY TRIM(C.CLIENTE)`;
+         GROUP BY TRIM(C.CODIGO_CLIENTE)`;
       const rows = queryParams.length > 0
         ? await queryWithParams(comercialSql, queryParams, [])
         : await query(comercialSql, false);
@@ -1424,11 +1388,10 @@ class Db2CobrosRepository extends CobrosRepository {
 
     try {
       const comercialRows = await queryWithParams(
-        `SELECT TRIM(DOCUMENTOSERIE) || '-' || TRIM(CAST(DOCUMENTONUMERO AS VARCHAR(20))) AS REF,
-                COALESCE(SUM(IMPORTECOBRADO), 0) AS TOTAL
-           FROM ${COBROS_LIN_TABLE}
-          WHERE TRIM(CLIENTE) = ?
-          GROUP BY TRIM(DOCUMENTOSERIE), TRIM(CAST(DOCUMENTONUMERO AS VARCHAR(20)))`,
+        `SELECT TRIM(REFERENCIA) AS REF, COALESCE(SUM(IMPORTE), 0) AS TOTAL
+           FROM ${APP_SCHEMA}.COBROS
+          WHERE TRIM(CODIGO_CLIENTE) = ?
+          GROUP BY TRIM(REFERENCIA)`,
         [trim(clientCode)],
         [],
       );
@@ -1487,17 +1450,20 @@ class Db2CobrosRepository extends CobrosRepository {
     const isCvcOrder = trim(order.SOURCE).toUpperCase() === 'CVC';
     const cvcStableReference = parseCvcStableReference(stableReference);
     const cvcLegacyIsSafe = !isCvcOrder || !cvcStableReference || ((parseInt(order.LEGACY_COLLISION_COUNT, 10) || 1) <= 1);
-    const payloadHash = requestHash({
-      clientCode: normalizedClient,
-      reference: stableReference,
-      amountCents,
-      paymentMethod: normalizedPaymentMethod,
-      userId: normalizedUserId,
-    });
-    const existingRows = await this.findCobroIdempotencyRows(id, normalizedIdempotencyToken);
+    const existingRows = await queryWithParams(
+      `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
+         FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+      [id, normalizedIdempotencyToken],
+      [],
+    ) || [];
     if (existingRows.length > 0) {
       const existing = existingRows[0];
-      if (trim(existing.REQUEST_HASH) !== payloadHash) {
+      const samePayload = trim(existing.CODIGO_CLIENTE) === normalizedClient &&
+        trim(existing.REFERENCIA) === stableReference &&
+        toCents(existing.IMPORTE) === amountCents &&
+        trim(existing.FORMA_PAGO) === normalizedPaymentMethod &&
+        codesMatch(existing.CODIGO_USUARIO, normalizedUserId);
+      if (!samePayload) {
         throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
       }
       return {
@@ -1517,18 +1483,12 @@ class Db2CobrosRepository extends CobrosRepository {
       if (isCvcOrder) paymentReferences.push(`CVC:${legacyReference}`);
     }
     const uniquePaymentReferences = [...new Set(paymentReferences.map(trim).filter(Boolean))];
-    const scope = cobrosScope();
-    const docKey = documentKeyForLine(order, scope);
     const paidRows = await queryWithParams(
-      `SELECT COALESCE(SUM(IMPORTECOBRADO), 0) AS TOTAL_COBRADO
-         FROM ${COBROS_LIN_TABLE}
-        WHERE TRIM(CLIENTE) = ?
-          AND DOCUMENTOSUBEMPRESA = ?
-          AND DOCUMENTOEJERCICIO = ?
-          AND DOCUMENTOSERIE = ?
-          AND DOCUMENTOTERMINAL = ?
-          AND DOCUMENTONUMERO = ?`,
-      [normalizedClient, docKey.subempresa, docKey.ejercicio, docKey.serie, docKey.terminal, docKey.numero],
+      `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
+         FROM ${APP_SCHEMA}.COBROS
+         WHERE TRIM(CODIGO_CLIENTE) = ?
+           AND TRIM(REFERENCIA) IN (${uniquePaymentReferences.map(() => '?').join(',')})`,
+      [normalizedClient, ...uniquePaymentReferences],
       [],
     );
     const paidComercialCents = toCents(paidRows?.[0]?.TOTAL_COBRADO);
@@ -1603,9 +1563,6 @@ class Db2CobrosRepository extends CobrosRepository {
     const insertPayload = {
       id,
       idempotencyToken: normalizedIdempotencyToken,
-      payloadHash,
-      scope,
-      docKey,
       normalizedClient,
       stableReference,
       amount: fromCents(amountCents),
@@ -1617,14 +1574,25 @@ class Db2CobrosRepository extends CobrosRepository {
       observations: trim(observations || overrideReason).substring(0, 255),
     };
     try {
-      await this.insertRuntimeCobro(insertPayload);
+      await this.insertCobroRow({ ...insertPayload, includeErpColumns: true });
     } catch (insertErr) {
       const msg = String(insertErr.message || '');
       if (/DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg)) {
-        const replayRows = await this.findCobroIdempotencyRows(id, normalizedIdempotencyToken);
+        const replayRows = await queryWithParams(
+          `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
+             FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+          [id, normalizedIdempotencyToken],
+          false,
+          false,
+        ) || [];
         if (replayRows.length > 0) {
           const existing = replayRows[0];
-          if (trim(existing.REQUEST_HASH) !== payloadHash) {
+          const samePayload = trim(existing.CODIGO_CLIENTE) === normalizedClient &&
+            trim(existing.REFERENCIA) === stableReference &&
+            toCents(existing.IMPORTE) === amountCents &&
+            trim(existing.FORMA_PAGO) === normalizedPaymentMethod &&
+            codesMatch(existing.CODIGO_USUARIO, normalizedUserId);
+          if (!samePayload) {
             throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
           }
           return {
@@ -1641,6 +1609,18 @@ class Db2CobrosRepository extends CobrosRepository {
       throw insertErr;
     }
 
+    try {
+      const dsedacExports = require('../../../../services/dsedac-exports.service');
+      await dsedacExports.exportCobroToSystem({
+        IDEMPOTENCY_TOKEN: normalizedIdempotencyToken,
+        CODIGO_CLIENTE: normalizedClient,
+        CODIGOVENDEDOR: order.CODIGOVENDEDOR || normalizedUserId,
+        IMPORTE: fromCents(amountCents),
+        CODIGO_USUARIO: normalizedUserId,
+      });
+    } catch (exportErr) {
+      logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
+    }
     return {
       id,
       clientCode: normalizedClient,
@@ -1654,214 +1634,84 @@ class Db2CobrosRepository extends CobrosRepository {
     };
   }
 
-  async findCobroIdempotencyRows(id, idempotencyToken) {
-    await this.ensureCobrosTable();
-    return await queryWithParams(
-      `SELECT I.IDEMPOTENCY_TOKEN, I.REQUEST_HASH, I.STATUS,
-              C.CLIENTE AS CODIGO_CLIENTE, C.IMPORTECOBRADO AS IMPORTE,
-              C.FORMAPAGO AS FORMA_PAGO, C.USUARIO AS CODIGO_USUARIO,
-              I.SUBEMPRESA, I.EJERCICIO, I.SERIE, I.TERMINAL, I.NUMERO
-         FROM ${COBROS_IDEMPOTENCY_TABLE} I
-         LEFT JOIN ${COBROS_CAB_TABLE} C
-           ON C.SUBEMPRESA = I.SUBEMPRESA
-          AND C.EJERCICIO = I.EJERCICIO
-          AND C.SERIE = I.SERIE
-          AND C.TERMINAL = I.TERMINAL
-          AND C.NUMERO = I.NUMERO
-        WHERE I.IDEMPOTENCY_TOKEN IN (?, ?)`,
-      [id, idempotencyToken],
-      [],
-    ) || [];
-  }
-
-  async reserveCobroNumero(conn, scope) {
-    return withCobrosNumeroLock(scope, async () => {
-      const params = [scope.subempresa, scope.ejercicio, scope.serie, scope.terminal];
-      const rows = await conn.query(
-        `SELECT NEXT_NUMERO
-           FROM ${COBROS_COUNTER_TABLE}
-          WHERE SUBEMPRESA = ?
-            AND EJERCICIO = ?
-            AND SERIE = ?
-            AND TERMINAL = ?
-          FETCH FIRST 1 ROW ONLY`,
-        params,
-      );
-      const numero = parseInt(rows?.[0]?.NEXT_NUMERO, 10);
-      if (!Number.isFinite(numero) || numero <= 0) {
-        throw supportUnavailable('Servicio de cobros no disponible: contador de cobros no inicializado');
-      }
-      await conn.query(
-        [
-          'UPDATE',
-          COBROS_COUNTER_TABLE,
-          'SET NEXT_NUMERO = NEXT_NUMERO + 1,',
-          'UPDATED_AT = CURRENT TIMESTAMP',
-          'WHERE SUBEMPRESA = ?',
-          'AND EJERCICIO = ?',
-          'AND SERIE = ?',
-          'AND TERMINAL = ?',
-          'AND NEXT_NUMERO = ?',
-        ].join('\n'),
-        [...params, numero],
-      );
-      const verifyRows = await conn.query(
-        `SELECT NEXT_NUMERO
-           FROM ${COBROS_COUNTER_TABLE}
-          WHERE SUBEMPRESA = ?
-            AND EJERCICIO = ?
-            AND SERIE = ?
-            AND TERMINAL = ?
-          FETCH FIRST 1 ROW ONLY`,
-        params,
-      );
-      if (parseInt(verifyRows?.[0]?.NEXT_NUMERO, 10) !== numero + 1) {
-        throw supportUnavailable('Servicio de cobros no disponible: contador de cobros no inicializado');
-      }
-      return numero;
+  async insertCobroRow({
+    id,
+    idempotencyToken,
+    normalizedClient,
+    stableReference,
+    amount,
+    paymentMethod,
+    tipoVenta,
+    tipoModo,
+    tipoUsuario,
+    codigoUsuario,
+    observations,
+    includeErpColumns,
+  }) {
+    let insert = buildCobroInsert({
+      id,
+      idempotencyToken,
+      normalizedClient,
+      stableReference,
+      amount,
+      paymentMethod,
+      tipoVenta,
+      tipoModo,
+      tipoUsuario,
+      codigoUsuario,
+      observations,
+      includeErpColumns,
     });
-  }
-
-  async insertRuntimeCobro(payload) {
-    const now = new Date();
-    const conn = await getPool().connect();
     try {
-      await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
-      const numero = await this.reserveCobroNumero(conn, payload.scope);
-      await conn.query(
-        db2InsertSql(COBROS_IDEMPOTENCY_TABLE, [
-          'IDEMPOTENCY_TOKEN', 'SUBEMPRESA', 'EJERCICIO', 'SERIE', 'TERMINAL', 'NUMERO',
-          'STATUS', 'REQUEST_HASH',
-        ]),
-        [
-          payload.idempotencyToken,
-          payload.scope.subempresa,
-          payload.scope.ejercicio,
-          payload.scope.serie,
-          payload.scope.terminal,
-          numero,
-          'RESERVED',
-          payload.payloadHash,
-        ],
-      );
-      await conn.query(
-        db2InsertSql(COBROS_CAB_TABLE, [
-          'SUBEMPRESA', 'EJERCICIO', 'SERIE', 'TERMINAL', 'NUMERO', 'TIPO',
-          'SUBDISTRIBUIDOR', 'CLIENTE', 'VENDEDOR', 'USUARIO', 'FORMAPAGO',
-          'NUMEROTALON', 'BANCO', 'FECHAEMISIONDIA', 'FECHAEMISIONMES',
-          'FECHAEMISIONANO', 'HORAEMISION', 'FECHAVENCIMIENTODIA',
-          'FECHAVENCIMIENTOMES', 'FECHAVENCIMIENTOANO', 'IMPORTECOBRADO',
-          'LIQUIDACIONMARCASINCRONIZACION', 'LIQUIDACIONSUBEMPRESA',
-          'LIQUIDACIONEJERCICIO', 'LIQUIDACIONSERIE', 'LIQUIDACIONTERMINAL',
-          'LIQUIDACIONNUMERO',
-        ]),
-        [
-          payload.scope.subempresa,
-          payload.scope.ejercicio,
-          payload.scope.serie,
-          payload.scope.terminal,
-          numero,
-          'C',
-          '',
-          payload.normalizedClient.substring(0, 10),
-          payload.codigoUsuario.substring(0, 2),
-          payload.codigoUsuario.substring(0, 2),
-          cobrosFormaPago(payload.paymentMethod),
-          '',
-          '',
-          now.getDate(),
-          now.getMonth() + 1,
-          now.getFullYear(),
-          currentHhmmss(now),
-          now.getDate(),
-          now.getMonth() + 1,
-          now.getFullYear(),
-          payload.amount,
-          '',
-          '',
-          0,
-          '',
-          0,
-          0,
-        ],
-      );
-      await conn.query(
-        db2InsertSql(COBROS_LIN_TABLE, [
-          'SUBEMPRESA', 'EJERCICIO', 'SERIE', 'TERMINAL', 'NUMERO', 'SECUENCIA',
-          'CLIENTE', 'FORMAPAGO', 'BANCONOMBRE', 'BANCOCUENTA',
-          'DOCUMENTOSUBEMPRESA', 'DOCUMENTOEJERCICIO', 'DOCUMENTOSERIE',
-          'DOCUMENTOTERMINAL', 'DOCUMENTONUMERO', 'IMPORTECOBRADO', 'IMPORTEPENDIENTE',
-        ]),
-        [
-          payload.scope.subempresa,
-          payload.scope.ejercicio,
-          payload.scope.serie,
-          payload.scope.terminal,
-          numero,
-          1,
-          payload.normalizedClient.substring(0, 10),
-          cobrosFormaPago(payload.paymentMethod),
-          '',
-          '',
-          payload.docKey.subempresa,
-          payload.docKey.ejercicio,
-          payload.docKey.serie,
-          payload.docKey.terminal,
-          payload.docKey.numero,
-          payload.amount,
-          0,
-        ],
-      );
-      await conn.query(
-        [
-          'UPDATE', COBROS_IDEMPOTENCY_TABLE,
-          "SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT TIMESTAMP, UPDATED_AT = CURRENT TIMESTAMP",
-          'WHERE IDEMPOTENCY_TOKEN = ?',
-        ].join(' '),
-        [payload.idempotencyToken],
-      );
-      await conn.query('COMMIT');
-    } catch (error) {
-      try { await conn.query('ROLLBACK'); } catch (_) { /* rollback best effort */ }
-      throw error;
-    } finally {
-      await conn.close();
+      await queryWithParams(insert.sql, insert.params, false, false);
+    } catch (erpInsertErr) {
+      if (!includeErpColumns || !isColumnNotFound(erpInsertErr)) throw erpInsertErr;
+      logger.warn(`[COBROS_REPO] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
+      insert = buildCobroInsert({
+        id,
+        idempotencyToken,
+        normalizedClient,
+        stableReference,
+        amount,
+        paymentMethod,
+        tipoVenta,
+        tipoModo,
+        tipoUsuario,
+        codigoUsuario,
+        observations,
+        includeErpColumns: false,
+      });
+      await queryWithParams(insert.sql, insert.params, false, false);
     }
   }
 
   async ensureCobrosTable() {
     try {
-      const rows = await queryWithParams(`
-        SELECT COUNT(*) AS N
-          FROM QSYS2.SYSTABLES
-         WHERE TABLE_SCHEMA = ?
-           AND TABLE_NAME IN ('COBROS_CAB', 'COBROS_LIN', 'COBROS_IDEMPOTENCY', 'COBROS_NUMERO_COUNTER')`,
-        [APP_SCHEMA],
-      );
-      if (rows?.[0] && (parseInt(rows[0].N, 10) || 0) < 4) throw supportUnavailable();
+      await query(COBROS_HEALTHCHECK_SQL);
     } catch (error) {
-      logger.error(`[COBROS] Soporte runtime ${APP_SCHEMA}.COBROS_* no disponible: ${error.message}`);
-      throw supportUnavailable();
+      logger.error(`[COBROS] Tabla ${APP_SCHEMA}.COBROS no disponible: ${error.message}`);
+      throw new CommercialCobrosError(
+        'COBROS_TABLE_UNAVAILABLE',
+        'Servicio de cobros no disponible: tabla de cobros no configurada',
+        503,
+      );
     }
   }
 
   async getPaymentsForClient(clientCode) {
     return await queryWithParams(`
-      SELECT TRIM(DOCUMENTOSERIE) || '-' || TRIM(CAST(DOCUMENTONUMERO AS VARCHAR(20))) AS REFERENCIA,
-             SUM(IMPORTECOBRADO) AS TOTAL_IMPORTE
-      FROM ${COBROS_LIN_TABLE}
-      WHERE TRIM(CLIENTE) = ?
-      GROUP BY TRIM(DOCUMENTOSERIE), TRIM(CAST(DOCUMENTONUMERO AS VARCHAR(20)))
+      SELECT REFERENCIA, SUM(IMPORTE) AS TOTAL_IMPORTE
+      FROM ${APP_SCHEMA}.COBROS
+      WHERE TRIM(CODIGO_CLIENTE) = ?
+      GROUP BY REFERENCIA
     `, [trim(clientCode)], []) || [];
   }
 
   async getAllPayments() {
     return await queryWithParams(`
-      SELECT TRIM(CLIENTE) AS CODIGO_CLIENTE,
-             TRIM(DOCUMENTOSERIE) || '-' || TRIM(CAST(DOCUMENTONUMERO AS VARCHAR(20))) AS REFERENCIA,
-             SUM(IMPORTECOBRADO) AS TOTAL_IMPORTE
-      FROM ${COBROS_LIN_TABLE}
-      GROUP BY TRIM(CLIENTE), TRIM(DOCUMENTOSERIE), TRIM(CAST(DOCUMENTONUMERO AS VARCHAR(20)))
+      SELECT TRIM(CODIGO_CLIENTE) AS CODIGO_CLIENTE, REFERENCIA, SUM(IMPORTE) AS TOTAL_IMPORTE
+      FROM ${APP_SCHEMA}.COBROS
+      GROUP BY TRIM(CODIGO_CLIENTE), REFERENCIA
     `, [], []) || [];
   }
 
@@ -1958,21 +1808,11 @@ class Db2CobrosRepository extends CobrosRepository {
     const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
     const sql = `
       SELECT
-        TRIM(C.SUBEMPRESA) || '-' || C.EJERCICIO || '-' || TRIM(C.SERIE) || '-' || C.TERMINAL || '-' || C.NUMERO AS ID,
-        C.CLIENTE AS CODIGO_CLIENTE, C.IMPORTECOBRADO AS IMPORTE, C.FORMAPAGO AS FORMA_PAGO,
-        TRIM(L.DOCUMENTOSERIE) || '-' || TRIM(CAST(L.DOCUMENTONUMERO AS VARCHAR(20))) AS REFERENCIA,
-        '' AS OBSERVACIONES,
-        TIMESTAMP_FORMAT(CHAR(C.FECHAEMISIONANO * 10000 + C.FECHAEMISIONMES * 100 + C.FECHAEMISIONDIA), 'YYYYMMDD') AS FECHA
-      FROM ${COBROS_CAB_TABLE} C
-      LEFT JOIN ${COBROS_LIN_TABLE} L
-        ON L.SUBEMPRESA = C.SUBEMPRESA
-       AND L.EJERCICIO = C.EJERCICIO
-       AND L.SERIE = C.SERIE
-       AND L.TERMINAL = C.TERMINAL
-       AND L.NUMERO = C.NUMERO
-       AND L.SECUENCIA = 1
-      WHERE TRIM(C.CLIENTE) = ?
-      ORDER BY C.FECHAEMISIONANO DESC, C.FECHAEMISIONMES DESC, C.FECHAEMISIONDIA DESC, C.HORAEMISION DESC
+        C.ID, C.CODIGO_CLIENTE, C.IMPORTE, C.FORMA_PAGO,
+        C.REFERENCIA, C.OBSERVACIONES, C.FECHA
+      FROM ${APP_SCHEMA}.COBROS C
+      WHERE TRIM(C.CODIGO_CLIENTE) = ?
+      ORDER BY C.FECHA DESC
       OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
     `;
 
@@ -1987,47 +1827,14 @@ class Db2CobrosRepository extends CobrosRepository {
     const sql = `
       SELECT
         COUNT(*) as TOTAL_COBROS,
-        SUM(IMPORTECOBRADO) as TOTAL_IMPORTE,
-        AVG(IMPORTECOBRADO) as PROMEDIO
-          FROM ${COBROS_CAB_TABLE}
-          WHERE USUARIO = ?
+        SUM(IMPORTE) as TOTAL_IMPORTE,
+        AVG(IMPORTE) as PROMEDIO
+      FROM ${APP_SCHEMA}.COBROS
+      WHERE CODIGO_USUARIO = ?
     `;
 
     const result = await queryWithParams(sql, [vendorCode], []);
     return result[0] || {};
-  }
-
-  async getCommercialMinimumObligation(vendorCode, context = {}) {
-    const scope = buildCvcVendorAccessClause({ ...context, userId: vendorCode }, 'CVC');
-    const safeDate = trim(context.date);
-    const rows = await queryWithParams(`
-      WITH COLLECTABLE AS (
-        SELECT COALESCE(SUM(CVC.IMPORTEPENDIENTE), 0) AS AMOUNT
-          FROM DSEDAC.CVC CVC
-         WHERE CVC.IMPORTEPENDIENTE > 0.01
-           AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-           ${scope.clause}
-      ), REGISTERED AS (
-        SELECT COALESCE(SUM(IMPORTECOBRADO), 0) AS AMOUNT
-          FROM ${COBROS_CAB_TABLE}
-         WHERE TRIM(USUARIO) = ?
-           AND (? = '' OR (FECHAEMISIONANO * 10000 + FECHAEMISIONMES * 100 + FECHAEMISIONDIA) = INTEGER(REPLACE(?, '-', '')))
-      )
-      SELECT INTEGER(ROUND(COLLECTABLE.AMOUNT * 100, 0)) AS COLLECTABLE_CENTS,
-             INTEGER(ROUND(REGISTERED.AMOUNT * 100, 0)) AS REGISTERED_CENTS
-        FROM COLLECTABLE, REGISTERED`, [...scope.params, trim(vendorCode), safeDate, safeDate], []);
-    const row = rows?.[0] || {};
-    const collectableCents = Number(row.COLLECTABLE_CENTS) || 0;
-    const registeredCents = Number(row.REGISTERED_CENTS) || 0;
-    const requiredCents = Math.ceil(collectableCents * 0.6);
-    return {
-      minimumPercent: 60,
-      collectableCents,
-      registeredCents,
-      requiredCents,
-      remainingCents: Math.max(0, requiredCents - registeredCents),
-      met: registeredCents >= requiredCents,
-    };
   }
 }
 

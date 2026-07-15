@@ -390,7 +390,7 @@ class CobrosProvider extends ChangeNotifier {
   Future<void> cargarPendingSummary(
     String? vendedorCode, {
     List<String>? vendedorCodes,
-    int limit = 200,
+    int limit = 2000,
     int page = 1,
     int offset = 0,
     bool forceRefresh = false,
@@ -419,7 +419,7 @@ class CobrosProvider extends ChangeNotifier {
       _lastSummaryTipoDocumento = tipoDocumento?.trim();
       _lastSummaryFechaDesde = fechaDesde?.trim();
       _lastSummaryFechaHasta = fechaHasta?.trim();
-      final safeLimit = limit < 1 ? 1 : (limit > 200 ? 200 : limit);
+      final safeLimit = limit < 1 ? 1 : (limit > 2000 ? 2000 : limit);
       final safeOffset = offset < 0 ? 0 : offset;
       final safePage = page < 1 ? 1 : page;
       final params = <String, String>{
@@ -751,7 +751,6 @@ class CobrosProvider extends ChangeNotifier {
             'cobros:historico:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:estado:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:pending-summary:');
-        await CacheService.invalidateByPrefix('comercial_liquidacion_summary_');
         if (reloadAfter) {
           await cargarCobrosPendientes(
             codigoCliente,

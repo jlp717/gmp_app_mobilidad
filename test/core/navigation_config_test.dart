@@ -77,7 +77,7 @@ void main() {
       expect(items.any((i) => i.label == 'Comisiones'), true);
     });
 
-    test('includes all expected sales items except Evolución', () {
+    test('includes all expected sales items', () {
       final items = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: false,
@@ -94,7 +94,7 @@ void main() {
       expect(items.any((i) => i.label == 'Alertas'), true);
       expect(items.any((i) => i.label == 'Cobros'), true);
       expect(items.any((i) => i.label == 'Liquidación'), true);
-      expect(items.any((i) => i.label == 'Evolución'), false);
+      expect(items.any((i) => i.label == 'Evolución'), true);
       expect(items.any((i) => i.label == 'Asistente'), true);
     });
 

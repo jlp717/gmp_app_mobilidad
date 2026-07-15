@@ -7,7 +7,6 @@ import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 
 // Re-export EstadoEntrega from shared location
 export 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
-export 'package:gmp_app_mobilidad/core/models/minimum_cobro_obligation.dart';
 
 // ============================================
 // ENUMS
@@ -65,44 +64,6 @@ enum TipoModoCobro {
 
   String get code => this == normal ? 'NORMAL' : 'ESPECIAL';
   String get label => this == normal ? 'Normal' : 'Especial';
-}
-
-enum CobroPendienteTab {
-  todos,
-  contado,
-  credito,
-  talones;
-
-  static CobroPendienteTab fromJson(dynamic value) {
-    final raw = value?.toString().trim().toUpperCase() ?? '';
-    switch (raw) {
-      case 'CONTADO':
-      case 'CC':
-        return CobroPendienteTab.contado;
-      case 'CREDITO':
-      case 'VC':
-        return CobroPendienteTab.credito;
-      case 'TALON':
-      case 'TALONES':
-      case 'CHEQUE':
-      case 'CHEQUES':
-        return CobroPendienteTab.talones;
-      default:
-        return CobroPendienteTab.todos;
-    }
-  }
-}
-
-int? _intOrNull(dynamic value) {
-  if (value == null) return null;
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  return int.tryParse(value.toString());
-}
-
-DateTime? _dateOrNull(dynamic value) {
-  if (value is DateTime) return value;
-  return DateTime.tryParse(value?.toString() ?? '');
 }
 
 // ============================================
@@ -171,13 +132,6 @@ class CobroPendiente {
     this.appPaymentApplied = 0,
     this.cobradoPorRepartidor = false,
     this.provisional = false,
-    this.amountPendingCents,
-    this.daysRemaining,
-    this.daysOverdue,
-    this.commercialTab = CobroPendienteTab.todos,
-    this.diasLimiteCredito,
-    this.fechaLimiteCredito,
-    this.diasRestantesCredito,
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
@@ -231,15 +185,6 @@ class CobroPendiente {
           json['cobradoRepartidor'] == true ||
           json['responsabilidad']?.toString().toUpperCase() == 'REPARTIDOR',
       provisional: json['provisional'] == true,
-      amountPendingCents: _intOrNull(json['amountPendingCents']),
-      daysRemaining: _intOrNull(json['daysRemaining']),
-      daysOverdue: _intOrNull(json['daysOverdue']),
-      commercialTab: CobroPendienteTab.fromJson(
-        json['commercialTab'] ?? json['tab'],
-      ),
-      diasLimiteCredito: _intOrNull(json['diasLimiteCredito']),
-      fechaLimiteCredito: _dateOrNull(json['fechaLimiteCredito']),
-      diasRestantesCredito: _intOrNull(json['diasRestantesCredito']),
     );
   }
   final String id;
@@ -262,13 +207,6 @@ class CobroPendiente {
   /// True cuando el cobro pendiente es responsabilidad del repartidor, no del comercial.
   final bool cobradoPorRepartidor;
   final bool provisional;
-  final int? amountPendingCents;
-  final int? daysRemaining;
-  final int? daysOverdue;
-  final CobroPendienteTab commercialTab;
-  final int? diasLimiteCredito;
-  final DateTime? fechaLimiteCredito;
-  final int? diasRestantesCredito;
 
   bool get isVencido => estado == EstadoCobro.vencido;
   bool get isPedidoAppProvisional => provisional || tipo == TipoCobro.pedidoApp;
@@ -312,16 +250,6 @@ class CobroPendiente {
         return TipoCobro.normal;
     }
   }
-}
-
-List<CobroPendiente> filterCobrosPendientesByTab(
-  Iterable<CobroPendiente> items,
-  CobroPendienteTab tab,
-) {
-  if (tab == CobroPendienteTab.todos) return items.toList(growable: false);
-  return items
-      .where((item) => item.commercialTab == tab)
-      .toList(growable: false);
 }
 
 /// Registro histórico de cobro comercial (tabla JAVIER.COBROS / DB2).

@@ -1151,7 +1151,7 @@ describe('DDD cobros route contracts', () => {
   test('GET /pending-summary/ALL clamps pagination and passes it to repository', async function () {
     mockCobrosRepo.getPendingSummary.mockResolvedValue({
       summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
-      pagination: { limit: 200, page: 1, offset: 0, returnedDocuments: 0 },
+      pagination: { limit: 2000, page: 1, offset: 0, returnedDocuments: 0 },
     });
 
     const res = await request(makeApp(createCobrosRoutes(), { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true }))
@@ -1161,11 +1161,11 @@ describe('DDD cobros route contracts', () => {
     expect(res.status).toBe(200);
     expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
       'ALL',
-      expect.objectContaining({ limit: 200, page: 1, offset: 0 }),
+      expect.objectContaining({ limit: 2000, page: 1, offset: 0 }),
     );
     expect(res.body).toMatchObject({
       success: true, summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
-      pagination: { limit: 200, page: 1, offset: 0, returnedDocuments: 0 },
+      pagination: { limit: 2000, page: 1, offset: 0, returnedDocuments: 0 },
     });
   });
 

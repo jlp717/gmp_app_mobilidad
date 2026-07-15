@@ -3,19 +3,51 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
-import 'package:gmp_app_mobilidad/features/liquidacion_comercial/data/comercial_liquidacion_service.dart';
-import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/comercial_liquidacion_models.dart';
-import 'package:gmp_app_mobilidad/features/liquidacion_comercial/providers/comercial_liquidacion_provider.dart';
 import 'package:intl/intl.dart';
-
-export 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/comercial_liquidacion_models.dart';
 
 final NumberFormat _moneyFormat =
     NumberFormat.currency(locale: 'es_ES', symbol: '€');
+
+class ComercialLiquidacionSummary {
+  const ComercialLiquidacionSummary({
+    this.totalEfectivo = 0,
+    this.totalCheques = 0,
+    this.totalPostdatados = 0,
+    this.saldoActual = 0,
+    double? totalAIngresar,
+  }) : totalAIngresar = totalAIngresar ??
+            totalEfectivo + totalCheques + totalPostdatados + saldoActual;
+
+  final double totalEfectivo;
+  final double totalCheques;
+  final double totalPostdatados;
+  final double saldoActual;
+  final double totalAIngresar;
+}
+
+class ComercialLiquidacionDraft {
+  const ComercialLiquidacionDraft({
+    required this.employeeCode,
+    required this.date,
+    required this.expectedTotal,
+    required this.ingresoBanco,
+    required this.entregado,
+  });
+
+  final String employeeCode;
+  final DateTime date;
+  final double expectedTotal;
+  final double ingresoBanco;
+  final double entregado;
+
+  double get registrado => ingresoBanco + entregado;
+  double get diferencia => expectedTotal - registrado;
+  bool get isBalanced => diferencia.abs() < 0.01;
+}
 
 class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const ComercialLiquidacionDiariaPage({
@@ -49,29 +81,6 @@ class _ComercialLiquidacionDiariaPageState
   late DateTime _sessionDate;
   bool _isSaving = false;
   DateTime? _lastSavedAt;
-  ComercialLiquidacionSummary _liveSummary =
-      const ComercialLiquidacionSummary();
-  bool _summaryPrefilled = false;
-
-  bool get _usesLiveBackend =>
-      widget.onSubmit == null && !widget.initialSummary.isPopulated;
-
-  String get _dateIso => _sessionDate.toIso8601String().substring(0, 10);
-
-  String _resolveVendorCode() {
-    if (widget.isJefeVentas || widget.forceShowVendorSelector) {
-      final selected = ref.read(selectedVendorProvider);
-      if (selected != null && selected.isNotEmpty && selected != 'ALL') {
-        return selected;
-      }
-    }
-    return widget.employeeCode;
-  }
-
-  ComercialLiquidacionQuery get _summaryQuery => (
-        vendorCode: _resolveVendorCode(),
-        dateIso: _dateIso,
-      );
 
   @override
   void initState() {
@@ -98,239 +107,33 @@ class _ComercialLiquidacionDiariaPageState
     if (mounted) setState(() {});
   }
 
-  ComercialLiquidacionSummary get _activeSummary =>
-      _usesLiveBackend ? _liveSummary : widget.initialSummary;
-
   ComercialLiquidacionDraft get _draft => ComercialLiquidacionDraft(
-        employeeCode:
-            _usesLiveBackend ? _resolveVendorCode() : widget.employeeCode,
+        employeeCode: widget.employeeCode,
         date: _sessionDate,
-        expectedTotal: _activeSummary.totalAIngresar,
+        expectedTotal: widget.initialSummary.totalAIngresar,
         ingresoBanco: _amount(_ingresoBancoController.text),
         entregado: _amount(_entregadoController.text),
-        summary: _activeSummary,
       );
 
-  void _maybePrefillFromSummary(ComercialLiquidacionSummary summary) {
-    if (!_usesLiveBackend || _summaryPrefilled || summary.ingresoBanco <= 0) {
-      return;
-    }
-    if (_ingresoBancoController.text.trim().isNotEmpty) return;
-    _summaryPrefilled = true;
-    _ingresoBancoController.text =
-        summary.ingresoBanco.toStringAsFixed(2).replaceAll('.', ',');
-  }
-
   bool get _hasInput =>
-      _ingresoBancoController.text.trim().isNotEmpty &&
+      _ingresoBancoController.text.trim().isNotEmpty ||
       _entregadoController.text.trim().isNotEmpty;
 
   bool get _amountsAreValid =>
       _tryParseAmount(_ingresoBancoController.text) != null &&
       _tryParseAmount(_entregadoController.text) != null;
 
-  bool get _canSave =>
-      _ingresoBancoController.text.trim().isNotEmpty &&
-      _entregadoController.text.trim().isNotEmpty &&
-      _amountsAreValid &&
-      !_isSaving;
+  bool get _canSave => _hasInput && _amountsAreValid && !_isSaving;
 
   @override
   Widget build(BuildContext context) {
-    if (_usesLiveBackend) {
-      if (widget.isJefeVentas || widget.forceShowVendorSelector) {
-        ref.watch(selectedVendorProvider);
-      }
-      final vendorCode = _resolveVendorCode();
-      if (vendorCode.contains(',') || vendorCode.isEmpty) {
-        return _buildShell(
-          body: const _LiquidacionEmptyPanel(
-            message: 'Selecciona un comercial para ver la liquidación.',
-          ),
-          summary: const ComercialLiquidacionSummary(),
-          employeeCode: vendorCode,
-        );
-      }
-
-      final summaryAsync =
-          ref.watch(comercialLiquidacionSummaryProvider(_summaryQuery));
-
-      ref.listen<AsyncValue<ComercialLiquidacionSummary>>(
-        comercialLiquidacionSummaryProvider(_summaryQuery),
-        (previous, next) {
-          next.whenData((summary) {
-            _liveSummary = summary;
-            _maybePrefillFromSummary(summary);
-          });
-        },
-      );
-
-      return summaryAsync.when(
-        loading: () => _buildShell(
-          body: const Center(
-            key: ValueKey('comercial-liquidacion-loading'),
-            child: CircularProgressIndicator(),
-          ),
-          summary: const ComercialLiquidacionSummary(),
-          employeeCode: vendorCode,
-        ),
-        error: (error, _) => _buildShell(
-          body: _LiquidacionErrorPanel(
-            message: error is ComercialLiquidacionException
-                ? error.message
-                : 'No se pudo cargar la liquidación',
-            onRetry: () => ref.invalidate(
-              comercialLiquidacionSummaryProvider(_summaryQuery),
-            ),
-          ),
-          summary: const ComercialLiquidacionSummary(),
-          employeeCode: vendorCode,
-        ),
-        data: (summary) {
-          _liveSummary = summary;
-          _maybePrefillFromSummary(summary);
-          if (!summary.isPopulated) {
-            return _buildShell(
-              body: const _LiquidacionEmptyPanel(),
-              summary: summary,
-              employeeCode: vendorCode,
-            );
-          }
-          return _buildContent(summary, vendorCode);
-        },
-      );
-    }
-
-    return _buildContent(widget.initialSummary, widget.employeeCode);
-  }
-
-  Widget _buildContent(
-    ComercialLiquidacionSummary summary,
-    String employeeCode,
-  ) {
-    final draft = ComercialLiquidacionDraft(
-      employeeCode: employeeCode,
-      date: _sessionDate,
-      expectedTotal: summary.totalAIngresar,
-      ingresoBanco: _amount(_ingresoBancoController.text),
-      entregado: _amount(_entregadoController.text),
-      summary: summary,
-    );
+    final draft = _draft;
     final status = _LiquidacionStatus.fromDraft(
       draft,
       hasInput: _hasInput,
       amountsAreValid: _amountsAreValid,
     );
 
-    return _buildShell(
-      summary: summary,
-      employeeCode: employeeCode,
-      body: Form(
-        key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 112),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _LiquidacionHero(
-                        date: _sessionDate,
-                        employeeCode: employeeCode,
-                        totalAIngresar: summary.totalAIngresar,
-                        status: status,
-                      ),
-                      const SizedBox(height: 16),
-                      _MetricGrid(metrics: _metricsForSummary(summary)),
-                      if (_LiquidacionRulesPanel.hasData(summary)) ...[
-                        const SizedBox(height: 16),
-                        _LiquidacionRulesPanel(summary: summary),
-                      ],
-                      const SizedBox(height: 16),
-                      _LiquidacionWorkspace(
-                        ingresoBancoController: _ingresoBancoController,
-                        entregadoController: _entregadoController,
-                        ingresoBancoFocus: _ingresoBancoFocus,
-                        entregadoFocus: _entregadoFocus,
-                        draft: draft,
-                        status: status,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-      footer: _SaveBar(
-        draft: draft,
-        status: status,
-        isSaving: _isSaving,
-        canSave: _canSave,
-        lastSavedAt: _lastSavedAt,
-        onSave: _save,
-      ),
-    );
-  }
-
-  List<_MetricData> _metricsForSummary(ComercialLiquidacionSummary summary) {
-    final metrics = <_MetricData>[
-      _MetricData(
-        icon: Icons.payments_outlined,
-        label: 'Total efectivo',
-        value: summary.totalEfectivo,
-        color: AppTheme.success,
-      ),
-      if (summary.totalTarjeta != 0)
-        _MetricData(
-          icon: Icons.credit_card_outlined,
-          label: 'Total tarjeta',
-          value: summary.totalTarjeta,
-          color: AppTheme.accentRose,
-        ),
-      _MetricData(
-        icon: Icons.receipt_long_outlined,
-        label: 'Total cheques',
-        value: summary.totalCheques,
-        color: AppTheme.info,
-      ),
-      _MetricData(
-        icon: Icons.event_repeat_outlined,
-        label: 'Total postdatados',
-        value: summary.totalPostdatados,
-        color: AppTheme.warning,
-      ),
-      _MetricData(
-        icon: Icons.account_balance_wallet_outlined,
-        label: 'Saldo actual',
-        value: summary.saldoActual,
-        color: AppTheme.accentIndigo,
-      ),
-    ];
-    if (summary.totalCobrosDia != 0) {
-      metrics.add(
-        _MetricData(
-          icon: Icons.summarize_outlined,
-          label: 'Total cobros',
-          value: summary.totalCobrosDia,
-          color: AppTheme.activeRing,
-        ),
-      );
-    }
-    return metrics;
-  }
-
-  Widget _buildShell({
-    required Widget body,
-    required ComercialLiquidacionSummary summary,
-    required String employeeCode,
-    Widget? footer,
-  }) {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -355,8 +158,83 @@ class _ComercialLiquidacionDiariaPageState
                 isJefeVentas: widget.isJefeVentas,
                 forceShow: widget.forceShowVendorSelector,
               ),
-            Expanded(child: body),
-            if (footer != null) footer,
+            Expanded(
+              child: Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 112),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1180),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _LiquidacionHero(
+                                date: _sessionDate,
+                                employeeCode: widget.employeeCode,
+                                totalAIngresar:
+                                    widget.initialSummary.totalAIngresar,
+                                status: status,
+                              ),
+                              const SizedBox(height: 16),
+                              _MetricGrid(
+                                metrics: [
+                                  _MetricData(
+                                    icon: Icons.payments_outlined,
+                                    label: 'Total efectivo',
+                                    value: widget.initialSummary.totalEfectivo,
+                                    color: AppTheme.success,
+                                  ),
+                                  _MetricData(
+                                    icon: Icons.receipt_long_outlined,
+                                    label: 'Total cheques',
+                                    value: widget.initialSummary.totalCheques,
+                                    color: AppTheme.info,
+                                  ),
+                                  _MetricData(
+                                    icon: Icons.event_repeat_outlined,
+                                    label: 'Total postdatados',
+                                    value:
+                                        widget.initialSummary.totalPostdatados,
+                                    color: AppTheme.warning,
+                                  ),
+                                  _MetricData(
+                                    icon: Icons.account_balance_wallet_outlined,
+                                    label: 'Saldo actual',
+                                    value: widget.initialSummary.saldoActual,
+                                    color: AppTheme.accentIndigo,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _LiquidacionWorkspace(
+                                ingresoBancoController: _ingresoBancoController,
+                                entregadoController: _entregadoController,
+                                ingresoBancoFocus: _ingresoBancoFocus,
+                                entregadoFocus: _entregadoFocus,
+                                draft: draft,
+                                status: status,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            _SaveBar(
+              draft: draft,
+              status: status,
+              isSaving: _isSaving,
+              canSave: _canSave,
+              lastSavedAt: _lastSavedAt,
+              onSave: _save,
+            ),
           ],
         ),
       ),
@@ -375,29 +253,18 @@ class _ComercialLiquidacionDiariaPageState
       if (submit != null) {
         await submit(draft);
       } else {
-        await ref.read(comercialLiquidacionServiceProvider).submitLiquidacion(
-              draft: draft,
-            );
-        ref.invalidate(comercialLiquidacionSummaryProvider(_summaryQuery));
+        await Future<void>.delayed(const Duration(milliseconds: 220));
       }
       if (!mounted) return;
       setState(() => _lastSavedAt = DateTime.now());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            submit == null ? 'Liquidación guardada.' : 'Liquidación guardada.',
+            submit == null
+                ? 'Liquidación preparada. Pendiente de conectar grabación real.'
+                : 'Liquidación guardada.',
           ),
         ),
-      );
-    } on ComercialLiquidacionException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar: $error')),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -409,73 +276,6 @@ class _ComercialLiquidacionDiariaPageState
     _entregadoController.clear();
     _lastSavedAt = null;
     setState(() {});
-  }
-}
-
-class _LiquidacionErrorPanel extends StatelessWidget {
-  const _LiquidacionErrorPanel({
-    required this.message,
-    required this.onRetry,
-  });
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      key: const ValueKey('comercial-liquidacion-error'),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: AppTheme.error, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Reintentar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LiquidacionEmptyPanel extends StatelessWidget {
-  const _LiquidacionEmptyPanel({
-    this.message = 'No hay liquidación disponible para esta fecha.',
-  });
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      key: const ValueKey('comercial-liquidacion-empty'),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppTheme.textSecondary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -798,119 +598,6 @@ class _MetricTileState extends State<_MetricTile> {
   }
 }
 
-class _LiquidacionRulesPanel extends StatelessWidget {
-  const _LiquidacionRulesPanel({required this.summary});
-
-  final ComercialLiquidacionSummary summary;
-
-  static bool hasData(ComercialLiquidacionSummary summary) {
-    return summary.registeredCobros.registeredCents > 0 ||
-        summary.obligation.minimumPercent > 0 ||
-        summary.obligation.collectableCents > 0 ||
-        summary.obligation.remainingCents > 0 ||
-        !summary.closeability.canClose ||
-        summary.closeability.reasons.isNotEmpty;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final obligation = summary.obligation;
-    final closeability = summary.closeability;
-    final closeColor =
-        closeability.canClose ? AppTheme.success : AppTheme.error;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.premiumPanel(
-        accentColor: obligation.met ? closeColor : AppTheme.warning,
-        opacity: 0.72,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _PanelHeader(
-            icon: Icons.policy_outlined,
-            title: 'Control de cierre',
-            subtitle: 'Cobros registrados, minimo exigido y bloqueo de cierre.',
-          ),
-          const SizedBox(height: 14),
-          _RulesRow(
-            label: 'Cobros registrados',
-            value: _money(summary.registeredCobros.registeredCents / 100),
-            color: AppTheme.activeRing,
-          ),
-          if (obligation.minimumPercent > 0 || obligation.collectableCents > 0)
-            _RulesRow(
-              label: 'Minimo ${obligation.minimumPercent}%',
-              value: obligation.bannerText,
-              color: obligation.met ? AppTheme.success : AppTheme.warning,
-            ),
-          _RulesRow(
-            label: 'Cierre',
-            value: closeability.canClose ? 'Permitido' : 'Bloqueado',
-            color: closeColor,
-          ),
-          if (closeability.reasons.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              closeability.reasons.join(' - '),
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
-                height: 1.32,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RulesRow extends StatelessWidget {
-  const _RulesRow({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: color,
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _LiquidacionWorkspace extends StatelessWidget {
   const _LiquidacionWorkspace({
     required this.ingresoBancoController,
@@ -1113,6 +800,9 @@ class _MoneyField extends StatelessWidget {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
+      ],
       validator: _validateAmount,
       style: const TextStyle(
         color: Colors.white,
@@ -1215,13 +905,7 @@ class _SaveBar extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.check_rounded, size: 18),
-                label: Text(
-                  isSaving
-                      ? 'Guardando'
-                      : status.kind == _LiquidacionStatusKind.balanced
-                          ? 'Guardar'
-                          : 'Revisar',
-                ),
+                label: Text(isSaving ? 'Guardando' : 'Guardar'),
               ),
             ),
           ],

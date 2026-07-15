@@ -414,15 +414,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         // The server uses ephemeral JWT secrets — a server restart invalidates
         // all stored tokens even if they haven't expired by time.
         // If the server is unreachable (offline), we proceed optimistically.
-        final restoredToken = token;
-        if (restoredToken == null || restoredToken.isEmpty) {
-          debugPrint(
-            '[AuthNotifier] Stored token missing after refresh - clearing session',
-          );
-          await _clearStoredSession(prefs);
-          return const AuthState(isInitialized: true);
-        }
-        ApiClient.setAuthToken(restoredToken);
+        ApiClient.setAuthToken(token);
         ApiClient.startLogin(); // suppress onUnauthorized during validation
         try {
           await ApiClient.get(ApiConfig.validate);

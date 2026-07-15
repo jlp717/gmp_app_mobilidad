@@ -10,9 +10,6 @@ import 'package:intl/intl.dart';
 /// Smallest balance treated as real payable debt.
 const double cobroPayableEpsilon = 0.0001;
 
-/// Maximum simultaneous payment registration calls from one submit.
-const int maxConcurrentCobroRegistrations = 3;
-
 /// Returns true when a document may still be charged.
 bool isCobroPayable(CobroPendiente cobro) {
   return cobro.estado != EstadoCobro.alDia &&
@@ -54,44 +51,6 @@ Map<String, String> nextCobroSelectionAfterSubmit({
           retryableIds.contains(entry.key);
     }),
   );
-}
-
-/// Runs submit tasks with a small concurrency cap and keeps result order.
-Future<List<T>> runBoundedCobroTasks<T>({
-  required List<Future<T> Function()> tasks,
-  int concurrency = maxConcurrentCobroRegistrations,
-}) async {
-  if (tasks.isEmpty) return <T>[];
-  final width = concurrency < 1
-      ? 1
-      : concurrency > tasks.length
-          ? tasks.length
-          : concurrency;
-  final results = <int, T>{};
-  var nextIndex = 0;
-
-  Future<void> worker() async {
-    while (true) {
-      final index = nextIndex++;
-      if (index >= tasks.length) return;
-      results[index] = await tasks[index]();
-    }
-  }
-
-  await Future.wait(List.generate(width, (_) => worker()));
-  return [for (var i = 0; i < tasks.length; i++) results[i] as T];
-}
-
-class _CobroRegistrationResult {
-  const _CobroRegistrationResult({
-    required this.cobroId,
-    required this.importe,
-    required this.success,
-  });
-
-  final String cobroId;
-  final double importe;
-  final bool success;
 }
 
 class CobroDetailScreen extends ConsumerStatefulWidget {
@@ -397,12 +356,6 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     ));
 
-    final tipoVenta =
-        _formaPago == 'CONTADO' ? TipoVenta.contado : TipoVenta.credito;
-    final tipoModo =
-        _formaPago == 'CONTADO' ? TipoModoCobro.normal : TipoModoCobro.especial;
-    final registrationTasks = <Future<_CobroRegistrationResult> Function()>[];
-
     for (final entry in selectedEntries) {
       final cobro = pendientesById[entry.key];
       if (cobro == null) {
@@ -419,39 +372,26 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         continue;
       }
 
-      registrationTasks.add(() async {
-        var success = false;
-        try {
-          success = await _provider.registrarCobro(
-            codigoCliente: widget.codigoCliente,
-            referencia: cobro.paymentReference,
-            importe: importe,
-            formaPago: _formaPago,
-            tipoVenta: tipoVenta,
-            tipoModo: tipoModo,
-            vendedorCodes: widget.vendedorCodes,
-            reloadAfter: false,
-          );
-        } catch (_) {
-          success = false;
-        }
-        return _CobroRegistrationResult(
-          cobroId: cobro.id,
-          importe: importe,
-          success: success,
-        );
-      });
-    }
+      final tipoVenta =
+          _formaPago == 'CONTADO' ? TipoVenta.contado : TipoVenta.credito;
+      final tipoModo = _formaPago == 'CONTADO'
+          ? TipoModoCobro.normal
+          : TipoModoCobro.especial;
 
-    final registrationResults =
-        await runBoundedCobroTasks<_CobroRegistrationResult>(
-      tasks: registrationTasks,
-    );
-    for (final result in registrationResults) {
-      if (result.success) {
+      final success = await _provider.registrarCobro(
+        codigoCliente: widget.codigoCliente,
+        referencia: cobro.paymentReference,
+        importe: importe,
+        formaPago: _formaPago,
+        tipoVenta: tipoVenta,
+        tipoModo: tipoModo,
+        vendedorCodes: widget.vendedorCodes,
+        reloadAfter: false,
+      );
+      if (success) {
         exitos++;
-        importeExitoso += result.importe;
-        successfulIds.add(result.cobroId);
+        importeExitoso += importe;
+        successfulIds.add(cobro.id);
       } else {
         fallos++;
       }
@@ -1019,12 +959,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   Widget _buildCobroCard(CobroPendiente cobro) {
     final state = _itemStates[cobro.id] ?? 'NONE';
     final isPartial = state == 'PARCIAL';
-    final creditLabel = _creditDeadlineLabel(cobro);
     final subtitle = [
       '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}',
       if (cobro.isPedidoAppProvisional) 'pendiente de ERP',
       'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}',
-      if (creditLabel != null) creditLabel,
       if (cobro.isVencido) 'Mora ${cobro.diasMora}d',
     ].join(' - ');
 
@@ -1178,33 +1116,6 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         ],
       ),
     );
-  }
-
-  String? _creditDeadlineLabel(CobroPendiente cobro) {
-    if (cobro.diasLimiteCredito == null &&
-        cobro.fechaLimiteCredito == null &&
-        cobro.diasRestantesCredito == null) {
-      return null;
-    }
-    final parts = <String>[];
-    if (cobro.diasLimiteCredito != null) {
-      parts.add('Crédito ${cobro.diasLimiteCredito} días');
-    }
-    if (cobro.fechaLimiteCredito != null) {
-      final fechaLimite = DateFormat(
-        'dd/MM/yyyy',
-      ).format(cobro.fechaLimiteCredito!);
-      parts.add('límite $fechaLimite');
-    }
-    final restantes = cobro.diasRestantesCredito;
-    if (restantes != null) {
-      parts.add(
-        restantes < 0
-            ? 'vencido hace ${-restantes} días'
-            : 'faltan $restantes días',
-      );
-    }
-    return parts.join(' · ');
   }
 
   Widget _buildStateButton(

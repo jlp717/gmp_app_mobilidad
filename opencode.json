@@ -431,32 +431,7 @@
                                        "description":  "Estado de jobs automaticos (radar, watchlist, modelos, digest).",
                                        "agent":  "chief-engineer-assistant",
                                        "template":  "Ejecuta scheduled-automation-runner operation=status. Si ARGUMENTS contiene force, usa operation=force job_id=... Argumentos: $ARGUMENTS"
-                                   },
-                    "security-scan":  {
-                                          "description":  "Ejecuta GuardVibe o fallback local con salida redactada.",
-                                          "agent":  "appsec-engineer",
-                                          "template":  "Ejecuta node .opencode/scripts/security/guardvibe-fallback-scan.mjs --check. Si GuardVibe real no esta disponible, reporta WARN y no inventes PASS. Argumentos: $ARGUMENTS"
-                                      },
-                    "shelfware-index":  {
-                                            "description":  "Genera indice read-only de uso de agentes, skills, tools y comandos.",
-                                            "agent":  "team-curator",
-                                            "template":  "Ejecuta node .opencode/scripts/audit/shelfware-telemetry-index.mjs. No borres ni modifiques configuracion. Argumentos: $ARGUMENTS"
-                                        },
-                    "model-probe":  {
-                                        "description":  "Verifica catalogo de modelos sin promover IDs no probados.",
-                                        "agent":  "team-curator",
-                                        "template":  "Ejecuta node .opencode/scripts/models/provider-model-probe.mjs. gpt-5.5-pro queda BLOCKED_UNVERIFIED salvo prueba viva. Argumentos: $ARGUMENTS"
-                                    },
-                    "memory-prune":  {
-                                         "description":  "Previsualiza poda de memoria semantica en modo dry-run/read-only.",
-                                         "agent":  "Context-Manager",
-                                         "template":  "Ejecuta node .opencode/scripts/memory/semantic-memory-pruner.mjs --dry-run --config .opencode/config/semantic-memory-pruner.yaml. No uses --apply sin aprobacion explicita. Argumentos: $ARGUMENTS"
-                                     },
-                    "graphify":  {
-                                     "description":  "Consulta el knowledge graph local de Graphify para preguntas de estructura del codebase sin grepear archivos crudos.",
-                                     "agent":  "chief-engineer-assistant",
-                                     "template":  "Consulta el knowledge graph de Graphify para: $ARGUMENTS. Si tienes bash, usa C:\\Users\\Javier\\.cache\\graphify-venv\\Scripts\\graphify.exe sobre C:\\Users\\Javier\\Desktop\\Repositorios\\gmp_app_mobilidad\\docs\\graphify\\graph.json y resume nodos/aristas/comunidades. Si no, lee C:\\Users\\Javier\\Desktop\\Repositorios\\gmp_app_mobilidad\\docs\\graphify\\GRAPH_REPORT.md. No uses API externa."
-                                 }
+                                   }
                 },
     "mcp":  {
                 "context7-local":  {
@@ -590,19 +565,6 @@
                                                },
                                "timeout":  30000
                            },
-                "guardvibe":  {
-                                  "enabled":  true,
-                                  "type":  "local",
-                                  "command":  [
-                                                  "npx",
-                                                  "-y",
-                                                  "guardvibe@3.1.21"
-                                              ],
-                                  "environment":  {
-                                                      "npm_config_update_notifier":  "false"
-                                                  },
-                                  "timeout":  30000
-                              },
                 "firecrawl":  {
                                   "enabled":  false,
                                   "type":  "local",
@@ -696,27 +658,7 @@
                                                                                                   "reasoningEffort":  "high"
                                                                                               }
                                                                                 }
-                                                               },
-                                                   "gpt-5.5-fast":  {
-                                                                        "options":  {
-                                                                                        "reasoningEffort":  "high"
-                                                                                    }
-                                                                    },
-                                                   "gpt-5.4":  {
-                                                                   "options":  {
-                                                                                   "reasoningEffort":  "high"
-                                                                               }
-                                                               },
-                                                   "gpt-5.4-fast":  {
-                                                                        "options":  {
-                                                                                        "reasoningEffort":  "medium"
-                                                                                    }
-                                                                    },
-                                                   "gpt-5.4-mini":  {
-                                                                        "options":  {
-                                                                                        "reasoningEffort":  "medium"
-                                                                                    }
-                                                                    }
+                                                               }
                                                }
                                 },
                      "opencode":  {
@@ -751,7 +693,7 @@
                                                        "auto":  {
                                                                     "name":  "auto",
                                                                     "tool_call":  true,
-                                                                    "reasoning":  false,
+                                                                    "reasoning":  true,
                                                                     "options":  {
 
                                                                                 }
@@ -759,7 +701,7 @@
                                                        "composer-2-fast":  {
                                                                                "name":  "composer-2-fast",
                                                                                "tool_call":  true,
-                                                                               "reasoning":  false,
+                                                                               "reasoning":  true,
                                                                                "options":  {
 
                                                                                            }
@@ -767,7 +709,7 @@
                                                        "composer-2":  {
                                                                           "name":  "composer-2",
                                                                           "tool_call":  true,
-                                                                          "reasoning":  false,
+                                                                          "reasoning":  true,
                                                                           "options":  {
 
                                                                                       }
@@ -779,63 +721,7 @@
                                                                             "options":  {
 
                                                                                         }
-                                                                        },
-                                                       "composer-2.5-fast":  {
-                                                                                 "name":  "composer-2.5-fast",
-                                                                                 "tool_call":  true,
-                                                                                 "reasoning":  true,
-                                                                                 "options":  {
-
-                                                                                             }
-                                                                             },
-                                                       "claude-fable-5-thinking-max":  {
-                                                                                           "name":  "claude-fable-5-thinking-max",
-                                                                                           "tool_call":  true,
-                                                                                           "reasoning":  true,
-                                                                                           "options":  {
-
-                                                                                                       }
-                                                                                       },
-                                                       "claude-fable-5-thinking-xhigh":  {
-                                                                                             "name":  "claude-fable-5-thinking-xhigh",
-                                                                                             "tool_call":  true,
-                                                                                             "reasoning":  true,
-                                                                                             "options":  {
-
-                                                                                                         }
-                                                                                         },
-                                                       "claude-opus-4-8-thinking-max":  {
-                                                                                            "name":  "claude-opus-4-8-thinking-max",
-                                                                                            "tool_call":  true,
-                                                                                            "reasoning":  true,
-                                                                                            "options":  {
-
-                                                                                                        }
-                                                                                        },
-                                                       "claude-opus-4-8-thinking-xhigh":  {
-                                                                                              "name":  "claude-opus-4-8-thinking-xhigh",
-                                                                                              "tool_call":  true,
-                                                                                              "reasoning":  true,
-                                                                                              "options":  {
-
-                                                                                                          }
-                                                                                          },
-                                                       "claude-opus-4-7-thinking-max":  {
-                                                                                            "name":  "claude-opus-4-7-thinking-max",
-                                                                                            "tool_call":  true,
-                                                                                            "reasoning":  true,
-                                                                                            "options":  {
-
-                                                                                                        }
-                                                                                        },
-                                                       "claude-4.6-opus-max-thinking":  {
-                                                                                            "name":  "claude-4.6-opus-max-thinking",
-                                                                                            "tool_call":  true,
-                                                                                            "reasoning":  true,
-                                                                                            "options":  {
-
-                                                                                                        }
-                                                                                        }
+                                                                        }
                                                    }
                                     }
                  }
