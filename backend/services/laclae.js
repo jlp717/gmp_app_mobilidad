@@ -21,6 +21,29 @@ function toDayArray(days) {
     return [];
 }
 
+/** CLI.ANOBAJA: 0 / NULL = active. Non-zero = baja (used on vendor transfers). */
+function isAnoBaja(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n !== 0;
+}
+
+function ensureCacheEntry(cache, accessOrder, vendor, client, extras = {}) {
+    if (!cache[vendor]) cache[vendor] = {};
+    if (!cache[vendor][client]) {
+        cache[vendor][client] = {
+            visitDays: new Set(),
+            deliveryDays: new Set(),
+            isBaja: false,
+            ...extras,
+        };
+        accessOrder.push(`${vendor}::${client}`);
+    } else if (extras.naturalOrder && !cache[vendor][client].naturalOrder) {
+        cache[vendor][client].naturalOrder = extras.naturalOrder;
+    }
+    if (extras.isBaja) cache[vendor][client].isBaja = true;
+    return cache[vendor][client];
+}
+
 function normalizeCodeList(value) {
     if (value === undefined || value === null) return [];
     const values = Array.isArray(value) ? value : [value];
@@ -166,10 +189,13 @@ async function loadLaclaeCacheInternal() {
             // 1. Load Master Route Config from DSEDAC.CDVI (Cuadro de Visitas)
             // This ensures NEW clients without sales are included
             logger.info('   Loading Master Route Config from DSEDAC.CDVI...');
+            // Include clients with ANOBAJA (vendor transfers mark the previous ficha as baja).
+            // Sales scope needs them; visit helpers skip isBaja so they do not appear on the day route.
             const cdviRows = await conn.query(`
                 SELECT 
                     TRIM(C.CODIGOVENDEDOR) as VENDEDOR,
                     TRIM(C.CODIGOCLIENTE) as CLIENTE,
+                    K.ANOBAJA as ANOBAJA,
                     C.DIAVISITALUNESSN as VIS_L, 
                     C.DIAVISITAMARTESSN as VIS_M, 
                     C.DIAVISITAMIERCOLESSN as VIS_X,
@@ -185,9 +211,8 @@ async function loadLaclaeCacheInternal() {
                     C.ORDENVISITASABADO as OR_S,
                     C.ORDENVISITADOMINGO as OR_D
                 FROM DSEDAC.CDVI C
-                JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE  -- Join CLI to check ANOBAJA
+                JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE
                 WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
-                  AND (K.ANOBAJA = 0 OR K.ANOBAJA IS NULL) -- EXCLUDE BAJAS
                   AND (  -- EXCLUDE zombie entries with NO visit days assigned
                     TRIM(C.DIAVISITALUNESSN) = 'S' OR TRIM(C.DIAVISITAMARTESSN) = 'S' OR
                     TRIM(C.DIAVISITAMIERCOLESSN) = 'S' OR TRIM(C.DIAVISITAJUEVESSN) = 'S' OR
@@ -202,11 +227,13 @@ async function loadLaclaeCacheInternal() {
             cdviRows.forEach(row => {
                 if (!row.VENDEDOR || !row.CLIENTE) return;
 
-                if (!nextLaclaeCache[row.VENDEDOR]) nextLaclaeCache[row.VENDEDOR] = {};
-                if (!nextLaclaeCache[row.VENDEDOR][row.CLIENTE]) {
-                    nextLaclaeCache[row.VENDEDOR][row.CLIENTE] = {
-                        visitDays: new Set(),
-                        deliveryDays: new Set(),
+                const entry = ensureCacheEntry(
+                    nextLaclaeCache,
+                    nextLaclaeCacheAccessOrder,
+                    row.VENDEDOR,
+                    row.CLIENTE,
+                    {
+                        isBaja: isAnoBaja(row.ANOBAJA),
                         naturalOrder: {
                             lunes: Number(row.OR_L) || 0,
                             martes: Number(row.OR_M) || 0,
@@ -216,11 +243,8 @@ async function loadLaclaeCacheInternal() {
                             sabado: Number(row.OR_S) || 0,
                             domingo: Number(row.OR_D) || 0
                         }
-                    };
-                    nextLaclaeCacheAccessOrder.push(`${row.VENDEDOR}::${row.CLIENTE}`);
-                }
-
-                const entry = nextLaclaeCache[row.VENDEDOR][row.CLIENTE];
+                    }
+                );
 
                 // Map 'S' to days (Handle 'S ' with trim)
                 if (String(row.VIS_D).trim() === 'S') entry.visitDays.add('domingo');
@@ -250,17 +274,17 @@ async function loadLaclaeCacheInternal() {
         SELECT DISTINCT
           L.R1_T8CDVD as VENDEDOR,
           L.LCCDCL as CLIENTE,
+          C.ANOBAJA as ANOBAJA,
           L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
           L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S, L.R1_T8DIVD as VIS_D,
           L.R1_T8DIRL as DEL_L, L.R1_T8DIRM as DEL_M, L.R1_T8DIRX as DEL_X,
           L.R1_T8DIRJ as DEL_J, L.R1_T8DIRV as DEL_V, L.R1_T8DIRS as DEL_S, L.R1_T8DIRD as DEL_D
         FROM DSED.LACLAE L
-        JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE -- Join CLI to check ANOBAJA
+        JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
         WHERE L.R1_T8CDVD IS NOT NULL 
           AND L.LCCDCL IS NOT NULL
-          AND L.LCAADC >= ${startYear}
-          AND (C.ANOBAJA = 0 OR C.ANOBAJA IS NULL) -- EXCLUDE BAJAS
-      `);
+          AND L.LCAADC >= ?
+      `, [startYear]);
 
             const visitCols = ['VIS_D', 'VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S'];
             const deliveryCols = ['DEL_D', 'DEL_L', 'DEL_M', 'DEL_X', 'DEL_J', 'DEL_V', 'DEL_S'];
@@ -270,17 +294,13 @@ async function loadLaclaeCacheInternal() {
                 const cliente = row.CLIENTE?.trim() || '';
                 if (!vendedor || !cliente) return;
 
-                if (!nextLaclaeCache[vendedor]) nextLaclaeCache[vendedor] = {};
-
-                if (!nextLaclaeCache[vendedor][cliente]) {
-                    nextLaclaeCache[vendedor][cliente] = {
-                        visitDays: new Set(),
-                        deliveryDays: new Set()
-                    };
-                    nextLaclaeCacheAccessOrder.push(`${vendedor}::${cliente}`);
-                }
-
-                const entry = nextLaclaeCache[vendedor][cliente];
+                const entry = ensureCacheEntry(
+                    nextLaclaeCache,
+                    nextLaclaeCacheAccessOrder,
+                    vendedor,
+                    cliente,
+                    { isBaja: isAnoBaja(row.ANOBAJA) }
+                );
 
                 for (let i = 0; i < 7; i++) {
                     if (row[visitCols[i]] === 'S') entry.visitDays.add(dayNames[i]);
@@ -350,6 +370,9 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
         const configClients = ruteroConfigCache[vendedor] || {};
 
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
+            // Baja fichas stay in sales scope but must not appear on the day route
+            if (data.isBaja) return;
+
             const days = toDayArray(isDelivery ? data.deliveryDays : data.visitDays);
 
             let shouldInclude = false;
@@ -408,6 +431,8 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial', ignoreOverrid
         const configClients = ruteroConfigCache[vendedor] || {};
 
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
+            if (data.isBaja) return;
+
             const days = toDayArray(isDelivery ? data.deliveryDays : data.visitDays);
 
             if (!ignoreOverrides) {
@@ -468,6 +493,7 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
+            if (data.isBaja) return;
             const days = toDayArray(isDelivery ? data.deliveryDays : data.visitDays);
             if (days.length > 0) {
                 allClients.add(clientCode);
@@ -478,8 +504,8 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
     return allClients.size;
 }
 
-// Get client codes from cache (for optimization)
-// Only returns clients with actual visit days assigned to this vendor.
+// Get client codes from cache (for sales/commission/objective client-scope).
+// Includes clients with ANOBAJA (vendor transfers). Visit helpers filter those out.
 // Delivery-only entries (from LACLAE history) are excluded — those clients
 // belong to another vendor for sales purposes and only appear in repartidor views.
 function getClientCodesFromCache(vendedorCodes) {
@@ -706,6 +732,20 @@ function clearLaclaeCache() {
     logger.info('📴 LACLAE cache fully cleared');
 }
 
+/** Test-only: inject laclae cache shape without hitting DB2. */
+function __setLaclaeCacheForTests(cache, { ready = true } = {}) {
+    laclaeCache = cache || {};
+    laclaeCacheAccessOrder = [];
+    Object.entries(laclaeCache).forEach(([vendor, clients]) => {
+        Object.keys(clients || {}).forEach((client) => {
+            laclaeCacheAccessOrder.push(`${vendor}::${client}`);
+        });
+    });
+    laclaeCacheReady = !!ready;
+    laclaeCacheLoadAttempted = true;
+    laclaeCacheLastLoadTime = Date.now();
+}
+
 module.exports = {
     loadLaclaeCache,
     isCacheReady,
@@ -724,5 +764,7 @@ module.exports = {
     getNaturalOrder,
     ruteroConfigCache,
     laclaeCacheLastLoadTime: () => laclaeCacheLastLoadTime,
-    clearLaclaeCache
+    clearLaclaeCache,
+    __setLaclaeCacheForTests,
+    isAnoBaja,
 };

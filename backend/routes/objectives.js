@@ -2499,7 +2499,6 @@ async function handleByClientRequest(req, res) {
                     SELECT COUNT(*) as TOTAL
                     FROM DSEDAC.CLI C
                     WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
-                      AND C.ANOBAJA = 0
                       ${extraFilters}
                 `, [...safeClientCodes, ...extraFilterParams], false);
                 totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
@@ -2536,7 +2535,6 @@ async function handleByClientRequest(req, res) {
                             C.POBLACION as CITY
                         FROM DSEDAC.CLI C
                         WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
-                          AND C.ANOBAJA = 0
                     `, topCodes, false);
 
                     const detailsMap = new Map();
@@ -2569,7 +2567,6 @@ async function handleByClientRequest(req, res) {
                             C.POBLACION as CITY
                         FROM DSEDAC.CLI C
                         WHERE C.CODIGOCLIENTE IN (${fallbackCodes.map(() => '?').join(',')})
-                          AND C.ANOBAJA = 0
                         FETCH FIRST ? ROWS ONLY
                     `, [...fallbackCodes, rowsLimit], false);
 
@@ -2605,7 +2602,6 @@ async function handleByClientRequest(req, res) {
                         GROUP BY LCCDCL
                     ) S ON C.CODIGOCLIENTE = S.LCCDCL
                     WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
-                      AND C.ANOBAJA = 0
                       ${extraFilters}
                     ORDER BY COALESCE(S.SALES, 0) DESC
                     FETCH FIRST ? ROWS ONLY
@@ -2645,7 +2641,6 @@ async function handleByClientRequest(req, res) {
                             C.POBLACION as CITY
                         FROM DSEDAC.CLI C
                         WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
-                          AND C.ANOBAJA = 0
                     `, topCodes, false);
 
                     const detailsMap = new Map();
