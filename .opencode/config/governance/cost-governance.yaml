@@ -1,0 +1,33 @@
+version: 1
+purpose: "Cost governance + complexity routing aliases"
+
+budgets:
+  session_hard_cap_usd: 25
+  session_warn_usd: 5
+  on_hard_cap: COLD_STORAGE
+  circuit_breaker_source: ".opencode/config/production-safety.yaml"
+
+complexity_routing:
+  aliases:
+    sol: "openai/gpt-5.6-sol"
+    terra: "openai/gpt-5.6-terra"
+    luna: "openai/gpt-5.6-luna"
+  rules:
+    - when: "orchestration|security|db2|sre|architecture|production"
+      use: sol
+    - when: "verification|review|runtime_diag|simplify"
+      use: terra
+    - when: "memory|metrics|context|prompt_optimize_low_risk"
+      use: luna
+
+retries:
+  max_retries: 2
+  backoff: exponential
+  base_ms: 1000
+  jitter: true
+  freeze_in_flight_on_quota: true
+
+fallbacks:
+  source: ".opencode/fallback-models.json"
+  forbid_zen_automatic: true
+  declared_per_agent: required

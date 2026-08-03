@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "min_deterministic_pass_rate": 1.0,
+  "min_gold_cases": 6,
+  "required_docs": [
+    "docs/agent-classification.md",
+    "docs/agent-inventory.yaml",
+    "docs/opencode-agent-governance/security-controls.md",
+    "docs/opencode-agent-governance/context-strategy.md",
+    "docs/opencode-agent-governance/workflow-patterns.md",
+    "docs/opencode-agent-governance/evals-calibration.md",
+    "docs/opencode-agent-governance/CHANGELOG.md"
+  ],
+  "required_canon": [
+    "docs/opencode-agent-governance/canon/sandbox-policy.yaml",
+    "docs/opencode-agent-governance/canon/intent-validator.yaml",
+    "docs/opencode-agent-governance/canon/otel-agentops.yaml",
+    "docs/opencode-agent-governance/canon/tool-aci-registry.yaml",
+    "docs/opencode-agent-governance/canon/cost-governance.yaml"
+  ],
+  "notes": "Architecture/prompt/model governance changes must keep validate-governance exit 0 and suite >= baseline."
+}

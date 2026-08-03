@@ -1,0 +1,64 @@
+name: verification-loop
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, develop, test, pre, 'feat/**', 'fix/**']
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-verification:
+    name: Deterministic Verification Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.6'
+          channel: stable
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          npm ci --prefix backend
+
+      - name: Run project verification loop
+        shell: pwsh
+        run: ./scripts/verify.ps1
+
+      - name: Run Politec gate
+        shell: pwsh
+        run: ./scripts/politec-quality-gate.ps1 -Strict -Json
+
+      - name: OpenCode governance baseline
+        run: |
+          node scripts/opencode-governance/validate-governance.mjs
+          node --test scripts/opencode-governance/governance.test.mjs
+
+      - name: Publish evidence
+        if: always()
+        run: |
+          {
+            echo "## Verification Loop"
+            echo "- Deterministic checks: executed"
+            echo "- Project gate: scripts/verify.ps1"
+            echo "- Architecture/security gate: scripts/politec-quality-gate.ps1 -Strict"
+            echo "- OpenCode governance: scripts/opencode-governance/validate-governance.mjs"
+            echo "- Human code review: not required"
+          } >> "$GITHUB_STEP_SUMMARY"

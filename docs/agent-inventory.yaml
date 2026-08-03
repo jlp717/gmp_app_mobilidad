@@ -1,0 +1,832 @@
+# OpenCode agent inventory — FASE 0 audit
+# Runtime agents live under .opencode/agents/ (often gitignored). This file is the committed inventory.
+version: 1
+project: gmp_app_mobilidad
+generated_at: "2026-08-03T19:00:00+02:00"
+scope: ".opencode/ agents, tools, plugins, workflow configs"
+
+classification_principle: |
+  Workflow = deterministic gates/state/tools that enforce policy without creative reasoning.
+  Agent = LLM node that reasons, plans, or synthesizes. If an agent mostly does workflow work, DEGRADE.
+
+agents:
+  - name: API-Contract-Specialist
+    kind: agent
+    declared_role: |
+      Especialista en contratos API GMP. Define y verifica request/response, codigos HTTP, errores tipados, compatibilidad Flutter-backend y regression tests.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - elite-quality-gate
+      - file-gate-check
+      - handoff-ledger
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: appsec-engineer
+    kind: agent
+    declared_role: |
+      Application Security Engineer full-spectrum. SAST, secretos, dependencias, threat modeling, OWASP Top 10 y DAST selectivo contra staging antes de merge o deploy.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - metrics-push
+      - telegram-notify
+      - rag-query
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Architect-Planner
+    kind: agent
+    declared_role: |
+      Arquitecto senior Tier 3. Genera planes JSON con workstreams, dependencias, riesgos y aprobacion requerida.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - memory-save
+      - code-autopilot
+      - decision-router
+      - flow-policy-check
+      - handoff-ledger
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Check-Reviewer
+    kind: agent
+    declared_role: |
+      Reviewer duro de riesgos. Evalua seguridad, tests, failure modes, efectos colaterales, rendimiento, deuda, breaking changes y reversibilidad.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - elite-quality-gate
+      - rag-query
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: chief-engineer-assistant
+    kind: orchestrator_agent
+    declared_role: |
+      Punto de entrada unico para Javier, especialmente desde movil. Parsea peticiones libres, detecta modo movil o voz, consulta RAG antes de actuar, activa el pipeline V4 de siete pasos y devuelve resumen ejecutivo por texto, Telegram o voz.
+    assigned_model: openai/gpt-5.6-sol
+    mode: primary
+    tools_access:
+      - decision-router
+      - rag-query
+      - memory-save
+      - voice-synthesis
+      - telegram-notify
+      - metrics-push
+      - parallel-dispatch
+      - production-approval-gate
+      - elite-quality-gate
+      - flow-policy-check
+      - correction-capture
+      - handoff-ledger
+      - daily-digest-summary
+      - flow-status
+      - model-provider-health
+      - flow-trace
+      - readiness-smoke
+      - mobile-ops-status
+      - mobile-autopilot
+      - mobile-safety-net
+      - continuous-improvement-loop
+      - repo-intake-gate
+      - tech-radar-fetch
+      - obsidian-capture
+      - team-ci
+      - team-backup
+      - retro-auto
+      - mobile-briefing
+      - model-roster-view
+      - model-assignment-audit
+      - agent-roster-audit
+      - workflow-state-audit
+      - autonomous-capability-audit
+      - honors-grade-audit
+      - goal-loop-manager
+      - clarification-gate
+      - state-manager
+      - project-context
+      - state-cleanup
+      - scheduled-automation-runner
+      - github-watchlist-sync
+      - model-catalog-watch
+      - plan-approval-gate
+      - team-curator-report
+    invoked_by: javier_entrypoint
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: code-autopilot
+    kind: agent
+    declared_role: |
+      Detecta codigo similar antes de implementar. Usa RAG para recomendar reutilizar, adaptar, estudiar o crear nuevo, reduciendo duplicacion y deuda tecnica.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - memory-save
+      - handoff-ledger
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Code-Reviewer
+    kind: agent
+    declared_role: |
+      Revisor final de calidad, naming, patrones, imports, documentacion y deuda tecnica.
+    assigned_model: openai/gpt-5.6-sol
+    mode: subagent
+    tools_access:
+      - elite-quality-gate
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Context-Manager
+    kind: agent
+    declared_role: |
+      Gestor de memoria persistente, StateGraph, tools-manifest, reglas deterministicas y contexto entre sesiones.
+    assigned_model: openai/gpt-5.6-luna
+    mode: subagent
+    tools_access:
+      - frontmatter_defaults
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: DB2-AS400-Specialist
+    kind: agent
+    declared_role: |
+      Especialista IBM DB2 for i / AS400. Verifica tablas y columnas reales antes de cualquier query.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - memory-save
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: DB2-Query-Optimizer
+    kind: agent
+    declared_role: |
+      Experto en optimizacion de queries DB2/AS400 GMP. Disena SQL set-based, elimina N+1, revisa indices, cardinalidad, paginacion, orden y coste de endpoints con datos reales.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - elite-quality-gate
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: DevOps-CICD-Specialist
+    kind: agent
+    declared_role: |
+      Especialista DevOps, SSH, PM2, GitHub Actions, worktrees, despliegues y rollback.
+    assigned_model: openai/gpt-5.6-sol
+    mode: subagent
+    tools_access:
+      - production-approval-gate
+      - staging-deploy
+      - rag-query
+      - memory-save
+      - flow-status
+      - flow-trace
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Flutter-Architecture-Specialist
+    kind: agent
+    declared_role: |
+      Arquitecto Flutter GMP. Define capas UI/estado/datos, navegacion, providers, modelos, codegen, offline y contratos con backend antes de cambios grandes.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - memory-save
+      - handoff-ledger
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Flutter-Data-Specialist
+    kind: agent
+    declared_role: |
+      Especialista de datos Flutter - modelos, providers, repositorios, serializacion y errores de red.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - elite-quality-gate
+      - file-gate-check
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Flutter-Performance-Specialist
+    kind: agent
+    declared_role: |
+      Especialista en rendimiento Flutter. Detecta rebuilds masivos, listas sin virtualizacion, cargas repetidas, parseo pesado, jank y llamadas API redundantes.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - elite-quality-gate
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Flutter-UI-Specialist
+    kind: agent
+    declared_role: |
+      Especialista Flutter UI - widgets, layouts, navegacion, estados visuales y validacion responsive.
+    assigned_model: opencode-go/glm-5.2
+    mode: all
+    tools_access:
+      - rag-query
+      - file-gate-check
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: GMP-Orchestrator
+    kind: agent
+    declared_role: |
+      Orquestador principal del proyecto GMP. Clasifica peticiones de Javier, crea StateGraph, carga memoria y delega siempre a subagentes especializados.
+    assigned_model: openai/gpt-5.6-sol
+    mode: subagent
+    tools_access:
+      - decision-router
+      - rag-query
+      - production-approval-gate
+      - elite-quality-gate
+      - flow-policy-check
+      - handoff-ledger
+      - memory-save
+      - model-provider-health
+      - readiness-smoke
+      - state-manager
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: mcp-tool-miner
+    kind: agent
+    declared_role: |
+      Minero autonomo de herramientas. Busca MCPs, repos y snippets utiles para GMP/Granja en repos vigilados. Propone integracion via Telegram HITL.
+    assigned_model: opencode-go/deepseek-v4-flash
+    mode: all
+    tools_access:
+      - tech-radar-fetch
+      - github-watchlist-sync
+      - rag-query
+      - memory-save
+      - telegram-notify
+      - repo-intake-gate
+      - ddg-search
+      - fetch-local
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: memory-cleaner
+    kind: agent
+    declared_role: |
+      Recollector de basura semantica. Consolida memoria, indexa flujos de exito, archiva sesiones antiguas y evita degradacion por contexto historico.
+    assigned_model: openai/gpt-5.6-luna
+    mode: all
+    tools_access:
+      - memory-save
+      - rag-query
+      - flow-status
+      - flow-trace
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: memory-formation
+    kind: agent
+    declared_role: |
+      Forma memoria operacional desde incidentes, retrospectivas, decisiones y correcciones explicitas de Javier.
+    assigned_model: openai/gpt-5.6-luna
+    mode: subagent
+    tools_access:
+      - memory-save
+      - rag-query
+      - correction-capture
+      - handoff-ledger
+      - flow-status
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Metrics-Observer
+    kind: agent
+    declared_role: |
+      Observador de Sentry, Prometheus, Redis/KPI, Grafana y metricas del sistema OpenCode.
+    assigned_model: openai/gpt-5.6-luna
+    mode: subagent
+    tools_access:
+      - rag-query
+      - flow-status
+      - flow-trace
+      - model-provider-health
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: NextJS-Shadcn-Specialist
+    kind: agent
+    declared_role: |
+      Especialista Next.js App Router, TypeScript, Tailwind y shadcn/ui para Granja y paneles web.
+    assigned_model: opencode-go/glm-5.2
+    mode: subagent
+    tools_access:
+      - rag-query
+      - file-gate-check
+      - elite-quality-gate
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Node-Express-Specialist
+    kind: agent
+    declared_role: |
+      Especialista backend Node.js/Express de GMP. Implementa rutas, validacion, errores y logging estructurado.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - elite-quality-gate
+      - file-gate-check
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Performance-Analyst
+    kind: agent
+    declared_role: |
+      Analista de rendimiento de API, DB2, Flutter, bundle y queries.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - elite-quality-gate
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: product-ux
+    kind: agent
+    declared_role: |
+      Producto y UX. Convierte peticiones ambiguas o por voz en historias verificables y sintetiza resultados tecnicos en resumen humano para movil, desktop o Telegram.
+    assigned_model: opencode-go/glm-5.2
+    mode: all
+    tools_access:
+      - rag-query
+      - mobile-briefing
+      - obsidian-capture
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: prompt-optimizer
+    kind: agent
+    declared_role: |
+      Optimiza peticiones naturales de Javier en briefs tecnicos ejecutables antes de orquestar. No implementa codigo; reduce ambiguedad, detecta riesgos y prepara context packets para el Chief.
+    assigned_model: openai/gpt-5.6-luna
+    mode: all
+    tools_access:
+      - frontmatter_defaults
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: qa-automation-lead
+    kind: agent
+    declared_role: |
+      QA Automation Lead. Orquesta pruebas unitarias, E2E Playwright, k6, contratos API y smoke tests de staging. Bloquea releases si fallan checks criticos.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - parallel-dispatch
+      - staging-deploy
+      - metrics-push
+      - telegram-notify
+      - file-gate-check
+      - snapshot-create
+      - elite-quality-gate
+      - flow-policy-check
+      - handoff-ledger
+      - flow-status
+      - flow-trace
+      - model-provider-health
+      - mobile-safety-net
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Redis-Cache-Specialist
+    kind: agent
+    declared_role: |
+      Especialista Redis/cache para GMP. Disena cache por request y Redis, TTLs, invalidacion, locks, stampede protection y observa claves/latencia sin tocar produccion sin gate.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - elite-quality-gate
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Release-Notifier
+    kind: agent
+    declared_role: |
+      Notificador Telegram. Comunica inicio, aprobaciones, degradados, completado y fallos en lenguaje humano.
+    assigned_model: opencode-go/kimi-k2.7-code
+    mode: subagent
+    tools_access:
+      - rag-query
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Repo-Explorer
+    kind: agent
+    declared_role: |
+      Explorador de codebase solo lectura. Mapea archivos, endpoints, imports y entidades reales antes de implementar.
+    assigned_model: openai/gpt-5.6-luna
+    mode: subagent
+    tools_access:
+      - frontmatter_defaults
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Runtime-Log-Diagnostician
+    kind: agent
+    declared_role: |
+      Diagnostica runtime GMP con SSH, PM2 logs, health checks, latencia, errores 500 y correlacion de requests. Solo lectura salvo acciones SRE con gate.
+    assigned_model: openai/gpt-5.6-terra
+    mode: all
+    tools_access:
+      - rag-query
+      - metrics-push
+      - telegram-notify
+      - flow-status
+      - flow-trace
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Security-Validator
+    kind: agent
+    declared_role: |
+      Auditor de seguridad OWASP, secretos, SQL injection, DB2 binding y dependencias.
+    assigned_model: openai/gpt-5.6-sol
+    mode: subagent
+    tools_access:
+      - hidden
+      - rag-query
+      - elite-quality-gate
+      - file-gate-check
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Simplify-Reviewer
+    kind: agent
+    declared_role: |
+      Reviewer de simplicidad. Detecta sobreingenieria, YAGNI, dependencias innecesarias y complejidad cognitiva.
+    assigned_model: openai/gpt-5.6-terra
+    mode: all
+    tools_access:
+      - rag-query
+      - elite-quality-gate
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: sre-engineer
+    kind: agent
+    declared_role: |
+      Site Reliability Engineer. Duenio de resiliencia, health checks, SLOs, rollback post-deploy, incidentes, post-mortems y retrospectivas por errores repetidos.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - memory-save
+      - metrics-push
+      - telegram-notify
+      - snapshot-restore
+      - retrospective-trigger
+      - production-approval-gate
+      - mobile-ops-status
+      - mobile-safety-net
+      - retro-auto
+      - flow-status
+      - flow-trace
+      - model-provider-health
+      - obsidian-capture
+      - daily-digest-summary
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: team-curator
+    kind: agent
+    declared_role: |
+      Curador semanal del equipo. Audita comportamiento de agentes, rutas, modelos, MCPs, metricas, errores repetidos y novedades relevantes; entrega reporte ejecutivo por Telegram.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - team-curator-report
+      - agent-roster-audit
+      - decision-router
+      - flow-policy-check
+      - tech-radar-fetch
+      - telegram-notify
+      - rag-query
+      - model-assignment-audit
+      - workflow-state-audit
+      - readiness-smoke
+      - mobile-safety-net
+      - mobile-autopilot
+      - continuous-improvement-loop
+      - repo-intake-gate
+      - team-ci
+      - team-backup
+      - retro-auto
+      - mobile-briefing
+      - model-roster-view
+      - flow-status
+      - flow-trace
+      - model-provider-health
+      - obsidian-capture
+      - autonomous-capability-audit
+      - honors-grade-audit
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: tech-radar-agent
+    kind: agent
+    declared_role: |
+      Inteligencia proactiva de tendencias. Consume HN, GitHub, arXiv, Product Hunt y Reddit, filtra por stack GMP/Granja y presenta solo novedades accionables.
+    assigned_model: opencode-go/deepseek-v4-pro
+    mode: all
+    tools_access:
+      - tech-radar-fetch
+      - repo-intake-gate
+      - rag-query
+      - telegram-notify
+      - memory-save
+      - ddg-search
+      - fetch-local
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Technical-Verifier
+    kind: agent
+    declared_role: |
+      Verificador tecnico independiente. Comprueba que afirmaciones, pruebas, MCPs, logs, DB2, comandos y gates realmente respaldan la entrega antes de cerrar.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+      - elite-quality-gate
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Test-Specialist
+    kind: agent
+    declared_role: |
+      Especialista de verificacion. Ejecuta tests, analiza fallos y valida visualmente cambios UI.
+    assigned_model: openai/gpt-5.6-terra
+    mode: all
+    tools_access:
+      - rag-query
+      - elite-quality-gate
+      - file-gate-check
+      - flow-status
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Test-Writer
+    kind: agent
+    declared_role: |
+      Escritor de tests TDD. Crea tests antes de implementar en Tier 2/3 y no toca codigo de produccion.
+    assigned_model: openai/gpt-5.6-terra
+    mode: all
+    tools_access:
+      - rag-query
+      - file-gate-check
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: truth-teller
+    kind: agent
+    declared_role: |
+      Validador independiente de verdad operacional. Detecta afirmaciones no verificadas, huecos de evidencia y estados parciales antes de entregar.
+    assigned_model: openai/gpt-5.6-sol
+    mode: all
+    tools_access:
+      - rag-query
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Visual-Design-Specialist
+    kind: agent
+    declared_role: |
+      Experto en diseno visual y UX operacional. Revisa jerarquia, layouts, estados loading/empty/error, accesibilidad, consistencia Material/Flutter y validacion visual.
+    assigned_model: opencode-go/glm-5.2
+    mode: all
+    tools_access:
+      - rag-query
+    invoked_by: chief_decision_router_or_manual_at
+    notes: "Layer per AGENTS.md V4 two-layer model"
+  - name: Web-Researcher
+    kind: agent
+    declared_role: |
+      Investigador de documentacion tecnica oficial y patrones actualizados.
+    assigned_model: cursor-acp/cursor-grok-4.5-high
+    mode: subagent
+    tools_access:
+      - rag-query
+      - memory-save
+    invoked_by: chief_or_task_tool
+    notes: "Layer per AGENTS.md V4 two-layer model"
+
+workflow_tools:
+  - name: agent-roster-audit
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: autonomous-capability-audit
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: chroma-query
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: clarification-gate
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: continuous-improvement-loop
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: correction-capture
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: daily-digest-summary
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: debate-protocol
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: decision-router
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: elite-quality-gate
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: file-gate-check
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: flow-policy-check
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: flow-status
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: flow-trace
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: github-advanced
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: github-watchlist-sync
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: goal-loop-manager
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: handoff-ledger
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: honors-grade-audit
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: memory-save
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: metrics-push
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: metrics-record
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: mobile-autopilot
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: mobile-briefing
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: mobile-ops-status
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: mobile-safety-net
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: model-assignment-audit
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: model-catalog-watch
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: model-provider-health
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: model-roster-view
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: obsidian-capture
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: parallel-dispatch
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: plan-approval-gate
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: production-approval-gate
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: project-context
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: rag-query
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: readiness-smoke
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: repo-intake-gate
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: retro-auto
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: retrospective-trigger
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: sandbox-run
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: scheduled-automation-runner
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: snapshot-create
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: snapshot-restore
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: staging-deploy
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: state-cleanup
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: state-manager
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: team-backup
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: team-ci
+    classification: workflow
+    invoked_by: agents_via_tool_call
+  - name: team-curator-report
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: tech-radar-fetch
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: telegram-notify
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: voice-synthesis
+    classification: agent_tool
+    invoked_by: agents_via_tool_call
+  - name: workflow-state-audit
+    classification: workflow
+    invoked_by: agents_via_tool_call
+
+plugins_workflow:
+  - name: anti-doom-loop
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: anti-hallucination-guard
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: context-compaction
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: env-protection
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: execution-visibility
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: flow-observability
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: goal-loop-idle-hint
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: mobile-mode-detector
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: model-fallback-forward
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: production-safety-guard
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: rate-limit-handler
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: same-error-detector
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: session-lifecycle
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: session-resilience
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: task-tracer
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+  - name: user-correction-capture
+    classification: workflow
+    invoked_by: opencode_runtime_hooks
+
+degrade_to_workflow:
+  - agent: memory-cleaner
+    justification: |
+      Mostly deterministic GC/prune; keep LLM only for semantic merge; promote prune path to workflow semantic-memory-pruner.
+  - agent: Metrics-Observer
+    justification: |
+      Collection/thresholding is workflow (cost-latency-threshold.mjs); agent should only interpret incidents.
+  - agent: Release-Notifier
+    justification: |
+      Templated Telegram notify is workflow (telegram-notify); agent only for narrative synthesis on complex releases.

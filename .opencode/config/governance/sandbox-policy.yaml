@@ -1,0 +1,42 @@
+version: 1
+purpose: "Sandbox policy for high-impact code execution by OpenCode agents"
+
+defaults:
+  ttl_seconds: 30
+  ttl_hard_max_seconds: 30
+  memory: "512m"
+  cpus: "1"
+  network: "none"
+  read_only_rootfs: true
+  no_new_privileges: true
+  user: "1000:1000"
+  workspace_mount: "/workspace"
+  write_paths_allowed: [".opencode/sandbox/**", "tmp/**", "/workspace"]
+
+extended_ttl:
+  max_seconds: 300
+  requires:
+    - allow_extended_ttl: true
+    - justification: "non-empty string"
+    - hitl_if_network_or_prod: true
+
+images_allowlist:
+  - "node:20-alpine"
+  - "dart:stable"
+  - "grafana/k6:latest"
+  - "python:3.12-slim"
+
+egress:
+  default: deny
+  allowlist_when_network_true:
+    - "registry.npmjs.org"
+    - "pub.dev"
+    - "proxy.golang.org"
+  production_hosts_forbidden:
+    - "192.168.1.230"
+    - "mari-pepa.com"
+    - "192.168.1.22"
+
+poka_yoke:
+  destructive_confirmation_param: "confirm"
+  required_for: ["rm", "deploy", "drop", "truncate"]

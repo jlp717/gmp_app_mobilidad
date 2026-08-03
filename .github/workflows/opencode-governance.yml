@@ -1,0 +1,56 @@
+name: opencode-governance
+
+on:
+  pull_request:
+    paths:
+      - 'docs/agent-classification.md'
+      - 'docs/agent-inventory.yaml'
+      - 'docs/opencode-agent-governance/**'
+      - 'scripts/opencode-governance/**'
+      - '.github/workflows/opencode-governance.yml'
+      - '.opencode/config/**'
+      - '.opencode/agents/**'
+      - '.opencode/tools/**'
+  push:
+    branches: [main, develop, 'feat/**', 'fix/**']
+    paths:
+      - 'docs/agent-classification.md'
+      - 'docs/agent-inventory.yaml'
+      - 'docs/opencode-agent-governance/**'
+      - 'scripts/opencode-governance/**'
+      - '.github/workflows/opencode-governance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  governance-baseline:
+    name: OpenCode governance baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate governance pack
+        run: node scripts/opencode-governance/validate-governance.mjs
+
+      - name: Run governance unit tests
+        run: node --test scripts/opencode-governance/governance.test.mjs
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## OpenCode Governance"
+            echo "- Validator: scripts/opencode-governance/validate-governance.mjs"
+            echo "- Tests: scripts/opencode-governance/governance.test.mjs"
+            echo "- Baseline: docs/opencode-agent-governance/evals/baseline.json"
+            echo "- Canary policy: fail job on regression (merge blocked)"
+          } >> "$GITHUB_STEP_SUMMARY"

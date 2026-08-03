@@ -11,7 +11,22 @@
 .svn/
 
 # Secrets and configuration
-.opencode/
+# OpenCode: ignore runtime noise/secrets, but track governance canon + hardened tools/plugins
+.opencode/*
+!.opencode/config/
+.opencode/config/*
+!.opencode/config/governance/
+!.opencode/config/governance/**
+!.opencode/tools/
+.opencode/tools/**
+!.opencode/tools/intent-validator.ts
+!.opencode/tools/sandbox-run.ts
+!.opencode/tools/state-manager.ts
+!.opencode/tools/goal-loop-manager.ts
+!.opencode/tools/parallel-dispatch.ts
+!.opencode/plugins/
+.opencode/plugins/**
+!.opencode/plugins/flow-observability.ts
 .opencode-runtime/
 .env
 .config/
@@ -267,3 +282,5 @@ acouz/
 .mcp.json
 CLAUDE.md
 .guardvibe/
+
+docs/opencode-agent-governance/evals/last-validation.json
