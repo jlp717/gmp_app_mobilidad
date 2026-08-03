@@ -1,0 +1,54 @@
+semantic_memory_pruner:
+  version: 1
+  purpose: "Mantenimiento de memoria a largo plazo. Evita degradacion por sobrecarga de contexto historico."
+
+  schedule:
+    interval_hours: 168
+    min_startup_delay_seconds: 360
+
+  operations:
+    consolidate_repeated_lessons:
+      description: "Consolidar aprendizajes repetidos del learning-loop en una sola entrada con contador"
+      input: ".opencode/memory/lessons-learned.md"
+      output: ".opencode/memory/lessons-learned-consolidated.md"
+      rules:
+        - "Si 3+ entradas tienen mismo patron, fusionar en una con referencia a originales"
+        - "Mantener timestamp de primera y ultima ocurrencia"
+        - "Preservar correcciones de Javier (user-corrections.jsonl) sin consolidar"
+
+    index_success_flows:
+      description: "Indexar flujos de exito con etiquetas semanticas"
+      input: ".opencode/TEAM_TRACE.jsonl"
+      output: ".opencode/memory/success-flows-index.jsonl"
+      rules:
+        - "Extraer sesiones con status=DONE y evidence no vacia"
+        - "Etiquetar con: tier, agents_involved, task_type, duration, success_factors"
+        - "Usar rag-query para verificar que el patron es reutilizable"
+
+    archive_old_sessions:
+      description: "Archivar y resumir logs de sesiones pasadas"
+      input: ".opencode/state/*.json"
+      output: ".opencode/memory/archived-sessions/"
+      rules:
+        - "Sesiones con last_updated > 30 dias se archivan"
+        - "Generar resumen de 3 lineas por sesion archivada"
+        - "Preservar task_id, objective, outcome y key_evidence"
+        - "Eliminar archivos .json originales del state dir tras archivar"
+
+    prune_stale_chromadb:
+      description: "Limpiar entradas stale de ChromaDB si esta disponible"
+      rules:
+        - "Entradas con last_accessed > 60 dias se marcan stale"
+        - "Entradas con score < 0.3 se eliminan"
+        - "Preservar user_corrections y anti_patterns siempre"
+
+    compress_flow_trace:
+      description: "Comprimir flow-trace.jsonl si supera 50MB"
+      rules:
+        - "Mantener ultimas 5000 lineas en archivo activo"
+        - "Archivar resto en .opencode/memory/archived-traces/flow-trace-{date}.jsonl.gz"
+        - "Preservar entradas con errores para same-error-detector"
+
+  memory_cleaner_agent: "memory-cleaner" # DEGRADED advisor only; prune via tool semantic-memory-pruner
+  prune_workflow_tool: "semantic-memory-pruner"
+  audit_log: ".opencode/state/memory-pruning-audit.jsonl"

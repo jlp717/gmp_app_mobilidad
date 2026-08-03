@@ -30,6 +30,7 @@ const workflowToolNames = new Set([
   "goal-loop-manager",
   "scheduled-automation-runner",
   "sandbox-run",
+  "semantic-memory-pruner",
   "parallel-dispatch",
   "flow-status",
   "flow-trace",
@@ -41,6 +42,7 @@ const workflowToolNames = new Set([
   "team-ci",
   "metrics-record",
   "metrics-push",
+  "telegram-notify",
   "correction-capture",
   "intent-validator",
 ])
@@ -49,17 +51,17 @@ const degradeCandidates = [
   {
     agent: "memory-cleaner",
     justification:
-      "Mostly deterministic GC/prune; keep LLM only for semantic merge; promote prune path to workflow semantic-memory-pruner.",
+      "Mostly deterministic GC/prune; keep LLM only for semantic merge; prune path is workflow semantic-memory-pruner (status=completed).",
   },
   {
     agent: "Metrics-Observer",
     justification:
-      "Collection/thresholding is workflow (cost-latency-threshold.mjs); agent should only interpret incidents.",
+      "Collection/thresholding is workflow (cost-latency-threshold.mjs); agent should only interpret incidents (status=completed).",
   },
   {
     agent: "Release-Notifier",
     justification:
-      "Templated Telegram notify is workflow (telegram-notify); agent only for narrative synthesis on complex releases.",
+      "Templated Telegram notify is workflow (telegram-notify); agent only for narrative synthesis (status=completed).",
   },
 ]
 

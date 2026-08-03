@@ -37,6 +37,22 @@ egress:
     - "mari-pepa.com"
     - "192.168.1.22"
 
+# When Docker is missing/unavailable: fail-closed for network, else process_isolate.
+fallback_when_docker_missing:
+  mode: process_isolate
+  enforce:
+    ttl_hard_max_seconds: 30
+    workspace_only: true
+    no_global_fs_writes: true
+    egress: deny
+  network_with_isolate: false # network=true WITHOUT Docker = CRITICAL_ERROR (fail-closed)
+  write_paths_allowed: [".opencode/sandbox/**", "tmp/**"]
+  env_allowlist: ["PATH", "LANG", "LC_ALL", "HOME", "TMP", "TEMP", "TMPDIR", "SystemRoot", "ComSpec"]
+  note: |
+    Process isolate: cwd + writes limited to ephemeral .opencode/sandbox/<uuid>,
+    SIGKILL on TTL, stripped env, no Docker. Cannot enforce cgroup memory/CPU or
+    true egress allow-list without Docker — so network stays fail-closed.
+
 poka_yoke:
   destructive_confirmation_param: "confirm"
   required_for: ["rm", "deploy", "drop", "truncate"]

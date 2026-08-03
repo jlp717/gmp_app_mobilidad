@@ -11,6 +11,7 @@ on:
       - '.opencode/config/**'
       - '.opencode/agents/**'
       - '.opencode/tools/**'
+      - '.opencode/plugins/**'
   push:
     branches: [main, develop, 'feat/**', 'fix/**']
     paths:
@@ -19,7 +20,16 @@ on:
       - 'docs/opencode-agent-governance/**'
       - 'scripts/opencode-governance/**'
       - '.github/workflows/opencode-governance.yml'
+      - '.opencode/config/**'
+      - '.opencode/agents/**'
+      - '.opencode/tools/**'
+      - '.opencode/plugins/**'
   workflow_dispatch:
+    inputs:
+      canary_candidate:
+        description: 'Optional canary label to set before eval (leave empty for stable check)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -52,5 +62,42 @@ jobs:
             echo "- Validator: scripts/opencode-governance/validate-governance.mjs"
             echo "- Tests: scripts/opencode-governance/governance.test.mjs"
             echo "- Baseline: docs/opencode-agent-governance/evals/baseline.json"
-            echo "- Canary policy: fail job on regression (merge blocked)"
+            echo "- Canary: see canary-eval job"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  canary-eval-rollback:
+    name: Canary eval auto-rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: governance-baseline
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Mark canary candidate (optional)
+        if: ${{ github.event.inputs.canary_candidate != '' }}
+        run: node scripts/opencode-governance/canary-eval-rollback.mjs --candidate "${{ github.event.inputs.canary_candidate }}"
+
+      - name: Run canary eval with auto-rollback
+        run: node scripts/opencode-governance/canary-eval-rollback.mjs
+
+      - name: Publish canary summary
+        if: always()
+        run: |
+          {
+            echo "## Canary / auto-rollback"
+            echo "- Script: scripts/opencode-governance/canary-eval-rollback.mjs"
+            echo "- State: docs/opencode-agent-governance/evals/canary-state.json"
+            echo "- On FAIL while status=canary → restore last_known_good and fail job"
+            echo "- Does NOT deploy to 192.168.1.230"
+            if [ -f docs/opencode-agent-governance/evals/canary-state.json ]; then
+              echo '```json'
+              cat docs/opencode-agent-governance/evals/canary-state.json
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

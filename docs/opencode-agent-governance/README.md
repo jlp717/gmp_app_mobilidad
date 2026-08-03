@@ -14,7 +14,7 @@ Local runtime still uses `.opencode/` (often gitignored); validators check both 
 | `evals-calibration.md` | Eval suite + LLM-as-judge calibration |
 | `CHANGELOG.md` | Versioned prompt/YAML/model governance changes |
 | `canon/` | Machine-readable policies copied into `.opencode/config/governance/` |
-| `evals/` | Gold cases + baseline scores |
+| `evals/` | Gold cases + baseline + canary-state |
 
 ## Priority order enforced
 
@@ -27,6 +27,15 @@ Local runtime still uses `.opencode/` (often gitignored); validators check both 
 ```bash
 node scripts/opencode-governance/validate-governance.mjs
 node --test scripts/opencode-governance/governance.test.mjs
+node scripts/opencode-governance/canary-eval-rollback.mjs
 ```
 
-CI: `.github/workflows/opencode-governance.yml`
+CI: `.github/workflows/opencode-governance.yml` (baseline + canary-eval-rollback jobs)
+
+## Optional OTLP
+
+```bash
+set OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+```
+
+Unset = file exporter only (`.opencode/state/otel-genai.jsonl`). Never commit collector credentials.

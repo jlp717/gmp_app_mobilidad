@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "active_revision": "ff453d8-governance-v1",
+  "last_known_good": "ff453d8-governance-v1",
+  "candidate": null,
+  "status": "stable",
+  "updated_at": "2026-08-03T17:38:57.469Z",
+  "notes": "Canary markers for agent/prompt/model governance. Auto-rollback on eval regression via canary-eval-rollback.mjs. Does not deploy to 192.168.1.230.",
+  "governance_hash": "716faa1fdedcaa0d",
+  "last_result": "pass"
+}

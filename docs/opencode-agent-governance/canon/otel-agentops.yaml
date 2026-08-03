@@ -4,7 +4,18 @@ purpose: "OpenTelemetry gen_ai.* semantic convention mapping for AgentOps"
 exporter:
   primary: "file"
   path: ".opencode/state/otel-genai.jsonl"
-  collector_otlp: "pending" # live OTLP exporter leftover risk
+  # Live OTLP path is optional and fail-soft. No secrets required to enable.
+  collector_otlp: "optional"
+  otlp:
+    enabled_when_env: "OTEL_EXPORTER_OTLP_ENDPOINT"
+    protocol_env: "OTEL_EXPORTER_OTLP_PROTOCOL" # http/json (default) | http/protobuf
+    headers_env: "OTEL_EXPORTER_OTLP_HEADERS" # optional key=value,key=value (Bearer tokens via env only)
+    traces_path: "/v1/traces"
+    fail_soft: true
+    note: |
+      Set OTEL_EXPORTER_OTLP_ENDPOINT to a collector base URL (e.g. http://127.0.0.1:4318).
+      Plugin posts OTLP/HTTP JSON spans; if unset or POST fails, file exporter still works.
+      Never commit collector credentials — use OTEL_EXPORTER_OTLP_HEADERS from local env/.env only.
 
 spans:
   routing_decision:
@@ -37,4 +48,4 @@ alerts:
 
 bridge:
   existing_plugin: "flow-observability.ts"
-  note: "Map FLOW_TRACE/TEAM_TRACE events to gen_ai.* attribute names in file exporter"
+  note: "Map FLOW_TRACE/TEAM_TRACE events to gen_ai.* in file exporter + optional OTLP/HTTP"

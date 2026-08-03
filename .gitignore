@@ -11,12 +11,21 @@
 .svn/
 
 # Secrets and configuration
-# OpenCode: ignore runtime noise/secrets, but track governance canon + hardened tools/plugins
+# OpenCode: ignore runtime noise/secrets, but track governance-critical configs/tools/plugins/agents.
+# NEVER un-ignore .opencode/CREDENCIALES.md or any secret-bearing local files.
 .opencode/*
 !.opencode/config/
 .opencode/config/*
 !.opencode/config/governance/
 !.opencode/config/governance/**
+!.opencode/config/model-routing.yaml
+!.opencode/config/agent-graph.yaml
+!.opencode/config/semantic-memory-pruner.yaml
+!.opencode/agents/
+.opencode/agents/**
+!.opencode/agents/memory-cleaner.md
+!.opencode/agents/Metrics-Observer.md
+!.opencode/agents/Release-Notifier.md
 !.opencode/tools/
 .opencode/tools/**
 !.opencode/tools/intent-validator.ts
@@ -24,6 +33,8 @@
 !.opencode/tools/state-manager.ts
 !.opencode/tools/goal-loop-manager.ts
 !.opencode/tools/parallel-dispatch.ts
+!.opencode/tools/semantic-memory-pruner.ts
+!.opencode/tools/telegram-notify.ts
 !.opencode/plugins/
 .opencode/plugins/**
 !.opencode/plugins/flow-observability.ts
@@ -284,3 +295,4 @@ CLAUDE.md
 .guardvibe/
 
 docs/opencode-agent-governance/evals/last-validation.json
+docs/opencode-agent-governance/evals/canary-markers/

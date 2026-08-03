@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { appendFlowTrace, resolveProjectRoot, setPluginRoot } from "../lib/provider-health-store.ts"
+import { randomUUID } from "node:crypto"
 
 type FlowStep = {
   ts: string
@@ -51,6 +52,123 @@ function phaseForTool(tool: string) {
   return "execute"
 }
 
+function parseOtlpHeaders(raw: string | undefined): Record<string, string> {
+  if (!raw) return {}
+  const out: Record<string, string> = {}
+  for (const part of raw.split(",")) {
+    const idx = part.indexOf("=")
+    if (idx <= 0) continue
+    const k = part.slice(0, idx).trim()
+    const v = part.slice(idx + 1).trim()
+    if (k) out[k] = v
+  }
+  return out
+}
+
+function toOtlpAnyValue(value: unknown): Record<string, unknown> | null {
+  if (value === undefined || value === null || value === "") return null
+  if (typeof value === "number" && Number.isFinite(value)) return { doubleValue: value }
+  if (typeof value === "boolean") return { boolValue: value }
+  return { stringValue: String(value) }
+}
+
+function hexId(bytes: number) {
+  return randomUUID().replace(/-/g, "").slice(0, bytes * 2)
+}
+
+/** Build OTLP/HTTP JSON ExportTraceServiceRequest from a gen_ai span record. */
+export function buildOtlpTracePayload(otel: {
+  ts: string
+  name: string
+  attributes: Record<string, unknown>
+}) {
+  const attrs = Object.entries(otel.attributes)
+    .map(([key, value]) => {
+      const any = toOtlpAnyValue(value)
+      return any ? { key, value: any } : null
+    })
+    .filter(Boolean)
+
+  const endTime = BigInt(Date.parse(otel.ts) || Date.now()) * 1_000_000n
+  const startTime = endTime - 1_000_000n
+
+  return {
+    resourceSpans: [
+      {
+        resource: {
+          attributes: [
+            { key: "service.name", value: { stringValue: "gmp-opencode-agentops" } },
+            { key: "deployment.environment", value: { stringValue: "local" } },
+          ],
+        },
+        scopeSpans: [
+          {
+            scope: { name: "flow-observability", version: "1" },
+            spans: [
+              {
+                traceId: hexId(16),
+                spanId: hexId(8),
+                name: otel.name,
+                kind: 1,
+                startTimeUnixNano: startTime.toString(),
+                endTimeUnixNano: endTime.toString(),
+                attributes: attrs,
+                status: {
+                  code: otel.attributes["gmp.status"] === "error" ? 2 : 1,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+}
+
+/** Optional OTLP/HTTP JSON export. Fail-soft when endpoint unset or POST fails. */
+export async function exportOtlpFailSoft(otel: {
+  ts: string
+  name: string
+  attributes: Record<string, unknown>
+}) {
+  const endpoint = String(process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "").trim()
+  if (!endpoint) return { exported: false, reason: "OTEL_EXPORTER_OTLP_ENDPOINT unset" }
+
+  const protocol = String(process.env.OTEL_EXPORTER_OTLP_PROTOCOL || "http/json").trim()
+  if (protocol !== "http/json" && protocol !== "http/protobuf") {
+    return { exported: false, reason: `unsupported protocol ${protocol}; use http/json` }
+  }
+  // Only http/json implemented without extra deps; protobuf requests fall back to json attempt note.
+  const base = endpoint.replace(/\/+$/, "")
+  const url = base.endsWith("/v1/traces") ? base : `${base}/v1/traces`
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...parseOtlpHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS),
+  }
+  const body = JSON.stringify(buildOtlpTracePayload(otel))
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 2000)
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body,
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (!res.ok) {
+      return { exported: false, reason: `OTLP HTTP ${res.status}` }
+    }
+    return { exported: true }
+  } catch (error) {
+    return {
+      exported: false,
+      reason: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 async function appendFlow(root: string, step: FlowStep) {
   const stateDir = path.join(root, ".opencode", "state")
   await fs.mkdir(stateDir, { recursive: true })
@@ -89,6 +207,18 @@ async function appendFlow(root: string, step: FlowStep) {
     },
   }
   await fs.appendFile(path.join(stateDir, "otel-genai.jsonl"), JSON.stringify(otel) + "\n", "utf8")
+
+  // Optional live collector — never throws into the agent loop
+  const otlp = await exportOtlpFailSoft(otel)
+  if (!otlp.exported && process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    await fs
+      .appendFile(
+        path.join(stateDir, "otel-otlp-errors.jsonl"),
+        JSON.stringify({ ts: step.ts, ...otlp }) + "\n",
+        "utf8",
+      )
+      .catch(() => undefined)
+  }
 }
 
 export default async function FlowObservabilityPlugin(ctx?: { directory?: string }) {

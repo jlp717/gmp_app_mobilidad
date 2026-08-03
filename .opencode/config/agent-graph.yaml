@@ -1,0 +1,391 @@
+version: 1
+project: gmp
+graph_id: gmp-agent-graph-v4
+
+nodes:
+  - agent_id: chief-engineer-assistant
+    identity: "Orquestador principal, entrypoint, decide rutas, valida gates, cero revisión humana de código"
+    mandate: "Orquesta todo el flujo V4, decide rutas, valida gates, cero revisión humana de código"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 50000
+    rate_limit: 10
+    tier: T3
+    role: orchestrator
+
+  - agent_id: prompt-optimizer
+    identity: "Optimiza peticiones naturales a brief técnico"
+    mandate: "Convierte lenguaje natural en brief técnico ejecutable con acceptance_criteria, risk_flags, delegation_plan"
+    model: opencode-go/glm-5.2
+    budget_tokens: 5000
+    rate_limit: 20
+    tier: T1
+    role: optimizer
+
+  - agent_id: product-ux
+    identity: "Producto/UX - historias verificables"
+    mandate: "Historias verificables, criterios de aceptación medibles, síntesis técnica→humano para móvil/Telegram"
+    model: opencode-go/glm-5.2
+    budget_tokens: 15000
+    rate_limit: 10
+    tier: T2
+    role: product
+
+  - agent_id: Architect-Planner
+    identity: "Arquitecto Tier 3 - planes JSON"
+    mandate: "Planes JSON con workstreams, dependencias, riesgos, aprobación requerida, zero implementation"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 80000
+    rate_limit: 5
+    tier: T3
+    role: architect
+
+  - agent_id: sre-engineer
+    identity: "Dueño producción/resiliencia"
+    mandate: "Health checks 192.168.1.230:3335, SLOs, rollback post-deploy, incident response, post-mortems"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 40000
+    rate_limit: 8
+    tier: T3
+    role: sre
+
+  - agent_id: appsec-engineer
+    identity: "Seguridad full-spectrum"
+    mandate: "SAST, secretos, deps, threat modeling, OWASP, DAST selectivo contra staging"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 40000
+    rate_limit: 8
+    tier: T3
+    role: appsec
+
+  - agent_id: qa-automation-lead
+    identity: "QA Lead - orquesta tests"
+    mandate: "Orquesta unit, E2E Playwright, k6, contract tests, smoke staging; bloquea release si fallan checks críticos"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 50000
+    rate_limit: 8
+    tier: T3
+    role: qa
+
+  - agent_id: code-autopilot
+    identity: "Detección reutilización RAG"
+    mandate: "RAG antes de implementar: recomienda reutilizar/adaptar/estudiar/crear nuevo"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 20000
+    rate_limit: 15
+    tier: T2
+    role: reuse
+
+  - agent_id: DB2-AS400-Specialist
+    identity: "DB2/AS400 - verifica schema real"
+    mandate: "Verifica tablas/columnas REALES (QSYS2) antes de cualquier query; readonly discovery first"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 30000
+    rate_limit: 10
+    tier: T2
+    role: db2_schema
+
+  - agent_id: DB2-Query-Optimizer
+    identity: "SQL set-based - elimina N+1"
+    mandate: "Elimina N+1, joins, cardinalidad, paginación, orden explícito, índices, coste endpoints con datos reales"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 30000
+    rate_limit: 10
+    tier: T2
+    role: db2_query
+
+  - agent_id: Node-Express-Specialist
+    identity: "Backend Node.js - rutas/servicios"
+    mandate: "Rutas validadas, servicios reglas negocio, repos/DB adapters concentran DB2, zero SQL en routes"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 40000
+    rate_limit: 10
+    tier: T2
+    role: backend
+
+  - agent_id: Flutter-Architecture-Specialist
+    identity: "Arquitectura Flutter - capas/nav/providers"
+    mandate: "Capas UI/estado/datos, navegación, providers, codegen, offline, contratos backend"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 40000
+    rate_limit: 10
+    tier: T2
+    role: flutter_arch
+
+  - agent_id: Flutter-UI-Specialist
+    identity: "UI Flutter - widgets finos"
+    mandate: "Widgets finos, estados loading/empty/error, accesibilidad, validación visual, zero lógica en build()"
+    model: opencode-go/glm-5.2
+    budget_tokens: 30000
+    rate_limit: 15
+    tier: T2
+    role: flutter_ui
+
+  - agent_id: Flutter-Data-Specialist
+    identity: "Datos Flutter - modelos/providers/repos"
+    mandate: "Modelos, providers, repositorios, serialización, errores red, offline-first, idempotencia"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 30000
+    rate_limit: 10
+    tier: T2
+    role: flutter_data
+
+  - agent_id: Technical-Verifier
+    identity: "Verificador independiente"
+    mandate: "Comprueba que afirmaciones, pruebas, MCPs, logs, DB2, comandos, gates respaldan entrega ANTES de cerrar"
+    model: openai/gpt-5.6-sol
+    budget_tokens: 25000
+    rate_limit: 10
+    tier: T3
+    role: verifier
+
+edges:
+  - from: chief-engineer-assistant
+    to:
+      - prompt-optimizer
+      - product-ux
+      - Architect-Planner
+      - sre-engineer
+      - appsec-engineer
+      - qa-automation-lead
+      - code-autopilot
+      - DB2-AS400-Specialist
+      - DB2-Query-Optimizer
+      - Node-Express-Specialist
+      - Flutter-Architecture-Specialist
+      - Flutter-UI-Specialist
+      - Flutter-Data-Specialist
+      - Technical-Verifier
+    type: delegation
+    gate: none
+
+  - from: prompt-optimizer
+    to: chief-engineer-assistant
+    type: return
+    payload: optimized_prompt
+    gate: none
+
+  - from: product-ux
+    to: chief-engineer-assistant
+    type: return
+    payload: historias_criterios
+    gate: none
+
+  - from: Architect-Planner
+    to: chief-engineer-assistant
+    type: return
+    payload: plan
+    gate: plan-approval-gate
+
+  - from: Architect-Planner
+    to: code-autopilot
+    type: query
+    payload: reutilizacion
+    gate: none
+
+  - from: code-autopilot
+    to: Architect-Planner
+    type: return
+    payload: reutilizacion_detectada
+    gate: none
+
+  - from: DB2-AS400-Specialist
+    to: DB2-Query-Optimizer
+    type: bidirectional
+    payload: schema_sql
+    gate: none
+
+  - from: DB2-Query-Optimizer
+    to: DB2-AS400-Specialist
+    type: bidirectional
+    payload: schema_sql
+    gate: none
+
+  - from: Node-Express-Specialist
+    to: API-Contract-Specialist
+    type: query
+    payload: contratos
+    gate: none
+
+  - from: Node-Express-Specialist
+    to: DB2-Query-Optimizer
+    type: query
+    payload: queries
+    gate: none
+
+  - from: Flutter-Architecture-Specialist
+    to: Flutter-UI-Specialist
+    type: delegation
+    payload: ui_spec
+    gate: none
+
+  - from: Flutter-Architecture-Specialist
+    to: Flutter-Data-Specialist
+    type: delegation
+    payload: data_spec
+    gate: none
+
+  - from: qa-automation-lead
+    to: Test-Writer
+    type: delegation
+    payload: test_plan
+    gate: none
+
+  - from: qa-automation-lead
+    to: Test-Specialist
+    type: delegation
+    payload: execute_tests
+    gate: none
+
+  - from: qa-automation-lead
+    to: Visual-Design-Specialist
+    type: delegation
+    payload: visual_validation
+    gate: none
+
+  - from: appsec-engineer
+    to: Security-Validator
+    type: delegation
+    payload: security_audit
+    gate: none
+
+  - from: appsec-engineer
+    to: Check-Reviewer
+    type: delegation
+    payload: review
+    gate: none
+
+  - from: sre-engineer
+    to: DevOps-CICD-Specialist
+    type: delegation
+    payload: deploy_ops
+    gate: none
+
+  - from: sre-engineer
+    to: Runtime-Log-Diagnostician
+    type: delegation
+    payload: logs_diagnosis
+    gate: none
+
+  - from: sre-engineer
+    to: Metrics-Observer
+    type: delegation
+    payload: metrics
+    gate: none
+
+  - from: Technical-Verifier
+    to: chief-engineer-assistant
+    type: return
+    payload: veredicto_final
+    gate: none
+
+  - from: Technical-Verifier
+    to: truth-teller
+    type: query
+    payload: validacion_verdad
+    gate: none
+
+gates:
+  production_approval:
+    name: production-approval-gate
+    description: "Requiere QA PASS, AppSec PASS, SRE PASS, staging_url, idempotency_key"
+    required_for:
+      - chief-engineer-assistant → production
+      - chief-engineer-assistant → db2-write-dsedac
+      - chief-engineer-assistant → secret-rotation
+      - chief-engineer-assistant → deploy
+    conditions:
+      - qa_status: PASS
+      - appsec_status: PASS
+      - sre_status: PASS
+      - staging_url: required
+      - idempotency_key: required
+
+  db2_write_javier:
+    name: db2-write-approval-javier
+    description: "Plan approval + DB2 write approval + rollback + idempotency + no DSEDAC"
+    required_for:
+      - chief-engineer-assistant → db2-write-javier
+    conditions:
+      - plan_approval_gate: PASS
+      - db2_write_approval: PASS
+      - rollback_plan: required
+      - idempotency_key: required
+      - no_dsedac: true
+
+  db2_write_dsedac:
+    name: production-approval-gate
+    description: "Producción DSEDAC requiere production-approval-gate completo"
+    required_for:
+      - chief-engineer-assistant → db2-write-dsedac
+    conditions:
+      - production_approval_gate: PASS
+
+  secret_rotation:
+    name: production-approval-gate
+    description: "Rotación de secretos requiere production-approval-gate"
+    required_for:
+      - chief-engineer-assistant → secret-rotation
+    conditions:
+      - production_approval_gate: PASS
+
+  deploy_staging_first:
+    name: staging-deploy-gate
+    description: "Despliegue a staging primero + QA + AppSec + SRE health 60s + production token"
+    required_for:
+      - chief-engineer-assistant → deploy
+    conditions:
+      - staging_deploy: required
+      - qa_pass: PASS
+      - appsec_pass: PASS
+      - sre_health_60s: PASS
+      - production_approval_token: required
+
+budgets:
+  T1:
+    total_tokens: 15000
+    max_agents: 1
+    tool_calls_per_agent: 8
+    max_concurrent: 1
+
+  T2:
+    total_tokens: 120000
+    max_agents: 6
+    tool_calls_per_agent: 15
+    max_concurrent: 4
+
+  T3:
+    total_tokens: 500000
+    max_agents: 15
+    tool_calls_per_agent: 30
+    max_concurrent: 8
+    memory_persistence_required: true
+
+rate_limits:
+  max_specialist_retries: 1
+  max_concurrent_handoffs: 8
+  financial_circuit_breaker_usd: 25
+  financial_circuit_breaker_action: COLD_STORAGE
+
+identity_resolution:
+  propagate_graph_id: true
+  propagate_node_id: true
+  handoff_ledger_integration: true
+
+governance_topology:
+  entry_node: intent-validator
+  actor_critic:
+    actor: specialist_maker
+    critic: [Technical-Verifier, truth-teller, elite-quality-gate]
+    iteration_counter: goal-loop-manager.iteration
+    on_max_iterations: CRITICAL_ERROR
+  checkpointing:
+    after_each_node: state-manager.snapshot
+  patterns:
+    - chaining
+    - routing
+    - parallelization
+    - orchestrator_workers
+    - evaluator_optimizer
+  docs:
+    - docs/opencode-agent-governance/workflow-patterns.md
+    - docs/opencode-agent-governance/canon/

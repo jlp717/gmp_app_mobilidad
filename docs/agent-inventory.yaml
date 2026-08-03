@@ -276,16 +276,17 @@ agents:
   - name: memory-cleaner
     kind: agent
     declared_role: |
-      Recollector de basura semantica. Consolida memoria, indexa flujos de exito, archiva sesiones antiguas y evita degradacion por contexto historico.
+      DEGRADED semantic merge advisor only. Deterministic GC is workflow semantic-memory-pruner.
     assigned_model: openai/gpt-5.6-luna
     mode: all
     tools_access:
       - memory-save
       - rag-query
+      - semantic-memory-pruner
       - flow-status
       - flow-trace
     invoked_by: chief_decision_router_or_manual_at
-    notes: "Layer per AGENTS.md V4 two-layer model"
+    notes: "DEGRADE complete — delete tools denied; prune via workflow"
   - name: memory-formation
     kind: agent
     declared_role: |
@@ -303,7 +304,7 @@ agents:
   - name: Metrics-Observer
     kind: agent
     declared_role: |
-      Observador de Sentry, Prometheus, Redis/KPI, Grafana y metricas del sistema OpenCode.
+      DEGRADED metrics interpreter only. Thresholding is workflow cost-latency-threshold.mjs.
     assigned_model: openai/gpt-5.6-luna
     mode: subagent
     tools_access:
@@ -312,7 +313,7 @@ agents:
       - flow-trace
       - model-provider-health
     invoked_by: chief_or_task_tool
-    notes: "Layer per AGENTS.md V4 two-layer model"
+    notes: "DEGRADE complete — no invent thresholds; bash limited to threshold script"
   - name: NextJS-Shadcn-Specialist
     kind: agent
     declared_role: |
@@ -411,13 +412,14 @@ agents:
   - name: Release-Notifier
     kind: agent
     declared_role: |
-      Notificador Telegram. Comunica inicio, aprobaciones, degradados, completado y fallos en lenguaje humano.
+      DEGRADED release narrative helper. Templated Telegram send is workflow telegram-notify.
     assigned_model: opencode-go/kimi-k2.7-code
     mode: subagent
     tools_access:
       - rag-query
+      - telegram-notify
     invoked_by: chief_or_task_tool
-    notes: "Layer per AGENTS.md V4 two-layer model"
+    notes: "DEGRADE complete — send path owned by telegram-notify"
   - name: Repo-Explorer
     kind: agent
     declared_role: |
@@ -730,6 +732,9 @@ workflow_tools:
   - name: sandbox-run
     classification: workflow
     invoked_by: agents_via_tool_call
+  - name: semantic-memory-pruner
+    classification: workflow
+    invoked_by: agents_via_tool_call
   - name: scheduled-automation-runner
     classification: workflow
     invoked_by: agents_via_tool_call
@@ -822,11 +827,17 @@ plugins_workflow:
 
 degrade_to_workflow:
   - agent: memory-cleaner
+    status: completed
+    workflow_owner: semantic-memory-pruner
     justification: |
-      Mostly deterministic GC/prune; keep LLM only for semantic merge; promote prune path to workflow semantic-memory-pruner.
+      Mostly deterministic GC/prune; keep LLM only for semantic merge; prune path is workflow semantic-memory-pruner (delete tools denied on agent).
   - agent: Metrics-Observer
+    status: completed
+    workflow_owner: scripts/opencode-governance/cost-latency-threshold.mjs
     justification: |
       Collection/thresholding is workflow (cost-latency-threshold.mjs); agent should only interpret incidents.
   - agent: Release-Notifier
+    status: completed
+    workflow_owner: telegram-notify
     justification: |
       Templated Telegram notify is workflow (telegram-notify); agent only for narrative synthesis on complex releases.

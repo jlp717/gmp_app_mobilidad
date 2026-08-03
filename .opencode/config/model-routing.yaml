@@ -1,0 +1,165 @@
+model_routing:
+  objective: "Asignar cada agente al modelo mas adecuado por riesgo, coste y tipo de trabajo, sin herencia implicita."
+
+  hard_rules:
+    - "Todo agente debe declarar model en su frontmatter; no se permite heredar el modelo global."
+    - "El nivel de razonamiento operativo debe mantenerse en X-high/high para trabajo real."
+    - "OpenCode Zen queda habilitado solo para seleccion manual de Javier, nunca como modelo automatico de agentes."
+    - "Cursor ACP no debe usar modelos GPT; cursor-acp/cursor-grok-4.5-high queda aprobado solo para Web-Researcher/researcher de solo lectura con catalogo local y autenticacion verificados; nunca para trabajo critico."
+    - "La seleccion manual de modelo de Javier en Chief se respeta y no se cambia silenciosamente a otro proveedor; un proveedor bloqueado solo prepara el siguiente intento o exige failover explicito."
+    - "Chief Engineer Assistant usa GPT-5.6 Sol por defecto y el plugin ajusta reasoningEffort de OpenAI por dificultad: medium para lectura/estado simple, high para implementacion, DB2, seguridad, produccion, QA, SRE, arquitectura o peticiones complejas."
+    - "OpenCode Go se usa para tareas T1, lectura, research, metricas, notificaciones y memoria de bajo riesgo solo si readiness-smoke no detecta CreditsError/billing reciente."
+    - "OpenAI GPT-5.6 Sol se reserva para orquestacion, arquitectura, DB2, seguridad, SRE, QA lead, rendimiento critico y verificacion de alto riesgo."
+    - "GLM 5.2 es primario para UX/UI/frontend visual cuando OpenCode Go esta PASS; Cursor Composer 2.5 queda manual/directo y solo sera fallback automatico de subagentes con tools tras Composer tool-smoke PASS."
+    - "Chief y agentes criticos conservan GPT-5.6 Sol en sesiones establecidas salvo failover explicito; los errores de cuota congelan sesiones en vuelo y preparan el siguiente intento seguro."
+    - "Cualquier ID de modelo nuevo o pro/preview requiere provider-model-probe PASS antes de entrar en routing critico; los modelos pro/preview quedan bloqueados hasta prueba viva del catalogo."
+
+  provider_roles:
+    openai:
+      primary_models: ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra", "openai/gpt-5.6-luna"]
+      blocked_unverified_models: []
+      role: "razonamiento critico, arquitectura, seguridad, DB2, SRE, QA lead, verificacion, decisiones irreversibles"
+    cursor_acp:
+      high_capability_models:
+        - "cursor-acp/composer-2.5"
+        - "cursor-acp/composer-2.5-fast"
+        - "cursor-acp/claude-fable-5-thinking-max"
+        - "cursor-acp/claude-fable-5-thinking-xhigh"
+        - "cursor-acp/claude-opus-4-8-thinking-max"
+        - "cursor-acp/claude-opus-4-8-thinking-xhigh"
+        - "cursor-acp/claude-opus-4-7-thinking-max"
+        - "cursor-acp/claude-4.6-opus-max-thinking"
+      research_models: ["cursor-acp/cursor-grok-4.5-high"]
+      forbidden_patterns: ["cursor-acp/gpt*"]
+      role: "resource center/manual/high-capability workstream provider; explicit selection or approved non-critical quality-test lane only"
+      automatic_policy:
+        silent_critical_fallback: false
+        allowed_when: "Web-Researcher/researcher de solo lectura con catalogo local y autenticacion verificados; o seleccion explicita de Javier; nunca Chief/DB2/AppSec/SRE/QA lead/Technical-Verifier/openai_critical"
+    opencode_go:
+      primary_models:
+        - "opencode-go/deepseek-v4-flash"
+        - "opencode-go/deepseek-v4-pro"
+        - "opencode-go/glm-5.2"
+        - "opencode-go/qwen3.8-max"
+        - "opencode-go/mimo-v2.5-pro"
+        - "opencode-go/kimi-k2.7-code"
+      role: "lectura, investigacion, memoria, metricas, notificaciones, tareas T1, UX/UI/frontend visual y fallback de codigo verificado"
+      probe_required_candidates: ["opencode-go/qwen3.8-max", "opencode-go/kimi-k2.7-code"]
+      skip_when:
+        - "readiness-smoke.providers.opencode_go.latest_credits_error contiene CreditsError o No payment method"
+        - "TEAM_TRACE muestra 401 contra https://opencode.ai/zen/go/v1/messages en las ultimas 24h"
+    opencode_zen:
+      automatic: false
+      manual_only: true
+      reason: "modelos free/interesantes disponibles para seleccion manual, no para routing automatico critico"
+
+  agent_groups:
+    openai_critical:
+      - chief-engineer-assistant
+      - GMP-Orchestrator
+      - Architect-Planner
+      - sre-engineer
+      - appsec-engineer
+      - qa-automation-lead
+      - code-autopilot
+      - DB2-AS400-Specialist
+      - DB2-Query-Optimizer
+      - Redis-Cache-Specialist
+      - Runtime-Log-Diagnostician
+      - API-Contract-Specialist
+      - Flutter-Architecture-Specialist
+      - Flutter-Performance-Specialist
+      - Performance-Analyst
+      - Technical-Verifier
+      - Check-Reviewer
+      - truth-teller
+      - team-curator
+      - Security-Validator
+      - DevOps-CICD-Specialist
+    opencode_go_frontend_visual:
+      - product-ux
+      - Flutter-UI-Specialist
+      - Visual-Design-Specialist
+      - NextJS-Shadcn-Specialist
+    openai_code_test_review:
+      - Code-Reviewer
+      - Flutter-Data-Specialist
+      - Node-Express-Specialist
+      - Simplify-Reviewer
+      - Test-Writer
+      - Test-Specialist
+    opencode_go_low_risk:
+      - prompt-optimizer
+      - Context-Manager
+      - Repo-Explorer
+      - Metrics-Observer
+      - Release-Notifier
+      - tech-radar-agent
+      - memory-formation
+      - mcp-tool-miner
+      - memory-cleaner
+
+    cursor_acp_research:
+      - Web-Researcher
+      - researcher
+
+  fallback_policy:
+    max_retries: 2
+    backoff: exponential
+    backoff_base_ms: 1000
+    backoff_jitter: true
+    allow_cross_provider_fallback: true
+    forbid_zen_fallback: true
+    prefer_same_capability_family: true
+    openai_quota_exhausted_primary_fallback: "openai/gpt-5.6-terra"
+    freeze_in_flight_sessions_on_quota_error: true
+    auto_retry_in_session: false
+    auto_fallback_same_session: false
+    auto_fallback_on_provider_error: true
+    auto_prepare_next_attempt: true
+    mobile_autopilot_command: "/autopilot"
+    manual_failover_command: "/failover openai"
+    continuous_improvement_command: "/improve"
+    respect_manual_model_selection: true
+    default_reasoning_variant: "xhigh"
+    gmp_forward_only: true
+    prefer_composer_on_openai_quota: true
+    composer_tool_fallback_enabled: true
+    preserve_established_critical_sessions: true
+    allow_critical_cross_provider_fallback: false
+    provider_health_ttl_minutes: 45
+    health_state_file: ".opencode/state/provider-health.json"
+    flow_trace_file: ".opencode/state/flow-trace.jsonl"
+
+  model_catalog_safety:
+    probe_tool: "provider-model-probe"
+    critical_routing_requires_probe_pass: true
+    blocked_until_verified: []
+    candidates_require_probe_before_live_valid: ["opencode-go/qwen3.8-max", "opencode-go/kimi-k2.7-code"]
+    no_silent_critical_fallback_to: ["cursor-acp/*", "anthropic/*", "fable", "opus", "openai/gpt-5.6-sol"]
+
+  effort_policy:
+    supported_runtime_options:
+      openai:
+        reasoningEffort: ["medium", "high"]
+      cursor_acp:
+        note: "No inyectar thinking ni verbosity; usar el modelo elegido y opciones por defecto del proveedor."
+      opencode_go:
+        note: "No inyectar reasoningSummary, verbosity ni thinking; varios modelos rechazan campos extra."
+    default_effort: "high"
+    simple_status_or_read_effort: "medium"
+    complexity_tiers:
+      low: "medium"
+      medium: "high"
+      high: "high"
+      xhigh: "high"
+    note: "Dynamic reasoning effort: low-complexity tasks use medium, medium/high-complexity use high. xhigh maps to high because OpenAI GPT-5.6 exposes the configured medium/high reasoningEffort; the variant xhigh is handled by the provider config."
+    high_effort_triggers:
+      - "Tier 2/Tier 3, R3/R4, produccion, deploy, rollback, DB2, AS400, seguridad, auth, secretos, cobros, facturas, pedidos, stock, arquitectura, performance, QA, SRE, AppSec, errores repetidos o peticiones de dejarlo perfecto."
+
+  cursor_grok_45_optional:
+    model: "cursor-acp/cursor-grok-4.5-high"
+    enabled: false
+    automatic_primary: false
+    requires: ["authenticated Cursor ACP catalog", "EU availability", "tool-smoke PASS"]
+    reason: "Registered as a manual candidate only; current local OpenCode catalog does not expose it."

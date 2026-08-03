@@ -32,12 +32,15 @@ test("ACI registry marks destructive and open-world", () => {
   assert.match(aci, /sandbox-run/)
 })
 
-test("sandbox policy TTL hard max 30", () => {
+test("sandbox policy TTL hard max 30 + process_isolate fallback", () => {
   const policy = fs.readFileSync(
     path.join(root, "docs/opencode-agent-governance/canon/sandbox-policy.yaml"),
     "utf8",
   )
   assert.match(policy, /ttl_hard_max_seconds:\s*30/)
+  assert.match(policy, /fallback_when_docker_missing:/)
+  assert.match(policy, /mode:\s*process_isolate/)
+  assert.match(policy, /network_with_isolate:\s*false/)
 })
 
 test("intent validator is workflow entry node", () => {
@@ -49,19 +52,24 @@ test("intent validator is workflow entry node", () => {
   assert.match(intent, /node_id:\s*intent-validator/)
 })
 
-test("otel maps gen_ai conventions", () => {
+test("otel maps gen_ai conventions and optional OTLP env", () => {
   const otel = fs.readFileSync(
     path.join(root, "docs/opencode-agent-governance/canon/otel-agentops.yaml"),
     "utf8",
   )
   assert.match(otel, /gen_ai\.execute_tool|gen_ai\.route|gen_ai\.invoke_agent/)
+  assert.match(otel, /OTEL_EXPORTER_OTLP_ENDPOINT/)
+  assert.match(otel, /collector_otlp:\s*"optional"/)
+  assert.doesNotMatch(otel, /collector_otlp:\s*"pending"/)
 })
 
-test("inventory lists agents and degrade list", () => {
+test("inventory lists agents and completed degrade list", () => {
   const inv = fs.readFileSync(path.join(root, "docs/agent-inventory.yaml"), "utf8")
   assert.match(inv, /chief-engineer-assistant/)
   assert.match(inv, /degrade_to_workflow:/)
   assert.match(inv, /memory-cleaner/)
+  assert.match(inv, /status:\s*completed/)
+  assert.match(inv, /semantic-memory-pruner/)
 })
 
 test("validate-governance exits 0", () => {
@@ -81,4 +89,53 @@ test("gold case ids unique", () => {
   )
   const ids = gold.cases.map((c) => c.id)
   assert.equal(new Set(ids).size, ids.length)
+})
+
+test("sandbox-run implements process_isolate fail-closed network", () => {
+  const src = fs.readFileSync(path.join(root, ".opencode/tools/sandbox-run.ts"), "utf8")
+  assert.match(src, /process_isolate/)
+  assert.match(src, /dockerAvailable/)
+  assert.match(src, /network=true requires Docker/)
+  assert.match(src, /\.default\(30\)/)
+})
+
+test("flow-observability optional OTLP fail-soft", () => {
+  const src = fs.readFileSync(path.join(root, ".opencode/plugins/flow-observability.ts"), "utf8")
+  assert.match(src, /OTEL_EXPORTER_OTLP_ENDPOINT/)
+  assert.match(src, /exportOtlpFailSoft/)
+  assert.match(src, /buildOtlpTracePayload/)
+})
+
+test("degraded agents deny unbounded tools", () => {
+  const mc = fs.readFileSync(path.join(root, ".opencode/agents/memory-cleaner.md"), "utf8")
+  const mo = fs.readFileSync(path.join(root, ".opencode/agents/Metrics-Observer.md"), "utf8")
+  const rn = fs.readFileSync(path.join(root, ".opencode/agents/Release-Notifier.md"), "utf8")
+  assert.match(mc, /DEGRADE/)
+  assert.match(mc, /memory_delete_entities:\s*deny/)
+  assert.match(mc, /semantic-memory-pruner/)
+  assert.match(mo, /cost-latency-threshold/)
+  assert.match(mo, /task:\s*deny/)
+  assert.match(rn, /telegram-notify/)
+  assert.match(rn, /bash:\s*deny/)
+})
+
+test("canary-eval-rollback script runs and keeps stable on pass", () => {
+  const r = spawnSync(process.execPath, ["scripts/opencode-governance/canary-eval-rollback.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  const out = JSON.parse(r.stdout)
+  assert.equal(out.action, "pass")
+  const state = JSON.parse(
+    fs.readFileSync(path.join(root, "docs/opencode-agent-governance/evals/canary-state.json"), "utf8"),
+  )
+  assert.ok(["stable", "rolled_back"].includes(state.status) || state.status === "stable")
+  assert.ok(state.last_known_good)
+})
+
+test("cost-latency-threshold script is committed", () => {
+  assert.ok(
+    fs.existsSync(path.join(root, "scripts/opencode-governance/cost-latency-threshold.mjs")),
+  )
 })

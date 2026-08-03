@@ -84,9 +84,33 @@ const otel = exists("docs/opencode-agent-governance/canon/otel-agentops.yaml")
   : ""
 check(
   "otel_gen_ai",
-  /gen_ai\./.test(otel),
+  /gen_ai\./.test(otel) && /OTEL_EXPORTER_OTLP_ENDPOINT/.test(otel) && !/collector_otlp:\s*"pending"/.test(otel),
   "otel-agentops.yaml",
-  "Map spans to gen_ai.* conventions",
+  "Map spans to gen_ai.* + optional OTLP (not pending)",
+)
+
+check(
+  "sandbox_process_isolate",
+  /fallback_when_docker_missing:/.test(sandboxPolicy) && /process_isolate/.test(sandboxPolicy),
+  "sandbox-policy.yaml",
+  "Document process_isolate fallback when Docker missing",
+)
+
+check(
+  "canary_rollback_script",
+  exists("scripts/opencode-governance/canary-eval-rollback.mjs") &&
+    exists("docs/opencode-agent-governance/evals/canary-state.json"),
+  "canary-eval-rollback.mjs + canary-state.json",
+  "Add canary eval auto-rollback script and state marker",
+)
+
+check(
+  "degrade_completed",
+  /status:\s*completed/.test(inventory) &&
+    exists(".opencode/tools/semantic-memory-pruner.ts") &&
+    exists("scripts/opencode-governance/cost-latency-threshold.mjs"),
+  "degrade agents + workflow owners",
+  "Complete Agent→Workflow degrade for memory-cleaner / Metrics-Observer / Release-Notifier",
 )
 
 const intent = exists("docs/opencode-agent-governance/canon/intent-validator.yaml")
@@ -109,11 +133,35 @@ if (fs.existsSync(sandboxTs)) {
     "sandbox-run.ts",
     "Set sandbox-run default timeout to 30s",
   )
+  check(
+    "runtime_sandbox_isolate",
+    /process_isolate/.test(src) && /dockerAvailable/.test(src),
+    "sandbox-run.ts",
+    "Implement process_isolate when Docker missing",
+  )
 } else {
   findings.push({
     id: "runtime_sandbox_ttl",
     status: "WARN",
     evidence: "local .opencode/tools/sandbox-run.ts missing in CI sandbox",
+    fix: null,
+  })
+}
+
+const flowPlugin = path.join(root, ".opencode/plugins/flow-observability.ts")
+if (fs.existsSync(flowPlugin)) {
+  const src = fs.readFileSync(flowPlugin, "utf8")
+  check(
+    "runtime_otlp_optional",
+    /OTEL_EXPORTER_OTLP_ENDPOINT/.test(src) && /exportOtlpFailSoft/.test(src),
+    "flow-observability.ts",
+    "Wire optional fail-soft OTLP exporter behind env",
+  )
+} else {
+  findings.push({
+    id: "runtime_otlp_optional",
+    status: "WARN",
+    evidence: "flow-observability.ts missing",
     fix: null,
   })
 }
