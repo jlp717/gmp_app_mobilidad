@@ -1,0 +1,422 @@
+{
+  "backedUpAt": "2026-08-05T09:46:53.449Z",
+  "pinnedNow": {
+    "10": {
+      "9": {
+        "obj": 151752.32,
+        "base": 137956.65,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +9850\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 178134.27,
+        "base": 161940.25,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +9850\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 155627.92,
+        "base": 141479.93,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +9850\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 191955.63,
+        "base": 174505.12,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +9850\u001a dif Mayo"
+      }
+    },
+    "13": {
+      "9": {
+        "obj": 94813.3,
+        "base": 86193.91,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6964\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 97187.17,
+        "base": 88351.97,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6964\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 82666.17,
+        "base": 75151.06,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6964\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 107196.16,
+        "base": 97451.05,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6964\u001a dif Mayo"
+      }
+    },
+    "15": {
+      "8": {
+        "obj": 34500,
+        "base": 31363.64,
+        "pct": 10,
+        "desc": "Comercial nuevo - objetivo fijo mensual"
+      },
+      "9": {
+        "obj": 36000,
+        "base": 32727.27,
+        "pct": 10,
+        "desc": "Comercial nuevo - objetivo fijo mensual"
+      },
+      "10": {
+        "obj": 37500,
+        "base": 34090.91,
+        "pct": 10,
+        "desc": "Comercial nuevo - objetivo fijo mensual"
+      },
+      "11": {
+        "obj": 39000,
+        "base": 35454.55,
+        "pct": 10,
+        "desc": "Comercial nuevo - objetivo fijo mensual"
+      },
+      "12": {
+        "obj": 40500,
+        "base": 36818.18,
+        "pct": 10,
+        "desc": "Comercial nuevo - objetivo fijo mensual"
+      }
+    },
+    "16": {
+      "9": {
+        "obj": 91234.76,
+        "base": 82940.69,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5296\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 74615.29,
+        "base": 67832.08,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5296\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 54379.52,
+        "base": 49435.93,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5296\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 55506.02,
+        "base": 50460.02,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5296\u001a dif Mayo"
+      }
+    },
+    "33": {
+      "9": {
+        "obj": 54106.86,
+        "base": 49188.05,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3821\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 46548.86,
+        "base": 42317.15,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3821\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 41684.88,
+        "base": 37895.35,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3821\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 49360.47,
+        "base": 44873.15,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3821\u001a dif Mayo"
+      }
+    },
+    "35": {
+      "9": {
+        "obj": 78177.67,
+        "base": 71070.61,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5864\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 79436.24,
+        "base": 72214.76,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5864\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 58956.61,
+        "base": 53596.92,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5864\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 74548.56,
+        "base": 67771.42,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5864\u001a dif Mayo"
+      }
+    },
+    "72": {
+      "9": {
+        "obj": 76738.3,
+        "base": 69762.09,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6640\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 84448.62,
+        "base": 76771.47,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6640\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 71522.79,
+        "base": 65020.72,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6640\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 106795.01,
+        "base": 97086.37,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6640\u001a dif Mayo"
+      }
+    },
+    "73": {
+      "9": {
+        "obj": 85144.69,
+        "base": 77404.26,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5989\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 83771.28,
+        "base": 76155.71,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5989\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 66985.88,
+        "base": 60896.25,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5989\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 84468.45,
+        "base": 76789.5,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5989\u001a dif Mayo"
+      }
+    },
+    "80": {
+      "9": {
+        "obj": 184886.59,
+        "base": 168078.72,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +8818\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 78903.57,
+        "base": 71730.52,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +8818\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 39496.91,
+        "base": 35906.28,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +8818\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 60928.31,
+        "base": 55389.37,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +8818\u001a dif Mayo"
+      }
+    },
+    "81": {
+      "9": {
+        "obj": 73908.78,
+        "base": 67189.8,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5778\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 64036.28,
+        "base": 58214.8,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5778\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 44347.1,
+        "base": 40315.55,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5778\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 45178.99,
+        "base": 41071.81,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5778\u001a dif Mayo"
+      }
+    },
+    "83": {
+      "9": {
+        "obj": 43885.96,
+        "base": 39896.33,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3979\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 38785.47,
+        "base": 35259.52,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3979\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 31831.24,
+        "base": 28937.49,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3979\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 33447.28,
+        "base": 30406.62,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +3979\u001a dif Mayo"
+      }
+    },
+    "93": {
+      "9": {
+        "obj": 37880.34,
+        "base": 34436.67,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +2272\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 37245.92,
+        "base": 33859.93,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +2272\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 32647.19,
+        "base": 29679.26,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +2272\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 36258.69,
+        "base": 32962.45,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +2272\u001a dif Mayo"
+      }
+    },
+    "02": {
+      "9": {
+        "obj": 125652.42,
+        "base": 114229.47,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6849\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 121504.32,
+        "base": 110458.47,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6849\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 106206.23,
+        "base": 96551.12,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6849\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 172116.23,
+        "base": 156469.3,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +6849\u001a dif Mayo"
+      }
+    },
+    "03": {
+      "9": {
+        "obj": 123734.96,
+        "base": 112486.33,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +7873\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 101419.36,
+        "base": 92199.42,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +7873\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 78841.07,
+        "base": 71673.7,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +7873\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 113584.96,
+        "base": 103259.05,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +7873\u001a dif Mayo"
+      }
+    },
+    "05": {
+      "9": {
+        "obj": 72806.68,
+        "base": 66187.89,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5126\u001a dif Mayo"
+      },
+      "10": {
+        "obj": 81875.63,
+        "base": 74432.39,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5126\u001a dif Mayo"
+      },
+      "11": {
+        "obj": 65805.82,
+        "base": 59823.47,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5126\u001a dif Mayo"
+      },
+      "12": {
+        "obj": 97858.44,
+        "base": 88962.22,
+        "pct": 10,
+        "desc": "Obj Sep-Dic +5126\u001a dif Mayo"
+      }
+    }
+  },
+  "globalPinned": {
+    "5": 1410000,
+    "9": 1330723.63,
+    "10": 1205412.28,
+    "11": 969999.33,
+    "12": 1269703.2
+  },
+  "globalBaseline": {
+    "1": 811804.936191993,
+    "2": 962658.5631488485,
+    "3": 1013115.4220646456,
+    "4": 1639153.734027312,
+    "5": 1410000,
+    "6": 1777532.3894565946,
+    "7": 2241305.6370568173,
+    "8": 2335352.426053797,
+    "9": 1330723.63,
+    "10": 1205412.28,
+    "11": 969999.33,
+    "12": 1269703.2
+  }
+}
