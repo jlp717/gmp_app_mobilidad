@@ -28,6 +28,7 @@ const {
     computeSeasonalWeightTargets,
     applyMonthlyObjectiveRebalances,
     hasObjectiveMonthlyRebalances,
+    getAnnualObjectiveAdjustment,
     sumMonthlyObjectives,
 } = require('./objectives-hybrid-helpers');
 const {
@@ -46,7 +47,7 @@ const {
     resolveObjectiveSalesTarget,
 } = require('../utils/objectives-source');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260706-live-sales-alignment';
+const OBJECTIVES_CACHE_VERSION = 'v20260805-annual-cut-100k';
 const objectivesByClientBreaker = new CircuitBreaker({
     name: 'objectives-by-client',
     failureThreshold: 2,
@@ -524,14 +525,30 @@ async function getGlobalObjectiveBaselineMonthly(year) {
 
     const targetPct = await getVendorTargetConfig('ALL');
     const fixedTargetsForYear = await getGlobalPinnedMonthlyTargets(safeYear);
+    const annualAdjustment = getAnnualObjectiveAdjustment(safeYear);
     const monthly = Object.keys(fixedTargetsForYear).length > 0 && combinedPrevTotal > 0
         ? applyHybridMonthlyObjectives(
             prevYearMonthlySales,
             combinedPrevTotal,
             targetPct,
             fixedTargetsForYear,
+            { annualAdjustment },
         ).monthly
-        : computeSeasonalWeightTargets(prevYearMonthlySales, combinedPrevTotal, targetPct);
+        : (() => {
+            const weights = computeSeasonalWeightTargets(
+                prevYearMonthlySales,
+                combinedPrevTotal,
+                targetPct,
+            );
+            if (!annualAdjustment) return weights;
+            const seasonalAnnual = Object.values(weights).reduce((s, v) => s + v, 0);
+            if (seasonalAnnual <= 0) return weights;
+            const targetAnnual = Math.max(0, seasonalAnnual + annualAdjustment);
+            const factor = targetAnnual / seasonalAnnual;
+            const scaled = {};
+            for (let m = 1; m <= 12; m++) scaled[m] = (weights[m] || 0) * factor;
+            return scaled;
+        })();
 
     _globalObjectiveBaselineCache.set(cacheKey, monthly);
     return monthly;
@@ -1088,21 +1105,28 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 annualObjective = multiVendorTargets.annualObjectiveByYear[year] || 0;
                 monthlyObjective = annualObjective / 12;
             } else if (hasFixedTargetsForYear && combinedPrevTotal > 0) {
-                // Hybrid: pinned months (e.g. May 1.41M) + remainder on other months
+                // Hybrid: pinned months (e.g. May 1.41M) + remainder on other months.
+                // JEFE ALL applies the 2026 -100k general cut; single-vendor pins do not.
+                const annualAdjustment = isAll ? getAnnualObjectiveAdjustment(year) : 0;
                 const hybrid = applyHybridMonthlyObjectives(
                     prevYearMonthlySales,
                     combinedPrevTotal,
                     targetPct,
                     fixedTargetsForYear,
+                    { annualAdjustment },
                 );
                 seasonalTargets = hybrid.monthly;
                 annualObjective = hybrid.annual;
                 monthlyObjective = annualObjective / 12;
             } else {
                 const growthFactor = 1 + (targetPct / 100);
-                annualObjective = combinedPrevTotal > 0
+                let rawAnnual = combinedPrevTotal > 0
                     ? combinedPrevTotal * growthFactor
                     : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
+                if (isAll) {
+                    rawAnnual = Math.max(0, rawAnnual + getAnnualObjectiveAdjustment(year));
+                }
+                annualObjective = rawAnnual;
                 monthlyObjective = annualObjective / 12;
             }
 
@@ -1114,7 +1138,20 @@ router.get('/evolution', verifyToken, async (req, res) => {
                     targetPct,
                 );
                 if (!multiVendorTargets && !hasFixedTargetsForYear) {
-                    annualObjective = Object.values(seasonalTargets).reduce((s, v) => s + v, 0);
+                    let seasonalAnnual = Object.values(seasonalTargets).reduce((s, v) => s + v, 0);
+                    if (isAll) {
+                        const annualAdjustment = getAnnualObjectiveAdjustment(year);
+                        if (annualAdjustment && seasonalAnnual > 0) {
+                            const targetAnnual = Math.max(0, seasonalAnnual + annualAdjustment);
+                            const factor = targetAnnual / seasonalAnnual;
+                            for (let m = 1; m <= 12; m++) {
+                                seasonalTargets[m] = (seasonalTargets[m] || 0) * factor;
+                            }
+                            seasonalAnnual = targetAnnual;
+                        }
+                    }
+                    annualObjective = seasonalAnnual;
+                    monthlyObjective = annualObjective / 12;
                 }
             }
 

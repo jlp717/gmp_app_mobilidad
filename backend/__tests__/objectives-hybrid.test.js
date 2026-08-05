@@ -76,4 +76,29 @@ describe('objectives hybrid redistribution', () => {
         expect(adjusted[11]).toBe(128000);
         expect(adjusted[12]).toBe(105000);
     });
+
+    test('2026 annual adjustment drops company total by 100k without changing pins', () => {
+        const {
+            getAnnualObjectiveAdjustment,
+            applyHybridMonthlyObjectives: hybridWithAdj,
+        } = require('../routes/objectives-hybrid-helpers');
+
+        expect(getAnnualObjectiveAdjustment(2026)).toBe(-100000);
+        expect(getAnnualObjectiveAdjustment(2025)).toBe(0);
+
+        const combinedPrevTotal = 10000000;
+        const prev = {};
+        for (let m = 1; m <= 12; m++) prev[m] = combinedPrevTotal / 12;
+        const pins = { 5: 1410000, 8: 2135000 };
+
+        const base = hybridWithAdj(prev, combinedPrevTotal, 10, pins);
+        const cut = hybridWithAdj(prev, combinedPrevTotal, 10, pins, {
+            annualAdjustment: getAnnualObjectiveAdjustment(2026),
+        });
+
+        expect(cut.annual).toBeCloseTo(base.annual - 100000, 2);
+        expect(cut.monthly[5]).toBe(1410000);
+        expect(cut.monthly[8]).toBe(2135000);
+        expect(cut.annual).toBeCloseTo(combinedPrevTotal * 1.10 - 100000, 2);
+    });
 });

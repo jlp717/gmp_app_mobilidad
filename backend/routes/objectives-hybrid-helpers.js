@@ -15,6 +15,28 @@ const MONTHLY_OBJECTIVE_REBALANCES = [
     },
 ];
 
+/**
+ * Company-wide annual cuts (JEFE ALL / global hybrid only).
+ * 2026: -100k from August real 2.335M → 2.235M that must leave the year total.
+ * The further August drop 2.235M → 2.135M is redistributed via COMMERCIAL_TARGETS
+ * (Nov +35k / Dic +65k) and must NOT cancel this annual cut.
+ */
+const ANNUAL_OBJECTIVE_ADJUSTMENTS = [
+    {
+        year: 2026,
+        id: '2026-general-cut-from-august',
+        amount: -100000,
+    },
+];
+
+function getAnnualObjectiveAdjustment(year, adjustments = ANNUAL_OBJECTIVE_ADJUSTMENTS) {
+    const safeYear = parseInt(year, 10);
+    if (!safeYear) return 0;
+    return (adjustments || [])
+        .filter((rule) => parseInt(rule.year, 10) === safeYear)
+        .reduce((sum, rule) => sum + (parseFloat(rule.amount) || 0), 0);
+}
+
 function roundCents(value) {
     return Math.round((parseFloat(value) || 0) * 100) / 100;
 }
@@ -108,20 +130,37 @@ function sumMonthlyObjectives(monthlyTargets) {
     return Object.values(monthlyTargets || {}).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
 }
 
-function applyHybridMonthlyObjectives(prevYearMonthlySales, combinedPrevTotal, targetPct, exactFixedByMonth) {
+function applyHybridMonthlyObjectives(
+    prevYearMonthlySales,
+    combinedPrevTotal,
+    targetPct,
+    exactFixedByMonth,
+    options = {},
+) {
     const seasonalWeights = computeSeasonalWeightTargets(
         prevYearMonthlySales,
         combinedPrevTotal,
         targetPct,
     );
-    const annualDynamic = Object.values(seasonalWeights).reduce((s, v) => s + v, 0);
+    const seasonalAnnual = Object.values(seasonalWeights).reduce((s, v) => s + v, 0);
+    const annualAdjustment = parseFloat(options.annualAdjustment) || 0;
+    const annualDynamic = Math.max(0, seasonalAnnual + annualAdjustment);
 
-    const pinnedMonths = Object.keys(exactFixedByMonth)
+    const pinnedMonths = Object.keys(exactFixedByMonth || {})
         .map(m => parseInt(m, 10))
         .filter(m => m >= 1 && m <= 12 && exactFixedByMonth[m] > 0);
 
     if (pinnedMonths.length === 0) {
-        return { monthly: seasonalWeights, annual: annualDynamic };
+        if (annualAdjustment === 0 || seasonalAnnual <= 0) {
+            return { monthly: seasonalWeights, annual: annualDynamic };
+        }
+        // Scale seasonal months so the company-wide annual cut is visible.
+        const factor = annualDynamic / seasonalAnnual;
+        const monthly = {};
+        for (let m = 1; m <= 12; m++) {
+            monthly[m] = (seasonalWeights[m] || 0) * factor;
+        }
+        return { monthly, annual: annualDynamic };
     }
 
     let pinnedSum = 0;
@@ -162,6 +201,8 @@ module.exports = {
     applyMonthlyObjectiveRebalances,
     getObjectiveMonthlyRebalances,
     hasObjectiveMonthlyRebalances,
+    getAnnualObjectiveAdjustment,
     sumMonthlyObjectives,
     MONTHLY_OBJECTIVE_REBALANCES,
+    ANNUAL_OBJECTIVE_ADJUSTMENTS,
 };
