@@ -50,6 +50,23 @@ void main() {
       expect(user.isJefeVentas, false);
     });
 
+    test('UserModel preserves DB-backed manager claims without code overrides',
+        () {
+      final user = UserModel.fromJson(const {
+        'id': 'V080',
+        'code': '080',
+        'name': 'Manager',
+        'company': 'GMP',
+        'role': 'JEFE_VENTAS',
+        'isJefeVentas': true,
+        'claimsVersion': 1,
+      });
+
+      expect(user.isJefeVentas, isTrue);
+      expect(user.claimsVersion, 1);
+      expect(user.toJson()['claimsVersion'], 1);
+    });
+
     test('UserModel showCommissions can be set to true', () {
       final user = UserModel(
         id: '1',

@@ -4,8 +4,12 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 void main() {
   group('ApiConfig', () {
     test('should have correct base URL format', () {
-      expect(ApiConfig.baseUrl, contains('/api'));
       expect(ApiConfig.baseUrl, startsWith('https://'));
+      expect(Uri.parse(ApiConfig.baseUrl).host, isNotEmpty);
+      // Production default embeds /api; compile-time API_BASE_URL overrides (test isolation) may omit it.
+      if (!const bool.hasEnvironment('API_BASE_URL')) {
+        expect(ApiConfig.baseUrl, contains('/api'));
+      }
     });
 
     test('should have correct endpoint paths', () {

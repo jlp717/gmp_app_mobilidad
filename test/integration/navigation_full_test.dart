@@ -40,7 +40,9 @@ void main() {
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(comercial.length, 10);
+      // `_ventasItems` has 12 product entries. A commercial without the
+      // commissions capability receives all except Comisiones.
+      expect(comercial.length, 11);
 
       // Jefe Ventas
       final jefe = NavigationConfigService.getNavItems(
@@ -49,7 +51,35 @@ void main() {
         isJefeVentas: true,
         showCommissions: true,
       );
-      expect(jefe.length, 12);
+      // Jefe keeps all 12 sales entries plus the Panel entry.
+      expect(jefe.length, 13);
+    });
+
+    test('commercial navigation keeps the eleven product-approved entries', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: false,
+        isJefeVentas: false,
+        showCommissions: false,
+      );
+
+      expect(
+        items.map((item) => item.label),
+        equals([
+          'Clientes',
+          'Ruta',
+          'Objetivos',
+          'Facturas',
+          'Pedidos',
+          'Alertas',
+          'Cobros',
+          'Liquidaci\u00f3n',
+          'Bolsa',
+          'Evoluci\u00f3n',
+          'Asistente',
+        ]),
+      );
+      expect(items.any((item) => item.label == 'Comisiones'), isFalse);
     });
 
     test('NavItem icons are correctly assigned', () {

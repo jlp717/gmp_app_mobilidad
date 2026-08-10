@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/comisiones_page.dart';
@@ -9,18 +10,32 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/page
 import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  late _NoNetworkFinanceService networkGuard;
+
   setUpAll(() async {
     await initializeDateFormatting('es_ES');
   });
 
+  setUp(() => networkGuard = _NoNetworkFinanceService());
+  tearDown(() {
+    expect(
+      networkGuard.unexpectedCalls,
+      0,
+      reason: 'A finance widget test attempted to use the real service.',
+    );
+  });
+
   Widget wrap(Widget child, {List<Override> overrides = const []}) {
     return ProviderScope(
-      overrides: overrides,
+      overrides: [
+        repartidorFinanzasServiceProvider.overrideWithValue(networkGuard),
+        ...overrides,
+      ],
       child: MaterialApp(home: child),
     );
   }
 
-  testWidgets('liquidacion diaria renders financial totals and inputs',
+  testWidgets('liquidacion diaria renders server-derived totals without inputs',
       (tester) async {
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
@@ -29,6 +44,7 @@ void main() {
       date: date,
       forceRefresh: false,
     );
+    final ledgerArgs = (repartidorId: '94', date: date);
 
     await tester.pumpWidget(
       wrap(
@@ -52,6 +68,9 @@ void main() {
               cobrosCount: 2,
             ),
           ),
+          repartidorLiquidacionLedgerProvider(ledgerArgs).overrideWith(
+            (ref) async => _emptyOpenLedger,
+          ),
         ],
       ),
     );
@@ -59,11 +78,11 @@ void main() {
 
     expect(find.text('Liquidacion Diaria'), findsOneWidget);
     expect(find.text('Efectivo'), findsWidgets);
-    expect(find.text('Ingreso en banco'), findsOneWidget);
-    expect(find.text('Entregado'), findsOneWidget);
+    expect(find.text('Ingreso en banco'), findsNothing);
+    expect(find.text('Entregado'), findsNothing);
   });
 
-  testWidgets('liquidacion diaria validates required money fields',
+  testWidgets('liquidacion diaria does not expose client financial fields',
       (tester) async {
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
@@ -72,6 +91,7 @@ void main() {
       date: date,
       forceRefresh: false,
     );
+    final ledgerArgs = (repartidorId: '94', date: date);
 
     await tester.pumpWidget(
       wrap(
@@ -95,15 +115,15 @@ void main() {
               cobrosCount: 0,
             ),
           ),
+          repartidorLiquidacionLedgerProvider(ledgerArgs).overrideWith(
+            (ref) async => _emptyOpenLedger,
+          ),
         ],
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(ElevatedButton).last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Obligatorio'), findsNWidgets(2));
+    expect(find.byType(TextFormField), findsNothing);
   });
 
   testWidgets('liquidacion diaria renders aggregate readonly totals',
@@ -194,6 +214,8 @@ void main() {
       to: to,
       clientCode: null as String?,
       estado: null as String?,
+      cursor: null as String?,
+      limit: 50,
       forceRefresh: false,
     );
 
@@ -202,30 +224,35 @@ void main() {
         const RepartidorVencimientosPage(repartidorId: '94'),
         overrides: [
           repartidorVencimientosProvider(args).overrideWith(
-            (ref) async => [
-              RepartidorVencimiento(
-                tipoDocumento: 'CAC',
-                codigoCliente: '4300001119',
-                nombreCliente: 'CARNICERIA MECA',
-                fechaVencimiento: DateTime(now.year, now.month, now.day)
-                    .toIso8601String()
-                    .substring(0, 10),
-                documento: 'E 2026-B-I-010-002730-01',
-                importe: 73.19,
-                importePendiente: 40,
-                keys: const {
-                  'tipoDocumento': 'CAC',
-                  'origenDocumento': 'B',
-                  'subempresaDocumento': 'GMP',
-                  'ejercicioDocumento': 2026,
-                  'serieDocumento': 'I',
-                  'terminalDocumento': 10,
-                  'numeroDocumento': 2730,
-                  'xdeDocumento': 1,
-                  'dexDocumento': 1,
-                },
-              ),
-            ],
+            (ref) async => RepartidorVencimientosBatch(
+              total: 1,
+              hasMore: false,
+              nextCursor: null,
+              items: [
+                RepartidorVencimiento(
+                  tipoDocumento: 'CAC',
+                  codigoCliente: '4300001119',
+                  nombreCliente: 'CARNICERIA MECA',
+                  fechaVencimiento: DateTime(now.year, now.month, now.day)
+                      .toIso8601String()
+                      .substring(0, 10),
+                  documento: 'E 2026-B-I-010-002730-01',
+                  importe: 73.19,
+                  importePendiente: 40,
+                  keys: const {
+                    'tipoDocumento': 'CAC',
+                    'origenDocumento': 'B',
+                    'subempresaDocumento': 'GMP',
+                    'ejercicioDocumento': 2026,
+                    'serieDocumento': 'I',
+                    'terminalDocumento': 10,
+                    'numeroDocumento': 2730,
+                    'xdeDocumento': 1,
+                    'dexDocumento': 1,
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -342,4 +369,29 @@ void main() {
     );
     expect(find.text('Comisiones'), findsOneWidget);
   });
+}
+
+const _emptyOpenLedger = RepartidorLiquidacionLedger(
+  status: 'OPEN',
+  expenses: [],
+  adjustments: [],
+  bankDeposits: [],
+  expensesTotal: 0,
+  adjustmentsTotal: 0,
+  bankDepositsTotal: 0,
+);
+
+class _NoNetworkFinanceService extends RepartidorFinanzasService {
+  int unexpectedCalls = 0;
+
+  @override
+  Future<RepartidorLiquidacionLedger> getLiquidacionLedger({
+    required String repartidorId,
+    required DateTime date,
+  }) {
+    unexpectedCalls++;
+    return Future<RepartidorLiquidacionLedger>.error(
+      StateError('Unexpected real finance service invocation'),
+    );
+  }
 }

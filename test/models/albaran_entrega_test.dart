@@ -24,6 +24,7 @@ void main() {
         'puedeCobrarse': false,
         'colorEstado': 'green',
         'estado': 'ENTREGADO',
+        'fecha': '2026-03-02',
         'items': [],
       };
 
@@ -165,17 +166,32 @@ void main() {
       expect(item.precioUnitario, 16.12);
     });
 
-    test('handles missing optional fields', () {
+    test('preserves fractional ERP quantities, packages and unit aliases', () {
+      final item = EntregaItem.fromJson(<String, dynamic>{
+        'itemId': '2',
+        'codigoArticulo': 'KG-1',
+        'descripcion': 'Producto por peso',
+        'cantidadUnidades': 4.75,
+        'cantidadEnvases': 1.25,
+        'unidad': 'KG',
+      });
+
+      expect(item.cantidadPedida, 4.75);
+      expect(item.bultos, 1.25);
+      expect(item.unit, 'KG');
+    });
+
+    test('rejects a missing required ordered quantity', () {
       final json = {
         'itemId': '1',
         'codigoArticulo': '7865',
         'descripcion': 'Test',
       };
 
-      final item = EntregaItem.fromJson(json);
-      expect(item.cantidadPedida, 0.0);
-      expect(item.precioUnitario, 0.0);
-      expect(item.cantidadEntregada, 0.0);
+      expect(
+        () => EntregaItem.fromJson(json),
+        throwsA(isA<EntregasPayloadException>()),
+      );
     });
   });
 }
