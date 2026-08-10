@@ -53,7 +53,7 @@ describe('Db2AuthRepository reparto association', () => {
     expect(db.executeParams).not.toHaveBeenCalled();
   });
 
-  test('findByCode derives manager status with EXISTS and deterministic vendor membership', async () => {
+  test('findByCode derives manager status with scalar VDDX subselect and deterministic vendor membership', async () => {
     const db = { executeParams: jest.fn().mockResolvedValue([{
       USUARIO: '050', NOMBRE: 'Persona', ROL: 'JEFE_VENTAS', PASSWORD_HASH: '1234', ACTIVO: 1,
       TIPOVENDEDOR: 'R', HIDE_COMMISSIONS: 'Y',
@@ -66,13 +66,16 @@ describe('Db2AuthRepository reparto association', () => {
     expect(user.tipoVendedor).toBe('R');
     expect(user.showCommissions).toBe(false);
     const [sql, params] = db.executeParams.mock.calls[0];
-    expect(sql).toMatch(/CASE WHEN EXISTS[\s\S]+FROM DSEDAC\.VDDX/);
+    // DB2 for i rejects EXISTS in the SELECT-list CASE (SQLCODE -104 / ODBC 42000).
+    // Use scalar MAX subselect (same pattern as TIPOVENDEDOR / HIDE_COMMISSIONS).
+    expect(sql).toMatch(/CASE WHEN \([\s\S]+MAX\(NULLIF\(TRIM\(X\.JEFEVENTASSN\)[\s\S]+FROM DSEDAC\.VDDX/);
     expect(sql).toMatch(/WHERE EXISTS[\s\S]+FROM DSEDAC\.VDC/);
     expect(sql).not.toMatch(/LEFT JOIN DSEDAC\.VDDX|JOIN DSEDAC\.VDC V ON/);
     expect(sql).not.toMatch(/SELECT DISTINCT TRIM\(P\.CODIGOVENDEDOR\)/);
     expect(sql).toMatch(/ORDER BY[\s\S]+FETCH FIRST 2 ROWS ONLY/);
     expect(sql).toMatch(/MAX\(NULLIF\(TRIM\(V2\.TIPOVENDEDOR\)/);
     expect(sql).toMatch(/MAX\(NULLIF\(TRIM\(E\.HIDE_COMMISSIONS\)/);
+    expect(sql).not.toMatch(/CASE WHEN EXISTS[\s\S]+FROM DSEDAC\.VDDX/);
     expect(params).toEqual(['050']);
   });
 

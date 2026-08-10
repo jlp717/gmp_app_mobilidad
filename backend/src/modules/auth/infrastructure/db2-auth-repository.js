@@ -19,11 +19,11 @@ class Db2AuthRepository extends AuthRepository {
     const codeSql = `
       SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
         TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
-        CASE WHEN EXISTS (
-          SELECT 1 FROM DSEDAC.VDDX X
+        CASE WHEN (
+          SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
+          FROM DSEDAC.VDDX X
           WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-            AND X.JEFEVENTASSN = 'S'
-        ) THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        ) = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
         COALESCE((
           SELECT MAX(NULLIF(TRIM(V2.TIPOVENDEDOR), ''))
           FROM DSEDAC.VDC V2
@@ -54,11 +54,11 @@ class Db2AuthRepository extends AuthRepository {
       const nameSql = `
         SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
           TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
-          CASE WHEN EXISTS (
-            SELECT 1 FROM DSEDAC.VDDX X
+          CASE WHEN (
+            SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
+            FROM DSEDAC.VDDX X
             WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-              AND X.JEFEVENTASSN = 'S'
-          ) THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+          ) = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
           COALESCE((
             SELECT MAX(NULLIF(TRIM(V2.TIPOVENDEDOR), ''))
             FROM DSEDAC.VDC V2
