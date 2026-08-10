@@ -456,6 +456,34 @@ function createRepartoFinanceDb2Repository(options = {}) {
   `, balanceFilter.params);
     },
 
+    async selectDailyStructuredSums({ ids, dateYmd }) {
+      const year = Math.trunc(dateYmd / 10000);
+      const month = Math.trunc((dateYmd % 10000) / 100);
+      const day = dateYmd % 100;
+      const vendor = inClause('CODIGO_REPARTIDOR', ids);
+      const baseParams = [...vendor.params, day, month, year];
+      const sumSql = (table) => (
+        `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL
+           FROM ${table}
+          WHERE ${vendor.sql}
+            AND DIA = ?
+            AND MES = ?
+            AND ANO = ?`
+      );
+      const [gastoRows, ingresoRows, ajusteRows] = await Promise.all([
+        queryWithParams(sumSql(tables.expenses), baseParams, false, false),
+        queryWithParams(sumSql(tables.bankDeposits), baseParams, false, false),
+        queryWithParams(sumSql(tables.adjustments), baseParams, false, false),
+      ]);
+      const first = (rows) => (Array.isArray(rows) && rows.length ? rows[0] : {});
+      const money = (row) => roundMoney(row?.TOTAL ?? row?.total ?? 0);
+      return Object.freeze({
+        gastos: money(first(gastoRows)),
+        ingresoBanco: money(first(ingresoRows)),
+        ajustes: money(first(ajusteRows)),
+      });
+    },
+
     async selectDailyCobros({ info, ids, dateYmd }) {
       const aliasedDateCol = cobrosDateFilterColumn(info, 'RC');
       const selectCols = cobrosDateSelectColumns(info);

@@ -814,11 +814,13 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   const totalsRows = await financeRepo.selectDailyTotals({ info, ids, dateYmd });
   const balanceRows = await financeRepo.selectBalanceSum({ info, ids });
   const cobroRows = await financeRepo.selectDailyCobros({ info, ids, dateYmd });
+  const structured = await financeRepo.selectDailyStructuredSums({ ids, dateYmd });
 
   const totals = firstRow(totalsRows);
   const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
   const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
-  const gastos = 0;
+  const gastos = roundMoney(structured.gastos);
+  const ingresoBanco = roundMoney(structured.ingresoBanco);
 
   return {
     repartidorId,
@@ -832,10 +834,11 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       totalCobrosDia,
       gastos,
       totalAIngresar: roundMoney(saldoActual + totalCobrosDia - gastos),
-      ingresoBanco: 0,
+      ingresoBanco,
       totalEfectivo2: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
       entregado: 0,
       cobrosCount: toInt(value(totals, 'COBROS_COUNT')),
+      ajustes: roundMoney(structured.ajustes),
     },
     cobros: cobroRows.map(mapCobro),
   };
