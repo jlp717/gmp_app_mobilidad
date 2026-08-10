@@ -325,6 +325,15 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         fallbackVendorCodes: widget.employeeCode,
       );
     }
+    // JEFE "Todos" / null must use the full employeeCode join, never literal ALL.
+    if (widget.isJefeVentas == true) {
+      if (filterCode == null ||
+          filterCode.isEmpty ||
+          filterCode.toUpperCase() == 'ALL') {
+        return widget.employeeCode;
+      }
+      return filterCode;
+    }
     return filterCode ?? widget.employeeCode;
   }
 

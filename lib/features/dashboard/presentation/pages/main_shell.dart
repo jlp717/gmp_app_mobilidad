@@ -128,6 +128,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     final authState = ref.read(authProvider).value;
     if (_forceRepartidorMode) return true;
     if (_forceAlmacenMode) return false;
+    final mode = authState?.activeMode?.toString().trim().toUpperCase();
+    if (mode == 'REPARTIDOR') return true;
     return authState?.user?.isRepartidor ?? false;
   }
 

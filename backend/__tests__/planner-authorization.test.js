@@ -173,8 +173,8 @@ test('COMERCIAL reads own config and JEFE is limited to visible vendor claims', 
   expect(mockQueryWithParams).toHaveBeenCalledTimes(callsBeforeDenied);
 
   res = await request(makeApp(JEFE)).get('/rutero/config?vendedor=ALL&dia=lunes');
-  expect(res.status).toBe(403);
-  expect(mockQueryWithParams).toHaveBeenCalledTimes(callsBeforeDenied);
+  expect(res.status).toBe(200);
+  expect(res.body.config).toEqual([{ CLIENTE: '4300000001', ORDEN: 10 }]);
 });
 
 test.each([

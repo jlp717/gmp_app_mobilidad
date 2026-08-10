@@ -75,17 +75,25 @@ function createAuthClaimsResolver({ authRepository } = {}) {
       if (hasManagerRole) availableRoles.push(JEFE_VENTAS);
       if (hasDriverRole) availableRoles.push(REPARTIDOR);
 
-      // ALMACEN is a UI mode, not an authorization role. It is available only
-      // to a DB-backed sales manager and always retains JEFE_VENTAS claims.
+      // ALMACEN and REPARTIDOR UI modes for managers are supervision surfaces,
+      // not a change of the underlying JEFE_VENTAS authorization role.
+      // Personal OPP/VEH still grants a real REPARTIDOR role for drivers.
       const availableModes = [COMERCIAL];
-      if (hasManagerRole) availableModes.push(ALMACEN);
-      if (hasDriverRole) availableModes.push(REPARTIDOR);
+      if (hasManagerRole) {
+        availableModes.push(ALMACEN, REPARTIDOR);
+      } else if (hasDriverRole) {
+        availableModes.push(REPARTIDOR);
+      }
 
       const defaultRole = hasManagerRole ? JEFE_VENTAS : hasDriverRole ? REPARTIDOR : COMERCIAL;
       const requestedMode = normalizeCode(selectedMode);
       const warehouseMode = requestedMode === ALMACEN
         || (!requestedMode && normalizeCode(selectedRole) === ALMACEN);
-      const requestedRole = warehouseMode ? JEFE_VENTAS : selectedRole;
+      const repartoSupervisionMode = hasManagerRole && !hasDriverRole && (
+        requestedMode === REPARTIDOR
+        || (!requestedMode && normalizeCode(selectedRole) === REPARTIDOR)
+      );
+      const requestedRole = (warehouseMode || repartoSupervisionMode) ? JEFE_VENTAS : selectedRole;
       const role = requestedRole === undefined || requestedRole === null || requestedRole === ''
         ? defaultRole
         : normalizeCode(requestedRole);
@@ -93,9 +101,14 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         throw new AuthClaimsError('Rol no asociado al sujeto', 'ROLE_NOT_ASSOCIATED', 403);
       }
 
-      const activeMode = requestedMode || (warehouseMode ? ALMACEN : role === JEFE_VENTAS ? COMERCIAL : role);
+      const activeMode = requestedMode
+        || (warehouseMode ? ALMACEN : null)
+        || (repartoSupervisionMode ? REPARTIDOR : null)
+        || (role === JEFE_VENTAS ? COMERCIAL : role);
       const modeMatchesRole = (activeMode === ALMACEN && role === JEFE_VENTAS && hasManagerRole)
         || (activeMode === COMERCIAL && [COMERCIAL, JEFE_VENTAS].includes(role))
+        // Supervision UI only when the subject is manager without personal OPP.
+        || (activeMode === REPARTIDOR && role === JEFE_VENTAS && hasManagerRole && !hasDriverRole)
         || (activeMode === REPARTIDOR && role === REPARTIDOR && hasDriverRole);
       if (!availableModes.includes(activeMode) || !modeMatchesRole) {
         throw new AuthClaimsError('Modo no asociado al sujeto', 'ROLE_NOT_ASSOCIATED', 403);

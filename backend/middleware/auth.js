@@ -651,19 +651,39 @@ exports.handleSwitchRole = async (req, res) => {
     }
 
     try {
-        const claims = selectedRole === 'ALMACEN'
-            ? await authClaimsResolver.resolve({
+        let claims;
+        if (selectedRole === 'ALMACEN') {
+            claims = await authClaimsResolver.resolve({
                 code: requestedUser,
                 selectedRole: 'JEFE_VENTAS',
                 selectedMode: 'ALMACEN',
-            })
-            : await authClaimsResolver.resolve({
+            });
+        } else if (selectedRole === 'REPARTIDOR') {
+            // Prefer personal driver role when OPP/VEH exists; otherwise JEFE
+            // supervision UI mode (keep JEFE_VENTAS claims + Ver como).
+            try {
+                claims = await authClaimsResolver.resolve({
+                    code: requestedUser,
+                    selectedRole: 'REPARTIDOR',
+                    selectedMode: 'REPARTIDOR',
+                });
+            } catch (driverError) {
+                if (driverError?.code !== 'ROLE_NOT_ASSOCIATED') throw driverError;
+                claims = await authClaimsResolver.resolve({
+                    code: requestedUser,
+                    selectedRole: 'JEFE_VENTAS',
+                    selectedMode: 'REPARTIDOR',
+                });
+            }
+        } else {
+            claims = await authClaimsResolver.resolve({
                 code: requestedUser,
                 selectedRole,
                 selectedMode: ['JEFE_VENTAS', 'COMERCIAL'].includes(selectedRole)
                     ? 'COMERCIAL'
                     : selectedRole,
             });
+        }
         if (String(claims.id) !== identity.subject) {
             return res.status(403).json({ error: 'No autorizado.', code: 'FORBIDDEN' });
         }

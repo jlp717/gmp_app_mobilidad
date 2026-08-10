@@ -174,7 +174,21 @@ function requirePlannerVendorScope({ location, field, mutation = false, requireV
         if (context.privileged) {
             const requestedAll = requestedCodes.some(code => code.toUpperCase() === 'ALL');
             if (context.visibleCodes.length === 0) return next();
-            if (requestedAll) return plannerForbidden(res);
+            if (requestedAll) {
+                // Expand literal ALL to the manager's visible vendor claims so
+                // "Todos los comerciales" keeps working in commercial Ruta.
+                const expanded = context.visibleCodes.join(',');
+                if (Object.prototype.hasOwnProperty.call(req.query || {}, field)) {
+                    req.query[field] = expanded;
+                }
+                if (field !== 'vendedor' && Object.prototype.hasOwnProperty.call(req.query || {}, 'vendedor')) {
+                    req.query.vendedor = expanded;
+                }
+                if (field !== 'vendedorCodes' && Object.prototype.hasOwnProperty.call(req.query || {}, 'vendedorCodes')) {
+                    req.query.vendedorCodes = expanded;
+                }
+                return next();
+            }
             const withinVisibleScope = requestedCodes.every(requested =>
                 context.visibleCodes.some(visible => plannerCodesMatch(requested, visible)));
             return withinVisibleScope ? next() : plannerForbidden(res);
@@ -284,13 +298,11 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                 date: orderDate.iso
             });
         });
-    } catch (_error) {
-        // Order state is business-critical: an unavailable source must never be
-        // presented as a real "SIN_PEDIDO" result.
-        logger.error('[RUTERO DAY] PEDIDOS_CAB status query failed');
-        const unavailable = new Error('Estado de pedidos no disponible');
-        unavailable.code = 'RUTERO_ORDER_STATUS_UNAVAILABLE';
-        throw unavailable;
+    } catch (error) {
+        // Never wipe the whole day list when PEDIDOS_CAB is down. Clients and
+        // sales must still render; order badges degrade to unavailable.
+        logger.error(`[RUTERO DAY] PEDIDOS_CAB status query failed: ${error && error.message ? error.message : error}`);
+        return new Map();
     }
 
     return statusMap;

@@ -89,7 +89,7 @@ describe('warehouse is an authorized UI mode, not a privilege role', () => {
     expect(switched.body).toEqual(expect.objectContaining({
       success: true, role: 'JEFE_VENTAS', activeMode: 'ALMACEN',
       availableRoles: ['COMERCIAL', 'JEFE_VENTAS'],
-      availableModes: ['COMERCIAL', 'ALMACEN'],
+      availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
       vendedorCodes: ['050', '051'],
       user: expect.objectContaining({
         role: 'JEFE_VENTAS', activeMode: 'ALMACEN', isJefeVentas: true,
@@ -123,7 +123,7 @@ describe('warehouse is an authorized UI mode, not a privilege role', () => {
     }));
     expect(refreshed.body.user).toEqual(expect.objectContaining({
       role: 'JEFE_VENTAS', activeMode: 'ALMACEN', isJefeVentas: true,
-      availableModes: ['COMERCIAL', 'ALMACEN'], vendedorCodes: ['050', '051'],
+      availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'], vendedorCodes: ['050', '051'],
     }));
     expect(refreshedClaims.sid).toBe(switchedClaims.sid);
     expect(refreshedClaims.jti).not.toBe(switchedClaims.jti);

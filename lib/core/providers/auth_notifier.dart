@@ -45,7 +45,10 @@ String authorizedActiveMode(UserModel user, Object? value) {
       user.userRole == UserRole.jefe) {
     return 'ALMACEN';
   }
-  if (requested == 'REPARTIDOR' && user.isRepartidor) {
+  // JEFE supervision mode for Perfil Reparto (mirrors ALMACEN).
+  if (requested == 'REPARTIDOR' &&
+      (user.isRepartidor ||
+          (user.isJefeVentas && user.userRole == UserRole.jefe))) {
     return 'REPARTIDOR';
   }
   return 'COMERCIAL';
@@ -257,7 +260,11 @@ String restoreAuthorizedActiveMode(
     'ALMACEN' => ('JEFE_VENTAS', 'ALMACEN'),
     'JEFE_VENTAS' => ('JEFE_VENTAS', 'COMERCIAL'),
     'COMERCIAL' => ('COMERCIAL', 'COMERCIAL'),
-    'REPARTIDOR' => ('REPARTIDOR', 'REPARTIDOR'),
+    // Managers keep JEFE_VENTAS in Perfil Reparto; pure drivers use REPARTIDOR.
+    'REPARTIDOR' => (
+        responseRole == 'JEFE_VENTAS' ? 'JEFE_VENTAS' : 'REPARTIDOR',
+        'REPARTIDOR',
+      ),
     _ => throw StateError('Modo solicitado no válido'),
   };
   if (responseRole != expectedRole || responseMode != expectedMode) {

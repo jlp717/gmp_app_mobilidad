@@ -50,8 +50,10 @@ describe('authoritative auth claims resolver', () => {
       activeMode: role === 'JEFE_VENTAS' ? 'COMERCIAL' : role,
       availableModes: [
         'COMERCIAL',
-        ...(availableRoles.includes('JEFE_VENTAS') ? ['ALMACEN'] : []),
-        ...(availableRoles.includes('REPARTIDOR') ? ['REPARTIDOR'] : []),
+        ...(availableRoles.includes('JEFE_VENTAS') ? ['ALMACEN', 'REPARTIDOR'] : []),
+        ...(!availableRoles.includes('JEFE_VENTAS') && availableRoles.includes('REPARTIDOR')
+          ? ['REPARTIDOR']
+          : []),
       ],
       isJefeVentas: role === 'JEFE_VENTAS',
       isRepartidor: role === 'REPARTIDOR',
@@ -126,7 +128,27 @@ describe('authoritative auth claims resolver', () => {
       expect.objectContaining({
         role: 'JEFE_VENTAS', activeMode: 'ALMACEN', isJefeVentas: true,
         availableRoles: ['COMERCIAL', 'JEFE_VENTAS'],
-        availableModes: ['COMERCIAL', 'ALMACEN'],
+        availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
+      }),
+    );
+  });
+
+  test('projects REPARTIDOR as JEFE supervision mode without personal OPP', async () => {
+    const { resolver } = harness({ user: profile({ code: '98', isJefeVentas: true }) });
+
+    await expect(resolver.resolve({
+      code: '98',
+      selectedRole: 'JEFE_VENTAS',
+      selectedMode: 'REPARTIDOR',
+    })).resolves.toEqual(
+      expect.objectContaining({
+        role: 'JEFE_VENTAS',
+        activeMode: 'REPARTIDOR',
+        isJefeVentas: true,
+        isRepartidor: false,
+        codigoConductor: null,
+        availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
+        vendorCodes: ['98', '051', 'UNK'],
       }),
     );
   });
