@@ -1,14 +1,147 @@
 // ignore_for_file: public_member_api_docs
 
+import 'package:dio/dio.dart';
+
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
+import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 
+typedef OfflineFinancePost = Future<Map<String, dynamic>> Function(
+  String endpoint,
+  Map<String, dynamic> data, {
+  String? syncType,
+  String? cacheKey,
+});
+typedef PendingFinanceOperations = List<SyncOperation> Function();
+typedef EnqueueFinanceOperation = Future<void> Function(
+  SyncOperation operation,
+);
+
+class LiquidacionTransportResponse {
+  const LiquidacionTransportResponse({
+    required this.statusCode,
+    required this.body,
+  });
+
+  final int statusCode;
+  final Map<String, dynamic> body;
+}
+
+typedef LiquidacionPost = Future<LiquidacionTransportResponse> Function(
+  String endpoint,
+  Map<String, dynamic> data,
+);
+typedef LiquidacionGet = Future<Map<String, dynamic>> Function(
+  String endpoint, {
+  Map<String, String>? queryParameters,
+});
+
+class RepartidorLiquidacionInputException implements Exception {
+  const RepartidorLiquidacionInputException(this.code, this.message);
+  final String code;
+  final String message;
+  @override
+  String toString() => 'RepartidorLiquidacionInputException($code)';
+}
+
 class RepartidorFinanzasService {
-  const RepartidorFinanzasService();
+  RepartidorFinanzasService({
+    OfflineFinancePost? offlinePost,
+    PendingFinanceOperations? pendingOperations,
+    EnqueueFinanceOperation? enqueueOperation,
+    LiquidacionPost? liquidacionPost,
+    LiquidacionGet? liquidacionGet,
+  })  : _offlinePost = offlinePost ?? OfflineAwareApi.post,
+        _pendingOperations =
+            pendingOperations ?? (() => SyncQueueService.instance.pending),
+        _enqueueOperation =
+            enqueueOperation ?? SyncQueueService.instance.enqueue,
+        _liquidacionPost = liquidacionPost ?? _postLiquidacion,
+        _liquidacionGet = liquidacionGet ??
+            ((endpoint, {queryParameters}) =>
+                ApiClient.get(endpoint, queryParameters: queryParameters));
 
   static const _prefix = 'repartidor_finanzas';
+  static const _vencimientoCobroEndpoint = '/repartidor-finanzas/cobros';
+
+  final OfflineFinancePost _offlinePost;
+  final PendingFinanceOperations _pendingOperations;
+  final EnqueueFinanceOperation _enqueueOperation;
+  final LiquidacionPost _liquidacionPost;
+  final LiquidacionGet _liquidacionGet;
+  final Set<String> _vencimientoSubmissionsInFlight = <String>{};
+  final Map<
+      String,
+      ({
+        String fingerprint,
+        Future<RepartidorLiquidacionEntryResult> future
+      })> _liquidacionEntrySubmissionsInFlight = {};
+
+  static Future<LiquidacionTransportResponse> _postLiquidacion(
+    String endpoint,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await ApiClient.dio.post<dynamic>(
+        endpoint,
+        data: data,
+        options: Options(extra: const <String, dynamic>{'idempotent': true}),
+      );
+      if (response.statusCode == null || response.data is! Map) {
+        throw const RepartidorLiquidacionContractException(
+          'LIQUIDACION_TRANSPORT_RESPONSE_INVALID',
+          'Respuesta de transporte de liquidacion invalida',
+        );
+      }
+      return LiquidacionTransportResponse(
+        statusCode: response.statusCode!,
+        body: Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (error) {
+      throw _mapLiquidacionTransportError(error);
+    }
+  }
+
+  static ApiException _mapLiquidacionTransportError(DioException error) {
+    final statusCode = error.response?.statusCode;
+    if (statusCode != null && statusCode > 0) {
+      return ApiException(
+        switch (statusCode) {
+          409 => 'Conflicto con el estado actual de la liquidacion.',
+          >= 500 => 'El servidor no puede procesar la liquidacion ahora.',
+          _ => 'La liquidacion no se ha podido procesar.',
+        },
+        statusCode: statusCode,
+        code: switch (statusCode) {
+          409 => 'LIQUIDACION_CONFLICT',
+          >= 500 => 'LIQUIDACION_SERVER_UNAVAILABLE',
+          _ => 'LIQUIDACION_HTTP_ERROR',
+        },
+      );
+    }
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout =>
+        ApiException(
+          'La solicitud de liquidacion ha agotado el tiempo de espera.',
+          statusCode: 0,
+          code: 'LIQUIDACION_TIMEOUT',
+        ),
+      DioExceptionType.cancel => ApiException(
+          'La solicitud de liquidacion se ha cancelado.',
+          statusCode: 0,
+          code: 'LIQUIDACION_CANCELLED',
+        ),
+      _ => ApiException(
+          'No se ha podido conectar para registrar la liquidacion.',
+          statusCode: 0,
+          code: 'LIQUIDACION_NETWORK',
+        ),
+    };
+  }
 
   static String _isoDate(DateTime value) {
     return value.toIso8601String().substring(0, 10);
@@ -17,15 +150,28 @@ class RepartidorFinanzasService {
   static String dailyLiquidacionCacheKey(String repartidorId, String date) =>
       '${_prefix}_liquidacion_${repartidorId}_$date';
 
+  static String monthlyLiquidacionSummaryCacheKey(
+    String repartidorId,
+    int year,
+    int month,
+  ) =>
+      '${_prefix}_monthly_liquidacion_${repartidorId}_${year}_$month';
+
   static String vencimientosCacheKey({
     required String repartidorId,
     required String from,
     required String to,
+    required int limit,
+    String? cursor,
     String? clientCode,
     String? estado,
   }) =>
       '${_prefix}_vencimientos_${repartidorId}_${from}_$to'
-      '_${clientCode ?? 'all'}_${estado ?? 'all'}';
+      '_${clientCode ?? 'all'}_${estado ?? 'all'}_${limit}_'
+      '${cursor ?? 'first'}';
+
+  static String evolutionCacheKey(String repartidorId) =>
+      '${_prefix}_evolution_$repartidorId';
 
   static String commissionSummaryCacheKey({
     required String repartidorId,
@@ -110,6 +256,29 @@ class RepartidorFinanzasService {
     return RepartidorCollectionSummary.fromJson(result.data);
   }
 
+  Future<RepartidorMonthlySummary> getMonthlySummary({
+    required String repartidorId,
+    required int year,
+    required int month,
+    bool forceRefresh = false,
+  }) async {
+    final result = await OfflineAwareApi.get(
+      '/repartidor-finanzas/summary/$repartidorId',
+      queryParameters: {
+        'year': year.toString(),
+        'month': month.toString(),
+      },
+      cacheKey: monthlyLiquidacionSummaryCacheKey(
+        repartidorId,
+        year,
+        month,
+      ),
+      cacheTTL: CacheService.shortTTL,
+      forceRefresh: forceRefresh,
+    );
+    return RepartidorMonthlySummary.fromJson(result.data);
+  }
+
   Future<RepartidorDailySummary> getDailySummary({
     required String repartidorId,
     required DateTime date,
@@ -135,56 +304,286 @@ class RepartidorFinanzasService {
     required String repartidorId,
     required DateTime date,
     required String idempotencyToken,
-    required double totalEfectivo,
-    required double totalCheques,
-    required double totalTarjeta,
-    required double totalPostdatados,
-    required double saldoActual,
-    required double totalCobrosDia,
-    required double totalAIngresar,
-    required double ingresoBanco,
-    required double gastos,
-    required double efectivo2,
-    required double entregado2,
+    String? matricula,
+    String? codigoVehiculo,
+    bool sendEmails = false,
   }) async {
-    final payload = {
+    final payload = <String, dynamic>{
       'repartidorId': repartidorId,
       'date': _isoDate(date),
       'idempotencyToken': idempotencyToken,
-      'sendEmails': true,
-      'totals': {
-        'totalEfectivo': totalEfectivo,
-        'totalCheques': totalCheques,
-        'totalTarjeta': totalTarjeta,
-        'totalPostdatados': totalPostdatados,
-        'saldoActual': saldoActual,
-        'totalCobrosDia': totalCobrosDia,
-        'totalAIngresar': totalAIngresar,
-        'ingresoBanco': ingresoBanco,
-        'gastos': gastos,
-        'efectivo2': efectivo2,
-        'entregado2': entregado2,
-      },
+      'sendEmails': sendEmails,
+      if (matricula != null && matricula.trim().isNotEmpty)
+        'matricula': matricula.trim(),
+      if (codigoVehiculo != null && codigoVehiculo.trim().isNotEmpty)
+        'codigoVehiculo': codigoVehiculo.trim(),
     };
-    final response = await OfflineAwareApi.post(
+    // A daily close cannot be queued: it changes financial state and the
+    // caller must receive a verified created/replay response before success.
+    final response = await _liquidacionPost(
       '/repartidor-finanzas/liquidaciones',
       payload,
-      syncType: 'close_liquidacion',
     );
+    if (response.body['queued'] == true) {
+      throw const FormatException(
+          'La liquidacion requiere confirmacion del servidor');
+    }
 
+    _validateLiquidacionTransport(
+      response,
+      created: response.body['created'],
+    );
+    final result = RepartidorLiquidacionResult.fromJson(response.body);
     await invalidateAllForRepartidor(repartidorId);
-    return RepartidorLiquidacionResult.fromJson(response);
+    return result;
   }
 
-  Future<List<RepartidorVencimiento>> getVencimientos({
+  Future<RepartidorLiquidacionLedger> getLiquidacionLedger({
+    required String repartidorId,
+    required DateTime date,
+  }) async {
+    _validateLiquidacionIdentity(repartidorId, date);
+    final response = await _liquidacionGet(
+      '/repartidor-finanzas/liquidaciones/$repartidorId/desglose',
+      queryParameters: {'date': _isoDate(date)},
+    );
+    if (response.keys.toSet().difference({'success', 'ledger'}).isNotEmpty ||
+        response.length != 2 ||
+        response['success'] != true ||
+        response['ledger'] is! Map) {
+      throw const FormatException(
+          'Respuesta de desglose de liquidacion invalida');
+    }
+    return RepartidorLiquidacionLedger.fromJson(
+      Map<String, dynamic>.from(response['ledger'] as Map),
+      expectedRepartidorId: repartidorId,
+      expectedDate: _isoDate(date),
+    );
+  }
+
+  Future<RepartidorLiquidacionEntryResult> createLiquidacionExpense({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String category,
+    required String idempotencyToken,
+    String? observation,
+  }) =>
+      _createLiquidacionEntry(
+        endpoint: '/repartidor-finanzas/liquidaciones/gastos',
+        repartidorId: repartidorId,
+        date: date,
+        amount: amount,
+        idempotencyToken: idempotencyToken,
+        detailKey: 'category',
+        detail: category,
+        observation: observation,
+        type: 'EXPENSE',
+      );
+
+  Future<RepartidorLiquidacionEntryResult> createLiquidacionAdjustment({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String reason,
+    required String idempotencyToken,
+    String? observation,
+  }) =>
+      _createLiquidacionEntry(
+        endpoint: '/repartidor-finanzas/liquidaciones/ajustes',
+        repartidorId: repartidorId,
+        date: date,
+        amount: amount,
+        idempotencyToken: idempotencyToken,
+        detailKey: 'reason',
+        detail: reason,
+        observation: observation,
+        type: 'ADJUSTMENT',
+      );
+
+  Future<RepartidorLiquidacionEntryResult> createLiquidacionBankDeposit({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String reference,
+    required String idempotencyToken,
+    String? observation,
+  }) =>
+      _createLiquidacionEntry(
+        endpoint: '/repartidor-finanzas/liquidaciones/ingresos-bancarios',
+        repartidorId: repartidorId,
+        date: date,
+        amount: amount,
+        idempotencyToken: idempotencyToken,
+        detailKey: 'reference',
+        detail: reference,
+        observation: observation,
+        type: 'BANK_DEPOSIT',
+      );
+
+  Future<RepartidorLiquidacionEntryResult> _createLiquidacionEntry({
+    required String endpoint,
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String idempotencyToken,
+    required String detailKey,
+    required String detail,
+    required String type,
+    String? observation,
+  }) async {
+    final isoDate = _validateLiquidacionIdentity(repartidorId, date);
+    final detailLimit = switch (type) {
+      'EXPENSE' => 40,
+      'ADJUSTMENT' => 120,
+      'BANK_DEPOSIT' => 80,
+      _ => 0,
+    };
+    final normalizedDetail = detail.trim();
+    final normalizedObservation = observation?.trim();
+    final validSign = type == 'ADJUSTMENT' ? amount != 0 : amount > 0;
+    if (detailLimit == 0 ||
+        !amount.isFinite ||
+        !validSign ||
+        amount.abs() > 99999999 ||
+        ((amount * 100).round() - amount * 100).abs() > 0.000001 ||
+        normalizedDetail.isEmpty ||
+        normalizedDetail.length > detailLimit) {
+      throw const RepartidorLiquidacionInputException(
+        'INVALID_LIQUIDACION_ENTRY',
+        'Importe o detalle de liquidacion invalido',
+      );
+    }
+    if (normalizedObservation != null &&
+        (normalizedObservation.isEmpty || normalizedObservation.length > 250)) {
+      throw const RepartidorLiquidacionInputException(
+        'INVALID_LIQUIDACION_OBSERVATION',
+        'Observacion de liquidacion invalida',
+      );
+    }
+    if (!RegExp(r'^[A-Za-z0-9_.:-]{8,128}$').hasMatch(idempotencyToken)) {
+      throw const RepartidorLiquidacionInputException(
+        'INVALID_LIQUIDACION_IDEMPOTENCY_TOKEN',
+        'Token de idempotencia invalido',
+      );
+    }
+    final payload = <String, dynamic>{
+      'repartidorId': repartidorId,
+      'date': isoDate,
+      'amount': amount,
+      'idempotencyToken': idempotencyToken,
+      detailKey: normalizedDetail,
+      if (normalizedObservation != null) 'observation': normalizedObservation,
+    };
+    final fingerprint = buildLiquidacionEntryFingerprint(
+      repartidorId,
+      date,
+      type,
+      amount: amount,
+      detail: normalizedDetail,
+      observation: normalizedObservation,
+    );
+    final active = _liquidacionEntrySubmissionsInFlight[idempotencyToken];
+    if (active != null) {
+      if (active.fingerprint != fingerprint) {
+        throw const RepartidorLiquidacionInputException(
+          'LIQUIDACION_LOCAL_IDEMPOTENCY_MISMATCH',
+          'El token activo pertenece a otro movimiento',
+        );
+      }
+      return active.future;
+    }
+    final future = _submitLiquidacionEntry(
+      endpoint: endpoint,
+      payload: payload,
+      type: type,
+      repartidorId: repartidorId,
+      isoDate: isoDate,
+    );
+    _liquidacionEntrySubmissionsInFlight[idempotencyToken] = (
+      fingerprint: fingerprint,
+      future: future,
+    );
+    try {
+      return await future;
+    } finally {
+      final current = _liquidacionEntrySubmissionsInFlight[idempotencyToken];
+      if (identical(current?.future, future)) {
+        _liquidacionEntrySubmissionsInFlight.remove(idempotencyToken);
+      }
+    }
+  }
+
+  Future<RepartidorLiquidacionEntryResult> _submitLiquidacionEntry({
+    required String endpoint,
+    required Map<String, dynamic> payload,
+    required String type,
+    required String repartidorId,
+    required String isoDate,
+  }) async {
+    final response = await _liquidacionPost(endpoint, payload);
+    _validateLiquidacionTransport(
+      response,
+      created: response.body['created'],
+    );
+    final result = RepartidorLiquidacionEntryResult.fromJson(
+      response.body,
+      expectedType: type,
+      expectedRepartidorId: repartidorId,
+      expectedDate: isoDate,
+    );
+    await invalidateAllForRepartidor(repartidorId);
+    return result;
+  }
+
+  static void _validateLiquidacionTransport(
+    LiquidacionTransportResponse response, {
+    required Object? created,
+  }) {
+    final isExpected = (response.statusCode == 201 && created == true) ||
+        (response.statusCode == 200 && created == false);
+    if (!isExpected) {
+      throw const RepartidorLiquidacionContractException(
+        'LIQUIDACION_TRANSPORT_STATUS_MISMATCH',
+        'Estado HTTP y created de liquidacion no coinciden',
+      );
+    }
+  }
+
+  static String _validateLiquidacionIdentity(
+    String repartidorId,
+    DateTime date,
+  ) {
+    final normalizedId = repartidorId.trim();
+    final isoDate = _isoDate(date);
+    final parsed = DateTime.tryParse('${isoDate}T00:00:00.000Z');
+    if (normalizedId != repartidorId ||
+        !RegExp(r'^\d{1,20}$').hasMatch(normalizedId) ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(isoDate) ||
+        parsed == null ||
+        parsed.toIso8601String().substring(0, 10) != isoDate) {
+      throw const RepartidorLiquidacionInputException(
+        'INVALID_LIQUIDACION_IDENTITY',
+        'Repartidor o fecha de liquidacion invalido',
+      );
+    }
+    return isoDate;
+  }
+
+  Future<RepartidorVencimientosBatch> getVencimientos({
     required String repartidorId,
     required DateTime from,
     required DateTime to,
     String? clientCode,
     String? estado,
-    int limit = 200,
+    String? cursor,
+    int limit = 50,
     bool forceRefresh = false,
   }) async {
+    if (to.isBefore(from)) {
+      throw ArgumentError.value(to, 'to', 'Debe ser igual o posterior a from');
+    }
+    final boundedLimit = limit.clamp(1, 100);
     final fromIso = _isoDate(from);
     final toIso = _isoDate(to);
     final response = await ApiClient.get(
@@ -192,7 +591,8 @@ class RepartidorFinanzasService {
       queryParameters: {
         'from': fromIso,
         'to': toIso,
-        'limit': limit.toString(),
+        'limit': boundedLimit.toString(),
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
         if (clientCode != null && clientCode.isNotEmpty)
           'clientCode': clientCode,
         if (estado != null && estado.isNotEmpty) 'estado': estado,
@@ -201,6 +601,8 @@ class RepartidorFinanzasService {
         repartidorId: repartidorId,
         from: fromIso,
         to: toIso,
+        limit: boundedLimit,
+        cursor: cursor,
         clientCode: clientCode,
         estado: estado,
       ),
@@ -208,10 +610,46 @@ class RepartidorFinanzasService {
       forceRefresh: forceRefresh,
     );
 
-    return _mapList(response['vencimientos'], RepartidorVencimiento.fromJson);
+    return RepartidorVencimientosBatch.fromJson(response);
   }
 
-  Future<void> registerVencimientoCobro({
+  PendingVencimientoCobroIntent? findPendingVencimientoCobro({
+    required String repartidorId,
+    required String codigoCliente,
+    required String tipoDocumento,
+    required JsonMap keys,
+  }) {
+    final expectedPayload = _buildVencimientoCobroPayload(
+      repartidorId: repartidorId,
+      codigoCliente: codigoCliente,
+      nombreCliente: '',
+      tipoDocumento: tipoDocumento,
+      documento: '',
+      keys: keys,
+      importeCobrado: 0,
+      importePendiente: 0,
+      formaPago: '',
+      idempotencyToken: '',
+    );
+    final obligationKey = _vencimientoObligationKey(expectedPayload);
+    for (final operation in _pendingOperations()) {
+      if (operation.type != 'register_cobro' ||
+          operation.endpoint != _vencimientoCobroEndpoint ||
+          _vencimientoObligationKey(operation.payload) != obligationKey) {
+        continue;
+      }
+      final token = operation.payload['idempotencyToken']?.toString().trim();
+      if (token == null || token.isEmpty) continue;
+      return PendingVencimientoCobroIntent(
+        idempotencyToken: token,
+        syncId: operation.id,
+        requiresManualReview: operation.isFailed,
+      );
+    }
+    return null;
+  }
+
+  Future<VencimientoCobroSubmissionResult> registerVencimientoCobro({
     required String repartidorId,
     required String codigoCliente,
     required String nombreCliente,
@@ -221,7 +659,97 @@ class RepartidorFinanzasService {
     required double importeCobrado,
     required double importePendiente,
     required String formaPago,
+    required String idempotencyToken,
   }) async {
+    final payload = _buildVencimientoCobroPayload(
+      repartidorId: repartidorId,
+      codigoCliente: codigoCliente,
+      nombreCliente: nombreCliente,
+      tipoDocumento: tipoDocumento,
+      documento: documento,
+      keys: keys,
+      importeCobrado: importeCobrado,
+      importePendiente: importePendiente,
+      formaPago: formaPago,
+      idempotencyToken: idempotencyToken,
+    );
+    final obligationKey = _vencimientoObligationKey(payload);
+    final existing = findPendingVencimientoCobro(
+      repartidorId: repartidorId,
+      codigoCliente: codigoCliente,
+      tipoDocumento: tipoDocumento,
+      keys: keys,
+    );
+    if (existing != null) {
+      return VencimientoCobroSubmissionResult(
+        state: existing.requiresManualReview
+            ? VencimientoCobroSubmissionState.manualReview
+            : VencimientoCobroSubmissionState.alreadyPending,
+        idempotencyToken: existing.idempotencyToken,
+        syncId: existing.syncId,
+      );
+    }
+    if (!_vencimientoSubmissionsInFlight.add(obligationKey)) {
+      return VencimientoCobroSubmissionResult(
+        state: VencimientoCobroSubmissionState.inFlight,
+        idempotencyToken: idempotencyToken,
+      );
+    }
+
+    try {
+      final response = await _offlinePost(
+        _vencimientoCobroEndpoint,
+        payload,
+        syncType: 'register_cobro',
+      );
+      final queued = response['queued'] == true;
+      if (!queued) {
+        await invalidateAllForRepartidor(repartidorId);
+      }
+      return VencimientoCobroSubmissionResult(
+        state: queued
+            ? VencimientoCobroSubmissionState.queued
+            : VencimientoCobroSubmissionState.confirmed,
+        idempotencyToken: idempotencyToken,
+        syncId: response['syncId']?.toString(),
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 409) {
+        final now = DateTime.now();
+        final failedPayload = Map<String, dynamic>.from(payload)
+          ..putIfAbsent('clientRequestId', () => idempotencyToken);
+        await _enqueueOperation(
+          SyncOperation(
+            id: 'review_$idempotencyToken',
+            type: 'register_cobro',
+            endpoint: _vencimientoCobroEndpoint,
+            method: 'POST',
+            payload: failedPayload,
+            attempts: 1,
+            createdAt: now,
+            failedAt: now,
+            lastError: 'HTTP 409: requiere revision manual',
+          ),
+        );
+      }
+      rethrow;
+    } finally {
+      _vencimientoSubmissionsInFlight.remove(obligationKey);
+    }
+  }
+
+  static Map<String, dynamic> _buildVencimientoCobroPayload({
+    required String repartidorId,
+    required String codigoCliente,
+    required String nombreCliente,
+    required String tipoDocumento,
+    required String documento,
+    required JsonMap keys,
+    required double importeCobrado,
+    required double importePendiente,
+    required String formaPago,
+    required String idempotencyToken,
+  }) {
     String keyString(String key, [String fallback = '']) {
       final value = keys[key];
       return value == null ? fallback : value.toString();
@@ -234,34 +762,50 @@ class RepartidorFinanzasService {
       return int.tryParse(value?.toString() ?? '') ?? fallback;
     }
 
-    final safeRep = repartidorId.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
-    final token = 'vto_${safeRep}_${DateTime.now().microsecondsSinceEpoch}';
-    await OfflineAwareApi.post(
-      '/repartidor-finanzas/cobros',
-      {
-        'codigoCliente': codigoCliente,
-        'nombreCliente': nombreCliente,
-        'codigoRepartidor': repartidorId,
-        'tipoDocumento': keyString('tipoDocumento', tipoDocumento),
-        'origenDocumento': keyString('origenDocumento', 'B'),
-        'subempresaDocumento': keyString('subempresaDocumento', 'GMP'),
-        'ejercicioDocumento': keyInt('ejercicioDocumento'),
-        'serieDocumento': keyString('serieDocumento'),
-        'terminalDocumento': keyInt('terminalDocumento'),
-        'numeroDocumento': keyInt('numeroDocumento'),
-        'xdeDocumento': keyInt('xdeDocumento', 1),
-        'dexDocumento': keyInt('dexDocumento', 1),
-        'importeCobrado': importeCobrado,
-        'importePendiente': importePendiente < 0 ? 0 : importePendiente,
-        'formaPago': formaPago,
-        'pantallaOrigen': 'VENCIMIENTOS',
-        'idempotencyToken': token,
-        'notas': 'Abono vencimiento $documento',
-      },
-      syncType: 'register_cobro',
-    );
+    return {
+      'codigoCliente': codigoCliente,
+      'nombreCliente': nombreCliente,
+      'codigoRepartidor': repartidorId,
+      'tipoDocumento': keyString('tipoDocumento', tipoDocumento),
+      'origenDocumento': keyString('origenDocumento', 'B'),
+      'subempresaDocumento': keyString('subempresaDocumento', 'GMP'),
+      'ejercicioDocumento': keyInt('ejercicioDocumento'),
+      'serieDocumento': keyString('serieDocumento'),
+      'terminalDocumento': keyInt('terminalDocumento'),
+      'numeroDocumento': keyInt('numeroDocumento'),
+      'xdeDocumento': keyInt('xdeDocumento', 1),
+      'dexDocumento': keyInt('dexDocumento', 1),
+      'importeCobrado': importeCobrado,
+      'importePendiente': importePendiente < 0 ? 0 : importePendiente,
+      'formaPago': formaPago,
+      'pantallaOrigen': 'VENCIMIENTOS',
+      'idempotencyToken': idempotencyToken,
+      'notas': documento.isEmpty ? null : 'Abono vencimiento $documento',
+    };
+  }
 
-    await invalidateAllForRepartidor(repartidorId);
+  static String _vencimientoObligationKey(Map<String, dynamic> payload) {
+    String text(String key, [String fallback = '']) =>
+        (payload[key]?.toString() ?? fallback).trim().toUpperCase();
+    int integer(String key, [int fallback = 0]) {
+      final value = payload[key];
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? fallback;
+    }
+
+    return <Object>[
+      text('codigoRepartidor'),
+      text('codigoCliente'),
+      text('tipoDocumento'),
+      text('origenDocumento', 'B'),
+      text('subempresaDocumento', 'GMP'),
+      integer('ejercicioDocumento'),
+      text('serieDocumento'),
+      integer('terminalDocumento'),
+      integer('numeroDocumento'),
+      integer('xdeDocumento', 1),
+      integer('dexDocumento', 1),
+    ].join('|');
   }
 
   /// Req #16 (devoluciones): anula un cobro registrado por el repartidor.
@@ -283,6 +827,19 @@ class RepartidorFinanzasService {
     );
     await invalidateAllForRepartidor(repartidorId);
     return Map<String, dynamic>.from(response);
+  }
+
+  Future<RepartidorEvolutionData> getEvolution({
+    required String repartidorId,
+    bool forceRefresh = false,
+  }) async {
+    final response = await ApiClient.get(
+      '/repartidor-finanzas/evolution/$repartidorId',
+      cacheKey: evolutionCacheKey(repartidorId),
+      cacheTTL: const Duration(hours: 1),
+      forceRefresh: forceRefresh,
+    );
+    return RepartidorEvolutionData.fromJson(response);
   }
 
   Future<RepartidorCommissionSummary> getCommissionSummary({

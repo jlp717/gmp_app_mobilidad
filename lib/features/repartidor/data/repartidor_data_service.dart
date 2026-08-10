@@ -8,6 +8,30 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
+class RepartidorDataException implements Exception {
+  const RepartidorDataException(
+    this.message, {
+    this.statusCode,
+    this.code,
+  });
+
+  final String message;
+  final int? statusCode;
+  final String? code;
+
+  @override
+  String toString() => code == null ? message : '[$code] $message';
+}
+
+/// Backend acknowledgement that a document may be passed to the operating
+/// system share sheet. It deliberately does not represent an external send.
+class LocalDocumentShare {
+  const LocalDocumentShare({required this.localShare, required this.sent});
+
+  final bool localShare;
+  final bool sent;
+}
+
 /// Resultado del resumen de cobros
 class CollectionsSummary {
   CollectionsSummary({
@@ -158,6 +182,8 @@ class HistoryClient {
   final String? repCode;
   final String? repName;
 }
+
+typedef HistoryClientsPage = ({List<HistoryClient> clients, bool hasMore});
 
 /// Documento del historial
 class HistoryDocument {
@@ -331,8 +357,10 @@ class RepartidorDataService {
       );
 
       return CollectionsSummary.fromJson(response);
-    } catch (e) {
-      throw Exception('Error cargando resumen de cobros: $e');
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar el resumen de cobros',
+      );
     }
   }
 
@@ -362,62 +390,103 @@ class RepartidorDataService {
           .toList();
 
       return dailyList;
-    } catch (e) {
-      throw Exception('Error cargando acumulado diario: $e');
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar el acumulado diario',
+      );
     }
   }
 
-  /// Obtener lista de clientes atendidos
-  static Future<List<HistoryClient>> getHistoryClients({
+  /// Obtener una página de clientes atendidos.
+  static Future<HistoryClientsPage> getHistoryClients({
     required String repartidorId,
     String? search,
+    int limit = 100,
+    int offset = 0,
+    bool forceRefresh = false,
   }) async {
+    if (repartidorId.trim().isEmpty ||
+        limit < 1 ||
+        limit > 100 ||
+        offset < 0 ||
+        offset > 1000000) {
+      throw const RepartidorDataException(
+        'Parámetros de clientes no válidos',
+      );
+    }
     try {
-      final queryParams = <String, String>{};
-      if (search != null && search.isNotEmpty) {
-        queryParams['search'] = search;
+      final normalizedRepartidorId = repartidorId.trim();
+      final normalizedSearch = search?.trim();
+      final searchScope = normalizedSearch == null || normalizedSearch.isEmpty
+          ? 'all'
+          : normalizedSearch;
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
+      if (normalizedSearch != null && normalizedSearch.isNotEmpty) {
+        queryParams['search'] = normalizedSearch;
       }
 
-      // Longer cache for client list - 30 min
-      final cacheKey = 'repartidor_clients_${repartidorId}_${search ?? 'all'}';
-
+      final cachePrefix =
+          'repartidor_clients_${normalizedRepartidorId}_${searchScope}_';
+      if (forceRefresh) {
+        await CacheService.invalidateByPrefix(cachePrefix);
+      }
+      final cacheKey = '${cachePrefix}${limit}$offset';
       final response = await ApiClient.get(
-        '/repartidor/history/clients/$repartidorId',
+        '/repartidor/history/clients/$normalizedRepartidorId',
         queryParameters: queryParams,
         cacheKey: cacheKey,
-        cacheTTL: CacheService.defaultTTL, // 30 minutes - client list stable
+        cacheTTL: CacheService.defaultTTL,
+        forceRefresh: forceRefresh,
       );
 
       final clients = (response['clients'] as List? ?? [])
-          .map((c) =>
-              HistoryClient.fromJson(Map<String, dynamic>.from(c as Map)))
+          .map(
+            (client) => HistoryClient.fromJson(
+              Map<String, dynamic>.from(client as Map),
+            ),
+          )
           .toList();
-
-      return clients;
-    } catch (e) {
-      throw Exception('Error cargando clientes: $e');
+      final pagination = response['pagination'];
+      final hasMore = pagination is Map && pagination['hasMore'] == true;
+      return (clients: clients, hasMore: hasMore);
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar el historial de clientes',
+      );
     }
   }
 
   /// Obtener documentos de un cliente
   static Future<List<HistoryDocument>> getClientDocuments({
     required String clientId,
-    String? repartidorId,
+    required String repartidorId,
     String? dateFrom,
     String? dateTo,
     int? year,
+    int limit = 100,
+    int offset = 0,
   }) async {
+    if (repartidorId.trim().isEmpty) {
+      throw const RepartidorDataException('Falta el repartidor del historial');
+    }
+    if (limit < 1 || limit > 100 || offset < 0 || offset > 100) {
+      throw const RepartidorDataException('Paginación de historial no válida');
+    }
     try {
-      final queryParams = <String, String>{};
-      if (repartidorId != null) {
-        queryParams['repartidorId'] = repartidorId;
-      }
+      final queryParams = <String, String>{
+        'repartidorId': repartidorId,
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
       if (dateFrom != null) queryParams['dateFrom'] = dateFrom;
       if (dateTo != null) queryParams['dateTo'] = dateTo;
       if (year != null) queryParams['year'] = year.toString();
 
       final cacheKey =
-          'repartidor_docs_${clientId}_${repartidorId ?? 'all'}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+          'repartidor_docs_${clientId}_${repartidorId}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
 
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
@@ -427,13 +496,17 @@ class RepartidorDataService {
       );
 
       final docs = (response['documents'] as List? ?? [])
-          .map((d) =>
-              HistoryDocument.fromJson(Map<String, dynamic>.from(d as Map)))
+          .map(
+            (d) =>
+                HistoryDocument.fromJson(Map<String, dynamic>.from(d as Map)),
+          )
           .toList();
 
       return docs;
-    } catch (e) {
-      throw Exception('Error cargando documentos: $e');
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar el historial de documentos',
+      );
     }
   }
 
@@ -463,8 +536,10 @@ class RepartidorDataService {
           .toList();
 
       return objectives;
-    } catch (e) {
-      throw Exception('Error cargando objetivos: $e');
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudieron cargar los objetivos',
+      );
     }
   }
 
@@ -490,8 +565,10 @@ class RepartidorDataService {
       );
 
       return response;
-    } catch (e) {
-      throw Exception('Error cargando desglose de ventas: $e');
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar el desglose de ventas',
+      );
     }
   }
 
@@ -539,9 +616,39 @@ class RepartidorDataService {
 
       final response = await ApiClient.getBytes(endpoint);
       return response;
-    } catch (e) {
-      throw Exception('Error descargando documento: $e');
+    } on ApiException catch (error) {
+      throw mapDocumentDownloadError(error);
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo descargar el documento',
+      );
     }
+  }
+
+  @visibleForTesting
+  static RepartidorDataException mapDocumentDownloadError(
+    ApiException error,
+  ) {
+    final message = switch (error.statusCode) {
+      401 =>
+        'La sesión ha caducado. Inicia sesión para descargar el documento.',
+      403 => 'No tienes permiso para descargar este documento.',
+      404 => 'El documento ya no está disponible.',
+      409 =>
+        'El documento está cambiando. Actualiza el histórico antes de descargarlo.',
+      503 => 'La descarga no está disponible temporalmente.',
+      0
+          when error.message.toLowerCase().contains('tardando') ||
+              error.message.toLowerCase().contains('timeout') =>
+        'La descarga ha superado el tiempo de espera.',
+      0 => 'No se pudo conectar para descargar el documento.',
+      _ => 'No se pudo descargar el documento.',
+    };
+    return RepartidorDataException(
+      message,
+      statusCode: error.statusCode,
+      code: error.code,
+    );
   }
 
   /// Obtener firma real de un albarán
@@ -569,8 +676,10 @@ class RepartidorDataService {
         return Map<String, dynamic>.from(response['signature'] as Map);
       }
       return null;
-    } catch (e) {
-      return null;
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar la firma',
+      );
     }
   }
 
@@ -596,8 +705,10 @@ class RepartidorDataService {
       );
 
       return response;
-    } catch (e) {
-      return {'summary': {}, 'daily': []};
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo cargar el resumen de entregas',
+      );
     }
   }
 
@@ -608,6 +719,7 @@ class RepartidorDataService {
     required int number,
     required String type, // 'factura' o 'albaran'
     required String destinatario,
+    bool canEmailDocuments = false,
     int terminal = 0,
     String? asunto,
     String? cuerpo,
@@ -621,6 +733,13 @@ class RepartidorDataService {
     int? albaranTerminal,
     int? albaranYear,
   }) async {
+    if (canEmailDocuments != true) {
+      throw const RepartidorDataException(
+        'El envío por email no está habilitado.',
+        statusCode: 503,
+        code: 'EMAIL_DOCUMENT_CAPABILITY_REQUIRED',
+      );
+    }
     try {
       final response = await ApiClient.post('/repartidor/document/send-email', {
         'ejercicio': year,
@@ -643,14 +762,35 @@ class RepartidorDataService {
       if (response['success'] == true) {
         return response;
       }
-      throw Exception(response['error'] ?? 'Error enviando email');
-    } catch (e) {
-      throw Exception('Error enviando email: $e');
+      throw const RepartidorDataException(
+        'El envío por email no está disponible',
+      );
+    } on ApiException catch (error) {
+      // The backend must own delivery tracking. Never turn a 503 capability
+      // response into a successful-looking email send or retry it blindly.
+      if (error.statusCode == 503 &&
+          error.code == 'EMAIL_DELIVERY_LEDGER_REQUIRED') {
+        throw const RepartidorDataException(
+          'Email delivery is unavailable until its delivery ledger is enabled.',
+          statusCode: 503,
+          code: 'EMAIL_DELIVERY_LEDGER_REQUIRED',
+        );
+      }
+      throw RepartidorDataException(
+        'Email delivery is unavailable.',
+        statusCode: error.statusCode,
+        code: error.code,
+      );
+    } catch (_) {
+      throw const RepartidorDataException(
+        'El envío por email no está disponible',
+      );
     }
   }
 
-  /// Compartir documento por WhatsApp - returns URL to open
-  static Future<String?> shareWhatsApp({
+  /// Requests permission to present the operating-system share sheet.
+  /// This operation never means that GMP sent a WhatsApp message.
+  static Future<LocalDocumentShare> shareWhatsApp({
     required int year,
     required String serie,
     required int number,
@@ -687,13 +827,24 @@ class RepartidorDataService {
         'albaranYear': albaranYear,
       });
 
-      if (response['success'] == true && response['whatsappUrl'] != null) {
-        return response['whatsappUrl'] as String?;
+      final localShare = response['localShare'] == true;
+      final sent = response['sent'] == true;
+      if (response['success'] == true && localShare && !sent) {
+        return const LocalDocumentShare(localShare: true, sent: false);
       }
-      return null;
-    } catch (e) {
-      debugPrint('Error in shareWhatsApp: $e');
-      return null;
+      throw const RepartidorDataException(
+        'No se pudo preparar el uso compartido local',
+      );
+    } on ApiException catch (error) {
+      throw RepartidorDataException(
+        'No se pudo preparar el uso compartido local.',
+        statusCode: error.statusCode,
+        code: error.code,
+      );
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo preparar el uso compartido local',
+      );
     }
   }
 
@@ -706,8 +857,8 @@ class RepartidorDataService {
         cacheTTL: const Duration(hours: 1), // Long cache for evolution
       );
       return response;
-    } catch (e) {
-      throw Exception('Error cargando evolución: $e');
+    } catch (_) {
+      throw const RepartidorDataException('No se pudo cargar la evolución');
     }
   }
 }

@@ -184,10 +184,14 @@ class _SignaturePadState extends State<SignaturePad> {
         final base64 = base64Encode(Uint8List.view(byteData.buffer));
         widget.onSave(base64);
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error guardando firma: $e')),
+          const SnackBar(
+            content: Text(
+              'No se pudo guardar la firma. Inténtalo de nuevo.',
+            ),
+          ),
         );
       }
     } finally {

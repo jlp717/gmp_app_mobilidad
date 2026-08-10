@@ -89,6 +89,13 @@ function isLoopbackIp(value = '') {
     return ip === '::1' || ip === '127.0.0.1' || ip.startsWith('127.');
 }
 
+// Internal authorization must use the TCP peer, never req.ip. Express may
+// derive req.ip from X-Forwarded-For when trust proxy changes, which would
+// otherwise permit a remote caller to impersonate loopback.
+function socketRemoteAddress(req) {
+    return req?.socket?.remoteAddress || req?.connection?.remoteAddress || '';
+}
+
 function configuredInternalTokens() {
     return [
         process['env'].INTERNAL_API_TOKEN,
@@ -122,10 +129,7 @@ function hasInternalToken(req) {
 }
 
 function isInternalRequest(req) {
-    return isLoopbackIp(req.ip)
-        || isLoopbackIp(req.socket?.remoteAddress)
-        || isLoopbackIp(req.connection?.remoteAddress)
-        || hasInternalToken(req);
+    return isLoopbackIp(socketRemoteAddress(req)) || hasInternalToken(req);
 }
 
 function canSeeInternalDetails(req) {
@@ -463,6 +467,7 @@ module.exports = {
     requireInternalMetricsAccess,
     isInternalRequest,
     canSeeInternalDetails,
+    socketRemoteAddress,
     resetMetrics,
     stopPeriodicCleanup,
 };

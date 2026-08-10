@@ -15,7 +15,6 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
-import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
@@ -24,7 +23,71 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+String _sanitizedDocumentActionError(
+  Object error, {
+  required String fallback,
+}) {
+  if (error is RepartidorDataException) {
+    return switch (error.statusCode) {
+      401 => 'La sesión ha caducado. Inicia sesión de nuevo.',
+      403 => 'No tienes permiso para realizar esta acción.',
+      404 => 'El documento ya no está disponible.',
+      409 => 'El documento está cambiando. Actualiza el histórico.',
+      503 => 'La acción no está disponible temporalmente.',
+      _ => fallback,
+    };
+  }
+  return fallback;
+}
+
+typedef RepartidorHistoryClientsLoader = Future<List<HistoryClient>> Function({
+  required String repartidorId,
+  String? search,
+});
+
+/// Paginated client loader used by the production path. [clientsLoader] is
+/// kept for legacy callers and tests; it always represents one complete page.
+typedef RepartidorHistoryClientsPageLoader = Future<HistoryClientsPage>
+    Function({
+  required String repartidorId,
+  String? search,
+  required int limit,
+  required int offset,
+  required bool forceRefresh,
+});
+
+typedef RepartidorHistoryDocumentsLoader = Future<List<HistoryDocument>>
+    Function({
+  required String clientId,
+  required String repartidorId,
+  String? dateFrom,
+  String? dateTo,
+  int? year,
+});
+
+typedef RepartidorHistoryDocumentDownloader = Future<List<int>> Function({
+  required int year,
+  required String serie,
+  required int number,
+  required String type,
+  required int terminal,
+  int? facturaNumber,
+  String? serieFactura,
+  int? ejercicioFactura,
+  int? albaranNumber,
+  String? albaranSerie,
+  int? albaranTerminal,
+  int? albaranYear,
+});
+
+typedef RepartidorHistorySignatureLoader = Future<Map<String, dynamic>?>
+    Function({
+  required int ejercicio,
+  required String serie,
+  required int terminal,
+  required int numero,
+});
 
 class RepartidorHistoricoPage extends StatefulWidget {
   const RepartidorHistoricoPage({
@@ -32,10 +95,24 @@ class RepartidorHistoricoPage extends StatefulWidget {
     super.key,
     this.initialClientId,
     this.initialClientName,
+    this.clientsLoader,
+    this.clientsPageLoader,
+    this.documentsLoader,
+    this.documentDownloader,
+    this.signatureLoader,
+    this.canEmailDocuments = false,
   });
   final String repartidorId;
   final String? initialClientId;
   final String? initialClientName;
+  final RepartidorHistoryClientsLoader? clientsLoader;
+  final RepartidorHistoryClientsPageLoader? clientsPageLoader;
+  final RepartidorHistoryDocumentsLoader? documentsLoader;
+  final RepartidorHistoryDocumentDownloader? documentDownloader;
+  final RepartidorHistorySignatureLoader? signatureLoader;
+
+  /// Must come from an explicit backend capability. Fail closed by default.
+  final bool canEmailDocuments;
 
   @override
   State<RepartidorHistoricoPage> createState() =>
@@ -46,10 +123,23 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _docSearchController = TextEditingController();
   bool _isLoading = false;
+  bool _isLoadingMoreClients = false;
+  String? _clientsError;
+  String? _clientsLoadMoreError;
+  String? _documentsError;
+  bool _isDownloadingDocument = false;
+  bool _isSharingDocument = false;
   String? _selectedClientId;
   String? _selectedClientName;
   List<_ClientItem> _clients = [];
   List<_DocumentItem> _documents = [];
+  bool _hasMoreClients = false;
+  int _clientRequestGeneration = 0;
+  int _clientRowsConsumed = 0;
+  int _documentsRequestGeneration = 0;
+  String? _clientsQuery;
+
+  static const _clientPageSize = 100;
 
   // Advanced Filters
   DateTime? _dateFrom;
@@ -67,6 +157,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
       _isLoading = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _loadClientDocuments(
           widget.initialClientId!,
           widget.initialClientName ?? widget.initialClientId!,
@@ -81,6 +172,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   @override
   void dispose() {
+    _clientRequestGeneration++;
+    _documentsRequestGeneration++;
     _searchController.dispose();
     _docSearchController.dispose();
     super.dispose();
@@ -90,16 +183,66 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // DATA LOADING
   // ==========================================================================
 
-  Future<void> _loadClients([String? search]) async {
+  Future<void> _loadClients(
+      [String? search,
+      bool loadMore = false,
+      bool forceRefresh = false]) async {
+    final normalizedSearch = search?.trim();
+    if (loadMore && _isLoadingMoreClients) return;
+    final queryChanged = normalizedSearch != _clientsQuery;
+    final append = loadMore && !queryChanged && _hasMoreClients;
+    if (loadMore && !append) return;
+    final requestGeneration = ++_clientRequestGeneration;
+    final offset = append ? _clientRowsConsumed : 0;
     // Don't set loading if already viewing documents (would flash empty state)
     final isInDocView = _selectedClientId != null;
-    if (!isInDocView) setState(() => _isLoading = true);
+    if (append) {
+      setState(() {
+        _isLoadingMoreClients = true;
+        _clientsLoadMoreError = null;
+      });
+    } else if (!isInDocView) {
+      setState(() {
+        _isLoading = true;
+        _isLoadingMoreClients = false;
+        _clientsError = null;
+        _clientsLoadMoreError = null;
+      });
+    } else {
+      setState(() {
+        _isLoadingMoreClients = false;
+        _clientsError = null;
+        _clientsLoadMoreError = null;
+      });
+    }
     try {
-      final clients = await RepartidorDataService.getHistoryClients(
-        repartidorId: widget.repartidorId,
-        search: search,
-      );
-      _clients = clients
+      final legacyLoader = widget.clientsLoader;
+      final pageLoader = widget.clientsPageLoader;
+      final page = legacyLoader != null
+          ? (
+              clients: await legacyLoader(
+                repartidorId: widget.repartidorId,
+                search: normalizedSearch,
+              ),
+              hasMore: false,
+            )
+          : pageLoader != null
+              ? await pageLoader(
+                  repartidorId: widget.repartidorId,
+                  search: normalizedSearch,
+                  limit: _clientPageSize,
+                  offset: offset,
+                  forceRefresh: forceRefresh,
+                )
+              : await RepartidorDataService.getHistoryClients(
+                  repartidorId: widget.repartidorId,
+                  search: normalizedSearch,
+                  limit: _clientPageSize,
+                  offset: offset,
+                  forceRefresh: forceRefresh,
+                );
+      if (!mounted || requestGeneration != _clientRequestGeneration) return;
+      final mappedClients = page.clients
           .map(
             (c) => _ClientItem(
               id: c.id,
@@ -111,44 +254,85 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             ),
           )
           .toList();
-    } catch (e) {
-      _clients = [];
-      if (mounted && !isInDocView) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar clientes: $e'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
-      }
+      final merged =
+          append ? <_ClientItem>[..._clients, ...mappedClients] : mappedClients;
+      final byId = <String, _ClientItem>{
+        for (final client in merged) client.id: client,
+      };
+      final ordered = byId.values.toList()
+        ..sort((a, b) {
+          final byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          return byName != 0 ? byName : a.id.compareTo(b.id);
+        });
+      setState(() {
+        _clients = ordered;
+        _clientsQuery = normalizedSearch;
+        _clientRowsConsumed = offset + page.clients.length;
+        _hasMoreClients = page.hasMore;
+        _clientsError = null;
+        _clientsLoadMoreError = null;
+      });
+    } catch (_) {
+      if (!mounted || requestGeneration != _clientRequestGeneration) return;
+      setState(() {
+        if (append && _clients.isNotEmpty) {
+          _clientsLoadMoreError =
+              'No se pudo cargar la siguiente página de clientes';
+        } else {
+          _clients = [];
+          _clientRowsConsumed = 0;
+          _hasMoreClients = false;
+          _clientsError = 'No se pudo cargar el historial de clientes';
+        }
+      });
     }
-    if (mounted && !isInDocView) setState(() => _isLoading = false);
+    if (!mounted || requestGeneration != _clientRequestGeneration) return;
+    setState(() {
+      if (!isInDocView) _isLoading = false;
+      _isLoadingMoreClients = false;
+    });
   }
 
   Future<void> _loadClientDocuments(String clientId, String clientName) async {
+    final requestGeneration = ++_documentsRequestGeneration;
+    final selectedYear = _selectedYear;
+    final dateFrom = _dateFrom;
+    final dateTo = _dateTo;
     setState(() {
       _isLoading = true;
+      _documentsError = null;
       _selectedClientId = clientId;
       _selectedClientName = clientName;
     });
 
     try {
-      final dateFromStr = _dateFrom != null
-          ? '${_dateFrom!.year}-${_dateFrom!.month.toString().padLeft(2, '0')}-${_dateFrom!.day.toString().padLeft(2, '0')}'
+      final dateFromStr = dateFrom != null
+          ? '${dateFrom.year}-${dateFrom.month.toString().padLeft(2, '0')}-${dateFrom.day.toString().padLeft(2, '0')}'
           : null;
-      final dateToStr = _dateTo != null
-          ? '${_dateTo!.year}-${_dateTo!.month.toString().padLeft(2, '0')}-${_dateTo!.day.toString().padLeft(2, '0')}'
+      final dateToStr = dateTo != null
+          ? '${dateTo.year}-${dateTo.month.toString().padLeft(2, '0')}-${dateTo.day.toString().padLeft(2, '0')}'
           : null;
 
-      final docs = await RepartidorDataService.getClientDocuments(
-        clientId: clientId,
-        repartidorId: widget.repartidorId,
-        dateFrom: dateFromStr,
-        dateTo: dateToStr,
-        year: _selectedYear,
-      );
+      final loader = widget.documentsLoader;
+      final docs = loader != null
+          ? await loader(
+              clientId: clientId,
+              repartidorId: widget.repartidorId,
+              dateFrom: dateFromStr,
+              dateTo: dateToStr,
+              year: selectedYear,
+            )
+          : await RepartidorDataService.getClientDocuments(
+              clientId: clientId,
+              repartidorId: widget.repartidorId,
+              dateFrom: dateFromStr,
+              dateTo: dateToStr,
+              year: selectedYear,
+            );
 
-      _documents = docs.map((d) {
+      if (!mounted || requestGeneration != _documentsRequestGeneration) return;
+
+      final mappedDocuments = docs.map((d) {
         _DeliveryStatus status;
         switch (d.status) {
           case 'delivered':
@@ -161,6 +345,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             status = _DeliveryStatus.notDelivered;
         }
 
+        final parsedDate = DateTime.tryParse(d.date);
         return _DocumentItem(
           id: d.id,
           type: d.type == 'factura' ? _DocType.factura : _DocType.albaran,
@@ -172,7 +357,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           facturaNumber: d.facturaNumber,
           serieFactura: d.serieFactura,
           ejercicioFactura: d.ejercicioFactura,
-          date: DateTime.tryParse(d.date) ?? DateTime.now(),
+          date: parsedDate,
+          hasValidDate: parsedDate != null,
           amount: d.amount,
           pending: d.pending,
           status: status,
@@ -186,10 +372,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           legacyDate: d.legacyDate,
         );
       }).toList();
-    } catch (e) {
-      _documents = [];
+      setState(() {
+        _documents = mappedDocuments;
+        _documentsError = null;
+      });
+    } catch (_) {
+      if (!mounted || requestGeneration != _documentsRequestGeneration) return;
+      setState(() {
+        // The backend has no reliable document-level hasMore contract yet.
+        // Keep the last complete snapshot rather than inventing pagination.
+        _documentsError = 'No se pudo cargar el historial de documentos';
+      });
     }
-    if (mounted) setState(() => _isLoading = false);
+    if (!mounted || requestGeneration != _documentsRequestGeneration) return;
+    setState(() => _isLoading = false);
   }
 
   // ==========================================================================
@@ -293,8 +489,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               children: [
                 IconButton(
                   onPressed: _goBackToClients,
-                  icon:
-                      const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
+                  icon: const Icon(
+                    Icons.arrow_back,
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
                 Expanded(
                   child: Column(
@@ -451,6 +649,32 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // LEVEL 1: CLIENT LIST
   // ==========================================================================
 
+  Widget _buildLoadError(String message, VoidCallback onRetry) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off, size: 48, color: AppTheme.error),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildClientList() {
     return Column(
       children: [
@@ -463,9 +687,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             decoration: InputDecoration(
               hintText: 'Buscar cliente por código o nombre...',
               hintStyle: TextStyle(
-                  color: AppTheme.textSecondary.withValues(alpha: 0.5)),
-              prefixIcon:
-                  const Icon(Icons.search, color: AppTheme.textSecondary),
+                color: AppTheme.textSecondary.withValues(alpha: 0.5),
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                color: AppTheme.textSecondary,
+              ),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(
@@ -523,44 +750,105 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         Expanded(
           child: _isLoading
               ? const Center(
-                  child:
-                      CircularProgressIndicator(color: AppTheme.accentIndigo),
+                  child: CircularProgressIndicator(
+                    color: AppTheme.accentIndigo,
+                  ),
                 )
-              : _filteredClients.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search_off,
-                            size: 48,
-                            color:
-                                AppTheme.textSecondary.withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No se encontraron clientes',
-                            style: TextStyle(color: AppTheme.textSecondary),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () => _loadClients(
+              : _clientsError != null
+                  ? _buildLoadError(
+                      _clientsError!,
+                      () => _loadClients(
                         _searchController.text.isNotEmpty
                             ? _searchController.text
                             : null,
                       ),
-                      color: AppTheme.accentIndigo,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _filteredClients.length,
-                        itemBuilder: (context, index) =>
-                            _buildClientCard(_filteredClients[index]),
-                      ),
-                    ),
+                    )
+                  : _filteredClients.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                size: 48,
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No se encontraron clientes',
+                                style: TextStyle(color: AppTheme.textSecondary),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () => _loadClients(
+                            _searchController.text.isNotEmpty
+                                ? _searchController.text
+                                : null,
+                          ),
+                          color: AppTheme.accentIndigo,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _filteredClients.length +
+                                (_hasMoreClients ||
+                                        _clientsLoadMoreError != null
+                                    ? 1
+                                    : 0),
+                            itemBuilder: (context, index) {
+                              final clients = _filteredClients;
+                              if (index < clients.length) {
+                                return _buildClientCard(clients[index]);
+                              }
+                              return _buildClientsPaginationFooter();
+                            },
+                          ),
+                        ),
         ),
       ],
+    );
+  }
+
+  Widget _buildClientsPaginationFooter() {
+    if (_isLoadingMoreClients) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(
+          child: CircularProgressIndicator(color: AppTheme.accentIndigo),
+        ),
+      );
+    }
+    if (_clientsLoadMoreError != null) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Text(
+              _clientsLoadMoreError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            TextButton.icon(
+              key: const ValueKey('history-clients-load-more-retry'),
+              onPressed: () => _loadClients(_clientsQuery, true),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Center(
+        child: OutlinedButton.icon(
+          key: const ValueKey('history-clients-load-more'),
+          onPressed: () => _loadClients(_clientsQuery, true),
+          icon: const Icon(Icons.expand_more),
+          label: const Text('Cargar más clientes'),
+        ),
+      ),
     );
   }
 
@@ -569,8 +857,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       onTap: () => _loadClientDocuments(client.id, client.name),
       child: RepartidorExecutivePanel(
         margin: const EdgeInsets.only(bottom: 10),
-        padding:
-            EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
+        padding: EdgeInsets.all(
+          Responsive.padding(context, small: 10, large: 14),
+        ),
         accentColor: AppTheme.accentIndigo,
         child: Row(
           children: [
@@ -586,8 +875,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 child: Text(
                   client.name.isNotEmpty ? client.name[0] : '?',
                   style: TextStyle(
-                    fontSize:
-                        Responsive.fontSize(context, small: 14, large: 18),
+                    fontSize: Responsive.fontSize(
+                      context,
+                      small: 14,
+                      large: 18,
+                    ),
                     fontWeight: FontWeight.bold,
                     color: AppTheme.accentIndigo,
                   ),
@@ -626,8 +918,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           client.lastVisit!,
                           style: TextStyle(
                             fontSize: 10,
-                            color:
-                                AppTheme.textSecondary.withValues(alpha: 0.7),
+                            color: AppTheme.textSecondary.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                         ),
                     ],
@@ -687,9 +980,62 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         child: CircularProgressIndicator(color: AppTheme.accentIndigo),
       );
     }
+    if (_documentsError != null && _documents.isEmpty) {
+      return _buildLoadError(
+        _documentsError!,
+        () => _loadClientDocuments(
+          _selectedClientId!,
+          _selectedClientName ?? _selectedClientId!,
+        ),
+      );
+    }
 
     return Column(
       children: [
+        if (_documentsError != null)
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.warning_amber_rounded,
+                color: AppTheme.warning,
+              ),
+              title: Text(_documentsError!),
+              trailing: TextButton(
+                onPressed: () => _loadClientDocuments(
+                  _selectedClientId!,
+                  _selectedClientName ?? _selectedClientId!,
+                ),
+                child: const Text('Reintentar'),
+              ),
+            ),
+          ),
+        if (_clientsError != null)
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.warning_amber_rounded,
+                color: AppTheme.warning,
+              ),
+              title: Text('Datos parciales'),
+              subtitle: Text(
+                'Los documentos están disponibles, pero no se pudo cargar la lista de clientes.',
+              ),
+            ),
+          ),
         // Advanced filter bar
         _buildAdvancedFilters(),
         // Stats summary
@@ -888,8 +1234,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           'Tipo',
                           style: TextStyle(
                             fontSize: 11,
-                            color:
-                                AppTheme.textSecondary.withValues(alpha: 0.6),
+                            color: AppTheme.textSecondary.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -910,8 +1257,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                               size: 14,
                               color: AppTheme.textSecondary,
                             ),
-                            SizedBox(width: 4),
-                            Text('Todos', style: TextStyle(fontSize: 11)),
+                            Text('Todos', style: TextStyle(fontSize: 10)),
                           ],
                         ),
                       ),
@@ -981,8 +1327,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           'Est.',
                           style: TextStyle(
                             fontSize: 11,
-                            color:
-                                AppTheme.textSecondary.withValues(alpha: 0.6),
+                            color: AppTheme.textSecondary.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -1003,8 +1350,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                               size: 14,
                               color: AppTheme.textSecondary,
                             ),
-                            SizedBox(width: 4),
-                            Text('Todos', style: TextStyle(fontSize: 11)),
+                            Text('Todos', style: TextStyle(fontSize: 10)),
                           ],
                         ),
                       ),
@@ -1085,7 +1431,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       color: AppTheme.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: AppTheme.error.withValues(alpha: 0.3)),
+                        color: AppTheme.error.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: const Icon(
                       Icons.filter_alt_off,
@@ -1294,7 +1641,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 icon: const Icon(Icons.clear, size: 16),
                 label: const Text('Limpiar filtros'),
                 style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.accentIndigo),
+                  foregroundColor: AppTheme.accentIndigo,
+                ),
               ),
             ],
           ],
@@ -1345,8 +1693,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       onTap: () => _showDocumentActions(doc),
       child: RepartidorExecutivePanel(
         margin: const EdgeInsets.only(bottom: 8),
-        padding:
-            EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
+        padding: EdgeInsets.all(
+          Responsive.padding(context, small: 10, large: 12),
+        ),
         accentColor: statusColor,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1355,8 +1704,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: isFactura
                         ? AppTheme.accentIndigo.withValues(alpha: 0.2)
@@ -1399,8 +1750,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 const Spacer(),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
@@ -1435,7 +1788,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  DateFormat('dd/MM/yyyy').format(doc.date),
+                  doc.hasValidDate
+                      ? DateFormat('dd/MM/yyyy').format(doc.date!)
+                      : 'Sin fecha',
                   style: TextStyle(
                     fontSize: 11,
                     color: AppTheme.textSecondary.withValues(alpha: 0.8),
@@ -1460,8 +1815,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 if (hasAnySignature) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
                       color: AppTheme.accentIndigo.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
@@ -1560,7 +1917,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           ),
                         ),
                         Text(
-                          '${DateFormat('dd/MM/yyyy').format(doc.date)} · ${CurrencyFormatter.format(doc.amount)}',
+                          doc.hasValidDate
+                              ? '${DateFormat('dd/MM/yyyy').format(doc.date!)} · ${CurrencyFormatter.format(doc.amount)}'
+                              : 'Sin fecha · ${CurrencyFormatter.format(doc.amount)}',
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppTheme.textSecondary,
@@ -1573,40 +1932,56 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               ),
             ),
 
-            // Actions
-            _buildActionTile(
-              icon: Icons.visibility,
-              label: 'Ver PDF',
-              color: AppTheme.info,
-              onTap: () {
-                Navigator.pop(ctx);
-                _previewDocument(doc);
-              },
-            ),
-            _buildActionTile(
-              icon: Icons.share_outlined,
-              label: 'Compartir',
-              subtitle: 'WhatsApp, Email, Guardar...',
-              color: AppTheme.accentIndigo,
-              onTap: () {
-                Navigator.pop(ctx);
-                _showShareOptions(doc);
-              },
-            ),
-            if (hasAnySignature)
+            // Actions that require a trustworthy document date stay disabled
+            // when the backend date cannot be parsed. This prevents silently
+            // substituting a synthetic year in document keys.
+            if (!doc.hasValidDate)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Text(
+                  'Acciones no disponibles: el documento no tiene una fecha válida',
+                  key: ValueKey('invalid-document-date-actions-disabled'),
+                  style: TextStyle(color: AppTheme.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            if (doc.hasValidDate) ...[
               _buildActionTile(
-                icon: Icons.draw,
-                label: 'Ver Firma',
-                subtitle: doc.legacySignatureName != null &&
-                        doc.legacySignatureName!.trim().isNotEmpty
-                    ? 'Firmado por: ${doc.legacySignatureName!.trim()}'
-                    : null,
-                color: AppTheme.accentAmber,
+                icon: Icons.visibility,
+                label: 'Ver PDF',
+                color: AppTheme.info,
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showSignatureDialog(doc);
+                  _previewDocument(doc);
                 },
               ),
+              _buildActionTile(
+                icon: Icons.share_outlined,
+                label: 'Compartir',
+                subtitle: widget.canEmailDocuments
+                    ? 'Compartir localmente, Email, Guardar'
+                    : 'Compartir localmente, Guardar',
+                color: AppTheme.accentIndigo,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showShareOptions(doc);
+                },
+              ),
+              if (hasAnySignature)
+                _buildActionTile(
+                  icon: Icons.draw,
+                  label: 'Ver Firma',
+                  subtitle: doc.legacySignatureName != null &&
+                          doc.legacySignatureName!.trim().isNotEmpty
+                      ? 'Firmado por: ${doc.legacySignatureName!.trim()}'
+                      : null,
+                  color: AppTheme.accentAmber,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showSignatureDialog(doc);
+                  },
+                ),
+            ],
             const SizedBox(height: 20),
           ],
         ),
@@ -1640,27 +2015,37 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   child: Icon(Icons.chat, color: Colors.white, size: 20),
                 ),
                 title: const Text(
-                  'WhatsApp',
+                  'Compartir localmente',
                   style: TextStyle(color: Colors.white),
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _whatsAppDocument(doc);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppTheme.info,
-                  child:
-                      Icon(Icons.email_outlined, color: Colors.white, size: 20),
+                subtitle: const Text(
+                  'Abre el selector del dispositivo; GMP no confirma el envío',
                 ),
-                title:
-                    const Text('Email', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
-                  _emailDocument(doc);
+                  _shareLocalDocument(doc);
                 },
               ),
+              if (widget.canEmailDocuments)
+                ListTile(
+                  key: const ValueKey('history-email-action'),
+                  leading: const CircleAvatar(
+                    backgroundColor: AppTheme.info,
+                    child: Icon(
+                      Icons.email_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text(
+                    'Email',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _emailDocument(doc);
+                  },
+                ),
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: AppTheme.success,
@@ -1763,14 +2148,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // ==========================================================================
 
   Future<void> _previewDocument(_DocumentItem doc) async {
-    final modal =
-        AsyncOperationModal.show(context, text: 'Cargando previsualización...');
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Cargando previsualización...',
+    );
     try {
       final isFactura = doc.type == _DocType.factura;
-      final bytes = await RepartidorDataService.downloadDocument(
+      final downloader =
+          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
+      final bytes = await downloader(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
         serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura
             ? (doc.facturaNumber ?? doc.number)
@@ -1808,34 +2197,44 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             pdfBytes: pdfBytes,
             title: '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
             fileName: fileName,
-            onEmailTap: () {
-              Navigator.pop(context);
-              _emailDocument(doc);
-            },
+            onEmailTap: widget.canEmailDocuments
+                ? () {
+                    Navigator.pop(context);
+                    _emailDocument(doc);
+                  }
+                : null,
             onWhatsAppTap: () {
               Navigator.pop(context);
-              _whatsAppDocument(doc);
+              _shareLocalDocument(doc);
             },
           ),
         ),
       );
     } catch (e) {
       modal.error(
-        'Error al visualizar: $e',
-        onRetry: () => _previewDocument(doc),
+        _sanitizedDocumentActionError(
+          e,
+          fallback: 'No se pudo visualizar el documento.',
+        ),
       );
     }
   }
 
   Future<void> _downloadDocument(_DocumentItem doc) async {
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando descarga...');
+    if (_isDownloadingDocument) return;
+    _isDownloadingDocument = true;
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando descarga...',
+    );
     try {
       final isFactura = doc.type == _DocType.factura;
-      final bytes = await RepartidorDataService.downloadDocument(
+      final downloader =
+          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
+      final bytes = await downloader(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
         serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura
             ? (doc.facturaNumber ?? doc.number)
@@ -1867,8 +2266,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
               width: 1,
               height: 1,
             )
@@ -1885,65 +2286,52 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al descargar documento: $e'),
+            content: Text(_downloadErrorMessage(e)),
             backgroundColor: AppTheme.error,
           ),
         );
       }
+    } finally {
+      _isDownloadingDocument = false;
     }
+  }
+
+  String _downloadErrorMessage(Object error) {
+    return _sanitizedDocumentActionError(
+      error,
+      fallback: 'No se pudo descargar el documento.',
+    );
   }
 
   Future<void> _emailDocument(_DocumentItem doc) async {
-    final isFactura = doc.type == _DocType.factura;
-    final typeLabel = isFactura ? 'Factura' : 'Albarán';
-    final clientName = _selectedClientName ?? 'Cliente';
-
-    final result = await EmailFormModal.show(
-      context,
-      defaultSubject:
-          '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number} - $clientName',
-      defaultBody: 'Hola $clientName,\n\n'
-          'Adjunto le remitimos su documento $typeLabel ${doc.serie}-${doc.terminal}-${doc.number}.\n\n'
-          'Gracias por confiar en nosotros.\n\n'
-          'Atentamente,\n'
-          'Granja Mari Pepa',
+    if (!mounted) return;
+    if (!widget.canEmailDocuments) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        key: ValueKey('history-email-unavailable'),
+        content: Text(
+          'Email no disponible: pendiente de habilitar el registro de entrega.',
+        ),
+        backgroundColor: AppTheme.warning,
+      ),
     );
+  }
 
-    if (result == null || !mounted) return;
-
-    final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
+  Future<void> _runShareAction(Future<void> Function() action) async {
+    if (_isSharingDocument) return;
+    _isSharingDocument = true;
     try {
-      await RepartidorDataService.sendEmail(
-        year: isFactura
-            ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
-        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
-        number: isFactura
-            ? (doc.facturaNumber ?? doc.number)
-            : (doc.albaranNumber ?? doc.number),
-        type: isFactura ? 'factura' : 'albaran',
-        destinatario: result.email,
-        terminal: doc.terminal,
-        asunto: result.subject,
-        cuerpo: result.body,
-        facturaNumber: doc.facturaNumber,
-        serieFactura: doc.serieFactura,
-        ejercicioFactura: doc.ejercicioFactura,
-        albaranNumber: doc.albaranNumber ?? doc.number,
-        albaranSerie: doc.serie,
-        albaranTerminal: doc.terminal,
-        albaranYear: doc.ejercicio,
-      );
-      modal.success('✓ Email enviado correctamente');
-    } catch (e) {
-      modal.error(
-        'Error enviando email: $e',
-        onRetry: () => _emailDocument(doc),
-      );
+      await action();
+    } finally {
+      _isSharingDocument = false;
     }
   }
 
-  Future<void> _whatsAppDocument(_DocumentItem doc) async {
+  Future<void> _shareLocalDocument(_DocumentItem doc) async {
+    await _runShareAction(() => _shareLocalDocumentUnlocked(doc));
+  }
+
+  Future<void> _shareLocalDocumentUnlocked(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final clientName = _selectedClientName ?? 'Cliente';
@@ -1957,14 +2345,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     if (result == null || !mounted) return;
 
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando documento...');
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando documento...',
+    );
     try {
       // Download document as PDF
-      final bytes = await RepartidorDataService.downloadDocument(
+      final downloader =
+          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
+      final bytes = await downloader(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
         serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura
             ? (doc.facturaNumber ?? doc.number)
@@ -1986,11 +2378,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
-      // Get WhatsApp URL from backend
-      final whatsappUrl = await RepartidorDataService.shareWhatsApp(
+      // This response only authorizes opening the local share sheet.
+      final localShare = await RepartidorDataService.shareWhatsApp(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
         serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura
             ? (doc.facturaNumber ?? doc.number)
@@ -2008,15 +2400,22 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranYear: doc.ejercicio,
       );
 
+      if (!localShare.localShare || localShare.sent) {
+        throw const RepartidorDataException(
+          'El servidor no autorizó el uso compartido local.',
+        );
+      }
       modal.close();
       if (!mounted) return;
 
-      // Share PDF via system share - user selects WhatsApp
+      // The user chooses an application in the operating-system share sheet.
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
               width: 1,
               height: 1,
             )
@@ -2028,23 +2427,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         subject: result.message,
         sharePositionOrigin: origin,
       );
-
-      // If WhatsApp URL available, also open WhatsApp chat
-      if (whatsappUrl != null && whatsappUrl.isNotEmpty) {
-        final uri = Uri.parse(whatsappUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(
-            uri,
-            mode: LaunchMode.externalApplication,
-          );
-        }
-      }
     } catch (e) {
       modal.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al compartir: $e'),
+            content: Text(
+              _sanitizedDocumentActionError(
+                e,
+                fallback: 'No se pudo compartir el documento.',
+              ),
+            ),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -2053,14 +2446,22 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _shareSystemDocument(_DocumentItem doc) async {
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando documento...');
+    await _runShareAction(() => _shareSystemDocumentUnlocked(doc));
+  }
+
+  Future<void> _shareSystemDocumentUnlocked(_DocumentItem doc) async {
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando documento...',
+    );
     try {
       final isFactura = doc.type == _DocType.factura;
-      final bytes = await RepartidorDataService.downloadDocument(
+      final downloader =
+          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
+      final bytes = await downloader(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
         serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura
             ? (doc.facturaNumber ?? doc.number)
@@ -2090,8 +2491,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
               width: 1,
               height: 1,
             )
@@ -2104,8 +2507,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
     } catch (e) {
       modal.error(
-        'Error al compartir: $e',
-        onRetry: () => _shareSystemDocument(doc),
+        _sanitizedDocumentActionError(
+          e,
+          fallback: 'No se pudo compartir el documento.',
+        ),
       );
     }
   }
@@ -2114,7 +2519,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     showDialog(
       context: context,
       builder: (ctx) => _SignatureDialog(
-        ejercicio: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        ejercicio: doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year,
         serie: doc.serie,
         terminal: doc.terminal,
         numero: doc.albaranNumber ?? doc.number,
@@ -2122,6 +2527,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             '${doc.type == _DocType.factura ? "Factura" : "Albarán"} #${doc.number}',
         legacySignatureName: doc.legacySignatureName,
         legacyDate: doc.legacyDate,
+        signatureLoader: widget.signatureLoader,
       ),
     );
   }
@@ -2272,6 +2678,7 @@ enum _DeliveryStatus { delivered, partial, notDelivered, enRuta }
 
 class _DocumentItem {
   _DocumentItem({
+    required this.hasValidDate,
     required this.id,
     required this.type,
     required this.number,
@@ -2296,6 +2703,7 @@ class _DocumentItem {
     this.legacyDate,
   });
   final String id;
+  final bool hasValidDate;
   final _DocType type;
   final int number;
   final String serie;
@@ -2305,7 +2713,7 @@ class _DocumentItem {
   final int? facturaNumber;
   final String? serieFactura;
   final int? ejercicioFactura;
-  final DateTime date;
+  final DateTime? date;
   final double amount;
   final double pending;
   final _DeliveryStatus status;
@@ -2333,6 +2741,7 @@ class _SignatureDialog extends StatefulWidget {
     required this.docLabel,
     this.legacySignatureName,
     this.legacyDate,
+    this.signatureLoader,
   });
   final int ejercicio;
   final String serie;
@@ -2341,6 +2750,7 @@ class _SignatureDialog extends StatefulWidget {
   final String docLabel;
   final String? legacySignatureName;
   final String? legacyDate;
+  final RepartidorHistorySignatureLoader? signatureLoader;
 
   @override
   State<_SignatureDialog> createState() => _SignatureDialogState();
@@ -2353,6 +2763,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
   String? _source;
   bool _loading = true;
   String? _error;
+  int _requestGeneration = 0;
 
   @override
   void initState() {
@@ -2360,23 +2771,35 @@ class _SignatureDialogState extends State<_SignatureDialog> {
     _fetchSignature();
   }
 
+  @override
+  void dispose() {
+    _requestGeneration++;
+    super.dispose();
+  }
+
   Future<void> _fetchSignature() async {
+    final requestGeneration = ++_requestGeneration;
     try {
-      final data = await RepartidorDataService.getSignature(
+      final loader =
+          widget.signatureLoader ?? RepartidorDataService.getSignature;
+      final data = await loader(
         ejercicio: widget.ejercicio,
         serie: widget.serie,
         terminal: widget.terminal,
         numero: widget.numero,
       );
+      if (!mounted || requestGeneration != _requestGeneration) return;
 
       if (data != null) {
         final source = data['source'] as String?;
-        _source = source;
 
         if (data['base64'] != null) {
           // We have actual image data
+          final signatureBytes = base64Decode(data['base64'] as String);
+          if (!mounted || requestGeneration != _requestGeneration) return;
           setState(() {
-            _signatureBytes = base64Decode(data['base64'] as String);
+            _source = source;
+            _signatureBytes = signatureBytes;
             _firmante = data['firmante'] as String?;
             _fecha = data['fecha'] as String?;
             _loading = false;
@@ -2385,27 +2808,34 @@ class _SignatureDialogState extends State<_SignatureDialog> {
             (data['firmante'] != null &&
                 (data['firmante'] as String).isNotEmpty)) {
           // Name-only signature from CACFIRMAS (no image, but record exists)
+          if (!mounted || requestGeneration != _requestGeneration) return;
           setState(() {
+            _source = source;
             _firmante = data['firmante'] as String?;
             _fecha = data['fecha'] as String?;
             _loading = false;
             _error = null;
           });
         } else {
-          _handleNoSignature();
+          _handleNoSignature(requestGeneration);
         }
       } else {
-        _handleNoSignature();
+        _handleNoSignature(requestGeneration);
       }
     } catch (e) {
+      if (!mounted || requestGeneration != _requestGeneration) return;
       setState(() {
         _loading = false;
-        _error = 'Error al cargar firma: $e';
+        _error = _sanitizedDocumentActionError(
+          e,
+          fallback: 'No se pudo cargar la firma.',
+        );
       });
     }
   }
 
-  void _handleNoSignature() {
+  void _handleNoSignature(int requestGeneration) {
+    if (!mounted || requestGeneration != _requestGeneration) return;
     String? info;
     if (widget.legacySignatureName != null &&
         widget.legacySignatureName!.trim().isNotEmpty) {
@@ -2415,6 +2845,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
       }
       info += '\n\n(Imagen no disponible en registros históricos)';
     }
+    if (!mounted || requestGeneration != _requestGeneration) return;
     setState(() {
       _loading = false;
       _error = info ?? 'No se encontró firma para este documento';

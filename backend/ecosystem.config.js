@@ -23,11 +23,6 @@ const defaultDbConcurrency = isMultiInstance
 const defaultThreadPoolSize = '128';
 const defaultOldSpaceMb = '512';
 const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
-const enablePm2Deploy = process.env.ENABLE_PM2_DEPLOY === 'true';
-
-if (enablePm2Deploy && !process.env.PM2_DEPLOY_REPO) {
-    throw new Error('ENABLE_PM2_DEPLOY=true requires PM2_DEPLOY_REPO');
-}
 
 const runtimePerformanceEnv = {
     UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE || defaultThreadPoolSize,
@@ -51,30 +46,46 @@ const runtimePerformanceEnv = {
     QUERY_CACHE_STALE_MS: process.env.QUERY_CACHE_STALE_MS || '300000',
 };
 
-const deployConfig = enablePm2Deploy
-    ? {
-        production: {
-            user: process.env.PM2_DEPLOY_USER || 'gmp',
-            host: process.env.PM2_DEPLOY_HOST || '192.168.1.230',
-            ref: process.env.PM2_DEPLOY_REF || 'origin/main',
-            repo: process.env.PM2_DEPLOY_REPO,
-            path: process.env.PM2_DEPLOY_PATH || '/opt/gmp-api',
-            'pre-deploy-local': '',
-            'post-deploy': [
-                'cd backend',
-                'npm ci --omit=dev',
-                'NODE_ENV=production node scripts/validate_production_config.js',
-                'pm2 reload ecosystem.config.js --env production',
-                'sleep 10',
-                'curl -fsS -A GMP-SRE-HealthCheck/1.0 http://localhost:${PORT:-3335}/api/ready',
-            ].join(' && '),
-            'pre-setup': '',
-            env: {
-                NODE_ENV: 'production',
-            },
-        },
-    }
-    : {};
+const REPARTO_BOOLEAN_FLAGS = Object.freeze([
+    'REPARTO_WRITES_ENABLED',
+    'REPARTO_PRODUCTION_WRITES_APPROVED',
+    'REPARTO_PRODUCTION_ERP_WRITES_APPROVED',
+    'REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED',
+    'REPARTO_PRODUCTION_CONFIRMATION_APPROVED',
+    'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED',
+]);
+
+function explicitRepartoBoolean(name) {
+    const value = process.env[name];
+    if (value === undefined || value === '') return 'false';
+    const normalized = String(value).trim().toLowerCase();
+    // Preserve invalid explicit values so resolveRepartoRuntime rejects the
+    // process at startup instead of silently changing an approval decision.
+    return normalized === 'true' || normalized === 'false' ? normalized : String(value);
+}
+
+const repartoConfiguredBooleans = Object.freeze(
+    Object.fromEntries(REPARTO_BOOLEAN_FLAGS.map((name) => [name, explicitRepartoBoolean(name)])),
+);
+
+// PM2 always starts reparto in a known, fail-closed production profile.
+// Enabling writes requires a reviewed configuration change after all gates.
+const repartoFailClosedEnv = Object.freeze({
+    REPARTO_ENVIRONMENT: 'production',
+    REPARTO_TABLE_SET: 'production',
+    REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    ...repartoConfiguredBooleans,
+    REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+    REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+    REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+    USE_TS_ROUTES: 'false',
+    USE_DDD_ROUTES: 'true',
+});
+
+// Deployment automation is intentionally absent. A production deployment is a
+// human-gated operation and must use the separately approved runbook, never a
+// PM2 ecosystem hook that could run extra installation, migration, or reload commands.
+const deployConfig = Object.freeze({});
 
 module.exports = {
     apps: [
@@ -95,6 +106,7 @@ module.exports = {
                 USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
                 SNAPSHOT_UNTIL_MONTH: '2',
+                ...repartoFailClosedEnv,
                 ...runtimePerformanceEnv,
             },
             env_production: {
@@ -104,6 +116,7 @@ module.exports = {
                 USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
                 SNAPSHOT_UNTIL_MONTH: '2',
+                ...repartoFailClosedEnv,
                 // JWT secrets loaded from .env — do NOT hardcode here
                 // (wrong secrets here cause "Invalid or expired token" errors)
                 // JWT_ACCESS_EXPIRES and JWT_REFRESH_EXPIRES are loaded from .env.
@@ -116,6 +129,7 @@ module.exports = {
                 USE_TS_ROUTES: 'false', // TS auth NOT compatible with Flutter yet — DO NOT enable
                 VENDOR_COLUMN: 'R1_T8CDVD',
                 SNAPSHOT_UNTIL_MONTH: '2',
+                ...repartoFailClosedEnv,
                 ...runtimePerformanceEnv,
             },
 
@@ -196,7 +210,7 @@ module.exports = {
     ],
 
     // ==================== DEPLOYMENT ====================
-    // Disabled unless ENABLE_PM2_DEPLOY=true and PM2_DEPLOY_REPO is explicit.
-    // Normal production changes still go through staging/QA/AppSec/SRE gates.
+    // Deploy automation intentionally disabled; production changes go through
+    // staging/QA/AppSec/SRE gates and the approved human runbook.
     deploy: deployConfig,
 };

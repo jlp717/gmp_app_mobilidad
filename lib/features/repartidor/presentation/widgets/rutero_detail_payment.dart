@@ -149,7 +149,11 @@ class RuteroDetailPayment extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _buildPaymentOption('TRANSFER', Icons.account_balance),
+              child: _buildPaymentOption(
+                'TRANSFERENCIA',
+                Icons.account_balance,
+                label: 'Transferencia',
+              ),
             ),
           ],
         ),
@@ -157,7 +161,11 @@ class RuteroDetailPayment extends StatelessWidget {
     );
   }
 
-  Widget _buildPaymentOption(String method, IconData icon) {
+  Widget _buildPaymentOption(
+    String method,
+    IconData icon, {
+    String? label,
+  }) {
     final isSelected = selectedPaymentMethod == method;
 
     return GestureDetector(
@@ -178,7 +186,7 @@ class RuteroDetailPayment extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              method,
+              label ?? method,
               style: TextStyle(
                 color: isSelected ? AppTheme.info : AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
@@ -235,7 +243,7 @@ class RuteroDetailPayment extends StatelessWidget {
                   ),
                   Text(
                     isPaid
-                        ? 'Cobro registrado con $selectedPaymentMethod'
+                        ? 'Cobro preparado con $selectedPaymentMethod'
                         : 'Confirmar recepción del pago',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,

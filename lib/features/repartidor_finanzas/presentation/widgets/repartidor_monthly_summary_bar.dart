@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 /// Repartidor — Resumen acumulado del mes en curso
 /// ================================================
 /// Banda compacta visible en la cabecera de "Liquidacion Diaria" que muestra
@@ -8,17 +10,22 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
+
+typedef RepartidorMonthlySummaryLoader = Future<RepartidorMonthlySummary>
+    Function(String repartidorId, int year, int month);
 
 class RepartidorMonthlySummaryBar extends StatefulWidget {
   const RepartidorMonthlySummaryBar({
-    super.key,
     required this.repartidorId,
+    super.key,
+    this.loader,
   });
 
   final String repartidorId;
+  final RepartidorMonthlySummaryLoader? loader;
 
   @override
   State<RepartidorMonthlySummaryBar> createState() =>
@@ -28,7 +35,8 @@ class RepartidorMonthlySummaryBar extends StatefulWidget {
 class _RepartidorMonthlySummaryBarState
     extends State<RepartidorMonthlySummaryBar> {
   bool _loading = true;
-  Map<String, dynamic>? _data;
+  RepartidorMonthlySummary? _data;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -39,32 +47,35 @@ class _RepartidorMonthlySummaryBarState
   @override
   void didUpdateWidget(covariant RepartidorMonthlySummaryBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repartidorId != widget.repartidorId) _load();
+    if (oldWidget.repartidorId != widget.repartidorId ||
+        oldWidget.loader != widget.loader) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
-    if (widget.repartidorId.isEmpty) {
+    if (widget.repartidorId.trim().isEmpty) {
       setState(() => _loading = false);
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _failed = false;
+      _data = null;
+    });
     try {
       final now = DateTime.now();
-      final response = await ApiClient.get(
-        '/repartidor-finanzas/summary/${Uri.encodeComponent(widget.repartidorId)}',
-        queryParameters: {
-          'year': now.year.toString(),
-          'month': now.month.toString(),
-        },
-        cacheKey:
-            'repartidor-finanzas:summary:${widget.repartidorId}:${now.year}:${now.month}',
-        cacheTTL: CacheService.shortTTL,
-      );
-      if (mounted && response['success'] == true) {
-        setState(() => _data = response);
-      }
+      final loader = widget.loader;
+      final data = loader == null
+          ? await RepartidorFinanzasService().getMonthlySummary(
+              repartidorId: widget.repartidorId,
+              year: now.year,
+              month: now.month,
+            )
+          : await loader(widget.repartidorId, now.year, now.month);
+      if (mounted) setState(() => _data = data);
     } catch (_) {
-      // silencioso
+      if (mounted) setState(() => _failed = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -89,22 +100,29 @@ class _RepartidorMonthlySummaryBarState
         ),
       );
     }
-    final data = _data;
-    if (data == null) return const SizedBox.shrink();
-
-    // Estructura del response:
-    // { success, repartidorId, year, month, summary: {...}, liquidaciones: [...] }
-    final summary = data['summary'] as Map<String, dynamic>? ?? {};
-    final totalCobrado = (summary['totalCobrado'] as num?)?.toDouble() ?? 0;
-    final totalLiquidado = (summary['totalLiquidado'] as num?)?.toDouble() ?? 0;
-    final saldoPendiente = (summary['saldoPendiente'] as num?)?.toDouble() ?? 0;
-    final numLiq = (data['liquidaciones'] as List?)?.length ?? 0;
-
-    if (totalCobrado == 0 && totalLiquidado == 0 && saldoPendiente == 0) {
-      return const SizedBox.shrink();
+    if (_failed) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off, size: 14, color: AppTheme.warning),
+            SizedBox(width: 6),
+            Text(
+              'Resumen mensual no disponible',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            ),
+          ],
+        ),
+      );
     }
+    final data = _data;
+    if (data == null || data.isEmpty) return const SizedBox.shrink();
 
-    final now = DateTime.now();
+    final totalCobrado = data.totalCobrado;
+    final totalLiquidado = data.totalLiquidado;
+    final saldoPendiente = data.saldoPendiente;
+    final numLiq = data.liquidacionesCount;
+
     const meses = [
       'enero',
       'febrero',
@@ -142,7 +160,7 @@ class _RepartidorMonthlySummaryBarState
               ),
               const SizedBox(width: 6),
               Text(
-                'Acumulado de ${meses[now.month - 1]}',
+                'Acumulado de ${meses[data.period.month - 1]}',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,

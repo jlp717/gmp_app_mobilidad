@@ -1,85 +1,40 @@
 'use strict';
 
+const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { validateFinanceTableMapping } = require('../config/reparto-runtime');
+const {
+  createRepartoCobrosDb2Port,
+  RepartoCobrosCapabilityError,
+  RepartoCobrosIdempotencyRaceError,
+} = require('../repositories/reparto-cobros-db2-port');
 // Req #16: Audit-trail para cobros del repartidor (write best-effort)
 const auditLog = require('./audit-log.service');
 
 let _financeSchemaInfo = null;
 
-const DEFAULT_FINANCE_SCHEMA_COLUMNS = [
-  ['REPARTIDOR_COBROS', 'TIPODOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'ORIGENDOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'SUBEMPRESADOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'EJERCICIODOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'SERIEDOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'TERMINALDOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'NUMERODOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'XDEDOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'DEXDOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN'],
-  ['REPARTIDOR_COBROS', 'CODIGOVENDEDOR'],
-  ['REPARTIDOR_COBROS', 'CODIGOFORMAPAGO'],
-  ['REPARTIDOR_COBROS', 'DIAVENCIMIENTO'],
-  ['REPARTIDOR_COBROS', 'MESVENCIMIENTO'],
-  ['REPARTIDOR_COBROS', 'ANOVENCIMIENTO'],
-  ['REPARTIDOR_COBROS', 'DIACOBRO'],
-  ['REPARTIDOR_COBROS', 'MESCOBRO'],
-  ['REPARTIDOR_COBROS', 'ANOCOBRO'],
-  ['REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'],
-  ['REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO'],
-  ['REPARTIDOR_COBROS', 'IMPORTEPENDIENTE'],
-  ['REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'],
-  ['REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
-  ['REPARTIDOR_COBROS', 'OPERADOR'],
-  ['REPARTIDOR_COBROS', 'CREATED_AT'],
-  ['REPARTIDOR_COBROS', 'ENTREGA_APP_ID'],
-  ['REPARTIDOR_COBROS', 'LIQUIDADO_SN'],
-  ['REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR'],
-  ['REPARTIDOR_COBROS', 'CODIGO_CLIENTE'],
-  ['REPARTIDOR_COBROS', 'TIPO_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'ORIGEN_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'SUBEMPRESA_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'EJERCICIO_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'SERIE_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'TERMINAL_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'NUMERO_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'XDE_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'DEX_DOCUMENTO'],
-  ['REPARTIDOR_COBROS', 'FORMA_PAGO'],
-  ['REPARTIDOR_COBROS', 'IMPORTE_COBRADO'],
-  ['REPARTIDOR_COBROS', 'IMPORTE_PENDIENTE'],
-  ['REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR'],
-  ['REPARTIDOR_FINANCIAL_BALANCES', 'SALDO_PENDIENTE'],
-  ['REPARTIDOR_FINANCIAL_BALANCES', 'UPDATED_BY'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IDEMPOTENCY_TOKEN'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'SUBEMPRESALIQUIDACION'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'EJERCICIOLIQUIDACION'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'SERIELIQUIDACION'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'TERMINALLIQUIDACION'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'NUMEROLIQUIDACION'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEEFECTIVO'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTECHEQUES'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTETARJETA'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEPOSTDATADOS'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTESALDOACTUAL'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEGASTOS'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTETOTALAINGRESAR'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEINGRESOENBANCO'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEEFECTIVO2'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEENTREGADO2'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'CODIGOUSUARIO'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'REVISADOSN'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'STATUS'],
-  ['REPARTIDOR_LIQUIDACION_OPS', 'OPERADOR'],
-  ['DELIVERY_STATUS', 'IDEMPOTENCY_TOKEN'],
-  ['DELIVERY_STATUS', 'STATUS'],
-  ['DELIVERY_STATUS', 'OPERADOR'],
-];
+class FinanceSchemaUnavailableError extends Error {
+  constructor(message = 'El catálogo DB2 de reparto no está disponible') {
+    super(message);
+    this.name = 'FinanceSchemaUnavailableError';
+    this.code = 'REPARTO_SCHEMA_UNAVAILABLE';
+    this.statusCode = 503;
+  }
+}
+
+class LiquidacionEmailRecipientRequiredError extends Error {
+  constructor() {
+    super('La liquidacion no tiene un destinatario de correo valido');
+    this.name = 'LiquidacionEmailRecipientRequiredError';
+    this.code = 'LIQUIDACION_EMAIL_RECIPIENT_REQUIRED';
+    this.statusCode = 422;
+  }
+}
 
 function normalizeColumnName(raw) {
   return String(raw || '').trim().toUpperCase();
@@ -89,45 +44,59 @@ function normalizeTableName(raw) {
   return String(raw || '').trim().toUpperCase();
 }
 
+function sanitizeErrorMessage(error) {
+  const raw = String(error?.message || error || 'unknown error');
+  return raw.replace(/[\r\n\t]/g, ' ').replace(/[^\w .,:;()/-]/g, '?').slice(0, 240);
+}
+
 async function getFinanceSchemaInfo() {
   if (_financeSchemaInfo && process.env.NODE_ENV !== 'test') {
     return _financeSchemaInfo;
   }
 
-  const APP_SCHEMA = getAppSchema();
-  const tables = [
-    'REPARTIDOR_COBROS',
-    'REPARTIDOR_FINANCIAL_BALANCES',
-    'REPARTIDOR_LIQUIDACION_OPS',
-    'DELIVERY_STATUS',
-  ];
-  const columnsByTable = new Map(tables.map((table) => [table, new Set()]));
+  const tables = {
+    REPARTIDOR_COBROS: FINANCE_TABLES.cobros,
+    REPARTIDOR_FINANCIAL_BALANCES: FINANCE_TABLES.balances,
+    REPARTIDOR_LIQUIDACION_OPS: FINANCE_TABLES.liquidationOps,
+  };
+  const catalogTargets = Object.entries(tables).map(([logical, identifier]) => {
+    const [schema, table] = identifier.split('.');
+    return { logical, schema, table };
+  });
+  const columnsByTable = new Map(Object.keys(tables).map((table) => [table, new Set()]));
   let rows = [];
 
   try {
     rows = await queryWithParams(`
-      SELECT TABLE_NAME, COLUMN_NAME
+      SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME
       FROM QSYS2.SYSCOLUMNS
-      WHERE TABLE_SCHEMA = ?
-        AND TABLE_NAME IN (${tables.map(() => '?').join(', ')})
-    `, [APP_SCHEMA, ...tables], false, false);
+      WHERE ${catalogTargets.map(() => '(TABLE_SCHEMA = ? AND TABLE_NAME = ?)').join(' OR ')}
+    `, catalogTargets.flatMap(({ schema, table }) => [schema, table]), false, false);
   } catch (error) {
-    logger.warn(`[REPARTIDOR_FINANZAS] Schema detection failed in ${APP_SCHEMA}: ${error.message}`);
+    logger.warn(`[REPARTIDOR_FINANZAS] Schema detection failed: ${sanitizeErrorMessage(error)}`);
+    throw new FinanceSchemaUnavailableError(
+      `No se pudo consultar el catálogo DB2 de reparto en reparto`,
+    );
   }
   const detectedRows = Array.isArray(rows)
-    ? rows.filter((row) =>
-        normalizeTableName(value(row, 'TABLE_NAME')) &&
-        normalizeColumnName(value(row, 'COLUMN_NAME'))
-      )
+    ? rows.map((row) => {
+        const physicalName = normalizeTableName(value(row, 'TABLE_NAME'));
+        const target = catalogTargets.find(({ schema, table }) =>
+          schema === normalizeTableName(value(row, 'TABLE_SCHEMA')) && table === physicalName)
+          // Unit doubles historically return logical names without a schema;
+          // production catalog rows never use this compatibility branch.
+          || (process.env.NODE_ENV === 'test' && Object.hasOwn(tables, physicalName)
+            ? { logical: physicalName } : null);
+        return target ? { ...row, TABLE_NAME: target.logical } : null;
+      }).filter((row) => row && normalizeColumnName(value(row, 'COLUMN_NAME')))
     : [];
   if (detectedRows.length === 0) {
-    rows = DEFAULT_FINANCE_SCHEMA_COLUMNS.map(([TABLE_NAME, COLUMN_NAME]) => ({
-      TABLE_NAME,
-      COLUMN_NAME,
-    }));
-  } else {
-    rows = detectedRows;
+    logger.warn('[REPARTIDOR_FINANZAS] Empty or malformed schema catalog');
+    throw new FinanceSchemaUnavailableError(
+      `El catálogo DB2 de reparto está vacío o es inválido`,
+    );
   }
+  rows = detectedRows;
 
   for (const row of rows || []) {
     const tableName = normalizeTableName(value(row, 'TABLE_NAME'));
@@ -143,6 +112,12 @@ async function getFinanceSchemaInfo() {
     has('REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO');
   const cobrosLegacy = has('REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR') &&
     has('REPARTIDOR_COBROS', 'IMPORTE_COBRADO');
+  if (!cobrosAligned && !cobrosLegacy) {
+    logger.warn('[REPARTIDOR_FINANZAS] Unsupported reparto cobros schema');
+    throw new FinanceSchemaUnavailableError(
+      `El catálogo DB2 de reparto no contiene un esquema de cobros compatible`,
+    );
+  }
 
   const info = {
     has,
@@ -153,7 +128,6 @@ async function getFinanceSchemaInfo() {
       has('REPARTIDOR_COBROS', 'DIACOBRO'),
     cobrosHasLiquidado: has('REPARTIDOR_COBROS', 'LIQUIDADO_SN'),
     cobrosHasLiquidacionToken: has('REPARTIDOR_COBROS', 'LIQUIDACION_TOKEN'),
-    cobrosHasEntregaAppId: has('REPARTIDOR_COBROS', 'ENTREGA_APP_ID'),
     cobrosHasCreatedAt: has('REPARTIDOR_COBROS', 'CREATED_AT'),
     cobrosHasFechaCobro: has('REPARTIDOR_COBROS', 'FECHA_COBRO'),
     cobrosHasNumeroLiquidacion: has('REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'),
@@ -176,7 +150,6 @@ async function getFinanceSchemaInfo() {
 function cobroReplaySelect(info) {
   const candidates = [
     'ID',
-    'ENTREGA_APP_ID',
     'CODIGOVENDEDOR',
     'CODIGO_REPARTIDOR',
     'CODIGOCLIENTEALBARAN',
@@ -302,14 +275,49 @@ function cobrosPaymentColumn(info, alias = '') {
   return info.cobrosAligned ? `${prefix}CODIGOFORMAPAGO` : `${prefix}FORMA_PAGO`;
 }
 
+function liquidacionCodeColumn(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  if (info.has('REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR')) {
+    return `${prefix}CODIGOVENDEDOR`;
+  }
+  if (info.has('REPARTIDOR_LIQUIDACION_OPS', 'CODIGO_REPARTIDOR')) {
+    return `${prefix}CODIGO_REPARTIDOR`;
+  }
+  throw new FinanceSchemaUnavailableError(
+    'El ledger de liquidaciones no contiene un codigo de repartidor compatible',
+  );
+}
+
+function liquidacionCollectedExpression(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  if (info.has('REPARTIDOR_LIQUIDACION_OPS', 'TOTAL_COBROS_DIA')) {
+    return `COALESCE(${prefix}TOTAL_COBROS_DIA, 0)`;
+  }
+
+  const components = [
+    'IMPORTEEFECTIVO',
+    'IMPORTECHEQUES',
+    'IMPORTETARJETA',
+    'IMPORTEPOSTDATADOS',
+  ].filter((column) => info.has('REPARTIDOR_LIQUIDACION_OPS', column));
+  if (components.length === 0) {
+    throw new FinanceSchemaUnavailableError(
+      'El ledger de liquidaciones no contiene importes cobrados compatibles',
+    );
+  }
+  return components.map((column) => `COALESCE(${prefix}${column}, 0)`).join(' + ');
+}
+
 function storagePaymentCode(raw, info) {
   const value = normalizeText(raw).toUpperCase();
   if (!info.cobrosAligned) return value;
-  if (value === 'EFECTIVO' || value === 'CONTADO') return 'EF';
-  if (value === 'TARJETA' || value === 'TPV') return 'TJ';
-  if (value === 'BIZUM') return 'BI';
-  if (value === 'CHEQUE' || value === 'TALON' || value === 'TALON BANCARIO') return 'CH';
-  if (value === 'POSTDATADO' || value === 'POSTDATADOS') return 'PD';
+  if (['EFECTIVO', 'CONTADO', 'EF', 'F0'].includes(value)) return 'EF';
+  if (['TARJETA', 'TPV', 'TJ'].includes(value)) return 'TJ';
+  if (['TRANSFERENCIA', 'TRANSFER', 'TR', 'T0'].includes(value)) return 'TR';
+  // BI is an app-ledger code; it is not asserted to be an ERP FPG master code.
+  if (['BIZUM', 'BI'].includes(value)) return 'BI';
+  if (['CHEQUE', 'TALON', 'TALON BANCARIO', 'CH'].includes(value)) return 'CH';
+  if (['POSTDATADO', 'POSTDATADOS', 'PD'].includes(value)) return 'PD';
   return value.slice(0, 2);
 }
 
@@ -324,7 +332,6 @@ function cobroInsertStatement(info, input) {
   };
 
   if (info.cobrosAligned) {
-    add('ENTREGA_APP_ID', input.entregaId || null);
     add('CODIGOCLIENTEALBARAN', input.codigoCliente);
     add('CODIGOCLIENTEFACTURA', input.codigoCliente);
     add('CODIGOVENDEDOR', input.codigoRepartidor);
@@ -349,7 +356,6 @@ function cobroInsertStatement(info, input) {
     add('OPERADOR', input.operador || 'unknown');
     add('OBSERVACIONES', input.notas || null);
   } else {
-    add('ENTREGA_APP_ID', input.entregaId || null);
     add('CODIGO_CLIENTE', input.codigoCliente);
     add('NOMBRE_CLIENTE', input.nombreCliente || '');
     add('CODIGO_REPARTIDOR', input.codigoRepartidor);
@@ -373,7 +379,7 @@ function cobroInsertStatement(info, input) {
 
   return {
     sql: `
-      INSERT INTO ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS (
+      INSERT INTO ${FINANCE_TABLES.cobros} (
         ${columns.join(',\n        ')}
       ) VALUES (${columns.map(() => '?').join(', ')})
     `,
@@ -416,7 +422,7 @@ function liquidacionOpsInsertStatement(info, input) {
 
   return {
     sql: `
-      INSERT INTO ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS (
+      INSERT INTO ${FINANCE_TABLES.liquidationOps} (
         ${columns.join(',\n        ')}
       ) VALUES (${columns.map(() => '?').join(', ')})
     `,
@@ -424,59 +430,44 @@ function liquidacionOpsInsertStatement(info, input) {
   };
 }
 
-const INTERNAL_LIQUIDATION_RECIPIENTS = [
-  'carmen@mari-pepa.com',
-  'marisol@mari-pepa.com',
-  'diegocorbalan@mari-pepa.com',
-];
+const INTERNAL_LIQUIDATION_RECIPIENTS = Object.freeze([]);
 
-function normalizeKnownSchema(raw, fallback = 'JAVIER') {
-  const schema = String(raw || fallback).trim().toUpperCase();
-  return schema === 'DSEDAC' ? 'DSEDAC' : 'JAVIER';
+const FINANCE_RUNTIME = resolveRepartoRuntime(process.env);
+
+function assertFinanceRuntime() {
+  const mapping = validateFinanceTableMapping(FINANCE_RUNTIME);
+  if (!FINANCE_RUNTIME.valid || !mapping.valid) {
+    throw new FinanceSchemaUnavailableError(
+      'La configuracion de reparto no permite consultar ni liquidar finanzas',
+    );
+  }
+  return FINANCE_RUNTIME;
 }
 
 function getErpDataSchema() {
-  return normalizeKnownSchema(
-    process.env.REPARTIDOR_FINANCE_READ_SCHEMA ||
-    process.env.FINANCE_ERP_READ_SCHEMA ||
-    process.env.ERP_READ_SCHEMA ||
-    'DSEDAC',
-    'DSEDAC',
-  );
-}
-
-function getErpLqdSchema() {
-  return normalizeKnownSchema(
-    process.env.REPARTIDOR_FINANCE_ERP_SCHEMA ||
-    process.env.FINANCE_ERP_SCHEMA ||
-    'JAVIER',
-    'JAVIER',
-  );
+  return assertFinanceRuntime().schemas.read;
 }
 
 function getAppSchema() {
-  return normalizeKnownSchema(
-    process.env.REPARTIDOR_FINANCE_APP_SCHEMA ||
-    process.env.PEDIDOS_CONFIRMATION_SCHEMA ||
-    'JAVIER',
-    'JAVIER',
-  );
+  return assertFinanceRuntime().schemas.app;
 }
 
 function getCommissionConfigSchema() {
+  const runtime = assertFinanceRuntime();
   const schema = String(
-    process.env.REPARTIDOR_COMMISSION_CONFIG_SCHEMA ||
-    process.env.COMMISSION_APP_SCHEMA ||
-    'JAVIER'
+    process.env.REPARTIDOR_COMMISSION_CONFIG_SCHEMA || runtime.schemas.app,
   ).trim().toUpperCase();
-  return schema === 'DSEDAC' ? 'DSEDAC' : 'JAVIER';
+  if (schema !== runtime.schemas.app) {
+    throw new FinanceSchemaUnavailableError(
+      'El esquema de comisiones debe coincidir con el esquema de aplicacion de reparto',
+    );
+  }
+  return schema;
 }
-
 const ERP_DATA_SCHEMA = getErpDataSchema();
-const ERP_LQD_SCHEMA = getErpLqdSchema();
-const ERP_FINANCE_SCHEMA = getAppSchema();
 const COMMISSION_CONFIG_SCHEMA = getCommissionConfigSchema();
-const LQD_TABLE = `${ERP_LQD_SCHEMA}.LQD`;
+const FINANCE_TABLES = Object.freeze({ ...assertFinanceRuntime().tables.finance });
+const ERP_APP_SCHEMA = getAppSchema();
 
 function value(row, key, fallback = undefined) {
   if (!row) return fallback;
@@ -616,14 +607,25 @@ function mapCobro(row) {
   };
 }
 
+function isValidIsoCalendarDate(raw) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw || ''))) return false;
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === raw;
+}
+
 function mapVencimiento(row) {
+  const calculatedDueDate = formatCvclDueDate(row) || formatCvcDueDate(row);
+  const fechaVencimiento = isValidIsoCalendarDate(calculatedDueDate)
+    ? calculatedDueDate
+    : null;
   return {
     tipoDocumento: String(value(row, 'TIPODOCUMENTO', '') || '').trim(),
     codigoCliente: String(value(row, 'CODIGOCLIENTEALBARAN', '') || '').trim(),
     nombreCliente: String(value(row, 'NOMBRE_CLIENTE', '') || '').trim(),
     nombreAlternativo: String(value(row, 'NOMBREALTERNATIVO', '') || '').trim(),
     poblacion: String(value(row, 'POBLACION', '') || '').trim(),
-    fechaVencimiento: formatCvclDueDate(row) || formatCvcDueDate(row),
+    fechaVencimiento,
+    fechaValida: fechaVencimiento !== null,
     documento: buildDocument(row),
     importe: roundMoney(value(row, 'IMPORTEVENCIMIENTO')),
     importePendiente: roundMoney(value(row, 'IMPORTEPENDIENTE')),
@@ -693,6 +695,15 @@ class PaymentAlreadyRegisteredError extends Error {
     super(message);
     this.name = 'PaymentAlreadyRegisteredError';
     this.code = 'PAYMENT_ALREADY_REGISTERED';
+  }
+}
+
+class PaymentExceedsOutstandingError extends Error {
+  constructor(message = 'El importe supera el saldo pendiente del documento') {
+    super(message);
+    this.name = 'PaymentExceedsOutstandingError';
+    this.code = 'PAYMENT_EXCEEDS_OUTSTANDING';
+    this.statusCode = 409;
   }
 }
 
@@ -769,8 +780,9 @@ function firstDefinedValue(row, keys, fallback = undefined) {
 
 function normalizePaymentForCompare(raw) {
   const current = normalizeText(raw).toUpperCase();
-  if (['EF', 'E', 'CT', 'EFECTIVO', 'CONTADO'].includes(current)) return 'EFECTIVO';
+  if (['EF', 'F0', 'E', 'CT', 'EFECTIVO', 'CONTADO'].includes(current)) return 'EFECTIVO';
   if (['TJ', 'TARJETA', 'TPV'].includes(current)) return 'TARJETA';
+  if (['TR', 'T0', 'TRANSFER', 'TRANSFERENCIA'].includes(current)) return 'TRANSFERENCIA';
   if (['BI', 'BIZUM'].includes(current)) return 'BIZUM';
   if (['CH', 'CHEQUE', 'TALON', 'TALON BANCARIO'].includes(current)) return 'CHEQUE';
   if (['PD', 'POSTDATADO', 'POSTDATADOS'].includes(current)) return 'POSTDATADO';
@@ -813,7 +825,6 @@ function assertCobroPayloadMatchesInput(row, expected) {
   }
   const mismatches = [];
   const checks = [
-    [['ENTREGA_APP_ID', 'ENTREGA_ID'], expected.entregaId, normalizeText],
     [['CODIGOVENDEDOR', 'CODIGO_REPARTIDOR'], expected.codigoRepartidor, normalizeText],
     [['CODIGOCLIENTEALBARAN', 'CODIGO_CLIENTE'], expected.codigoCliente, normalizeText],
     [['TIPODOCUMENTO', 'TIPO_DOCUMENTO'], expected.tipoDocumento, normalizeTipoDocumento],
@@ -825,7 +836,6 @@ function assertCobroPayloadMatchesInput(row, expected) {
   ];
   for (const [columns, expectedValue, normalizer] of checks) {
     const actual = firstDefinedValue(row, columns);
-    if (actual === undefined && columns[0] === 'ENTREGA_APP_ID') continue;
     if (actual === undefined && expectedValue == null) continue;
     if (normalizer(actual) !== normalizer(expectedValue)) {
       mismatches.push(columns[0]);
@@ -914,32 +924,46 @@ function cobroDocumentCriteria(info, input) {
 }
 
 async function lockCobrosForPayment(conn) {
-  await conn.query(`LOCK TABLE ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS IN EXCLUSIVE MODE`);
+  await conn.query(`LOCK TABLE ${FINANCE_TABLES.cobros} IN EXCLUSIVE MODE`);
 }
 
-async function assertDocumentNotAlreadyCollected(conn, info, input) {
-  const criteria = cobroDocumentCriteria(info, input);
-  const rows = await conn.query(`
-    SELECT ID, IDEMPOTENCY_TOKEN
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-    WHERE ${criteria.sql}
-      AND COALESCE(TRIM(IDEMPOTENCY_TOKEN), '') <> ?
-    FETCH FIRST 1 ROW ONLY
-  `, [...criteria.params, input.idempotencyToken]);
-
-  if (Array.isArray(rows) && rows.length > 0) {
-    throw new PaymentAlreadyRegisteredError();
+async function assertPaymentWithinOutstandingBalance(conn, info, input, documentRow) {
+  const erpPending = Number(value(documentRow, 'ERP_IMPORTEPENDIENTE'));
+  if (!Number.isFinite(erpPending) || erpPending < 0) {
+    throw new FinanceSchemaUnavailableError(
+      'El documento no expone un saldo pendiente valido para registrar el abono',
+    );
   }
 
-  // CROSS-TABLE: tambien comprueba la tabla COBROS (cobros COMERCIALES) por la
-  // referencia compuesta "SERIE-NUMERO" del mismo cliente. Si el comercial ya
-  // cobro este documento, el repartidor no puede volver a cobrarlo.
+  const criteria = cobroDocumentCriteria(info, input);
+  const amountColumn = cobrosAmountColumn(info);
+  const totals = firstRow(await conn.query(`
+    SELECT COALESCE(SUM(${amountColumn}), 0) AS APP_COLLECTED
+    FROM ${FINANCE_TABLES.cobros}
+    WHERE ${criteria.sql}
+  `, criteria.params));
+  const appCollected = roundMoney(value(totals, 'APP_COLLECTED'));
+  const available = roundMoney(Math.max(erpPending - appCollected, 0));
+  const requested = roundMoney(input.importeCobrado);
+  const expectedRemaining = roundMoney(Math.max(available - requested, 0));
+  const submittedRemaining = roundMoney(input.importePendiente);
+
+  if (requested <= 0 || requested > available || submittedRemaining !== expectedRemaining) {
+    throw new PaymentExceedsOutstandingError(
+      `El abono solicitado no coincide con el saldo pendiente disponible (${available})`,
+    );
+  }
+}
+
+async function assertDocumentNotCollectedByCommercial(conn, input) {
+  // Preserve the existing cross-table business guard without changing the
+  // commercial collection subsystem.
   try {
     const composedRef = `${String(input.serieDocumento || '').trim()}-${input.numeroDocumento}`;
     const likeRef = `%${composedRef}`;
     const comercialRows = await conn.query(`
       SELECT ID
-        FROM ${ERP_FINANCE_SCHEMA}.COBROS
+        FROM ${FINANCE_TABLES.commercialCobros}
        WHERE TRIM(CODIGO_CLIENTE) = ?
          AND (TRIM(REFERENCIA) = ? OR REFERENCIA LIKE ?)
        FETCH FIRST 1 ROW ONLY
@@ -951,11 +975,9 @@ async function assertDocumentNotAlreadyCollected(conn, info, input) {
       throw err;
     }
   } catch (xtableErr) {
-    // Si la tabla COBROS no existe o falla la consulta, log y continua.
-    // No bloqueamos repartidor por un error transitorio de la tabla comercial.
     if (xtableErr instanceof PaymentAlreadyRegisteredError) throw xtableErr;
     if (xtableErr && xtableErr.code === 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL') throw xtableErr;
-    logger.warn(`[REPARTIDOR_FINANZAS] Cross-table check ${ERP_FINANCE_SCHEMA}.COBROS fallo (continuando): ${xtableErr.message}`);
+    logger.warn(`[REPARTIDOR_FINANZAS] Cross-table check failed: ${sanitizeErrorMessage(xtableErr)}`);
   }
 }
 
@@ -1015,14 +1037,8 @@ function assertLiquidacionMatchesInput(row, input) {
 
 async function findLiquidacionRowByToken(idempotencyToken) {
   const rows = await queryWithParams(`
-    SELECT
-      OPS.*,
-      LQD.DIALIQUIDACION,
-      LQD.MESLIQUIDACION,
-      LQD.ANOLIQUIDACION
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS OPS
-    LEFT JOIN ${LQD_TABLE} LQD
-      ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
+    SELECT OPS.*
+    FROM ${FINANCE_TABLES.liquidationOps} OPS
     WHERE OPS.IDEMPOTENCY_TOKEN = ?
     FETCH FIRST 1 ROW ONLY
   `, [idempotencyToken], false, false);
@@ -1059,13 +1075,13 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
 
   const totalsRows = await queryWithParams(`
     SELECT
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('EFECTIVO', 'EF', 'F0', 'E', 'CONTADO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_CHEQUES,
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_TARJETA,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('TARJETA', 'TJ', 'TPV', 'TRANSFERENCIA', 'TR', 'T0', 'BIZUM', 'BI') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_TARJETA,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
       COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBROS_DIA,
       COUNT(*) AS COBROS_COUNT
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+    FROM ${FINANCE_TABLES.cobros}
     WHERE TRIM(CODIGOVENDEDOR) = ?
       AND ${dateCol} = ?
       AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
@@ -1073,7 +1089,7 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
 
   const balanceRows = await queryWithParams(`
     SELECT SALDO_PENDIENTE
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES
+    FROM ${FINANCE_TABLES.balances}
     WHERE TRIM(CODIGOVENDEDOR) = ?
     FETCH FIRST 1 ROW ONLY
   `, [repartidorId], false, false);
@@ -1094,7 +1110,7 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
       RC.XDEDOCUMENTO,
       RC.IMPORTEVENCIMIENTO,
       RC.IMPORTEPENDIENTE
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS RC
+    FROM ${FINANCE_TABLES.cobros} RC
     LEFT JOIN ${ERP_DATA_SCHEMA}.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(RC.CODIGOCLIENTEALBARAN)
     WHERE TRIM(RC.CODIGOVENDEDOR) = ?
       AND ${dateCol} = ?
@@ -1142,19 +1158,10 @@ async function getDailySummary({ repartidorId, date }) {
         _financeSchemaInfo = null; // Invalidate cache
         continue; // Retry with fresh schema
       }
-      // Schema-aware retry failed — run legacy query as last resort
-      if (retry === 1) {
-        logger.warn(`[REPARTIDOR_COBROS] getDailySummary: schema mismatch, returning empty`);
-        return {
-          repartidorId,
-          date,
-          summary: {
-            totalEfectivo: 0, totalCheques: 0, totalTarjeta: 0, totalPostdatados: 0,
-            saldoActual: 0, totalCobrosDia: 0, gastos: 0, totalAIngresar: 0,
-            ingresoBanco: 0, totalEfectivo2: 0, entregado: 0, cobrosCount: 0,
-          },
-          cobros: [],
-        };
+      if (isColumnMissing) {
+        throw new FinanceSchemaUnavailableError(
+          'El catálogo DB2 de reparto no coincide con las columnas necesarias',
+        );
       }
       throw error; // Non-column error, propagate
     }
@@ -1196,13 +1203,13 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
 
   const totalsRows = await queryWithParams(`
     SELECT
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('EFECTIVO', 'EF', 'E', 'CONTADO', 'CT') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('EFECTIVO', 'EF', 'F0', 'E', 'CONTADO', 'CT') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_EFECTIVO,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('CHEQUE', 'CH', 'TALON', 'TALON BANCARIO') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_CHEQUES,
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('TARJETA', 'TJ', 'TPV', 'BIZUM', 'BI') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_TARJETA,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('TARJETA', 'TJ', 'TPV', 'TRANSFERENCIA', 'TR', 'T0', 'BIZUM', 'BI') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_TARJETA,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('POSTDATADO', 'PD', 'POSTDATADOS') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
       COALESCE(SUM(${amountCol}), 0) AS TOTAL_COBROS_DIA,
       COUNT(*) AS COBROS_COUNT
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+    FROM ${FINANCE_TABLES.cobros}
     WHERE ${repFilter.sql}
       AND ${dateCol} = ?
       AND ${notLiquidated}
@@ -1210,7 +1217,7 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
 
   const balanceRows = await queryWithParams(`
     SELECT COALESCE(SUM(SALDO_PENDIENTE), 0) AS SALDO_PENDIENTE
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES
+    FROM ${FINANCE_TABLES.balances}
     WHERE ${balanceFilter.sql}
   `, balanceFilter.params, false, false);
 
@@ -1231,7 +1238,7 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       ${info.cobrosAligned ? 'RC.XDEDOCUMENTO' : 'COALESCE(RC.XDE_DOCUMENTO, 1) AS XDEDOCUMENTO'},
       ${cobrosAmountColumn(info, 'RC')} AS IMPORTEVENCIMIENTO,
       ${cobrosPendingColumn(info, 'RC')} AS IMPORTEPENDIENTE
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS RC
+    FROM ${FINANCE_TABLES.cobros} RC
     LEFT JOIN ${ERP_DATA_SCHEMA}.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE'})
     WHERE ${repFilterRc.sql}
       AND ${aliasedDateCol} = ?
@@ -1266,294 +1273,388 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
 }
 
 async function getSummary({ repartidorId, year, month }) {
-  const today = new Date();
-  const todayYmd = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
-  const rows = await queryWithParams(`
-    SELECT
-      COALESCE(SUM(CVC.IMPORTEPENDIENTE), 0) AS TOTAL_PENDIENTE,
-      COALESCE(SUM(CASE
-        WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO) < ?
-        THEN CVC.IMPORTEPENDIENTE ELSE 0 END), 0) AS TOTAL_VENCIDO,
-      COUNT(*) AS DOCUMENTOS_PENDIENTES,
-      COUNT(DISTINCT TRIM(CVC.CODIGOCLIENTEALBARAN)) AS CLIENTES_PENDIENTES
-    FROM ${ERP_DATA_SCHEMA}.CVC CVC
-    INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
-      ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-      AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-      AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
-      AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
-      AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-    INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
-      ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-      AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-    WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
-      AND CVC.ANOEMISION = ?
-      AND CVC.MESEMISION = ?
-      AND COALESCE(CVC.ANULADOSN, '') <> 'S'
-      AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
-      AND CVC.IMPORTEPENDIENTE <> 0
-  `, [todayYmd, repartidorId, year, month], false, false);
+  const info = await getFinanceSchemaInfo();
+  const ids = codeList(repartidorId);
+  if (ids.length === 0) {
+    throw new FinanceSchemaUnavailableError(
+      'No existe un repartidor valido para calcular el resumen mensual',
+    );
+  }
 
-  const row = firstRow(rows);
+  const cobrosCodeFilter = inClause(`TRIM(${cobrosCodeColumn(info, 'RC')})`, ids);
+  const liquidacionCodeFilter = inClause(
+    `TRIM(${liquidacionCodeColumn(info, 'OPS')})`,
+    ids,
+  );
+  const firstDay = year * 10000 + month * 100 + 1;
+  const nextMonthYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const firstDayNextMonth = nextMonthYear * 10000 + nextMonth * 100 + 1;
+  const cobrosDateColumn = cobrosDateFilterColumn(info, 'RC');
+  const collectedAmountColumn = cobrosAmountColumn(info, 'RC');
+  const liquidatedAmountExpression = liquidacionCollectedExpression(info, 'OPS');
+
+  const cobrosRows = await queryWithParams(`
+    SELECT
+      COALESCE(SUM(${collectedAmountColumn}), 0) AS TOTAL_COBRADO,
+      COUNT(*) AS COBROS_COUNT
+    FROM ${FINANCE_TABLES.cobros} RC
+    WHERE ${cobrosCodeFilter.sql}
+      AND ${cobrosDateColumn} >= ?
+      AND ${cobrosDateColumn} < ?
+  `, [...cobrosCodeFilter.params, firstDay, firstDayNextMonth], false, false);
+
+  const liquidacionRows = await queryWithParams(`
+    SELECT OPS.*, ${liquidatedAmountExpression} AS TOTAL_LIQUIDADO_COBROS
+    FROM ${FINANCE_TABLES.liquidationOps} OPS
+    WHERE ${liquidacionCodeFilter.sql}
+      AND OPS.ANOLIQUIDACION = ?
+      AND OPS.MESLIQUIDACION = ?
+    ORDER BY OPS.ANOLIQUIDACION, OPS.MESLIQUIDACION,
+      OPS.DIALIQUIDACION, OPS.IDEMPOTENCY_TOKEN
+  `, [...liquidacionCodeFilter.params, year, month], false, false);
+
+  const cobrosRow = firstRow(cobrosRows);
+  const totalCobrado = roundMoney(value(cobrosRow, 'TOTAL_COBRADO'));
+  const totalLiquidado = roundMoney((liquidacionRows || []).reduce(
+    (total, row) => total + roundMoney(value(row, 'TOTAL_LIQUIDADO_COBROS')),
+    0,
+  ));
+  const saldoPendiente = roundMoney(Math.max(totalCobrado - totalLiquidado, 0));
+  const liquidaciones = (liquidacionRows || []).map((row) => ({
+    ...mapLiquidacion(row),
+    date: `${value(row, 'ANOLIQUIDACION')}-${pad(value(row, 'MESLIQUIDACION'), 2)}-${pad(value(row, 'DIALIQUIDACION'), 2)}`,
+    totalLiquidado: roundMoney(value(row, 'TOTAL_LIQUIDADO_COBROS')),
+  }));
+
   return {
     repartidorId,
+    year,
+    month,
     period: { year, month },
     summary: {
-      totalPendiente: roundMoney(value(row, 'TOTAL_PENDIENTE')),
-      totalVencido: roundMoney(value(row, 'TOTAL_VENCIDO')),
-      documentosPendientes: toInt(value(row, 'DOCUMENTOS_PENDIENTES')),
-      clientesPendientes: toInt(value(row, 'CLIENTES_PENDIENTES')),
+      totalCobrado,
+      totalLiquidado,
+      saldoPendiente,
+      cobrosCount: toInt(value(cobrosRow, 'COBROS_COUNT')),
+      liquidacionesCount: liquidaciones.length,
     },
+    liquidaciones,
   };
 }
 
-async function getVencimientos({ repartidorId, from, to, limit, clientCode, estado }) {
-  await getFinanceSchemaInfo();
-  const fromParts = dateParts(from);
-  const toParts = dateParts(to);
-  const broadFrom = compactDate(addDaysIso(fromParts.year, fromParts.month, fromParts.day, -120));
-  const broadTo = compactDate(addDaysIso(toParts.year, toParts.month, toParts.day, 120));
+class InvalidFinanceCursorError extends Error {
+  constructor() {
+    super('El cursor de vencimientos no es valido para estos filtros');
+    this.name = 'InvalidFinanceCursorError';
+    this.code = 'INVALID_FINANCE_CURSOR';
+    this.statusCode = 400;
+  }
+}
+
+const MAX_VENCIMIENTOS_CURSOR_OFFSET = 100000;
+
+class FinanceCursorUnavailableError extends Error {
+  constructor() {
+    super('La firma del cursor financiero no esta configurada');
+    this.name = 'FinanceCursorUnavailableError';
+    this.code = 'FINANCE_CURSOR_UNAVAILABLE';
+    this.statusCode = 503;
+  }
+}
+
+function currentLocalYmd() {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+function validCompactCalendarDate(raw) {
+  if (!Number.isInteger(raw) || raw < 20000101 || raw > 21001231) return false;
+  const text = String(raw);
+  return isValidIsoCalendarDate(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`);
+}
+
+function financeCursorSecret() {
+  const secret = String(process.env.JWT_ACCESS_SECRET || '');
+  if (secret.length < 32) throw new FinanceCursorUnavailableError();
+  return secret;
+}
+
+function vencimientosCursorFingerprint({ repartidorId, from, to, clientCode, estado, todayYmd }) {
+  return [repartidorId, from, to, clientCode || '', estado || 'todos', todayYmd].join('|');
+}
+
+function cursorSignature(encodedPayload) {
+  return crypto
+    .createHmac('sha256', financeCursorSecret())
+    .update(encodedPayload)
+    .digest('hex');
+}
+
+function decodeVencimientosCursor(cursor, filters) {
+  if (!cursor) {
+    const todayYmd = currentLocalYmd();
+    return {
+      offset: 0,
+      todayYmd,
+      fingerprint: vencimientosCursorFingerprint({ ...filters, todayYmd }),
+    };
+  }
+  try {
+    const parts = String(cursor).split('.');
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      throw new InvalidFinanceCursorError();
+    }
+    const [encodedPayload, signature] = parts;
+    const expectedSignature = cursorSignature(encodedPayload);
+    const signatureBuffer = Buffer.from(signature, 'hex');
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    if (
+      signature.length !== expectedSignature.length ||
+      signatureBuffer.length !== expectedBuffer.length ||
+      !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+    ) {
+      throw new InvalidFinanceCursorError();
+    }
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    if (
+      payload.version !== 1 ||
+      !Number.isInteger(payload.offset) ||
+      payload.offset < 0 ||
+      payload.offset > MAX_VENCIMIENTOS_CURSOR_OFFSET ||
+      !validCompactCalendarDate(payload.todayYmd)
+    ) {
+      throw new InvalidFinanceCursorError();
+    }
+    const fingerprint = vencimientosCursorFingerprint({
+      ...filters,
+      todayYmd: payload.todayYmd,
+    });
+    if (payload.fingerprint !== fingerprint) {
+      throw new InvalidFinanceCursorError();
+    }
+    return { offset: payload.offset, todayYmd: payload.todayYmd, fingerprint };
+  } catch (error) {
+    if (error instanceof FinanceCursorUnavailableError) throw error;
+    if (error instanceof InvalidFinanceCursorError) throw error;
+    throw new InvalidFinanceCursorError();
+  }
+}
+
+function encodeVencimientosCursor(offset, fingerprint, todayYmd) {
+  const encodedPayload = Buffer.from(JSON.stringify({
+    version: 1,
+    offset,
+    fingerprint,
+    todayYmd,
+  }), 'utf8').toString('base64url');
+  return `${encodedPayload}.${cursorSignature(encodedPayload)}`;
+}
+
+function db2DateFromParts(yearExpression, monthExpression, dayExpression) {
+  return `DATE(
+    RIGHT('0000' || TRIM(CHAR(${yearExpression})), 4) || '-' ||
+    RIGHT('00' || TRIM(CHAR(${monthExpression})), 2) || '-' ||
+    RIGHT('00' || TRIM(CHAR(${dayExpression})), 2)
+  )`;
+}
+
+function vencimientosDueYmdExpression() {
+  const useAlbaran = "UPPER(TRIM(COALESCE(CLCL1.DIASLIMITECREDITOCONFECHAALB, ''))) = 'S'";
+  const baseYear = `CASE WHEN ${useAlbaran} THEN CPC.ANODOCUMENTO ELSE CVC.ANOEMISION END`;
+  const baseMonth = `CASE WHEN ${useAlbaran} THEN CPC.MESDOCUMENTO ELSE CVC.MESEMISION END`;
+  const baseDay = `CASE WHEN ${useAlbaran} THEN CPC.DIADOCUMENTO ELSE CVC.DIAEMISION END`;
+  const baseDate = db2DateFromParts(baseYear, baseMonth, baseDay);
+  const calculatedDate = `(${baseDate} + INTEGER(CLCL1.DIASLIMITECREDITO) DAYS)`;
+  const rawDueYmd = '(CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)';
+  return `(CASE
+    WHEN CLCL1.DIASLIMITECREDITO IS NOT NULL
+      AND (${baseYear}) > 0 AND (${baseMonth}) > 0 AND (${baseDay}) > 0
+    THEN YEAR(${calculatedDate}) * 10000 + MONTH(${calculatedDate}) * 100 + DAY(${calculatedDate})
+    ELSE ${rawDueYmd}
+  END)`;
+}
+
+async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, estado }) {
   const ids = codeList(repartidorId);
+  const pageLimit = Math.min(Math.max(toInt(limit), 1), 100);
+  const cursorState = decodeVencimientosCursor(cursor, {
+    repartidorId: ids.join(','), from, to, clientCode, estado,
+  });
+  const { offset, todayYmd, fingerprint } = cursorState;
+  await getFinanceSchemaInfo();
   const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
-  const params = [...repFilter.params, broadFrom, broadTo];
+  const fromYmd = compactDate(from);
+  const toYmd = compactDate(to);
+  const dueYmd = vencimientosDueYmdExpression();
+  const params = [...repFilter.params, fromYmd, toYmd];
   let clientFilter = '';
   if (clientCode) {
     clientFilter = ' AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?';
     params.push(clientCode.trim());
   }
-  const candidateLimit = Math.min(Math.max(limit * 25, 1000), 20000);
-  params.push(candidateLimit);
+  let stateFilter = '';
+  if (estado === 'vencido' || estado === 'pendiente') {
+    stateFilter = estado === 'vencido'
+      ? ' AND BASE.DUE_YMD < ?'
+      : ' AND BASE.DUE_YMD >= ?';
+    params.push(todayYmd);
+  }
+  params.push(offset, offset + pageLimit);
 
   const rows = await queryWithParams(`
-    SELECT
-      TIPODOCUMENTO,
-      ORIGENDOCUMENTO,
-      SUBEMPRESADOCUMENTO,
-      EJERCICIODOCUMENTO,
-      SERIEDOCUMENTO,
-      TERMINALDOCUMENTO,
-      NUMERODOCUMENTO,
-      XDEDOCUMENTO,
-      DEXDOCUMENTO,
-      CODIGOCLIENTEALBARAN,
-      NOMBRE_CLIENTE,
-      NOMBREALTERNATIVO,
-      POBLACION,
-      DIAVENCIMIENTO,
-      MESVENCIMIENTO,
-      ANOVENCIMIENTO,
-      FACTURA_BASE_DIA,
-      FACTURA_BASE_MES,
-      FACTURA_BASE_ANO,
-      ALBARAN_BASE_DIA,
-      ALBARAN_BASE_MES,
-      ALBARAN_BASE_ANO,
-      DIASLIMITECREDITO,
-      DIASLIMITECREDITOCONFECHAALB,
-      IMPORTEVENCIMIENTO,
-      IMPORTEPENDIENTE,
-      RN
+    SELECT *
     FROM (
       SELECT
-        CVC.TIPODOCUMENTO,
-        CVC.ORIGENDOCUMENTO,
-        CVC.SUBEMPRESADOCUMENTO,
-        CVC.EJERCICIODOCUMENTO,
-        CVC.SERIEDOCUMENTO,
-        CVC.TERMINALDOCUMENTO,
-        CVC.NUMERODOCUMENTO,
-        CVC.XDEDOCUMENTO,
-        CVC.DEXDOCUMENTO,
-        CVC.CODIGOCLIENTEALBARAN,
-        TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBRECLIENTE), ''), CVC.CODIGOCLIENTEALBARAN)) AS NOMBRE_CLIENTE,
-        TRIM(COALESCE(CLI.NOMBREALTERNATIVO, '')) AS NOMBREALTERNATIVO,
-        TRIM(COALESCE(CLI.POBLACION, '')) AS POBLACION,
-        CVC.DIAVENCIMIENTO,
-        CVC.MESVENCIMIENTO,
-        CVC.ANOVENCIMIENTO,
-        CVC.DIAEMISION AS FACTURA_BASE_DIA,
-        CVC.MESEMISION AS FACTURA_BASE_MES,
-        CVC.ANOEMISION AS FACTURA_BASE_ANO,
-        CPC.DIADOCUMENTO AS ALBARAN_BASE_DIA,
-        CPC.MESDOCUMENTO AS ALBARAN_BASE_MES,
-        CPC.ANODOCUMENTO AS ALBARAN_BASE_ANO,
-        CLCL1.DIASLIMITECREDITO,
-        CLCL1.DIASLIMITECREDITOCONFECHAALB,
-        CVC.IMPORTEVENCIMIENTO,
-        CAST(
-          CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0)
-          AS DECIMAL(15,2)
-        ) AS IMPORTEPENDIENTE,
+        BASE.*,
+        COUNT(*) OVER() AS TOTAL_COUNT,
         ROW_NUMBER() OVER (
-          ORDER BY CVC.ANOVENCIMIENTO, CVC.MESVENCIMIENTO, CVC.DIAVENCIMIENTO, CVC.NUMERODOCUMENTO
+          ORDER BY BASE.DUE_YMD,
+            BASE.EJERCICIODOCUMENTO, BASE.TIPODOCUMENTO,
+            BASE.ORIGENDOCUMENTO, BASE.SUBEMPRESADOCUMENTO,
+            BASE.SERIEDOCUMENTO, BASE.TERMINALDOCUMENTO,
+            BASE.NUMERODOCUMENTO, BASE.XDEDOCUMENTO,
+            BASE.DEXDOCUMENTO, BASE.CODIGOCLIENTEALBARAN
         ) AS RN
-      FROM ${ERP_DATA_SCHEMA}.CVC CVC
-      INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
-        ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-        AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-        AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
-        AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
-        AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-      INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
-        ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-        AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-      LEFT JOIN ${ERP_DATA_SCHEMA}.CLI CLI
-        ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-      LEFT JOIN ${ERP_DATA_SCHEMA}.CLCL1 CLCL1
-        ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-      LEFT JOIN (
+      FROM (
         SELECT
-          TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
-          TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
-          TRIM(TIPODOCUMENTO) AS TIPODOCUMENTO,
-          TRIM(ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
-          TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,
-          EJERCICIODOCUMENTO,
-          TRIM(SERIEDOCUMENTO) AS SERIEDOCUMENTO,
-          TERMINALDOCUMENTO,
-          NUMERODOCUMENTO,
-          XDEDOCUMENTO,
-          DEXDOCUMENTO,
-          SUM(COALESCE(IMPORTEVENCIMIENTO, 0)) AS IMPORTE_COBRADO_APP
-        FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-        GROUP BY
-          TRIM(CODIGOVENDEDOR),
-          TRIM(CODIGOCLIENTEALBARAN),
-          TRIM(TIPODOCUMENTO),
-          TRIM(ORIGENDOCUMENTO),
-          TRIM(SUBEMPRESADOCUMENTO),
-          EJERCICIODOCUMENTO,
-          TRIM(SERIEDOCUMENTO),
-          TERMINALDOCUMENTO,
-          NUMERODOCUMENTO,
-          XDEDOCUMENTO,
-          DEXDOCUMENTO
-      ) APP_COBROS
-        ON APP_COBROS.CODIGOVENDEDOR = TRIM(OPP.CODIGOREPARTIDOR)
-        AND APP_COBROS.CODIGOCLIENTEALBARAN = TRIM(CVC.CODIGOCLIENTEALBARAN)
-        AND APP_COBROS.TIPODOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
-        AND APP_COBROS.ORIGENDOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
-        AND APP_COBROS.SUBEMPRESADOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
-        AND APP_COBROS.EJERCICIODOCUMENTO = CVC.EJERCICIODOCUMENTO
-        AND APP_COBROS.SERIEDOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
-        AND APP_COBROS.TERMINALDOCUMENTO = CVC.TERMINALDOCUMENTO
-        AND APP_COBROS.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
-        AND COALESCE(APP_COBROS.XDEDOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
-        AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
-      WHERE ${repFilter.sql}
-        AND (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO) BETWEEN ? AND ?
-        AND COALESCE(CVC.ANULADOSN, '') <> 'S'
-        AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
-        AND CVC.IMPORTEPENDIENTE <> 0
-        ${clientFilter}
-    ) V
-    WHERE V.RN <= ?
-    ORDER BY V.ANOVENCIMIENTO, V.MESVENCIMIENTO, V.DIAVENCIMIENTO, V.NUMERODOCUMENTO
+          CVC.TIPODOCUMENTO,
+          CVC.ORIGENDOCUMENTO,
+          CVC.SUBEMPRESADOCUMENTO,
+          CVC.EJERCICIODOCUMENTO,
+          CVC.SERIEDOCUMENTO,
+          CVC.TERMINALDOCUMENTO,
+          CVC.NUMERODOCUMENTO,
+          CVC.XDEDOCUMENTO,
+          CVC.DEXDOCUMENTO,
+          CVC.CODIGOCLIENTEALBARAN,
+          TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBRECLIENTE), ''), CVC.CODIGOCLIENTEALBARAN)) AS NOMBRE_CLIENTE,
+          TRIM(COALESCE(CLI.NOMBREALTERNATIVO, '')) AS NOMBREALTERNATIVO,
+          TRIM(COALESCE(CLI.POBLACION, '')) AS POBLACION,
+          CVC.DIAVENCIMIENTO,
+          CVC.MESVENCIMIENTO,
+          CVC.ANOVENCIMIENTO,
+          CVC.DIAEMISION AS FACTURA_BASE_DIA,
+          CVC.MESEMISION AS FACTURA_BASE_MES,
+          CVC.ANOEMISION AS FACTURA_BASE_ANO,
+          CPC.DIADOCUMENTO AS ALBARAN_BASE_DIA,
+          CPC.MESDOCUMENTO AS ALBARAN_BASE_MES,
+          CPC.ANODOCUMENTO AS ALBARAN_BASE_ANO,
+          CLCL1.DIASLIMITECREDITO,
+          CLCL1.DIASLIMITECREDITOCONFECHAALB,
+          CVC.IMPORTEVENCIMIENTO,
+          CAST(CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0) AS DECIMAL(15,2)) AS IMPORTEPENDIENTE,
+          ${dueYmd} AS DUE_YMD
+        FROM ${ERP_DATA_SCHEMA}.CVC CVC
+        INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
+          ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+          AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+          AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+          AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
+          AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+        INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
+          ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+          AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+        LEFT JOIN ${ERP_DATA_SCHEMA}.CLI CLI
+          ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+        LEFT JOIN ${ERP_DATA_SCHEMA}.CLCL1 CLCL1
+          ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+        LEFT JOIN (
+          SELECT
+            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+            TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
+            TRIM(TIPODOCUMENTO) AS TIPODOCUMENTO,
+            TRIM(ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
+            TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,
+            EJERCICIODOCUMENTO,
+            TRIM(SERIEDOCUMENTO) AS SERIEDOCUMENTO,
+            TERMINALDOCUMENTO,
+            NUMERODOCUMENTO,
+            XDEDOCUMENTO,
+            DEXDOCUMENTO,
+            SUM(COALESCE(IMPORTEVENCIMIENTO, 0)) AS IMPORTE_COBRADO_APP
+          FROM ${FINANCE_TABLES.cobros}
+          GROUP BY TRIM(CODIGOVENDEDOR), TRIM(CODIGOCLIENTEALBARAN),
+            TRIM(TIPODOCUMENTO), TRIM(ORIGENDOCUMENTO),
+            TRIM(SUBEMPRESADOCUMENTO), EJERCICIODOCUMENTO,
+            TRIM(SERIEDOCUMENTO), TERMINALDOCUMENTO,
+            NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO
+        ) APP_COBROS
+          ON APP_COBROS.CODIGOVENDEDOR = TRIM(OPP.CODIGOREPARTIDOR)
+          AND APP_COBROS.CODIGOCLIENTEALBARAN = TRIM(CVC.CODIGOCLIENTEALBARAN)
+          AND APP_COBROS.TIPODOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
+          AND APP_COBROS.ORIGENDOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
+          AND APP_COBROS.SUBEMPRESADOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
+          AND APP_COBROS.EJERCICIODOCUMENTO = CVC.EJERCICIODOCUMENTO
+          AND APP_COBROS.SERIEDOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
+          AND APP_COBROS.TERMINALDOCUMENTO = CVC.TERMINALDOCUMENTO
+          AND APP_COBROS.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
+          AND COALESCE(APP_COBROS.XDEDOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
+          AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
+        WHERE ${repFilter.sql}
+          AND ${dueYmd} BETWEEN ? AND ?
+          AND COALESCE(CVC.ANULADOSN, '') <> 'S'
+          AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
+          ${clientFilter}
+      ) BASE
+      WHERE BASE.IMPORTEPENDIENTE <> 0
+        ${stateFilter}
+    ) PAGED
+    WHERE PAGED.RN > ? AND PAGED.RN <= ?
+    ORDER BY PAGED.RN
   `, params, false, false);
 
-  const fromYmd = compactDate(from);
-  const toYmd = compactDate(to);
-  const now = new Date();
-  const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-
-  return rows
-    .map(mapVencimiento)
-    .filter((item) => {
-      const dueYmd = isoDateToCompact(item.fechaVencimiento);
-      if (dueYmd < fromYmd || dueYmd > toYmd) return false;
-      if (item.importePendiente === 0) return false;
-      if (estado === 'vencido') return dueYmd < todayYmd;
-      return true;
-    })
-    .slice(0, limit);
-}
-
-async function registerCobro(input) {
-  const replayExisting = async () => {
-    const info = await getFinanceSchemaInfo();
-    const existingRows = await queryWithParams(`
-      SELECT ${cobroReplaySelect(info)}
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-      WHERE IDEMPOTENCY_TOKEN = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [input.idempotencyToken], false, false);
-    const existing = firstRow(existingRows);
-    assertCobroPayloadMatchesInput(existing, expectedCobroPayload(null, input));
-    return { created: false, id: String(value(existing, 'ID')) };
+  const items = (rows || []).map(mapVencimiento);
+  const reportedTotal = rows.length > 0 ? toInt(value(rows[0], 'TOTAL_COUNT')) : 0;
+  const total = reportedTotal > 0 ? reportedTotal : offset + items.length;
+  const nextOffset = offset + items.length;
+  const hasMore = nextOffset < total;
+  return {
+    items,
+    total,
+    hasMore,
+    nextCursor: hasMore ? encodeVencimientosCursor(nextOffset, fingerprint, todayYmd) : null,
   };
+}
+async function registerCobro(input) {
+  const runtime = assertFinanceRuntime();
+  if (!runtime.financeCapabilityApproved || !runtime.writesEnabled) {
+    throw new FinanceSchemaUnavailableError('La capacidad canonica de cobros no esta autorizada');
+  }
 
+  const pool = getPool();
+  const conn = await pool.connect();
+  let begun = false;
   try {
-    const result = await withTransaction(async (conn) => {
-      await lockCobrosForPayment(conn);
-      const info = await getFinanceSchemaInfo();
-
-      const existingRows = await conn.query(`
-        SELECT ${cobroReplaySelect(info)}
-        FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-        WHERE IDEMPOTENCY_TOKEN = ?
-        FETCH FIRST 1 ROW ONLY
-      `, [input.idempotencyToken]);
-
-      if (existingRows.length > 0) {
-        const existing = firstRow(existingRows);
-        assertCobroPayloadMatchesInput(existing, expectedCobroPayload(null, input));
-        return { created: false, id: String(value(existing, 'ID')) };
-      }
-
-      await validateCobroDocument(input, conn);
-      await assertDocumentNotAlreadyCollected(conn, info, input);
-      const insert = cobroInsertStatement(info, input);
-      await conn.query(insert.sql, insert.params);
-
-      const row = firstRow(await conn.query(`
-        SELECT ID FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-        WHERE IDEMPOTENCY_TOKEN = ?
-        FETCH FIRST 1 ROW ONLY
-      `, [input.idempotencyToken]));
-
-      return { created: true, id: String(value(row, 'ID', '')) };
-    });
-
-    if (result.created) {
-      const docStamp = `${normalizeTipoDocumento(input.tipoDocumento)}-${input.ejercicioDocumento}-${input.serieDocumento}-${input.terminalDocumento}-${input.numeroDocumento}`;
-      logger.info(`[AUDIT] PAYMENT_REGISTERED | Doc:${docStamp} | Rep:${input.codigoRepartidor} | Amount:${roundMoney(input.importeCobrado)} | Token:${input.idempotencyToken}`);
-      // Req #16: traza persistente en REPARTIDOR_COBROS_AUDIT (best-effort).
-      auditLog.logPaymentEvent({
-        eventType: 'PAYMENT_REGISTERED',
-        operador: input.operador || input.codigoUsuario || '',
-        codigoRepartidor: input.codigoRepartidor,
-        idempotencyToken: input.idempotencyToken,
-        documento: docStamp,
-        payload: {
-          cliente: input.codigoCliente,
-          importe: roundMoney(input.importeCobrado),
-          formaPago: input.codigoFormaPago,
-        },
-      }).catch(() => { /* swallow */ });
-    }
-
-    return result;
+    const port = createRepartoCobrosDb2Port({ runtime, logger });
+    // The catalog/index capability gate deliberately runs before BEGIN WORK.
+    await port.assertCapabilities(conn);
+    await conn.query('BEGIN WORK');
+    begun = true;
+    const result = await port.forConnection(conn).insertCobro(input);
+    await conn.query('COMMIT');
+    begun = false;
+    logger.info(`[REPARTIDOR_FINANZAS] PAYMENT_REGISTERED rep=${normalizeText(input.codigoRepartidor)} amount=${roundMoney(input.importeCobrado)} created=${result.created}`);
+    return { created: result.created, id: String(result.id) };
   } catch (error) {
-    if (isDuplicateKeyError(error)) {
-      return replayExisting();
+    if (begun) {
+      try { await conn.query('ROLLBACK'); } catch (rollbackError) {
+        logger.error(`[REPARTIDOR_FINANZAS] Cobro rollback failed: ${sanitizeErrorMessage(rollbackError)}`);
+      }
     }
-    // Req #16: audit del error (incluye DOCUMENT_NOT_ASSIGNED, PAYMENT_AUTHZ_DENIED, etc.)
-    auditLog.logPaymentEvent({
-      eventType: 'PAYMENT_ERROR',
-      operador: input.operador || input.codigoUsuario || '',
-      codigoRepartidor: input.codigoRepartidor,
-      idempotencyToken: input.idempotencyToken,
-      documento: `${normalizeTipoDocumento(input.tipoDocumento)}-${input.ejercicioDocumento}-${input.serieDocumento}-${input.terminalDocumento}-${input.numeroDocumento}`,
-      payload: { message: error.message },
-      errorCode: error.code || error.name || 'UNKNOWN',
-    }).catch(() => { /* swallow */ });
+    if (error instanceof RepartoCobrosCapabilityError || error instanceof RepartoCobrosIdempotencyRaceError) {
+      throw error;
+    }
     throw error;
+  } finally {
+    try { await conn.close(); } catch (closeError) {
+      logger.warn(`[REPARTIDOR_FINANZAS] Cobro connection close failed: ${sanitizeErrorMessage(closeError)}`);
+    }
   }
 }
-
 async function validateCobroDocument(input, conn = null) {
   const sql = `
-    SELECT 1 AS OK
+    SELECT CVC.IMPORTEPENDIENTE AS ERP_IMPORTEPENDIENTE
     FROM ${ERP_DATA_SCHEMA}.CVC CVC
     INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
       ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
@@ -1598,6 +1699,7 @@ async function validateCobroDocument(input, conn = null) {
     error.code = 'DOCUMENT_NOT_ASSIGNED';
     throw error;
   }
+  return firstRow(rows);
 }
 
 async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
@@ -1605,7 +1707,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     const info = await getFinanceSchemaInfo();
     const existingRows = await queryWithParams(`
       SELECT ${cobroReplaySelect(info)}
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+      FROM ${FINANCE_TABLES.cobros}
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
     `, [cobro.idempotencyToken], false, false);
@@ -1613,7 +1715,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     assertCobroMatchesInput(existing, delivery, cobro);
     const deliveryRows = await queryWithParams(`
       SELECT CONFORMADOSN
-      FROM ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS
+      FROM ${ERP_APP_SCHEMA}.DELIVERY_STATUS
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
     `, [delivery.idempotencyToken], false, false);
@@ -1633,16 +1735,18 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
   }
 
   try {
+    // Fail before opening a transaction or taking locks when catalog is unavailable.
+    const schemaInfo = await getFinanceSchemaInfo();
     return await withTransaction(async (conn) => {
       await lockCobrosForPayment(conn);
-      const info = await getFinanceSchemaInfo();
+      const info = schemaInfo;
       if (isDeliveryStatusAvailable()) {
-        await conn.query(`LOCK TABLE ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS IN EXCLUSIVE MODE`);
+        await conn.query(`LOCK TABLE ${ERP_APP_SCHEMA}.DELIVERY_STATUS IN EXCLUSIVE MODE`);
       }
 
       const tokenRows = await conn.query(`
         SELECT ${cobroReplaySelect(info)}
-        FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+        FROM ${FINANCE_TABLES.cobros}
         WHERE IDEMPOTENCY_TOKEN = ?
         FETCH FIRST 1 ROW ONLY
       `, [cobro.idempotencyToken]);
@@ -1655,7 +1759,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
 
       const deliveryRows = await conn.query(`
         SELECT ${dsStatusCol}, UPDATED_AT, ${dsRepCol}
-        FROM ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS
+        FROM ${ERP_APP_SCHEMA}.DELIVERY_STATUS
         WHERE ${dsLookupCol} = ?
         FETCH FIRST 1 ROW ONLY
       `, [dsLookupVal]);
@@ -1701,13 +1805,13 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       if (repartidorId.length > 20) repartidorId = repartidorId.substring(0, 20);
 
       await conn.query(`
-        DELETE FROM ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS
+        DELETE FROM ${ERP_APP_SCHEMA}.DELIVERY_STATUS
         WHERE ${dsLookupCol} = ?
       `, [dsLookupVal]);
 
       if (dsNew) {
         await conn.query(`
-          INSERT INTO ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS (
+          INSERT INTO ${ERP_APP_SCHEMA}.DELIVERY_STATUS (
             STATUS,
             LATITUD,
             LONGITUD,
@@ -1725,7 +1829,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         ]);
       } else {
         await conn.query(`
-          INSERT INTO ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS (
+          INSERT INTO ${ERP_APP_SCHEMA}.DELIVERY_STATUS (
             ID,
             CONFORMADOSN,
             OBSERVACIONES,
@@ -1771,23 +1875,6 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
   }
 }
 
-async function nextLiquidacionNumber({ conn, subempresa, ejercicio, serie, terminal }) {
-  const sql = `
-    SELECT COALESCE(MAX(NUMEROLIQUIDACION), 0) + 1 AS NEXT_NUMERO
-    FROM ${LQD_TABLE}
-    WHERE SUBEMPRESALIQUIDACION = ?
-      AND EJERCICIOLIQUIDACION = ?
-      AND SERIELIQUIDACION = ?
-      AND TERMINALLIQUIDACION = ?
-  `;
-  const params = [subempresa, ejercicio, serie, terminal];
-  const rows = conn
-    ? await conn.query(sql, params)
-    : await queryWithParams(sql, params, false, false);
-  const numero = toInt(value(firstRow(rows), 'NEXT_NUMERO', 1));
-  return numero > 0 ? numero : 1;
-}
-
 async function withTransaction(callback) {
   let pool = getPool();
   if (!pool) {
@@ -1816,318 +1903,12 @@ async function withTransaction(callback) {
   }
 }
 
-async function closeLiquidacion(input) {
-  const existingRow = await findLiquidacionRowByToken(input.idempotencyToken);
-  if (existingRow && Object.keys(existingRow).length > 0) {
-    assertLiquidacionMatchesInput(existingRow, input);
-    return { created: false, liquidacion: mapLiquidacion(existingRow) };
-  }
-
-  const { year, month, day } = dateParts(input.date);
-  const info = await getFinanceSchemaInfo();
-  const subempresa = 'GMP';
-  const serie = 'A';
-  const terminal = toInt(input.repartidorId);
-  const hora = currentHhmmss();
-  let createdLiquidacion = null;
-  let replayedInsideTransaction = false;
-
-  await withTransaction(async (conn) => {
-    const existingInsideRow = firstRow(await conn.query(`
-      SELECT
-        OPS.*,
-        LQD.DIALIQUIDACION,
-        LQD.MESLIQUIDACION,
-        LQD.ANOLIQUIDACION
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS OPS
-      LEFT JOIN ${LQD_TABLE} LQD
-        ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
-      WHERE OPS.IDEMPOTENCY_TOKEN = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [input.idempotencyToken]));
-    if (existingInsideRow && Object.keys(existingInsideRow).length > 0) {
-      assertLiquidacionMatchesInput(existingInsideRow, input);
-      createdLiquidacion = mapLiquidacion(existingInsideRow);
-      replayedInsideTransaction = true;
-      return;
-    }
-
-    try {
-      await conn.query(`LOCK TABLE ${LQD_TABLE} IN EXCLUSIVE MODE`);
-    } catch (lockError) {
-      logger.error(`[REPARTIDOR_FINANZAS] Could not lock ${LQD_TABLE} before numbering: ${lockError.message}`);
-      throw lockError;
-    }
-
-    try {
-      await conn.query(`LOCK TABLE ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS IN EXCLUSIVE MODE`);
-      await conn.query(`LOCK TABLE ${ERP_FINANCE_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES IN EXCLUSIVE MODE`);
-    } catch (lockError) {
-      logger.error(`[REPARTIDOR_FINANZAS] Could not lock finance tables before closing: ${lockError.message}`);
-      throw lockError;
-    }
-
-    const existingAfterLockRow = firstRow(await conn.query(`
-      SELECT
-        OPS.*,
-        LQD.DIALIQUIDACION,
-        LQD.MESLIQUIDACION,
-        LQD.ANOLIQUIDACION
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS OPS
-      LEFT JOIN ${LQD_TABLE} LQD
-        ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
-      WHERE OPS.IDEMPOTENCY_TOKEN = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [input.idempotencyToken]));
-    if (existingAfterLockRow && Object.keys(existingAfterLockRow).length > 0) {
-      assertLiquidacionMatchesInput(existingAfterLockRow, input);
-      createdLiquidacion = mapLiquidacion(existingAfterLockRow);
-      replayedInsideTransaction = true;
-      return;
-    }
-
-    const orphanLqd = firstRow(await conn.query(`
-      SELECT IDMARCALIQUIDACION
-      FROM ${LQD_TABLE}
-      WHERE IDMARCALIQUIDACION = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [input.idempotencyToken]));
-    if (orphanLqd && Object.keys(orphanLqd).length > 0) {
-      throw new IdempotencyConflictError(
-        'Existe una liquidacion ERP con este token pero sin ledger local; requiere revision manual',
-      );
-    }
-
-    const existingSameDay = firstRow(await conn.query(`
-      SELECT IDMARCALIQUIDACION
-      FROM ${LQD_TABLE}
-      WHERE SUBEMPRESALIQUIDACION = ?
-        AND EJERCICIOLIQUIDACION = ?
-        AND SERIELIQUIDACION = ?
-        AND TERMINALLIQUIDACION = ?
-        AND DIALIQUIDACION = ?
-        AND MESLIQUIDACION = ?
-        AND ANOLIQUIDACION = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [subempresa, year, serie, terminal, day, month, year]));
-    const existingDailyToken = normalizeText(value(existingSameDay, 'IDMARCALIQUIDACION'));
-    if (existingDailyToken && existingDailyToken !== input.idempotencyToken) {
-      throw new DuplicateLiquidacionError(
-        `Ya existe una liquidacion para el repartidor ${input.repartidorId} en ${input.date}`,
-      );
-    }
-
-    const numero = await nextLiquidacionNumber({
-      conn,
-      subempresa,
-      ejercicio: year,
-      serie,
-      terminal,
-    });
-    const dateYmd = compactDate(input.date);
-    const dateCol = cobrosDateFilterColumn(info);
-    const orderBy = cobrosDateOrderBy(info, '');
-    const codeColumn = cobrosCodeColumn(info);
-    const amountCol = cobrosAmountColumn(info);
-    const paymentCol = cobrosPaymentColumn(info);
-    const notLiquidated = cobrosNotLiquidatedCondition(info);
-
-    const totalsRow = firstRow(await conn.query(`
-      SELECT
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('EFECTIVO', 'EF', 'E', 'CONTADO', 'CT') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_EFECTIVO,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('CHEQUE', 'CH', 'TALON', 'TALON BANCARIO') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_CHEQUES,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('TARJETA', 'TJ', 'TPV', 'BIZUM', 'BI') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_TARJETA,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('POSTDATADO', 'PD', 'POSTDATADOS') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
-        COALESCE(SUM(${amountCol}), 0) AS TOTAL_COBROS_DIA,
-        COUNT(*) AS COBROS_COUNT
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-      WHERE TRIM(${codeColumn}) = ?
-        AND ${dateCol} = ?
-        AND ${notLiquidated}
-    `, [input.repartidorId, dateYmd]));
-
-    const cobroRows = await conn.query(`
-      SELECT ID
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-      WHERE TRIM(${codeColumn}) = ?
-        AND ${dateCol} = ?
-        AND ${notLiquidated}
-      ORDER BY ${orderBy}, ID
-    `, [input.repartidorId, dateYmd]);
-
-    const balanceRow = firstRow(await conn.query(`
-      SELECT SALDO_PENDIENTE
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES
-      WHERE TRIM(${info.balanceCodeColumn}) = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [input.repartidorId]));
-
-    const gastos = roundMoney(input.totals.gastos);
-    const totals = {
-      totalEfectivo: roundMoney(value(totalsRow, 'TOTAL_EFECTIVO')),
-      totalCheques: roundMoney(value(totalsRow, 'TOTAL_CHEQUES')),
-      totalTarjeta: roundMoney(value(totalsRow, 'TOTAL_TARJETA')),
-      totalPostdatados: roundMoney(value(totalsRow, 'TOTAL_POSTDATADOS')),
-      saldoActual: roundMoney(value(balanceRow, 'SALDO_PENDIENTE')),
-      totalCobrosDia: roundMoney(value(totalsRow, 'TOTAL_COBROS_DIA')),
-      gastos,
-      totalAIngresar: 0,
-      ingresoBanco: roundMoney(input.totals.ingresoBanco),
-      efectivo2: roundMoney(input.totals.efectivo2),
-      entregado2: roundMoney(input.totals.entregado2),
-    };
-    totals.totalAIngresar = roundMoney(
-      totals.saldoActual + totals.totalCobrosDia - totals.gastos
-    );
-    const saldoResultante = roundMoney(
-      totals.totalAIngresar - totals.ingresoBanco
-    );
-
-    await conn.query(`
-      INSERT INTO ${LQD_TABLE} (
-        SUBEMPRESALIQUIDACION,
-        EJERCICIOLIQUIDACION,
-        SERIELIQUIDACION,
-        TERMINALLIQUIDACION,
-        NUMEROLIQUIDACION,
-        DIALIQUIDACION,
-        MESLIQUIDACION,
-        ANOLIQUIDACION,
-        HORALIQUIDACION,
-        CODIGOVENDEDOR,
-        CODIGOVENDEDORUSUARIO,
-        CODIGOUSUARIO,
-        MATRICULA,
-        KILOMETROSSALIDA,
-        KILOMETROSLLEGADA,
-        KILOMETROSRECORRIDOS,
-        IMPORTEEFECTIVO,
-        IMPORTECHEQUES,
-        IMPORTEPOSTDATADOS,
-        IMPORTESALDOACTUAL,
-        IMPORTETOTALAINGRESAR,
-        IMPORTEINGRESOENBANCO,
-        IMPORTEGASTOS,
-        IMPRESOSN,
-        CODIGOVEHICULO,
-        REVISADOSN,
-        IDMARCALIQUIDACION,
-        IMPORTEEFECTIVO2,
-        IMPORTEENTREGADO2,
-        IMPORTETARJETA
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      subempresa,
-      year,
-      serie,
-      terminal,
-      numero,
-      day,
-      month,
-      year,
-      hora,
-      pad(input.repartidorId, 2).slice(-2),
-      pad(input.repartidorId, 2).slice(-2),
-      String(input.createdBy || '').substring(0, 10),
-      input.matricula || '',
-      0,
-      0,
-      0,
-      roundMoney(totals.totalEfectivo),
-      roundMoney(totals.totalCheques),
-      roundMoney(totals.totalPostdatados),
-      roundMoney(totals.saldoActual),
-      roundMoney(totals.totalAIngresar),
-      roundMoney(totals.ingresoBanco),
-      roundMoney(totals.gastos),
-      'N',
-      input.codigoVehiculo || '',
-      'N',
-      input.idempotencyToken,
-      roundMoney(totals.efectivo2),
-      roundMoney(totals.entregado2),
-      roundMoney(totals.totalTarjeta),
-    ]);
-
-    const opsInsert = liquidacionOpsInsertStatement(info, {
-      idempotencyToken: input.idempotencyToken,
-      subempresa,
-      year,
-      serie,
-      terminal,
-      numero,
-      repartidorId: input.repartidorId,
-      totals,
-      saldoResultante,
-      createdBy: input.createdBy,
-    });
-    await conn.query(opsInsert.sql, opsInsert.params);
-
-    await conn.query(`
-      MERGE INTO ${ERP_FINANCE_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES B
-      USING (VALUES (?, ?, ?)) AS V(${info.balanceCodeColumn}, SALDO_PENDIENTE, UPDATED_BY)
-        ON B.${info.balanceCodeColumn} = V.${info.balanceCodeColumn}
-      WHEN MATCHED THEN
-        UPDATE SET SALDO_PENDIENTE = V.SALDO_PENDIENTE,
-                   UPDATED_BY = V.UPDATED_BY,
-                   UPDATED_AT = CURRENT_TIMESTAMP
-      WHEN NOT MATCHED THEN
-        INSERT (${info.balanceCodeColumn}, SALDO_PENDIENTE, UPDATED_BY)
-        VALUES (V.${info.balanceCodeColumn}, V.SALDO_PENDIENTE, V.UPDATED_BY)
-    `, [input.repartidorId, saldoResultante, input.createdBy || 'unknown']);
-
-    if (Array.isArray(cobroRows) && cobroRows.length > 0) {
-      const placeholders = cobroRows.map(() => '?').join(', ');
-      const setParts = [];
-      const updateParams = [];
-      if (info.cobrosHasLiquidado) setParts.push("LIQUIDADO_SN = 'S'");
-      if (info.cobrosHasLiquidacionToken) {
-        setParts.push('LIQUIDACION_TOKEN = ?');
-        updateParams.push(input.idempotencyToken);
-      }
-      if (info.cobrosHasNumeroLiquidacion) {
-        setParts.push('NUMEROLIQUIDACION = ?');
-        updateParams.push(numero);
-      }
-      if (setParts.length > 0) {
-        await conn.query(`
-          UPDATE ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-          SET ${setParts.join(',\n              ')}
-          WHERE ID IN (${placeholders})
-        `, [
-          ...updateParams,
-          ...cobroRows.map((row) => value(row, 'ID')),
-        ]);
-      }
-    }
-  });
-
-  const liquidacion =
-    createdLiquidacion || await findLiquidacionByToken(input.idempotencyToken);
-
-  // EXPORT al ERP DSEDAC.CLV (best-effort, no rompe el flujo si falla).
-  // Solo se ejecuta si PEDIDOS_EXPORT_TO_SYSTEM=true y schema=DSEDAC.
-  // No exportamos si ya estabamos haciendo replay (la fila ya existe).
-  if (!replayedInsideTransaction && liquidacion) {
-    try {
-      const dsedacExports = require('./dsedac-exports.service');
-      await dsedacExports.exportLiquidacionToSystem({
-        IDEMPOTENCY_TOKEN: input.idempotencyToken,
-        CODIGOVENDEDOR: input.repartidorId,
-        CODIGO_REPARTIDOR: input.repartidorId,
-        IMPORTEEFECTIVO: liquidacion.totalEfectivo || 0,
-        IMPORTECHEQUES: liquidacion.totalCheques || 0,
-        IMPORTETARJETA: liquidacion.totalTarjeta || 0,
-        IMPORTEPOSTDATADOS: liquidacion.totalPostdatados || 0,
-        IMPORTEINGRESOENBANCO: liquidacion.ingresoBanco || 0,
-        IMPORTEGASTOS: liquidacion.gastos || 0,
-      });
-    } catch (exportErr) {
-      logger.warn(`[REPARTIDOR] dsedac CLV export best-effort fail: ${exportErr.message}`);
-    }
-  }
-
-  return { created: !replayedInsideTransaction, liquidacion };
+async function closeLiquidacion() {
+  // The canonical liquidation service exclusively owns this operation.
+  // This compatibility export must stay side-effect free.
+  throw new FinanceSchemaUnavailableError(
+    'El cierre de liquidacion se realiza mediante el servicio canonico',
+  );
 }
 
 async function getCommissionTiers() {
@@ -2197,7 +1978,7 @@ async function getCommissionSummaryLegacyUnused({ repartidorId, from, to }) {
 
   const collectedRows = await queryWithParams(`
     SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBRADO
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+    FROM ${FINANCE_TABLES.cobros}
     WHERE TRIM(CODIGOVENDEDOR) = ?
       AND ${dateCol} >= ?
       AND ${dateCol} <= ?
@@ -2301,110 +2082,12 @@ async function saveCommissionTiers({ tiers, updatedBy }) {
   return getCommissionTiers();
 }
 
-async function deleteTestData(idempotencyToken, options = {}) {
-  const opRows = await queryWithParams(`
-    SELECT CODIGOVENDEDOR, IMPORTESALDOACTUAL, CREATED_AT
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS
-    WHERE IDEMPOTENCY_TOKEN = ?
-    FETCH FIRST 1 ROW ONLY
-  `, [idempotencyToken], false, false);
-  const opRow = firstRow(opRows);
-
-  const cobroRows = await queryWithParams(`
-    SELECT ENTREGA_APP_ID, LIQUIDACION_TOKEN
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-    WHERE IDEMPOTENCY_TOKEN = ?
-  `, [idempotencyToken], false, false);
-
-  const liquidatedCobro = cobroRows.find((row) =>
-    normalizeText(value(row, 'LIQUIDACION_TOKEN')).length > 0
+async function deleteTestData() {
+  // Destructive ledger cleanup is retired in every environment. Test fixtures
+  // must be isolated by their owning repository instead of deleting live data.
+  throw new FinanceSchemaUnavailableError(
+    'La limpieza destructiva de datos financieros esta retirada',
   );
-  if (liquidatedCobro && Object.keys(opRow).length === 0) {
-    throw new Error(
-      'Cleanup bloqueado: el cobro ya pertenece a una liquidacion. Borra primero la liquidacion de prueba.',
-    );
-  }
-
-  if (Object.keys(opRow).length > 0) {
-    const newerRows = await queryWithParams(`
-      SELECT ID
-      FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS
-      WHERE TRIM(CODIGOVENDEDOR) = ?
-        AND CREATED_AT > ?
-        AND REVISADOSN = 'CLOSED'
-      FETCH FIRST 1 ROW ONLY
-    `, [
-      normalizeText(value(opRow, 'CODIGOVENDEDOR')),
-      value(opRow, 'CREATED_AT'),
-    ], false, false);
-    if (newerRows.length > 0) {
-      throw new Error(
-        'Cleanup bloqueado: existen liquidaciones posteriores para este repartidor. No se restaura saldo de una prueba antigua.',
-      );
-    }
-  }
-
-  await queryWithParams(`
-    DELETE FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_EMAILS
-    WHERE LIQUIDACION_OP_ID IN (
-      SELECT ID FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS WHERE IDEMPOTENCY_TOKEN = ?
-    )
-  `, [idempotencyToken], false, false);
-  await queryWithParams(`
-    DELETE FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS WHERE IDEMPOTENCY_TOKEN = ?
-  `, [idempotencyToken], false, false);
-  await queryWithParams(`
-    DELETE FROM ${LQD_TABLE} WHERE IDMARCALIQUIDACION = ?
-  `, [idempotencyToken], false, false);
-  await queryWithParams(`
-    UPDATE ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-    SET LIQUIDADO_SN = 'N',
-        LIQUIDACION_TOKEN = NULL
-    WHERE LIQUIDACION_TOKEN = ?
-  `, [idempotencyToken], false, false);
-
-  if (Object.keys(opRow).length > 0) {
-    await queryWithParams(`
-      MERGE INTO ${ERP_FINANCE_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES B
-      USING (VALUES (?, ?, 'cleanup')) AS V(CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
-        ON B.CODIGOVENDEDOR = V.CODIGOVENDEDOR
-      WHEN MATCHED THEN
-        UPDATE SET SALDO_PENDIENTE = V.SALDO_PENDIENTE,
-                   UPDATED_BY = V.UPDATED_BY,
-                   UPDATED_AT = CURRENT_TIMESTAMP
-      WHEN NOT MATCHED THEN
-        INSERT (CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
-        VALUES (V.CODIGOVENDEDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
-    `, [
-      value(opRow, 'CODIGOVENDEDOR'),
-      roundMoney(value(opRow, 'IMPORTESALDOACTUAL')),
-    ], false, false);
-  }
-
-  await queryWithParams(`
-    DELETE FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-    WHERE IDEMPOTENCY_TOKEN = ?
-  `, [idempotencyToken], false, false);
-
-  if (options.deleteDeliveryStatus === true) {
-    const dsNew = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
-    const dsDelCol = dsNew ? 'IDEMPOTENCY_TOKEN' : 'ID';
-    const deliveryIds = new Set(
-      cobroRows
-        .map((row) => String(value(row, 'ENTREGA_APP_ID', '') || '').trim())
-        .filter(Boolean),
-    );
-    if (options.deliveryId) {
-      deliveryIds.add(String(options.deliveryId).trim());
-    }
-
-    for (const deliveryId of deliveryIds) {
-      await queryWithParams(`
-        DELETE FROM ${ERP_FINANCE_SCHEMA}.DELIVERY_STATUS
-        WHERE ${dsDelCol} = ?
-      `, [deliveryId], false, false);
-    }
-  }
 }
 
 function simplePdfBuffer(title, lines) {
@@ -2424,7 +2107,8 @@ function simplePdfBuffer(title, lines) {
 }
 
 async function sendLiquidacionEmails({ liquidacion, repartidorEmail, repartidorName, cobros }) {
-  if (!liquidacion || !repartidorEmail) return [];
+  if (!liquidacion) return [];
+  if (!normalizeText(repartidorEmail)) throw new LiquidacionEmailRecipientRequiredError();
   const subject = `Liquidacion Diaria - GMP ${liquidacion.numero.display}`;
   const lines = [
     `Vendedor: ${liquidacion.repartidorId} ${repartidorName || ''}`,
@@ -2464,6 +2148,10 @@ async function sendLiquidacionEmails({ liquidacion, repartidorEmail, repartidorN
  */
 async function getDetalleVencimiento(docKey) {
   if (!docKey || !docKey.tipo) return null;
+  const repartidorId = normalizeText(docKey.repartidorId);
+  if (!repartidorId) {
+    throw new PaymentAuthzDeniedError('Se requiere el repartidor para consultar un vencimiento');
+  }
   const params = [
     String(docKey.tipo).trim(),
     Number(docKey.ejercicio) || 0,
@@ -2472,9 +2160,7 @@ async function getDetalleVencimiento(docKey) {
     Number(docKey.numero) || 0,
     Number(docKey.xde) || 1,
   ];
-  let rows = [];
-  try {
-    rows = await queryWithParams(`
+  const rows = await queryWithParams(`
       SELECT
         TRIM(CVC.TIPODOCUMENTO) AS TIPODOCUMENTO,
         TRIM(CVC.ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
@@ -2507,12 +2193,9 @@ async function getDetalleVencimiento(docKey) {
         AND CVC.TERMINALDOCUMENTO = ?
         AND CVC.NUMERODOCUMENTO = ?
         AND COALESCE(CVC.XDEDOCUMENTO, 1) = ?
+        AND (TRIM(CVC.CODIGOVENDEDOR) = ? OR TRIM(CVC.CODIGOVENDEDORCOBRO) = ?)
       FETCH FIRST 1 ROW ONLY
-    `, params, false, false);
-  } catch (err) {
-    logger.warn(`[REPARTIDOR_FINANZAS] getDetalleVencimiento error: ${err.message}`);
-    return null;
-  }
+    `, [...params, repartidorId, repartidorId], false, false);
   if (!rows || rows.length === 0) return null;
   const row = rows[0];
   return {
@@ -2564,14 +2247,13 @@ async function getSaldoActual(repartidorId) {
   const rep = normalizeText(repartidorId);
   if (!rep) return 0;
   const info = await getFinanceSchemaInfo();
-  const currentYear = new Date().getFullYear();
   try {
     const rows = await queryWithParams(
-      `SELECT COALESCE(SALDO_ACUMULADO, 0) AS SALDO
-       FROM ${ERP_FINANCE_SCHEMA}.CUENTAS_LIQUIDACION
-       WHERE TRIM(CODIGO_REPARTIDOR) = ? AND EJERCICIO = ?
-       FETCH FIRST 1 ROW ONLY`,
-      [rep, currentYear], false, false
+      `SELECT COALESCE(SALDO_PENDIENTE, 0) AS SALDO
+       FROM ${FINANCE_TABLES.balances}
+        WHERE TRIM(CODIGO_REPARTIDOR) = ?
+        FETCH FIRST 1 ROW ONLY`,
+      [rep], false, false
     );
     if (rows && rows.length > 0) return roundMoney(value(rows[0], 'SALDO'));
   } catch (_) { /* tabla no existe aún */ }
@@ -2587,7 +2269,7 @@ async function getSaldoActual(repartidorId) {
     const notLiquidated = cobrosNotLiquidatedCondition(info);
     const rows = await queryWithParams(
       `SELECT COALESCE(SUM(${pendingColumn}), 0) AS SALDO
-       FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+       FROM ${FINANCE_TABLES.cobros}
        WHERE TRIM(${codeColumn}) = ?
          AND ${notLiquidated}`,
       [rep], false, false
@@ -2603,13 +2285,11 @@ async function getSaldoActual(repartidorId) {
  * Evolución mensual (últimos 6 meses) de cobros del repartidor.
  */
 async function getEvolution(repartidorId) {
-  const rep = normalizeText(repartidorId);
-  if (!rep) return [];
+  const ids = codeList(repartidorId);
   const info = await getFinanceSchemaInfo();
-  if (!info.cobrosAligned && !info.cobrosLegacy) return [];
-
   const codeColumn = cobrosCodeColumn(info);
   const amountColumn = cobrosAmountColumn(info);
+  const codeFilter = inClause(`TRIM(${codeColumn})`, ids);
   const yearExpr = info.cobrosHasCollectionDate
     ? 'ANOCOBRO'
     : info.cobrosHasFechaCobro
@@ -2620,79 +2300,86 @@ async function getEvolution(repartidorId) {
     : info.cobrosHasFechaCobro
       ? 'MONTH(FECHA_COBRO)'
       : 'MESVENCIMIENTO';
-  try {
-    const rows = await queryWithParams(
-      `SELECT ${yearExpr} AS ANO,
-              ${monthExpr} AS MES,
-              COALESCE(SUM(${amountColumn}), 0) AS TOTAL,
-              COUNT(*) AS NUM_COBROS
-       FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-       WHERE TRIM(${codeColumn}) = ?
-         AND ${yearExpr} IS NOT NULL
-         AND ${monthExpr} BETWEEN 1 AND 12
-       GROUP BY ${yearExpr}, ${monthExpr}
-       ORDER BY ${yearExpr} DESC, ${monthExpr} DESC
-       FETCH FIRST 6 ROWS ONLY`,
-      [rep], false, false
-    );
-    return (rows || []).map((r) => ({
-      ano: toInt(value(r, 'ANO')),
-      mes: toInt(value(r, 'MES')),
-      total: roundMoney(value(r, 'TOTAL')),
-      numCobros: toInt(value(r, 'NUM_COBROS')),
-    })).reverse();
-  } catch (err) {
-    logger.warn(`[REPARTIDOR_FINANZAS] getEvolution error: ${err.message}`);
-    return [];
-  }
+  const rows = await queryWithParams(
+    `SELECT ${yearExpr} AS ANO,
+            ${monthExpr} AS MES,
+            COALESCE(SUM(${amountColumn}), 0) AS TOTAL,
+            COUNT(*) AS NUM_COBROS
+     FROM ${FINANCE_TABLES.cobros}
+     WHERE ${codeFilter.sql}
+       AND ${yearExpr} BETWEEN 2000 AND 2100
+       AND ${monthExpr} BETWEEN 1 AND 12
+     GROUP BY ${yearExpr}, ${monthExpr}
+     ORDER BY ${yearExpr} DESC, ${monthExpr} DESC
+     FETCH FIRST 6 ROWS ONLY`,
+    codeFilter.params, false, false
+  );
+  return (rows || []).map((row) => {
+    const ano = toInt(value(row, 'ANO'));
+    const mes = toInt(value(row, 'MES'));
+    const total = roundMoney(value(row, 'TOTAL'));
+    const numCobros = toInt(value(row, 'NUM_COBROS'));
+    return {
+      period: `${ano}-${pad(mes, 2)}`,
+      ano,
+      mes,
+      total,
+      totalSales: total,
+      numCobros,
+    };
+  }).reverse();
 }
-
 /**
  * Top productos entregados por el repartidor (basado en CPC.CODIGOREPARTIDOR
  * vía OPP, agregado por familia/artículo).
  */
 async function getTopProducts(repartidorId, { limit = 10 } = {}) {
-  const rep = normalizeText(repartidorId);
-  if (!rep) return [];
-  try {
-    const rows = await queryWithParams(
-      `SELECT TRIM(LAC.CODIGOARTICULO) AS CODIGO,
-              TRIM(COALESCE(NULLIF(TRIM(ART.DESCRIPCIONARTICULO), ''), NULLIF(TRIM(LAC.DESCRIPCION), ''), LAC.CODIGOARTICULO)) AS NOMBRE,
-              COALESCE(SUM(LAC.CANTIDADENVASES), 0) AS UNIDADES,
-              COALESCE(SUM(LAC.IMPORTEVENTA), 0) AS IMPORTE
-       FROM ${ERP_DATA_SCHEMA}.CPC CPC
-       INNER JOIN ${ERP_DATA_SCHEMA}.LAC LAC
-         ON LAC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
-        AND LAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-        AND LAC.SERIEALBARAN = CPC.SERIEALBARAN
-        AND LAC.TERMINALALBARAN = CPC.TERMINALALBARAN
-        AND LAC.NUMEROALBARAN = CPC.NUMEROALBARAN
-       LEFT JOIN ${ERP_DATA_SCHEMA}.ART ART
-         ON TRIM(ART.CODIGOARTICULO) = TRIM(LAC.CODIGOARTICULO)
-       INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
-         ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-        AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-       WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
-         AND CPC.ANODOCUMENTO >= YEAR(CURRENT DATE) - 1
-         AND TRIM(LAC.CODIGOARTICULO) <> ''
-       GROUP BY TRIM(LAC.CODIGOARTICULO),
-                TRIM(COALESCE(NULLIF(TRIM(ART.DESCRIPCIONARTICULO), ''), NULLIF(TRIM(LAC.DESCRIPCION), ''), LAC.CODIGOARTICULO))
-       ORDER BY IMPORTE DESC
-       FETCH FIRST ${Math.max(1, Math.min(50, Number(limit) || 10))} ROWS ONLY`,
-      [rep], false, false
-    );
-    return (rows || []).map((r) => ({
-      codigo: value(r, 'CODIGO'),
-      nombre: value(r, 'NOMBRE') || value(r, 'CODIGO'),
-      unidades: Number(value(r, 'UNIDADES')) || 0,
-      importe: roundMoney(value(r, 'IMPORTE')),
-    }));
-  } catch (err) {
-    logger.warn(`[REPARTIDOR_FINANZAS] getTopProducts error: ${err.message}`);
-    return [];
-  }
+  const ids = codeList(repartidorId);
+  const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
+  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+  const rows = await queryWithParams(
+    `SELECT TRIM(LAC.CODIGOARTICULO) AS CODIGO,
+            TRIM(COALESCE(NULLIF(TRIM(ART.DESCRIPCIONARTICULO), ''), NULLIF(TRIM(LAC.DESCRIPCION), ''), LAC.CODIGOARTICULO)) AS NOMBRE,
+            COALESCE(SUM(LAC.CANTIDADENVASES), 0) AS UNIDADES,
+            COALESCE(SUM(LAC.IMPORTEVENTA), 0) AS IMPORTE
+     FROM ${ERP_DATA_SCHEMA}.CPC CPC
+     INNER JOIN ${ERP_DATA_SCHEMA}.LAC LAC
+       ON LAC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
+      AND LAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+      AND LAC.SERIEALBARAN = CPC.SERIEALBARAN
+      AND LAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+      AND LAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+     LEFT JOIN ${ERP_DATA_SCHEMA}.ART ART
+       ON TRIM(ART.CODIGOARTICULO) = TRIM(LAC.CODIGOARTICULO)
+     INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
+       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+      AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+     WHERE ${repFilter.sql}
+       AND CPC.ANODOCUMENTO >= YEAR(CURRENT DATE) - 1
+       AND TRIM(LAC.CODIGOARTICULO) <> ''
+     GROUP BY TRIM(LAC.CODIGOARTICULO),
+              TRIM(COALESCE(NULLIF(TRIM(ART.DESCRIPCIONARTICULO), ''), NULLIF(TRIM(LAC.DESCRIPCION), ''), LAC.CODIGOARTICULO))
+     ORDER BY IMPORTE DESC, CODIGO
+     FETCH FIRST ${safeLimit} ROWS ONLY`,
+    repFilter.params, false, false
+  );
+  return (rows || []).map((row) => {
+    const codigo = String(value(row, 'CODIGO', '') || '').trim();
+    const nombre = String(value(row, 'NOMBRE', codigo) || codigo).trim();
+    const unidades = toNumber(value(row, 'UNIDADES'));
+    const importe = roundMoney(value(row, 'IMPORTE'));
+    return {
+      codigo,
+      nombre,
+      unidades,
+      importe,
+      code: codigo,
+      name: nombre,
+      totalUnits: unidades,
+      totalSales: importe,
+    };
+  });
 }
-
 /**
  * Req #16 (devoluciones): anula un cobro registrado por el repartidor.
  *
@@ -2707,121 +2394,12 @@ async function getTopProducts(repartidorId, { limit = 10 } = {}) {
  * Devuelve el cobro anulado (snapshot previo al borrado) para que el frontend
  * pueda mostrar al usuario lo que se ha revertido.
  */
-async function reverseCobro({
-  idempotencyToken,
-  repartidorId,
-  operador,
-  reason,
-  allowAcrossRepartidores = false,
-}) {
-  const token = String(idempotencyToken || '').trim();
-  if (!token) {
-    throw new CobroNotFoundError('Token de idempotencia obligatorio');
-  }
-
-  const existingRows = await queryWithParams(
-    `SELECT ${cobroReplaySelect(await getFinanceSchemaInfo())} FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
-     WHERE IDEMPOTENCY_TOKEN = ?
-     FETCH FIRST 1 ROW ONLY`,
-    [token], false, false,
+async function reverseCobro() {
+  // The approved production ledger does not yet expose a verified soft-reversal
+  // column set plus transactional audit contract. Refuse before any DB action.
+  throw new FinanceSchemaUnavailableError(
+    'La reversi?n de cobros no est? disponible hasta validar el contrato de anulaci?n y auditor?a',
   );
-  const existing = firstRow(existingRows);
-  if (!existing) {
-    throw new CobroNotFoundError();
-  }
-
-  const cobroRepartidor = normalizeText(
-    value(existing, 'CODIGOVENDEDOR') || value(existing, 'CODIGO_REPARTIDOR'),
-  );
-  const requester = normalizeText(repartidorId);
-  if (!allowAcrossRepartidores && requester && cobroRepartidor && cobroRepartidor !== requester) {
-    const err = new PaymentAuthzDeniedError(
-      'No tienes autorización para anular este cobro (pertenece a otro repartidor)',
-    );
-    err.context = { owner: cobroRepartidor, requester };
-    throw err;
-  }
-
-  const liquidadoFlag = String(value(existing, 'LIQUIDADO_SN') || '').toUpperCase();
-  const numeroLiquidacion = toInt(value(existing, 'NUMEROLIQUIDACION'));
-  if (liquidadoFlag === 'S' || numeroLiquidacion > 0) {
-    throw new CobroAlreadyLiquidadoError();
-  }
-
-  // Snapshot para devolver y para el audit log.
-  const snapshot = {
-    id: value(existing, 'ID'),
-    idempotencyToken: token,
-    codigoRepartidor: cobroRepartidor,
-    codigoCliente: normalizeText(
-      value(existing, 'CODIGOCLIENTEALBARAN') ||
-      value(existing, 'CODIGO_CLIENTE'),
-    ),
-    importe: roundMoney(
-      value(existing, 'IMPORTEVENCIMIENTO') ||
-      value(existing, 'IMPORTE_COBRADO'),
-    ),
-    tipoDocumento: normalizeText(
-      value(existing, 'TIPODOCUMENTO') || value(existing, 'TIPO_DOCUMENTO'),
-    ),
-    numeroDocumento: toInt(
-      value(existing, 'NUMERODOCUMENTO') || value(existing, 'NUMERO_DOCUMENTO'),
-    ),
-    fecha: value(existing, 'CREATED_AT'),
-  };
-
-  try {
-    await queryWithParams(
-      `DELETE FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?`,
-      [token], false, false,
-    );
-  } catch (err) {
-    logger.error(`[REPARTIDOR_FINANZAS] reverseCobro DELETE failed: ${err.message}`);
-    throw err;
-  }
-
-  const docStamp = snapshot.numeroDocumento
-    ? `${snapshot.tipoDocumento}-${snapshot.numeroDocumento}`
-    : snapshot.tipoDocumento;
-
-  // Audit: REPARTIDOR_COBROS_AUDIT.EVENT_TYPE='PAYMENT_REVERSED'
-  // Fallo de audit NO debe perderse en silencio: lo logueamos a logger.error y a
-  // un fallback stream para que sea recuperable post-mortem.
-  try {
-    await auditLog.logPaymentEvent({
-      eventType: 'PAYMENT_REVERSED',
-      operador: operador || 'unknown',
-      codigoRepartidor: snapshot.codigoRepartidor,
-      idempotencyToken: token,
-      documento: docStamp,
-      payload: {
-        cliente: snapshot.codigoCliente,
-        importe: snapshot.importe,
-        reason: reason || '(sin motivo)',
-      },
-    });
-  } catch (auditErr) {
-    // Best-effort hacia DB pero registro completo en log para reconciliacion manual.
-    logger.error(
-      `[AUDIT_FALLBACK] PAYMENT_REVERSED audit DB write fallo; ` +
-      `token=${auditLog.hashTokenPreview(token)} ` +
-      `repartidor=${snapshot.codigoRepartidor} cliente=${snapshot.codigoCliente} ` +
-      `importe=${snapshot.importe} documento=${docStamp} ` +
-      `operador=${operador || 'unknown'} reason="${(reason || '').replace(/"/g, '\\"')}" ` +
-      `error=${auditErr.message}`
-    );
-  }
-
-  logger.info(
-    `[REPARTIDOR_FINANZAS] PAYMENT_REVERSED token=${auditLog.hashTokenPreview(token)} ` +
-    `rep=${snapshot.codigoRepartidor} cliente=${snapshot.codigoCliente} ` +
-    `importe=${snapshot.importe} operador=${operador} reason="${reason || ''}"`
-  );
-
-  return {
-    reversed: true,
-    cobro: snapshot,
-  };
 }
 
 module.exports = {
@@ -2853,6 +2431,8 @@ module.exports = {
   DuplicateLiquidacionError,
   CobroAlreadyLiquidadoError,
   CobroNotFoundError,
+  FinanceSchemaUnavailableError,
+  LiquidacionEmailRecipientRequiredError,
   // Audit helper (re-export para tests)
   _auditLog: auditLog,
 };

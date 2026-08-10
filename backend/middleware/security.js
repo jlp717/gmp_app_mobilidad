@@ -31,6 +31,19 @@ const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '10', 10);
 const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '30000', 10); // 30k for mobile apps
 const RATE_LIMIT_REDIS_TIMEOUT_MS = parseInt(process.env.RATE_LIMIT_REDIS_TIMEOUT_MS || '500', 10);
 
+// One Redis command owns both the increment and its expiry. It also repairs a
+// pre-existing counter without TTL, so an interrupted older deployment cannot
+// leave a permanent rate-limit key behind.
+const RATE_LIMIT_INCREMENT_SCRIPT = `
+local total = redis.call('INCR', KEYS[1])
+local ttl = redis.call('PTTL', KEYS[1])
+if total == 1 or ttl < 0 then
+    redis.call('PEXPIRE', KEYS[1], ARGV[1])
+    ttl = tonumber(ARGV[1])
+end
+return { total, ttl }
+`;
+
 // CORS configuration
 const parseCorsOrigin = (value) => {
     if (isProduction) {
@@ -47,27 +60,43 @@ const parseCorsOrigin = (value) => {
 };
 
 class RedisRateLimitStore {
-    constructor(prefix) {
+    constructor(prefix, { requireRedis = isProduction, getClient } = {}) {
         this.prefix = prefix;
         this.windowMs = 60_000;
-        this.fallback = new rateLimit.MemoryStore();
+        this.requireRedis = requireRedis;
+        this.getClient = getClient || (() => {
+            try {
+                const { redisCache } = require('../services/redis-cache');
+                return redisCache?.isConnected && redisCache.client ? redisCache.client : null;
+            } catch (_) {
+                return null;
+            }
+        });
+        // Development/test may be intentionally self-contained. Production is
+        // never allowed a per-worker counter because it defeats rate limiting.
+        this.fallback = requireRedis ? null : new rateLimit.MemoryStore();
     }
 
     init(options) {
         this.windowMs = options.windowMs;
-        if (typeof this.fallback.init === 'function') {
+        if (typeof this.fallback?.init === 'function') {
             this.fallback.init(options);
         }
     }
 
     _client() {
-        try {
-            const { redisCache } = require('../services/redis-cache');
-            if (redisCache?.isConnected && redisCache.client) {
-                return redisCache.client;
-            }
-        } catch (_) {}
-        return null;
+        return this.getClient();
+    }
+
+    isAvailable() {
+        return Boolean(this._client());
+    }
+
+    _unavailable() {
+        const error = new Error('Rate limiting is temporarily unavailable');
+        error.code = 'RATE_LIMIT_REDIS_UNAVAILABLE';
+        error.status = 503;
+        return error;
     }
 
     _key(key) {
@@ -94,31 +123,42 @@ class RedisRateLimitStore {
 
     async increment(key) {
         const client = this._client();
-        if (!client) return this.fallback.increment(key);
+        if (!client) {
+            if (this.requireRedis) throw this._unavailable();
+            return this.fallback.increment(key);
+        }
 
         try {
             const redisKey = this._key(key);
-            const totalHits = await this._withTimeout(client.incr(redisKey), 'incr');
-            if (totalHits === 1) {
-                if (typeof client.pExpire === 'function') {
-                    await this._withTimeout(client.pExpire(redisKey, this.windowMs), 'pExpire');
-                } else {
-                    await this._withTimeout(client.expire(redisKey, Math.ceil(this.windowMs / 1000)), 'expire');
-                }
+            const result = await this._withTimeout(client.eval(RATE_LIMIT_INCREMENT_SCRIPT, {
+                keys: [redisKey],
+                arguments: [String(this.windowMs)],
+            }), 'increment');
+            const totalHits = Number(result?.[0]);
+            const ttlMs = Number(result?.[1]);
+            if (!Number.isSafeInteger(totalHits) || totalHits < 1 || !Number.isFinite(ttlMs) || ttlMs < 0) {
+                throw new Error('Invalid Redis rate-limit response');
             }
             return {
                 totalHits,
-                resetTime: new Date(Date.now() + this.windowMs),
+                resetTime: new Date(Date.now() + ttlMs),
             };
         } catch (error) {
-            logger.warn(`[Security] Redis rate-limit store fallback for ${this.prefix}: ${error.message}`);
+            if (this.requireRedis) {
+                logger.warn('[Security] Redis rate-limit store unavailable');
+                throw this._unavailable();
+            }
+            logger.warn('[Security] Redis rate-limit store unavailable; using development fallback');
             return this.fallback.increment(key);
         }
     }
 
     async decrement(key) {
         const client = this._client();
-        if (!client) return this.fallback.decrement(key);
+        if (!client) {
+            if (this.requireRedis) return;
+            return this.fallback.decrement(key);
+        }
         try {
             const redisKey = this._key(key);
             const current = parseInt(await this._withTimeout(client.get(redisKey), 'get'), 10) || 0;
@@ -126,31 +166,75 @@ class RedisRateLimitStore {
                 await this._withTimeout(client.decr(redisKey), 'decr');
             }
         } catch (_) {
-            await this.fallback.decrement(key);
+            if (!this.requireRedis) await this.fallback.decrement(key);
         }
     }
 
     async resetKey(key) {
         const client = this._client();
-        if (!client) return this.fallback.resetKey(key);
+        if (!client) {
+            if (this.requireRedis) return;
+            return this.fallback.resetKey(key);
+        }
         try {
             await this._withTimeout(client.del(this._key(key)), 'del');
         } catch (_) {
-            await this.fallback.resetKey(key);
+            if (!this.requireRedis) await this.fallback.resetKey(key);
         }
     }
 }
 
-function sharedRateLimitStore(prefix) {
-    return new RedisRateLimitStore(prefix);
+function sharedRateLimitStore(prefix, options) {
+    return new RedisRateLimitStore(prefix, options);
+}
+
+function createRateLimiter(options, { store } = {}) {
+    const rateLimitStore = store || sharedRateLimitStore(options.prefix);
+    const skipRequest = options.skip || (() => false);
+    const limiter = rateLimit({ ...options, skip: () => false, store: rateLimitStore });
+
+    const failClosedLimiter = async (req, res, next) => {
+        try {
+            // Liveness endpoints must remain observable during a Redis outage.
+            if (await skipRequest(req, res)) return next();
+            if (rateLimitStore.requireRedis && !rateLimitStore.isAvailable()) {
+                return res.status(503).json({ error: 'Servicio temporalmente no disponible', code: 'RATE_LIMIT_UNAVAILABLE' });
+            }
+            return limiter(req, res, (error) => {
+                if (error?.code === 'RATE_LIMIT_REDIS_UNAVAILABLE') {
+                    return res.status(503).json({ error: 'Servicio temporalmente no disponible', code: 'RATE_LIMIT_UNAVAILABLE' });
+                }
+                return error ? next(error) : next();
+            });
+        } catch (error) {
+            return next(error);
+        }
+    };
+    failClosedLimiter.resetKey = limiter.resetKey;
+    failClosedLimiter.getKey = limiter.getKey;
+    failClosedLimiter.store = rateLimitStore;
+    return failClosedLimiter;
+}
+
+// Do not use req.ip here. It can be derived from X-Forwarded-For when proxy
+// settings change; rate limiting must retain the connected peer identity.
+function rateLimitPeerIp(req) {
+    const address = req?.socket?.remoteAddress || req?.connection?.remoteAddress;
+    return typeof address === 'string' && address.startsWith('::ffff:')
+        ? address.slice(7)
+        : address || 'unknown';
+}
+
+function globalRateLimitKey(req) {
+    return rateLimitPeerIp(req);
 }
 
 // =============================================================================
 // RATE LIMITERS
 // =============================================================================
 
-exports.globalLimiter = rateLimit({
-    store: sharedRateLimitStore('global'),
+exports.globalLimiter = createRateLimiter({
+    prefix: 'global',
     windowMs: RATE_LIMIT_WINDOW_MS,
     max: RATE_LIMIT_MAX_REQUESTS,
     message: {
@@ -159,12 +243,12 @@ exports.globalLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => `${req.ip || 'unknown'}-${req.get('user-agent') || 'unknown'}`,
+    keyGenerator: globalRateLimitKey,
     skip: (req) => req.path === '/api/health' || req.path === '/health/version-check'
 });
 
-exports.loginLimiter = rateLimit({
-    store: sharedRateLimitStore('login'),
+exports.loginLimiter = createRateLimiter({
+    prefix: 'login',
     windowMs: 5 * 60 * 1000, // 5 minutes (reduced from 15)
     max: LOGIN_RATE_LIMIT_MAX,
     message: {
@@ -173,11 +257,11 @@ exports.loginLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => `${req.ip || 'unknown'}-${req.body?.username || 'unknown'}`
+    keyGenerator: (req) => `${rateLimitPeerIp(req)}-${req.body?.username || 'unknown'}`
 });
 
-exports.apiLimiter = rateLimit({
-    store: sharedRateLimitStore('api'),
+exports.apiLimiter = createRateLimiter({
+    prefix: 'api',
     windowMs: 15 * 60 * 1000,
     max: API_RATE_LIMIT_MAX,
     message: { 
@@ -187,33 +271,35 @@ exports.apiLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => req.path === '/api/health' || req.path === '/health/version-check', // Skip health checks
-    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+    keyGenerator: (req) => req.user?.id || rateLimitPeerIp(req)
 });
 
-exports.uploadLimiter = rateLimit({
-    store: sharedRateLimitStore('upload'),
+exports.uploadLimiter = createRateLimiter({
+    prefix: 'upload',
     windowMs: 15 * 60 * 1000,
     max: 10,
     message: { error: 'Demasiadas subidas de archivos. Intente más tarde.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    keyGenerator: rateLimitPeerIp
 });
 
-exports.emailLimiter = rateLimit({
-    store: sharedRateLimitStore('email'),
+exports.emailLimiter = createRateLimiter({
+    prefix: 'email',
     windowMs: 60 * 60 * 1000,
     max: 5,
     message: { error: 'Demasiados envíos de email. Intente en una hora.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    keyGenerator: rateLimitPeerIp
 });
 
 // Para apps moviles los limites deben ser GENEROSOS por usuario. La app abre
 // pestanas que disparan 20-40 GET en paralelo. Limites bajos producen 429
 // masivos y rompen la UI. Limites RESTRICTIVOS solo en POST/PUT/DELETE
 // (escritura), no en GET de lectura.
-exports.cobrosLimiter = rateLimit({
-    store: sharedRateLimitStore('cobros'),
+exports.cobrosLimiter = createRateLimiter({
+    prefix: 'cobros',
     windowMs: 60 * 1000,         // 1 minuto
     max: 240,                    // 240 req/min/usuario (lectura GET intensiva OK)
     message: {
@@ -222,13 +308,13 @@ exports.cobrosLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.user?.id || req.ip || 'unknown',
+    keyGenerator: (req) => req.user?.id || rateLimitPeerIp(req),
     skip: (req) => req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'DELETE'
         ? false : false // aplicar siempre, pero con limite generoso
 });
 
-exports.pedidosLimiter = rateLimit({
-    store: sharedRateLimitStore('pedidos'),
+exports.pedidosLimiter = createRateLimiter({
+    prefix: 'pedidos',
     windowMs: 60 * 1000,
     max: 300,                    // 300 req/min/usuario para pedidos
     message: {
@@ -237,11 +323,11 @@ exports.pedidosLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+    keyGenerator: (req) => req.user?.id || rateLimitPeerIp(req)
 });
 
-exports.bolsaLimiter = rateLimit({
-    store: sharedRateLimitStore('bolsa'),
+exports.bolsaLimiter = createRateLimiter({
+    prefix: 'bolsa',
     windowMs: 60 * 1000,
     max: 120,                    // 120 req/min/usuario
     message: {
@@ -249,11 +335,11 @@ exports.bolsaLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+    keyGenerator: (req) => req.user?.id || rateLimitPeerIp(req)
 });
 
-exports.evolutionLimiter = rateLimit({
-    store: sharedRateLimitStore('evolution'),
+exports.evolutionLimiter = createRateLimiter({
+    prefix: 'evolution',
     windowMs: 60 * 1000,
     max: 120,                    // 120 req/min/usuario (era 40)
     message: {
@@ -261,8 +347,13 @@ exports.evolutionLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+    keyGenerator: (req) => req.user?.id || rateLimitPeerIp(req)
 });
+
+exports.rateLimitPeerIp = rateLimitPeerIp;
+exports.globalRateLimitKey = globalRateLimitKey;
+exports.RedisRateLimitStore = RedisRateLimitStore;
+exports.createRateLimiter = createRateLimiter;
 
 // =============================================================================
 // SECURITY HEADERS
@@ -450,7 +541,7 @@ exports.detectSqlInjection = (req, res, next) => {
     
     for (const [key, value] of Object.entries(req.query)) {
         if (typeof value === 'string' && checkForSqlInjection(value)) {
-            logger.warn(`[SQL Injection Blocked] Suspicious query param: ${key} from IP: ${req.ip}`);
+            logger.warn(`[SQL Injection Blocked] Suspicious query param: ${key}`);
             return res.status(400).json({ error: 'Invalid input detected' });
         }
     }
@@ -461,7 +552,7 @@ exports.detectSqlInjection = (req, res, next) => {
                 const currentPath = path ? `${path}.${key}` : key;
                 
                 if (typeof value === 'string' && checkForSqlInjection(value)) {
-                    logger.warn(`[SQL Injection Blocked] Suspicious field: ${currentPath} from IP: ${req.ip}`);
+                    logger.warn(`[SQL Injection Blocked] Suspicious field: ${currentPath}`);
                     return true;
                 } else if (typeof value === 'object' && value !== null) {
                     if (checkObject(value, currentPath)) return true;
@@ -522,7 +613,7 @@ exports.detectSuspiciousAgents = (req, res, next) => {
         if (req.path === '/api/health' || req.path === '/health') {
             return next();
         }
-        logger.warn(`[Security] Blocked request with empty User-Agent from IP: ${req.ip} on ${req.path}`);
+        logger.warn(`[Security] Blocked request with empty User-Agent on ${req.path}`);
         return res.status(403).json({ error: 'User-Agent header required' });
     }
     
@@ -533,7 +624,7 @@ exports.detectSuspiciousAgents = (req, res, next) => {
     
     for (const pattern of suspiciousUserAgents) {
         if (pattern.test(userAgent)) {
-            logger.warn(`[Security] Blocked suspicious User-Agent "${userAgent}" from IP: ${req.ip}`);
+            logger.warn('[Security] Blocked suspicious User-Agent');
             return res.status(403).json({ error: 'Forbidden' });
         }
     }
@@ -558,7 +649,7 @@ exports.validateContentLength = (req, res, next) => {
         }
         
         if (contentLength > MAX_CONTENT_LENGTH) {
-            logger.warn(`[Security] Blocked large payload (${contentLength} bytes) from IP: ${req.ip} on ${req.path}`);
+            logger.warn(`[Security] Blocked large payload (${contentLength} bytes) on ${req.path}`);
             return res.status(413).json({ 
                 error: 'Payload too large',
                 maxAllowed: MAX_CONTENT_LENGTH
@@ -588,11 +679,8 @@ exports.addRequestId = (req, res, next) => {
 
 exports.logSecurityEvent = (event, req, details) => {
     logger.warn(`[SECURITY] ${event}`, {
-        ip: req.ip,
         path: req.path,
         method: req.method,
-        userAgent: req.get('user-agent'),
-        userId: req.user?.id,
         timestamp: new Date().toISOString(),
         ...details
     });
@@ -624,7 +712,7 @@ exports.detectScannerProbes = (req, res, next) => {
 
     if (!isScannerProbe) return next();
 
-    const ip = req.ip || 'unknown';
+    const ip = rateLimitPeerIp(req);
     const now = Date.now();
 
     let tracker = scannerIpTracker.get(ip);
@@ -637,9 +725,9 @@ exports.detectScannerProbes = (req, res, next) => {
     scannerIpTracker.set(ip, tracker);
 
     if (tracker.count === 1) {
-        logger.warn(`[SCANNER] New scanner from ${ip}: ${req.method} ${fullPath}`);
+        logger.warn(`[SCANNER] New scanner probe blocked: ${req.method} ${fullPath}`);
     } else if (tracker.count % 10 === 0) {
-        logger.warn(`[SCANNER] Persistent scanner from ${ip}: ${tracker.count} probes (latest: ${req.method} ${fullPath})`);
+        logger.warn(`[SCANNER] Persistent scanner: ${tracker.count} probes (latest: ${req.method} ${fullPath})`);
     }
 
     if (scannerIpTracker.size > 200) {
@@ -662,7 +750,7 @@ const BRUTE_FORCE_MAX_USERS_PER_IP = parseInt(process.env.BRUTE_FORCE_MAX_USERS 
 exports.bruteForceIpTracker = (req, res, next) => {
     if (req.method !== 'POST') return next();
 
-    const ip = req.ip || 'unknown';
+    const ip = rateLimitPeerIp(req);
     const username = (req.body && req.body.username) || '__MISSING__';
     const now = Date.now();
 
@@ -682,8 +770,9 @@ exports.bruteForceIpTracker = (req, res, next) => {
     if (!tracker.blocked && tracker.users.size > BRUTE_FORCE_MAX_USERS_PER_IP) {
         tracker.blocked = true;
         const windowSec = Math.round((now - tracker.first) / 1000);
-        logger.warn(`[BRUTE FORCE] IP ${ip} probed ${tracker.users.size} usernames in ${windowSec}s — BLOCKED for 30min`);
-        setTimeout(() => bruteForceTracker.delete(ip), 30 * 60 * 1000);
+        logger.warn(`[BRUTE FORCE] ${tracker.users.size} usernames probed in ${windowSec}s — BLOCKED for 30min`);
+        const unblockTimer = setTimeout(() => bruteForceTracker.delete(ip), 30 * 60 * 1000);
+        unblockTimer.unref?.();
     }
 
     if (tracker.blocked) {

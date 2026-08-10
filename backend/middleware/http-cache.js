@@ -54,6 +54,12 @@ function requiresVerifiedUserForCache(req) {
     return isApiRequest(req) ? !isPublicApiRequest(req) : false;
 }
 
+function isSensitiveRepartoPath(req) {
+    const path = getRequestPath(req);
+    return path.includes('/repartidor-finanzas/rutero/evidence/')
+        || /\/repartidor-finanzas\/rutero\/confirmations(?:\/[^/]+)?\/receipt$/.test(path);
+}
+
 function generateETag(data) {
     return `"${crypto.createHash('md5').update(JSON.stringify(data)).digest('hex').substring(0, 16)}"`;
 }
@@ -260,7 +266,12 @@ function cached(cachePrefix, ttlSeconds) {
             if (res.headersSent || res.writableEnded || res.locals?.requestTimedOut) {
                 return res;
             }
+            const cacheControl = String(res.getHeader('Cache-Control') || '').toLowerCase();
+            const responseForbidsStorage = cacheControl.split(',')
+                .map(value => value.trim())
+                .includes('no-store');
             if (
+                !responseForbidsStorage &&
                 res.statusCode >= 200 &&
                 res.statusCode < 300 &&
                 data &&
@@ -269,8 +280,10 @@ function cached(cachePrefix, ttlSeconds) {
             ) {
                 set(cacheKey, data, ttlSeconds);
             }
-            res.setHeader('ETag', generateETag(data));
-            res.setHeader('Cache-Control', 'private, max-age=' + Math.floor(ttlSeconds * 0.5));
+            if (!responseForbidsStorage) {
+                res.setHeader('ETag', generateETag(data));
+                res.setHeader('Cache-Control', 'private, max-age=' + Math.floor(ttlSeconds * 0.5));
+            }
             return originalJson(data);
         };
 
@@ -286,6 +299,11 @@ function cacheMiddleware(req, res, next) {
         }
 
         const path = req.path;
+
+        if (isSensitiveRepartoPath(req)) {
+            res.setHeader('Cache-Control', 'private, no-store');
+            return next();
+        }
 
         if (path.includes('/dashboard/metrics')) {
             return cached('metrics', CACHE_TTL.metrics)(req, res, next);
@@ -355,6 +373,7 @@ module.exports = {
     invalidate,
     invalidateAll,
     isCacheBypassRequest,
+    isSensitiveRepartoPath,
     CACHE_TTL,
     MAX_ENTRY_SIZE,
     MAX_TOTAL_CACHE,

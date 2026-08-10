@@ -8,16 +8,9 @@
  */
 
 const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path = require('path');
 const logger = require('../../middleware/logger');
 const { query, queryWithParams } = require('../../config/db');
 
-// Directorio para almacenar recibos temporales
-const receiptsDir = path.join(__dirname, '../../uploads/receipts');
-if (!fs.existsSync(receiptsDir)) {
-    fs.mkdirSync(receiptsDir, { recursive: true });
-}
 
 // Mapeo de código IVA a porcentaje real (actualizado)
 const IVA_MAP = {
@@ -93,33 +86,9 @@ async function getAlbaranHeader(ejercicio, serie, terminal, numero) {
  * @returns {Buffer|null} signature image buffer
  */
 function resolveSignatureBuffer(signaturePath, signatureBase64) {
-    // 1. Try file path
-    if (signaturePath) {
-        // Direct file path
-        if (fs.existsSync(signaturePath)) {
-            try {
-                return fs.readFileSync(signaturePath);
-            } catch (e) {
-                logger.warn(`[RECEIPT] Cannot read signature file: ${e.message}`);
-            }
-        }
-        // Try relative paths under uploads
-        const basePaths = [
-            path.join(__dirname, '../../uploads'),
-            path.join(__dirname, '../../uploads/photos')
-        ];
-        for (const basePath of basePaths) {
-            const fullPath = path.join(basePath, signaturePath);
-            if (fs.existsSync(fullPath)) {
-                try {
-                    return fs.readFileSync(fullPath);
-                } catch (e) {
-                    logger.warn(`[RECEIPT] Cannot read signature: ${e.message}`);
-                }
-            }
-        }
+    if (Buffer.isBuffer(arguments[2])) {
+        return Buffer.from(arguments[2]);
     }
-
     // 2. Try base64
     if (signatureBase64) {
         try {
@@ -145,15 +114,22 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
         clientCode, clientName,
         fecha, formaPago, repartidor, ordenPreparacion,
         signatureBase64: inputSigBase64,
-        firmante: inputFirmante,
-        firmanteDni: inputFirmanteDni
+        firmante,
+        firmanteDni,
+        receiverName,
+        receiverSurnames,
+        receiverDni,
+        confirmedAt
     } = deliveryData;
 
     // Intentar obtener líneas de la BD
     let lines = [];
+    const canonicalProjection = deliveryData.canonicalProjection === true;
+    const inputFirmante = firmante || [receiverName, receiverSurnames].filter(Boolean).join(' ');
+    const inputFirmanteDni = firmanteDni || receiverDni;
     let header = null;
 
-    if (ejercicio && serie !== undefined && terminal !== undefined && numero) {
+    if (!canonicalProjection && ejercicio && serie !== undefined && terminal !== undefined && numero) {
         try {
             lines = await getAlbaranLines(ejercicio, serie, terminal, numero);
             header = await getAlbaranHeader(ejercicio, serie, terminal, numero);
@@ -166,15 +142,15 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
     // Fallback: si no hay líneas de BD, usar las proporcionadas
     if (lines.length === 0 && deliveryData.items && deliveryData.items.length > 0) {
         lines = deliveryData.items.map((item, i) => ({
-            SECUENCIA: i + 1,
-            ARTICULO: item.codigoArticulo || '',
-            DESCRIPCION: item.descripcion || item.DESCRIPTION || '',
-            BULTOS: item.bultos || item.cantidad || 0,
-            UNIDADES: item.unidades || item.cantidad || 0,
-            PRECIO: item.precio || item.PRICE || 0,
-            DTO: item.descuento || 0,
-            IMPORTE: item.importe || (item.cantidad * item.precio) || 0,
-            COD_IVA: '1'
+            SECUENCIA: item.SECUENCIA ?? item.itemId ?? i + 1,
+            ARTICULO: item.ARTICULO ?? item.codigoArticulo ?? '',
+            DESCRIPCION: item.DESCRIPCION ?? item.descripcion ?? item.DESCRIPTION ?? '',
+            BULTOS: item.BULTOS ?? item.bultos ?? item.cantidad ?? 0,
+            UNIDADES: item.CANTIDAD_ENTREGADA ?? item.UNIDADES ?? item.unidades ?? item.cantidad ?? 0,
+            PRECIO: item.PRECIO ?? item.precio ?? item.PRICE ?? 0,
+            DTO: item.DTO ?? item.descuento ?? 0,
+            IMPORTE: item.IMPORTE ?? item.importe ?? ((item.cantidad ?? 0) * (item.precio ?? 0)),
+            COD_IVA: canonicalProjection ? '' : (item.COD_IVA ?? '1')
         }));
     }
 
@@ -198,7 +174,12 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
     });
 
     // Si hay header de CPC, usar totales oficiales
-    if (header) {
+    if (canonicalProjection) {
+        Object.keys(gruposIVA).forEach(k => delete gruposIVA[k]);
+        baseImponible = Number(deliveryData.subtotal ?? deliveryData.total ?? 0);
+        const canonicalTotal = Number(deliveryData.total ?? baseImponible);
+        totalIVA = canonicalTotal - baseImponible;
+    } else if (header) {
         baseImponible = parseFloat(header.IMPORTEBRUTO) || 0;
         const total = parseFloat(header.IMPORTETOTAL) || 0;
         totalIVA = total - baseImponible;
@@ -225,7 +206,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
     const importeTotal = baseImponible + totalIVA;
 
     // Resolve signature buffer (supports file path + base64)
-    const sigBuffer = resolveSignatureBuffer(signaturePath, inputSigBase64);
+    const sigBuffer = resolveSignatureBuffer(signaturePath, inputSigBase64, deliveryData.signatureBuffer);
     const hasSignature = !!sigBuffer;
 
     return new Promise((resolve, reject) => {
@@ -241,7 +222,10 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
 
             const doc = new PDFDocument({
                 size: [226, docHeight],
-                margin: 8
+                margin: 8,
+                // Keep long thermal receipts readable by legacy PDF consumers.
+                // Some deployed parsers reject large compressed content streams.
+                compress: false
             });
 
             const chunks = [];
@@ -445,7 +429,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                         .text(`DNI/NIF: ${inputFirmanteDni}`, { align: 'center' });
                 }
 
-                const now = new Date();
+                const now = confirmedAt ? new Date(confirmedAt) : new Date();
                 doc.fontSize(5).font('Helvetica')
                     .text(`Fecha firma: ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, { align: 'center' });
 
@@ -482,24 +466,15 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
  */
 async function saveReceipt(deliveryData, signaturePath) {
     const buffer = await generateDeliveryReceipt(deliveryData, signaturePath);
+    const docId = String(deliveryData.facturaNum || deliveryData.albaranNum || 'unknown').replace(/[^A-Za-z0-9_-]/g, '_');
+    const confirmationId = String(deliveryData.confirmationId || docId).replace(/[^A-Za-z0-9_-]/g, '_');
+    const version = String(deliveryData.confirmationVersion || 'preview').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 48);
+    const fileName = `RECIBO_${confirmationId}_${version}.pdf`;
 
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-
-    const dir = path.join(receiptsDir, year.toString(), month);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const docId = deliveryData.facturaNum || deliveryData.albaranNum || 'unknown';
-    const fileName = `RECIBO_${year}-${month}-${String(now.getDate()).padStart(2, '0')}_${docId}_${Date.now()}.pdf`;
-    const filePath = path.join(dir, fileName);
-
-    fs.writeFileSync(filePath, buffer);
-    logger.info('[RECEIPT] Saved receipt', { filePath });
-
-    return { buffer, filePath, relativePath: `${year}/${month}/${fileName}` };
+    // Canonical receipts are immutable in-memory previews. The authoritative
+    // confirmation remains in DB2; no duplicate timestamped files are stored.
+    logger.info('[RECEIPT] Generated deterministic in-memory preview');
+    return { buffer, fileName, filePath: fileName, relativePath: null, disposition: 'inline-preview', persisted: false };
 }
 
 module.exports = {

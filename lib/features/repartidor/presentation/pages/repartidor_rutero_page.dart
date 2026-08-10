@@ -17,6 +17,15 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/smart_delivery_card.dart';
 
+typedef RepartidorRuteroWeekLoader = Future<Map<String, dynamic>> Function({
+  required String repartidorId,
+  required DateTime date,
+  required bool forceRefresh,
+});
+
+typedef RepartidorRuteroListLoader = Future<List<Map<String, dynamic>>>
+    Function();
+
 /// Repartidor Rutero Page - Futuristic Redesign
 /// Features:
 /// - Holographic week navigator with gestures
@@ -29,9 +38,13 @@ class RepartidorRuteroPage extends ConsumerStatefulWidget {
     super.key,
     this.repartidorId,
     this.repartidorNames,
+    this.weekLoader,
+    this.repartidoresLoader,
   });
   final String? repartidorId;
   final Map<String, String>? repartidorNames;
+  final RepartidorRuteroWeekLoader? weekLoader;
+  final RepartidorRuteroListLoader? repartidoresLoader;
 
   @override
   ConsumerState<RepartidorRuteroPage> createState() =>
@@ -43,6 +56,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
+  String? _weekError;
+  String? _identityError;
   int _weekLoadGeneration = 0;
   String? _lastLoadedId;
   final TextEditingController _searchClientController = TextEditingController();
@@ -50,10 +65,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       TextEditingController();
   Timer? _loadDebounceTimer;
   Completer<void>? _loadCompleter;
+  bool _isDetailModalOpen = false;
 
   late AnimationController _listAnimController;
   // Cache the repartidores future to avoid re-fetching on every rebuild
   Future<List<Map<String, dynamic>>>? _repartidoresFuture;
+  bool _repartidoresLoadFailed = false;
 
   @override
   void initState() {
@@ -63,17 +80,41 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       vsync: this,
     );
     // Pre-fetch repartidores list once
-    _repartidoresFuture = ApiClient.getList(
-      '/auth/repartidores',
-      cacheKey: 'auth:repartidores',
-      cacheTTL: CacheService.longTTL,
-    ).then(
-      (val) => val.map((e) => e as Map<String, dynamic>).toList(),
-    );
+    _repartidoresFuture = _scheduleRepartidoresLoad();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
       _listAnimController.forward();
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> _loadRepartidores() async {
+    try {
+      final result = await (widget.repartidoresLoader?.call() ??
+          ApiClient.getList(
+            '/auth/repartidores',
+            cacheKey: 'auth:repartidores',
+            cacheTTL: CacheService.longTTL,
+          ));
+      return result.map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (_) {
+      if (mounted) setState(() => _repartidoresLoadFailed = true);
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _scheduleRepartidoresLoad() {
+    return Future<List<Map<String, dynamic>>>.delayed(
+      Duration.zero,
+      _loadRepartidores,
+    );
+  }
+
+  void _retryRepartidores() {
+    final future = _scheduleRepartidoresLoad();
+    setState(() {
+      _repartidoresFuture = future;
+      _repartidoresLoadFailed = false;
     });
   }
 
@@ -149,7 +190,19 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
     // The week endpoint needs single ID, handled in _loadWeekData
 
-    if (targetId.isEmpty) return;
+    if (targetId.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _identityError =
+              'No se ha podido determinar el repartidor del rutero.';
+        });
+      }
+      return;
+    }
+
+    if (_identityError != null && mounted) {
+      setState(() => _identityError = null);
+    }
 
     if (_lastLoadedId != targetId) {
       _lastLoadedId = targetId;
@@ -178,22 +231,37 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     if (mounted) setState(() => _isLoadingWeek = true);
 
     try {
-      final response = await ApiClient.get(
-        '/repartidor/rutero/week/$repartidorId?date=${requestDate.toIso8601String()}',
-        cacheKey:
-            'repartidor:rutero-week:$repartidorId:${requestDate.toIso8601String().substring(0, 10)}',
-        cacheTTL: const Duration(minutes: 2),
-        forceRefresh: forceRefresh,
-      );
+      final response = widget.weekLoader != null
+          ? await widget.weekLoader!(
+              repartidorId: repartidorId,
+              date: requestDate,
+              forceRefresh: forceRefresh,
+            )
+          : await ApiClient.get(
+              '/repartidor/rutero/week/$repartidorId?date=${requestDate.toIso8601String()}',
+              cacheKey:
+                  'repartidor:rutero-week:$repartidorId:${requestDate.toIso8601String().substring(0, 10)}',
+              cacheTTL: const Duration(minutes: 2),
+              forceRefresh: forceRefresh,
+            );
       if (generation != _weekLoadGeneration || !mounted) return;
       if (response['success'] == true) {
         setState(() {
           _weekDays = List<Map<String, dynamic>>.from(response['days'] as List);
+          _weekError = null;
+        });
+      } else {
+        setState(() {
+          _weekDays = [];
+          _weekError = 'No se pudo cargar la semana de reparto';
         });
       }
-    } catch (e) {
-      if (generation == _weekLoadGeneration) {
-        debugPrint('Error loading week data: $e');
+    } catch (_) {
+      if (generation == _weekLoadGeneration && mounted) {
+        setState(() {
+          _weekDays = [];
+          _weekError = 'No se pudo cargar la semana de reparto';
+        });
       }
     } finally {
       if (mounted && generation == _weekLoadGeneration) {
@@ -247,7 +315,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     // Header Name Logic
     var currentName = authState?.user?.name ?? 'Repartidor';
     if (authState?.user?.isJefeVentas ?? false && selectedVendor != null) {
-      currentName = 'Repartidor $selectedVendor';
+      final selectedName = widget.repartidorNames?[selectedVendor]?.trim();
+      currentName = selectedName?.isNotEmpty == true
+          ? selectedName!
+          : 'Repartidor $selectedVendor';
     }
 
     return Scaffold(
@@ -313,6 +384,16 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
             ),
 
+          if (_weekError != null)
+            TextButton.icon(
+              key: const ValueKey('week-load-retry'),
+              onPressed: () => _loadData(forceRefresh: true),
+              icon: const Icon(Icons.refresh, color: AppTheme.error),
+              label: Text(_weekError!),
+            ),
+
+          if (_identityError != null) _buildIdentityError(),
+
           // DIRECTOR FILTER (if applicable)
           if (authState?.user?.isJefeVentas ?? false)
             _buildDirectorFilter(authState!),
@@ -353,6 +434,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       child: FutureBuilder<List<Map<String, dynamic>>>(
         future: _repartidoresFuture,
         builder: (context, snapshot) {
+          if (_repartidoresLoadFailed) return _buildRepartidoresError();
           if (!snapshot.hasData) return const SizedBox.shrink();
 
           final repartidores = snapshot.data!;
@@ -463,6 +545,62 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildRepartidoresError() {
+    return RepartidorExecutivePanel(
+      accentColor: AppTheme.error,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'No se ha podido cargar la lista de repartidores.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+          ),
+          TextButton.icon(
+            key: const ValueKey('repartidores-load-retry'),
+            onPressed: _retryRepartidores,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIdentityError() {
+    return Container(
+      key: const ValueKey('rutero-identity-error'),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.error.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.person_off_outlined,
+              color: AppTheme.error, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _identityError!,
+              style: const TextStyle(color: AppTheme.error, fontSize: 12),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('rutero-identity-retry'),
+            onPressed: () => _loadData(forceRefresh: true),
+            child: const Text('Reintentar'),
+          ),
+        ],
       ),
     );
   }
@@ -778,8 +916,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       SmartDeliveryCard(
                         albaran: albaran,
                         onTap: () => _showDetailDialog(albaran),
-                        onSwipeComplete: () => _handleQuickComplete(albaran),
-                        onSwipeNote: () => _showQuickNoteDialog(albaran),
+                        onSwipeComplete: () =>
+                            _openConfirmationFromSwipe(albaran),
+                        onSwipeNote: () => _showDetailDialog(albaran),
                         repartidorNames: widget.repartidorNames,
                       ),
                       if (index < albaranes.length - 1)
@@ -802,58 +941,67 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          RepartidorExecutivePanel(
-            accentColor: AppTheme.info,
-            padding: const EdgeInsets.all(28),
-            borderRadius: AppTheme.radiusXl,
-            child: Icon(
-              Icons.inventory_2_outlined,
-              size: 56,
-              color: AppTheme.textSecondary.withValues(alpha: 0.5),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            RepartidorExecutivePanel(
+              accentColor: AppTheme.info,
+              padding: const EdgeInsets.all(28),
+              borderRadius: AppTheme.radiusXl,
+              child: Icon(
+                Icons.inventory_2_outlined,
+                size: 56,
+                color: AppTheme.textSecondary.withValues(alpha: 0.5),
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'No hay entregas para este día',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
+            const SizedBox(height: 24),
+            const Text(
+              'No hay entregas para este día',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Selecciona otro día en el calendario\no usa el buscador',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppTheme.textTertiary,
-              fontSize: 14,
+            const SizedBox(height: 8),
+            const Text(
+              'Selecciona otro día en el calendario\no usa el buscador',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 14,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              _onDaySelected(DateTime.now());
-            },
-            icon: const Icon(Icons.today, size: 18),
-            label: const Text('Ir a hoy'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.info,
-              side: BorderSide(color: AppTheme.info.withValues(alpha: 0.5)),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                _onDaySelected(DateTime.now());
+              },
+              icon: const Icon(Icons.today, size: 18),
+              label: const Text('Ir a hoy'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.info,
+                side: BorderSide(color: AppTheme.info.withValues(alpha: 0.5)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   void _showDetailDialog(AlbaranEntrega albaran) {
+    if (_isDetailModalOpen) {
+      return;
+    }
+
+    _isDetailModalOpen = true;
     final entregasNotifier = ref.read(entregasProvider.notifier);
 
     showModalBottomSheet(
@@ -861,109 +1009,22 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => RuteroDetailModal(albaran: albaran, ref: ref),
-    ).then((_) {
+    ).whenComplete(() {
+      _isDetailModalOpen = false;
       if (mounted) {
         entregasNotifier.cargarAlbaranesPendientes(forceRefresh: true);
       }
     });
   }
 
-  void _handleQuickComplete(AlbaranEntrega albaran) {
-    // 1. Validation: If CTR (Must Pay), prevent quick swipe
-    if (albaran.esCTR) {
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Cobro obligatorio. Abra el detalle para registrar pago.',
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.obligatorio,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'ABRIR',
-            textColor: Colors.white,
-            onPressed: () => _showDetailDialog(albaran),
-          ),
-        ),
-      );
-      // Re-open detail slightly delayed
-      Future.delayed(
-        const Duration(milliseconds: 300),
-        () => _showDetailDialog(albaran),
-      );
+  /// A swipe is only a shortcut to the governed confirmation form. It never
+  /// marks an order delivered or records a payment on its own.
+  void _openConfirmationFromSwipe(AlbaranEntrega albaran) {
+    if (albaran.estado == EstadoEntrega.entregado) {
       return;
     }
-
-    // 2. Perform Quick Complete
-    final provider = ref.read(entregasProvider.notifier);
-
-    // Optimistic UI update or wait?
-    // Let's show loading snackbar then success
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.info,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text('Completando ${albaran.nombreCliente}...')),
-          ],
-        ),
-        backgroundColor: AppTheme.raisedSurface,
-        duration: const Duration(seconds: 1),
-      ),
-    );
-
-    provider
-        .marcarEntregado(
-      albaranId: albaran.id,
-      observaciones: 'Completado rápido (Swipe)',
-      // No signature/photos for quick swipe
-    )
-        .then((success) {
-      if (success) {
-        HapticFeedback.lightImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text('Completado: ${albaran.nombreCliente}')),
-              ],
-            ),
-            backgroundColor: AppTheme.success,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        provider.cargarAlbaranesPendientes(forceRefresh: true); // Refresh list
-      } else {
-        HapticFeedback.heavyImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Error al completar: ${ref.read(entregasProvider).error ?? "Desconocido"}',
-            ),
-            backgroundColor: AppTheme.error,
-          ),
-        );
-      }
-    });
+    HapticFeedback.mediumImpact();
+    _showDetailDialog(albaran);
   }
 
   void _showQuickNoteDialog(AlbaranEntrega albaran) {
@@ -1027,12 +1088,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Nota guardada'),
-                  backgroundColor: AppTheme.success,
-                ),
-              );
+              _showDetailDialog(albaran);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.info,

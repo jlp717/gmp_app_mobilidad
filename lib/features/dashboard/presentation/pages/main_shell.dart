@@ -46,10 +46,25 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/vehicles
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+@visibleForTesting
+bool canSwitchAuthenticatedModes(UserModel? user) =>
+    user != null && user.availableModes.toSet().length > 1;
+
+@visibleForTesting
+bool canCreateRepartidorLiquidationAdjustments(UserModel? user) {
+  final role = user?.role.trim().toUpperCase();
+  return role == 'JEFE_VENTAS' || role == 'ADMIN';
+}
+
 /// Main app shell with navigation rail for tablet mode
 /// Dashboard is only visible for Jefe de Ventas
 class MainShell extends ConsumerStatefulWidget {
-  const MainShell({super.key});
+  /// Creates the authenticated application shell.
+  const MainShell({super.key, this.contentOverride});
+
+  /// Replaces feature content in focused widget tests; production leaves null.
+  @visibleForTesting
+  final Widget? contentOverride;
 
   @override
   ConsumerState<MainShell> createState() => _MainShellState();
@@ -62,9 +77,11 @@ class _MainShellState extends ConsumerState<MainShell> {
   String? _selectedRepartidor = 'ALL';
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
+  String? _repartidoresError;
 
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
+  bool _isSwitchingMode = false;
 
   String? _pendingClientId;
   String? _pendingClientName;
@@ -116,7 +133,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool get _isAlmacenEffective {
     if (_forceAlmacenMode) return true;
-    return false;
+    return isWarehouseUiMode(ref.read(authProvider).value);
   }
 
   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
@@ -276,22 +293,16 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Future<void> _fetchRepartidores() async {
-    setState(() => _isLoadingRepartidores = true);
+    setState(() {
+      _isLoadingRepartidores = true;
+      _repartidoresError = null;
+    });
     try {
-      debugPrint('[MainShell] _fetchRepartidores: calling API...');
       final res = await ApiClient.getList(
         '/auth/repartidores',
         cacheKey: 'auth:repartidores',
         cacheTTL: CacheService.longTTL,
       );
-      debugPrint(
-        '[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}',
-      );
-      if (res.isNotEmpty) {
-        debugPrint(
-          '[MainShell] First item: ${res.first} (type=${res.first.runtimeType})',
-        );
-      }
       if (!mounted) return;
       setState(() {
         // Helper to safely get value regardless of case
@@ -329,15 +340,16 @@ class _MainShellState extends ConsumerState<MainShell> {
               .compareTo(b['code']?.toString() ?? ''),
         );
 
-        debugPrint(
-          '[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options',
-        );
         _isLoadingRepartidores = false;
+        _repartidoresError = null;
       });
-    } catch (e, stack) {
-      debugPrint('[MainShell] ERROR fetching repartidores: $e');
-      debugPrint('[MainShell] Stack: $stack');
-      if (mounted) setState(() => _isLoadingRepartidores = false);
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _isLoadingRepartidores = false;
+          _repartidoresError =
+              'No se ha podido cargar la lista de repartidores. Se usan los codigos autorizados disponibles.';
+        });
     }
   }
 
@@ -406,6 +418,11 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     // PERFORMANCE: Use select() to only rebuild when user changes
     final user = ref.watch(authProvider.select((state) => state.value?.user));
+    // The authorization role remains JEFE_VENTAS while this independent UI
+    // mode changes, so subscribe explicitly to rebuild the shell on switches.
+    ref.watch(
+      authProvider.select((state) => state.value?.activeMode),
+    );
 
     if (user == null) {
       return const Scaffold(
@@ -767,7 +784,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             _buildUserAvatar(user, isJefeVentas),
             const SizedBox(height: 16),
             // Mode switcher in drawer for Jefe
-            if (isJefeVentas) _buildModeSwitcher(),
+            if (canSwitchAuthenticatedModes(user)) _buildModeSwitcher(),
             // Network settings removed for user restriction
             const Spacer(),
             const Padding(
@@ -870,7 +887,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                             const SizedBox(height: 16),
 
                             // Mode switcher for Jefe
-                            if (isJefeVentas)
+                            if (canSwitchAuthenticatedModes(user))
                               _buildModeSwitcher(compact: sidebarW < 128),
 
                             const SizedBox(height: 16),
@@ -966,14 +983,18 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   /// Mode switcher widget (used in both sidebar and drawer)
   Widget _buildModeSwitcher({bool compact = false}) {
-    final activeColor = _forceAlmacenMode
+    final user = ref.read(authProvider).value?.user;
+    final availableModes = user?.availableModes ?? const <String>[];
+    final isAlmacenMode = _isAlmacenEffective;
+    final isRepartidorMode = !isAlmacenMode && _isRepartidorEffective;
+    final activeColor = isAlmacenMode
         ? AppTheme.accentIndigo
-        : _forceRepartidorMode
+        : isRepartidorMode
             ? AppTheme.warning
             : AppTheme.info;
-    final modeIcon = _forceAlmacenMode
+    final modeIcon = isAlmacenMode
         ? Icons.warehouse_rounded
-        : _forceRepartidorMode
+        : isRepartidorMode
             ? Icons.local_shipping
             : Icons.store;
 
@@ -1006,7 +1027,9 @@ class _MainShellState extends ConsumerState<MainShell> {
           ],
         ),
         child: PopupMenuButton<String>(
+          key: const ValueKey('main-shell-mode-switch'),
           tooltip: 'Cambiar Perfil',
+          enabled: !_isSwitchingMode,
           offset: const Offset(0, 40),
           color: AppTheme.raisedSurface,
           shape: RoundedRectangleBorder(
@@ -1024,9 +1047,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      _forceAlmacenMode
+                      isAlmacenMode
                           ? Icons.warehouse_rounded
-                          : _forceRepartidorMode
+                          : isRepartidorMode
                               ? Icons.local_shipping
                               : Icons.store,
                       color: activeColor,
@@ -1035,9 +1058,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        _forceAlmacenMode
+                        isAlmacenMode
                             ? 'Almacén'
-                            : _forceRepartidorMode
+                            : isRepartidorMode
                                 ? 'Reparto'
                                 : 'Ventas',
                         style: TextStyle(
@@ -1058,69 +1081,131 @@ class _MainShellState extends ConsumerState<MainShell> {
                   ],
                 ),
           itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'VENTAS',
-              child: Row(
-                children: [
-                  Icon(Icons.store, color: AppTheme.info, size: 18),
-                  SizedBox(width: 12),
-                  Text(
-                    'Perfil Ventas',
-                    style: TextStyle(color: AppTheme.textPrimary),
-                  ),
-                ],
+            if (availableModes.contains('COMERCIAL'))
+              const PopupMenuItem(
+                value: 'VENTAS',
+                child: Row(
+                  children: [
+                    Icon(Icons.store, color: AppTheme.info, size: 18),
+                    SizedBox(width: 12),
+                    Text(
+                      'Perfil Ventas',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const PopupMenuItem(
-              value: 'REPARTO',
-              child: Row(
-                children: [
-                  Icon(Icons.local_shipping, color: AppTheme.warning, size: 18),
-                  SizedBox(width: 12),
-                  Text(
-                    'Perfil Reparto',
-                    style: TextStyle(color: AppTheme.textPrimary),
-                  ),
-                ],
+            if (availableModes.contains('REPARTIDOR'))
+              const PopupMenuItem(
+                value: 'REPARTO',
+                child: Row(
+                  children: [
+                    Icon(Icons.local_shipping,
+                        color: AppTheme.warning, size: 18),
+                    SizedBox(width: 12),
+                    Text(
+                      'Perfil Reparto',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const PopupMenuItem(
-              value: 'ALMACEN',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.inventory_2,
-                    color: AppTheme.accentIndigo,
-                    size: 18,
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    'Perfil Almacén',
-                    style: TextStyle(color: AppTheme.textPrimary),
-                  ),
-                ],
+            if (availableModes.contains('ALMACEN'))
+              const PopupMenuItem(
+                value: 'ALMACEN',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.inventory_2,
+                      color: AppTheme.accentIndigo,
+                      size: 18,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Perfil Almacén',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
-          onSelected: (value) {
-            if (value == 'ALMACEN') {
-              setState(() {
-                _forceAlmacenMode = true;
-                _forceRepartidorMode = false;
-                _currentIndex = 0;
-              });
-              return;
-            }
-            final newMode = value == 'REPARTO';
-            setState(() {
-              _forceAlmacenMode = false;
-              _forceRepartidorMode = newMode;
-              _currentIndex = 0;
-            });
-          },
+          onSelected: _switchMode,
         ),
       ),
     );
+  }
+
+  Future<void> _switchMode(String selectedMode) async {
+    if (_isSwitchingMode) return;
+
+    final currentUser = ref.read(authProvider).value?.user;
+    if (currentUser == null) return;
+    final allowedMode = switch (selectedMode) {
+      'VENTAS' => 'COMERCIAL',
+      'REPARTO' => 'REPARTIDOR',
+      'ALMACEN' => 'ALMACEN',
+      _ => '',
+    };
+    if (!currentUser.availableModes.contains(allowedMode)) return;
+
+    final requestedRole = switch (selectedMode) {
+      'VENTAS' => currentUser.availableRoles.contains('JEFE_VENTAS')
+          ? 'JEFE_VENTAS'
+          : 'COMERCIAL',
+      'REPARTO' => 'REPARTIDOR',
+      'ALMACEN' => 'ALMACEN',
+      _ => null,
+    };
+    if (requestedRole == null) return;
+
+    setState(() => _isSwitchingMode = true);
+
+    var switched = false;
+    try {
+      switched =
+          await ref.read(authProvider.notifier).switchRole(requestedRole);
+    } catch (_) {
+      switched = false;
+    }
+    if (!mounted) return;
+
+    final authState = ref.read(authProvider).value;
+    final expectedMode = switch (selectedMode) {
+      'VENTAS' => 'COMERCIAL',
+      'REPARTO' => 'REPARTIDOR',
+      'ALMACEN' => 'ALMACEN',
+      _ => '',
+    };
+    final expectedRole = switch (selectedMode) {
+      'VENTAS' => requestedRole,
+      'REPARTO' => 'REPARTIDOR',
+      'ALMACEN' => 'JEFE_VENTAS',
+      _ => '',
+    };
+    final committed = switched &&
+        authState?.activeMode == expectedMode &&
+        authState?.user?.role == expectedRole;
+
+    if (!committed) {
+      setState(() => _isSwitchingMode = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo cambiar el perfil. Mantienes el perfil actual.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      // Runtime mode is session state. Local flags are reserved for the
+      // explicit visual-QA override and must not diverge after a real switch.
+      _forceAlmacenMode = false;
+      _forceRepartidorMode = false;
+      _currentIndex = 0;
+      _isSwitchingMode = false;
+    });
   }
 
   Widget _buildUserAvatar(UserModel user, bool isJefeVentas) {
@@ -1461,86 +1546,117 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.visibility, color: AppTheme.info, size: 16),
-              SizedBox(width: 8),
-              Text(
-                'Ver Como',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+              const Row(
+                children: [
+                  Icon(Icons.visibility, color: AppTheme.info, size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'Ver Como',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.softPanel,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: _isLoadingRepartidores
+                      ? const Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.info,
+                            ),
+                          ),
+                        )
+                      : DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedRepartidor,
+                            hint: const Text(
+                              'Seleccionar Repartidor',
+                              style: TextStyle(color: AppTheme.textSecondary),
+                            ),
+                            isExpanded: true,
+                            dropdownColor: AppTheme.raisedSurface,
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down,
+                              color: AppTheme.info,
+                            ),
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 13,
+                            ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: 'ALL',
+                                child: Text(
+                                  'Todos los Repartidores',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              ..._repartidoresOptions.map((r) {
+                                return DropdownMenuItem(
+                                  value: r['code'].toString(),
+                                  child: Text('${r['code']} - ${r['name']}'),
+                                );
+                              }),
+                            ],
+                            onChanged: (val) =>
+                                setState(() => _selectedRepartidor = val),
+                          ),
+                        ),
                 ),
               ),
             ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: _isLoadingRepartidores
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.info,
-                        ),
-                      ),
-                    )
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedRepartidor,
-                        hint: const Text(
-                          'Seleccionar Repartidor',
-                          style: TextStyle(color: AppTheme.textSecondary),
-                        ),
-                        isExpanded: true,
-                        dropdownColor: AppTheme.raisedSurface,
-                        icon: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: AppTheme.info,
-                        ),
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 13,
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'ALL',
-                            child: Text(
-                              'Todos los Repartidores',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          ..._repartidoresOptions.map((r) {
-                            return DropdownMenuItem(
-                              value: r['code'].toString(),
-                              child: Text('${r['code']} - ${r['name']}'),
-                            );
-                          }),
-                        ],
-                        onChanged: (val) =>
-                            setState(() => _selectedRepartidor = val),
-                      ),
+          if (_repartidoresError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      color: AppTheme.warning, size: 16),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Lista no disponible. Usando codigos autorizados.',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 12),
                     ),
+                  ),
+                  TextButton(
+                    key: const ValueKey('repartidores-header-retry'),
+                    onPressed: _fetchRepartidores,
+                    child: const Text('Reintentar'),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
   Widget _buildCurrentPage(bool isJefeVentas) {
+    if (widget.contentOverride != null) return widget.contentOverride!;
+
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
     final vendedorCodes = authState?.vendedorCodes ?? [];
@@ -1627,6 +1743,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         if (label == 'Liquidacion Diaria' || label == 'Liquidación') {
           return RepartidorLiquidacionDiariaPage(
             repartidorId: effectiveRepartidorId,
+            canCreateAdjustments:
+                canCreateRepartidorLiquidationAdjustments(user),
           );
         }
         if (label == 'Vencimientos') {

@@ -53,6 +53,14 @@ const CACHE_CONTROL = {
     default: 'private, no-cache',
 };
 
+function isSensitiveRepartoArtifactPath(req) {
+    const path = String(req.originalUrl || req.path || '')
+        .split('?')[0]
+        .toLowerCase();
+    return path.startsWith('/api/repartidor-finanzas/rutero/evidence/')
+        || /^\/api\/repartidor-finanzas\/rutero\/confirmations(?:\/[^/]+)?\/receipt$/.test(path);
+}
+
 /**
  * Prefetch hints for related resources
  */
@@ -111,8 +119,9 @@ function networkOptimizer(req, res, next) {
         addPrefetchHints(req, res);
     }
 
-    // Add ETag support
-    if (FEATURE_FLAGS.ETAG_CACHING) {
+    // Sensitive evidence/receipt responses must not create validators that
+    // encourage intermediary or client storage.
+    if (FEATURE_FLAGS.ETAG_CACHING && !isSensitiveRepartoArtifactPath(req)) {
         setupETagSupport(req, res);
     }
 
@@ -134,6 +143,13 @@ function networkOptimizer(req, res, next) {
  * Apply cache control headers based on route
  */
 function applyCacheControl(req, res) {
+    if (isSensitiveRepartoArtifactPath(req)) {
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        return;
+    }
+
     // Skip for mutations
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.setHeader('Cache-Control', 'no-store');
@@ -243,6 +259,9 @@ function isCoalescingBypass(req) {
 }
 
 function isJsonCoalescibleRequest(req) {
+    if (isSensitiveRepartoArtifactPath(req)) {
+        return false;
+    }
     const path = `${req.path || ''} ${req.originalUrl || ''}`.toLowerCase();
     const accept = String(req.get?.('accept') || req.headers?.accept || '').toLowerCase();
 
@@ -474,6 +493,7 @@ module.exports = {
     requestDeduplication,
     compressionStats,
     isJsonCoalescibleRequest,
+    isSensitiveRepartoArtifactPath,
     getFeatureFlags,
     setFeatureFlag,
     COMPRESSION_CONFIG,

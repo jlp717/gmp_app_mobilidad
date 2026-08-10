@@ -1,10 +1,23 @@
 'use strict';
 
 const express = require('express');
+const multer = require('multer');
 const { z } = require('zod');
 const logger = require('../middleware/logger');
 const { verifyToken, requireRoles } = require('../middleware/auth');
 const financeService = require('../services/repartidor-finance-service');
+const {
+  buildConfirmationCommand,
+  RepartoContractError,
+} = require('../services/reparto-confirmation-contract');
+const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
+const { RepartoCatalogError } = require('../services/reparto-catalog-service');
+const { createRepartoConfirmationRuntime } = require('../services/reparto-confirmation-factory');
+const {
+  EvidenceError,
+  PHOTO_MAX_BYTES,
+  unavailableDeliveryEvidenceService,
+} = require('../services/delivery-evidence-service');
 const { deleteCachePattern, invalidateCache } = require('../services/redis-cache');
 
 let Sentry = null;
@@ -16,6 +29,174 @@ try {
 
 const router = express.Router();
 
+// No DB2 repository is wired here by default. The factory is intentionally
+// fail-closed until the isolated TEST_REPARTO capability gate is approved.
+function buildCanonicalRuntime(dependencies) {
+  const confirmation = createRepartoConfirmationRuntime(dependencies);
+  return Object.freeze({
+    ...confirmation,
+    evidenceService: dependencies?.evidenceService || unavailableDeliveryEvidenceService(),
+    receiptService: dependencies?.receiptService || Object.freeze({
+      async getReceipt() {
+        throw new RepartoPersistenceError('El recibo canÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³nico de reparto no estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ habilitado en este entorno', { code: 'REPARTO_RECEIPT_RUNTIME_UNAVAILABLE', statusCode: 503 });
+      },
+    }),
+    receiptPdfService: dependencies?.receiptPdfService || Object.freeze({
+      async render() {
+        throw new RepartoPersistenceError('El generador canÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³nico de recibos no estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ habilitado en este entorno', { code: 'REPARTO_RECEIPT_RUNTIME_UNAVAILABLE', statusCode: 503 });
+      },
+    }),
+  });
+}
+
+let canonicalConfirmationRuntime = buildCanonicalRuntime();
+
+function setCanonicalConfirmationRuntime(dependencies) {
+  canonicalConfirmationRuntime = buildCanonicalRuntime(dependencies);
+}
+
+function resetCanonicalConfirmationRuntime() {
+  canonicalConfirmationRuntime = buildCanonicalRuntime();
+}
+
+function unavailableLiquidacionService() {
+  const unavailable = async () => {
+    throw new RepartoPersistenceError('La liquidacion transaccional no esta habilitada en este entorno', {
+      code: 'LIQUIDACION_CAPABILITY_UNAVAILABLE', statusCode: 503,
+    });
+  };
+  return Object.freeze({
+    closeDay: unavailable, createExpense: unavailable, createAdjustment: unavailable,
+    createBankDeposit: unavailable, getDayEntries: unavailable,
+  });
+}
+
+let canonicalLiquidacionService = unavailableLiquidacionService();
+
+function setCanonicalLiquidacionService(service) {
+  if (!service || typeof service.closeDay !== 'function') {
+    throw new TypeError('liquidacionService.closeDay is required');
+  }
+  const fallback = unavailableLiquidacionService();
+  const bind = (name) => typeof service[name] === 'function'
+    ? service[name].bind(service) : fallback[name];
+  canonicalLiquidacionService = Object.freeze({
+    closeDay: bind('closeDay'), createExpense: bind('createExpense'),
+    createAdjustment: bind('createAdjustment'), createBankDeposit: bind('createBankDeposit'),
+    getDayEntries: bind('getDayEntries'),
+  });
+}
+
+function resetCanonicalLiquidacionService() {
+  canonicalLiquidacionService = unavailableLiquidacionService();
+}
+
+function requireCanonicalConfirmationRole(req, res, next) {
+  const user = req.user;
+  if (!user || !(user.id || user.user || user.code)) {
+    return res.status(401).json({
+      success: false,
+      code: 'AUTHENTICATED_ACTOR_REQUIRED',
+      error: 'Contexto autenticado incompleto',
+    });
+  }
+  const role = String(user.role || '').trim().toUpperCase();
+  if (role !== 'REPARTIDOR' && role !== 'ADMIN') {
+    return res.status(403).json({
+      success: false,
+      code: 'REPARTO_CONFIRMATION_ROLE_REQUIRED',
+      error: 'Solo un repartidor o administrador puede confirmar una entrega',
+    });
+  }
+  return next();
+}
+
+const EVIDENCE_REQUEST_TIMEOUT_MS = 15000;
+const EVIDENCE_TIMEOUT_CODES = new Set(['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'HYT00', 'HYT01']);
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: PHOTO_MAX_BYTES, files: 1, fields: 3, parts: 4, fieldSize: 16 * 1024 },
+});
+
+function actorCode(user) {
+  return String(user?.code || user?.id || user?.user || '').trim();
+}
+
+function evidenceRepartidorId(req, requested) {
+  const role = String(req.user?.role || '').trim().toUpperCase();
+  const authenticated = actorCode(req.user);
+  const target = String(requested || '').trim();
+  if (role === 'ADMIN') {
+    if (!target) throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'repartidorId es obligatorio para administrador', 400);
+    return target;
+  }
+  if (target && !codesMatch(authenticated, target)) {
+    throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
+  }
+  return authenticated;
+}
+
+function evidenceDocumentId(body) {
+  return body?.documentId || body?.entregaId;
+}
+
+function setEvidenceRequestTimeout(req, res) {
+  req.setTimeout?.(EVIDENCE_REQUEST_TIMEOUT_MS);
+  res.setTimeout?.(EVIDENCE_REQUEST_TIMEOUT_MS);
+}
+
+let canonicalReceiptTimeoutMs = EVIDENCE_REQUEST_TIMEOUT_MS;
+
+function setCanonicalReceiptTimeoutMs(value) {
+  if (!Number.isInteger(value) || value < 1 || value > 60000) throw new TypeError('receipt timeout must be between 1 and 60000 ms');
+  canonicalReceiptTimeoutMs = value;
+}
+
+function withCanonicalReceiptTimeout(work) {
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const timeoutError = new RepartoPersistenceError('El recibo no se pudo generar a tiempo', { code: 'REPARTO_RECEIPT_TIMEOUT', statusCode: 504 });
+      reject(timeoutError);
+      controller.abort(timeoutError);
+    }, canonicalReceiptTimeoutMs);
+  });
+  // Receipt reads are intentionally not retried: they carry PII and a timeout
+  // can mean the authoritative ledger state is still being resolved.
+  return Promise.race([Promise.resolve().then(() => work(controller.signal)), timeout])
+    .finally(() => clearTimeout(timer));
+}
+function isEvidenceTimeout(error) {
+  const codes = [
+    error?.code,
+    error?.cause?.code,
+    ...(Array.isArray(error?.odbcErrors)
+      ? error.odbcErrors.flatMap((item) => [item?.state, item?.code])
+      : []),
+  ].map((code) => String(code || '').trim().toUpperCase());
+  return codes.some((code) => EVIDENCE_TIMEOUT_CODES.has(code));
+}
+
+function sendEvidenceError(res, error, action) {
+  if (isEvidenceTimeout(error)) {
+    return sendError(res, new EvidenceError(
+      'EVIDENCE_TIMEOUT',
+      'El almacen de evidencias no respondio a tiempo',
+      504,
+    ), { action });
+  }
+  if (error instanceof multer.MulterError) {
+    const tooLarge = error.code === 'LIMIT_FILE_SIZE';
+    return res.status(tooLarge ? 413 : 400).json({
+      success: false,
+      code: tooLarge ? 'EVIDENCE_TOO_LARGE' : 'INVALID_EVIDENCE_MULTIPART',
+      error: tooLarge ? 'La evidencia supera el límite de 4 MiB' : 'Formulario multipart inválido',
+    });
+  }
+  return sendError(res, error, { action });
+}
+
 const singleCodeSchema = z.string().trim().min(1).max(20).regex(/^[A-Za-z0-9_-]+$/);
 const numericCodeSchema = z.string().trim().min(1).max(20).regex(/^\d+$/);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((raw) => {
@@ -23,6 +204,9 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((raw) => {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === raw;
 }, 'Fecha invalida');
 const idempotencyTokenSchema = z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9_.:-]+$/);
+const detailDocIdSchema = z.string().trim().regex(
+  /^[A-Za-z0-9]{1,10}-\d{4}-[A-Za-z0-9]{1,10}-\d{1,10}-\d{1,10}-\d{1,10}$/,
+);
 const moneySchema = z.coerce.number().min(0).max(99999999);
 
 const paramsSchema = z.object({
@@ -51,9 +235,13 @@ const summaryQuerySchema = z.object({
 const vencimientosQuerySchema = z.object({
   from: dateSchema,
   to: dateSchema,
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().trim().min(1).max(512).optional(),
   clientCode: z.string().trim().max(20).optional(),
   estado: z.enum(['pendiente', 'vencido']).optional(),
+}).refine((query) => query.from <= query.to, {
+  path: ['to'],
+  message: 'El final del rango debe ser igual o posterior al inicio',
 });
 
 const cobroSchema = z.object({
@@ -78,42 +266,7 @@ const cobroSchema = z.object({
   notas: z.string().trim().max(500).optional(),
 });
 
-const deliverySchema = z.object({
-  itemId: z.string().trim().min(1).max(160),
-  status: z.enum(['ENTREGADO']).default('ENTREGADO'),
-  repartidorId: singleCodeSchema,
-  observaciones: z.string().trim().max(1000).optional(),
-  firma: z.string().trim().max(500).optional(),
-  fotos: z.array(z.string().trim().max(500)).optional(),
-  latitud: z.coerce.number().min(-90).max(90).optional(),
-  longitud: z.coerce.number().min(-180).max(180).optional(),
-  forceUpdate: z.boolean().optional().default(false),
-});
-
-const ruteroConfirmSchema = z.object({
-  delivery: deliverySchema,
-  cobro: cobroSchema,
-}).superRefine((value, ctx) => {
-  if (!codesMatch(value.delivery.repartidorId, value.cobro.codigoRepartidor)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['delivery', 'repartidorId'],
-      message: 'delivery.repartidorId y cobro.codigoRepartidor deben coincidir',
-    });
-  }
-  if (
-    value.cobro.entregaId &&
-    String(value.cobro.entregaId).trim() !== value.delivery.itemId
-  ) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['cobro', 'entregaId'],
-      message: 'cobro.entregaId debe coincidir con delivery.itemId',
-    });
-  }
-});
-
-const liquidacionSchema = z.object({
+const legacyLiquidacionSchema = z.object({
   repartidorId: singleCodeSchema,
   date: dateSchema,
   idempotencyToken: idempotencyTokenSchema,
@@ -135,6 +288,52 @@ const liquidacionSchema = z.object({
   }),
 });
 
+// Liquidation amounts and operation lists are derived exclusively by the
+// server-side transaction. Keep this boundary deliberately small so an old
+// client cannot make a daily close balance on client supplied totals.
+const liquidacionCloseSchema = z.object({
+  repartidorId: numericCodeSchema,
+  date: dateSchema,
+  idempotencyToken: idempotencyTokenSchema,
+  matricula: z.string().trim().max(20).optional(),
+  codigoVehiculo: z.string().trim().max(10).optional(),
+  sendEmails: z.boolean().optional().default(false),
+}).strict();
+
+const LIQUIDACION_DERIVED_FIELDS = new Set([
+  'totals', 'snapshot', 'deliveries', 'payments', 'expenses', 'adjustments',
+  'bankDeposits', 'openingBalance', 'pending', 'balance', 'breakdown',
+  'totalEfectivo', 'totalCheques',
+  'totalTarjeta', 'totalPostdatados', 'totalCobrosDia', 'totalAIngresar',
+  'ingresoBanco', 'gastos', 'efectivo2', 'entregado2', 'saldoActual',
+]);
+
+function parseLiquidacionCloseRequest(body) {
+  const value = body && typeof body === 'object' && !Array.isArray(body) ? body : body;
+  const forbidden = value && typeof value === 'object'
+    ? Object.keys(value).filter((key) => LIQUIDACION_DERIVED_FIELDS.has(key))
+    : [];
+  if (forbidden.length) {
+    const error = new Error('Los importes y operaciones de liquidacion los calcula el servidor');
+    error.code = 'LIQUIDACION_CLIENT_DERIVED_FIELDS_FORBIDDEN';
+    error.statusCode = 422;
+    error.details = { fields: forbidden };
+    throw error;
+  }
+  try {
+    return liquidacionCloseSchema.parse(value);
+  } catch (error) {
+    if (error instanceof z.ZodError && error.errors.some((item) => item.code === 'unrecognized_keys')) {
+      const typed = new Error('El cierre de liquidacion contiene campos no permitidos');
+      typed.code = 'LIQUIDACION_CLIENT_FIELDS_FORBIDDEN';
+      typed.statusCode = 422;
+      typed.details = { fields: error.errors.flatMap((item) => item.keys || []) };
+      throw typed;
+    }
+    throw error;
+  }
+}
+
 const tiersSchema = z.object({
   tiers: z.array(z.object({
     thresholdPct: z.coerce.number().min(0).max(100),
@@ -152,61 +351,98 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const rangeQuerySchema = z.object({
   from: dateSchema.default(firstDayCurrentMonthIso),
   to: dateSchema.default(todayIso),
+}).refine((query) => query.from <= query.to, {
+  path: ['to'],
+  message: 'El final del rango debe ser igual o posterior al inicio',
 });
+
+class UnsupportedRepartidorSelectorError extends Error {
+  constructor() {
+    super('Usa codigos de repartidor explicitos; el selector ALL no esta soportado');
+    this.name = 'UnsupportedRepartidorSelectorError';
+    this.code = 'UNSUPPORTED_REPARTIDOR_SELECTOR';
+    this.statusCode = 422;
+  }
+}
+
+function assertExplicitRepartidorSelector(repartidorId) {
+  const codes = String(repartidorId || '').split(',').map((code) => code.trim().toUpperCase());
+  if (codes.includes('ALL')) throw new UnsupportedRepartidorSelectorError();
+}
+
+function normalizedRepartidorSelection(repartidorId) {
+  const selected = String(repartidorId || '')
+    .split(',')
+    .map((code) => code.trim())
+    .filter(Boolean);
+  assertExplicitRepartidorSelector(selected.join(','));
+  return selected;
+}
+
+function hasFinanceListRole(user) {
+  const role = String(user?.role || '').trim().toUpperCase();
+  return role === 'ADMIN' || role === 'JEFE_VENTAS';
+}
+
+function requireFinanceRepartidorSelector(req, res, next) {
+  try {
+    // Validate the selector before ownership checks. Otherwise malformed
+    // values are misclassified as a foreign-driver 403 instead of a typed
+    // client error and the HTTP contract becomes ambiguous.
+    const { repartidorId } = listParamsSchema.parse(req.params);
+    const selected = normalizedRepartidorSelection(repartidorId);
+    if (selected.length > 1 && !hasFinanceListRole(req.user)) {
+      return res.status(403).json({
+        success: false,
+        code: 'MULTIPLE_REPARTIDOR_SELECTOR_FORBIDDEN',
+        error: 'Solo JEFE_VENTAS o ADMIN pueden consultar varios repartidores',
+      });
+    }
+    return next();
+  } catch (error) {
+    return sendError(res, error, {
+      action: 'repartidor selector',
+      params: req.params,
+    });
+  }
+}
 
 function captureException(error, context) {
   if (Sentry && typeof Sentry.captureException === 'function') {
-    Sentry.captureException(error, { extra: sanitizeContext(context) });
+    const rawCode = String(error?.code || '').trim().toUpperCase();
+    const code = /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode) ? rawCode : 'UNEXPECTED_ERROR';
+    const statusCode = Number.isInteger(error?.statusCode)
+      && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
+    // A plain allowlisted incident deliberately has no message, stack, cause,
+    // SQL, binds or driver-owned properties. Never forward the original Error.
+    const safeIncident = Object.freeze({ name: 'RepartidorFinanzasIncident', code, statusCode });
+    Sentry.captureException(safeIncident, { extra: sentryContext(context) });
   }
 }
 
-function redactValue(key, value) {
-  const sensitiveKeys = new Set([
-    'codigoCliente',
-    'clientCode',
-    'codigoRepartidor',
-    'repartidorId',
-    'nombreCliente',
-    'notas',
-    'firma',
-    'observaciones',
-    'repartidorEmail',
-    'email',
-    'idempotencyToken',
-  ]);
-  if (sensitiveKeys.has(key)) return '[REDACTED]';
-  if (typeof value === 'string' && value.length > 80) return `${value.slice(0, 80)}...`;
-  return value;
-}
-
-function sanitizeContext(context) {
-  if (!context || typeof context !== 'object') return context;
-  const safe = {};
-  for (const [key, value] of Object.entries(context)) {
-    if (value && typeof value === 'object') {
-      safe[key] = sanitizeBody(value);
-    } else {
-      safe[key] = redactValue(key, value);
+function sentryContext(context) {
+  // Strictly copy this fixed allowlist. Request payloads, identifiers and any
+  // nested value can contain PII or credentials, including case variants.
+  const source = context && typeof context === 'object' ? context : {};
+  const extra = {};
+  for (const key of ['action', 'requestId', 'status', 'code']) {
+    const value = source[key];
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      extra[key] = value;
     }
   }
-  return safe;
-}
-
-function sanitizeBody(body) {
-  if (!body || typeof body !== 'object') return body;
-  if (Array.isArray(body)) return body.map(sanitizeBody);
-  const safe = {};
-  for (const [key, value] of Object.entries(body)) {
-    if (value && typeof value === 'object') {
-      safe[key] = sanitizeBody(value);
-    } else {
-      safe[key] = redactValue(key, value);
-    }
-  }
-  return safe;
+  return extra;
 }
 
 function sendError(res, error, context) {
+  if (error && error.code === 'REPARTO_SCHEMA_UNAVAILABLE') {
+    logger.error(`[REPARTIDOR_FINANZAS] ${context.action}: esquema de reparto no disponible`);
+    return res.status(503).json({
+      success: false,
+      code: error.code,
+      error: 'El origen de datos de reparto no esta disponible. Reintenta mas tarde.',
+    });
+  }
   if (error instanceof z.ZodError) {
     return res.status(400).json({
       success: false,
@@ -218,18 +454,31 @@ function sendError(res, error, context) {
     });
   }
 
-  // Logging mas detallado: odbcErrors + stack para debug.
-  const odbc0 = error.odbcErrors && error.odbcErrors[0];
-  const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
-  logger.error(`[REPARTIDOR_FINANZAS] ${context.action}: ${error.message}`
-    + (odbcMsg ? `\n  ODBC: ${odbcMsg}` : '')
-    + (error.stack ? `\n  STACK: ${error.stack.split('\n').slice(0, 6).join('\n')}` : ''));
+  const typedStatus = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+    ? error.statusCode
+    : null;
+  const rawCode = String(error?.code || '').trim().toUpperCase();
+  const safeCode = /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode) ? rawCode : 'UNEXPECTED_ERROR';
+  const safeLog = {
+    action: context?.action || 'unknown',
+    code: safeCode,
+    statusCode: typedStatus || 500,
+  };
+  // Never log SQL text, bind values, ODBC messages, or stack traces here:
+  // delivery payloads contain PII and DB2 diagnostics can echo SQL.
+  logger.error('[REPARTIDOR_FINANZAS] request failed', safeLog);
   captureException(error, context);
+  if (typedStatus) {
+    return res.status(typedStatus).json({
+      success: false,
+      code: safeCode,
+      error: typedStatus >= 500 ? 'Servicio temporalmente no disponible' : error.message,
+    });
+  }
   return res.status(500).json({
     success: false,
+    code: 'INTERNAL_SERVER_ERROR',
     error: 'Error interno del servidor',
-    detail: process.env.NODE_ENV !== 'production' ? error.message : undefined,
-    odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined,
   });
 }
 
@@ -276,7 +525,9 @@ function requireRepartidorAccess(resolveRepartidorId) {
   return (req, res, next) => {
     const repartidorId = resolveRepartidorId(req);
     if (canAccessRepartidor(req, repartidorId)) return next();
-    logger.warn(`[REPARTIDOR_FINANZAS] Forbidden ${req.user?.code || 'unknown'} -> ${repartidorId}`);
+    logger.warn('[REPARTIDOR_FINANZAS] Access denied', {
+      code: 'REPARTIDOR_ACCESS_DENIED',
+    });
     return res.status(403).json({
       success: false,
       error: 'No tienes permisos para operar sobre este repartidor',
@@ -298,12 +549,15 @@ async function invalidateFinanceCaches(repartidorId) {
         await invalidateCache(pattern);
       }
     } catch (error) {
-      logger.warn(`[REPARTIDOR_FINANZAS] Cache invalidation failed for ${pattern}: ${error.message}`);
+      // Do not expose cache key patterns, driver messages, or repartidor IDs.
+      logger.warn('[REPARTIDOR_FINANZAS] Cache invalidation failed', {
+        code: 'FINANCE_CACHE_INVALIDATION_FAILED',
+      });
     }
   }
 }
 
-router.get('/daily-summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
     const query = dailySummaryQuerySchema.parse(req.query);
@@ -311,13 +565,13 @@ router.get('/daily-summary/:repartidorId', verifyToken, requireRepartidorAccess(
       repartidorId: params.repartidorId,
       date: query.date,
     });
-    return res.json({ success: true, ...result });
+    return res.json({ success: true, ...result, canReverseCobros: false });
   } catch (error) {
     return sendError(res, error, { action: 'GET /daily-summary', params: req.params, query: req.query });
   }
 });
 
-router.get('/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
     const query = summaryQuerySchema.parse(req.query);
@@ -335,12 +589,14 @@ router.get('/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) 
 router.get('/vencimientos/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
+    assertExplicitRepartidorSelector(params.repartidorId);
     const query = vencimientosQuerySchema.parse(req.query);
-    const vencimientos = await financeService.getVencimientos({
+    const page = await financeService.getVencimientos({
       repartidorId: params.repartidorId,
       from: query.from,
       to: query.to,
       limit: query.limit,
+      cursor: query.cursor,
       clientCode: query.clientCode,
       estado: query.estado,
     });
@@ -348,7 +604,13 @@ router.get('/vencimientos/:repartidorId', verifyToken, requireRepartidorAccess((
       success: true,
       repartidorId: params.repartidorId,
       range: { from: query.from, to: query.to, limit: query.limit },
-      vencimientos,
+      vencimientos: page.items,
+      pagination: {
+        total: page.total,
+        limit: query.limit,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
+      },
     });
   } catch (error) {
     return sendError(res, error, { action: 'GET /vencimientos', params: req.params, query: req.query });
@@ -432,86 +694,248 @@ router.post('/cobros/reverse', verifyToken, requireRepartidorAccess((req) => req
   }
 });
 
-router.post('/rutero/confirm-delivery-cobro', verifyToken, requireRepartidorAccess((req) => req.body?.cobro?.codigoRepartidor || req.body?.delivery?.repartidorId), async (req, res) => {
+router.post('/rutero/evidence/signature', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
+  setEvidenceRequestTimeout(req, res);
   try {
-    const body = ruteroConfirmSchema.parse(req.body);
-    const operador = (req.user && (req.user.code || req.user.id)) || 'unknown';
-    const result = await financeService.confirmRuteroDeliveryWithCobro({
-      delivery: body.delivery,
-      cobro: {
-        ...body.cobro,
-        operador,
-      },
+    const result = await canonicalConfirmationRuntime.evidenceService.stageSignature({
+      documentId: evidenceDocumentId(req.body),
+      repartidorId: evidenceRepartidorId(req, req.body?.repartidorId),
+      dataUri: req.body?.signature || req.body?.firma,
     });
-    await invalidateFinanceCaches(body.cobro.codigoRepartidor);
+    return res.status(result.created ? 201 : 200).json({ success: true, ...result });
+  } catch (error) {
+    return sendEvidenceError(res, error, 'POST /rutero/evidence/signature');
+  }
+});
+
+router.post('/rutero/evidence/photo', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, (req, res) => {
+  setEvidenceRequestTimeout(req, res);
+  evidenceUpload.single('photo')(req, res, async (uploadError) => {
+    if (uploadError) return sendEvidenceError(res, uploadError, 'POST /rutero/evidence/photo');
+    try {
+      if (!req.file) throw new EvidenceError('EVIDENCE_REQUIRED', 'Debe adjuntar una evidencia', 400);
+      const result = await canonicalConfirmationRuntime.evidenceService.stagePhoto({
+        documentId: evidenceDocumentId(req.body),
+        repartidorId: evidenceRepartidorId(req, req.body?.repartidorId),
+        mimeType: req.file.mimetype,
+        buffer: req.file.buffer,
+      });
+      return res.status(result.created ? 201 : 200).json({ success: true, ...result });
+    } catch (error) {
+      return sendEvidenceError(res, error, 'POST /rutero/evidence/photo');
+    }
+  });
+});
+
+router.get('/rutero/evidence/:evidenceId', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
+  setEvidenceRequestTimeout(req, res);
+  try {
+    const evidence = await canonicalConfirmationRuntime.evidenceService.retrieve({
+      evidenceId: req.params.evidenceId,
+      actor: { role: req.user?.role, repartidorId: actorCode(req.user) },
+    });
+    // Response remains JSON/base64. The filename is fixed and never derived
+    // from evidence metadata or request input.
+    res.set({
+      'Cache-Control': 'private, no-store',
+      Pragma: 'no-cache',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': 'inline; filename="evidence.json"',
+    });
+    return res.json({ success: true, ...evidence });
+  } catch (error) {
+    return sendEvidenceError(res, error, 'GET /rutero/evidence/:evidenceId');
+  }
+});
+
+// Canonical receipts are immutable renderings of the persisted confirmation.
+// The route accepts no body, preventing local quantities, receiver data,
+// totals, or signature substitution.
+function setCanonicalReceiptHeaders(res) {
+  res.set({
+    'Cache-Control': 'private, no-store',
+    Pragma: 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+  });
+}
+
+function setCanonicalArtifactHeaders(_req, res, next) {
+  setCanonicalReceiptHeaders(res);
+  return next();
+}
+
+async function serveCanonicalReceipt(req, res, lookup) {
+  req.setTimeout?.(canonicalReceiptTimeoutMs + 1000);
+  res.setTimeout?.(canonicalReceiptTimeoutMs + 1000);
+  setCanonicalReceiptHeaders(res);
+  try {
+    const actor = { role: req.user?.role, repartidorId: actorCode(req.user) };
+    const { receipt, rendered } = await withCanonicalReceiptTimeout(async (signal) => {
+      const receipt = await canonicalConfirmationRuntime.receiptService.getReceipt({ ...lookup, actor, signal });
+    let signature = null;
+    if (receipt.firmaEvidenceId) {
+      // getReceipt authorizes confirmation ownership before this evidence read.
+      signature = await canonicalConfirmationRuntime.evidenceService.retrieve({ evidenceId: receipt.firmaEvidenceId, actor, signal });
+      if (signature.kind !== 'FIRMA') {
+        throw new RepartoPersistenceError('La firma del recibo no estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ disponible', { code: 'REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', statusCode: 503 });
+      }
+    }
+      const rendered = await canonicalConfirmationRuntime.receiptPdfService.render({ receipt, signature, signal });
+      return { receipt, rendered };
+    });
+    return res.status(200).json({
+      success: true,
+      confirmationId: receipt.confirmationId,
+      pdfBase64: rendered.pdf.toString('base64'),
+      fileName: rendered.fileName,
+    });
+  } catch (error) {
+    if (error instanceof EvidenceError || isEvidenceTimeout(error)) {
+      return sendEvidenceError(res, error, 'GET canonical receipt');
+    }
+    if (error instanceof RepartoPersistenceError) {
+      if (error.statusCode >= 500) logger.error('[REPARTIDOR_FINANZAS] canonical receipt unavailable', { code: error.code, statusCode: error.statusCode });
+      const safeMessage = error.statusCode >= 500
+        ? 'Servicio temporalmente no disponible'
+        : error.message;
+      return res.status(error.statusCode).json({ success: false, code: error.code, error: safeMessage });
+    }
+    return sendError(res, error, { action: 'GET receipt' });
+  }
+}
+
+const entryAmount = () => z.number().finite().min(-99999999).max(99999999)
+  .refine((amount) => Math.abs((amount * 100) - Math.round(amount * 100)) < 0.000001,
+    'amount admite como maximo dos decimales');
+const liquidacionEntryBase = {
+  repartidorId: numericCodeSchema,
+  date: dateSchema,
+  amount: entryAmount(),
+  idempotencyToken: idempotencyTokenSchema,
+  observation: z.string().trim().min(1).max(250).optional(),
+};
+const liquidacionEntrySchemas = Object.freeze({
+  expense: z.object({
+    ...liquidacionEntryBase,
+    amount: entryAmount().refine((amount) => amount > 0, 'amount debe ser positivo'),
+    category: z.string().trim().min(1).max(40),
+  }).strict(),
+  adjustment: z.object({
+    ...liquidacionEntryBase,
+    amount: entryAmount().refine((amount) => amount !== 0, 'amount debe ser firmado y no cero'),
+    reason: z.string().trim().min(1).max(120),
+  }).strict(),
+  bankDeposit: z.object({
+    ...liquidacionEntryBase,
+    amount: entryAmount().refine((amount) => amount > 0, 'amount debe ser positivo'),
+    reference: z.string().trim().min(1).max(80),
+  }).strict(),
+});
+
+function parseLiquidacionEntry(schema, body) {
+  try {
+    return schema.parse(body);
+  } catch (cause) {
+    const error = new Error('Entrada de liquidacion invalida');
+    error.code = 'INVALID_LIQUIDACION_ENTRY';
+    error.statusCode = 422;
+    error.details = cause instanceof z.ZodError
+      ? cause.errors.map((item) => ({ path: item.path.join('.'), message: item.message }))
+      : undefined;
+    throw error;
+  }
+}
+
+router.get('/rutero/confirmations/receipt', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
+  setCanonicalReceiptHeaders(res);
+  const parsed = idempotencyTokenSchema.safeParse(req.query?.idempotencyKey);
+  if (!parsed.success || Object.keys(req.query || {}).some((key) => key !== 'idempotencyKey')) {
+    return res.status(422).json({
+      success: false,
+      code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
+      error: 'Debe indicarse solo una clave de idempotencia valida',
+    });
+  }
+  return serveCanonicalReceipt(req, res, { idempotencyKey: parsed.data });
+});
+
+router.get('/rutero/confirmations/:confirmationId/receipt', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole,
+  (req, res) => {
+    setCanonicalReceiptHeaders(res);
+    if (Object.keys(req.query || {}).length !== 0) {
+      return res.status(422).json({
+        success: false,
+        code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
+        error: 'El recibo por confirmacion no admite selectores adicionales',
+      });
+    }
+    return serveCanonicalReceipt(req, res, { confirmationId: req.params.confirmationId });
+  });
+
+router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
+  try {
+    const command = buildConfirmationCommand({
+      user: req.user,
+      headers: req.headers,
+      body: req.body,
+    });
+    // Validate the authoritative catalog before opening the persistence
+    // transaction. This prevents an unknown state/reason/payment from being
+    // partially written even if a downstream adapter is misconfigured.
+    await canonicalConfirmationRuntime.catalogService.validateConfirmation(command);
+    const result = await canonicalConfirmationRuntime.confirmationService.confirm(command);
+    await invalidateFinanceCaches(command.delivery.repartidorId);
     return res.status(result.created ? 201 : 200).json({
       success: true,
       ...result,
     });
   } catch (error) {
-    if (error && error.code === 'ALREADY_DELIVERED') {
-      return res.status(409).json({
+    if (error instanceof RepartoContractError) {
+      return res.status(error.statusCode).json({
         success: false,
+        code: error.code,
         error: error.message,
-        alreadyDelivered: true,
-        previousRepartidor: error.previousRepartidor,
-        previousDate: error.previousDate,
+        details: error.details,
       });
     }
-    if (error && (
-      error.code === 'IDEMPOTENCY_CONFLICT' ||
-      error.code === 'INCONSISTENT_IDEMPOTENCY' ||
-      error.code === 'DOCUMENT_NOT_ASSIGNED' ||
-      error.code === 'PAYMENT_ALREADY_REGISTERED'
-    )) {
-      return res.status(error.code === 'DOCUMENT_NOT_ASSIGNED' ? 403 : 409).json({
+    if (error instanceof RepartoCatalogError || error instanceof RepartoPersistenceError) {
+      return res.status(error.statusCode).json({
         success: false,
         error: error.message,
         code: error.code,
+        ...(error.details ? { details: error.details } : {}),
       });
     }
     return sendError(res, error, {
       action: 'POST /rutero/confirm-delivery-cobro',
-      body: req.body,
+      ...(req.id ? { requestId: req.id } : {}),
     });
   }
 });
 
-router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.body.repartidorId), async (req, res) => {
+router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.body?.repartidorId), async (req, res) => {
   try {
-    const body = liquidacionSchema.extend({
-      repartidorId: numericCodeSchema,
-    }).parse(req.body);
-    const createdBy = (req.user && (req.user.code || req.user.id)) || 'unknown';
-    const result = await financeService.closeLiquidacion({
-      ...body,
-      createdBy,
+    const body = parseLiquidacionCloseRequest(req.body);
+    const result = await canonicalLiquidacionService.closeDay(body, {
+      actorId: actorCode(req.user),
+      actorRole: String(req.user?.role || '').trim(),
     });
 
-    await invalidateFinanceCaches(body.repartidorId);
-
-    if (result.created && body.sendEmails) {
-      financeService.sendLiquidacionEmails({
-        liquidacion: result.liquidacion,
-        repartidorEmail: req.user?.email,
-        repartidorName: req.user?.name,
-        cobros: [],
-      }).catch((error) => {
-        logger.error(`[REPARTIDOR_FINANZAS] Email send failed after close: ${error.message}`);
-        captureException(error, { action: 'sendLiquidacionEmails', idempotencyToken: body.idempotencyToken });
-      });
-    }
+    // Cache invalidation is a post-commit concern and only applies to a
+    // newly created close. Replays must remain read-only.
+    if (result.created) await invalidateFinanceCaches(body.repartidorId);
 
     return res.status(result.created ? 201 : 200).json({
       success: true,
       created: result.created,
       liquidacion: result.liquidacion,
+      outboxIntent: result.outboxIntent,
     });
   } catch (error) {
-    if (error && (
-      error.code === 'DUPLICATE_DAILY_LIQUIDACION' ||
-      error.code === 'IDEMPOTENCY_CONFLICT'
-    )) {
+    if (error && [
+      'DUPLICATE_DAILY_LIQUIDACION', 'IDEMPOTENCY_CONFLICT',
+      'LIQUIDACION_DAY_ALREADY_CLOSED',
+    ].includes(error.code)) {
       return res.status(409).json({
         success: false,
         error: error.message,
@@ -522,30 +946,95 @@ router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.
   }
 });
 
+function validateLiquidacionEntry(schema) {
+  return (req, res, next) => {
+    try {
+      req.liquidacionEntry = parseLiquidacionEntry(schema, req.body);
+      return next();
+    } catch (error) {
+      return sendError(res, error, { action: 'validate liquidation entry' });
+    }
+  };
+}
+
+function requireLiquidacionAdjustmentRole(req, res, next) {
+  if (hasFinanceListRole(req.user)) return next();
+  return res.status(403).json({
+    success: false,
+    code: 'LIQUIDACION_ADJUSTMENT_ROLE_REQUIRED',
+    error: 'Solo JEFE_VENTAS o ADMIN puede crear ajustes',
+  });
+}
+
+function createLiquidacionEntryHandler(method, action) {
+  return async (req, res) => {
+    try {
+      const result = await canonicalLiquidacionService[method](req.liquidacionEntry, {
+        actorId: actorCode(req.user), actorRole: String(req.user?.role || '').trim(),
+      });
+      if (result.created) await invalidateFinanceCaches(req.liquidacionEntry.repartidorId);
+      return res.status(result.created ? 201 : 200).json({ success: true, ...result });
+    } catch (error) {
+      return sendError(res, error, { action, body: req.body });
+    }
+  };
+}
+
+router.post('/liquidaciones/gastos', verifyToken,
+  validateLiquidacionEntry(liquidacionEntrySchemas.expense),
+  requireRepartidorAccess((req) => req.liquidacionEntry.repartidorId),
+  createLiquidacionEntryHandler('createExpense', 'POST /liquidaciones/gastos'));
+
+router.post('/liquidaciones/ajustes', verifyToken,
+  validateLiquidacionEntry(liquidacionEntrySchemas.adjustment),
+  requireLiquidacionAdjustmentRole,
+  requireRepartidorAccess((req) => req.liquidacionEntry.repartidorId),
+  createLiquidacionEntryHandler('createAdjustment', 'POST /liquidaciones/ajustes'));
+
+router.post('/liquidaciones/ingresos-bancarios', verifyToken,
+  validateLiquidacionEntry(liquidacionEntrySchemas.bankDeposit),
+  requireRepartidorAccess((req) => req.liquidacionEntry.repartidorId),
+  createLiquidacionEntryHandler('createBankDeposit', 'POST /liquidaciones/ingresos-bancarios'));
+
+router.get('/liquidaciones/:repartidorId/desglose', verifyToken,
+  requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+    try {
+      const { repartidorId } = numericParamsSchema.parse(req.params);
+      const { date } = z.object({ date: dateSchema }).strict().parse(req.query);
+      const ledger = await canonicalLiquidacionService.getDayEntries({ repartidorId, date }, {
+        actorId: actorCode(req.user), actorRole: String(req.user?.role || '').trim(),
+      });
+      return res.json({ success: true, ledger });
+    } catch (cause) {
+      const error = cause instanceof z.ZodError
+        ? Object.assign(new Error('Consulta de liquidacion invalida'), {
+          code: 'INVALID_LIQUIDACION_ENTRY', statusCode: 422,
+          details: cause.errors.map((item) => ({ path: item.path.join('.'), message: item.message })),
+        }) : cause;
+      return sendError(res, error, { action: 'GET /liquidaciones/desglose', params: req.params, query: req.query });
+    }
+  });
+
+router.post('/liquidaciones/:idempotencyToken/reopen', verifyToken, async (req, res) => {
+  try {
+    idempotencyTokenSchema.parse(req.params.idempotencyToken);
+    return res.status(501).json({
+      success: false,
+      code: 'LIQUIDACION_REOPEN_RULE_UNDEFINED',
+      error: 'La reapertura de liquidaciones esta bloqueada hasta disponer de una regla de negocio aprobada y auditada.',
+    });
+  } catch (error) {
+    return sendError(res, error, { action: 'POST /liquidaciones/reopen', params: req.params });
+  }
+});
 router.post('/liquidaciones/:idempotencyToken/resend-emails', verifyToken, async (req, res) => {
   try {
-    const token = idempotencyTokenSchema.parse(req.params.idempotencyToken);
-    const liquidacion = await financeService.findLiquidacionByToken(token);
-    if (!liquidacion) {
-      return res.status(404).json({
-        success: false,
-        error: 'Liquidacion no encontrada',
-      });
-    }
-    if (!canAccessRepartidor(req, liquidacion.repartidorId)) {
-      return res.status(403).json({
-        success: false,
-        error: 'No tienes permisos para reenviar esta liquidacion',
-      });
-    }
-
-    const results = await financeService.sendLiquidacionEmails({
-      liquidacion,
-      repartidorEmail: req.user?.email,
-      repartidorName: req.user?.name,
-      cobros: [],
+    idempotencyTokenSchema.parse(req.params.idempotencyToken);
+    return res.status(503).json({
+      success: false,
+      code: 'LIQUIDACION_OUTBOX_RESEND_UNAVAILABLE',
+      error: 'El reenvio solo estara disponible mediante el outbox canonico idempotente',
     });
-    return res.json({ success: true, liquidacion, emailResults: results });
   } catch (error) {
     return sendError(res, error, { action: 'POST /liquidaciones/resend-emails', params: req.params });
   }
@@ -577,6 +1066,7 @@ router.put('/commissions/tiers', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN
 router.get('/commissions/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
+    assertExplicitRepartidorSelector(params.repartidorId);
     const query = rangeQuerySchema.parse(req.query);
     const summary = await financeService.getCommissionSummary({
       repartidorId: params.repartidorId,
@@ -614,11 +1104,14 @@ router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireRoles('JEFE
 
 router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const docId = req.params.docId; // e.g. "FAC-2024-1-0-1234-1"
+    const docId = detailDocIdSchema.parse(req.params.docId);
     const parts = docId.split('-');
-    if (parts.length < 6) throw new Error('Invalid docId format');
     
     const docKey = {
+      // The service binds this value into the ERP ownership predicate.  Keep
+      // it sourced from the already-authorized path parameter rather than
+      // accepting a client-controlled selector in the document id/body.
+      repartidorId: req.params.repartidorId,
       tipo: parts[0],
       ejercicio: parseInt(parts[1]),
       serie: parts[2],
@@ -638,17 +1131,18 @@ router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireRep
   }
 });
 
-router.get('/cuentas/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/cuentas/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const repartidorId = req.params.repartidorId;
+    const { repartidorId } = listParamsSchema.parse(req.params);
     const saldoActual = await financeService.getSaldoActual(repartidorId);
-    
-    // We can also try to find the last liquidation date from OPS
+
+    // A read failure is not an empty summary: that would report a false
+    // ultimoCierre to the driver. It is mapped through the typed route error.
     const dateYmd = new Date().toISOString().slice(0, 10);
     const summary = await financeService.getDailySummary({
       repartidorId,
       date: dateYmd
-    }).catch(() => null);
+    });
 
     res.json({ 
       success: true, 
@@ -664,7 +1158,8 @@ router.get('/cuentas/:repartidorId', verifyToken, requireRepartidorAccess((req) 
 
 router.get('/evolution/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const repartidorId = req.params.repartidorId;
+    const { repartidorId } = listParamsSchema.parse(req.params);
+    assertExplicitRepartidorSelector(repartidorId);
     const [evolution, topProducts] = await Promise.all([
       financeService.getEvolution(repartidorId),
       financeService.getTopProducts(repartidorId)
@@ -674,5 +1169,13 @@ router.get('/evolution/:repartidorId', verifyToken, requireRepartidorAccess((req
     return sendError(res, error, { action: 'GET /evolution', params: req.params });
   }
 });
+
+// Test-only dependency seam. It accepts explicit ports, never environment
+// flags, so an automated test cannot accidentally enable DB2 writes.
+router.setCanonicalConfirmationRuntime = setCanonicalConfirmationRuntime;
+router.resetCanonicalConfirmationRuntime = resetCanonicalConfirmationRuntime;
+router.setCanonicalReceiptTimeoutMs = setCanonicalReceiptTimeoutMs;
+router.setCanonicalLiquidacionService = setCanonicalLiquidacionService;
+router.resetCanonicalLiquidacionService = resetCanonicalLiquidacionService;
 
 module.exports = router;

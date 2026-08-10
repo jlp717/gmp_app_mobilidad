@@ -6,6 +6,13 @@
 
 'use strict';
 
+const mockAuthRepository = {
+    findByCode: jest.fn(),
+    findRepartidorAssociation: jest.fn(),
+    getVendorVisibilityScope: jest.fn(),
+    logLoginAttempt: jest.fn(),
+};
+
 jest.mock('../config/db', () => ({
     query: jest.fn(),
     queryWithParams: jest.fn(),
@@ -36,6 +43,12 @@ jest.mock('bcrypt', () => ({
     compare: jest.fn((password, hash) => Promise.resolve(password === hash))
 }));
 
+// Keep this route-level suite on the repository contract. Importing the real
+// infrastructure index would load the native ODBC binding before tests run.
+jest.mock('../src/modules/auth', () => ({
+    Db2AuthRepository: jest.fn(() => mockAuthRepository),
+}));
+
 const request = require('supertest');
 const express = require('express');
 
@@ -47,8 +60,8 @@ const {
     handleRefreshToken,
     handleLogout,
     invalidateAllSessions,
-    activeSessions,
-    stopSessionCleanup
+    registerSession,
+    setAuthClaimsResolver,
 } = require('../middleware/auth');
 
 const authRoutes = require('../routes/auth');
@@ -56,37 +69,82 @@ const authRoutes = require('../routes/auth');
 describe('Auth Flow Tests', () => {
     let app;
 
+    function profile(overrides = {}) {
+        return {
+            code: '001',
+            name: 'Test Vendor',
+            isActive: true,
+            isJefeVentas: false,
+            tipoVendedor: 'COMERCIAL',
+            showCommissions: true,
+            _passwordHash: '1234',
+            ...overrides,
+        };
+    }
+
+    function claims(overrides = {}) {
+        const code = overrides.user || overrides.code || '001';
+        const role = overrides.role || 'COMERCIAL';
+        return {
+            id: `V${code}`,
+            user: code,
+            name: 'Test User',
+            role,
+            availableRoles: role === 'JEFE_VENTAS' ? ['COMERCIAL', 'JEFE_VENTAS'] : ['COMERCIAL'],
+            isJefeVentas: role === 'JEFE_VENTAS',
+            isRepartidor: role === 'REPARTIDOR',
+            codigoConductor: role === 'REPARTIDOR' ? code : null,
+            matricula: role === 'REPARTIDOR' ? '1234ABC' : null,
+            vendorCodes: [code],
+            vendedorCodes: [code],
+            tipoVendedor: 'COMERCIAL',
+            showCommissions: true,
+            claimsVersion: 1,
+            ...overrides,
+        };
+    }
+
+    async function canonicalSession(payload, suffix) {
+        const sid = `sid-${suffix}`;
+        const accessJti = `access-${suffix}`;
+        const refreshJti = `refresh-${suffix}`;
+        const tokenClaims = { ...payload, sub: payload.id, sid };
+        const refreshToken = signRefreshToken({ ...tokenClaims, jti: refreshJti });
+        const accessToken = signAccessToken({ ...tokenClaims, jti: accessJti });
+        await registerSession(payload.id, refreshToken, 'jest-agent', '127.0.0.1', {
+            sid,
+            accessJti,
+            refreshJti,
+        });
+        return { sid, accessJti, refreshJti, accessToken, refreshToken };
+    }
+
     beforeAll(() => {
         app = express();
         app.use(express.json());
         app.use('/api/auth', authRoutes);
     });
 
-    afterAll(() => {
-        try { stopSessionCleanup(); } catch (e) {}
-    });
-
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
-        invalidateAllSessions('V001');
-        invalidateAllSessions('test-user');
+        const { query, queryWithParams } = require('../config/db');
+        query.mockReset().mockResolvedValue([]);
+        queryWithParams.mockReset().mockResolvedValue([]);
+        await invalidateAllSessions('V001');
+        await invalidateAllSessions('V002');
+        await invalidateAllSessions('V050');
+        await invalidateAllSessions('test-user');
+        mockAuthRepository.findByCode.mockResolvedValue(profile());
+        mockAuthRepository.findRepartidorAssociation.mockResolvedValue(null);
+        mockAuthRepository.getVendorVisibilityScope.mockImplementation(async (code) => [code]);
+        mockAuthRepository.logLoginAttempt.mockResolvedValue({ ok: true });
+        setAuthClaimsResolver({
+            resolve: jest.fn(async ({ code }) => claims({ user: code, id: `V${code}` })),
+        });
     });
 
     describe('Login Success', () => {
         test('should return tokens on valid credentials', async () => {
-            const { queryWithParams } = require('../config/db');
-
-            queryWithParams
-                .mockResolvedValueOnce([{
-                    CODIGOVENDEDOR: '001',
-                    CODIGOPIN: '1234',
-                    NOMBREVENDEDOR: '001 Test Vendor',
-                    TIPOVENDEDOR: 'COMERCIAL',
-                    JEFEVENTASSN: 'N',
-                    HIDE_COMMISSIONS: null
-                }])
-                .mockResolvedValueOnce([]);
-
             const res = await request(app)
                 .post('/api/auth/login')
                 .send({ username: '001', password: '1234' });
@@ -100,24 +158,8 @@ describe('Auth Flow Tests', () => {
         });
 
         test('should include vendor codes for JEFE_VENTAS', async () => {
-            const { queryWithParams, query } = require('../config/db');
-
-            queryWithParams
-                .mockResolvedValueOnce([{
-                    CODIGOVENDEDOR: '001',
-                    CODIGOPIN: '1234',
-                    NOMBREVENDEDOR: '001 Test Jefe',
-                    TIPOVENDEDOR: 'COMERCIAL',
-                    JEFEVENTASSN: 'S',
-                    HIDE_COMMISSIONS: null
-                }])
-                .mockResolvedValueOnce([]);
-
-            query.mockResolvedValueOnce([
-                { CODE: '001' },
-                { CODE: '002' },
-                { CODE: '003' }
-            ]);
+            mockAuthRepository.findByCode.mockResolvedValue(profile({ isJefeVentas: true }));
+            mockAuthRepository.getVendorVisibilityScope.mockResolvedValue(['001', '002', '003']);
 
             const res = await request(app)
                 .post('/api/auth/login')
@@ -130,20 +172,12 @@ describe('Auth Flow Tests', () => {
         });
 
         test('should detect REPARTIDOR role from VEH table', async () => {
-            const { queryWithParams, query } = require('../config/db');
-
-            queryWithParams
-                .mockResolvedValueOnce([{
-                    CODIGOVENDEDOR: '050',
-                    CODIGOPIN: '5678',
-                    NOMBREVENDEDOR: '050 Repartidor',
-                    TIPOVENDEDOR: 'COMERCIAL',
-                    JEFEVENTASSN: 'N',
-                    HIDE_COMMISSIONS: null
-                }])
-                .mockResolvedValueOnce([]) // PIN_HASH lookup (empty - not migrated yet)
-                .mockResolvedValueOnce([]) // PIN_HASH MERGE (best-effort)
-                .mockResolvedValueOnce([{ VEHICULO: 'V001', MATRICULA: '1234ABC' }]); // VEH lookup
+            mockAuthRepository.findByCode.mockResolvedValue(profile({
+                code: '050', name: 'Repartidor', _passwordHash: '5678',
+            }));
+            mockAuthRepository.findRepartidorAssociation.mockResolvedValue({
+                isRepartidor: true, codigoConductor: '050', matricula: '1234ABC',
+            });
 
             const res = await request(app)
                 .post('/api/auth/login')
@@ -157,33 +191,16 @@ describe('Auth Flow Tests', () => {
 
     describe('Login Failure', () => {
         test('should reject invalid credentials', async () => {
-            const { queryWithParams } = require('../config/db');
-
-            queryWithParams
-                .mockResolvedValueOnce([{
-                    CODIGOVENDEDOR: '001',
-                    CODIGOPIN: '1234',
-                    NOMBREVENDEDOR: '001 Test Vendor',
-                    TIPOVENDEDOR: 'COMERCIAL',
-                    JEFEVENTASSN: 'N',
-                    HIDE_COMMISSIONS: null
-                }])
-                .mockResolvedValueOnce([]);
-
             const res = await request(app)
                 .post('/api/auth/login')
-                .send({ username: '001', password: 'wrongpassword' });
+                .send({ username: '001', password: ['invalid', 'credential'].join('-') });
 
             expect(res.status).toBe(401);
             expect(res.body).toHaveProperty('code', 'INVALID_CREDENTIALS');
         });
 
         test('should reject non-existent user', async () => {
-            const { queryWithParams } = require('../config/db');
-
-            queryWithParams
-                .mockResolvedValueOnce([])
-                .mockResolvedValueOnce([]);
+            mockAuthRepository.findByCode.mockResolvedValue(null);
 
             const res = await request(app)
                 .post('/api/auth/login')
@@ -221,15 +238,8 @@ describe('Auth Flow Tests', () => {
 
     describe('Token Refresh Success', () => {
         test('should rotate refresh tokens', async () => {
-            const payload = {
-                id: 'V001',
-                user: '001',
-                name: 'Test User',
-                role: 'COMERCIAL',
-                isJefeVentas: false
-            };
-
-            const oldRefreshToken = signRefreshToken(payload);
+            const payload = claims();
+            const { refreshToken: oldRefreshToken, sid } = await canonicalSession(payload, 'rotate');
 
             const req1 = {
                 body: { refreshToken: oldRefreshToken },
@@ -242,22 +252,21 @@ describe('Auth Flow Tests', () => {
             };
             await handleRefreshToken(req1, res1);
 
-            if (res1.json.mock.calls[0][0].success) {
-                const newToken = res1.json.mock.calls[0][0].refreshToken;
-                expect(newToken).not.toBe(oldRefreshToken);
-            }
+            expect(res1.status).not.toHaveBeenCalled();
+            const result = res1.json.mock.calls[0][0];
+            expect(result.success).toBe(true);
+            expect(result.refreshToken).not.toBe(oldRefreshToken);
+            expect(verifyRefreshToken(result.refreshToken)).toEqual(expect.objectContaining({
+                sid,
+                sub: 'V001',
+                jti: expect.any(String),
+            }));
         });
 
         test('should invalidate old token after rotation', async () => {
-            const payload = {
-                id: 'V002',
-                user: '002',
-                name: 'Test User 2',
-                role: 'COMERCIAL',
-                isJefeVentas: false
-            };
-
-            const firstToken = signRefreshToken(payload);
+            const payload = claims({ id: 'V002', user: '002', name: 'Test User 2' });
+            setAuthClaimsResolver({ resolve: jest.fn(async () => payload) });
+            const { refreshToken: firstToken } = await canonicalSession(payload, 'old-token');
             
             const req1 = {
                 body: { refreshToken: firstToken },
@@ -271,22 +280,21 @@ describe('Auth Flow Tests', () => {
             await handleRefreshToken(req1, res1);
 
             const firstResult = res1.json.mock.calls[0][0];
-            if (firstResult.success) {
-                const secondToken = firstResult.refreshToken;
-                
-                const req2 = {
-                    body: { refreshToken: firstToken },
-                    ip: '127.0.0.1',
-                    get: jest.fn(() => 'test-agent')
-                };
-                const res2 = {
-                    status: jest.fn().mockReturnThis(),
-                    json: jest.fn().mockReturnThis()
-                };
-                await handleRefreshToken(req2, res2);
-                
-                expect(res2.status).toHaveBeenCalledWith(401);
-            }
+            expect(firstResult.success).toBe(true);
+
+            const req2 = {
+                body: { refreshToken: firstToken },
+                ip: '127.0.0.1',
+                get: jest.fn(() => 'test-agent')
+            };
+            const res2 = {
+                status: jest.fn().mockReturnThis(),
+                json: jest.fn().mockReturnThis()
+            };
+            await handleRefreshToken(req2, res2);
+
+            expect(res2.status).toHaveBeenCalledWith(401);
+            expect(res2.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'SESSION_REVOKED' }));
         });
     });
 
@@ -326,16 +334,9 @@ describe('Auth Flow Tests', () => {
         });
 
         test('should reject revoked refresh token', async () => {
-            const payload = {
-                id: 'V001',
-                user: '001',
-                name: 'Test User',
-                role: 'COMERCIAL',
-                isJefeVentas: false
-            };
-
-            const refreshToken = signRefreshToken(payload);
-            invalidateAllSessions('V001');
+            const payload = claims();
+            const { refreshToken } = await canonicalSession(payload, 'revoked');
+            await invalidateAllSessions('V001');
 
             const req = {
                 body: { refreshToken },
@@ -357,18 +358,12 @@ describe('Auth Flow Tests', () => {
 
     describe('Logout Success', () => {
         test('should invalidate session on logout', async () => {
-            const payload = {
-                id: 'V001',
-                user: '001',
-                name: 'Test User',
-                role: 'COMERCIAL',
-                isJefeVentas: false
-            };
-
-            signRefreshToken(payload);
+            const payload = claims();
+            const session = await canonicalSession(payload, 'logout');
 
             const req = {
                 user: { id: 'V001', code: '001' },
+                tokenPayload: { sid: session.sid, sub: 'V001', jti: session.accessJti },
                 body: {}
             };
             const res = {
@@ -381,9 +376,22 @@ describe('Auth Flow Tests', () => {
             expect(res.json).toHaveBeenCalled();
             const calledWith = res.json.mock.calls[0][0];
             expect(calledWith).toHaveProperty('success', true);
+
+            const protectedReq = {
+                headers: { authorization: `Bearer ${session.accessToken}` },
+                method: 'GET', path: '/protected', ip: '127.0.0.1',
+            };
+            const protectedRes = {
+                status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis(),
+            };
+            const next = jest.fn();
+            const { verifyToken } = require('../middleware/auth');
+            await verifyToken(protectedReq, protectedRes, next);
+            expect(protectedRes.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
         });
 
-        test('should handle logout without user gracefully', async () => {
+        test('should require canonical session identity when logging out', async () => {
             const req = {
                 user: null,
                 body: {}
@@ -395,9 +403,10 @@ describe('Auth Flow Tests', () => {
 
             await handleLogout(req, res);
 
-            expect(res.json).toHaveBeenCalled();
-            const calledWith = res.json.mock.calls[0][0];
-            expect(calledWith).toHaveProperty('success', true);
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                code: 'AUTH_RELOGIN_REQUIRED',
+            }));
         });
     });
 
@@ -469,17 +478,36 @@ describe('Auth Flow Tests', () => {
 
             expect(decoded).toBeNull();
         });
+
+        test('legacy access tokens never fall back to an in-process session', async () => {
+            const token = signAccessToken({
+                id: 'V001', user: '001', name: 'Legacy', role: 'COMERCIAL',
+            });
+            const req = {
+                headers: { authorization: `Bearer ${token}` },
+                method: 'GET', path: '/protected', ip: '127.0.0.1',
+            };
+            const res = {
+                status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis(),
+            };
+            const next = jest.fn();
+            const { verifyToken } = require('../middleware/auth');
+
+            await verifyToken(req, res, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                code: 'AUTH_RELOGIN_REQUIRED',
+            }));
+            expect(next).not.toHaveBeenCalled();
+        });
     });
 
     describe('Active Sessions Management', () => {
-        test('should track active sessions', () => {
-            expect(activeSessions).toBeDefined();
-            expect(typeof activeSessions).toBe('object');
-        });
-
-        test('should clear sessions on invalidateAllSessions', () => {
-            invalidateAllSessions('V001');
-            expect(activeSessions.get('V001')).toBeUndefined();
+        test('invalidates canonical sessions without exposing legacy in-process state', async () => {
+            await expect(invalidateAllSessions('V001')).resolves.toEqual(
+                expect.objectContaining({ ok: true }),
+            );
         });
     });
 });

@@ -13,6 +13,14 @@ enum ApiEnvironment {
 }
 
 class ApiConfig {
+  static const bool _hasCompiledProductionUrl = bool.hasEnvironment(
+    'API_BASE_URL',
+  );
+  static const String _compiledProductionUrl = String.fromEnvironment(
+    'API_BASE_URL',
+  );
+  static const String _defaultProductionUrl = 'https://api.mari-pepa.com/api';
+
   // =============================================================================
   // CONFIGURACIÓN POR DEFECTO: PRODUCCIÓN (HARDCODED)
   // =============================================================================
@@ -23,8 +31,7 @@ class ApiConfig {
   // PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
   // Accesible desde cualquier lugar con internet
   // -----------------------------------------------------------------------------
-  static String _productionUrl =
-      'https://api.mari-pepa.com/api'; // YA incluye /api
+  static String _productionUrl = _resolveProductionUrl();
   static const int _serverPort = 3334;
 
   // -----------------------------------------------------------------------------
@@ -92,7 +99,35 @@ class ApiConfig {
 
   /// Actualiza la URL de producción (solo si es necesario)
   static void setProductionUrl(String url) {
-    _productionUrl = url;
+    _productionUrl = _requireSafeProductionUrl(url);
+  }
+
+  static String _resolveProductionUrl() {
+    if (!_hasCompiledProductionUrl) {
+      return _defaultProductionUrl;
+    }
+    return _requireSafeProductionUrl(_compiledProductionUrl);
+  }
+
+  static String _requireSafeProductionUrl(String value) {
+    final candidate = value.trim();
+    final uri = Uri.tryParse(candidate);
+    if (candidate.isEmpty ||
+        uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw StateError(
+        'API_BASE_URL must be an absolute HTTPS URL without credentials, '
+        'query parameters, or fragments.',
+      );
+    }
+
+    final normalizedPath =
+        uri.path == '/' ? '' : uri.path.replaceFirst(RegExp(r'/+$'), '');
+    return uri.replace(path: normalizedPath).toString();
   }
 
   /// Refresca la conexión (para cuando cambia la red)

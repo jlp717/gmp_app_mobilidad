@@ -3,13 +3,52 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_operation_safety.dart';
+
+String _deliveryQuantityText(num value) {
+  final fixed = value.toDouble().toStringAsFixed(3);
+  return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+}
+
+/// Returns the only valid UI identity for a delivery line.
+String ruteroLineKey(EntregaItem item) => item.itemId.trim();
+
+/// Fails closed when the backend omits or duplicates a canonical line ID.
+String? validateRuteroLineIdentities(List<EntregaItem> items) {
+  final seen = <String>{};
+  for (final item in items) {
+    final lineId = ruteroLineKey(item);
+    if (lineId.isEmpty) {
+      return 'Una línea de entrega no tiene identificador. Recarga el reparto.';
+    }
+    if (!seen.add(lineId)) {
+      return 'Hay líneas de entrega duplicadas. Recarga el reparto.';
+    }
+  }
+  return null;
+}
+
+/// Validates that a loaded delivery has usable canonical lines before submit.
+String? validateRuteroLoadedDeliveryLines({
+  required List<EntregaItem> items,
+  required bool isLoading,
+  String? loadError,
+}) {
+  if (isLoading) {
+    return 'Espera a que terminen de cargar las líneas de entrega.';
+  }
+  if (loadError != null) return loadError;
+  if (items.isEmpty) {
+    return 'La entrega no contiene líneas confirmables. Recarga el reparto.';
+  }
+  return validateRuteroLineIdentities(items);
+}
 
 class RuteroDetailProducts extends StatelessWidget {
   const RuteroDetailProducts({
@@ -22,6 +61,7 @@ class RuteroDetailProducts extends StatelessWidget {
     required this.onProductCheckedChanged,
     required this.onQuantityChanged,
     required this.onShowQuantityEditDialog,
+    required this.onRetryItems,
     required this.onConfirmAll,
     required this.onContinueToPayment,
     required this.onOpenFicha,
@@ -33,11 +73,13 @@ class RuteroDetailProducts extends StatelessWidget {
   final bool isLoadingItems;
   final String? itemsError;
   final Map<String, bool> productChecked;
-  final Map<String, int> productQuantities;
+  final Map<String, double> productQuantities;
   final String? ordenPreparacion;
   final void Function(String code, bool value) onProductCheckedChanged;
-  final void Function(String code, int value) onQuantityChanged;
-  final void Function(EntregaItem linea, int current) onShowQuantityEditDialog;
+  final void Function(String code, double value) onQuantityChanged;
+  final void Function(EntregaItem linea, double current)
+      onShowQuantityEditDialog;
+  final VoidCallback onRetryItems;
   final VoidCallback onConfirmAll;
   final VoidCallback onContinueToPayment;
   final void Function(EntregaItem linea) onOpenFicha;
@@ -57,6 +99,11 @@ class RuteroDetailProducts extends StatelessWidget {
       return _buildEmpty(context);
     }
 
+    final identityError = validateRuteroLineIdentities(items);
+    if (identityError != null) {
+      return _buildLineIdentityError(identityError);
+    }
+
     return Column(
       children: [
         _buildSummary(context),
@@ -66,19 +113,18 @@ class RuteroDetailProducts extends StatelessWidget {
             itemCount: items.length,
             itemBuilder: (context, index) {
               final linea = items[index];
+              final lineId = ruteroLineKey(linea);
               return _ProductCard(
                 linea: linea,
-                isChecked: productChecked[linea.codigoArticulo] ?? true,
-                quantity: productQuantities[linea.codigoArticulo] ??
-                    linea.cantidadPedida.toInt(),
+                isChecked: productChecked[lineId] ?? false,
+                quantity: productQuantities[lineId] ?? linea.cantidadPedida,
                 onCheckedChanged: (value) =>
-                    onProductCheckedChanged(linea.codigoArticulo, value),
-                onQuantityChanged: (value) =>
-                    onQuantityChanged(linea.codigoArticulo, value),
+                    onProductCheckedChanged(lineId, value),
+                onQuantityChanged: (value) => onQuantityChanged(lineId, value),
                 onShowEditDialog: () => onShowQuantityEditDialog(
-                    linea,
-                    productQuantities[linea.codigoArticulo] ??
-                        linea.cantidadPedida.toInt()),
+                  linea,
+                  productQuantities[lineId] ?? linea.cantidadPedida,
+                ),
                 onOpenFicha: () => onOpenFicha(linea),
                 onShowFullscreenImage: () => onShowFullscreenImage(
                     linea.codigoArticulo, linea.descripcion),
@@ -147,7 +193,7 @@ class RuteroDetailProducts extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: onRetryItems,
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
             ),
@@ -177,8 +223,23 @@ class RuteroDetailProducts extends StatelessWidget {
     );
   }
 
+  Widget _buildLineIdentityError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          message,
+          style: const TextStyle(color: AppTheme.error, fontSize: 16),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSummary(BuildContext context) {
-    final checked = productChecked.values.where((v) => v).length;
+    final checked = items
+        .where((item) => productChecked[ruteroLineKey(item)] ?? false)
+        .length;
     final total = items.length;
 
     return RepartidorExecutivePanel(
@@ -244,7 +305,8 @@ class RuteroDetailProducts extends StatelessWidget {
   }
 
   Widget _buildConfirmButton(BuildContext context) {
-    final allChecked = productChecked.values.every((v) => v);
+    final allChecked = items.isNotEmpty &&
+        items.every((item) => productChecked[ruteroLineKey(item)] ?? false);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -301,14 +363,14 @@ class _ProductCard extends StatelessWidget {
 
   final EntregaItem linea;
   final bool isChecked;
-  final int quantity;
+  final double quantity;
   final void Function(bool) onCheckedChanged;
-  final void Function(int) onQuantityChanged;
+  final void Function(double) onQuantityChanged;
   final VoidCallback onShowEditDialog;
   final VoidCallback onOpenFicha;
   final VoidCallback onShowFullscreenImage;
 
-  bool get isModified => quantity != linea.cantidadPedida.toInt();
+  bool get isModified => (quantity - linea.cantidadPedida).abs() > 0.0001;
 
   @override
   Widget build(BuildContext context) {
@@ -377,12 +439,7 @@ class _ProductCard extends StatelessWidget {
             productName: linea.descripcion,
             width: 48,
             height: 48,
-            headers: {
-              'Accept': 'image/*',
-              if (ApiClient.dio.options.headers['Authorization'] != null)
-                'Authorization':
-                    ApiClient.dio.options.headers['Authorization'] as String,
-            },
+            headers: repartidorProtectedImageHeaders(url),
             showCodeOnFallback: false,
           ),
         ),
@@ -499,17 +556,19 @@ class _ProductCard extends StatelessWidget {
             onTap: quantity > 0
                 ? () {
                     HapticFeedback.selectionClick();
-                    onQuantityChanged(quantity - 1);
+                    onQuantityChanged(
+                      (quantity - 1).clamp(0.0, linea.cantidadPedida),
+                    );
                   }
                 : null,
           ),
           GestureDetector(
             onTap: onShowEditDialog,
             child: Container(
-              width: 40,
+              width: 52,
               alignment: Alignment.center,
               child: Text(
-                '$quantity',
+                _deliveryQuantityText(quantity),
                 style: TextStyle(
                   color: isModified ? AppTheme.warning : AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
@@ -522,10 +581,14 @@ class _ProductCard extends StatelessWidget {
           ),
           _QuantityButton(
             icon: Icons.add,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              onQuantityChanged(quantity + 1);
-            },
+            onTap: quantity + 0.0001 < linea.cantidadPedida
+                ? () {
+                    HapticFeedback.selectionClick();
+                    onQuantityChanged(
+                      (quantity + 1).clamp(0.0, linea.cantidadPedida),
+                    );
+                  }
+                : null,
           ),
         ],
       ),

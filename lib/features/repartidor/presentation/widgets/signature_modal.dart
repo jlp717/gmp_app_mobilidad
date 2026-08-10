@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_operation_safety.dart';
 import 'package:signature/signature.dart';
 
 /// Modal de firma digital para captura de firma del cliente
@@ -96,11 +97,16 @@ class _SignatureModalState extends State<SignatureModal> {
           Navigator.of(context).pop(base64Signature);
         }
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al guardar firma: $e'),
+            content: Text(
+              repartidorSafeOperationMessage(
+                error: error,
+                operation: 'signature',
+              ),
+            ),
             backgroundColor: AppTheme.error,
           ),
         );

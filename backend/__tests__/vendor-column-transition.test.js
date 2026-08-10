@@ -45,7 +45,11 @@ describe('vendor column transition filter', () => {
         expect(clause).toMatch(/DSEDAC\.CLP/);
         expect(clause).toMatch(/VENDEDORCOMERCIAL/);
         expect(clause).toMatch(/DSED\.LACLAE/);
-        expect(clause).toMatch(/CASE WHEN LAC\.LCMMDC/);
+        // Product uses an explicit month-bound OR (bind-safe), not CASE WHEN.
+        expect(clause).toMatch(/LAC\.LCMMDC\s*<\s*3/);
+        expect(clause).toMatch(/LAC\.LCCDVD\s+IN/);
+        expect(clause).toMatch(/LAC\.LCMMDC\s*>=\s*3/);
+        expect(clause).toMatch(/LAC\.R1_T8CDVD\s+IN/);
         expect(clause).not.toMatch(/CLI\.CODIGOVENDEDOR/);
         expect(clause).not.toMatch(/CODIGOVENDEDOR/);
         expect(params).toEqual(['02', '02']);

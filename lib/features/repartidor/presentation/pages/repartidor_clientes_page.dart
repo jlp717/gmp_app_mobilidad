@@ -3,6 +3,8 @@
 /// Equivalente a SimpleClientListPage de ventas pero enfocado a repartidor
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -13,87 +15,172 @@ import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 
+typedef RepartidorClientsLoader = Future<HistoryClientsPage> Function({
+  required String repartidorId,
+  required int limit,
+  required int offset,
+  required bool forceRefresh,
+  String? search,
+});
+
 class RepartidorClientesPage extends StatefulWidget {
-  const RepartidorClientesPage(
-      {required this.repartidorId,
-      super.key,
-      this.isJefeMode = false,
-      this.onNavigateToHistory});
+  const RepartidorClientesPage({
+    required this.repartidorId,
+    super.key,
+    this.isJefeMode = false,
+    this.onNavigateToHistory,
+    this.clientsLoader,
+    this.searchDebounce = const Duration(milliseconds: 350),
+  });
+
   final String repartidorId;
   final bool isJefeMode;
   final void Function(String clientId, String clientName)? onNavigateToHistory;
+  final RepartidorClientsLoader? clientsLoader;
+  final Duration searchDebounce;
 
   @override
   State<RepartidorClientesPage> createState() => _RepartidorClientesPageState();
 }
 
 class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
+  static const int _pageSize = 100;
+
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<HistoryClient> _clients = [];
+  Timer? _searchTimer;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  bool _loadMoreError = false;
   String? _error;
   String _searchQuery = '';
+  int _requestGeneration = 0;
 
   // Sort options
   _SortBy _sortBy = _SortBy.lastVisit;
   bool _sortAsc = false;
 
+  RepartidorClientsLoader get _clientsLoader =>
+      widget.clientsLoader ?? RepartidorDataService.getHistoryClients;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadClients();
   }
 
   @override
+  void didUpdateWidget(covariant RepartidorClientesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repartidorId != widget.repartidorId) {
+      _searchTimer?.cancel();
+      _searchController.clear();
+      _searchQuery = '';
+      _loadClients(forceRefresh: true);
+    }
+  }
+
+  @override
   void dispose() {
+    _requestGeneration++;
+    _searchTimer?.cancel();
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadClients([String? search]) async {
+  Future<void> _loadClients({
+    String? search,
+    bool reset = true,
+    bool forceRefresh = false,
+  }) async {
+    if (!reset && (_isLoadingMore || !_hasMore)) return;
+
+    final normalizedSearch = (search ?? _searchQuery).trim();
+    final generation = reset ? ++_requestGeneration : _requestGeneration;
+    final offset = reset ? 0 : _clients.length;
+
     setState(() {
-      _isLoading = true;
-      _error = null;
+      if (reset) {
+        _isLoading = true;
+        _error = null;
+        _loadMoreError = false;
+      } else {
+        _isLoadingMore = true;
+        _loadMoreError = false;
+      }
     });
 
     try {
-      final clients = await RepartidorDataService.getHistoryClients(
+      final page = await _clientsLoader(
         repartidorId: widget.repartidorId,
-        search: search,
+        search: normalizedSearch.isEmpty ? null : normalizedSearch,
+        limit: _pageSize,
+        offset: offset,
+        forceRefresh: forceRefresh,
       );
-      if (mounted) {
-        setState(() {
-          _clients = clients;
+      if (!mounted || generation != _requestGeneration) return;
+
+      setState(() {
+        if (reset) {
+          _clients = page.clients;
+        } else {
+          final byId = <String, HistoryClient>{
+            for (final client in _clients) client.id: client,
+            for (final client in page.clients) client.id: client,
+          };
+          _clients = byId.values.toList();
+        }
+        _hasMore = page.hasMore;
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        if (reset) {
+          _error = 'No se pudieron cargar los clientes';
           _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('[RepartidorClientesPage] Error cargando clientes: $e');
-      if (mounted) {
-        setState(() {
-          _error =
-              'No se pudieron cargar los clientes. Revisa la conexión y vuelve a intentarlo.';
-          _isLoading = false;
-        });
-      }
+        } else {
+          _loadMoreError = true;
+          _isLoadingMore = false;
+        }
+      });
     }
   }
 
-  List<HistoryClient> get _filteredClients {
-    var list = _clients;
-
-    // Local text filter
-    if (_searchQuery.length > 1) {
-      final q = _searchQuery.toUpperCase();
-      list = list
-          .where(
-            (c) =>
-                c.name.toUpperCase().contains(q) ||
-                c.id.toUpperCase().contains(q) ||
-                c.address.toUpperCase().contains(q),
-          )
-          .toList();
+  void _onScroll() {
+    if (_scrollController.hasClients &&
+        _scrollController.position.extentAfter < 240) {
+      _loadClients(reset: false);
     }
+  }
+
+  void _scheduleSearch(String value) {
+    setState(() => _searchQuery = value);
+    _searchTimer?.cancel();
+    _searchTimer = Timer(
+      widget.searchDebounce,
+      () => _loadClients(search: value),
+    );
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _scheduleSearch('');
+  }
+
+  Future<void> _refreshClients() {
+    return _loadClients(search: _searchQuery, forceRefresh: true);
+  }
+
+  List<HistoryClient> get _filteredClients {
+    var list = List<HistoryClient>.of(_clients);
 
     // Sort
     list.sort((a, b) {
@@ -116,6 +203,9 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final visibleClients = _filteredClients;
+    final showFooter = _hasMore || _isLoadingMore || _loadMoreError;
+
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       body: Column(
@@ -125,39 +215,84 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           _buildSortBar(),
           Expanded(
             child: _isLoading
-                ? const SkeletonList(itemCount: 6, itemHeight: 80)
+                ? const SkeletonList(itemCount: 6, itemHeight: 112)
                 : _error != null
                     ? ErrorStateWidget(
                         message: _error!,
-                        onRetry: _loadClients,
+                        onRetry: () => _loadClients(forceRefresh: true),
                       )
                     : RefreshIndicator(
-                        onRefresh: _loadClients,
-                        child: _filteredClients.isEmpty
+                        onRefresh: _refreshClients,
+                        child: visibleClients.isEmpty
                             ? ListView(
+                                controller: _scrollController,
+                                physics: const AlwaysScrollableScrollPhysics(),
                                 children: const [
                                   SizedBox(height: 100),
                                   Center(
-                                      child: Icon(Icons.people_outline,
-                                          color: AppTheme.textSecondary,
-                                          size: 64)),
+                                    child: Icon(
+                                      Icons.people_outline,
+                                      color: AppTheme.textSecondary,
+                                      size: 64,
+                                    ),
+                                  ),
                                   SizedBox(height: 12),
                                   Center(
-                                      child: Text('No se encontraron clientes',
-                                          style: TextStyle(
-                                              color: AppTheme.textSecondary))),
+                                    child: Text(
+                                      'No se encontraron clientes',
+                                      style: TextStyle(
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               )
                             : OptimizedListView(
+                                controller: _scrollController,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
-                                itemCount: _filteredClients.length,
-                                itemBuilder: (context, index) =>
-                                    _buildClientCard(_filteredClients[index]),
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                itemCount: visibleClients.length +
+                                    (showFooter ? 1 : 0),
+                                itemBuilder: (context, index) {
+                                  if (index == visibleClients.length) {
+                                    return _buildPaginationFooter();
+                                  }
+                                  return _buildClientCard(
+                                      visibleClients[index]);
+                                },
                               ),
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationFooter() {
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadMoreError) {
+      return Center(
+        child: TextButton.icon(
+          key: const ValueKey('retry-more-clients'),
+          onPressed: () => _loadClients(reset: false),
+          icon: const Icon(Icons.refresh),
+          label: const Text('Reintentar carga'),
+        ),
+      );
+    }
+    return Center(
+      child: TextButton.icon(
+        key: const ValueKey('load-more-clients'),
+        onPressed: () => _loadClients(reset: false),
+        icon: const Icon(Icons.expand_more),
+        label: const Text('Cargar más'),
       ),
     );
   }
@@ -213,7 +348,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           // Refresh
           IconButton(
             icon: const Icon(Icons.refresh, color: AppTheme.info, size: 22),
-            onPressed: _loadClients,
+            onPressed: _refreshClients,
             tooltip: 'Actualizar',
           ),
         ],
@@ -239,10 +374,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
               ? IconButton(
                   icon: const Icon(Icons.clear,
                       color: AppTheme.textSecondary, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
+                  onPressed: _clearSearch,
                 )
               : null,
           filled: true,
@@ -254,9 +386,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
               borderSide: BorderSide.none),
         ),
         onChanged: (v) {
-          setState(() => _searchQuery = v);
-          // Server-side search for longer queries
-          if (v.length > 3) _loadClients(v);
+          _scheduleSearch(v);
         },
       ),
     );

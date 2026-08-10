@@ -19,8 +19,31 @@ const {
     requireRoles,
     requireJefeVentas,
     signAccessToken,
-    verifyAccessToken
+    signRefreshToken,
+    verifyAccessToken,
+    registerSession,
+    invalidateAllSessions,
+    ACCESS_TTL_MS,
 } = require('../../middleware/auth');
+const logger = require('../../middleware/logger');
+
+let sessionSequence = 0;
+
+async function canonicalAccessToken(payload, label = 'session') {
+    sessionSequence += 1;
+    const subject = payload.id;
+    const sid = `sid-${label}-${sessionSequence}`;
+    const accessJti = `access-${label}-${sessionSequence}`;
+    const refreshJti = `refresh-${label}-${sessionSequence}`;
+    const claims = { ...payload, sub: subject, sid };
+    const refreshToken = signRefreshToken({ ...claims, jti: refreshJti });
+    await registerSession(subject, refreshToken, 'jest', '127.0.0.1', {
+        sid,
+        accessJti,
+        refreshJti,
+    });
+    return signAccessToken({ ...claims, jti: accessJti });
+}
 
 function createMockReq(overrides = {}) {
     const headers = { ...overrides.headers };
@@ -46,6 +69,10 @@ function createMockRes() {
     return res;
 }
 
+beforeEach(async () => {
+    await invalidateAllSessions('V001');
+});
+
 describe('Auth Middleware - verifyToken', () => {
     let res, next;
 
@@ -54,7 +81,7 @@ describe('Auth Middleware - verifyToken', () => {
         next = jest.fn();
     });
 
-    test('should pass valid Bearer token', () => {
+    test('should pass valid Bearer token', async () => {
         const payload = {
             id: 'V001',
             user: '001',
@@ -62,12 +89,12 @@ describe('Auth Middleware - verifyToken', () => {
             role: 'COMERCIAL',
             isJefeVentas: false
         };
-        const token = signAccessToken(payload);
+        const token = await canonicalAccessToken(payload, 'valid');
         const req = createMockReq({
             headers: { authorization: `Bearer ${token}` }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(next).toHaveBeenCalled();
         expect(req.user).toBeDefined();
@@ -75,10 +102,10 @@ describe('Auth Middleware - verifyToken', () => {
         expect(req.user.role).toBe('COMERCIAL');
     });
 
-    test('should reject missing authorization header', () => {
+    test('should reject missing authorization header', async () => {
         const req = createMockReq();
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(res.json).toHaveBeenCalledWith(
@@ -87,22 +114,22 @@ describe('Auth Middleware - verifyToken', () => {
         expect(next).not.toHaveBeenCalled();
     });
 
-    test('should reject empty authorization header', () => {
+    test('should reject empty authorization header', async () => {
         const req = createMockReq({
             headers: { authorization: '' }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(res.status).toHaveBeenCalledWith(401);
     });
 
-    test('should reject invalid authorization format (no Bearer)', () => {
+    test('should reject invalid authorization format (no Bearer)', async () => {
         const req = createMockReq({
             headers: { authorization: 'Basic sometoken' }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(res.json).toHaveBeenCalledWith(
@@ -110,12 +137,12 @@ describe('Auth Middleware - verifyToken', () => {
         );
     });
 
-    test('should reject invalid token format', () => {
+    test('should reject invalid token format', async () => {
         const req = createMockReq({
             headers: { authorization: 'Bearer invalidtoken' }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(res.json).toHaveBeenCalledWith(
@@ -123,7 +150,7 @@ describe('Auth Middleware - verifyToken', () => {
         );
     });
 
-    test('should reject token with wrong signature', () => {
+    test('should reject token with wrong signature', async () => {
         const payload = {
             id: 'V001',
             user: '001',
@@ -139,13 +166,40 @@ describe('Auth Middleware - verifyToken', () => {
             headers: { authorization: `Bearer ${tamperedToken}` }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(next).not.toHaveBeenCalled();
     });
 
-    test('should attach user object to request on success', () => {
+    test('should reject expired tokens without logging token claims or raw data', () => {
+        const syntheticUser = ['synthetic', 'operator', '987'].join('-');
+        const token = signAccessToken({
+            id: 'V987',
+            user: syntheticUser,
+            sub: syntheticUser,
+            role: 'COMERCIAL',
+        });
+        const issuedAt = Date.now();
+        logger.warn.mockClear();
+
+        const clock = jest
+            .spyOn(Date, 'now')
+            .mockReturnValue(issuedAt + ACCESS_TTL_MS + 1);
+        try {
+            expect(verifyAccessToken(token)).toBeNull();
+        } finally {
+            clock.mockRestore();
+        }
+
+        const warning = logger.warn.mock.calls.flat().join(' ');
+        expect(warning).toBe('AUTH_TOKEN_REJECTED_EXPIRED');
+        expect(warning).not.toContain(syntheticUser);
+        expect(warning).not.toContain(token);
+        expect(warning).not.toMatch(/\b(?:user|sub|age|ttl|token)=/i);
+    });
+
+    test('should attach user object to request on success', async () => {
         const payload = {
             id: 'V001',
             user: '001',
@@ -153,12 +207,12 @@ describe('Auth Middleware - verifyToken', () => {
             role: 'JEFE_VENTAS',
             isJefeVentas: true
         };
-        const token = signAccessToken(payload);
+        const token = await canonicalAccessToken(payload, 'projection');
         const req = createMockReq({
             headers: { authorization: `Bearer ${token}` }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(req.user).toEqual(expect.objectContaining({
             id: 'V001',
@@ -170,14 +224,29 @@ describe('Auth Middleware - verifyToken', () => {
         expect(req.tokenPayload).toBeDefined();
     });
 
-    test('should handle malformed token gracefully', () => {
+    test('should handle malformed token gracefully', async () => {
         const req = createMockReq({
             headers: { authorization: 'Bearer eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ==' }
         });
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should reject a signed legacy token without sid/sub/jti instead of falling back', async () => {
+        const token = signAccessToken({
+            id: 'V001', user: '001', name: 'Legacy', role: 'COMERCIAL',
+        });
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+
+        await verifyToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            code: 'AUTH_RELOGIN_REQUIRED',
+        }));
+        expect(next).not.toHaveBeenCalled();
     });
 });
 
@@ -189,16 +258,16 @@ describe('Auth Middleware - optionalAuth', () => {
         next = jest.fn();
     });
 
-    test('should pass without authorization header', () => {
+    test('should pass without authorization header', async () => {
         const req = createMockReq();
 
-        optionalAuth(req, res, next);
+        await optionalAuth(req, res, next);
 
         expect(next).toHaveBeenCalled();
         expect(req.user).toBeNull();
     });
 
-    test('should pass with valid token but not attach user', () => {
+    test('should pass with valid token and attach canonical user', async () => {
         const payload = {
             id: 'V001',
             user: '001',
@@ -206,34 +275,34 @@ describe('Auth Middleware - optionalAuth', () => {
             role: 'COMERCIAL',
             isJefeVentas: false
         };
-        const token = signAccessToken(payload);
+        const token = await canonicalAccessToken(payload, 'optional');
         const req = createMockReq({
             headers: { authorization: `Bearer ${token}` }
         });
 
-        optionalAuth(req, res, next);
+        await optionalAuth(req, res, next);
 
         expect(next).toHaveBeenCalled();
         expect(req.user).toBeDefined();
     });
 
-    test('should pass with invalid token but not fail', () => {
+    test('should pass with invalid token but not fail', async () => {
         const req = createMockReq({
             headers: { authorization: 'Bearer invalidtoken' }
         });
 
-        optionalAuth(req, res, next);
+        await optionalAuth(req, res, next);
 
         expect(next).toHaveBeenCalled();
         expect(req.user).toBeNull();
     });
 
-    test('should handle non-Bearer auth gracefully', () => {
+    test('should handle non-Bearer auth gracefully', async () => {
         const req = createMockReq({
             headers: { authorization: 'Basic sometoken' }
         });
 
-        optionalAuth(req, res, next);
+        await optionalAuth(req, res, next);
 
         expect(next).toHaveBeenCalled();
         expect(req.user).toBeNull();
@@ -489,7 +558,7 @@ describe('Token Payload Preservation', () => {
         expect(decoded.name).toBe('Juan Perez');
     });
 
-    test('should preserve isJefeVentas flag', () => {
+    test('should preserve isJefeVentas flag', async () => {
         const payload = {
             id: 'V001',
             user: '001',
@@ -497,14 +566,14 @@ describe('Token Payload Preservation', () => {
             role: 'JEFE_VENTAS',
             isJefeVentas: true
         };
-        const token = signAccessToken(payload);
+        const token = await canonicalAccessToken(payload, 'jefe');
         const req = createMockReq({
             headers: { authorization: `Bearer ${token}` }
         });
         const res = createMockRes();
         const next = jest.fn();
 
-        verifyToken(req, res, next);
+        await verifyToken(req, res, next);
 
         expect(req.user.isJefeVentas).toBe(true);
     });

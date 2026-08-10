@@ -9,8 +9,7 @@ class RuteroDetailCompleted extends StatelessWidget {
     required this.albaran,
     required this.onPreviewReceiptPdf,
     required this.onDownloadReceiptPdf,
-    required this.onShareViaWhatsApp,
-    required this.onShareViaEmail,
+    required this.onSharePdfLocally,
     required this.buildPrinterConfigSection,
     required this.tieneImpresora,
     required this.items,
@@ -21,8 +20,7 @@ class RuteroDetailCompleted extends StatelessWidget {
   final AlbaranEntrega albaran;
   final VoidCallback onPreviewReceiptPdf;
   final VoidCallback onDownloadReceiptPdf;
-  final VoidCallback onShareViaWhatsApp;
-  final VoidCallback onShareViaEmail;
+  final VoidCallback onSharePdfLocally;
   final Widget Function() buildPrinterConfigSection;
   final bool tieneImpresora;
   final List<EntregaItem> items;
@@ -214,17 +212,18 @@ class RuteroDetailCompleted extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         _ShareButton(
-          icon: Icons.chat,
-          label: 'Enviar por WhatsApp',
-          color: const Color(0xFF25D366),
-          onTap: onShareViaWhatsApp,
+          icon: Icons.share,
+          label: 'Compartir PDF (acción local)',
+          color: AppTheme.success,
+          onTap: onSharePdfLocally,
         ),
         const SizedBox(height: 10),
-        _ShareButton(
-          icon: Icons.email,
-          label: 'Enviar por Email',
+        const _ShareButton(
+          icon: Icons.email_outlined,
+          label: 'Email no disponible',
           color: AppTheme.accentIndigo,
-          onTap: onShareViaEmail,
+          enabled: false,
+          onTap: null,
         ),
       ],
     );
@@ -273,31 +272,36 @@ class _ShareButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = enabled ? color : AppTheme.textTertiary;
     return RepartidorExecutivePanel(
-      accentColor: color,
+      accentColor: effectiveColor,
       padding: EdgeInsets.zero,
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 24),
+            Icon(icon, color: effectiveColor, size: 24),
             const SizedBox(width: 12),
             Text(
               label,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+              style:
+                  TextStyle(color: effectiveColor, fontWeight: FontWeight.w600),
             ),
             const Spacer(),
-            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.6)),
+            Icon(Icons.chevron_right,
+                color: effectiveColor.withValues(alpha: 0.6)),
           ],
         ),
       ),

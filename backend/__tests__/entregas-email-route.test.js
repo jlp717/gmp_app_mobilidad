@@ -5,12 +5,13 @@ const request = require('supertest');
 
 const mockSaveReceipt = jest.fn();
 const mockSendEmailWithPdf = jest.fn();
+const mockQueryWithParams = jest.fn();
 const mockGenerateDeliveryEmailHtml = jest.fn();
 const mockSendDeliveryReceipt = jest.fn();
 
 jest.mock('../config/db', () => ({
     query: jest.fn(),
-    queryWithParams: jest.fn()
+    queryWithParams: (...args) => mockQueryWithParams(...args)
 }));
 
 jest.mock('../services/query-optimizer', () => ({
@@ -59,6 +60,29 @@ jest.mock('../app/services/emailService', () => ({
 
 const entregasRoutes = require('../routes/entregas');
 
+        mockQueryWithParams
+            .mockResolvedValueOnce([{ CODIGO_REPARTIDOR: '94' }])
+            .mockResolvedValueOnce([{
+                ID: 'CONF-3113',
+                DOCUMENT_ID: '2026-A-0-3113-4300009479',
+                REPARTIDOR_ID: '94',
+                CLIENTE_CODIGO: '4300009479',
+                CLIENTE_NOMBRE: 'Cliente real',
+                DOCUMENTO_SERIE: 'A',
+                DOCUMENTO_TERMINAL: 0,
+                DOCUMENTO_NUMERO: 3113,
+                OCCURRED_AT: '2026-04-28T09:00:00.000Z',
+                CONFIRMED_AT: '2026-04-28T09:05:00.000Z',
+                RECEPTOR_NOMBRE: 'Persona',
+                RECEPTOR_APELLIDOS: 'Real',
+                RECEPTOR_DNI: '12345678Z',
+                FIRMA_EVIDENCE_ID: null
+            }])
+            .mockResolvedValueOnce([{
+                LINEA_ID: 'LINE-1', CODIGO_ARTICULO: 'ART-1', DESCRIPCION: 'Producto',
+                CANTIDAD_PEDIDA: 1, CANTIDAD_ENTREGADA: 1, CANTIDAD_RECHAZADA: 0,
+                CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: 42.5
+            }]);
 function makeApp() {
     const app = express();
     app.use(express.json());
@@ -79,9 +103,9 @@ describe('Entregas receipt email route', () => {
         mockSendDeliveryReceipt.mockResolvedValue({ success: true, messageId: 'legacy-message' });
     });
 
-    test('uses the shared PDF email sender for delivery receipts', async () => {
+    test('fails closed instead of sending to a request-provided recipient', async () => {
         const res = await request(makeApp())
-            .post('/receipt/2026-A-0-3113/email')
+            .post('/receipt/2026-A-0-3113-4300009479/email')
             .send({
                 email: 'cliente@example.com',
                 subject: 'Nota de entrega personalizada',
@@ -96,19 +120,16 @@ describe('Entregas receipt email route', () => {
                 ]
             });
 
-        expect(res.status).toBe(200);
+        expect(res.status).toBe(410);
         expect(res.body).toEqual(expect.objectContaining({
-            success: true,
-            messageId: 'message-1'
+            success: false,
+            code: 'REPARTO_CANONICAL_RECEIPT_ENDPOINT_REQUIRED',
+            canonicalEndpoint: '/api/repartidor-finanzas/rutero/confirmations/:confirmationId/receipt'
         }));
+        expect(mockQueryWithParams).not.toHaveBeenCalled();
+        expect(mockSaveReceipt).not.toHaveBeenCalled();
         expect(mockSendDeliveryReceipt).not.toHaveBeenCalled();
-        expect(mockSendEmailWithPdf).toHaveBeenCalledWith(expect.objectContaining({
-            to: 'cliente@example.com',
-            subject: 'Nota de entrega personalizada',
-            htmlBody: '<p>Nota de entrega</p>',
-            textBody: 'Adjunto comprobante.',
-            pdfBuffer: expect.any(Buffer),
-            pdfFilename: 'Nota_Entrega_A-0-3113.pdf'
-        }));
+        expect(mockSendEmailWithPdf).not.toHaveBeenCalled();
+        expect(mockGenerateDeliveryEmailHtml).not.toHaveBeenCalled();
     });
 });

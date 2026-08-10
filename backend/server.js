@@ -10,6 +10,43 @@ const path = require('path');
 // Production accepts GMP_ENV_FILE, .env.production, .env.produccion, then .env.
 require('./config/load-env').loadEnv(__dirname);
 
+// Route selection is a security boundary. Resolve it before loading any
+// database, route, or observability dependency so contradictory settings fail
+// before the process can create a listener or select a fallback route family.
+const {
+  resolveRepartoRuntime,
+  resolveRepartoRouteMode,
+  sanitizedRepartoDiagnostic,
+  createRepartoWriteGuard,
+} = require('./config/reparto-runtime');
+const {
+  assertRepartoStartupMutationPolicy,
+} = require('./config/reparto-startup-mutation-policy');
+
+const repartoRouteMode = resolveRepartoRouteMode(process.env);
+if (!repartoRouteMode.valid) {
+  const error = new Error(`Invalid reparto route mode: ${repartoRouteMode.errors.join('; ')}`);
+  error.code = 'INVALID_REPARTO_ROUTE_MODE';
+  throw error;
+}
+const repartoRuntime = resolveRepartoRuntime(process.env);
+assertRepartoStartupMutationPolicy({ env: process.env, repartoRuntime });
+const repartoConfirmationWriteGuard = createRepartoWriteGuard(
+  repartoRuntime,
+  { requiredCapability: 'confirmation' },
+);
+const repartoFinanceWriteGuard = createRepartoWriteGuard(
+  repartoRuntime,
+  { requiredCapability: 'finance' },
+);
+function repartoFinanzasWriteGuard(req, res, next) {
+  const isConfirmationWrite = req.path === '/rutero/confirm-delivery-cobro'
+    || req.path.startsWith('/rutero/evidence/');
+  return (isConfirmationWrite ? repartoConfirmationWriteGuard : repartoFinanceWriteGuard)(req, res, next);
+}
+const USE_TS_ROUTES = repartoRouteMode.useTsRoutes;
+const USE_DDD_ROUTES = repartoRouteMode.useDddRoutes;
+
 if (process.env.NODE_ENV === 'production' &&
   process.env.SKIP_PRODUCTION_CONFIG_VALIDATION !== 'true') {
   const { validateProductionConfig } = require('./scripts/validate_production_config');
@@ -25,9 +62,11 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const { monitorEventLoopDelay } = require('perf_hooks');
+const { createCanonicalConfirmationBootstrap } = require('./config/reparto-confirmation-bootstrap');
+const { createRepartidorLiquidacionBootstrap } = require('./config/repartidor-liquidacion-bootstrap');
 const logger = require('./middleware/logger');
-const { verifyToken, handleRefreshToken, handleLogout } = require('./middleware/auth');
-const { initDb, query, queryWithParams, getPoolMetrics, runWithDbRequestContext } = require('./config/db');
+const { verifyToken, getSessionStoreReadiness } = require('./middleware/auth');
+const { initDb, query, getPoolMetrics, runWithDbRequestContext } = require('./config/db');
 const {
     globalLimiter,
     createSecurityHeaders,
@@ -44,7 +83,7 @@ const {
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
-const { setDeliveryStatusAvailable, initSchemaCheck } = require('./utils/delivery-status-check');
+const { initSchemaCheck } = require('./utils/delivery-status-check');
 
 // ==================== OPTIMIZATION IMPORTS ====================
 const { initCache, getCacheStats } = require('./services/redis-cache');
@@ -61,15 +100,39 @@ const { checkAuthPinHashReadiness } = require('./services/auth-pin-readiness');
 // Set USE_TS_ROUTES=true to use compiled TypeScript routes (from dist/)
 // Set USE_TS_ROUTES=false (default) to use legacy JavaScript routes
 // =============================================================================
-const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
+const repartoDiagnostic = sanitizedRepartoDiagnostic(repartoRuntime, repartoRouteMode);
+logger.info(`[REPARTO_RUNTIME] ${JSON.stringify(repartoDiagnostic)}`);
+if (!repartoRuntime.valid) {
+  logger.warn(`[REPARTO_RUNTIME] Writes blocked: ${repartoRuntime.errors.join('; ')}`);
+}
+
+const canonicalRepartidorFinanzasRoutes = require('./routes/repartidor-finanzas');
+const canonicalConfirmationBootstrap = createCanonicalConfirmationBootstrap({
+  runtime: repartoRuntime,
+  db: { initDb, getPool: require('./config/db').getPool },
+  logger,
+});
+canonicalRepartidorFinanzasRoutes.setCanonicalConfirmationRuntime(
+  canonicalConfirmationBootstrap.runtime,
+);
+logger.info(`[REPARTO_CONFIRMATION_RUNTIME] ${JSON.stringify(canonicalConfirmationBootstrap.diagnostic)}`);
+
+const canonicalLiquidacionBootstrap = createRepartidorLiquidacionBootstrap({
+  runtime: repartoRuntime,
+  db: { initDb, getPool: require('./config/db').getPool },
+  logger,
+});
+canonicalRepartidorFinanzasRoutes.setCanonicalLiquidacionService(
+  canonicalLiquidacionBootstrap.service,
+);
+logger.info(`[REPARTIDOR_LIQUIDACION_RUNTIME] ${JSON.stringify(canonicalLiquidacionBootstrap.diagnostic)}`);
 
 // =============================================================================
-// FEATURE TOGGLE: USE_DDD_ROUTES â€” DEFAULT TRUE for v4.0.0
+// FEATURE TOGGLE: USE_DDD_ROUTES — DEFAULT TRUE for v4.0.0
 // Set USE_DDD_ROUTES=true to use DDD module routes (from src/modules/)
 // Set USE_DDD_ROUTES=false to use legacy JavaScript routes
 // HEAVY endpoints (clients, commissions, dashboard) use DDD modules with Redis ALL cache
 // =============================================================================
-const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES !== 'false';
 
 function requireOperationalAdmin(req, res, next) {
   const user = req.user || {};
@@ -85,7 +148,7 @@ function requireOperationalAdmin(req, res, next) {
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  repartidorFinanzasRoutes, userActionsRoutes, facturasRoutes, warehouseRoutes,
+  userActionsRoutes, facturasRoutes, warehouseRoutes,
   productsRoutes, bolsaRoutes, evolutionRoutes,
   pedidosRoutes, cobrosRoutes, kpiModule;
 
@@ -120,13 +183,11 @@ if (USE_TS_ROUTES) {
     global.__TS_APP__ = tsApp;
   } catch (err) {
     logger.error(`❌ Failed to load TS routes: ${err.message}`);
-    logger.warn('⚠️ Falling back to legacy JavaScript routes');
-    process.env.USE_TS_ROUTES = 'false';
-    // Fall through to legacy imports below
+    throw err;
   }
 }
 
-if (process.env.USE_TS_ROUTES !== 'true') {
+if (!USE_TS_ROUTES) {
   // ==================== LEGACY JAVASCRIPT ROUTES ====================
   authRoutes = require('./routes/auth');
   dashboardRoutes = require('./routes/dashboard');
@@ -152,7 +213,6 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   filtersRoutes = require('./routes/filters');
   entregasRoutes = require('./routes/entregas');
   repartidorRoutes = require('./routes/repartidor');
-  repartidorFinanzasRoutes = require('./routes/repartidor-finanzas');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
@@ -170,7 +230,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
 }
 
 // ==================== DDD MODULE ROUTES ====================
-let dddAuthRoutes, dddPedidosRoutes, dddCobrosRoutes, dddEntregasRoutes, dddRuteroRoutes;
+let dddAuthRoutes, dddPedidosRoutes, dddCobrosRoutes;
 
 if (USE_DDD_ROUTES) {
   try {
@@ -178,19 +238,20 @@ if (USE_DDD_ROUTES) {
     dddAuthRoutes = dddAdapters.createAuthRoutes();
     dddPedidosRoutes = dddAdapters.createPedidosRoutes();
     dddCobrosRoutes = dddAdapters.createCobrosRoutes();
-    dddEntregasRoutes = dddAdapters.createEntregasRoutes();
-    dddRuteroRoutes = dddAdapters.createRuteroRoutes();
     logger.info('✅ DDD module routes loaded (src/modules/)');
   } catch (err) {
     logger.error(`❌ Failed to load DDD routes: ${err.message}`);
-    logger.warn('⚠️ Falling back to legacy JavaScript routes');
-    process.env.USE_DDD_ROUTES = 'false';
+    throw err;
   }
 }
 
 const app = express();
-app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
-const PORT = process.env.PORT || 3334;
+// This process receives client traffic directly. Never trust arbitrary
+// X-Forwarded-For values; proxy support needs an explicit reviewed allowlist.
+app.set('trust proxy', false);
+// PM2 production readiness is defined on 3335. An explicit PORT still wins for
+// local and test runtimes.
+const PORT = process.env.PORT || 3335;
 const HTTP_COMPRESSION_THRESHOLD = parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024;
 const HTTP_COMPRESSION_LEVEL = parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6;
 const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 30000;
@@ -281,7 +342,7 @@ function requestTimeoutMiddleware(req, res, next) {
   next();
 }
 
-// Middleware â€” Security
+// Middleware — Security
 function configuredCorsOrigin() {
     return process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || '';
 }
@@ -301,7 +362,7 @@ function parseCorsOrigin(value) {
 app.use(cors({
     origin: parseCorsOrigin(configuredCorsOrigin()),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'X-Force-Refresh', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent', 'X-Internal-Token', 'X-Metrics-Token', 'X-Healthcheck-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'X-Force-Refresh', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent', 'X-Internal-Token', 'X-Metrics-Token', 'X-Healthcheck-Token', 'Idempotency-Key'],
     exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'X-Cache-Status', 'ETag', 'Cache-Control'],
     credentials: true,
     maxAge: 86400
@@ -363,7 +424,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    // Only log warnings/errors here â€” audit middleware handles the rest
+    // Only log warnings/errors here — audit middleware handles the rest
     if (res.statusCode >= 400 && req.path !== '/api/health') {
       logger.warn(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
     }
@@ -393,16 +454,6 @@ app.use('/api/', globalLimiter);
 // Removed AdvancedRateLimiter from login to prevent duplicate rate limiting that
 // was causing legitimate users to get 429 after pressing back button and re-login
 
-// Refresh token endpoint
-app.post('/api/auth/refresh', async (req, res) => {
-  await handleRefreshToken(req, res);
-});
-
-// Logout endpoint
-app.post('/api/auth/logout', verifyToken, async (req, res) => {
-  await handleLogout(req, res);
-});
-
 // Cache stats endpoint (admin only)
 app.get('/api/admin/cache-stats', verifyToken, requireOperationalAdmin, (req, res) => {
   const { performanceCache } = require('./src/core/infrastructure/cache/performance-cache');
@@ -416,7 +467,7 @@ app.get('/api/admin/cache-stats', verifyToken, requireOperationalAdmin, (req, re
 // =============================================================================
 // PUBLIC ROUTES (No Auth Required)
 // =============================================================================
-if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
+if (USE_DDD_ROUTES && dddAuthRoutes) {
   app.use('/api/auth', dddAuthRoutes);
   // Fall-through to legacy for routes DDD doesn't implement yet
   // (/repartidores, /refresh, /logout, /switch-role, etc.)
@@ -592,12 +643,12 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
   const start = Date.now();
   const dbHealth = await checkDbHealth();
   const redisHealth = getRedisHealth();
-  const redisRequired = authRequiresSharedSessionStore();
+  const authSessionStore = await getSessionStoreReadiness();
   const authPinHashes = dbHealth.status === 'connected'
     ? await checkAuthPinHashReadiness()
     : { status: 'skipped', reason: 'database_not_connected' };
   const ready = dbHealth.status === 'connected'
-    && (!redisRequired || redisHealth.connected)
+    && authSessionStore.ready === true
     && authPinHashes.status === 'ready';
 
   res.status(ready ? 200 : 503).json({
@@ -610,12 +661,13 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
     },
     redis: {
       status: redisHealth.status,
-      required: redisRequired,
+      required: authSessionStore.required,
       error: redisHealth.error,
       ...redisHealth.stats,
     },
     auth: {
       pinHashes: authPinHashes,
+      sessions: authSessionStore,
     },
     timestamp: new Date().toISOString(),
     responseTime: `${Date.now() - start}ms`,
@@ -665,7 +717,14 @@ app.get('/api/app/version', (req, res) => {
 // PROTECTED ROUTES (Token Required)
 // =============================================================================
 
-if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
+// Reparto has exactly one canonical write contract, independent of the
+// selected application route family. Keep the guard before every reparto
+// family mount so an invalid runtime can never fall through to legacy writes.
+app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);
+app.use('/api/repartidor', verifyToken, repartoConfirmationWriteGuard);
+app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
+
+if (USE_TS_ROUTES && global.__TS_APP__) {
   // TS app handles its own auth, routes, and middleware
   app.use(global.__TS_APP__);
   logger.info('✅ TypeScript routes mounted (compiled from src/)');
@@ -679,37 +738,35 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/analytics', analyticsRoutes);
   app.use('/api', masterRoutes); // mounts /products and /vendedores
   app.use('/api', plannerRoutes); // mounts /router/* and /rutero/*
+  // Flutter reparto uses the legacy read contract. Keep it canonical in both
+  // JavaScript modes while plannerRoutes remains the sole /rutero owner.
+  app.use('/api/entregas', entregasRoutes);
   app.use('/api/objectives', objectivesRoutes);
   app.use('/api/export', exportRoutes);
   app.use('/api/chatbot', chatbotRoutes);
   app.use('/api/filters', filtersRoutes);
   app.use('/api/repartidor', repartidorRoutes);
-  app.use('/api/repartidor-finanzas', repartidorFinanzasRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
   if (bolsaRoutes) app.use('/api/bolsa', bolsaRoutes);
   if (evolutionRoutes) app.use('/api/evolution', evolutionRoutes);
 
-  // DDD routes (mount before legacy â€” Express first-match wins)
-  if (process.env.USE_DDD_ROUTES !== 'false') {
-    app.use('/api/auth', dddAuthRoutes);
+  // DDD routes for domains whose public contracts remain canonical in DDD mode.
+  if (USE_DDD_ROUTES) {
     app.use('/api/pedidos', pedidosLimiter, dddPedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, dddCobrosRoutes);
-    app.use('/api/entregas', dddEntregasRoutes);
-    app.use('/api/rutero', dddRuteroRoutes);
     // DDD clients + commissions with performance cache (overrides legacy)
     const dddAdapters = require('./src/shared/routes/ddd-adapters');
     app.use('/api/clients', dddAdapters.createClientsRoutes());
     app.use('/api/commissions', dddAdapters.createCommissionsRoutes());
     // Mount productsRoutes for image/ficha endpoints (not in masterRoutes)
     app.use('/api/products', productsRoutes);
-    logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
+    logger.info('✅ DDD routes mounted at /api/{pedidos,cobros}');
     logger.info('✅ DDD-enhanced: clients + commissions with Redis ALL cache + performanceCache');
     logger.info('✅ Products image/ficha routes mounted at /api/products/:code/{image,ficha}');
   } else {
     // Legacy fallback
-    app.use('/api/entregas', entregasRoutes);
     app.use('/api/products', productsRoutes);
     app.use('/api/pedidos', pedidosLimiter, pedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, cobrosRoutes);
@@ -735,40 +792,6 @@ async function startServer() {
 
   await initDb();
 
-  // ─── PHASE 1: Centralized table initialization (init-tables.js) ───────
-  const { getPool } = require('./config/db');
-  try {
-    const { initAllTables } = require('./migrations/init-tables');
-    // CRITICAL FIX: init-tables.js ensureColumn() passes (sql, params).
-    // query(sql, logQuery, logError) interprets params[] as logQuery=true,
-    // causing state=07002 (wrong param count) cascade errors → pool recreate → SQL5051.
-    await initAllTables((sql, ...args) => {
-      if (args.length > 0 && Array.isArray(args[0])) {
-        return queryWithParams(sql, args[0], false, false);
-      }
-      return query(sql, false, false);
-    });
-    logger.info('✅ App-specific tables initialized via init-tables.js');
-    setDeliveryStatusAvailable(true);
-
-    // Req #18: Schema Audit
-    try {
-      const { runSchemaAudit } = require('./migrations/schema-audit');
-      await runSchemaAudit();
-    } catch (auditErr) {
-      logger.warn('⚠️  Schema audit skipped: ' + auditErr.message);
-    }
-  } catch (initErr) {
-    logger.warn(`⚠️ init-tables error (non-fatal): ${initErr.message}`);
-    // Fallback: check DELIVERY_STATUS manually
-    try {
-      await query('SELECT 1 FROM JAVIER.DELIVERY_STATUS FETCH FIRST 1 ROW ONLY');
-      setDeliveryStatusAvailable(true);
-    } catch (_) {
-      logger.warn('⚠️ DELIVERY_STATUS unavailable â€” using in-memory fallback.');
-    }
-  }
-
   // Detect DELIVERY_STATUS schema version (OLD vs NEW migration 024)
   try {
     await initSchemaCheck();
@@ -778,28 +801,13 @@ async function startServer() {
 
   // ─── PHASE 2: Create/verify DB schema (direct connections, no pool recreation) ───
   try {
-    const { initWarehouseTables } = require('./routes/warehouse');
-    await initWarehouseTables();
-  } catch (whErr) {
-    logger.warn(`⚠️ Warehouse table setup error (non-fatal): ${whErr.message}`);
-  }
-
-  try {
-    const { initCommissionTables } = require('./routes/commissions');
-    await initCommissionTables();
-  } catch (commErr) {
-    logger.warn(`⚠️ Commission table setup error (non-fatal): ${commErr.message}`);
-  }
-
-  // ─── PHASE 3: Initialize caches (pool is stable, schema is ready) ─────
-  try {
     await initCache();
     logger.info('✅ Redis cache initialized');
   } catch (err) {
     logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`);
   }
 
-  logger.info('📦 Pre-loading critical caches before accepting requestsâ€¦');
+  logger.info('📦 Pre-loading critical caches before accepting requests…');
   const cacheStart = Date.now();
 
   try {
@@ -816,27 +824,8 @@ async function startServer() {
     logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
   }
 
-  // ─── PHASE 3.5: Initialize Pedidos tables ───
-  try {
-    const pedidosService = require('./services/pedidos.service');
-    await pedidosService.initPedidosTables();
-    logger.info('✅ Pedidos tables initialized');
-  } catch (err) {
-    logger.warn(`⚠️ Pedidos table init error (non-fatal): ${err.message}`);
-  }
-
-  // ─── PHASE 3.6: Initialize KPI Glacius module (DB2/ODBC + Redis) ───
-  if (kpiModule) {
-    try {
-      await kpiModule.initKpiModule();
-      logger.info('✅ KPI Glacius module initialized');
-    } catch (kpiErr) {
-      logger.warn(`⚠️ KPI module init error (non-fatal): ${kpiErr.message}`);
-    }
-  }
-
   // ─── PHASE 3.7: Initialize DDD modules (if enabled) ───
-  if (process.env.USE_DDD_ROUTES === 'true') {
+  if (USE_DDD_ROUTES) {
     try {
       const { Db2ConnectionPool } = require('./src/core/infrastructure/database/db2-connection-pool');
       const { ResponseCache } = require('./src/core/infrastructure/cache/response-cache');
@@ -848,8 +837,7 @@ async function startServer() {
       logger.info('✅ DDD response cache initialized');
     } catch (dddErr) {
       logger.error(`❌ DDD module init error: ${dddErr.message}`);
-      logger.warn('⚠️ Falling back to legacy routes');
-      process.env.USE_DDD_ROUTES = 'false';
+      throw dddErr;
     }
   }
 
@@ -858,7 +846,7 @@ async function startServer() {
     // Store server reference globally for graceful shutdown
     global.__httpServer = server;
     
-    const dddStatus = process.env.USE_DDD_ROUTES === 'true' ? 'DDD Routes ✅' : 'Legacy Routes';
+    const dddStatus = USE_DDD_ROUTES ? 'DDD Routes ✅' : 'Legacy Routes';
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);

@@ -74,9 +74,7 @@ class ZebraPrintService {
       (s) => s.isGranted || s.isLimited,
     );
     if (!allGranted) {
-      debugPrint(
-        '[ZEBRA] BT permissions not granted: $statuses',
-      );
+      debugPrint('[ZEBRA] BT permissions not granted');
     }
     return allGranted;
   }
@@ -111,8 +109,8 @@ class ZebraPrintService {
         await FlutterBluetoothPrinter.disconnect(addr);
       }
       return connected;
-    } catch (e) {
-      debugPrint('[ZEBRA] Connection test error: $e');
+    } catch (_) {
+      debugPrint('[ZEBRA] Connection test failed');
       return false;
     }
   }
@@ -211,8 +209,8 @@ class ZebraPrintService {
       }
 
       return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,$hex';
-    } catch (e) {
-      debugPrint('[ZEBRA] GRF conversion error: $e');
+    } catch (_) {
+      debugPrint('[ZEBRA] GRF conversion failed');
       return null;
     }
   }
@@ -334,13 +332,12 @@ class ZebraPrintService {
     y += 6;
 
     // ═══ PRODUCT LINES ═══
-    var totalBultos = 0;
+    var totalBultos = 0.0;
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final partida = '${i + 1}';
       // Use CANTIDADENVASES (bultos) for the Bultos column, not CANTIDADUNIDADES
-      final bultos =
-          item.bultos > 0 ? item.bultos : item.cantidadPedida.toInt();
+      final bultos = item.bultos > 0 ? item.bultos : item.cantidadPedida;
       totalBultos += bultos;
       final importe = item.cantidadPedida * item.precioUnitario;
 
@@ -355,7 +352,7 @@ class ZebraPrintService {
       }
       buf.writeln('^CF0,16');
       buf.writeln(
-        '^FO$_colBult,$y^FD${bultos.toString().padLeft(4)}^FS',
+        '^FO$_colBult,$y^FD${_formatQuantity(bultos).padLeft(4)}^FS',
       );
       buf.writeln(
         '^FO$_colImp,$y^FD${importe.toStringAsFixed(2).padLeft(8)}^FS',
@@ -378,7 +375,7 @@ class ZebraPrintService {
     // Bultos total
     buf.writeln('^CF0,18');
     buf.writeln(
-      '^FO300,$y^FDBultos: $totalBultos^FS',
+      '^FO300,$y^FDBultos: ${_formatQuantity(totalBultos)}^FS',
     );
     y += 22;
 
@@ -537,21 +534,26 @@ class ZebraPrintService {
 
           debugPrint('[ZEBRA] Print attempt ${attempt + 1}: $ok');
           if (ok) return true;
-        } catch (e) {
-          debugPrint('[ZEBRA] Print attempt ${attempt + 1} error: $e');
+        } catch (_) {
+          debugPrint('[ZEBRA] Print attempt ${attempt + 1} failed');
         }
         if (attempt == 0) {
           await Future<void>.delayed(const Duration(seconds: 2));
         }
       }
       return false;
-    } catch (e) {
-      debugPrint('[ZEBRA] Print error: $e');
+    } catch (_) {
+      debugPrint('[ZEBRA] Print failed');
       return false;
     }
   }
 
   // -- Helpers --
+
+  static String _formatQuantity(num value) {
+    final fixed = value.toDouble().toStringAsFixed(3);
+    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
 
   static String _truncate(String text, int maxLen) {
     if (maxLen <= 0) return '';

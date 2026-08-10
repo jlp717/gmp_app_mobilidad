@@ -235,10 +235,10 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         isLoadingOverview: false,
         lastUpdated: DateTime.now(),
       );
-    } catch (e) {
+    } catch (_) {
       state = state.copyWith(
         isLoadingOverview: false,
-        error: e.toString(),
+        error: 'No se pudo cargar el resumen financiero.',
       );
     }
   }
@@ -267,10 +267,10 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         isLoadingClients: false,
         lastUpdated: DateTime.now(),
       );
-    } catch (e) {
+    } catch (_) {
       state = state.copyWith(
         isLoadingClients: false,
-        error: e.toString(),
+        error: 'No se pudo cargar la lista de clientes.',
       );
     }
   }
@@ -310,10 +310,10 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         isLoadingDocuments: false,
         lastUpdated: DateTime.now(),
       );
-    } catch (e) {
+    } catch (_) {
       state = state.copyWith(
         isLoadingDocuments: false,
-        error: e.toString(),
+        error: 'No se pudieron cargar los documentos del cliente.',
       );
     }
   }
@@ -351,10 +351,10 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         isLoadingObjectives: false,
         lastUpdated: DateTime.now(),
       );
-    } catch (e) {
+    } catch (_) {
       state = state.copyWith(
         isLoadingObjectives: false,
-        error: e.toString(),
+        error: 'No se pudieron cargar los objetivos.',
       );
     }
   }
@@ -433,7 +433,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
 
 final repartidorFinanzasServiceProvider =
     Provider<RepartidorFinanzasService>((ref) {
-  return const RepartidorFinanzasService();
+  return RepartidorFinanzasService();
 });
 
 final repartidorFinanzasProvider =
@@ -480,12 +480,19 @@ typedef DailySummaryArgs = ({
   bool forceRefresh,
 });
 
+typedef LiquidacionLedgerArgs = ({
+  String repartidorId,
+  DateTime date,
+});
+
 typedef VencimientosArgs = ({
   String repartidorId,
   DateTime from,
   DateTime to,
   String? clientCode,
   String? estado,
+  String? cursor,
+  int limit,
   bool forceRefresh,
 });
 
@@ -507,8 +514,17 @@ final repartidorDailySummaryProvider =
   },
 );
 
+final repartidorLiquidacionLedgerProvider =
+    FutureProvider.family<RepartidorLiquidacionLedger, LiquidacionLedgerArgs>(
+  (ref, args) =>
+      ref.read(repartidorFinanzasServiceProvider).getLiquidacionLedger(
+            repartidorId: args.repartidorId,
+            date: args.date,
+          ),
+);
+
 final repartidorVencimientosProvider =
-    FutureProvider.family<List<RepartidorVencimiento>, VencimientosArgs>(
+    FutureProvider.family<RepartidorVencimientosBatch, VencimientosArgs>(
   (ref, args) {
     return ref.read(repartidorFinanzasServiceProvider).getVencimientos(
           repartidorId: args.repartidorId,
@@ -516,6 +532,8 @@ final repartidorVencimientosProvider =
           to: args.to,
           clientCode: args.clientCode,
           estado: args.estado,
+          cursor: args.cursor,
+          limit: args.limit,
           forceRefresh: args.forceRefresh,
         );
   },
@@ -552,32 +570,127 @@ class RepartidorLiquidacionActions {
     required String repartidorId,
     required DateTime date,
     required String idempotencyToken,
-    required RepartidorDailySummary summary,
-    required double ingresoBanco,
-    required double entregado,
+    String? matricula,
+    String? codigoVehiculo,
+    bool sendEmails = false,
   }) async {
     final result =
         await _ref.read(repartidorFinanzasServiceProvider).closeLiquidacion(
               repartidorId: repartidorId,
               date: date,
               idempotencyToken: idempotencyToken,
-              totalEfectivo: summary.totalEfectivo,
-              totalCheques: summary.totalCheques,
-              totalTarjeta: summary.totalTarjeta,
-              totalPostdatados: summary.totalPostdatados,
-              saldoActual: summary.saldoActual,
-              totalCobrosDia: summary.totalCobrosDia,
-              totalAIngresar: summary.totalAIngresar,
-              ingresoBanco: ingresoBanco,
-              gastos: summary.gastos,
-              efectivo2: summary.totalEfectivo,
-              entregado2: entregado,
+              matricula: matricula,
+              codigoVehiculo: codigoVehiculo,
+              sendEmails: sendEmails,
             );
 
+    final dailyArgs = (
+      repartidorId: repartidorId,
+      date: date,
+      forceRefresh: false,
+    );
     _ref
-      ..invalidate(repartidorDailySummaryProvider)
+      ..invalidate(repartidorDailySummaryProvider(dailyArgs))
+      ..invalidate(repartidorLiquidacionLedgerProvider((
+        repartidorId: repartidorId,
+        date: date,
+      )))
       ..invalidate(repartidorVencimientosProvider)
       ..invalidate(repartidorCommissionSummaryProvider);
+    return result;
+  }
+
+  Future<RepartidorLiquidacionEntryResult> createExpense({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String category,
+    required String idempotencyToken,
+    String? observation,
+  }) =>
+      _createEntry(
+        repartidorId: repartidorId,
+        date: date,
+        amount: amount,
+        idempotencyToken: idempotencyToken,
+        submit: () => _ref
+            .read(repartidorFinanzasServiceProvider)
+            .createLiquidacionExpense(
+              repartidorId: repartidorId,
+              date: date,
+              amount: amount,
+              category: category,
+              idempotencyToken: idempotencyToken,
+              observation: observation,
+            ),
+      );
+
+  Future<RepartidorLiquidacionEntryResult> createAdjustment({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String reason,
+    required String idempotencyToken,
+    String? observation,
+  }) =>
+      _createEntry(
+        repartidorId: repartidorId,
+        date: date,
+        amount: amount,
+        idempotencyToken: idempotencyToken,
+        submit: () => _ref
+            .read(repartidorFinanzasServiceProvider)
+            .createLiquidacionAdjustment(
+              repartidorId: repartidorId,
+              date: date,
+              amount: amount,
+              reason: reason,
+              idempotencyToken: idempotencyToken,
+              observation: observation,
+            ),
+      );
+
+  Future<RepartidorLiquidacionEntryResult> createBankDeposit({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String reference,
+    required String idempotencyToken,
+    String? observation,
+  }) =>
+      _createEntry(
+        repartidorId: repartidorId,
+        date: date,
+        amount: amount,
+        idempotencyToken: idempotencyToken,
+        submit: () => _ref
+            .read(repartidorFinanzasServiceProvider)
+            .createLiquidacionBankDeposit(
+              repartidorId: repartidorId,
+              date: date,
+              amount: amount,
+              reference: reference,
+              idempotencyToken: idempotencyToken,
+              observation: observation,
+            ),
+      );
+
+  Future<RepartidorLiquidacionEntryResult> _createEntry({
+    required String repartidorId,
+    required DateTime date,
+    required double amount,
+    required String idempotencyToken,
+    required Future<RepartidorLiquidacionEntryResult> Function() submit,
+  }) async {
+    final result = await submit();
+    final dailyArgs =
+        (repartidorId: repartidorId, date: date, forceRefresh: false);
+    _ref
+      ..invalidate(repartidorDailySummaryProvider(dailyArgs))
+      ..invalidate(repartidorLiquidacionLedgerProvider((
+        repartidorId: repartidorId,
+        date: date,
+      )));
     return result;
   }
 

@@ -5,356 +5,40 @@
 
 const express = require('express');
 const router = express.Router();
-const { query, queryWithParams } = require('../config/db');
+const { query } = require('../config/db');
 const logger = require('../middleware/logger');
 const { 
     verifyToken, 
-    signAccessToken, 
-    signRefreshToken, 
     handleRefreshToken,
-    handleLogout,
-    registerSession
+    handleLogout
 } = require('../middleware/auth');
-const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection, bruteForceIpTracker } = require('../middleware/security');
-const { auditLogin, getClientIP } = require('../middleware/audit');
-const fs = require('fs');
-const fsPromises = require('fs').promises;
-const path = require('path');
-const { getVendorVisibilityScope } = require('../utils/common');
+const { loginLimiter, sanitizeInput, bruteForceIpTracker } = require('../middleware/security');
 const { verifyVendorPin } = require('../services/vendor-pin-auth');
-
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
-
-const lockoutsPath = path.join(__dirname, '../data/lockouts.json');
-const lockoutsDir = path.dirname(lockoutsPath);
-
-if (!fs.existsSync(lockoutsDir)) {
-    fs.mkdirSync(lockoutsDir, { recursive: true, mode: 0o700 });
-}
-
-async function loadLockouts() {
-    try {
-        if (fs.existsSync(lockoutsPath)) {
-            return JSON.parse(await fsPromises.readFile(lockoutsPath, 'utf8'));
-        }
-    } catch (e) {
-        logger.warn(`[Auth] Failed to load lockouts: ${e.message}`);
-    }
-    return {};
-}
-
-async function saveLockouts(lockouts) {
-    try {
-        await fsPromises.writeFile(lockoutsPath, JSON.stringify(lockouts, null, 2), { mode: 0o600 });
-    } catch (e) {
-        logger.error(`[Auth] Failed to save lockouts: ${e.message}`);
-    }
-}
-
-const MAX_FAILED_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
-const LOCKOUT_TIME_MS = parseInt(process.env.LOCK_TIME_MINUTES || '30', 10) * 60 * 1000;
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-async function handleFailedLogin(res, safeUser, requestId, message) {
-    const lockouts = await loadLockouts();
-    const current = lockouts[safeUser] || { count: 0, lastAttempt: 0 };
-    current.count += 1;
-    current.lastAttempt = Date.now();
-    
-    if (current.count >= MAX_FAILED_ATTEMPTS) {
-        current.lockedUntil = Date.now() + LOCKOUT_TIME_MS;
-        logger.warn(`[Auth] [${requestId}] Account locked: ${safeUser}`);
-    }
-    
-    lockouts[safeUser] = current;
-    await saveLockouts(lockouts);
-
-    const remainingAttempts = MAX_FAILED_ATTEMPTS - current.count;
-    
-    if (current.lockedUntil) {
-        const minutesRemaining = Math.ceil((LOCKOUT_TIME_MS - (Date.now() - current.lastAttempt)) / 60000);
-        return res.status(429).json({
-            error: `Cuenta bloqueada. Espera ${minutesRemaining} minutos.`,
-            code: 'ACCOUNT_LOCKED',
-            lockedUntil: current.lockedUntil
-        });
-    }
-
-    return res.status(401).json({
-        error: `${message}. Te quedan ${remainingAttempts} intentos.`,
-        code: 'INVALID_CREDENTIALS',
-        remainingAttempts
-    });
-}
-
-function sanitizeUsername(username) {
-    return username.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
-}
+const authTokenService = require('../middleware/auth');
+const { Db2AuthRepository } = require('../src/modules/auth');
+const { createAuthClaimsResolver } = require('../src/modules/auth/application/auth-claims-resolver');
+const { createAuthClaimsLoginHandler } = require('../src/modules/auth/application/auth-claims-login-handler');
 
 // =============================================================================
 // LOGIN ENDPOINT
 // =============================================================================
 
-router.post('/login', 
+const authRepository = new Db2AuthRepository();
+const authClaimsResolver = createAuthClaimsResolver({ authRepository });
+authTokenService.setAuthClaimsResolver(authClaimsResolver);
+const authClaimsLoginHandler = createAuthClaimsLoginHandler({
+    authRepository,
+    authClaimsResolver,
+    verifyVendorPin,
+    tokenService: authTokenService,
+});
+
+router.post('/login',
     bruteForceIpTracker,
     loginLimiter,
     sanitizeInput,
-    async (req, res) => {
-        const requestId = Date.now().toString(36);
-        const clientIp = getClientIP(req);
-
-        try {
-            const { username, password } = req.body;
-
-            if (!username || !password) {
-                logger.warn(`[${requestId}] Login attempt with missing credentials`);
-                return res.status(400).json({ error: 'Usuario y contraseña requeridos', code: 'MISSING_CREDENTIALS' });
-            }
-
-            const safeUser = sanitizeUsername(username);
-            const trimmedPwd = password.trim();
-
-            if (safeUser.length < 1 || safeUser.length > 50) {
-                logger.warn(`[${requestId}] Invalid username length: ${safeUser.length}`);
-                return res.status(400).json({ error: 'Usuario inválido', code: 'INVALID_USERNAME' });
-            }
-
-            // Check lockout
-            const lockouts = await loadLockouts();
-            const lockoutInfo = lockouts[safeUser];
-            
-            if (lockoutInfo && lockoutInfo.lockedUntil) {
-                const timeUntilUnlock = lockoutInfo.lockedUntil - Date.now();
-                if (timeUntilUnlock > 0) {
-                    const minutesRemaining = Math.ceil(timeUntilUnlock / 60000);
-                    logger.warn(`[${requestId}] Locked account access attempt: ${safeUser}`);
-                    return res.status(429).json({
-                        error: `Cuenta bloqueada. Intenta en ${minutesRemaining} minutos.`,
-                        code: 'ACCOUNT_LOCKED',
-                        lockedUntil: lockoutInfo.lockedUntil
-                    });
-                } else {
-                    delete lockouts[safeUser];
-                    await saveLockouts(lockouts);
-                }
-            }
-
-            // Find vendor
-            logger.info(`[${requestId}] Login attempt for: ${safeUser}`);
-
-            let pinRecord = [];
-
-            // Try code search
-            if (safeUser.length <= 10) {
-                try {
-                    pinRecord = await queryWithParams(`
-                        SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
-                               TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                               V.TIPOVENDEDOR, X.JEFEVENTASSN,
-                               E.HIDE_COMMISSIONS
-                        FROM DSEDAC.VDPL1 P
-                        JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
-                        JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
-                        LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                        LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                        WHERE TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
-                        FETCH FIRST 1 ROWS ONLY
-                    `, [safeUser], false);
-                } catch (e) {
-                    logger.debug(`[${requestId}] Code search failed: ${e.message}`);
-                }
-            }
-
-            // Try name search
-            if (pinRecord.length === 0) {
-                const searchParam = safeUser.replace(/ /g, '');
-                const nameSearch = await queryWithParams(`
-                    SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
-                           TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                           V.TIPOVENDEDOR, X.JEFEVENTASSN,
-                           E.HIDE_COMMISSIONS
-                    FROM DSEDAC.VDD D
-                    JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-                    JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
-                    LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                    LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                    WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT CAST(? AS VARCHAR(100)) CONCAT '%'
-                    FETCH FIRST 1 ROWS ONLY
-                `, [searchParam], false);
-
-                if (nameSearch.length > 0) {
-                    pinRecord = nameSearch;
-                    logger.info(`[${requestId}] Found vendor by name`);
-                }
-            }
-
-            if (pinRecord.length === 0) {
-                logger.warn(`[${requestId}] User not found: ${safeUser}`);
-                return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
-            }
-
-            const vendor = pinRecord[0];
-            const dbPin = vendor.CODIGOPIN?.toString().trim();
-            const vendedorCode = vendor.CODIGOVENDEDOR?.toString().trim();
-            let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
-            const vendedorName = rawName.replace(/^\d+\s+/, '').trim();
-            const normalizedLoginCode = (vendedorCode || '').replace(/^0+/, '') || vendedorCode;
-            // Juan Luis (80): always COMERCIAL — JEFEVENTASSN in DB must not change nav/API scope
-            let isJefeVentas = vendor.JEFEVENTASSN === 'S';
-            if (normalizedLoginCode === '80') {
-                isJefeVentas = false;
-            }
-            const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
-
-            // Verify PIN with migration support
-            const pinVerification = await verifyVendorPin({
-                vendedorCode,
-                candidatePin: trimmedPwd,
-                dbPin,
-                requestId,
-            });
-
-            if (!pinVerification.valid) {
-                if (pinVerification.reason === 'plaintext_pin_denied') {
-                    logger.warn(`[${requestId}] Plaintext PIN auth denied for vendor ${vendedorCode}; PIN hash migration required`);
-                } else {
-                    logger.warn(`[${requestId}] PIN verification failed for vendor ${vendedorCode}: ${pinVerification.reason}`);
-                }
-                return handleFailedLogin(res, safeUser, requestId, 'Credenciales invalidas');
-            }
-            logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via ${pinVerification.method}`);
-
-            // Check Repartidor role
-            let isRepartidor = false;
-            let codigoConductor = null;
-            let matriculaVehiculo = null;
-
-            try {
-                const currentYear = new Date().getFullYear();
-                const vehCheck = await queryWithParams(`
-                    SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA
-                    FROM DSEDAC.VEH
-                    WHERE TRIM(CODIGOCONDUCTOR) = ?
-                      AND TRIM(CODIGOCONDUCTOR) <> '98'
-                    FETCH FIRST 1 ROWS ONLY
-                `, [vendedorCode], false);
-
-                if (vehCheck.length > 0) {
-                    isRepartidor = true;
-                    matriculaVehiculo = vehCheck[0].MATRICULA;
-                    codigoConductor = vendedorCode;
-                } else {
-                    const oppCheck = await queryWithParams(`
-                        SELECT COUNT(*) as CNT FROM DSEDAC.OPP
-                        WHERE TRIM(CODIGOREPARTIDOR) = ?
-                          AND ANOREPARTO = ?
-                    `, [vendedorCode, currentYear], false);
-                    
-                    if (oppCheck.length > 0 && (oppCheck[0].CNT || 0) >= 100) {
-                        isRepartidor = true;
-                        codigoConductor = vendedorCode;
-                    }
-                }
-            } catch (e) {
-                logger.warn(`[${requestId}] Error checking vehicle: ${e.message}`);
-            }
-
-            // Success
-            logger.info(`[${requestId}] Login successful for ${vendedorName} (${vendedorCode})`);
-
-            // Clear lockout on success
-            const successLockouts = await loadLockouts();
-            delete successLockouts[safeUser];
-            await saveLockouts(successLockouts);
-
-            let finalRole = 'COMERCIAL';
-            if (isJefeVentas) finalRole = 'JEFE_VENTAS';
-            else if (isRepartidor) finalRole = 'REPARTIDOR';
-
-            let vendedorCodes = [vendedorCode];
-            if (isJefeVentas) {
-                const allVendedores = await query(`
-                    SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE 
-                    FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'
-                `);
-                const orphans = ['82', '20', 'UNK'];
-                const existingCodes = new Set(allVendedores.map(v => v.CODE));
-                orphans.forEach(o => existingCodes.add(o));
-                vendedorCodes = Array.from(existingCodes);
-            } else {
-                vendedorCodes = getVendorVisibilityScope(vendedorCode);
-            }
-
-            const accessToken = signAccessToken({
-                id: `V${vendedorCode}`,
-                user: vendedorCode,
-                name: vendedorName, // ADD NAME to token for PDF and other services
-                role: finalRole,
-                isJefeVentas,
-                vendorCodes: vendedorCodes,
-                vendedorCodes: vendedorCodes,
-                timestamp: Date.now()
-            });
-
-            const refreshToken = signRefreshToken({
-                id: `V${vendedorCode}`,
-                user: vendedorCode,
-                name: vendedorName,
-                role: finalRole,
-                isJefeVentas,
-                vendorCodes: vendedorCodes,
-                vendedorCodes: vendedorCodes
-            });
-            await registerSession(
-                `V${vendedorCode}`,
-                refreshToken,
-                req.get('user-agent') || 'unknown',
-                getClientIP(req) || req.ip || 'unknown'
-            );
-
-            const showCommissions = vendor.HIDE_COMMISSIONS !== 'Y';
-
-            res.json({
-                user: {
-                    id: `V${vendedorCode}`,
-                    code: vendedorCode,
-                    name: vendedorName,
-                    company: 'GMP',
-                    vendedorCode,
-                    isJefeVentas,
-                    tipoVendedor: tipoVendedor || '-',
-                    role: finalRole,
-                    isRepartidor,
-                    codigoConductor,
-                    matricula: matriculaVehiculo,
-                    showCommissions,
-                },
-                role: finalRole,
-                isRepartidor,
-                showCommissions,
-                vendedorCodes,
-                token: accessToken,
-                refreshToken,
-                latestVersion: '3.3.1',
-                tokenExpiresIn: 3600,
-                refreshExpiresIn: 604800
-            });
-
-            auditLogin(req, vendedorCode, vendedorName, finalRole, true);
-
-        } catch (error) {
-            logger.error(`[${requestId}] Login error: ${error.message}`);
-            auditLogin(req, req.body?.username || 'unknown', null, null, false);
-            res.status(401).json({ error: 'Error de autenticación', code: 'AUTH_ERROR' });
-        }
-    }
+    authClaimsLoginHandler
 );
-
 // =============================================================================
 // REFRESH / LOGOUT / SWITCH ROLE
 // =============================================================================
@@ -368,56 +52,7 @@ router.post('/logout', verifyToken, async (req, res) => {
 });
 
 router.post('/switch-role', verifyToken, async (req, res) => {
-    try {
-        const { userId, newRole } = req.body;
-        const validRoles = ['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR', 'ALMACEN'];
-        
-        if (!validRoles.includes(newRole)) {
-            return res.status(400).json({ error: 'Rol no válido', code: 'INVALID_ROLE' });
-        }
-        
-        if (req.user?.code !== userId) {
-            return res.status(403).json({ error: 'No tienes permiso para cambiar este rol', code: 'FORBIDDEN' });
-        }
-
-        if (newRole !== req.user.role && !req.user?.isJefeVentas) {
-            return res.status(403).json({ error: 'No tienes permiso para cambiar a este rol', code: 'INSUFFICIENT_ROLE' });
-        }
-
-        if (newRole === 'JEFE_VENTAS' && !req.user?.isJefeVentas) {
-            return res.status(403).json({ error: 'Acceso restringido a Jefes de Ventas', code: 'INSUFFICIENT_ROLE' });
-        }
-
-        const isJefeVentas = req.user?.isJefeVentas === true;
-        const vendorCodes = Array.isArray(req.user?.vendorCodes)
-            ? req.user.vendorCodes
-            : (Array.isArray(req.user?.vendedorCodes) ? req.user.vendedorCodes : []);
-        const accessToken = signAccessToken({
-            id: userId,
-            user: userId,
-            code: userId,
-            role: newRole,
-            isJefeVentas,
-            vendorCodes,
-            vendedorCodes: vendorCodes,
-            timestamp: Date.now()
-        });
-        const refreshToken = signRefreshToken({
-            id: userId,
-            user: userId,
-            code: userId,
-            role: newRole,
-            isJefeVentas,
-            vendorCodes,
-            vendedorCodes: vendorCodes
-        });
-        await registerSession(userId, refreshToken, req.get('user-agent') || 'unknown', getClientIP(req) || req.ip || 'unknown');
-
-        res.json({ success: true, role: newRole, token: accessToken, refreshToken, tokenExpiresIn: 3600 });
-    } catch (error) {
-        logger.error(`Switch role error: ${error.message}`);
-        res.status(500).json({ error: 'Error cambiando de rol', code: 'SERVER_ERROR' });
-    }
+    return authTokenService.handleSwitchRole(req, res);
 });
 
 // =============================================================================

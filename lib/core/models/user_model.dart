@@ -18,7 +18,12 @@ class UserModel extends Equatable {
     this.isJefeVentas = false,
     this.tipoVendedor,
     this.codigoConductor,
+    this.matricula,
+    this.availableRoles = const [],
+    this.availableModes = const [],
+    this.vendedorCodes = const [],
     this.showCommissions = true, // Default true
+    this.claimsVersion = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -29,12 +34,20 @@ class UserModel extends Equatable {
       company: (json['company'] as String?) ?? 'GMP',
       delegation: json['delegation'] as String?,
       vendedorCode: json['vendedorCode'] as String?,
-      isJefeVentas: _parseBool(json['isJefeVentas']) &&
-          (json['code']?.toString().replaceFirst(RegExp(r'^0+'), '') != '80'),
+      isJefeVentas: _parseBool(json['isJefeVentas']),
       tipoVendedor: json['tipoVendedor'] as String?,
       role: (json['role'] as String?) ?? 'COMERCIAL',
       codigoConductor: json['codigoConductor'] as String?,
-      showCommissions: (json['showCommissions'] as bool?) ?? true,
+      matricula: json['matricula'] as String?,
+      availableRoles: _parseStringList(json['availableRoles']),
+      availableModes: _parseStringList(json['availableModes']),
+      vendedorCodes: _parseStringList(
+        json['vendedorCodes'] ?? json['vendorCodes'],
+      ),
+      showCommissions: json.containsKey('showCommissions')
+          ? _parseBool(json['showCommissions'])
+          : true,
+      claimsVersion: _parseInt(json['claimsVersion']),
     );
   }
   final String id;
@@ -47,7 +60,12 @@ class UserModel extends Equatable {
   final String? tipoVendedor; // TIPOVENDEDOR
   final String role; // JEFE, COMERCIAL, REPARTIDOR
   final String? codigoConductor; // Para repartidores
+  final String? matricula; // Matricula DB-backed del reparto activo
+  final List<String> availableRoles; // Roles autorizados por backend
+  final List<String> availableModes; // Modos UI autorizados por backend
+  final List<String> vendedorCodes; // Ambito canonico actual
   final bool showCommissions;
+  final int claimsVersion;
 
   // Role helpers
   UserRole get userRole {
@@ -80,7 +98,12 @@ class UserModel extends Equatable {
       'tipoVendedor': tipoVendedor,
       'role': role,
       'codigoConductor': codigoConductor,
+      'matricula': matricula,
+      'availableRoles': availableRoles,
+      'availableModes': availableModes,
+      'vendedorCodes': vendedorCodes,
       'showCommissions': showCommissions,
+      'claimsVersion': claimsVersion,
     };
   }
 
@@ -95,7 +118,12 @@ class UserModel extends Equatable {
     String? tipoVendedor,
     String? role,
     String? codigoConductor,
+    String? matricula,
+    List<String>? availableRoles,
+    List<String>? availableModes,
+    List<String>? vendedorCodes,
     bool? showCommissions,
+    int? claimsVersion,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -108,7 +136,12 @@ class UserModel extends Equatable {
       tipoVendedor: tipoVendedor ?? this.tipoVendedor,
       role: role ?? this.role,
       codigoConductor: codigoConductor ?? this.codigoConductor,
+      matricula: matricula ?? this.matricula,
+      availableRoles: availableRoles ?? this.availableRoles,
+      availableModes: availableModes ?? this.availableModes,
+      vendedorCodes: vendedorCodes ?? this.vendedorCodes,
       showCommissions: showCommissions ?? this.showCommissions,
+      claimsVersion: claimsVersion ?? this.claimsVersion,
     );
   }
 
@@ -124,8 +157,23 @@ class UserModel extends Equatable {
         tipoVendedor,
         role,
         codigoConductor,
+        matricula,
+        availableRoles,
+        availableModes,
+        vendedorCodes,
         showCommissions,
+        claimsVersion,
       ];
+
+  static List<String> _parseStringList(dynamic value) {
+    if (value is! Iterable) return const [];
+    return List<String>.unmodifiable(
+      value
+          .map((item) => item.toString().trim().toUpperCase())
+          .where((item) => item.isNotEmpty),
+    );
+  }
+
   static bool _parseBool(dynamic value) {
     if (value == null) return false;
     if (value is bool) return value;
@@ -135,5 +183,11 @@ class UserModel extends Equatable {
       return v == 'TRUE' || v == 'S' || v == '1' || v == 'YES' || v == 'Y';
     }
     return false;
+  }
+
+  static int _parseInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 }

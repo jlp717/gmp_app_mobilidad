@@ -11,24 +11,58 @@ import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 
+typedef RepartidorDeliverySummaryLoader = Future<Map<String, dynamic>>
+    Function({
+  required String repartidorId,
+  required int year,
+  required int month,
+});
+
+typedef RepartidorMonthlySummaryLoader = Future<RepartidorMonthlySummary>
+    Function({
+  required String repartidorId,
+  required int year,
+  required int month,
+});
+
 class RepartidorPanelPage extends StatefulWidget {
-  const RepartidorPanelPage({required this.repartidorId, super.key});
+  const RepartidorPanelPage({
+    required this.repartidorId,
+    super.key,
+    this.deliverySummaryLoader,
+    this.monthlySummaryLoader,
+  });
+
   final String repartidorId;
+  final RepartidorDeliverySummaryLoader? deliverySummaryLoader;
+  final RepartidorMonthlySummaryLoader? monthlySummaryLoader;
 
   @override
   State<RepartidorPanelPage> createState() => _RepartidorPanelPageState();
 }
 
+class _PanelLoadResult<T> {
+  const _PanelLoadResult.success(this.value) : error = null;
+  const _PanelLoadResult.failure(this.error) : value = null;
+
+  final T? value;
+  final Object? error;
+}
+
 class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   bool _isLoading = true;
+  bool _isPartial = false;
+  bool _isEmpty = false;
+  bool _deliveryAvailable = false;
   String? _error;
 
-  // Data
   Map<String, dynamic> _deliverySummary = {};
+  RepartidorMonthlySummary? _monthlyFinance;
   List<Map<String, dynamic>> _dailyData = [];
-  CollectionsSummary? _collectionsSummary;
 
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
@@ -39,56 +73,87 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     _loadAllData();
   }
 
+  Future<_PanelLoadResult<T>> _capture<T>(Future<T> operation) async {
+    try {
+      return _PanelLoadResult<T>.success(await operation);
+    } catch (error) {
+      return _PanelLoadResult<T>.failure(error);
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadDeliverySummary() {
+    final loader = widget.deliverySummaryLoader;
+    if (loader != null) {
+      return loader(
+        repartidorId: widget.repartidorId,
+        year: _selectedYear,
+        month: _selectedMonth,
+      );
+    }
+    return RepartidorDataService.getDeliverySummary(
+      repartidorId: widget.repartidorId,
+      year: _selectedYear,
+      month: _selectedMonth,
+    );
+  }
+
+  Future<RepartidorMonthlySummary> _loadMonthlySummary() {
+    final loader = widget.monthlySummaryLoader;
+    if (loader != null) {
+      return loader(
+        repartidorId: widget.repartidorId,
+        year: _selectedYear,
+        month: _selectedMonth,
+      );
+    }
+    return RepartidorFinanzasService().getMonthlySummary(
+      repartidorId: widget.repartidorId,
+      year: _selectedYear,
+      month: _selectedMonth,
+    );
+  }
+
   Future<void> _loadAllData() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    try {
-      final results = await Future.wait([
-        RepartidorDataService.getDeliverySummary(
-          repartidorId: widget.repartidorId,
-          year: _selectedYear,
-          month: _selectedMonth,
-        ),
-        (() async {
-          try {
-            return await RepartidorDataService.getCollectionsSummary(
-              repartidorId: widget.repartidorId,
-              year: _selectedYear,
-              month: _selectedMonth,
-            );
-          } catch (_) {
-            return null;
-          }
-        })(),
-      ]);
+    final deliveryFuture = _capture<Map<String, dynamic>>(
+      _loadDeliverySummary(),
+    );
+    final financeFuture = _capture<RepartidorMonthlySummary>(
+      _loadMonthlySummary(),
+    );
+    final deliveryResult = await deliveryFuture;
+    final financeResult = await financeFuture;
+    if (!mounted) return;
 
-      final deliveryData = Map<String, dynamic>.from(results[0] as Map? ?? {});
-      final collections = results[1];
+    final deliveryData = deliveryResult.value;
+    final summary = Map<String, dynamic>.from(
+      (deliveryData?['summary'] as Map?) ?? const <String, dynamic>{},
+    );
+    final daily = ((deliveryData?['daily'] as List?) ?? const <dynamic>[])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    final finance = financeResult.value;
+    final allFailed =
+        deliveryResult.error != null && financeResult.error != null;
+    final hasDeliveryData = daily.isNotEmpty ||
+        summary.values.any((value) => value is num && value != 0);
 
-      if (mounted) {
-        setState(() {
-          _deliverySummary = Map<String, dynamic>.from(
-              (deliveryData['summary'] as Map?) ?? {});
-          _dailyData = ((deliveryData['daily'] as List?) ?? [])
-              .map((d) => Map<String, dynamic>.from(d as Map))
-              .toList();
-          if (collections is CollectionsSummary) {
-            _collectionsSummary = collections;
-          }
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
+    setState(() {
+      _deliverySummary = summary;
+      _dailyData = daily;
+      _monthlyFinance = finance;
+      _deliveryAvailable = deliveryResult.error == null;
+      _isPartial = !allFailed &&
+          (deliveryResult.error != null || financeResult.error != null);
+      _isEmpty =
+          !allFailed && !_isPartial && !hasDeliveryData && finance!.isEmpty;
+      _error = allFailed ? 'No se pudieron cargar los datos del periodo' : null;
+      _isLoading = false;
+    });
   }
 
   @override
@@ -100,27 +165,38 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           _buildHeader(),
           Expanded(
             child: _isLoading
-                ? const SkeletonList(itemCount: 4, itemHeight: 100)
+                ? const SkeletonList(itemCount: 4, itemHeight: 112)
                 : _error != null
                     ? ErrorStateWidget(
-                        message: 'Error: $_error',
+                        message: _error!,
                         onRetry: _loadAllData,
                       )
                     : RefreshIndicator(
                         onRefresh: _loadAllData,
                         child: ListView(
-                          padding: EdgeInsets.all(Responsive.padding(context,
-                              small: 10, large: 16)),
+                          padding: EdgeInsets.all(
+                            Responsive.padding(context, small: 10, large: 16),
+                          ),
                           children: [
-                            _buildKPICards(),
-                            const SizedBox(height: 16),
-                            if (_collectionsSummary != null) ...[
-                              _buildCollectionsCard(),
+                            if (_isPartial) ...[
+                              _buildPartialNotice(),
                               const SizedBox(height: 16),
                             ],
-                            _buildDailyChart(),
-                            const SizedBox(height: 16),
-                            _buildDailyTable(),
+                            if (_isEmpty)
+                              _buildEmptyState()
+                            else ...[
+                              if (_deliveryAvailable) ...[
+                                _buildKPICards(),
+                                const SizedBox(height: 16),
+                              ],
+                              _buildFinancialCard(),
+                              if (_deliveryAvailable) ...[
+                                const SizedBox(height: 16),
+                                _buildDailyChart(),
+                                const SizedBox(height: 16),
+                                _buildDailyTable(),
+                              ],
+                            ],
                           ],
                         ),
                       ),
@@ -133,15 +209,14 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          Responsive.padding(context, small: 12, large: 20),
-          20,
-          Responsive.padding(context, small: 12, large: 20),
-          16),
+        Responsive.padding(context, small: 12, large: 20),
+        20,
+        Responsive.padding(context, small: 12, large: 20),
+        16,
+      ),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
-        border: const Border(
-          bottom: BorderSide(color: AppTheme.borderColor),
-        ),
+        border: const Border(bottom: BorderSide(color: AppTheme.borderColor)),
         boxShadow: AppTheme.elevation1,
       ),
       child: Row(
@@ -162,9 +237,10 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                         .toUpperCase()
                     : 'R',
                 style: const TextStyle(
-                    color: AppTheme.info,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold),
+                  color: AppTheme.info,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -173,24 +249,39 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('RESUMEN DEL PERIODO',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: AppTheme.textTertiary,
-                        letterSpacing: 0,
-                        fontWeight: FontWeight.bold)),
+                const Text(
+                  'RESUMEN DEL PERIODO',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textTertiary,
+                    letterSpacing: 0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text('Repartidor ${widget.repartidorId}',
-                    style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 16, large: 20),
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.textPrimary)),
-                Text('Entregas, cobros y comisiones del periodo',
-                    style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 10, large: 12),
-                        color: AppTheme.textSecondary)),
+                Text(
+                  'Repartidor ${widget.repartidorId}',
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(
+                      context,
+                      small: 16,
+                      large: 20,
+                    ),
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Text(
+                  'Entregas y liquidaciones del periodo',
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(
+                      context,
+                      small: 10,
+                      large: 12,
+                    ),
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -214,7 +305,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       'Sep',
       'Oct',
       'Nov',
-      'Dic'
+      'Dic',
     ];
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -233,9 +324,10 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               isDense: true,
               dropdownColor: AppTheme.raisedSurface,
               style: const TextStyle(
-                  color: AppTheme.info,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold),
+                color: AppTheme.info,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
               items: [
                 for (int y = DateTime.now().year;
                     y >= DateTime.now().year - 2;
@@ -266,9 +358,10 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               isDense: true,
               dropdownColor: AppTheme.raisedSurface,
               style: const TextStyle(
-                  color: AppTheme.warning,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold),
+                color: AppTheme.warning,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
               items: [
                 for (int m = 1; m <= 12; m++)
                   DropdownMenuItem(value: m, child: Text(months[m - 1])),
@@ -283,6 +376,45 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPartialNotice() {
+    final missingLabel = _deliveryAvailable ? 'datos financieros' : 'entregas';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.35)),
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(
+          Icons.warning_amber_rounded,
+          color: AppTheme.warning,
+        ),
+        title: const Text('Datos parciales'),
+        subtitle: Text(
+          'No se pudieron cargar $missingLabel. El resto de datos sí está disponible.',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.raisedSurface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.inbox_outlined, color: AppTheme.textSecondary),
+        title: Text('Sin datos para este periodo'),
+        subtitle: Text('No hay entregas, cobros ni liquidaciones registradas.'),
+      ),
     );
   }
 
@@ -301,17 +433,41 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       runSpacing: 12,
       children: [
         _kpiWidget(
-            'Total Albaranes', '$total', Icons.receipt_long, AppTheme.info),
+          'Total Albaranes',
+          '$total',
+          Icons.receipt_long,
+          AppTheme.info,
+        ),
         _kpiWidget(
-            'Entregados', '$entregados', Icons.check_circle, AppTheme.success),
+          'Entregados',
+          '$entregados',
+          Icons.check_circle,
+          AppTheme.success,
+        ),
         _kpiWidget(
-            'No Entregados', '$noEntregados', Icons.cancel, AppTheme.error),
+          'No Entregados',
+          '$noEntregados',
+          Icons.cancel,
+          AppTheme.error,
+        ),
         _kpiWidget(
-            'Pendientes', '$pendientes', Icons.pending, AppTheme.warning),
-        _kpiWidget('% Entrega', '${pctEntrega.toStringAsFixed(1)}%',
-            Icons.pie_chart, AppTheme.accentIndigo),
-        _kpiWidget('Importe Total', CurrencyFormatter.format(importe),
-            Icons.euro, AppTheme.info),
+          'Pendientes',
+          '$pendientes',
+          Icons.pending,
+          AppTheme.warning,
+        ),
+        _kpiWidget(
+          '% Entrega',
+          '${pctEntrega.toStringAsFixed(1)}%',
+          Icons.pie_chart,
+          AppTheme.accentIndigo,
+        ),
+        _kpiWidget(
+          'Importe Total',
+          CurrencyFormatter.format(importe),
+          Icons.euro,
+          AppTheme.info,
+        ),
       ],
     );
   }
@@ -326,8 +482,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
 
         return Container(
           width: width > 180 ? 180 : width,
-          padding:
-              EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
+          padding: EdgeInsets.all(
+            Responsive.padding(context, small: 10, large: 14),
+          ),
           decoration: BoxDecoration(
             color: AppTheme.raisedSurface,
             borderRadius: BorderRadius.circular(14),
@@ -341,24 +498,36 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                   Icon(icon, color: color, size: 18),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(label,
-                        style: TextStyle(
-                            fontSize: Responsive.fontSize(context,
-                                small: 9, large: 11),
-                            color: AppTheme.textSecondary),
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: Responsive.fontSize(
+                          context,
+                          small: 9,
+                          large: 11,
+                        ),
+                        color: AppTheme.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(value,
-                    style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 16, large: 20),
-                        fontWeight: FontWeight.bold,
-                        color: color)),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(
+                      context,
+                      small: 16,
+                      large: 20,
+                    ),
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
               ),
             ],
           ),
@@ -367,76 +536,52 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     );
   }
 
-  Widget _buildCollectionsCard() {
-    final cs = _collectionsSummary!;
+  Widget _buildFinancialCard() {
+    if (_monthlyFinance == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const ListTile(
+          leading: Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
+          title: Text('Datos financieros no disponibles'),
+          subtitle: Text(
+            'Las entregas se muestran con la información disponible.',
+          ),
+        ),
+      );
+    }
+    final finance = _monthlyFinance!;
     return Container(
-      padding:
-          EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.success.withValues(alpha: 0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Resumen financiero mensual',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.euro,
-                  color: AppTheme.success,
-                  size: Responsive.iconSize(context, phone: 18, desktop: 20)),
-              const SizedBox(width: 8),
-              Text('Cobros del Mes',
-                  style: TextStyle(
-                      fontSize:
-                          Responsive.fontSize(context, small: 12, large: 15),
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary)),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: cs.thresholdMet
-                      ? AppTheme.success.withValues(alpha: 0.16)
-                      : AppTheme.warning.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  cs.thresholdMet
-                      ? 'OBJETIVO CUMPLIDO'
-                      : '${cs.overallPercentage.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        cs.thresholdMet ? AppTheme.success : AppTheme.warning,
-                  ),
-                ),
+              _miniStat(
+                'Cobrado',
+                CurrencyFormatter.format(finance.totalCobrado),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Progress bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: (cs.overallPercentage / 100).clamp(0.0, 1.0),
-              minHeight: 10,
-              backgroundColor: AppTheme.borderColor.withValues(alpha: 0.45),
-              valueColor: AlwaysStoppedAnimation(
-                  cs.thresholdMet ? AppTheme.success : AppTheme.warning),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
               _miniStat(
-                  'Cobrable', CurrencyFormatter.format(cs.totalCollectable)),
-              _miniStat('Cobrado', CurrencyFormatter.format(cs.totalCollected)),
+                'Liquidado',
+                CurrencyFormatter.format(finance.totalLiquidado),
+              ),
               _miniStat(
-                  'Comisión', CurrencyFormatter.format(cs.totalCommission)),
-              _miniStat('Clientes', '${cs.clientCount}'),
+                'Pendiente',
+                CurrencyFormatter.format(finance.saldoPendiente),
+              ),
             ],
           ),
         ],
@@ -448,16 +593,22 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     return Expanded(
       child: Column(
         children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: Responsive.fontSize(context, small: 10, large: 13),
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: Responsive.fontSize(context, small: 10, large: 13),
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(label,
-              style: TextStyle(
-                  fontSize: Responsive.fontSize(context, small: 8, large: 10),
-                  color: AppTheme.textSecondary)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: Responsive.fontSize(context, small: 8, large: 10),
+              color: AppTheme.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -473,8 +624,10 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           border: Border.all(color: AppTheme.borderColor),
         ),
         child: const Center(
-          child: Text('Sin datos de entregas para este período',
-              style: TextStyle(color: AppTheme.textSecondary)),
+          child: Text(
+            'Sin datos de entregas para este período',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
         ),
       );
     }
@@ -485,8 +638,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     });
 
     return Container(
-      padding:
-          EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
+      padding: EdgeInsets.all(
+        Responsive.padding(context, small: 10, large: 16),
+      ),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(14),
@@ -497,16 +651,20 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.bar_chart,
-                  color: AppTheme.info,
-                  size: Responsive.iconSize(context, phone: 18, desktop: 20)),
+              Icon(
+                Icons.bar_chart,
+                color: AppTheme.info,
+                size: Responsive.iconSize(context, phone: 18, desktop: 20),
+              ),
               const SizedBox(width: 8),
-              Text('Entregas Diarias',
-                  style: TextStyle(
-                      fontSize:
-                          Responsive.fontSize(context, small: 12, large: 15),
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary)),
+              Text(
+                'Entregas Diarias',
+                style: TextStyle(
+                  fontSize: Responsive.fontSize(context, small: 12, large: 15),
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -529,9 +687,13 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         FittedBox(
-                          child: Text('${total.toInt()}',
-                              style: const TextStyle(
-                                  fontSize: 8, color: AppTheme.textSecondary)),
+                          child: Text(
+                            '${total.toInt()}',
+                            style: const TextStyle(
+                              fontSize: 8,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Stack(
@@ -556,9 +718,12 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                         const SizedBox(height: 4),
                         FittedBox(
                           child: Text(
-                              '${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}',
-                              style: const TextStyle(
-                                  fontSize: 8, color: AppTheme.textSecondary)),
+                            '${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}',
+                            style: const TextStyle(
+                              fontSize: 8,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -572,26 +737,32 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                      color: AppTheme.info.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(2))),
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: AppTheme.info.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(width: 4),
-              const Text('Total',
-                  style:
-                      TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+              const Text(
+                'Total',
+                style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+              ),
               const SizedBox(width: 16),
               Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.78),
-                      borderRadius: BorderRadius.circular(2))),
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withValues(alpha: 0.78),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(width: 4),
-              const Text('Entregados',
-                  style:
-                      TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+              const Text(
+                'Entregados',
+                style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+              ),
             ],
           ),
         ],
@@ -615,16 +786,24 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.table_chart,
-                    color: AppTheme.accentIndigo,
-                    size: Responsive.iconSize(context, phone: 18, desktop: 20)),
+                Icon(
+                  Icons.table_chart,
+                  color: AppTheme.accentIndigo,
+                  size: Responsive.iconSize(context, phone: 18, desktop: 20),
+                ),
                 const SizedBox(width: 8),
-                Text('Detalle diario',
-                    style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 12, large: 15),
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary)),
+                Text(
+                  'Detalle diario',
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(
+                      context,
+                      small: 12,
+                      large: 15,
+                    ),
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -636,54 +815,80 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                 children: [
                   // Table header
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: const BoxDecoration(color: AppTheme.softPanel),
                     child: const Row(
                       children: [
                         SizedBox(
-                            width: 50,
-                            child: Text('Día',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textSecondary))),
+                          width: 50,
+                          child: Text(
+                            'Día',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
                         Expanded(
-                            child: Text('Total',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textSecondary))),
+                          child: Text(
+                            'Total',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
                         Expanded(
-                            child: Text('Entreg.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.success))),
+                          child: Text(
+                            'Entreg.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.success,
+                            ),
+                          ),
+                        ),
                         Expanded(
-                            child: Text('No Ent.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.error))),
+                          child: Text(
+                            'No Ent.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.error,
+                            ),
+                          ),
+                        ),
                         Expanded(
-                            child: Text('Pend.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.warning))),
+                          child: Text(
+                            'Pend.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.warning,
+                            ),
+                          ),
+                        ),
                         SizedBox(
-                            width: 80,
-                            child: Text('Importe',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textSecondary))),
+                          width: 80,
+                          child: Text(
+                            'Importe',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -697,59 +902,85 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
 
                     return Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         border: Border(
-                            bottom: BorderSide(
-                                color: AppTheme.borderColor
-                                    .withValues(alpha: 0.4))),
+                          bottom: BorderSide(
+                            color: AppTheme.borderColor.withValues(alpha: 0.4),
+                          ),
+                        ),
                       ),
                       child: Row(
                         children: [
                           SizedBox(
-                              width: 50,
-                              child: Text(
-                                  '${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textPrimary,
-                                      fontWeight: FontWeight.w600))),
+                            width: 50,
+                            child: Text(
+                              '${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                              child: Text('$total',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textPrimary))),
+                            child: Text(
+                              '$total',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                              child: Text('$delivered',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.success,
-                                      fontWeight: FontWeight.bold))),
+                            child: Text(
+                              '$delivered',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.success,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                              child: Text('$notDel',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: notDel > 0
-                                          ? AppTheme.error
-                                          : AppTheme.textSecondary))),
+                            child: Text(
+                              '$notDel',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: notDel > 0
+                                    ? AppTheme.error
+                                    : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                              child: Text('$pending',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: pending > 0
-                                          ? AppTheme.warning
-                                          : AppTheme.textSecondary))),
+                            child: Text(
+                              '$pending',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: pending > 0
+                                    ? AppTheme.warning
+                                    : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
                           SizedBox(
-                              width: 80,
-                              child: Text(CurrencyFormatter.format(amount),
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textPrimary))),
+                            width: 80,
+                            child: Text(
+                              CurrencyFormatter.format(amount),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     );

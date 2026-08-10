@@ -37,6 +37,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   late Animation<double> _scaleAnimation;
   double _dragOffset = 0;
   bool _isDragging = false;
+  bool _swipeActionTriggered = false;
+
+  static const double _swipeThreshold = 80;
 
   @override
   void initState() {
@@ -109,7 +112,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
       padding: const EdgeInsets.symmetric(
           horizontal: 8, vertical: 1), // Compact vertical padding
       child: GestureDetector(
-        // Swipe disabled as requested
         onTapDown: (_) => _animController.forward(),
         onTapUp: (_) => _animController.reverse(),
         onTapCancel: () => _animController.reverse(),
@@ -117,12 +119,32 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           HapticFeedback.selectionClick();
           widget.onTap();
         },
+        onHorizontalDragStart: _isEntregado
+            ? null
+            : (_) {
+                setState(() {
+                  _isDragging = true;
+                  _swipeActionTriggered = false;
+                });
+              },
+        onHorizontalDragUpdate: _isEntregado
+            ? null
+            : (details) {
+                setState(() {
+                  _dragOffset =
+                      (_dragOffset + details.delta.dx).clamp(-120.0, 120.0);
+                });
+              },
+        onHorizontalDragEnd: _isEntregado ? null : _handleDragEnd,
         child: AnimatedBuilder(
           animation: _scaleAnimation,
           builder: (context, child) {
             return Transform.scale(
               scale: _scaleAnimation.value,
-              child: _buildCardContent(),
+              child: Transform.translate(
+                offset: Offset(_dragOffset, 0),
+                child: _buildCardContent(),
+              ),
             );
           },
         ),
@@ -470,18 +492,28 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   }
 
   void _handleDragEnd(DragEndDetails details) {
-    setState(() => _isDragging = false);
+    if (!_isDragging || _swipeActionTriggered) {
+      return;
+    }
 
-    if (_dragOffset < -80) {
-      // Swipe left - complete
+    final dragOffset = _dragOffset;
+    setState(() {
+      _isDragging = false;
+      _dragOffset = 0;
+    });
+
+    if (dragOffset < -_swipeThreshold) {
+      _swipeActionTriggered = true;
       HapticFeedback.mediumImpact();
       widget.onSwipeComplete?.call();
-    } else if (_dragOffset > 80) {
-      // Swipe right - add note
+    } else if (dragOffset > _swipeThreshold) {
+      _swipeActionTriggered = true;
       HapticFeedback.mediumImpact();
       widget.onSwipeNote?.call();
     }
 
-    setState(() => _dragOffset = 0);
+    if (mounted) {
+      setState(() => _swipeActionTriggered = false);
+    }
   }
 }

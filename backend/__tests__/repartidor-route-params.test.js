@@ -148,7 +148,7 @@ describe('Repartidor route parameter binding', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
     const [, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual(['05', '08', '4300030041', 2026]);
+    expect(params).toEqual(['05', '08', '4300030041', 2026, 0, 50]);
   });
 
   test('GET /history/delivery-summary rejects invalid repartidor ids before querying', async () => {
@@ -162,6 +162,10 @@ describe('Repartidor route parameter binding', () => {
 
   test('GET /pendientes binds a single repartidor id as parameter array', async () => {
     const entregasApp = makeEntregasApp();
+    mockCachedQuery.mockResolvedValueOnce([
+      { CODIGO: 'CTR', DESCRIPCION: 'Contado', TIPO: 'CONTADO', DEBE_COBRAR: 'S', PUEDE_COBRAR: 'S' },
+    ]);
+
 
     const res = await request(entregasApp)
       .get('/pendientes/02')
@@ -171,6 +175,6 @@ describe('Repartidor route parameter binding', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
     const [, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual(['02', 21, 4, 2026]);
+    expect(params).toEqual(['02', 21, 4, 2026, 0, 101]);
   });
 });

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,20 +12,23 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
-import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
-import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_upload_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_operation_safety.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'rutero_detail_completed.dart';
 import 'rutero_detail_finalize.dart';
@@ -50,11 +54,108 @@ bool _isValidDniNie(String value) {
   return cleaned[cleaned.length - 1] == letters[num % 23];
 }
 
+enum RepartoConfirmationErrorDisposition {
+  alreadyConfirmed,
+  manualReview,
+  retryable,
+}
+
+RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
+  required Object error,
+  required bool acknowledged,
+}) {
+  if (error is RepartoAlreadyAcknowledgedException) {
+    return RepartoConfirmationErrorDisposition.alreadyConfirmed;
+  }
+  if (error is RepartoReceiptUnavailableException ||
+      error is RepartoConfirmationConflictException ||
+      error is RepartoJournalCorruptionException) {
+    return RepartoConfirmationErrorDisposition.manualReview;
+  }
+  if (error is ApiException) {
+    if (acknowledged &&
+        error.statusCode == 409 &&
+        error.code == 'DELIVERY_ALREADY_CONFIRMED') {
+      return RepartoConfirmationErrorDisposition.alreadyConfirmed;
+    }
+    return RepartoConfirmationErrorDisposition.manualReview;
+  }
+  return RepartoConfirmationErrorDisposition.retryable;
+}
+
+class RepartoConfirmationErrorPresentation {
+  const RepartoConfirmationErrorPresentation({
+    required this.message,
+    required this.canRetry,
+  });
+
+  final String message;
+  final bool canRetry;
+}
+
+RepartoConfirmationErrorPresentation repartoConfirmationErrorPresentation({
+  required Object error,
+  required bool acknowledged,
+}) {
+  final disposition = repartoConfirmationErrorDisposition(
+    error: error,
+    acknowledged: acknowledged,
+  );
+  switch (disposition) {
+    case RepartoConfirmationErrorDisposition.alreadyConfirmed:
+      return const RepartoConfirmationErrorPresentation(
+        message: 'Esta entrega ya fue confirmada.',
+        canRetry: false,
+      );
+    case RepartoConfirmationErrorDisposition.manualReview:
+      return const RepartoConfirmationErrorPresentation(
+        message: 'El resultado de la confirmación no es concluyente. '
+            'La operación requiere revisión manual.',
+        canRetry: false,
+      );
+    case RepartoConfirmationErrorDisposition.retryable:
+      return RepartoConfirmationErrorPresentation(
+        message: error is RepartoEvidenceUploadException
+            ? repartoEvidenceErrorMessage(error)
+            : 'No se pudo registrar la entrega. Reinténtalo.',
+        canRetry: true,
+      );
+  }
+}
+
+SnackBar repartoConfirmationErrorSnackBar({
+  required RepartoConfirmationErrorPresentation presentation,
+  VoidCallback? onRetry,
+}) {
+  final retryAction = presentation.canRetry ? onRetry : null;
+  return SnackBar(
+    content: Row(
+      children: <Widget>[
+        const Icon(Icons.error_outline, color: Colors.white),
+        const SizedBox(width: 12),
+        Expanded(child: Text(presentation.message)),
+      ],
+    ),
+    action: retryAction == null
+        ? null
+        : SnackBarAction(
+            label: 'Reintentar',
+            onPressed: retryAction,
+          ),
+    backgroundColor: AppTheme.error,
+  );
+}
+
 class RuteroDetailModal extends StatefulWidget {
-  const RuteroDetailModal(
-      {required this.albaran, required this.ref, super.key});
+  const RuteroDetailModal({
+    required this.albaran,
+    required this.ref,
+    this.confirmationJournalStore,
+    super.key,
+  });
   final AlbaranEntrega albaran;
   final WidgetRef ref;
+  final RepartoConfirmationJournalStore? confirmationJournalStore;
 
   @override
   State<RuteroDetailModal> createState() => _RuteroDetailModalState();
@@ -69,6 +170,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _apellidosController = TextEditingController();
+  final TextEditingController _incidenciaMotivoController =
+      TextEditingController();
   final TextEditingController _importeCobradoController =
       TextEditingController();
   final FocusNode _nombreFocusNode = FocusNode();
@@ -79,18 +183,28 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   );
 
   final Map<String, bool> _productChecked = {};
-  final Map<String, int> _productQuantities = {};
+  final Map<String, double> _productQuantities = {};
 
   List<EntregaItem> _items = [];
   bool _isLoadingItems = true;
   String? _itemsError;
 
-  List<String> _suggestedNames = [];
-  List<String> _suggestedDnis = [];
-
   String _selectedPaymentMethod = 'EFECTIVO';
   bool _isPaid = false;
   bool _isSubmitting = false;
+  bool _allowProgrammaticDismiss = false;
+  late final RepartoConfirmationJournal _confirmationJournal;
+  late final RepartoPersistentConfirmationOperation _confirmationOperation;
+  late final RepartoEvidenceConfirmationCoordinator _evidenceCoordinator;
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<XFile> _evidencePhotos = <XFile>[];
+  bool _hasPersistedSignature = false;
+  bool _isAcknowledgedTombstone = false;
+  bool _isJournalBlocked = false;
+  bool _isRestoringJournal = true;
+  RepartoDeliveryStatus _deliveryStatus = RepartoDeliveryStatus.entregado;
+  RepartoDifferenceReason _differenceReason = RepartoDifferenceReason.otro;
+  RepartoIncidentType _incidentType = RepartoIncidentType.otro;
 
   bool _tieneImpresora = false;
   String? _printerName;
@@ -110,6 +224,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   @override
   void initState() {
     super.initState();
+    _confirmationJournal = RepartoConfirmationJournal(
+        widget.confirmationJournalStore ??
+            HiveRepartoConfirmationJournalStore());
+    _confirmationOperation =
+        RepartoPersistentConfirmationOperation(_confirmationJournal);
+    _evidenceCoordinator = RepartoEvidenceConfirmationCoordinator(
+        RepartoEvidenceUploadService(), _confirmationJournal);
     _tabController = TabController(length: 3, vsync: this);
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 400),
@@ -125,8 +246,39 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
 
     _loadItems();
-    _loadSignerSuggestions();
     _loadPrinterConfig();
+    unawaited(_restorePendingEvidence());
+  }
+
+  Future<void> _restorePendingEvidence() async {
+    try {
+      final entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
+      if (entry.state == RepartoOperationState.acknowledged) {
+        if (mounted) {
+          setState(() {
+            _isAcknowledgedTombstone = true;
+            _isRestoringJournal = false;
+          });
+        }
+        return;
+      }
+      final signatureId = entry.evidences['signature']?.evidenceId;
+      if (mounted) {
+        setState(() {
+          _isJournalBlocked = entry.state == RepartoOperationState.manualReview;
+          _hasPersistedSignature = signatureId != null &&
+              RepartoEvidenceUploadService.isValidEvidenceId(signatureId);
+          _isRestoringJournal = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isJournalBlocked = true;
+          _isRestoringJournal = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadPrinterConfig() async {
@@ -208,6 +360,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           widget.albaran.ejercicio,
           widget.albaran.serie,
           widget.albaran.terminal,
+          widget.albaran.codigoCliente,
         );
         if (albaranDetalle == null) {
           if (mounted) {
@@ -230,58 +383,32 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         return true;
       }).toList();
 
+      final identityError = validateRuteroLineIdentities(filtered);
       if (mounted) {
         setState(() {
+          _itemsError = identityError;
           _items = filtered;
           _isLoadingItems = false;
+          _productChecked.clear();
+          _productQuantities.clear();
 
-          for (final item in filtered) {
-            if (!_productChecked.containsKey(item.codigoArticulo)) {
-              _productChecked[item.codigoArticulo] = true;
-              _productQuantities[item.codigoArticulo] =
-                  item.cantidadPedida.toInt();
+          if (identityError == null) {
+            for (final item in filtered) {
+              final lineId = ruteroLineKey(item);
+              _productChecked[lineId] = true;
+              _productQuantities[lineId] = item.cantidadPedida;
             }
           }
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _itemsError = e.toString();
+          _itemsError =
+              'No se pudieron cargar las líneas. Recarga el reparto e inténtalo de nuevo.';
           _isLoadingItems = false;
         });
       }
-    }
-  }
-
-  Future<void> _loadSignerSuggestions() async {
-    try {
-      final codigoCliente = widget.albaran.codigoCliente;
-      if (codigoCliente == null) return;
-
-      final response = await ApiClient.get(
-        '/entregas/signers/$codigoCliente',
-        queryParameters: {'entregaId': widget.albaran.id},
-        cacheKey: 'entregas:signers:$codigoCliente:${widget.albaran.id}',
-        cacheTTL: CacheService.defaultTTL,
-      );
-      if (response['success'] == true && mounted) {
-        final signers = response['signers'] as List;
-        setState(() {
-          _suggestedDnis =
-              signers.map((s) => s['DNI'].toString().trim()).toList();
-          _suggestedNames =
-              signers.map((s) => s['NOMBRE'].toString().trim()).toList();
-
-          if (signers.isNotEmpty) {
-            final last = signers.first;
-            _dniController.text = last['DNI'].toString().trim();
-            _nombreController.text = last['NOMBRE'].toString().trim();
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading signers: $e');
     }
   }
 
@@ -292,6 +419,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _observacionesController.dispose();
     _dniController.dispose();
     _nombreController.dispose();
+    _apellidosController.dispose();
+    _incidenciaMotivoController.dispose();
     _importeCobradoController.dispose();
     _nombreFocusNode.dispose();
     _dniFocusNode.dispose();
@@ -299,67 +428,90 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     super.dispose();
   }
 
+  static double _normalizeQuantity(num value) =>
+      double.parse(value.toDouble().toStringAsFixed(3));
+
+  static bool _quantityDiffers(num left, num right) =>
+      (left.toDouble() - right.toDouble()).abs() > 0.0001;
+
+  static String _formatQuantity(num value) {
+    final fixed = _normalizeQuantity(value).toStringAsFixed(3);
+    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  double _boundedQuantity(String lineId, num value) {
+    final ordered = _items
+        .firstWhere((item) => ruteroLineKey(item) == lineId)
+        .cantidadPedida;
+    return _normalizeQuantity(value.clamp(0.0, ordered));
+  }
+
   bool get _isFactura => widget.albaran.numeroFactura > 0;
   bool get _isUrgent => widget.albaran.esCTR;
   bool get _isCompleted => widget.albaran.estado == EstadoEntrega.entregado;
 
   bool get _hasDiscrepancy {
-    final anyQtyModified = _items.any((item) =>
-        (_productQuantities[item.codigoArticulo] ??
-            item.cantidadPedida.toInt()) !=
-        item.cantidadPedida.toInt());
+    final anyQtyModified = _items.any((item) => _quantityDiffers(
+          _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
+          item.cantidadPedida,
+        ));
     final anyUnchecked =
-        _items.any((item) => !(_productChecked[item.codigoArticulo] ?? true));
+        _items.any((item) => !(_productChecked[ruteroLineKey(item)] ?? false));
     return anyQtyModified || anyUnchecked;
   }
 
   @override
   Widget build(BuildContext context) {
-    return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, 1),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _slideController,
-        curve: Curves.easeOutCubic,
-      )),
-      child: RepartidorExecutiveSheet(
-        height: Responsive.modalHeight(
-          context,
-          portraitFraction: _isCompleted ? 0.70 : 0.92,
-          landscapeFraction: _isCompleted ? 0.80 : 0.95,
-        ),
-        accentColor: _isCompleted
-            ? AppTheme.success
-            : _isUrgent
-                ? AppTheme.obligatorio
-                : AppTheme.info,
-        child: Column(
-          children: [
-            RuteroDetailHeader(
-              albaran: widget.albaran,
-              isCompleted: _isCompleted,
-            ),
-            if (_isCompleted)
-              Expanded(child: _buildCompletedView())
-            else ...[
-              RuteroDetailTabBar(
-                tabController: _tabController,
-                isUrgent: _isUrgent,
+    // PopScope also vetoes barrier taps and drag-driven route pops while the
+    // evidence transaction is active. Only the success path opts back in.
+    return PopScope(
+      canPop: !_isSubmitting || _allowProgrammaticDismiss,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: _slideController,
+          curve: Curves.easeOutCubic,
+        )),
+        child: RepartidorExecutiveSheet(
+          height: Responsive.modalHeight(
+            context,
+            portraitFraction: _isCompleted ? 0.70 : 0.92,
+            landscapeFraction: _isCompleted ? 0.80 : 0.95,
+          ),
+          accentColor: _isCompleted
+              ? AppTheme.success
+              : _isUrgent
+                  ? AppTheme.obligatorio
+                  : AppTheme.info,
+          child: Column(
+            children: [
+              RuteroDetailHeader(
+                albaran: widget.albaran,
+                isCompleted: _isCompleted,
               ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _buildProductsTab(),
-                    _buildPaymentTab(),
-                    _buildFinalizeTab(),
-                  ],
+              if (_isCompleted)
+                Expanded(child: _buildCompletedView())
+              else ...[
+                RuteroDetailTabBar(
+                  tabController: _tabController,
+                  isUrgent: _isUrgent,
                 ),
-              ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _buildProductsTab(),
+                      _buildPaymentTab(),
+                      _buildFinalizeTab(),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -370,8 +522,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       albaran: widget.albaran,
       onPreviewReceiptPdf: _previewReceiptPdf,
       onDownloadReceiptPdf: _downloadReceiptPdf,
-      onShareViaWhatsApp: _shareViaWhatsApp,
-      onShareViaEmail: _shareViaEmail,
+      onSharePdfLocally: _sharePdfLocally,
       buildPrinterConfigSection: _buildPrinterConfigSection,
       tieneImpresora: _tieneImpresora,
       items: _items,
@@ -387,24 +538,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       productChecked: _productChecked,
       productQuantities: _productQuantities,
       ordenPreparacion: widget.albaran.ordenPreparacion?.toString(),
-      onProductCheckedChanged: (code, value) {
+      onProductCheckedChanged: (lineId, value) {
         setState(() {
-          _productChecked[code] = value;
+          _productChecked[lineId] = value;
+          _cachedPdfBase64 = null;
         });
       },
-      onQuantityChanged: (code, value) {
+      onQuantityChanged: (lineId, value) {
         setState(() {
-          _productQuantities[code] = value;
+          _productQuantities[lineId] = _boundedQuantity(lineId, value);
           _cachedPdfBase64 = null;
         });
       },
       onShowQuantityEditDialog: _showQuantityEditDialog,
+      onRetryItems: _loadItems,
       onConfirmAll: () {
         HapticFeedback.lightImpact();
-        final allChecked = _productChecked.values.every((v) => v);
+        final allChecked = _items.isNotEmpty &&
+            _items.every(
+              (item) => _productChecked[ruteroLineKey(item)] ?? false,
+            );
         setState(() {
           for (final linea in _items) {
-            _productChecked[linea.codigoArticulo] = !allChecked;
+            _productChecked[ruteroLineKey(linea)] = !allChecked;
           }
         });
       },
@@ -456,7 +612,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildReceiverData(),
+          _buildDeliveryStatusSection(),
+          const SizedBox(height: 16),
+          if (_deliveryStatus != RepartoDeliveryStatus.noEntregado)
+            _buildReceiverData(),
           const SizedBox(height: 16),
           if (_hasDiscrepancy) ...[
             _buildDiscrepancyWarning(),
@@ -484,12 +643,257 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ),
           const SizedBox(height: 12),
+          _buildEvidencePhotosSection(),
+          const SizedBox(height: 12),
           _buildPrinterConfigSection(),
           const SizedBox(height: 20),
-          _buildSignatureSection(),
+          if (_deliveryStatus != RepartoDeliveryStatus.noEntregado)
+            _buildSignatureSection(),
           const SizedBox(height: 24),
           _buildSubmitButton(),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryStatusSection() {
+    final noDelivery = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
+    final rejected = _deliveryStatus == RepartoDeliveryStatus.rechazado;
+    final hasIncident = noDelivery || rejected;
+    return RepartidorExecutivePanel(
+      accentColor: hasIncident ? AppTheme.warning : AppTheme.info,
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        DropdownButtonFormField<RepartoDeliveryStatus>(
+          value: _deliveryStatus,
+          decoration:
+              const InputDecoration(labelText: 'Resultado de la entrega'),
+          items: RepartoDeliveryStatus.values
+              .map((status) => DropdownMenuItem(
+                    value: status,
+                    child: Text(status.apiValue.replaceAll('_', ' ')),
+                  ))
+              .toList(growable: false),
+          onChanged: _isSubmitting
+              ? null
+              : (status) {
+                  if (status == null) return;
+                  setState(() {
+                    _deliveryStatus = status;
+                    if (status == RepartoDeliveryStatus.noEntregado ||
+                        status == RepartoDeliveryStatus.rechazado)
+                      _isPaid = false;
+                  });
+                },
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<RepartoDifferenceReason>(
+          value: _differenceReason,
+          decoration:
+              const InputDecoration(labelText: 'Motivo de la diferencia'),
+          items: RepartoDifferenceReason.values
+              .map((reason) => DropdownMenuItem(
+                    value: reason,
+                    child: Text(reason.apiValue.replaceAll('_', ' ')),
+                  ))
+              .toList(growable: false),
+          onChanged: _isSubmitting
+              ? null
+              : (reason) => setState(() {
+                    if (reason != null) _differenceReason = reason;
+                  }),
+        ),
+        if (hasIncident) ...[
+          const SizedBox(height: 12),
+          DropdownButtonFormField<RepartoIncidentType>(
+            value: _incidentType,
+            decoration:
+                const InputDecoration(labelText: 'Tipo de incidencia *'),
+            items: RepartoIncidentType.values
+                .map((type) => DropdownMenuItem(
+                      value: type,
+                      child: Text(type.apiValue.replaceAll('_', ' ')),
+                    ))
+                .toList(growable: false),
+            onChanged: _isSubmitting
+                ? null
+                : (type) => setState(() {
+                      if (type != null) _incidentType = type;
+                    }),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _incidenciaMotivoController,
+            enabled: !_isSubmitting,
+            decoration:
+                const InputDecoration(labelText: 'Motivo de la incidencia *'),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildEvidencePhotosSection() {
+    final canAdd = !_isSubmitting &&
+        _evidencePhotos.length < RepartoEvidenceUploadService.maxPhotos;
+    return RepartidorExecutivePanel(
+      accentColor: AppTheme.info,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const RepartidorExecutiveIcon(
+                icon: Icons.photo_camera,
+                color: AppTheme.info,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'EVIDENCIAS FOTOGRÁFICAS',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              Text(
+                '${_evidencePhotos.length}/${RepartoEvidenceUploadService.maxPhotos}',
+                style: const TextStyle(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_evidencePhotos.isNotEmpty)
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: List<Widget>.generate(_evidencePhotos.length, (index) {
+                final photo = _evidencePhotos[index];
+                return SizedBox(
+                  width: 104,
+                  height: 104,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Semantics(
+                          button: true,
+                          image: true,
+                          label: 'Previsualizar foto ${index + 1}',
+                          child: InkWell(
+                            onTap: () => _previewEvidencePhoto(photo, index),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusMd),
+                            child: ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusMd),
+                              child: Image.file(
+                                File(photo.path),
+                                fit: BoxFit.cover,
+                                width: 104,
+                                height: 104,
+                                errorBuilder: (_, __, ___) => const ColoredBox(
+                                  color: AppTheme.softPanel,
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: AppTheme.textTertiary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: IconButton.filled(
+                          tooltip: 'Quitar foto ${index + 1}',
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => setState(
+                                    () => _evidencePhotos.removeAt(index),
+                                  ),
+                          icon: const Icon(Icons.close, size: 18),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppTheme.error,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(48, 48),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          if (_evidencePhotos.isNotEmpty) const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: canAdd ? _takeEvidencePhoto : null,
+            icon: const Icon(Icons.add_a_photo_outlined),
+            label: Text(
+              canAdd ? 'Hacer foto' : 'Máximo de 3 fotos alcanzado',
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Las fotos se previsualizan aquí y se suben al confirmar.',
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _takeEvidencePhoto() async {
+    if (_isSubmitting ||
+        _evidencePhotos.length >= RepartoEvidenceUploadService.maxPhotos) {
+      return;
+    }
+    try {
+      final photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+      if (photo == null || !mounted) return;
+      setState(() => _evidencePhotos.add(photo));
+    } catch (_) {
+      if (mounted) {
+        _showError('No se pudo abrir la cámara. Revisa sus permisos.');
+      }
+    }
+  }
+
+  Future<void> _previewEvidencePhoto(XFile photo, int index) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.raisedSurface,
+        title: Text('Foto ${index + 1}'),
+        content: Semantics(
+          image: true,
+          label: 'Vista previa de la foto ${index + 1}',
+          child: InteractiveViewer(
+            child: Image.file(
+              File(photo.path),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const SizedBox(
+                height: 180,
+                child: Center(child: Text('No se pudo mostrar la foto')),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CERRAR'),
+          ),
         ],
       ),
     );
@@ -521,144 +925,70 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ],
           ),
           const SizedBox(height: 16),
-          RawAutocomplete<String>(
-            textEditingController: _nombreController,
+          TextField(
+            controller: _nombreController,
             focusNode: _nombreFocusNode,
-            optionsBuilder: (TextEditingValue textEditingValue) {
-              if (textEditingValue.text.isEmpty) {
-                return const Iterable<String>.empty();
+            enabled: !_isSubmitting,
+            onChanged: (_) {
+              if (_nombreError != null) {
+                setState(() => _nombreError = null);
               }
-              return _suggestedNames.where((String option) {
-                return option
-                    .toUpperCase()
-                    .contains(textEditingValue.text.toUpperCase());
-              });
             },
-            fieldViewBuilder:
-                (context, controller, focusNode, onEditingComplete) {
-              return TextField(
-                controller: controller,
-                focusNode: focusNode,
-                onEditingComplete: onEditingComplete,
-                onChanged: (_) {
-                  if (_nombreError != null) {
-                    setState(() => _nombreError = null);
-                  }
-                },
-                style: const TextStyle(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Nombre y Apellidos *',
-                  prefixIcon: const Icon(Icons.person_outline, size: 20),
-                  filled: true,
-                  fillColor: AppTheme.softPanel,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  ),
-                  errorText: _nombreError,
-                  errorStyle: const TextStyle(color: AppTheme.error),
-                ),
-              );
-            },
-            optionsViewBuilder: (context, onSelected, options) {
-              return Align(
-                alignment: Alignment.topLeft,
-                child: Material(
-                  elevation: 4,
-                  color: AppTheme.raisedSurface,
-                  child: SizedBox(
-                    height: 200,
-                    width: MediaQuery.of(context).size.width -
-                        Responsive.value(context, phone: 40, desktop: 80),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: options.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final option = options.elementAt(index);
-                        return ListTile(
-                          tileColor: AppTheme.softPanel,
-                          title: Text(option,
-                              style:
-                                  const TextStyle(color: AppTheme.textPrimary)),
-                          onTap: () {
-                            onSelected(option);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Nombre *',
+              prefixIcon: const Icon(Icons.person_outline, size: 20),
+              filled: true,
+              fillColor: AppTheme.softPanel,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              errorText: _nombreError,
+              errorStyle: const TextStyle(color: AppTheme.error),
+            ),
           ),
           const SizedBox(height: 12),
-          RawAutocomplete<String>(
-            textEditingController: _dniController,
+          TextField(
+            controller: _apellidosController,
+            enabled: !_isSubmitting,
+            onChanged: (_) {
+              if (_nombreError != null) setState(() => _nombreError = null);
+            },
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Apellidos *',
+              prefixIcon: const Icon(Icons.person_outline, size: 20),
+              filled: true,
+              fillColor: AppTheme.softPanel,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              errorText: _nombreError,
+              errorStyle: const TextStyle(color: AppTheme.error),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _dniController,
             focusNode: _dniFocusNode,
-            optionsBuilder: (TextEditingValue textEditingValue) {
-              if (textEditingValue.text.isEmpty) {
-                return const Iterable<String>.empty();
+            enabled: !_isSubmitting,
+            onChanged: (_) {
+              if (_dniError != null) {
+                setState(() => _dniError = null);
               }
-              return _suggestedDnis.where((String option) {
-                return option
-                    .toUpperCase()
-                    .contains(textEditingValue.text.toUpperCase());
-              });
             },
-            fieldViewBuilder:
-                (context, controller, focusNode, onEditingComplete) {
-              return TextField(
-                controller: controller,
-                focusNode: focusNode,
-                onEditingComplete: onEditingComplete,
-                onChanged: (_) {
-                  if (_dniError != null) {
-                    setState(() => _dniError = null);
-                  }
-                },
-                style: const TextStyle(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'DNI / NIF *',
-                  prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-                  filled: true,
-                  fillColor: AppTheme.softPanel,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  ),
-                  errorText: _dniError,
-                  errorStyle: const TextStyle(color: AppTheme.error),
-                ),
-              );
-            },
-            optionsViewBuilder: (context, onSelected, options) {
-              return Align(
-                alignment: Alignment.topLeft,
-                child: Material(
-                  elevation: 4,
-                  color: AppTheme.raisedSurface,
-                  child: SizedBox(
-                    height: 200,
-                    width: MediaQuery.of(context).size.width -
-                        Responsive.value(context, phone: 40, desktop: 80),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: options.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final option = options.elementAt(index);
-                        return ListTile(
-                          tileColor: AppTheme.softPanel,
-                          title: Text(option,
-                              style:
-                                  const TextStyle(color: AppTheme.textPrimary)),
-                          onTap: () {
-                            onSelected(option);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'DNI / NIF *',
+              prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+              filled: true,
+              fillColor: AppTheme.softPanel,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              errorText: _dniError,
+              errorStyle: const TextStyle(color: AppTheme.error),
+            ),
           ),
         ],
       ),
@@ -751,7 +1081,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Widget _buildSubmitButton() {
     return ElevatedButton(
-      onPressed: _isSubmitting ? null : _submitDelivery,
+      onPressed: _isSubmitting ||
+              _isRestoringJournal ||
+              _isAcknowledgedTombstone ||
+              _isJournalBlocked
+          ? null
+          : _submitDelivery,
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.success,
         foregroundColor: Colors.white,
@@ -769,26 +1104,53 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 color: Colors.white,
               ),
             )
-          : const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle, size: 24),
-                SizedBox(width: 12),
-                Text(
-                  'CONFIRMAR ENTREGA',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+          : _isAcknowledgedTombstone
+              ? const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified, size: 24),
+                    SizedBox(width: 12),
+                    Text(
+                      'ENTREGA YA CONFIRMADA',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, size: 24),
+                    SizedBox(width: 12),
+                    Text(
+                      'CONFIRMAR ENTREGA',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
     );
   }
 
-  Future<void> _showQuantityEditDialog(EntregaItem linea, int current) async {
-    final controller = TextEditingController(text: '$current');
-    final result = await showDialog<int>(
+  Future<void> _showQuantityEditDialog(
+    EntregaItem linea,
+    double current,
+  ) async {
+    final controller = TextEditingController(text: _formatQuantity(current));
+    double? parseQuantity(String raw) {
+      final parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
+      if (parsed == null ||
+          parsed.isNaN ||
+          parsed.isInfinite ||
+          parsed < 0 ||
+          parsed - linea.cantidadPedida > 0.0001) {
+        return null;
+      }
+      return _normalizeQuantity(parsed);
+    }
+
+    final result = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
@@ -821,7 +1183,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Cantidad original: ${linea.cantidadPedida.toInt()}',
+              'Cantidad original: ${_formatQuantity(linea.cantidadPedida)}',
               style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 12,
@@ -830,7 +1192,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              keyboardType: TextInputType.number,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               autofocus: true,
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -847,11 +1210,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 ),
               ),
               inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
+                FilteringTextInputFormatter.allow(
+                  RegExp(r'^\d{0,8}([\.,]\d{0,3})?$'),
+                ),
               ],
               onSubmitted: (val) {
-                final n = int.tryParse(val);
-                if (n != null && n >= 0) Navigator.pop(ctx, n);
+                final quantity = parseQuantity(val);
+                if (quantity != null) Navigator.pop(ctx, quantity);
               },
             ),
           ],
@@ -866,8 +1231,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
           ElevatedButton(
             onPressed: () {
-              final n = int.tryParse(controller.text);
-              if (n != null && n >= 0) Navigator.pop(ctx, n);
+              final quantity = parseQuantity(controller.text);
+              if (quantity != null) Navigator.pop(ctx, quantity);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.info,
@@ -881,7 +1246,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (result != null && mounted) {
       HapticFeedback.selectionClick();
       setState(() {
-        _productQuantities[linea.codigoArticulo] = result;
+        _productQuantities[ruteroLineKey(linea)] = result;
         _cachedPdfBase64 = null;
       });
     }
@@ -892,12 +1257,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context,
       imageUrl: imageUrl,
       productName: name,
-      headers: {
-        'Accept': 'image/*',
-        if (ApiClient.dio.options.headers['Authorization'] != null)
-          'Authorization':
-              ApiClient.dio.options.headers['Authorization'] as String,
-      },
+      headers: repartidorProtectedImageHeaders(imageUrl),
     );
   }
 
@@ -964,20 +1324,31 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               filePath: filePath,
               onError: (error) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error al abrir PDF: $error')),
+                  SnackBar(
+                    content: Text(
+                      repartidorSafeOperationMessage(
+                        error: error,
+                        operation: 'technicalSheet',
+                      ),
+                    ),
+                  ),
                 );
               },
             ),
           ),
         ),
       );
-    } catch (e) {
+    } catch (error) {
       if (navigator.canPop()) navigator.pop();
-      final msg = e.toString().contains('404')
-          ? 'No hay ficha técnica para este producto'
-          : 'Error al descargar: $e';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
+        SnackBar(
+          content: Text(
+            repartidorSafeOperationMessage(
+              error: error,
+              operation: 'technicalSheet',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -993,46 +1364,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (code.contains('TAR')) return 'TARJETA';
     if (code.contains('TRA')) return 'TRANSFERENCIA';
     return code;
-  }
-
-  String _sanitizeTokenPart(Object? value) {
-    final raw = value?.toString().trim() ?? '';
-    if (raw.isEmpty) return 'NA';
-    return raw.replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '_');
-  }
-
-  String _ruteroCobroIdempotencyToken() {
-    final serie = widget.albaran.serie.trim().isEmpty
-        ? 'SIN_SERIE'
-        : widget.albaran.serie.trim();
-    final parts = [
-      'RUTERO',
-      'COBRO',
-      'GMP',
-      widget.albaran.ejercicio,
-      'B',
-      serie,
-      widget.albaran.terminal,
-      widget.albaran.numeroAlbaran,
-      1,
-      widget.albaran.codigoCliente,
-    ];
-    return parts.map(_sanitizeTokenPart).join(':');
-  }
-
-  String _codigoRepartidorCobro() {
-    final fromAlbaran = widget.albaran.codigoRepartidor.trim();
-    if (fromAlbaran.isNotEmpty) return fromAlbaran;
-
-    final repartidorState =
-        widget.ref.read(entregasProvider).repartidorId.trim();
-    if (repartidorState.contains(',')) {
-      throw Exception(
-        'No se puede registrar el cobro sin un repartidor concreto. '
-        'Selecciona el reparto desde un repartidor individual.',
-      );
-    }
-    return repartidorState;
   }
 
   List<String> _repartidorIdsParaInvalidar() {
@@ -1071,93 +1402,126 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return double.parse(parsed.toStringAsFixed(2));
   }
 
-  Map<String, dynamic> _cobroRuteroPayload() {
-    final codigoCliente = widget.albaran.codigoCliente.trim();
-    final codigoRepartidor = _codigoRepartidorCobro();
-    if (codigoCliente.isEmpty) {
-      throw Exception('Falta el codigo de cliente para registrar el cobro');
-    }
-    if (codigoRepartidor.isEmpty) {
-      throw Exception('Falta el codigo de repartidor para registrar el cobro');
-    }
-
-    final importeCobrado = _parseMoney(_importeCobradoController.text);
-    if (importeCobrado == null) {
-      throw Exception('Importe cobrado no valido');
-    }
-    final importePendiente = (widget.albaran.importeTotal - importeCobrado)
-        .clamp(0, double.infinity)
-        .toDouble();
-    return {
-      'entregaId': widget.albaran.id,
-      'codigoCliente': codigoCliente,
-      'nombreCliente': widget.albaran.nombreCliente,
-      'codigoRepartidor': codigoRepartidor,
-      'tipoDocumento': 'CAC',
-      'origenDocumento': 'B',
-      // TODO(repartidor): usar subempresa del albaran cuando el modelo
-      // la exponga.
-      'subempresaDocumento': 'GMP',
-      'ejercicioDocumento': widget.albaran.ejercicio,
-      'serieDocumento': widget.albaran.serie,
-      'terminalDocumento': widget.albaran.terminal,
-      'numeroDocumento': widget.albaran.numeroAlbaran,
-      'xdeDocumento': 1,
-      'importeCobrado': importeCobrado,
-      'importePendiente': double.parse(importePendiente.toStringAsFixed(2)),
-      'formaPago': _selectedPaymentMethod,
-      'pantallaOrigen': 'RUTERO',
-      'idempotencyToken': _ruteroCobroIdempotencyToken(),
-      'notas': 'Cobro registrado desde Rutero al confirmar entrega',
-    };
-  }
-
-  Future<bool> _confirmarEntregaConCobroRutero({
-    required String firmaBase64,
+  Future<bool> _confirmarEntregaCanonica({
+    required String? firmaId,
+    required List<String> evidenceIds,
     required String observaciones,
   }) async {
-    String? firmaPath;
-    final signatureResponse =
-        await ApiClient.post('/entregas/uploads/signature', {
-      'entregaId': widget.albaran.id,
-      'firma': firmaBase64,
-      'clientCode': widget.albaran.codigoCliente,
-      'dni': _dniController.text.trim(),
-      'nombre': _nombreController.text.trim(),
-    });
-
-    if (signatureResponse['success'] == true) {
-      firmaPath = signatureResponse['path'] as String?;
-    }
-
-    final response = await ApiClient.post(
-      '/repartidor-finanzas/rutero/confirm-delivery-cobro',
-      {
-        'delivery': {
-          'itemId': widget.albaran.id,
-          'status': 'ENTREGADO',
-          'repartidorId': _codigoRepartidorCobro(),
-          'observaciones': observaciones,
-          'firma': firmaPath,
-        },
-        'cobro': _cobroRuteroPayload(),
-      },
+    final request = RepartoConfirmationRequest(
+      itemId: widget.albaran.id,
+      status: _deliveryStatus,
+      occurredAt: DateTime.now().toUtc(),
+      lineas: _buildCanonicalLines(),
+      receiver: _deliveryStatus == RepartoDeliveryStatus.noEntregado
+          ? null
+          : RepartoReceiver(
+              nombre: _nombreController.text,
+              apellidos: _apellidosController.text,
+              dni: _dniController.text),
+      firma:
+          _deliveryStatus == RepartoDeliveryStatus.noEntregado ? null : firmaId,
+      evidencias: evidenceIds,
+      observaciones: observaciones,
+      incidencia: _deliveryStatus == RepartoDeliveryStatus.noEntregado ||
+              _deliveryStatus == RepartoDeliveryStatus.rechazado
+          ? RepartoIncident(
+              tipo: _incidentType,
+              motivo: _incidenciaMotivoController.text,
+              observaciones: observaciones,
+            )
+          : null,
+      cobro: _isPaid ? _buildCanonicalPayment() : null,
     );
-
+    final prepared = await _confirmationOperation.prepare(request);
+    Map<String, dynamic> response;
+    try {
+      await _confirmationOperation.markSubmitting(widget.albaran.id);
+      response = await ApiClient.post(
+        '/repartidor-finanzas/rutero/confirm-delivery-cobro',
+        prepared.toJson(),
+        headers: prepared.headers,
+        idempotent: true,
+      );
+    } on ApiException catch (error) {
+      final reconciled = await _confirmationOperation.reconcileConflict(
+        deliveryId: widget.albaran.id,
+        statusCode: error.statusCode,
+        code: error.code,
+        prepared: prepared,
+        confirmationId: error.confirmationId,
+      );
+      if (reconciled) {
+        if (mounted) setState(() => _isAcknowledgedTombstone = true);
+      }
+      rethrow;
+    } catch (_) {
+      await _confirmationOperation.markManualReview(widget.albaran.id);
+      rethrow;
+    }
     if (response['success'] != true) {
-      throw Exception(
-        response['error']?.toString() ?? 'No se pudo registrar entrega y cobro',
+      final code = response['code']?.toString();
+      await _confirmationOperation.markManualReview(widget.albaran.id);
+      throw ApiException(
+        response['error']?.toString() ?? 'No se pudo registrar la entrega',
+        statusCode: 200,
+        code: code,
       );
     }
-
-    widget.albaran.firma = firmaPath;
-    widget.albaran.estado = EstadoEntrega.entregado;
-    await widget.ref
-        .read(entregasProvider.notifier)
-        .cargarAlbaranesPendientes(forceRefresh: true);
-    await _invalidateFinanceForDelivery();
+    await _confirmationOperation.acknowledgeResponse(
+      deliveryId: widget.albaran.id,
+      prepared: prepared,
+      response: response,
+    );
+    try {
+      await widget.ref
+          .read(entregasProvider.notifier)
+          .cargarAlbaranesPendientes(forceRefresh: true);
+      await _invalidateFinanceForDelivery();
+    } catch (_) {
+      // The backend acknowledgement is authoritative. Cache refresh remains
+      // best effort and must never recreate or replay an acknowledged write.
+    }
     return true;
   }
+
+  List<RepartoDeliveryLine> _buildCanonicalLines() {
+    final identityError = validateRuteroLineIdentities(_items);
+    if (identityError != null) {
+      throw RepartoConfirmationValidationException(identityError);
+    }
+    return _items.map((item) {
+      final lineId = ruteroLineKey(item);
+      final ordered = item.cantidadPedida;
+      final checked = _productChecked[lineId] ?? false;
+      final selected = _normalizeQuantity(
+        (_productQuantities[lineId] ?? ordered).clamp(0.0, ordered),
+      );
+      final delivered = _deliveryStatus == RepartoDeliveryStatus.entregado
+          ? ordered
+          : _deliveryStatus == RepartoDeliveryStatus.parcial && checked
+              ? selected
+              : 0.0;
+      final rejected =
+          _deliveryStatus == RepartoDeliveryStatus.rechazado ? ordered : 0.0;
+      final pending = _normalizeQuantity(ordered - delivered - rejected);
+      return RepartoDeliveryLine(
+        lineaId: lineId,
+        codigoArticulo: item.codigoArticulo,
+        cantidadPedida: ordered,
+        cantidadEntregada: delivered,
+        cantidadRechazada: rejected,
+        cantidadPendiente: pending,
+        motivoDiferencia:
+            pending > 0 || rejected > 0 ? _differenceReason : null,
+      );
+    }).toList(growable: false);
+  }
+
+  RepartoPayment _buildCanonicalPayment() => RepartoPayment(
+        importeCobrado: _parseMoney(_importeCobradoController.text)!,
+        formaPago: _selectedPaymentMethod,
+        entregaId: widget.albaran.id,
+      );
 
   void _clearValidationErrors() {
     setState(() {
@@ -1171,30 +1535,82 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   bool _validateFields() {
+    if (_isRestoringJournal || _isAcknowledgedTombstone || _isJournalBlocked) {
+      _showError(_isAcknowledgedTombstone
+          ? 'Esta entrega ya fue confirmada.'
+          : 'La operación local requiere revisión manual.');
+      return false;
+    }
     var isValid = true;
     _clearValidationErrors();
 
-    if (_nombreController.text.trim().isEmpty) {
+    final linesError = validateRuteroLoadedDeliveryLines(
+      items: _items,
+      isLoading: _isLoadingItems,
+      loadError: _itemsError,
+    );
+    if (linesError != null) {
+      setState(() => _itemsError = linesError);
+      _tabController.animateTo(0);
+      return false;
+    }
+
+    final observations = _observacionesController.text.trim();
+    if (observations.length > 1000) {
+      _observacionesError =
+          'Las observaciones no pueden superar 1000 caracteres';
+      isValid = false;
+      _tabController.animateTo(2);
+    }
+
+    final requiresIncident =
+        _deliveryStatus == RepartoDeliveryStatus.noEntregado ||
+            _deliveryStatus == RepartoDeliveryStatus.rechazado;
+    if (requiresIncident &&
+        (_incidenciaMotivoController.text.trim().isEmpty ||
+            _observacionesController.text.trim().isEmpty)) {
+      _observacionesError =
+          'La no entrega o rechazo exige incidencia y observaciones';
+      isValid = false;
+    }
+
+    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+        (_nombreController.text.trim().isEmpty ||
+            _apellidosController.text.trim().isEmpty)) {
       _nombreError = 'El nombre del receptor es obligatorio';
       isValid = false;
     }
 
     final dniText = _dniController.text.trim();
-    if (dniText.isEmpty) {
+    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+        dniText.isEmpty) {
       _dniError = 'El DNI/NIF es obligatorio';
       isValid = false;
-    } else if (!_isValidDniNie(dniText)) {
+    } else if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+        !_isValidDniNie(dniText)) {
       _dniError = 'Formato no válido (ej: 12345678A o X1234567B)';
       isValid = false;
     }
 
-    final anyQtyModified = _items.any((item) =>
-        (_productQuantities[item.codigoArticulo] ??
-            item.cantidadPedida.toInt()) !=
-        item.cantidadPedida.toInt());
+    final anyQtyModified = _items.any((item) => _quantityDiffers(
+          _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
+          item.cantidadPedida,
+        ));
     final anyUnchecked =
-        _items.any((item) => !(_productChecked[item.codigoArticulo] ?? true));
+        _items.any((item) => !(_productChecked[ruteroLineKey(item)] ?? false));
     final hasDiscrepancy = anyQtyModified || anyUnchecked;
+    if (_deliveryStatus == RepartoDeliveryStatus.entregado && hasDiscrepancy) {
+      _observacionesError =
+          'Selecciona PARCIAL, NO ENTREGADO o RECHAZADO para registrar diferencias';
+      isValid = false;
+      _tabController.animateTo(0);
+    }
+    if (_deliveryStatus == RepartoDeliveryStatus.parcial && !hasDiscrepancy) {
+      _observacionesError =
+          'PARCIAL requiere al menos una cantidad pendiente o un producto no entregado';
+      isValid = false;
+      _tabController.animateTo(0);
+    }
     if (hasDiscrepancy && _observacionesController.text.trim().isEmpty) {
       _observacionesError = anyUnchecked
           ? 'Obligatorio: hay productos sin marcar como entregados'
@@ -1203,7 +1619,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _tabController.animateTo(2);
     }
 
-    if (_signatureController.isEmpty) {
+    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+        _signatureController.isEmpty &&
+        !_hasPersistedSignature) {
       _firmaError = anyQtyModified
           ? 'FIRMA OBLIGATORIA: las cantidades no coinciden con el pedido'
           : 'La firma es obligatoria';
@@ -1211,7 +1629,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       isValid = false;
     }
 
-    if (_isUrgent && !_isPaid) {
+    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+        _isUrgent &&
+        !_isPaid) {
       _pagoError = '⚠️ COBRO OBLIGATORIO';
       _tabController.animateTo(1);
       isValid = false;
@@ -1347,119 +1767,145 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return result ?? false;
   }
 
+  EstadoEntrega _localDeliveryStatus() {
+    switch (_deliveryStatus) {
+      case RepartoDeliveryStatus.entregado:
+        return EstadoEntrega.entregado;
+      case RepartoDeliveryStatus.parcial:
+        return EstadoEntrega.parcial;
+      case RepartoDeliveryStatus.noEntregado:
+        return EstadoEntrega.noEntregado;
+      case RepartoDeliveryStatus.rechazado:
+        return EstadoEntrega.rechazado;
+    }
+  }
+
   Future<void> _submitDelivery() async {
-    if (_isSubmitting) {
-      return;
-    }
-    if (!_validateFields()) {
-      return;
-    }
+    if (_isSubmitting || !_validateFields()) return;
+    if (!_confirmationOperation.beginSubmit()) return;
 
     setState(() => _isSubmitting = true);
 
-    final confirmed = await _showConfirmationDialog();
-    if (!confirmed) {
-      if (mounted) setState(() => _isSubmitting = false);
-      return;
-    }
-
     try {
-      final notifier = widget.ref.read(entregasProvider.notifier);
+      final confirmed = await _showConfirmationDialog();
+      if (!confirmed || !mounted) return;
 
-      final sigBytes = await _signatureController.toPngBytes();
-      if (sigBytes == null) throw Exception('Error al procesar firma');
-      final base64Sig = base64Encode(sigBytes);
+      final signaturePng =
+          _deliveryStatus == RepartoDeliveryStatus.noEntregado ||
+                  (_hasPersistedSignature && _signatureController.isEmpty)
+              ? null
+              : await _signatureController.toPngBytes() ??
+                  (throw Exception('Error al procesar firma'));
 
       var finalObs = _observacionesController.text.trim();
       final qtyChanges = <String>[];
       for (final item in _items) {
-        final orig = item.cantidadPedida.toInt();
-        final actual = _productQuantities[item.codigoArticulo] ?? orig;
-        if (actual != orig) {
+        final orig = item.cantidadPedida;
+        final actual = _productQuantities[ruteroLineKey(item)] ?? orig;
+        if (_quantityDiffers(actual, orig)) {
           qtyChanges.add(
-            '${item.descripcion}: $orig -> $actual',
+            '${item.descripcion}: ${_formatQuantity(orig)} -> '
+            '${_formatQuantity(actual)}',
           );
         }
       }
       if (qtyChanges.isNotEmpty) {
         finalObs += '\n--- Cambios de cantidad ---\n${qtyChanges.join('\n')}';
       }
-      if (_nombreController.text.isNotEmpty) {
-        finalObs +=
-            '\nReceptor: ${_nombreController.text} (${_dniController.text})';
+      if (finalObs.length > 1000) {
+        setState(() {
+          _observacionesError =
+              'Observaciones y cambios no pueden superar 1000 caracteres';
+        });
+        _tabController.animateTo(2);
+        return;
       }
-      final bool success;
-      if (_isPaid) {
-        finalObs += '\nCobrado: $_selectedPaymentMethod';
-        success = await _confirmarEntregaConCobroRutero(
-          firmaBase64: base64Sig,
+      final success = await _evidenceCoordinator.uploadThenConfirm<bool>(
+        entregaId: widget.albaran.id,
+        signaturePngBytes: signaturePng,
+        photos: List<XFile>.unmodifiable(_evidencePhotos),
+        confirm: (evidence) => _confirmarEntregaCanonica(
+          firmaId: evidence.signatureId,
+          evidenceIds: evidence.photoIds,
           observaciones: finalObs,
-        );
-      } else {
-        success = await notifier.marcarEntregado(
-          albaranId: widget.albaran.id,
-          firma: base64Sig,
-          observaciones: finalObs,
-          clientCode: widget.albaran.codigoCliente,
-          dni: _dniController.text.trim(),
-          nombre: _nombreController.text.trim(),
-        );
-      }
+        ),
+      );
 
       if (!mounted) return;
+      if (!success) {
+        _showError('No se pudo registrar la entrega');
+        return;
+      }
 
-      setState(() => _isSubmitting = false);
+      await HapticFeedback.heavyImpact();
+      final state = widget.ref.read(entregasProvider);
+      final updated = state.albaranes.firstWhere(
+        (albaran) => albaran.id == widget.albaran.id,
+        orElse: () => widget.albaran,
+      );
+      widget.albaran
+        ..firma = updated.firma
+        ..estado = _localDeliveryStatus();
 
-      if (success) {
-        if (!_isPaid) {
-          await _invalidateFinanceForDelivery();
-          if (!mounted) return;
-        }
-        HapticFeedback.heavyImpact();
-        final state = widget.ref.read(entregasProvider);
-        final updated = state.albaranes.firstWhere(
-          (a) => a.id == widget.albaran.id,
-          orElse: () => widget.albaran,
-        );
-        widget.albaran.firma = updated.firma;
-        widget.albaran.estado = EstadoEntrega.entregado;
+      try {
         if (_tieneImpresora) {
           await _showZebraPrintPreview();
         }
         await _showShareReceiptDialog();
-        if (!mounted) return;
-        final messenger = ScaffoldMessenger.of(context);
-        Navigator.pop(context);
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Row(children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Entrega registrada correctamente'),
-            ]),
-            backgroundColor: AppTheme.success,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } else {
-        final state = widget.ref.read(entregasProvider);
-        final errorMsg = state.error ?? 'Error al guardar entrega';
-        if (errorMsg.contains('ya fue confirmada')) {
-          _showAlreadyDeliveredDialog();
-        } else {
-          _showError(errorMsg);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Entrega guardada; el comprobante no está disponible ahora',
+              ),
+              backgroundColor: AppTheme.warning,
+            ),
+          );
         }
       }
-    } catch (e) {
+
+      if (!mounted) return;
+      setState(() => _allowProgrammaticDismiss = true);
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('Entrega registrada correctamente'),
+          ]),
+          backgroundColor: AppTheme.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (error) {
       if (mounted) {
-        setState(() => _isSubmitting = false);
-        final errorText = e.toString();
-        if (errorText.contains('ya fue confirmada') ||
-            errorText.contains('alreadyDelivered')) {
-          _showAlreadyDeliveredDialog();
-        } else {
-          _showError('Error: $e');
+        final disposition = repartoConfirmationErrorDisposition(
+          error: error,
+          acknowledged: _isAcknowledgedTombstone,
+        );
+        final presentation = repartoConfirmationErrorPresentation(
+          error: error,
+          acknowledged: _isAcknowledgedTombstone,
+        );
+        switch (disposition) {
+          case RepartoConfirmationErrorDisposition.alreadyConfirmed:
+            _showAlreadyDeliveredDialog();
+            break;
+          case RepartoConfirmationErrorDisposition.manualReview:
+            _showConfirmationError(presentation);
+            break;
+          case RepartoConfirmationErrorDisposition.retryable:
+            _showConfirmationError(presentation);
+            break;
         }
+      }
+    } finally {
+      _confirmationOperation.endSubmit();
+      if (mounted && _isSubmitting) {
+        setState(() => _isSubmitting = false);
       }
     }
   }
@@ -1505,6 +1951,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  void _showConfirmationError(
+    RepartoConfirmationErrorPresentation presentation,
+  ) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      repartoConfirmationErrorSnackBar(
+        presentation: presentation,
+        onRetry: presentation.canRetry ? _submitDelivery : null,
+      ),
+    );
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1534,9 +1991,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         if (sigPng != null) {
           signatureGrf = await ZebraPrintService.convertSignatureToGrf(sigPng);
         }
-      } catch (e) {
-        debugPrint('[ZEBRA] Error converting signature to GRF: $e');
-      }
+      } catch (_) {}
     }
 
     if (!mounted) return;
@@ -1801,22 +2256,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(height: 12),
             _buildShareButton(
-              icon: Icons.chat,
-              label: 'Enviar por WhatsApp',
-              color: const Color(0xFF25D366),
+              icon: Icons.share,
+              label: 'Compartir PDF (acción local)',
+              color: AppTheme.success,
               onTap: () async {
                 Navigator.pop(ctx);
-                await _shareViaWhatsApp();
+                await _sharePdfLocally();
               },
             ),
             const SizedBox(height: 12),
             _buildShareButton(
               icon: Icons.email,
-              label: 'Enviar por Email',
+              label: 'Email no disponible',
               color: AppTheme.accentIndigo,
               onTap: () async {
                 Navigator.pop(ctx);
-                await _shareViaEmail();
+                await _showEmailUnavailable();
               },
             ),
           ],
@@ -1892,17 +2347,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             fileName: fileName,
             onEmailTap: () {
               Navigator.pop(context);
-              _shareViaEmail();
+              _showEmailUnavailable();
             },
             onWhatsAppTap: () {
               Navigator.pop(context);
-              _shareViaWhatsApp();
+              _sharePdfLocally();
             },
           ),
         ),
       );
-    } catch (e) {
-      modal.error('Error al visualizar: $e', onRetry: _previewReceiptPdf);
+    } on RepartoReceiptUnavailableException catch (error) {
+      final presentation = repartoConfirmationErrorPresentation(
+        error: error,
+        acknowledged: _isAcknowledgedTombstone,
+      );
+      modal.error(presentation.message);
+    } catch (error) {
+      modal.error(
+        repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
+        onRetry: _previewReceiptPdf,
+      );
     }
   }
 
@@ -1942,12 +2406,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         subject: docLabel,
         sharePositionOrigin: origin,
       );
-    } catch (e) {
+    } on RepartoReceiptUnavailableException catch (error) {
+      modal.close();
+      if (mounted) {
+        _showConfirmationError(
+          repartoConfirmationErrorPresentation(
+            error: error,
+            acknowledged: _isAcknowledgedTombstone,
+          ),
+        );
+      }
+    } catch (error) {
       modal.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al descargar PDF: $e'),
+            content: Text(
+              repartidorSafeOperationMessage(
+                error: error,
+                operation: 'pdfDownload',
+              ),
+            ),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -1955,179 +2434,85 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
-  Future<void> _shareViaWhatsApp() async {
-    final result = await WhatsAppFormModal.show(
+  Future<void> _sharePdfLocally() async {
+    final modal = AsyncOperationModal.show(
       context,
-      defaultMessage:
-          'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}',
+      text: 'Preparando PDF para compartir localmente...',
     );
-    if (result == null || !mounted) return;
-
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando documento...');
     try {
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('Error generando PDF');
       _cachedPdfBase64 = pdfData;
 
       final tempDir = await getTemporaryDirectory();
-      final ts = DateTime.now().millisecondsSinceEpoch;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
       final file = File(
-        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$ts.pdf',
+        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$timestamp.pdf',
       );
       await file.writeAsBytes(base64Decode(pdfData));
-
-      final response = await ApiClient.post(
-        '/entregas/receipt/${widget.albaran.id}/whatsapp',
-        {
-          'telefono': result.phone,
-          'clienteNombre': widget.albaran.nombreCliente,
-        },
-      );
-
       modal.close();
       if (!mounted) return;
 
       final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox != null
-          ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+      final origin = renderBox == null
+          ? null
+          : Rect.fromCenter(
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
               width: 1,
               height: 1,
-            )
-          : null;
-
+            );
       await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: result.message,
-        subject: result.message,
+        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
+        text: 'PDF de la nota de entrega. Compartición local del dispositivo.',
         sharePositionOrigin: origin,
       );
-
-      if (response['success'] == true && response['whatsappUrl'] != null) {
-        final whatsappUrl = response['whatsappUrl'] as String;
-        final uri = Uri.parse(whatsappUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(
-            uri,
-            mode: LaunchMode.externalApplication,
-          );
-        }
-      }
-    } catch (e) {
+    } on RepartoReceiptUnavailableException catch (error) {
       modal.close();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al compartir: $e'),
-            backgroundColor: AppTheme.error,
+        _showConfirmationError(
+          repartoConfirmationErrorPresentation(
+            error: error,
+            acknowledged: _isAcknowledgedTombstone,
           ),
         );
+      }
+    } catch (error) {
+      modal.close();
+      if (mounted) {
+        _showError('No se pudo preparar el PDF para compartir localmente.');
       }
     }
   }
 
-  Future<void> _shareViaEmail() async {
-    final result = await EmailFormModal.show(
-      context,
-      defaultSubject: 'Nota de entrega - ${widget.albaran.nombreCliente}',
-      defaultBody:
-          'Adjunto le remitimos la nota de entrega correspondiente.\n\nSaludos,\nGranja Mari Pepa',
+  Future<void> _showEmailUnavailable() async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Email no disponible hasta habilitar destinatarios canónicos.',
+        ),
+        backgroundColor: AppTheme.warning,
+      ),
     );
-    if (result == null || !mounted) return;
-
-    final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
-    try {
-      final response = await ApiClient.post(
-        '/entregas/receipt/${widget.albaran.id}/email',
-        {
-          'email': result.email,
-          'subject': result.subject,
-          'body': result.body,
-          'signaturePath': widget.albaran.firma,
-          'clientCode': widget.albaran.codigoCliente,
-          'clientName': widget.albaran.nombreCliente,
-          'albaranNum':
-              '${widget.albaran.serie}-${widget.albaran.terminal}-${widget.albaran.numeroAlbaran}',
-          'facturaNum': widget.albaran.numeroFactura > 0
-              ? widget.albaran.numeroFactura.toString()
-              : null,
-          'fecha': widget.albaran.fecha,
-          'subtotal': widget.albaran.importeTotal,
-          'iva': 0,
-          'total': widget.albaran.importeTotal,
-          'formaPago': widget.albaran.formaPagoDesc,
-          'ordenPreparacion': widget.albaran.ordenPreparacion,
-          'firmante': _nombreController.text.trim(),
-          'firmanteDni': _dniController.text.trim(),
-          'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
-              ? widget.albaran.nombreRepartidor
-              : widget.albaran.codigoRepartidor,
-          'items': _items
-              .map((i) => {
-                    'cantidad': _productQuantities[i.codigoArticulo] ??
-                        i.cantidadPedida.toInt(),
-                    'descripcion': i.descripcion,
-                    'precio': i.precioUnitario,
-                  })
-              .toList(),
-        },
-      );
-
-      if (response['success'] == true) {
-        modal.success('Email enviado a ${result.email}');
-      } else {
-        modal.error((response['error'] as String?) ?? 'Error al enviar email');
-      }
-    } catch (e) {
-      modal.error('Error al enviar email: $e');
-    }
   }
 
   Future<String?> _generateReceiptPdf() async {
     try {
-      final response = await ApiClient.post(
-        '/entregas/receipt/${widget.albaran.id}',
-        {
-          'signaturePath': widget.albaran.firma,
-          'clientCode': widget.albaran.codigoCliente,
-          'clientName': widget.albaran.nombreCliente,
-          'albaranNum':
-              '${widget.albaran.serie}-${widget.albaran.terminal}-${widget.albaran.numeroAlbaran}',
-          'facturaNum': widget.albaran.numeroFactura > 0
-              ? widget.albaran.numeroFactura.toString()
-              : null,
-          'fecha': widget.albaran.fecha,
-          'subtotal': widget.albaran.importeTotal,
-          'iva': 0,
-          'total': widget.albaran.importeTotal,
-          'formaPago': widget.albaran.formaPagoDesc,
-          'ordenPreparacion': widget.albaran.ordenPreparacion,
-          'firmante': _nombreController.text.trim(),
-          'firmanteDni': _dniController.text.trim(),
-          'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
-              ? widget.albaran.nombreRepartidor
-              : widget.albaran.codigoRepartidor,
-          'items': _items
-              .map((i) => {
-                    'cantidad': _productQuantities[i.codigoArticulo] ??
-                        i.cantidadPedida.toInt(),
-                    'descripcion': i.descripcion,
-                    'precio': i.precioUnitario,
-                  })
-              .toList(),
-        },
+      final confirmationId =
+          await _confirmationJournal.receiptConfirmationId(widget.albaran.id);
+      final response = await ApiClient.get(
+        RepartoCanonicalReceiptRequest(confirmationId).endpoint,
+        forceRefresh: true,
+        allowStale: false,
       );
-
-      if (response['success'] == true) {
-        return response['pdfBase64'] as String?;
-      }
-      debugPrint('[RECEIPT] API error: ${response['error']}');
-      return null;
-    } catch (e) {
-      debugPrint('[RECEIPT] Error generating receipt: $e');
-      return null;
+      return RepartoReceiptPdf.fromResponse(response).base64;
+    } on RepartoReceiptUnavailableException {
+      rethrow;
+    } catch (_) {
+      throw const RepartoReceiptUnavailableException();
     }
   }
 }

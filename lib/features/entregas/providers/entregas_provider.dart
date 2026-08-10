@@ -1,12 +1,117 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 
 export '../../../core/models/estado_entrega.dart';
+
+const _deliveryLoadFailureMessage =
+    'No se pudieron cargar las entregas. Intentalo de nuevo.';
+
+/// A backend payload did not meet the minimum contract needed to identify a
+/// delivery safely.  Keep this error deliberately free of server values: it is
+/// shown through generic connection/error surfaces and must not leak data.
+class EntregasPayloadException implements Exception {
+  const EntregasPayloadException(this.field);
+
+  final String field;
+
+  @override
+  String toString() => 'INVALID_DELIVERY_PAYLOAD:$field';
+}
+
+String _requiredText(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is! String || value.trim().isEmpty) {
+    throw EntregasPayloadException(key);
+  }
+  return value.trim();
+}
+
+double _requiredDoubleAlias(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is num && value.isFinite) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value.trim());
+      if (parsed != null && parsed.isFinite) return parsed;
+    }
+  }
+  throw EntregasPayloadException(keys.first);
+}
+
+double _optionalDoubleAlias(
+  Map<String, dynamic> json,
+  List<String> keys, {
+  double defaultValue = 0,
+}) {
+  for (final key in keys) {
+    if (!json.containsKey(key) || json[key] == null) continue;
+    return _requiredDoubleAlias(json, <String>[key]);
+  }
+  return defaultValue;
+}
+
+int _requiredIntAlias(Map<String, dynamic> json, List<String> keys) {
+  final value = _requiredDoubleAlias(json, keys);
+  if (value != value.roundToDouble()) {
+    throw EntregasPayloadException(keys.first);
+  }
+  return value.toInt();
+}
+
+int _optionalIntAlias(
+  Map<String, dynamic> json,
+  List<String> keys, {
+  int defaultValue = 0,
+}) {
+  for (final key in keys) {
+    if (!json.containsKey(key) || json[key] == null) continue;
+    return _requiredIntAlias(json, <String>[key]);
+  }
+  return defaultValue;
+}
+
+String _requiredDate(Map<String, dynamic> json) {
+  final value = _requiredText(json, 'fecha');
+  final iso = RegExp(r'^\d{4}-\d{2}-\d{2}(?:[T ].*)?$').firstMatch(value);
+  final slash = RegExp(r'^\d{2}/\d{2}/\d{4}$').firstMatch(value);
+  if (iso != null) {
+    final date = value.substring(0, 10).split('-').map(int.parse).toList();
+    final parsed = DateTime(date[0], date[1], date[2]);
+    if (parsed.year == date[0] &&
+        parsed.month == date[1] &&
+        parsed.day == date[2] &&
+        DateTime.tryParse(value) != null) {
+      return value;
+    }
+  }
+  if (slash != null) {
+    final parts = value.split('/').map(int.parse).toList(growable: false);
+    final parsed = DateTime(parts[2], parts[1], parts[0]);
+    if (parsed.year == parts[2] &&
+        parsed.month == parts[1] &&
+        parsed.day == parts[0]) {
+      return value;
+    }
+  }
+  throw const EntregasPayloadException('fecha');
+}
+
+String _safeDeliveryError(Object error, {required bool detail}) {
+  if (error is EntregasPayloadException) {
+    return detail
+        ? 'El detalle recibido no cumple el contrato de reparto.'
+        : 'Los datos de entregas recibidos no son validos.';
+  }
+  return detail
+      ? 'No se pudo obtener el detalle del albaran.'
+      : _deliveryLoadFailureMessage;
+}
 
 // ── Models (kept from original) ──────────────────────────────────────────────
 
@@ -19,23 +124,37 @@ class EntregaItem {
     this.bultos = 0,
     this.unit,
     this.precioUnitario = 0,
-    this.cantidadEntregada = 0,
+    this.cantidadEntregada,
+    this.confirmationState = 'NOT_CONFIRMED',
     this.estado = EstadoEntrega.pendiente,
     this.observacion,
   });
 
   factory EntregaItem.fromJson(Map<String, dynamic> json) {
     return EntregaItem(
-      itemId: json['itemId']?.toString() ?? '',
-      codigoArticulo: json['codigoArticulo']?.toString() ?? '',
+      itemId: _requiredText(json, 'itemId'),
+      codigoArticulo: _requiredText(json, 'codigoArticulo'),
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidadPedida:
-          ((json['cantidadPedida'] ?? json['QTY'] ?? 0) as num).toDouble(),
-      bultos: ((json['bultos'] ?? 0) as num).toInt(),
-      unit: json['UNIT']?.toString() ?? json['unit']?.toString(),
-      precioUnitario:
-          ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
-      cantidadEntregada: ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
+      cantidadPedida: _requiredDoubleAlias(
+        json,
+        const <String>['cantidadPedida', 'cantidadUnidades', 'QTY'],
+      ),
+      bultos: _optionalDoubleAlias(
+        json,
+        const <String>['bultos', 'cantidadEnvases'],
+      ),
+      unit: json['unidad']?.toString() ??
+          json['UNIT']?.toString() ??
+          json['unit']?.toString(),
+      precioUnitario: _optionalDoubleAlias(
+        json,
+        const <String>['precioUnitario', 'PRICE'],
+      ),
+      cantidadEntregada: json['cantidadEntregada'] == null
+          ? null
+          : _requiredDoubleAlias(json, const <String>['cantidadEntregada']),
+      confirmationState:
+          json['confirmationState']?.toString() ?? 'NOT_CONFIRMED',
       estado: EstadoEntrega.fromString(
         (json['estado'] ?? 'PENDIENTE') as String,
       ),
@@ -46,14 +165,16 @@ class EntregaItem {
   final String codigoArticulo;
   final String descripcion;
   final double cantidadPedida;
-  final int bultos;
+  final double bultos;
   final String? unit;
   final double precioUnitario;
-  double cantidadEntregada;
+  double? cantidadEntregada;
+  final String confirmationState;
   EstadoEntrega estado;
   String? observacion;
 
-  bool get entregadoCompleto => cantidadEntregada >= cantidadPedida;
+  bool get entregadoCompleto =>
+      cantidadEntregada != null && cantidadEntregada! >= cantidadPedida;
 }
 
 class IvaBreakdownItem {
@@ -122,15 +243,16 @@ class AlbaranEntrega {
 
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
     return AlbaranEntrega(
-      id: json['id']?.toString() ?? '',
-      numeroAlbaran: (json['numeroAlbaran'] ?? json['numero'] ?? 0) as int,
-      ejercicio: (json['ejercicio'] ?? DateTime.now().year) as int,
+      id: _requiredText(json, 'id'),
+      numeroAlbaran:
+          _requiredIntAlias(json, const <String>['numeroAlbaran', 'numero']),
+      ejercicio: _requiredIntAlias(json, const <String>['ejercicio']),
       serie: json['serie']?.toString() ?? '',
-      terminal: (json['terminal'] ?? 0) as int,
-      numeroFactura: (json['numeroFactura'] ?? 0) as int,
+      terminal: _optionalIntAlias(json, const <String>['terminal']),
+      numeroFactura: _optionalIntAlias(json, const <String>['numeroFactura']),
       serieFactura: json['serieFactura']?.toString() ?? '',
-      codigoCliente: json['codigoCliente']?.toString() ?? '',
-      nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
+      codigoCliente: _requiredText(json, 'codigoCliente'),
+      nombreCliente: _requiredText(json, 'nombreCliente'),
       nombreComercial: json['nombreComercial']?.toString(),
       nombreFiscal: json['nombreFiscal']?.toString(),
       direccion: json['direccion']?.toString() ?? '',
@@ -139,12 +261,12 @@ class AlbaranEntrega {
       telefono2: json['telefono2']?.toString() ?? '',
       emailCliente:
           json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
-      fecha: json['fecha']?.toString() ?? '',
+      fecha: _requiredDate(json),
       importeTotal:
-          ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
-      importeBruto: ((json['importeBruto'] ?? 0) as num).toDouble(),
-      importeNeto: ((json['netoSum'] ?? 0) as num).toDouble(),
-      importeIva: ((json['ivaSum'] ?? 0) as num).toDouble(),
+          _requiredDoubleAlias(json, const <String>['importe', 'importeTotal']),
+      importeBruto: _optionalDoubleAlias(json, const <String>['importeBruto']),
+      importeNeto: _optionalDoubleAlias(json, const <String>['netoSum']),
+      importeIva: _optionalDoubleAlias(json, const <String>['ivaSum']),
       ivaBreakdown: (json['ivaBreakdown'] as List<dynamic>?)
               ?.map(
                 (e) => IvaBreakdownItem.fromJson(e as Map<String, dynamic>),
@@ -155,7 +277,7 @@ class AlbaranEntrega {
       formaPago: json['formaPago']?.toString() ?? '',
       formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
       tipoPago: json['tipoPago']?.toString() ?? '',
-      diasPago: (json['diasPago'] ?? 0) as int,
+      diasPago: _optionalIntAlias(json, const <String>['diasPago']),
       esCTR: json['esCTR'] == true,
       puedeCobrarse: json['puedeCobrarse'] == true,
       colorEstado: json['colorEstado']?.toString() ?? 'green',
@@ -164,9 +286,11 @@ class AlbaranEntrega {
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',
       codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
       nombreRepartidor: json['nombreRepartidor']?.toString() ?? '',
-      ordenPreparacion: json['ordenPreparacion'] as int?,
+      ordenPreparacion: json['ordenPreparacion'] == null
+          ? null
+          : _requiredIntAlias(json, const <String>['ordenPreparacion']),
       discrepancy: json['discrepancy'] == true,
-      lineSum: ((json['lineSum'] ?? 0) as num).toDouble(),
+      lineSum: _optionalDoubleAlias(json, const <String>['lineSum']),
       estado: EstadoEntrega.fromString(
         (json['estado'] ?? 'PENDIENTE') as String,
       ),
@@ -262,7 +386,10 @@ class EntregasState {
     this.resumenTotalBruto = 0,
     this.resumenTotalACobrar = 0,
     this.resumenTotalOpcional = 0,
+    this.nextOffset = 0,
     this.resumenCompletedCount = 0,
+    this.hasMore = false,
+    this.total,
   }) : fechaSeleccionada = fechaSeleccionada ?? DateTime.now();
   final List<AlbaranEntrega> albaranes;
   final AlbaranEntrega? albaranSeleccionado;
@@ -281,6 +408,9 @@ class EntregasState {
   final double resumenTotalACobrar;
   final double resumenTotalOpcional;
   final int resumenCompletedCount;
+  final int nextOffset;
+  final bool hasMore;
+  final int? total;
 
   EntregasState copyWith({
     List<AlbaranEntrega>? albaranes,
@@ -299,7 +429,10 @@ class EntregasState {
     double? resumenTotalBruto,
     double? resumenTotalACobrar,
     double? resumenTotalOpcional,
+    int? nextOffset,
     int? resumenCompletedCount,
+    bool? hasMore,
+    Object? total = _sentinel,
   }) {
     return EntregasState(
       albaranes: albaranes ?? this.albaranes,
@@ -320,8 +453,11 @@ class EntregasState {
       resumenTotalBruto: resumenTotalBruto ?? this.resumenTotalBruto,
       resumenTotalACobrar: resumenTotalACobrar ?? this.resumenTotalACobrar,
       resumenTotalOpcional: resumenTotalOpcional ?? this.resumenTotalOpcional,
+      nextOffset: nextOffset ?? this.nextOffset,
       resumenCompletedCount:
           resumenCompletedCount ?? this.resumenCompletedCount,
+      hasMore: hasMore ?? this.hasMore,
+      total: total == _sentinel ? this.total : total as int?,
     );
   }
 
@@ -389,14 +525,34 @@ class EntregasNotifier extends Notifier<EntregasState> {
     bool forceReload = false,
   }) {
     final wasChanged = state.repartidorId != repartidorId;
+    if (wasChanged) {
+      // A response belonging to the previous driver must never repopulate the
+      // new driver's screen.  Clear every delivery-derived value before the
+      // next request is scheduled, including when callers opt out of reload.
+      _pendingLoadGeneration++;
+      state = state.copyWith(
+        repartidorId: repartidorId,
+        albaranes: const <AlbaranEntrega>[],
+        albaranSeleccionado: null,
+        isLoading: false,
+        error: null,
+        resumenTotalBruto: 0,
+        resumenTotalACobrar: 0,
+        resumenTotalOpcional: 0,
+        resumenCompletedCount: 0,
+        nextOffset: 0,
+        hasMore: false,
+        total: null,
+      );
+    }
     if (autoReload && (wasChanged || forceReload)) {
-      state = state.copyWith(repartidorId: repartidorId);
+      if (!wasChanged) state = state.copyWith(repartidorId: repartidorId);
       if (_initialLoadDone) {
         _debouncedLoad(forceRefresh: forceReload);
       } else {
         _immediateLoad(forceRefresh: forceReload);
       }
-    } else {
+    } else if (!wasChanged) {
       state = state.copyWith(repartidorId: repartidorId);
     }
   }
@@ -451,18 +607,23 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _debouncedLoad();
   }
 
-  Future<void> cargarAlbaranesPendientes({bool forceRefresh = false}) async {
+  Future<void> cargarAlbaranesPendientes({
+    bool forceRefresh = false,
+    bool append = false,
+  }) async {
+    if (append && (!state.hasMore || state.isLoading)) return;
     if (state.repartidorId.isEmpty) return;
 
     final generation = ++_pendingLoadGeneration;
     final requestState = state;
     final formattedDate =
         '${requestState.fechaSeleccionada.year}-${requestState.fechaSeleccionada.month.toString().padLeft(2, '0')}-${requestState.fechaSeleccionada.day.toString().padLeft(2, '0')}';
+    final pageOffset = append ? requestState.nextOffset : 0;
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       var url =
-          '/entregas/pendientes/${requestState.repartidorId}?date=$formattedDate';
+          '/entregas/pendientes/${requestState.repartidorId}?date=$formattedDate&limit=100&offset=$pageOffset';
 
       if (requestState.searchQuery.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(requestState.searchQuery)}';
@@ -500,6 +661,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
           requestState.sortBy,
           requestState.filterTipoPago,
           requestState.filterDebeCobrar,
+          pageOffset,
           requestState.filterDocTipo,
         ].join(':'),
         cacheTTL: const Duration(minutes: 2),
@@ -510,35 +672,62 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
-        final albaranes = lista
+        final page = lista
             .map((e) => AlbaranEntrega.fromJson(e as Map<String, dynamic>))
             .toList();
+        final byId = <String, AlbaranEntrega>{
+          if (append)
+            for (final albaran in requestState.albaranes) albaran.id: albaran,
+        };
+        for (final albaran in page) {
+          byId[albaran.id] = albaran;
+        }
+        final albaranes = byId.values.toList(growable: false);
+        final pagination =
+            response['pagination'] as Map<String, dynamic>? ?? response;
+        final nextOffset = (pagination['nextOffset'] as num?)?.toInt() ??
+            pageOffset + page.length;
 
         final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
         state = state.copyWith(
           albaranes: albaranes,
           isLoading: false,
-          resumenTotalBruto: ((resumen['totalBruto'] ?? 0) as num).toDouble(),
-          resumenTotalACobrar:
+          hasMore: pagination['hasMore'] == true,
+          nextOffset: nextOffset,
+          total: pagination['total'] is num
+              ? (pagination['total'] as num).toInt()
+              : null,
+          resumenTotalBruto: (append ? requestState.resumenTotalBruto : 0) +
+              ((resumen['totalBruto'] ?? 0) as num).toDouble(),
+          resumenTotalACobrar: (append ? requestState.resumenTotalACobrar : 0) +
               ((resumen['totalACobrar'] ?? 0) as num).toDouble(),
           resumenTotalOpcional:
-              ((resumen['totalOpcional'] ?? 0) as num).toDouble(),
-          resumenCompletedCount: (resumen['completedCount'] ?? 0) as int,
+              (append ? requestState.resumenTotalOpcional : 0) +
+                  ((resumen['totalOpcional'] ?? 0) as num).toDouble(),
+          resumenCompletedCount:
+              (append ? requestState.resumenCompletedCount : 0) +
+                  ((resumen['completedCount'] ?? 0) as num).toInt(),
         );
       } else {
         state = state.copyWith(
           isLoading: false,
-          error: (response['error'] ?? 'Error cargando entregas') as String,
+          // A semantic failure body is untrusted backend input. Never surface
+          // error/details/code because they may contain SQL, paths or PII.
+          error: _deliveryLoadFailureMessage,
         );
       }
-    } catch (e) {
+    } catch (error) {
       if (generation == _pendingLoadGeneration) {
         state = state.copyWith(
           isLoading: false,
-          error: 'Error de conexión: $e',
+          error: _safeDeliveryError(error, detail: false),
         );
       }
     }
+  }
+
+  Future<void> cargarMasAlbaranes() {
+    return cargarAlbaranesPendientes(append: true);
   }
 
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(
@@ -546,11 +735,13 @@ class EntregasNotifier extends Notifier<EntregasState> {
     int ejercicio,
     String serie,
     int terminal,
+    String codigoCliente,
   ) async {
     try {
       final response = await ApiClient.get(
-        '/entregas/albaran/$numero/$ejercicio?serie=$serie&terminal=$terminal',
-        cacheKey: 'entregas:albaran:$numero:$ejercicio:$serie:$terminal',
+        '/entregas/albaran/$numero/$ejercicio?serie=${Uri.encodeQueryComponent(serie)}&terminal=$terminal&cliente=${Uri.encodeQueryComponent(codigoCliente)}',
+        cacheKey:
+            'entregas:albaran:$numero:$ejercicio:$serie:$terminal:$codigoCliente',
         cacheTTL: const Duration(minutes: 2),
       );
 
@@ -560,8 +751,8 @@ class EntregasNotifier extends Notifier<EntregasState> {
         state = state.copyWith(albaranSeleccionado: albaran);
         return albaran;
       }
-    } catch (e) {
-      state = state.copyWith(error: 'Error obteniendo detalle: $e');
+    } catch (error) {
+      state = state.copyWith(error: _safeDeliveryError(error, detail: true));
     }
     return null;
   }
@@ -577,115 +768,65 @@ class EntregasNotifier extends Notifier<EntregasState> {
     String? dni,
     String? nombre,
   }) async {
-    String? firmaPath;
-
-    if (firma != null) {
-      try {
-        final res = await ApiClient.post('/entregas/uploads/signature', {
-          'entregaId': albaranId,
-          'firma': firma,
-          'clientCode': clientCode,
-          'dni': dni,
-          'nombre': nombre,
-        });
-        if (res['success'] == true) {
-          firmaPath = res['path'] as String?;
-        }
-        if (firmaPath == null || firmaPath.isEmpty) {
-          throw Exception('La firma no se ha guardado en el servidor');
-        }
-      } catch (e) {
-        debugPrint('Error uploading signature: $e');
-        state = state.copyWith(error: 'Error subiendo firma: $e');
-        return false;
-      }
-    }
-
-    return _actualizarEstado(
-      itemId: albaranId,
-      estado: EstadoEntrega.entregado,
-      observaciones: observaciones,
-      firma: firmaPath,
-      fotos: fotos,
-      latitud: latitud,
-      longitud: longitud,
+    state = state.copyWith(
+      error: 'Confirma la entrega desde el flujo canonico del rutero.',
     );
+    return false;
   }
 
   Future<Map<String, dynamic>?> generateReceipt({
-    required AlbaranEntrega albaran,
+    AlbaranEntrega? albaran,
+    String? confirmationId,
   }) async {
-    try {
-      final response = await ApiClient.post('/entregas/receipt/${albaran.id}', {
-        'signaturePath': albaran.firma,
-        'items': albaran.items
-            .map(
-              (i) => {
-                'cantidad': i.cantidadPedida,
-                'descripcion': i.descripcion,
-                'precio': i.precioUnitario,
-              },
-            )
-            .toList(),
-        'clientCode': albaran.codigoCliente,
-        'clientName': albaran.nombreCliente,
-        'albaranNum': albaran.numeroAlbaran,
-        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
-        'fecha': albaran.fecha,
-        'subtotal': albaran.importeNeto > 0
-            ? albaran.importeNeto
-            : albaran.importeTotal,
-        'iva': albaran.importeIva,
-        'total': albaran.importeTotal,
-        'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.nombreRepartidor.isNotEmpty
-            ? albaran.nombreRepartidor
-            : albaran.codigoRepartidor,
-      });
-      if (response['success'] == true) return response;
+    final canonicalReceiptId = confirmationId?.trim();
+    if (canonicalReceiptId == null ||
+        !isValidRepartoServerId(canonicalReceiptId)) {
+      state = state.copyWith(
+        error: 'El recibo requiere una confirmacion sincronizada.',
+      );
       return null;
-    } catch (e) {
+    }
+    try {
+      final response = await ApiClient.get(
+        RepartoCanonicalReceiptRequest(canonicalReceiptId).endpoint,
+        forceRefresh: true,
+        allowStale: false,
+      );
+      final pdf = RepartoReceiptPdf.fromResponse(response);
+      return <String, dynamic>{
+        'success': true,
+        'pdfBase64': pdf.base64,
+        'confirmationId': canonicalReceiptId,
+      };
+    } on RepartoReceiptUnavailableException {
+      state = state.copyWith(
+        error: 'El recibo confirmado no contiene un PDF valido.',
+      );
+      return null;
+    } on ApiException catch (error) {
+      state = state.copyWith(
+        error: 'No se pudo recuperar el recibo: ${error.message}',
+      );
+      return null;
+    } catch (_) {
+      state = state.copyWith(
+        error: 'No se pudo recuperar el recibo confirmado.',
+      );
       return null;
     }
   }
 
+  /// Remote email is intentionally unavailable until it has a server-owned
+  /// recipient contract. Never reconstruct or POST receipt data from here.
   Future<bool> sendReceiptByEmail({
-    required AlbaranEntrega albaran,
+    AlbaranEntrega? albaran,
+    String? confirmationId,
     required String email,
   }) async {
-    try {
-      final response =
-          await ApiClient.post('/entregas/receipt/${albaran.id}/email', {
-        'email': email,
-        'signaturePath': albaran.firma,
-        'items': albaran.items
-            .map(
-              (i) => {
-                'cantidad': i.cantidadPedida,
-                'descripcion': i.descripcion,
-                'precio': i.precioUnitario,
-              },
-            )
-            .toList(),
-        'clientCode': albaran.codigoCliente,
-        'clientName': albaran.nombreCliente,
-        'albaranNum': albaran.numeroAlbaran,
-        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
-        'fecha': albaran.fecha,
-        'subtotal': albaran.importeNeto > 0
-            ? albaran.importeNeto
-            : albaran.importeTotal,
-        'iva': albaran.importeIva,
-        'total': albaran.importeTotal,
-        'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.nombreRepartidor.isNotEmpty
-            ? albaran.nombreRepartidor
-            : albaran.codigoRepartidor,
-      });
-      return response['success'] == true;
-    } catch (e) {
-      return false;
-    }
+    state = state.copyWith(
+      error: 'El envio por email no esta habilitado para recibos de reparto.',
+    );
+    return false;
   }
 
   Future<bool> marcarParcial({
@@ -726,53 +867,9 @@ class EntregasNotifier extends Notifier<EntregasState> {
     double? longitud,
     bool forceUpdate = false,
   }) async {
-    try {
-      final response = await ApiClient.post(
-        '/entregas/update',
-        {
-          'itemId': itemId,
-          'status': estado.value,
-          'repartidorId': state.repartidorId,
-          'observaciones': observaciones,
-          'firma': firma,
-          'fotos': fotos,
-          'latitud': latitud,
-          'longitud': longitud,
-          'forceUpdate': forceUpdate,
-        },
-      );
-
-      if (response['success'] == true) {
-        await CacheService.invalidateByPrefix(
-          'entregas:pendientes:${state.repartidorId}:',
-        );
-        await CacheService.invalidateByPrefix('entregas:albaran:');
-        final idx = state.albaranes.indexWhere((a) => a.id == itemId);
-        if (idx != -1) {
-          final updated = List<AlbaranEntrega>.from(state.albaranes);
-          final albaran = updated[idx];
-          albaran.estado = estado;
-          albaran.observaciones = observaciones;
-          albaran.horaEntrega = DateTime.now();
-          if (firma != null) albaran.firma = firma;
-          if (fotos != null) albaran.fotos = fotos;
-          state = state.copyWith(albaranes: updated);
-        }
-        return true;
-      } else if (response['alreadyDelivered'] == true) {
-        state = state.copyWith(
-          error: 'Esta entrega ya fue confirmada anteriormente',
-        );
-        return false;
-      } else {
-        state = state.copyWith(
-          error: (response['error'] ?? 'Error desconocido') as String,
-        );
-        return false;
-      }
-    } catch (e) {
-      state = state.copyWith(error: 'Error actualizando: $e');
-    }
+    state = state.copyWith(
+      error: 'Confirma la entrega desde el flujo canonico del rutero.',
+    );
     return false;
   }
 

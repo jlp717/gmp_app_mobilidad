@@ -69,6 +69,23 @@ describe('metrics and health internal access gates', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'METRICS_FORBIDDEN' }));
   });
 
+  test('does not trust a forwarded loopback address from a remote socket', () => {
+    const req = makeReq({
+      ip: '127.0.0.1',
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+    });
+    req.socket.remoteAddress = '203.0.113.10';
+    req.connection.remoteAddress = '203.0.113.10';
+    const res = makeRes();
+    const next = jest.fn();
+
+    requireInternalMetricsAccess(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(canSeeInternalDetails(req)).toBe(false);
+  });
+
   test('allows metrics with configured internal token', () => {
     process['env'].INTERNAL_API_TOKEN = 'secret-token';
     const req = makeReq({ headers: { 'x-internal-token': 'secret-token' } });

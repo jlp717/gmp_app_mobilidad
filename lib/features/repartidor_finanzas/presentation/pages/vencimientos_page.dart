@@ -14,6 +14,7 @@ enum VencimientoEstado {
   vencido,
   hoy,
   proximo,
+  sinFecha,
 }
 
 class VencimientoItem {
@@ -36,7 +37,7 @@ class VencimientoItem {
   final String? id;
   final String cliente;
   final String documento;
-  final DateTime fecha;
+  final DateTime? fecha;
   final double importe;
   final VencimientoEstado estado;
   final String? vendedor;
@@ -62,12 +63,20 @@ class VencimientosPage extends StatefulWidget {
     this.initialFiltro = VencimientosFiltro.todos,
     this.onFiltroChanged,
     this.onItemTap,
+    this.total,
+    this.hasMore = false,
+    this.isLoadingMore = false,
+    this.onLoadMore,
   });
 
   final List<VencimientoItem> vencimientos;
   final VencimientosFiltro initialFiltro;
   final ValueChanged<VencimientosFiltro>? onFiltroChanged;
   final ValueChanged<VencimientoItem>? onItemTap;
+  final int? total;
+  final bool hasMore;
+  final bool isLoadingMore;
+  final VoidCallback? onLoadMore;
 
   @override
   State<VencimientosPage> createState() => _VencimientosPageState();
@@ -123,6 +132,19 @@ class _VencimientosPageState extends State<VencimientosPage> {
                           const SizedBox(height: 8),
                         ],
                       ],
+                      if (widget.hasMore)
+                        Center(
+                          child: widget.isLoadingMore
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: CircularProgressIndicator(),
+                                )
+                              : OutlinedButton.icon(
+                                  onPressed: widget.onLoadMore,
+                                  icon: const Icon(Icons.expand_more),
+                                  label: const Text('Cargar más'),
+                                ),
+                        ),
                     ],
                   ),
           ),
@@ -140,7 +162,11 @@ class _VencimientosPageState extends State<VencimientosPage> {
         VencimientosFiltro.proximos => item.estado == VencimientoEstado.proximo,
       };
     }).toList()
-      ..sort((a, b) => a.fecha.compareTo(b.fecha));
+      ..sort((a, b) {
+        if (a.fecha == null) return b.fecha == null ? 0 : 1;
+        if (b.fecha == null) return -1;
+        return a.fecha!.compareTo(b.fecha!);
+      });
   }
 
   Map<String, List<VencimientoItem>> _groupItems(List<VencimientoItem> items) {
@@ -150,6 +176,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
         VencimientoEstado.vencido => 'Vencidos',
         VencimientoEstado.hoy => 'Vencen hoy',
         VencimientoEstado.proximo => 'Proximos',
+        VencimientoEstado.sinFecha => 'Sin fecha válida',
       };
       grouped.putIfAbsent(key, () => []).add(item);
     }
@@ -157,7 +184,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
   }
 }
 
-class RepartidorVencimientosPage extends ConsumerWidget {
+class RepartidorVencimientosPage extends ConsumerStatefulWidget {
   const RepartidorVencimientosPage({
     required this.repartidorId,
     super.key,
@@ -166,8 +193,107 @@ class RepartidorVencimientosPage extends ConsumerWidget {
   final String repartidorId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (repartidorId.isEmpty) {
+  ConsumerState<RepartidorVencimientosPage> createState() =>
+      _RepartidorVencimientosPageState();
+}
+
+class _RepartidorVencimientosPageState
+    extends ConsumerState<RepartidorVencimientosPage> {
+  static const _pageSize = 50;
+
+  final List<RepartidorVencimiento> _items = [];
+  late DateTime _from;
+  late DateTime _to;
+  String? _nextCursor;
+  Object? _error;
+  int _total = 0;
+  int _generation = 0;
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _setDefaultRange();
+    Future<void>.microtask(_loadFirstPage);
+  }
+
+  @override
+  void didUpdateWidget(covariant RepartidorVencimientosPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repartidorId != widget.repartidorId) {
+      _loadFirstPage(forceRefresh: true);
+    }
+  }
+
+  void _setDefaultRange() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    _from = today.subtract(const Duration(days: 180));
+    _to = today.add(const Duration(days: 180));
+  }
+
+  Future<void> _loadFirstPage({bool forceRefresh = false}) {
+    return _loadPage(reset: true, forceRefresh: forceRefresh);
+  }
+
+  Future<void> _loadMore() {
+    if (_nextCursor == null || _isLoadingMore) return Future<void>.value();
+    return _loadPage(reset: false);
+  }
+
+  Future<void> _loadPage({
+    required bool reset,
+    bool forceRefresh = false,
+  }) async {
+    if (widget.repartidorId.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    final generation = reset ? ++_generation : _generation;
+    setState(() {
+      if (reset) {
+        _isLoading = true;
+        _error = null;
+      } else {
+        _isLoadingMore = true;
+      }
+    });
+    final args = (
+      repartidorId: widget.repartidorId,
+      from: _from,
+      to: _to,
+      clientCode: null as String?,
+      estado: null as String?,
+      cursor: reset ? null : _nextCursor,
+      limit: _pageSize,
+      forceRefresh: forceRefresh,
+    );
+    try {
+      final page = await ref.read(repartidorVencimientosProvider(args).future);
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        if (reset) _items.clear();
+        _items.addAll(page.items);
+        _total = page.total;
+        _nextCursor = page.nextCursor;
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _error = error;
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.repartidorId.isEmpty) {
       return const Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Center(
@@ -178,74 +304,65 @@ class RepartidorVencimientosPage extends ConsumerWidget {
         ),
       );
     }
-
-    final now = DateTime.now();
-    final from = DateTime(now.year, now.month, now.day).subtract(
-      const Duration(days: 180),
-    );
-    final to = DateTime(now.year, now.month, now.day).add(
-      const Duration(days: 180),
-    );
-    final args = (
-      repartidorId: repartidorId,
-      from: from,
-      to: to,
-      clientCode: null as String?,
-      estado: null as String?,
-      forceRefresh: false,
-    );
-    final asyncItems = ref.watch(repartidorVencimientosProvider(args));
-
-    return asyncItems.when(
-      data: (items) => VencimientosPage(
-        vencimientos: items.map(_mapVencimiento).toList(),
-        onItemTap: (item) => _showDetail(context, ref, repartidorId, item),
-      ),
-      loading: () => const Scaffold(
+    if (_isLoading && _items.isEmpty) {
+      return const Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, stackTrace) {
-        Sentry.captureException(error, stackTrace: stackTrace);
-        return Scaffold(
-          backgroundColor: AppTheme.inkSurface,
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  financeErrorMessage(
-                    error,
-                    'No se pudieron cargar los vencimientos',
-                  ),
-                  style: const TextStyle(color: AppTheme.textSecondary),
+      );
+    }
+    if (_error != null && _items.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppTheme.inkSurface,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                financeErrorMessage(
+                  _error!,
+                  'No se pudieron cargar los vencimientos',
                 ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(
-                    repartidorVencimientosProvider(args),
-                  ),
-                  child: const Text('Reintentar'),
-                ),
-              ],
-            ),
+                style: const TextStyle(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () => _loadFirstPage(forceRefresh: true),
+                child: const Text('Reintentar'),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      );
+    }
+    return VencimientosPage(
+      vencimientos: _items.map(_mapVencimiento).toList(),
+      total: _total,
+      hasMore: _nextCursor != null,
+      isLoadingMore: _isLoadingMore,
+      onLoadMore: _loadMore,
+      onItemTap: (item) => _showDetail(
+        context,
+        ref,
+        widget.repartidorId,
+        item,
+        onSaved: () => _loadFirstPage(forceRefresh: true),
+      ),
     );
   }
 
   static VencimientoItem _mapVencimiento(RepartidorVencimiento item) {
-    final parsedFecha = DateTime.tryParse(item.fechaVencimiento);
-    final fecha = parsedFecha ?? DateTime(9999, 12, 31);
+    final fecha = item.dueDate;
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
-    final dueDate = DateTime(fecha.year, fecha.month, fecha.day);
-    final estado = dueDate.isBefore(todayDate)
-        ? VencimientoEstado.vencido
-        : dueDate.isAtSameMomentAs(todayDate)
-            ? VencimientoEstado.hoy
-            : VencimientoEstado.proximo;
+    final dueDate =
+        fecha == null ? null : DateTime(fecha.year, fecha.month, fecha.day);
+    final estado = dueDate == null
+        ? VencimientoEstado.sinFecha
+        : dueDate.isBefore(todayDate)
+            ? VencimientoEstado.vencido
+            : dueDate.isAtSameMomentAs(todayDate)
+                ? VencimientoEstado.hoy
+                : VencimientoEstado.proximo;
 
     return VencimientoItem(
       id: item.documento,
@@ -260,7 +377,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
       importePendiente: item.importePendiente,
       keys: item.keys,
       notas: [
-        if (parsedFecha == null) 'Fecha de vencimiento no calculada',
+        if (fecha == null) 'Sin fecha válida',
         if (item.tipoDocumento.isNotEmpty) item.tipoDocumento,
         if (item.nombreAlternativo.isNotEmpty) item.nombreAlternativo,
         if (item.poblacion.isNotEmpty) item.poblacion,
@@ -272,9 +389,11 @@ class RepartidorVencimientosPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String repartidorId,
-    VencimientoItem item,
-  ) {
-    final canAbonar = !repartidorId.contains(',') &&
+    VencimientoItem item, {
+    required VoidCallback onSaved,
+  }) {
+    final canAbonar = item.fecha != null &&
+        !repartidorId.contains(',') &&
         item.keys.isNotEmpty &&
         item.importePendiente > 0;
     showModalBottomSheet<void>(
@@ -305,7 +424,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Vence: ${DateFormat('dd/MM/yyyy').format(item.fecha)}',
+                    'Vence: ${_formatDueDate(item.fecha)}',
                     style: const TextStyle(color: AppTheme.textSecondary),
                   ),
                   const SizedBox(height: 8),
@@ -331,7 +450,13 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                       child: ElevatedButton.icon(
                         onPressed: () {
                           Navigator.of(sheetContext).pop();
-                          _showAbonoDialog(context, ref, repartidorId, item);
+                          _showAbonoDialog(
+                            context,
+                            ref,
+                            repartidorId,
+                            item,
+                            onSaved: onSaved,
+                          );
                         },
                         icon: const Icon(Icons.payments),
                         label: const Text('Abonar'),
@@ -351,11 +476,40 @@ class RepartidorVencimientosPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String repartidorId,
-    VencimientoItem item,
-  ) async {
+    VencimientoItem item, {
+    required VoidCallback onSaved,
+  }) async {
+    final service = ref.read(repartidorFinanzasServiceProvider);
+    final pendingIntent = service.findPendingVencimientoCobro(
+      repartidorId: repartidorId,
+      codigoCliente: item.codigoCliente,
+      tipoDocumento: item.tipoDocumento,
+      keys: item.keys,
+    );
+    if (pendingIntent != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            pendingIntent.requiresManualReview
+                ? 'Este abono requiere revision manual; no se enviara otro.'
+                : 'Este abono sigue pendiente de sincronizacion.',
+          ),
+          backgroundColor: pendingIntent.requiresManualReview
+              ? AppTheme.error
+              : AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
+    final idempotencyToken = createVencimientoCobroIdempotencyToken(
+      repartidorId,
+      item.documento,
+    );
     final amountController = TextEditingController(
       text: item.importePendiente.toStringAsFixed(2).replaceAll('.', ','),
     );
+
     var formaPago = 'EFECTIVO';
     var saving = false;
     String? errorText;
@@ -367,6 +521,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
         return StatefulBuilder(
           builder: (contentContext, setState) {
             Future<void> submit() async {
+              if (saving) return;
               final amount = double.tryParse(
                 amountController.text.trim().replaceAll(',', '.'),
               );
@@ -378,34 +533,47 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                 setState(() => errorText = 'Importe superior al pendiente');
                 return;
               }
-
               setState(() {
                 saving = true;
                 errorText = null;
               });
               try {
-                await ref
-                    .read(repartidorFinanzasServiceProvider)
-                    .registerVencimientoCobro(
-                      repartidorId: repartidorId,
-                      codigoCliente: item.codigoCliente,
-                      nombreCliente: item.nombreCliente,
-                      tipoDocumento: item.tipoDocumento,
-                      documento: item.documento,
-                      keys: item.keys,
-                      importeCobrado: amount,
-                      importePendiente: item.importePendiente - amount,
-                      formaPago: formaPago,
-                    );
-                ref
-                  ..invalidate(repartidorVencimientosProvider)
-                  ..invalidate(repartidorDailySummaryProvider)
-                  ..invalidate(repartidorCommissionSummaryProvider);
+                final result = await service.registerVencimientoCobro(
+                  repartidorId: repartidorId,
+                  codigoCliente: item.codigoCliente,
+                  nombreCliente: item.nombreCliente,
+                  tipoDocumento: item.tipoDocumento,
+                  documento: item.documento,
+                  keys: item.keys,
+                  importeCobrado: amount,
+                  importePendiente: item.importePendiente - amount,
+                  formaPago: formaPago,
+                  idempotencyToken: idempotencyToken,
+                );
+                if (result.isConfirmed) {
+                  ref
+                    ..invalidate(repartidorVencimientosProvider)
+                    ..invalidate(repartidorDailySummaryProvider)
+                    ..invalidate(repartidorCommissionSummaryProvider);
+                  onSaved();
+                }
                 if (!dialogContext.mounted) return;
                 Navigator.of(dialogContext).pop();
                 if (!rootContext.mounted) return;
+                final message = result.isConfirmed
+                    ? 'Abono registrado'
+                    : result.requiresManualReview
+                        ? 'Abono pendiente de revision manual'
+                        : 'Abono pendiente de sincronizacion';
                 ScaffoldMessenger.of(rootContext).showSnackBar(
-                  const SnackBar(content: Text('Abono registrado')),
+                  SnackBar(
+                    content: Text(message),
+                    backgroundColor: result.requiresManualReview
+                        ? AppTheme.error
+                        : result.isConfirmed
+                            ? AppTheme.success
+                            : AppTheme.warning,
+                  ),
                 );
               } catch (error, stackTrace) {
                 await Sentry.captureException(error, stackTrace: stackTrace);
@@ -460,10 +628,18 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                     style: const TextStyle(color: AppTheme.textPrimary),
                     items: const [
                       DropdownMenuItem(
-                          value: 'EFECTIVO', child: Text('Efectivo')),
+                        value: 'EFECTIVO',
+                        child: Text('Efectivo'),
+                      ),
                       DropdownMenuItem(
-                          value: 'TARJETA', child: Text('Tarjeta')),
+                        value: 'TARJETA',
+                        child: Text('Tarjeta'),
+                      ),
                       DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
+                      DropdownMenuItem(
+                        value: 'TRANSFERENCIA',
+                        child: Text('Transferencia'),
+                      ),
                       DropdownMenuItem(value: 'CHEQUE', child: Text('Cheque')),
                     ],
                     onChanged: saving
@@ -708,7 +884,7 @@ class _VencimientoRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${item.documento} - '
-                    '${DateFormat('dd/MM/yyyy').format(item.fecha)}',
+                    '${_formatDueDate(item.fecha)}',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
@@ -800,6 +976,7 @@ Color _statusColor(VencimientoEstado estado) {
     VencimientoEstado.vencido => AppTheme.error,
     VencimientoEstado.hoy => AppTheme.warning,
     VencimientoEstado.proximo => AppTheme.info,
+    VencimientoEstado.sinFecha => AppTheme.textTertiary,
   };
 }
 
@@ -808,7 +985,14 @@ String _statusLabel(VencimientoEstado estado) {
     VencimientoEstado.vencido => 'Vencido',
     VencimientoEstado.hoy => 'Hoy',
     VencimientoEstado.proximo => 'Proximo',
+    VencimientoEstado.sinFecha => 'Sin fecha válida',
   };
+}
+
+String _formatDueDate(DateTime? value) {
+  return value == null
+      ? 'Sin fecha válida'
+      : DateFormat('dd/MM/yyyy').format(value);
 }
 
 String _money(double value) {

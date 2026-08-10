@@ -17,20 +17,27 @@ const DB_PWD = process.env.ODBC_PWD;
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
 
 if (NODE_ENV === 'production' && (!DB_UID || !DB_PWD)) {
-    logger.warn('[DB] ⚠️ Using default DB credentials in production');
+    logger.error('[DB] DB2 credentials are not configured; database initialization is blocked');
 }
 
-const DB_UID_FINAL = DB_UID || 'JAVIER';
-const DB_PWD_FINAL = DB_PWD || (NODE_ENV === 'development' ? 'JAVIER' : '');
+const DB_CREDENTIALS_CONFIGURED = Boolean(DB_UID && DB_PWD);
 
-const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;CCSID=1208;CMPTDM=1;
+const DB_CONFIG = DB_CREDENTIALS_CONFIGURED ? `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;CCSID=1208;CMPTDM=1;
     CPOOLMAX=${parseIntEnv('ODBC_POOL_MAX', 20)};
     CPOOLMIN=${parseIntEnv('ODBC_POOL_MIN', 3)};
     CPTOUT=${parseIntEnv('ODBC_TIMEOUT', 60)};
     COMMTIMEOUT=${parseIntEnv('ODBC_COMM_TIMEOUT', 90)};
     LONGDATACOMPAT=1;
     ExtendedColInfo=0;
-    DBQ=${DB_DSN};`;
+    DBQ=${DB_DSN};` : null;
+
+function assertDbCredentialsConfigured() {
+    if (DB_CREDENTIALS_CONFIGURED) return;
+    const error = new Error('DB2 credentials are not configured');
+    error.code = 'DB_CREDENTIALS_REQUIRED';
+    error.statusCode = 503;
+    throw error;
+}
 
 // Pool sizing — configurable via env for production tuning.
 // Defaults raised: /commissions/summary?vendor=ALL fans out to N parallel vendor
@@ -439,6 +446,7 @@ async function ensureUtf8(conn) {
 }
 
 async function initDb() {
+    assertDbCredentialsConfigured();
     if (pool._initPromise) {
         await pool._initPromise;
         return pool._odbcPool;
@@ -465,6 +473,7 @@ async function initDb() {
 let poolRecreateDelay = 1000;
 
 async function recreatePool() {
+    assertDbCredentialsConfigured();
     if (poolRecreateInProgress) {
         await new Promise(res => setTimeout(res, 2000));
         return;

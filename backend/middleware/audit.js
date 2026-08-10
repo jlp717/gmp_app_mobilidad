@@ -93,16 +93,20 @@ function trackSession(userId, ip, role, userAgent, deviceInfo) {
 }
 
 // =============================================================================
-// IP EXTRACTION (handles proxies, load balancers, ngrok)
+// IP EXTRACTION
 // =============================================================================
+function normalizePeerAddress(address) {
+    if (!address || typeof address !== 'string') return 'unknown';
+    // Node reports IPv4 peers through an IPv6 socket as ::ffff:a.b.c.d.
+    if (address.startsWith('::ffff:')) return address.slice(7);
+    return address;
+}
+
 function getClientIP(req) {
-    // Priority: X-Forwarded-For (first IP) > X-Real-IP > req.ip > socket
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-        // X-Forwarded-For can be: "client, proxy1, proxy2"
-        return forwarded.split(',')[0].trim();
-    }
-    return req.headers['x-real-ip'] || req.ip || req.socket?.remoteAddress || 'unknown';
+    // This application deliberately does not trust proxy headers.  A client can
+    // send X-Forwarded-For/X-Real-IP directly, so audit identity must be the
+    // connected peer until an explicitly trusted proxy is introduced.
+    return normalizePeerAddress(req?.socket?.remoteAddress || req?.connection?.remoteAddress);
 }
 
 // =============================================================================
@@ -334,5 +338,6 @@ module.exports = {
         return sessions;
     },
     getClientIP,
+    normalizePeerAddress,
     cleanup
 };

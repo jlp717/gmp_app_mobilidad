@@ -49,6 +49,9 @@ const {
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 const { verifyVendorPin } = require('../../../services/vendor-pin-auth');
+const authTokenService = require('../../../middleware/auth');
+const { createAuthClaimsResolver } = require('../../modules/auth/application/auth-claims-resolver');
+const { createAuthClaimsLoginHandler } = require('../../modules/auth/application/auth-claims-login-handler');
 
 // TTL constants (milliseconds)
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Error interno del servidor';
@@ -676,125 +679,66 @@ function stripMarginFromProductHistory(payload, user) {
 function createAuthRoutes() {
   const router = express.Router();
   const repo = new Db2AuthRepository(getDbPool());
+  const authClaimsResolver = createAuthClaimsResolver({ authRepository: repo });
+  authTokenService.setAuthClaimsResolver(authClaimsResolver);
+  const authClaimsLoginHandler = createAuthClaimsLoginHandler({
+    authRepository: repo,
+    authClaimsResolver,
+    verifyVendorPin,
+    tokenService: authTokenService,
+  });
 
   router.post('/login',
     bruteForceIpTracker,
     loginLimiter,
     sanitizeInput,
-    async (req, res) => {
-    try {
-      const { username, password } = req.body;
-      if (!username || !password) {
-        return res.status(400).json({ error: 'Usuario y contraseña requeridos', code: 'MISSING_CREDENTIALS' });
-      }
-
-      const user = await repo.findByCode(username);
-      if (!user || !user.isActive) {
-        return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
-      }
-
-      if (!user._passwordHash) {
-        logger.warn(`[DDD-AUTH] User ${username} has no password hash - login denied`);
-        await repo.logLoginAttempt(user.id, false, req.ip);
-        return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
-      }
-
-      const pinVerification = await verifyVendorPin({
-        vendedorCode: user.code,
-        candidatePin: password,
-        dbPin: user._passwordHash,
-        requestId: 'DDD-AUTH',
-      });
-
-      if (!pinVerification.valid) {
-        await repo.logLoginAttempt(user.id, false, req.ip);
-        if (pinVerification.reason === 'plaintext_pin_denied') {
-          logger.warn(`[DDD-AUTH] Plaintext PIN auth denied for user ${username}; PIN hash migration required`);
-        } else {
-          logger.warn(`[DDD-AUTH] PIN verification failed for user ${username}: ${pinVerification.reason}`);
-        }
-        return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
-      }
-
-      logger.info(`[DDD-AUTH] Vendor ${user.code} authenticated via ${pinVerification.method}`);
-
-      await repo.logLoginAttempt(user.id, true, req.ip);
-
-      // Expand vendedorCodes for JEFE_VENTAS (same as legacy: all GMP vendors)
-      let vendedorCodes = [user.code];
-      if (user.isJefeVentas) {
-        try {
-          const allVendedores = await getDbPool().execute(
-            `SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'`
-          );
-          const orphans = ['82', '20', 'UNK'];
-          const existingCodes = new Set(allVendedores.map(v => v.CODE));
-          orphans.forEach(o => existingCodes.add(o));
-          vendedorCodes = Array.from(existingCodes);
-        } catch (e) {
-          logger.warn(`[DDD-AUTH] Could not expand vendedorCodes for JEFE_VENTAS: ${e.message}`);
-        }
-      } else {
-        vendedorCodes = getVendorVisibilityScope(user.code);
-      }
-
-      const {
-        signAccessToken,
-        signRefreshToken,
-        registerSession,
-        ACCESS_TTL_MS,
-        REFRESH_TTL_MS
-      } = require('../../../middleware/auth');
-      const tokenPayload = {
-        id: user.id,
-        user: user.code,
-        name: user.name,
-        role: user.role,
-        isJefeVentas: user.isJefeVentas,
-        vendorCodes: vendedorCodes,
-        vendedorCodes
-      };
-      const accessToken = signAccessToken(tokenPayload);
-      const refreshToken = signRefreshToken(tokenPayload);
-      await registerSession(
-        user.id,
-        refreshToken,
-        req.get('user-agent') || 'unknown',
-        req.ip || 'unknown'
-      );
-
-      // Response format must match legacy auth routes (Flutter expects 'token', not 'accessToken')
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          code: user.code,
-          name: user.name,
-          role: user.role,
-          isJefeVentas: user.isJefeVentas,
-          vendedorCode: user.code,
-          isRepartidor: user.role === 'REPARTIDOR',
-          showCommissions: process.env.HIDE_COMMISSIONS !== 'true'
-        },
-        role: user.role,
-        vendedorCodes,
-        token: accessToken,
-        refreshToken,
-        tokenExpiresIn: Math.floor(ACCESS_TTL_MS / 1000),
-        refreshExpiresIn: Math.floor(REFRESH_TTL_MS / 1000)
-      });
-    } catch (error) {
-      logger.error(`[DDD-AUTH] Login error: ${error.message}`);
-      res.status(500).json({ error: 'Internal server error', code: 'AUTH_INTERNAL_ERROR' });
-    }
-  });
-
+    authClaimsLoginHandler,
+  );
   // Lightweight token validation — JWT check only, no DB query.
   // Used by Flutter on startup to verify stored tokens are still valid
   // (guards against ephemeral JWT secrets being regenerated on server restart).
   const { verifyToken: _verifyToken } = require('../../../middleware/auth');
   router.get('/validate', _verifyToken, (req, res) => {
     res.json({ valid: true, usuario: req.user.code });
+  });
+
+  // Signed login claims are preserved by refresh; this avoids loading the
+  // PIN-bearing auth row from DB2 for a read-only profile response.
+  router.get('/perfil', _verifyToken, (req, res) => {
+    const payload = req.tokenPayload;
+    if (!payload) {
+      return res.status(401).json({ error: 'Contexto de autenticación inválido', code: 'AUTH_CONTEXT_MISSING' });
+    }
+    const role = String(payload.role || 'COMERCIAL').trim().toUpperCase();
+    const isRepartidor = role === 'REPARTIDOR' && payload.isRepartidor === true;
+    const codigoConductor = isRepartidor && typeof payload.codigoConductor === 'string'
+      ? payload.codigoConductor.trim()
+      : null;
+    const matricula = isRepartidor && typeof payload.matricula === 'string'
+      ? payload.matricula.trim() || null
+      : null;
+    const vendedorCodes = Array.isArray(payload.vendedorCodes)
+      ? payload.vendedorCodes
+      : (Array.isArray(payload.vendorCodes) ? payload.vendorCodes : []);
+
+    res.json({
+      success: true,
+      user: {
+        id: payload.id,
+        code: payload.user,
+        name: payload.name,
+        company: 'GMP',
+        vendedorCode: payload.user,
+        role,
+        isJefeVentas: payload.isJefeVentas === true,
+        isRepartidor,
+        codigoConductor,
+        matricula,
+      },
+      role,
+      isRepartidor,
+      vendedorCodes,
+    });
   });
 
   return router;

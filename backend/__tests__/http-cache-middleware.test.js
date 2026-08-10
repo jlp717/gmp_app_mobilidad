@@ -13,6 +13,7 @@ const {
   responseCoalescing,
   requestDeduplication,
   isJsonCoalescibleRequest,
+  isSensitiveRepartoArtifactPath,
 } = require('../middleware/network-optimizer');
 
 function makeRes() {
@@ -65,6 +66,60 @@ beforeEach(() => {
 });
 
 describe('HTTP cache auth safety', () => {
+  test.each([
+    '/api/repartidor-finanzas/rutero/evidence/ev-1',
+    '/api/repartidor-finanzas/rutero/confirmations/91/receipt',
+    '/api/repartidor-finanzas/rutero/confirmations/receipt',
+  ])('never caches sensitive reparto payloads: %s', (path) => {
+    const req = {
+      method: 'GET',
+      path,
+      originalUrl: path,
+      baseUrl: '/api',
+      query: {},
+      headers: {},
+      user: { id: '94', role: 'REPARTIDOR' },
+    };
+    const firstRes = makeRes();
+    const firstNext = jest.fn();
+
+    cacheMiddleware(req, firstRes, firstNext);
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(firstRes.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    firstRes.json({ success: true, dataBase64: 'sensitive-test-payload' });
+
+    const secondRes = makeRes();
+    const secondNext = jest.fn();
+    cacheMiddleware(req, secondRes, secondNext);
+
+    expect(secondNext).toHaveBeenCalledTimes(1);
+    expect(secondRes.setHeader).not.toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+  });
+
+  test('respects a downstream no-store response and does not overwrite it', () => {
+    const req = {
+      method: 'GET',
+      path: '/rutero/day/lunes',
+      originalUrl: '/api/rutero/day/lunes',
+      baseUrl: '/api',
+      query: {},
+      headers: {},
+      user: { id: '94', role: 'REPARTIDOR' },
+    };
+    const firstRes = makeRes();
+    cacheMiddleware(req, firstRes, jest.fn());
+    firstRes.setHeader('Cache-Control', 'private, no-store');
+    firstRes.json({ success: true, privateValue: 'test-only' });
+
+    const secondRes = makeRes();
+    const secondNext = jest.fn();
+    cacheMiddleware(req, secondRes, secondNext);
+
+    expect(secondNext).toHaveBeenCalledTimes(1);
+    expect(secondRes.setHeader).not.toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+    expect(firstRes.headers['cache-control']).toBe('private, no-store');
+  });
+
   test('skips protected api cache before verifyToken populates req.user', () => {
     const req = {
       method: 'GET',
@@ -229,6 +284,28 @@ describe('HTTP cache auth safety', () => {
 });
 
 describe('network optimizer cache headers', () => {
+  test.each([
+    '/api/repartidor-finanzas/rutero/evidence/ev-1',
+    '/api/repartidor-finanzas/rutero/confirmations/91/receipt',
+    '/api/repartidor-finanzas/rutero/confirmations/receipt?idempotencyKey=receipt-key-7',
+  ])('marks canonical receipt/evidence private no-store before auth and bypasses coalescing: %s', (originalUrl) => {
+    const req = makeGetReq({ path: originalUrl.split('?')[0], originalUrl });
+    const res = makeRes();
+    const next = jest.fn();
+
+    networkOptimizer(req, res, next);
+
+    expect(isSensitiveRepartoArtifactPath(req)).toBe(true);
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(res.headers.pragma).toBe('no-cache');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.setHeader).not.toHaveBeenCalledWith('ETag', expect.any(String));
+    expect(isJsonCoalescibleRequest(req)).toBe(false);
+    const coalescingNext = jest.fn();
+    responseCoalescing(req, makeEventedRes(), coalescingNext);
+    expect(coalescingNext).toHaveBeenCalledTimes(1);
+  });
+
   test('does not mark products API as public cacheable', () => {
     const req = { method: 'GET', path: '/api/products', headers: {}, get: jest.fn(() => undefined) };
     const res = makeRes();

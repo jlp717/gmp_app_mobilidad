@@ -4,7 +4,7 @@
 const { Entity } = require('../../../core/domain/entity');
 
 class User extends Entity {
-  constructor({ id, code, name, role, isJefeVentas, email, passwordHash, active }) {
+  constructor({ id, code, name, role, isJefeVentas, email, passwordHash, active, tipoVendedor, showCommissions }) {
     super(id);
     this._code = code;
     this._name = name;
@@ -13,6 +13,8 @@ class User extends Entity {
     this._email = email;
     this._passwordHash = passwordHash;
     this._active = active !== false;
+    this._tipoVendedor = String(tipoVendedor || '-').trim() || '-';
+    this._showCommissions = showCommissions !== false;
   }
 
   get code() { return this._code; }
@@ -21,6 +23,8 @@ class User extends Entity {
   get isJefeVentas() { return this._isJefeVentas; }
   get email() { return this._email; }
   get isActive() { return this._active; }
+  get tipoVendedor() { return this._tipoVendedor; }
+  get showCommissions() { return this._showCommissions; }
 
   hasRole(role) {
     return this._role === role;
@@ -49,7 +53,9 @@ class User extends Entity {
       isJefeVentas: (row.ROL === 'JEFE_VENTAS'),
       email: row.EMAIL,
       passwordHash: row.PASSWORD_HASH,
-      active: row.ACTIVO !== 0
+      active: row.ACTIVO !== 0,
+      tipoVendedor: row.TIPOVENDEDOR,
+      showCommissions: String(row.HIDE_COMMISSIONS || 'N').trim().toUpperCase() !== 'Y'
     });
   }
 }

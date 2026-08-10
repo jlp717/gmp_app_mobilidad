@@ -31,7 +31,7 @@ class RuteroDetailFinalize extends StatelessWidget {
 
   final AlbaranEntrega albaran;
   final List<EntregaItem> items;
-  final Map<String, int> productQuantities;
+  final Map<String, double> productQuantities;
   final TextEditingController nombreController;
   final TextEditingController dniController;
   final TextEditingController observacionesController;

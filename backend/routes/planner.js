@@ -12,6 +12,7 @@ const {
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
     getVendorVisibilityScope,
+    lookupClientAssignedVendorCodes,
     handleRouteError
 } = require('../utils/common');
 const { db2WriteTable } = require('../utils/db2-schemas');
@@ -117,6 +118,95 @@ function normalizeRuteroVendorCodes(vendedorCodes) {
         .filter(Boolean);
 }
 
+function normalizePlannerVendorCode(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    return /^\d+$/.test(raw) ? (raw.replace(/^0+/, '') || '0') : raw;
+}
+
+function plannerCodesMatch(left, right) {
+    return normalizePlannerVendorCode(left) === normalizePlannerVendorCode(right);
+}
+
+function getPlannerUserContext(req) {
+    const user = req.user || {};
+    const role = String(user.role || '').trim().toUpperCase();
+    const code = String(user.code || user.codigovendedor || '').trim();
+    const privileged = user.isJefeVentas === true || ['JEFE_VENTAS', 'ADMIN'].includes(role);
+    const visibleCodes = [...new Set([
+        ...(Array.isArray(user.vendorCodes) ? user.vendorCodes : []),
+        ...(Array.isArray(user.vendedorCodes) ? user.vendedorCodes : []),
+    ].map(value => String(value || '').trim()).filter(Boolean))];
+    return { role, code, privileged, visibleCodes };
+}
+
+function plannerForbidden(res, error = 'No autorizado para este vendedor') {
+    return res.status(403).json({ error, code: 'INSUFFICIENT_ROLE' });
+}
+
+function requirePlannerPrivilege(req, res, next) {
+    const context = getPlannerUserContext(req);
+    if (!context.code) {
+        return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+    }
+    if (!context.privileged) return plannerForbidden(res, 'Acceso restringido a responsables de ventas');
+    return next();
+}
+
+function requirePlannerVendorScope({ location, field, mutation = false, requireValue = true }) {
+    return (req, res, next) => {
+        const context = getPlannerUserContext(req);
+        if (!context.code) {
+            return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+        }
+        if (mutation && context.role === 'REPARTIDOR') {
+            return plannerForbidden(res, 'REPARTIDOR no puede modificar ruteros comerciales');
+        }
+
+        const raw = req[location]?.[field];
+        if (raw == null || String(raw).trim() === '') {
+            return requireValue && !context.privileged ? plannerForbidden(res) : next();
+        }
+
+        const requestedCodes = String(raw).split(',').map(code => code.trim()).filter(Boolean);
+        if (requestedCodes.length === 0) return context.privileged ? next() : plannerForbidden(res);
+
+        if (context.privileged) {
+            const requestedAll = requestedCodes.some(code => code.toUpperCase() === 'ALL');
+            if (context.visibleCodes.length === 0) return next();
+            if (requestedAll) return plannerForbidden(res);
+            const withinVisibleScope = requestedCodes.every(requested =>
+                context.visibleCodes.some(visible => plannerCodesMatch(requested, visible)));
+            return withinVisibleScope ? next() : plannerForbidden(res);
+        }
+
+        const ownsEveryCode = requestedCodes.every(code =>
+            code.toUpperCase() !== 'ALL' && plannerCodesMatch(code, context.code));
+        return ownsEveryCode ? next() : plannerForbidden(res);
+    };
+}
+
+async function requirePlannerClientOwnership(req, res, next) {
+    const context = getPlannerUserContext(req);
+    if (!context.code) {
+        return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+    }
+    if (context.privileged) return next();
+    if (context.role === 'REPARTIDOR') return plannerForbidden(res, 'No autorizado para consultar este cliente');
+
+    const clientCode = String(req.params?.code || '').trim();
+    if (!/^[A-Za-z0-9]{1,10}$/.test(clientCode)) {
+        return plannerForbidden(res, 'No autorizado para consultar este cliente');
+    }
+    try {
+        const assignedCodes = await lookupClientAssignedVendorCodes(clientCode);
+        const ownsClient = assignedCodes.some(code => plannerCodesMatch(code, context.code));
+        return ownsClient ? next() : plannerForbidden(res, 'No autorizado para consultar este cliente');
+    } catch (_error) {
+        return plannerForbidden(res, 'No autorizado para consultar este cliente');
+    }
+}
+
 async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }) {
     const statusMap = new Map();
     clientCodes.forEach(code => {
@@ -194,8 +284,13 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                 date: orderDate.iso
             });
         });
-    } catch (error) {
-        logger.warn(`[RUTERO DAY] Order status enrichment skipped: ${error.message}`);
+    } catch (_error) {
+        // Order state is business-critical: an unavailable source must never be
+        // presented as a real "SIN_PEDIDO" result.
+        logger.error('[RUTERO DAY] PEDIDOS_CAB status query failed');
+        const unavailable = new Error('Estado de pedidos no disponible');
+        unavailable.code = 'RUTERO_ORDER_STATUS_UNAVAILABLE';
+        throw unavailable;
     }
 
     return statusMap;
@@ -204,7 +299,7 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
 // =============================================================================
 // ROUTER CALENDAR
 // =============================================================================
-router.get('/router/calendar', async (req, res) => {
+router.get('/router/calendar', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
         const now = getCurrentDate();
@@ -282,7 +377,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
 // =============================================================================
 // RUTERO WEEK (Fast CACHE version)
 // =============================================================================
-router.get('/rutero/week', async (req, res) => {
+router.get('/rutero/week', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { vendedorCodes, role } = req.query;
         const now = getCurrentDate();
@@ -442,7 +537,7 @@ router.get('/rutero/week', async (req, res) => {
 // =============================================================================
 // RUTERO VENDEDORES
 // =============================================================================
-router.get('/rutero/vendedores', async (req, res) => {
+router.get('/rutero/vendedores', requirePlannerPrivilege, async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
         const prevYear = currentYear - 1;
@@ -518,7 +613,7 @@ router.get('/rutero/vendedores', async (req, res) => {
 // =============================================================================
 // RUTERO MOVE CLIENTS
 // =============================================================================
-router.post('/rutero/move_clients', async (req, res) => {
+router.post('/rutero/move_clients', requirePlannerVendorScope({ location: 'body', field: 'vendedor', mutation: true, requireValue: false }), async (req, res) => {
     let conn;
     try {
         const { vendedor, moves, targetPosition } = req.body;
@@ -534,7 +629,7 @@ router.post('/rutero/move_clients', async (req, res) => {
         // SECURITY: Verify user authorization
         // User must be either a JEFE_VENTAS (can modify any rutero) or the owner of this rutero
         const userCode = req.user?.codigovendedor || req.user?.code;
-        const isJefeVentas = req.user?.isJefeVentas || req.user?.role === 'JEFE_VENTAS';
+        const isJefeVentas = getPlannerUserContext(req).privileged;
         
         if (!userCode) {
             return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
@@ -726,7 +821,7 @@ router.post('/rutero/move_clients', async (req, res) => {
 // =============================================================================
 // RUTERO CONFIGURATION (GET/POST)
 // =============================================================================
-router.post('/rutero/config', async (req, res) => {
+router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', field: 'vendedor', mutation: true, requireValue: false }), async (req, res) => {
     try {
         const { vendedor, dia, orden } = req.body;
 
@@ -742,7 +837,7 @@ router.post('/rutero/config', async (req, res) => {
         // SECURITY: Verify user authorization
         // User must be either a JEFE_VENTAS (can modify any rutero) or the owner of this rutero
         const userCode = req.user?.codigovendedor || req.user?.code;
-        const isJefeVentas = req.user?.isJefeVentas || req.user?.role === 'JEFE_VENTAS';
+        const isJefeVentas = getPlannerUserContext(req).privileged;
         
         if (!userCode) {
             return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
@@ -946,7 +1041,7 @@ router.post('/rutero/config', async (req, res) => {
     }
 });
 
-router.get('/rutero/config', async (req, res) => {
+router.get('/rutero/config', requirePlannerVendorScope({ location: 'query', field: 'vendedor' }), async (req, res) => {
     try {
         const { vendedor, dia } = req.query;
         if (!vendedor || !dia) return res.status(400).json({ error: 'Vendedor y dia requeridos' });
@@ -968,7 +1063,7 @@ router.get('/rutero/config', async (req, res) => {
 // =============================================================================
 // RUTERO DAY COUNTS
 // =============================================================================
-router.get('/rutero/counts', async (req, res) => {
+router.get('/rutero/counts', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { vendedorCodes, role, ignoreOverrides } = req.query;
         const shouldIgnore = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
@@ -998,7 +1093,7 @@ router.get('/rutero/counts', async (req, res) => {
 // =============================================================================
 // RUTERO AVAILABLE POSITIONS
 // =============================================================================
-router.get('/rutero/positions/:day', async (req, res) => {
+router.get('/rutero/positions/:day', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, role } = req.query;
@@ -1061,7 +1156,7 @@ router.post('/rutero/reload-cache', async (req, res) => {
 // NOTE: This endpoint intentionally reloads cache to ensure fresh data.
 // For normal requests, use /rutero/day/:day which uses cached data.
 // =============================================================================
-router.get('/rutero/day-direct/:day', async (req, res) => {
+router.get('/rutero/day-direct/:day', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query;
@@ -1205,7 +1300,7 @@ router.post('/rutero/reload-cache-old', async (req, res) => {
 // =============================================================================
 // RUTERO DAY (OPTIMIZED WITH CACHING) - Hotfix Update Check
 // =============================================================================
-router.get('/rutero/day/:day', async (req, res) => {
+router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides, date } = req.query; // Added ignoreOverrides
@@ -1349,18 +1444,6 @@ router.get('/rutero/day/:day', async (req, res) => {
             logger.warn(`[RUTERO DAY] Cache not ready`);
             return res.json({ clients: [], count: 0, day, cacheStatus: 'loading' });
         }
-
-        // --- DEBUG LOG FOR TESTS ---
-        if (day === 'miercoles' || day === 'jueves') {
-            logger.info(`[TEST-DEBUG] /rutero/day/${day} requested. dayClientCodes.length = ${dayClientCodes.length}`);
-            const testClient = '4300008971'; // Client from test output
-            const { ruteroConfigCache } = require('../services/laclae');
-            const cacheForVendor = ruteroConfigCache[vendedorCodes] || {};
-            const cacheForClient = cacheForVendor[testClient] || {};
-            logger.info(`[TEST-DEBUG] ruteroConfigCache for ${testClient}: ${JSON.stringify(cacheForClient)}`);
-            logger.info(`[TEST-DEBUG] is testClient in dayClientCodes? ${dayClientCodes.includes(testClient)}`);
-        }
-        // ---------------------------
 
         if (dayClientCodes.length === 0) {
             return res.json({
@@ -1637,14 +1720,23 @@ router.get('/rutero/day/:day', async (req, res) => {
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo rutero diario', 500);
+        if (error?.code === 'RUTERO_ORDER_STATUS_UNAVAILABLE') {
+            return handleRouteError(
+                error,
+                res,
+                'Estado de pedidos no disponible',
+                503,
+                { code: 'RUTERO_ORDER_STATUS_UNAVAILABLE' }
+            );
+        }
+        return handleRouteError(error, res, 'Error obteniendo rutero diario', 500);
     }
 });
 
 // =============================================================================
 // DIAGNOSTIC: Client-Vendor Assignment
 // =============================================================================
-router.get('/diagnose/client/:code', async (req, res) => {
+router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) => {
     try {
         const clientCode = req.params.code.trim();
         logger.info(`[DIAGNOSE] Investigating client: ${clientCode}`);
@@ -1795,7 +1887,7 @@ router.get('/diagnose/client/:code', async (req, res) => {
 // =============================================================================
 // DIAGNOSTIC: Vendor Cache Dump
 // =============================================================================
-router.get('/diagnose/vendor/:code', (req, res) => {
+router.get('/diagnose/vendor/:code', requirePlannerPrivilege, (req, res) => {
     try {
         const vendorCode = req.params.code.trim();
         const { getCachedVendorCodes, getWeekCountsFromCache, getTotalClientsFromCache } = require('../services/laclae');
@@ -1824,7 +1916,7 @@ router.get('/diagnose/vendor/:code', (req, res) => {
 // =============================================================================
 // RUTERO CLIENT DETAIL - Year comparison data for client detail page
 // =============================================================================
-router.get('/rutero/client/:code/detail', async (req, res) => {
+router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (req, res) => {
     try {
         const { code } = req.params;
         const { year } = req.query;

@@ -22,12 +22,305 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/services/auth_session_persistence.dart';
 import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/services/session_scope.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Non-sensitive preference used to restore the authorized UI mode.
+const String authActiveModePreferenceKey = 'auth_active_mode';
+
+final authSessionPersistenceProvider = Provider<AuthSessionPersistence>(
+  (ref) => AuthSessionPersistence.secure(),
+);
+
+/// Returns an allowed UI mode without changing the user's authorization role.
+String authorizedActiveMode(UserModel user, Object? value) {
+  final requested = value?.toString().trim().toUpperCase() ?? '';
+  if (requested == 'ALMACEN' &&
+      user.isJefeVentas &&
+      user.userRole == UserRole.jefe) {
+    return 'ALMACEN';
+  }
+  if (requested == 'REPARTIDOR' && user.isRepartidor) {
+    return 'REPARTIDOR';
+  }
+  return 'COMERCIAL';
+}
+
+/// Restores a saved mode and revalidates it against the persisted user claims.
+String restoreAuthorizedActiveMode(
+  SharedPreferences preferences,
+  UserModel user,
+) {
+  return authorizedActiveMode(
+    user,
+    preferences.getString(authActiveModePreferenceKey),
+  );
+}
+
+({UserModel user, String activeMode, List<String> vendedorCodes})
+    requireCanonicalAuthProjection(
+  Map<String, dynamic> response, {
+  UserModel? currentUser,
+}) {
+  final rawUser = response['user'];
+  if (rawUser is! Map) {
+    throw StateError('Respuesta invalida: perfil canonico ausente');
+  }
+  final userJson = Map<String, dynamic>.from(rawUser);
+  const requiredTopLevelFields = {
+    'role',
+    'activeMode',
+    'availableRoles',
+    'availableModes',
+    'isJefeVentas',
+    'isRepartidor',
+    'codigoConductor',
+    'matricula',
+    'vendorCodes',
+    'vendedorCodes',
+    'tipoVendedor',
+    'showCommissions',
+    'claimsVersion',
+  };
+  const requiredUserFields = {
+    'id',
+    'code',
+    'name',
+    'company',
+    'vendedorCode',
+    'role',
+    'activeMode',
+    'availableRoles',
+    'availableModes',
+    'isJefeVentas',
+    'isRepartidor',
+    'codigoConductor',
+    'matricula',
+    'vendorCodes',
+    'vendedorCodes',
+    'tipoVendedor',
+    'showCommissions',
+    'claimsVersion',
+  };
+  if (!requiredTopLevelFields.every(response.containsKey) ||
+      !requiredUserFields.every(userJson.containsKey)) {
+    throw StateError('Respuesta invalida: proyeccion canonica incompleta');
+  }
+
+  List<String> normalizedStringList(Object? raw, String key) {
+    if (raw is! Iterable || raw.any((value) => value is! String)) {
+      throw StateError('Respuesta invalida: $key ausente');
+    }
+    return raw
+        .cast<String>()
+        .map((value) => value.trim().toUpperCase())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  final user = UserModel.fromJson(userJson);
+  final role = response['role']?.toString().trim().toUpperCase() ?? '';
+  final activeMode =
+      response['activeMode']?.toString().trim().toUpperCase() ?? '';
+  if (user.id.isEmpty ||
+      user.id == 'null' ||
+      user.code.isEmpty ||
+      user.name.isEmpty ||
+      user.company.isEmpty ||
+      user.vendedorCode == null ||
+      user.vendedorCode!.trim().isEmpty ||
+      role.isEmpty ||
+      activeMode.isEmpty) {
+    throw StateError('Respuesta invalida: identidad o autorizacion incompleta');
+  }
+  if (currentUser != null &&
+      (user.id != currentUser.id || user.code != currentUser.code)) {
+    throw StateError('Respuesta invalida: sujeto de autenticacion distinto');
+  }
+  if (user.role.toUpperCase() != role ||
+      !user.availableRoles.contains(role) ||
+      !user.availableModes.contains(activeMode)) {
+    throw StateError('Respuesta invalida: rol o modo no autorizado');
+  }
+  List<String> responseList(String key) {
+    return normalizedStringList(response[key], key);
+  }
+
+  if (!listEquals(responseList('availableRoles'), user.availableRoles) ||
+      !listEquals(responseList('availableModes'), user.availableModes) ||
+      !listEquals(
+        normalizedStringList(userJson['availableRoles'], 'user.availableRoles'),
+        user.availableRoles,
+      ) ||
+      !listEquals(
+        normalizedStringList(userJson['availableModes'], 'user.availableModes'),
+        user.availableModes,
+      )) {
+    throw StateError('Respuesta invalida: capacidades incoherentes');
+  }
+  if (userJson['activeMode']?.toString().trim().toUpperCase() != activeMode ||
+      userJson['role']?.toString().trim().toUpperCase() != role) {
+    throw StateError('Respuesta invalida: rol o modo de usuario incoherente');
+  }
+  if (authorizedActiveMode(user, activeMode) != activeMode) {
+    throw StateError('Respuesta invalida: modo incoherente con el perfil');
+  }
+
+  final vendedorCodes = List<String>.unmodifiable(
+    normalizedStringList(response['vendedorCodes'], 'vendedorCodes'),
+  );
+  if (vendedorCodes.isEmpty ||
+      !listEquals(vendedorCodes, user.vendedorCodes) ||
+      !listEquals(responseList('vendorCodes'), vendedorCodes) ||
+      !listEquals(
+        normalizedStringList(userJson['vendedorCodes'], 'user.vendedorCodes'),
+        vendedorCodes,
+      ) ||
+      !listEquals(
+        normalizedStringList(userJson['vendorCodes'], 'user.vendorCodes'),
+        vendedorCodes,
+      )) {
+    throw StateError('Respuesta invalida: ambito de vendedores incoherente');
+  }
+
+  if (response['isJefeVentas'] is! bool ||
+      response['isRepartidor'] is! bool ||
+      userJson['isJefeVentas'] is! bool ||
+      userJson['isRepartidor'] is! bool ||
+      response['showCommissions'] is! bool ||
+      userJson['showCommissions'] is! bool) {
+    throw StateError('Respuesta invalida: flags de autorizacion invalidos');
+  }
+  final topIsJefe = response['isJefeVentas'] as bool;
+  final topIsRepartidor = response['isRepartidor'] as bool;
+  if (topIsJefe != user.isJefeVentas ||
+      topIsRepartidor != user.isRepartidor ||
+      userJson['isJefeVentas'] != topIsJefe ||
+      userJson['isRepartidor'] != topIsRepartidor ||
+      (role == 'JEFE_VENTAS' && !topIsJefe) ||
+      (role == 'REPARTIDOR' &&
+          (!topIsRepartidor ||
+              user.codigoConductor == null ||
+              user.codigoConductor!.isEmpty)) ||
+      (role != 'REPARTIDOR' &&
+          (topIsRepartidor || user.codigoConductor != null))) {
+    throw StateError('Respuesta invalida: privilegios de perfil incoherentes');
+  }
+  if (response['codigoConductor'] != user.codigoConductor ||
+      response['matricula'] != user.matricula ||
+      response['tipoVendedor'] != user.tipoVendedor ||
+      response['showCommissions'] != user.showCommissions) {
+    throw StateError('Respuesta invalida: atributos de perfil incoherentes');
+  }
+  final topClaimsVersion = response['claimsVersion'];
+  if (topClaimsVersion is! int ||
+      topClaimsVersion <= 0 ||
+      userJson['claimsVersion'] != topClaimsVersion ||
+      user.claimsVersion != topClaimsVersion) {
+    throw StateError('Respuesta invalida: version de claims incoherente');
+  }
+
+  return (
+    user: user,
+    activeMode: activeMode,
+    vendedorCodes: vendedorCodes,
+  );
+}
+
+/// Projects a switch response while replacing every authorization field.
+({UserModel user, String activeMode, List<String> vendedorCodes})
+    projectAuthorizedModeSwitch({
+  required UserModel currentUser,
+  required String requestedMode,
+  required Map<String, dynamic> response,
+}) {
+  final projection = requireCanonicalAuthProjection(
+    response,
+    currentUser: currentUser,
+  );
+  final normalizedRequest = requestedMode.trim().toUpperCase();
+  final responseRole = response['role']?.toString().trim().toUpperCase();
+  if (responseRole == null || responseRole.isEmpty) {
+    throw StateError('Respuesta inválida: rol ausente');
+  }
+  final responseMode = response['activeMode']?.toString().trim().toUpperCase();
+  if (responseMode == null || responseMode.isEmpty) {
+    throw StateError('Respuesta inválida: modo ausente');
+  }
+
+  final (expectedRole, expectedMode) = switch (normalizedRequest) {
+    'ALMACEN' => ('JEFE_VENTAS', 'ALMACEN'),
+    'JEFE_VENTAS' => ('JEFE_VENTAS', 'COMERCIAL'),
+    'COMERCIAL' => ('COMERCIAL', 'COMERCIAL'),
+    'REPARTIDOR' => ('REPARTIDOR', 'REPARTIDOR'),
+    _ => throw StateError('Modo solicitado no válido'),
+  };
+  if (responseRole != expectedRole || responseMode != expectedMode) {
+    throw StateError('Respuesta de cambio de modo incoherente');
+  }
+
+  final updatedUser = projection.user;
+  final activeMode = authorizedActiveMode(updatedUser, responseMode);
+  if (activeMode != expectedMode) {
+    throw StateError('Modo solicitado no autorizado');
+  }
+  return (
+    user: updatedUser,
+    activeMode: activeMode,
+    vendedorCodes: projection.vendedorCodes,
+  );
+}
+
+/// Requires the complete session rotation returned by a role/mode switch.
+({String accessToken, String refreshToken}) requireModeSwitchSession(
+  Map<String, dynamic> response,
+) {
+  final accessToken = response['token'];
+  final refreshToken = response['refreshToken'];
+  if (accessToken is! String ||
+      accessToken.trim().isEmpty ||
+      refreshToken is! String ||
+      refreshToken.trim().isEmpty) {
+    throw StateError('Respuesta inválida: rotación de sesión ausente');
+  }
+  return (
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+  );
+}
+
+({String accessToken, String refreshToken, DateTime expiresAt})
+    requireCanonicalSessionRotation(
+  Map<String, dynamic> response, {
+  required String accessTokenKey,
+  DateTime? now,
+}) {
+  final accessToken = response[accessTokenKey];
+  final refreshToken = response['refreshToken'];
+  final rawRefreshExpiresIn = response['refreshExpiresIn'];
+  final refreshExpiresIn = rawRefreshExpiresIn is num
+      ? rawRefreshExpiresIn.toInt()
+      : int.tryParse(rawRefreshExpiresIn?.toString() ?? '');
+  if (accessToken is! String ||
+      accessToken.trim().isEmpty ||
+      refreshToken is! String ||
+      refreshToken.trim().isEmpty ||
+      refreshExpiresIn == null ||
+      refreshExpiresIn <= 0 ||
+      refreshExpiresIn > const Duration(days: 30).inSeconds) {
+    throw StateError('Respuesta invalida: rotacion de sesion incompleta');
+  }
+  return (
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+    expiresAt: (now ?? DateTime.now()).add(Duration(seconds: refreshExpiresIn)),
+  );
+}
 
 // ============================================================
 // STATE
@@ -37,6 +330,7 @@ class AuthState {
   const AuthState({
     this.user,
     this.vendedorCodes = const [],
+    this.activeMode = 'COMERCIAL',
     this.isLoading = false,
     this.error,
     this.isInitialized = false,
@@ -46,6 +340,7 @@ class AuthState {
   });
   final UserModel? user;
   final List<String> vendedorCodes;
+  final String activeMode;
   final bool isLoading;
   final String? error;
   final bool isInitialized;
@@ -61,6 +356,7 @@ class AuthState {
   AuthState copyWith({
     UserModel? user,
     List<String>? vendedorCodes,
+    String? activeMode,
     bool? isLoading,
     String? error,
     bool? isInitialized,
@@ -71,6 +367,7 @@ class AuthState {
     return AuthState(
       user: user ?? this.user,
       vendedorCodes: vendedorCodes ?? this.vendedorCodes,
+      activeMode: activeMode ?? this.activeMode,
       isLoading: isLoading ?? this.isLoading,
       error: error, // null = keep, empty string = clear
       isInitialized: isInitialized ?? this.isInitialized,
@@ -87,6 +384,7 @@ class AuthState {
           runtimeType == other.runtimeType &&
           user == other.user &&
           vendedorCodes == other.vendedorCodes &&
+          activeMode == other.activeMode &&
           isLoading == other.isLoading &&
           error == other.error &&
           isInitialized == other.isInitialized &&
@@ -98,6 +396,7 @@ class AuthState {
   int get hashCode => Object.hash(
         user,
         vendedorCodes,
+        activeMode,
         isLoading,
         error,
         isInitialized,
@@ -105,6 +404,14 @@ class AuthState {
         isMandatoryUpdate,
         updateMessage,
       );
+}
+
+/// Whether the state may render the warehouse UI for its existing manager role.
+bool isWarehouseUiMode(AuthState? authState) {
+  final user = authState?.user;
+  return user != null &&
+      authState?.activeMode == 'ALMACEN' &&
+      authorizedActiveMode(user, authState?.activeMode) == 'ALMACEN';
 }
 
 // ============================================================
@@ -122,6 +429,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   static const String _sessionExpiresAtKey = 'session_expires_at';
 
   Timer? _sessionExpiryTimer;
+  Future<void>? _logoutInFlight;
 
   @override
   Future<AuthState> build() async {
@@ -132,9 +440,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     // Bind global 401 callback
     ApiClient.onUnauthorized = () {
       debugPrint('[AuthNotifier] 401 detected — logging out');
-      logout(sessionExpired: true);
+      unawaited(logout(sessionExpired: true));
     };
-    ApiClient.onTokenRefreshed = () => _persistNewSessionDeadline();
+    ApiClient.onTokenRefreshed = _applyRefreshedCanonicalSession;
+    ApiClient.onAuthSessionDiverged = () => _forceReloginRequired();
 
     final visualQaRole = _visualQaRoleOverride();
     if (visualQaRole.isNotEmpty) {
@@ -143,6 +452,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     // Try auto-login
     return _tryAutoLogin();
+  }
+
+  @visibleForTesting
+  @protected
+  void bindAuthClientCallbacks() {
+    ApiClient.onUnauthorized = () {
+      unawaited(logout(sessionExpired: true));
+    };
+    ApiClient.onTokenRefreshed = _applyRefreshedCanonicalSession;
+    ApiClient.onAuthSessionDiverged = () => _forceReloginRequired();
   }
 
   String _visualQaRoleOverride() {
@@ -183,6 +502,21 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
               : '12',
       codigoConductor: isRepartidor ? 'R01' : null,
       isJefeVentas: isAlmacen,
+      availableRoles: isRepartidor
+          ? const ['REPARTIDOR']
+          : isAlmacen
+              ? const ['JEFE_VENTAS']
+              : const ['COMERCIAL'],
+      availableModes: isRepartidor
+          ? const ['REPARTIDOR']
+          : isAlmacen
+              ? const ['COMERCIAL', 'ALMACEN']
+              : const ['COMERCIAL'],
+      vendedorCodes: isRepartidor
+          ? const ['R01']
+          : isAlmacen
+              ? const ['12', '14', '80']
+              : const ['12'],
       showCommissions: true,
     );
     final codes = isRepartidor
@@ -195,6 +529,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return AuthState(
       user: user,
       vendedorCodes: codes,
+      activeMode: isAlmacen
+          ? 'ALMACEN'
+          : isRepartidor
+              ? 'REPARTIDOR'
+              : 'COMERCIAL',
       isInitialized: true,
     );
   }
@@ -210,8 +549,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       SessionScope.clear();
       CachePreWarmer.reset();
       debugPrint('[AuthNotifier] Local session caches cleared');
-    } catch (e) {
-      debugPrint('[AuthNotifier] Cache clear error: $e');
+    } catch (_) {
+      debugPrint('[AuthNotifier] Local cache clear failed');
     }
   }
 
@@ -257,17 +596,85 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     _applySessionDeadline(expiresAt);
   }
 
-  Future<void> _clearStoredSession(SharedPreferences prefs) async {
+  Future<void> _clearStoredSession([SharedPreferences? _]) async {
     _sessionExpiryTimer?.cancel();
     ApiClient.clearAuthToken();
     ApiClient.authSessionExpiresAt = null;
-    await ApiClient.clearRefreshToken();
-    await SecureStorage.deleteSecureData('user_token');
-    await SecureStorage.deleteSecureData('user_data');
-    await SecureStorage.deleteSecureData(_sessionExpiresAtKey);
-    await prefs.remove('vendedor_codes');
-    await prefs.remove('global_filter_vendor');
+    await ref.read(authSessionPersistenceProvider).clear();
     await _clearLocalSessionCache();
+  }
+
+  Future<void> _forceReloginRequired() async {
+    await _clearStoredSession();
+    state = const AsyncValue.data(
+      AuthState(
+        isInitialized: true,
+        error: 'La sesion cambio en el servidor. Inicia sesion de nuevo.',
+      ),
+    );
+  }
+
+  Future<bool> _applyRefreshedCanonicalSession(
+    Map<String, dynamic> response,
+  ) async {
+    try {
+      await _commitCanonicalSession(
+        response,
+        accessTokenKey: 'accessToken',
+        currentUser: state.value?.user,
+      );
+      return true;
+    } catch (_) {
+      await _forceReloginRequired();
+      return false;
+    }
+  }
+
+  Future<void> _commitCanonicalSession(
+    Map<String, dynamic> response, {
+    required String accessTokenKey,
+    UserModel? currentUser,
+  }) async {
+    final projection = requireCanonicalAuthProjection(
+      response,
+      currentUser: currentUser,
+    );
+    final rotation = requireCanonicalSessionRotation(
+      response,
+      accessTokenKey: accessTokenKey,
+    );
+    await ref.read(authSessionPersistenceProvider).commit(
+          CanonicalLocalAuthSession(
+            accessToken: rotation.accessToken,
+            refreshToken: rotation.refreshToken,
+            userJson: jsonEncode(projection.user.toJson()),
+            vendedorCodes: projection.vendedorCodes,
+            activeMode: projection.activeMode,
+            expiresAt: rotation.expiresAt,
+          ),
+        );
+
+    // Publish bearer and UI only after every local write succeeded.
+    ApiClient.setAuthToken(rotation.accessToken);
+    _applySessionDeadline(rotation.expiresAt);
+    await _clearLocalSessionCache();
+    _applyCacheScope(projection.user, projection.vendedorCodes);
+    final previous = state.value;
+    state = AsyncValue.data(
+      previous?.copyWith(
+            user: projection.user,
+            vendedorCodes: projection.vendedorCodes,
+            activeMode: projection.activeMode,
+            isLoading: false,
+            error: '',
+          ) ??
+          AuthState(
+            user: projection.user,
+            vendedorCodes: projection.vendedorCodes,
+            activeMode: projection.activeMode,
+            isInitialized: true,
+          ),
+    );
   }
 
   /// Validates the persisted session deadline and clears auth if it expired.
@@ -313,8 +720,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         if (refreshedToken != null && refreshedToken.isNotEmpty) {
           ApiClient.setAuthToken(refreshedToken);
         }
-      } else if (ApiClient.isAuthSessionExpired) {
-        await logout(sessionExpired: true);
+      } else {
         return false;
       }
     }
@@ -370,8 +776,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       var token = await SecureStorage.readSecureData('user_token');
-      final userDataStr = await SecureStorage.readSecureData('user_data');
-      final codes = prefs.getStringList('vendedor_codes');
+      var userDataStr = await SecureStorage.readSecureData('user_data');
+      var codes = prefs.getStringList('vendedor_codes');
       final expiresAt = await _readSessionExpiresAt();
 
       if (token != null || userDataStr != null || codes != null) {
@@ -397,6 +803,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           final refreshed = await ApiClient.refreshAccessToken();
           token = await SecureStorage.readSecureData('user_token');
           if (refreshed && token != null && token.isNotEmpty) {
+            userDataStr = await SecureStorage.readSecureData('user_data');
+            codes = prefs.getStringList('vendedor_codes');
             debugPrint('[AuthNotifier] Stored token refreshed');
           } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity &&
               !_isSessionExpired(expiresAt)) {
@@ -414,7 +822,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         // The server uses ephemeral JWT secrets — a server restart invalidates
         // all stored tokens even if they haven't expired by time.
         // If the server is unreachable (offline), we proceed optimistically.
-        ApiClient.setAuthToken(token);
+        final currentToken = token;
+        if (currentToken == null || currentToken.isEmpty) {
+          await _clearStoredSession(prefs);
+          return const AuthState(isInitialized: true);
+        }
+        ApiClient.setAuthToken(currentToken);
         ApiClient.startLogin(); // suppress onUnauthorized during validation
         try {
           await ApiClient.get(ApiConfig.validate);
@@ -433,10 +846,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         } finally {
           ApiClient.endLogin();
         }
+        final restoredUserData = userDataStr;
+        if (restoredUserData == null) {
+          await _clearStoredSession(prefs);
+          return const AuthState(isInitialized: true);
+        }
         final user = UserModel.fromJson(
-          jsonDecode(userDataStr) as Map<String, dynamic>,
+          jsonDecode(restoredUserData) as Map<String, dynamic>,
         );
         final vendedorCodes = codes ?? [];
+        final activeMode = restoreAuthorizedActiveMode(prefs, user);
         _applyCacheScope(user, vendedorCodes);
 
         // Pre-warm cache in background
@@ -453,217 +872,170 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         return AuthState(
           user: user,
           vendedorCodes: vendedorCodes,
+          activeMode: activeMode,
           isInitialized: true,
         );
       }
-    } catch (e) {
-      debugPrint('[AuthNotifier] Auto-login failed: $e');
+    } catch (_) {
+      debugPrint('[AuthNotifier] Auto-login failed');
+      await _clearStoredSession();
     }
 
     return const AuthState(isInitialized: true);
   }
 
   /// Login with credentials
-  Future<bool> login(String username, String password) async {
-    ApiClient.startLogin(); // Block concurrent 401s from triggering logout
-    state = const AsyncValue.loading();
-
-    try {
-      if (username.isEmpty || password.isEmpty) {
-        state = const AsyncValue.data(
-          AuthState(
-              isInitialized: true, error: 'Usuario y contraseña requeridos'),
-        );
-        return false;
-      }
-
-      // Ensure Dio is ready with correct timeouts for current network
-      await ApiClient.ensureDioReady();
-
-      final response = await ApiClient.post(
-        ApiConfig.login,
-        {'username': username, 'password': password},
+  Future<bool> login(String username, String password) => _loginCanonical(
+        username: username,
+        password: password,
+        allowRoleSelection: true,
       );
 
-      if (response == null) {
-        state = const AsyncValue.data(
-          AuthState(
-            isInitialized: true,
-            error: 'No se pudo conectar con el servidor',
-          ),
-        );
-        return false;
-      }
+  /// Login for multi-role users
+  Future<bool> loginWithRole(
+    String username,
+    String password,
+    String role,
+  ) =>
+      _loginCanonical(
+        username: username,
+        password: password,
+        selectedRole: role,
+        allowRoleSelection: false,
+      );
 
-      if (response['requiresRoleSelection'] == true) {
+  Future<bool> _loginCanonical({
+    required String username,
+    required String password,
+    required bool allowRoleSelection,
+    String? selectedRole,
+  }) async {
+    if (username.trim().isEmpty || password.isEmpty) {
+      state = const AsyncValue.data(
+        AuthState(
+          isInitialized: true,
+          error: 'Usuario y contraseña requeridos.',
+        ),
+      );
+      return false;
+    }
+
+    ApiClient.startLogin();
+    state = const AsyncValue.loading();
+    try {
+      // Remove stale fragments before attempting to publish a new session.
+      await _clearStoredSession();
+      await ApiClient.ensureDioReady();
+      final payload = <String, dynamic>{
+        'username': username,
+        'password': password,
+        if (selectedRole != null) 'role': selectedRole,
+      };
+      final response = await ApiClient.post(ApiConfig.login, payload);
+
+      if (response['requiresRoleSelection'] == true && allowRoleSelection) {
+        final roles = response['availableRoles'];
+        if (roles is! Iterable) {
+          await _setFailedLogin('Respuesta de autenticación inválida.');
+          return false;
+        }
+        const allowedRoles = {
+          'ADMIN',
+          'DIRECTOR',
+          'JEFE_VENTAS',
+          'COMERCIAL',
+          'REPARTIDOR',
+        };
+        final safeRoles = roles
+            .whereType<String>()
+            .map((role) => role.trim().toUpperCase())
+            .where(allowedRoles.contains)
+            .toSet()
+            .toList(growable: false);
+        if (safeRoles.isEmpty) {
+          await _setFailedLogin('Respuesta de autenticación inválida.');
+          return false;
+        }
         state = AsyncValue.data(
           AuthState(
             isInitialized: true,
             error: 'ROLE_SELECTION',
-            updateMessage: jsonEncode(response['availableRoles'] ?? []),
+            updateMessage: jsonEncode(safeRoles),
           ),
         );
         return false;
       }
 
-      if (response['user'] != null) {
-        final user = UserModel.fromJson(
-          response['user'] as Map<String, dynamic>,
-        );
-        final token = response['token'] as String?;
-        final refreshToken = response['refreshToken'] as String?;
-
-        if (token == null || token.isEmpty) {
-          state = const AsyncValue.data(
-            AuthState(
-              isInitialized: true,
-              error: 'Respuesta inválida del servidor: token faltante',
-            ),
-          );
-          return false;
-        }
-
-        final vendedorCodes = response['vendedorCodes'] != null
-            ? List<String>.from(response['vendedorCodes'] as Iterable)
-            : <String>[];
-
-        // Store token
-        ApiClient.setAuthToken(token);
-        await SecureStorage.writeSecureData('user_token', token);
-        if (refreshToken != null && refreshToken.isNotEmpty) {
-          await ApiClient.storeRefreshToken(refreshToken);
-        }
-        await SecureStorage.writeSecureData(
-          'user_data',
-          jsonEncode(response['user']),
-        );
-        await _persistNewSessionDeadline();
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setStringList('vendedor_codes', vendedorCodes);
-        _applyCacheScope(user, vendedorCodes);
-
-        // Re-apply token immediately before state update to guard against
-        // stale 401 responses clearing it during the storage writes above
-        ApiClient.setAuthToken(token);
-
-        // Update state
-        state = AsyncValue.data(
-          AuthState(
-            user: user,
-            vendedorCodes: vendedorCodes,
-            isInitialized: true,
-          ),
-        );
-
-        // Pre-warm cache in background
-        unawaited(
-          CachePreWarmer.preWarmCache(
-            vendedorCodes: vendedorCodes,
-            isJefeVentas: user.isJefeVentas,
-          ),
-        );
-
-        debugPrint('[AuthNotifier] Login successful: ${user.name}');
-        return true;
-      } else {
-        state = AsyncValue.data(
-          AuthState(
-            isInitialized: true,
-            error: response['error']?.toString() ?? 'Respuesta inválida',
-          ),
-        );
-        return false;
-      }
-    } catch (e, st) {
-      debugPrint('[AuthNotifier] Login error: $e');
-      state = AsyncValue.data(
-        AuthState(
-          isInitialized: true,
-          error: e.toString().replaceAll('Exception: ', ''),
-        ),
+      await _commitCanonicalSession(
+        response,
+        accessTokenKey: 'token',
       );
-      debugPrintStack(stackTrace: st);
+      final authenticated = state.value;
+      if (authenticated?.isAuthenticated != true) {
+        await _setFailedLogin('Respuesta de autenticación inválida.');
+        return false;
+      }
+      preWarmAuthenticatedSession(authenticated!);
+      return true;
+    } catch (error) {
+      await _setFailedLogin(_safeLoginError(error));
       return false;
     } finally {
       ApiClient.endLogin();
     }
   }
 
-  /// Login for multi-role users
-  Future<bool> loginWithRole(
-      String username, String password, String role) async {
-    ApiClient.startLogin(); // Block concurrent 401s from triggering logout
-    state = const AsyncValue.loading();
+  @protected
+  void preWarmAuthenticatedSession(AuthState authenticated) {
+    unawaited(
+      CachePreWarmer.preWarmCache(
+        vendedorCodes: authenticated.vendedorCodes,
+        isJefeVentas: authenticated.user!.isJefeVentas,
+      ),
+    );
+  }
 
-    try {
-      final response = await ApiClient.post(
-        ApiConfig.login,
-        {'username': username, 'password': password, 'role': role},
-      );
+  Future<void> _setFailedLogin(String message) async {
+    await _clearStoredSession();
+    state = AsyncValue.data(
+      AuthState(isInitialized: true, error: message),
+    );
+  }
 
-      if (response == null || response['user'] == null) {
-        state = const AsyncValue.data(
-          AuthState(isInitialized: true, error: 'Credenciales inválidas'),
-        );
-        return false;
+  String _safeLoginError(Object error) {
+    if (error is ApiException) {
+      if (error.statusCode == 401) return 'Credenciales inválidas.';
+      if (error.statusCode == 429) {
+        return 'Demasiados intentos. Inténtalo más tarde.';
       }
-
-      final user = UserModel.fromJson(response['user'] as Map<String, dynamic>);
-      final token = response['token'] as String?;
-      final refreshToken = response['refreshToken'] as String?;
-      if (token == null) {
-        state = const AsyncValue.data(
-          AuthState(isInitialized: true, error: 'Token faltante'),
-        );
-        return false;
+      if (error.statusCode == 503) {
+        return 'Servicio de autenticación no disponible.';
       }
-
-      final vendedorCodes = response['vendedorCodes'] != null
-          ? List<String>.from(response['vendedorCodes'] as Iterable)
-          : <String>[];
-
-      ApiClient.setAuthToken(token);
-      await SecureStorage.writeSecureData('user_token', token);
-      if (refreshToken != null && refreshToken.isNotEmpty) {
-        await ApiClient.storeRefreshToken(refreshToken);
-      }
-      await SecureStorage.writeSecureData(
-          'user_data', jsonEncode(response['user']));
-      await _persistNewSessionDeadline();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('vendedor_codes', vendedorCodes);
-      _applyCacheScope(user, vendedorCodes);
-
-      // Re-apply token immediately before state update to guard against
-      // stale 401 responses clearing it during the storage writes above
-      ApiClient.setAuthToken(token);
-
-      state = AsyncValue.data(
-        AuthState(
-            user: user, vendedorCodes: vendedorCodes, isInitialized: true),
-      );
-
-      unawaited(
-        CachePreWarmer.preWarmCache(
-          vendedorCodes: vendedorCodes,
-          isJefeVentas: user.isJefeVentas,
-        ),
-      );
-      return true;
-    } catch (e) {
-      state = AsyncValue.data(
-        AuthState(isInitialized: true, error: e.toString()),
-      );
-      return false;
-    } finally {
-      ApiClient.endLogin();
     }
+    return 'No se pudo iniciar sesión.';
   }
 
   /// Logout
-  Future<void> logout({bool sessionExpired = false}) async {
+  Future<void> logout({bool sessionExpired = false}) {
+    final active = _logoutInFlight;
+    if (active != null) return active;
+
+    late Future<void> guarded;
+    guarded = _logoutOnce(sessionExpired: sessionExpired).whenComplete(() {
+      if (identical(_logoutInFlight, guarded)) _logoutInFlight = null;
+    });
+    _logoutInFlight = guarded;
+    return guarded;
+  }
+
+  Future<void> _logoutOnce({required bool sessionExpired}) async {
+    var remoteLogoutFailed = false;
+    try {
+      await ApiClient.revokeCurrentSession();
+    } catch (_) {
+      remoteLogoutFailed = true;
+    }
+
     // Clear auth state immediately
     state = AsyncValue.data(
       AuthState(
@@ -674,14 +1046,23 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       ),
     );
 
-    final prefs = await SharedPreferences.getInstance();
-    await _clearStoredSession(prefs);
+    await _clearStoredSession();
 
     // Clear filters
     try {
       ref.read(filterProvider.notifier).clear();
-    } catch (e) {
-      debugPrint('[AuthNotifier] Filter clear error: $e');
+    } catch (_) {
+      debugPrint('[AuthNotifier] Filter clear failed');
+    }
+
+    if (!sessionExpired && remoteLogoutFailed) {
+      state = const AsyncValue.data(
+        AuthState(
+          isInitialized: true,
+          error:
+              'La sesion local se cerro; no se pudo confirmar el cierre remoto.',
+        ),
+      );
     }
   }
 
@@ -694,6 +1075,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     state = AsyncValue.data(currentState!.copyWith(isLoading: true));
 
+    ApiClient.startLogin();
+    var serverAccepted = false;
     try {
       final response = await ApiClient.post(
         '/auth/switch-role',
@@ -704,52 +1087,39 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         },
       );
 
-      if (response != null && response['success'] == true) {
-        if (response['token'] != null) {
-          final token = response['token'] as String;
-          final refreshToken = response['refreshToken'] as String?;
-          ApiClient.setAuthToken(token);
-          await SecureStorage.writeSecureData('user_token', token);
-          if (refreshToken != null && refreshToken.isNotEmpty) {
-            await ApiClient.storeRefreshToken(refreshToken);
-          }
-
-          final updatedUser = currentState.user!.copyWith(role: newRole);
-          final nextVendedorCodes = response['vendedorCodes'] != null
-              ? List<String>.from(response['vendedorCodes'] as Iterable)
-              : currentState.vendedorCodes;
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setStringList('vendedor_codes', nextVendedorCodes);
-          await SecureStorage.writeSecureData(
-            'user_data',
-            jsonEncode(updatedUser.toJson()),
-          );
-          final expiresAt = await _readSessionExpiresAt();
-          if (expiresAt == null || _isSessionExpired(expiresAt)) {
-            await logout(sessionExpired: true);
-            return false;
-          }
-          _applySessionDeadline(expiresAt);
-          await _clearLocalSessionCache();
-          _applyCacheScope(updatedUser, nextVendedorCodes);
-          state = AsyncValue.data(
-            currentState.copyWith(
-              user: updatedUser,
-              vendedorCodes: nextVendedorCodes,
-              isLoading: false,
-            ),
-          );
-        }
-        return true;
+      if (response == null || response['success'] != true) {
+        await _forceReloginRequired();
+        return false;
       }
-
-      state = AsyncValue.data(currentState.copyWith(
-          isLoading: false, error: 'Failed to switch role'));
-      return false;
+      serverAccepted = true;
+      projectAuthorizedModeSwitch(
+        currentUser: currentState.user!,
+        requestedMode: newRole,
+        response: response,
+      );
+      await _commitCanonicalSession(
+        response,
+        accessTokenKey: 'token',
+        currentUser: currentState.user,
+      );
+      return true;
     } catch (e) {
-      state = AsyncValue.data(
-          currentState.copyWith(isLoading: false, error: e.toString()));
+      final statusCode = e is ApiException ? e.statusCode : null;
+      final definitiveRejection =
+          !serverAccepted && const [400, 403, 422].contains(statusCode);
+      if (definitiveRejection) {
+        state = AsyncValue.data(
+          currentState.copyWith(
+            isLoading: false,
+            error: 'El perfil solicitado no esta autorizado.',
+          ),
+        );
+      } else {
+        await _forceReloginRequired();
+      }
       return false;
+    } finally {
+      ApiClient.endLogin();
     }
   }
 
@@ -770,8 +1140,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           updateMessage: (data['message'] as String?) ?? '',
         ),
       );
-    } catch (e) {
-      debugPrint('[AuthNotifier] Update check error: $e');
+    } catch (_) {
+      debugPrint('[AuthNotifier] Update check failed');
     }
   }
 

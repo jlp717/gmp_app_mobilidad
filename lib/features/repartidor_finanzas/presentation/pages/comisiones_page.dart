@@ -29,13 +29,18 @@ class RepartidorComisionesFinanzasPage extends ConsumerStatefulWidget {
 class _RepartidorComisionesFinanzasPageState
     extends ConsumerState<RepartidorComisionesFinanzasPage> {
   bool _isLoading = true;
-  String? _error;
+  Object? _error;
   DateTime? _lastFetchTime;
+  late DateTime _selectedPeriod;
+  late RepartidorCommissionSummary? _summary;
+  List<RepartidorCommissionTier> _tiers = const [];
   int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedPeriod = DateTime(now.year, now.month);
     _loadData();
   }
 
@@ -45,6 +50,17 @@ class _RepartidorComisionesFinanzasPageState
     if (oldWidget.repartidorId != widget.repartidorId) {
       _loadData(forceRefresh: true);
     }
+  }
+
+  Future<void> _changePeriod(int monthDelta) async {
+    final next = DateTime(
+      _selectedPeriod.year,
+      _selectedPeriod.month + monthDelta,
+    );
+    final now = DateTime.now();
+    if (next.isAfter(DateTime(now.year, now.month))) return;
+    setState(() => _selectedPeriod = next);
+    await _loadData();
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
@@ -61,29 +77,40 @@ class _RepartidorComisionesFinanzasPageState
       _error = null;
     });
     try {
-      final now = DateTime.now();
-      final from = DateTime(now.year, now.month);
-      final to = DateTime(now.year, now.month + 1, 0);
+      final from = DateTime(_selectedPeriod.year, _selectedPeriod.month);
+      final to = DateTime(_selectedPeriod.year, _selectedPeriod.month + 1, 0);
       final summaryArgs = (
         repartidorId: widget.repartidorId,
         from: from,
         to: to,
         forceRefresh: forceRefresh,
       );
-      await ref.read(repartidorCommissionSummaryProvider(summaryArgs).future);
-      await ref.read(repartidorCommissionTiersProvider.future);
+      if (forceRefresh) {
+        ref.invalidate(repartidorCommissionTiersProvider);
+      }
+      final results = await Future.wait<dynamic>([
+        ref.read(repartidorCommissionSummaryProvider(summaryArgs).future),
+        if (forceRefresh)
+          ref
+              .read(repartidorFinanzasServiceProvider)
+              .getCommissionTiers(forceRefresh: true)
+        else
+          ref.read(repartidorCommissionTiersProvider.future),
+      ]);
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
+        _summary = results[0] as RepartidorCommissionSummary;
+        _tiers = results[1] as List<RepartidorCommissionTier>;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
-    } catch (e) {
-      if (mounted && generation == _loadGeneration) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _error = error;
+        _isLoading = false;
+      });
     }
   }
 
@@ -100,32 +127,24 @@ class _RepartidorComisionesFinanzasPageState
         ),
       );
     }
-
     final now = DateTime.now();
-    final from = DateTime(now.year, now.month);
-    final to = DateTime(now.year, now.month + 1, 0);
-    final summaryArgs = (
-      repartidorId: widget.repartidorId,
-      from: from,
-      to: to,
-      forceRefresh: false,
-    );
-    final summaryAsync =
-        ref.watch(repartidorCommissionSummaryProvider(summaryArgs));
-    final tiersAsync = ref.watch(repartidorCommissionTiersProvider);
-
+    final canMoveNext = _selectedPeriod.isBefore(DateTime(now.year, now.month));
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       body: Column(
         children: [
           SmartSyncHeader(
             title: 'Comisiones',
-            subtitle: 'Seguimiento y Objetivos',
+            subtitle: 'Seguimiento y objetivos',
             isLoading: _isLoading,
             lastSync: _lastFetchTime,
             onSync: () => _loadData(forceRefresh: true),
           ),
-          _Header(period: DateFormat('MM/yyyy').format(now)),
+          _Header(period: DateFormat('MM/yyyy').format(_selectedPeriod)),
+          _PeriodSelector(
+            onPrevious: () => _changePeriod(-1),
+            onNext: canMoveNext ? () => _changePeriod(1) : null,
+          ),
           if (_isLoading)
             const Expanded(child: Center(child: SkeletonList(itemCount: 6)))
           else if (_error != null)
@@ -150,46 +169,67 @@ class _RepartidorComisionesFinanzasPageState
                 ),
               ),
             )
-          else
-            summaryAsync.when(
-              data: (summary) => tiersAsync.when(
-                data: (tiers) =>
-                    _Content(summary: summary, tiers: tiers, now: now),
-                loading: () => const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (e, st) {
-                  Sentry.captureException(e, stackTrace: st);
-                  return Expanded(
-                    child: Center(
-                      child: Text(
-                        financeErrorMessage(
-                          e,
-                          'No se pudieron cargar los tramos',
-                        ),
-                        style: const TextStyle(color: AppTheme.textSecondary),
+          else if (_tiers.isEmpty)
+            Expanded(
+              child: Center(
+                child: RepartidorExecutivePanel(
+                  accentColor: AppTheme.warning,
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'No hay tramos de comisión configurados',
+                        style: TextStyle(color: AppTheme.textSecondary),
                       ),
-                    ),
-                  );
-                },
-              ),
-              loading: () => const Expanded(
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, st) {
-                Sentry.captureException(e, stackTrace: st);
-                return Expanded(
-                  child: Center(
-                    child: Text(
-                      financeErrorMessage(e, 'No se pudo cargar el resumen'),
-                      style: const TextStyle(color: AppTheme.textSecondary),
-                    ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => _loadData(forceRefresh: true),
+                        child: const Text('Reintentar'),
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+              ),
+            )
+          else
+            _Content(
+              summary: _summary!,
+              tiers: _tiers,
+              now: _selectedPeriod,
             ),
         ],
       ),
+    );
+  }
+}
+
+class _PeriodSelector extends StatelessWidget {
+  const _PeriodSelector({required this.onPrevious, required this.onNext});
+
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          tooltip: 'Mes anterior',
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left),
+        ),
+        const Text(
+          'Cambiar periodo',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        IconButton(
+          tooltip: 'Mes siguiente',
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right),
+        ),
+      ],
     );
   }
 }
@@ -266,6 +306,7 @@ class _Content extends StatelessWidget {
         children: [
           if (!_isLoadingPlaceholder) ...[
             _SummaryCards(
+              period: now,
               totalTarget: totalTarget,
               totalActual: totalActual,
               commission: summary.commission,
@@ -429,7 +470,6 @@ class _Content extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: RepartidorExecutivePanel(
-          accentColor: AppTheme.info,
           margin: const EdgeInsets.all(12),
           padding: EdgeInsets.zero,
           child: DataTable(
@@ -552,6 +592,7 @@ class _Content extends StatelessWidget {
 
 class _SummaryCards extends StatelessWidget {
   const _SummaryCards({
+    required this.period,
     required this.totalTarget,
     required this.totalActual,
     required this.commission,
@@ -560,6 +601,7 @@ class _SummaryCards extends StatelessWidget {
     required this.collectedPct,
   });
 
+  final DateTime period;
   final double totalTarget;
   final double totalActual;
   final double commission;
@@ -583,12 +625,12 @@ class _SummaryCards extends StatelessWidget {
               accentColor: AppTheme.info,
               icon: Icons.calendar_today,
               iconColor: AppTheme.info,
-              title: DateFormat('MMMM').format(DateTime.now()).toUpperCase(),
+              title: DateFormat('MMMM').format(period).toUpperCase(),
               value: CurrencyFormatter.format(totalActual),
               subtitle: 'de ${CurrencyFormatter.format(totalTarget)}',
               progressValue: totalTarget > 0
-                  ? (totalActual / totalTarget).clamp(0.01, double.infinity)
-                  : 0.01,
+                  ? (totalActual / totalTarget).clamp(0.0, 1.0)
+                  : 0.0,
               progressColor:
                   totalActual >= totalTarget ? AppTheme.success : AppTheme.info,
             ),

@@ -24,6 +24,9 @@ class ApiClient {
   static int _authEpoch = 0;
   static bool _lastTokenRefreshFailedDueToConnectivity = false;
 
+  @visibleForTesting
+  static Future<String?> Function()? refreshTokenReaderOverride;
+
   /// Absolute local deadline for the current authenticated session.
   static DateTime? authSessionExpiresAt;
 
@@ -35,8 +38,12 @@ class ApiClient {
   /// This is called when the server returns 401, indicating session expired
   static VoidCallback? onUnauthorized;
 
-  /// Callback invoked after a successful refresh-token rotation.
-  static FutureOr<void> Function()? onTokenRefreshed;
+  /// Commits a complete DB-revalidated refresh projection locally.
+  static FutureOr<bool> Function(Map<String, dynamic> response)?
+      onTokenRefreshed;
+
+  /// Clears local auth when a refresh response may have been lost after CAS.
+  static FutureOr<void> Function()? onAuthSessionDiverged;
 
   /// Flag to prevent duplicate logout calls
   static bool _isLoggingOut = false;
@@ -135,8 +142,8 @@ class ApiClient {
       debugPrint(
         '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}',
       );
-    } catch (e) {
-      debugPrint('[ApiClient] ⚠️ Error en inicialización: $e');
+    } catch (_) {
+      debugPrint('[ApiClient] Initialization failed; using safe defaults');
       // Continuar con configuración por defecto
       _isInitialized = true;
     }
@@ -311,7 +318,8 @@ class ApiClient {
           options.extra['authEpoch'] = _authEpoch;
           options.extra['hadAuthToken'] = token != null;
           if (token != null) {
-            if (isAuthSessionExpired) {
+            if (isAuthSessionExpired &&
+                options.extra['allowExpiredAuthForLogout'] != true) {
               _savedAuthToken = null;
               _authEpoch++;
               options.headers.remove('Authorization');
@@ -344,8 +352,10 @@ class ApiClient {
         onError: (error, handler) async {
           final statusCode = error.response?.statusCode;
           final path = error.requestOptions.path;
-          final isAuthEndpoint =
-              path.contains('/auth/login') || path.contains('/auth/refresh');
+          final isAuthEndpoint = path.contains('/auth/login') ||
+              path.contains('/auth/refresh') ||
+              path.contains('/auth/logout') ||
+              path.contains('/auth/switch-role');
           final alreadyRetried =
               error.requestOptions.extra['authRetried'] == true;
 
@@ -425,8 +435,8 @@ class ApiClient {
       await ApiConfig.refreshConnection();
       reinitialize();
       return ApiConfig.isNetworkReady;
-    } catch (e) {
-      debugPrint('[ApiClient] ❌ Error en reconexión: $e');
+    } catch (_) {
+      debugPrint('[ApiClient] Connectivity recheck failed');
       return false;
     }
   }
@@ -488,6 +498,32 @@ class ApiClient {
     await SecureStorage.deleteSecureData('refresh_token');
   }
 
+  /// Revokes the canonical server session exactly once before local cleanup.
+  /// Logout is deliberately non-idempotent from the client's perspective and
+  /// is never retried automatically.
+  static Future<void> revokeCurrentSession() async {
+    final token = _savedAuthToken;
+    if (token == null || token.isEmpty) return;
+
+    _isLoggingOut = true;
+    try {
+      await dio.post<Map<String, dynamic>>(
+        ApiConfig.logout,
+        data: const <String, dynamic>{},
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          extra: const {
+            'skipRetry': true,
+            'idempotent': false,
+            'allowExpiredAuthForLogout': true,
+          },
+        ),
+      );
+    } finally {
+      _isLoggingOut = false;
+    }
+  }
+
   static Future<bool> refreshAccessToken() async {
     final pending = _refreshInFlight;
     if (pending != null) return pending;
@@ -507,8 +543,11 @@ class ApiClient {
       return false;
     }
 
-    final refreshToken = await SecureStorage.readSecureData('refresh_token');
+    final refreshToken = await (refreshTokenReaderOverride?.call() ??
+        SecureStorage.readSecureData('refresh_token'));
     if (refreshToken == null || refreshToken.isEmpty) {
+      final diverged = onAuthSessionDiverged;
+      if (diverged != null) await diverged();
       return false;
     }
 
@@ -521,28 +560,37 @@ class ApiClient {
       );
       final body = response.data ?? const <String, dynamic>{};
       final accessToken = (body['token'] ?? body['accessToken'])?.toString();
-      final nextRefreshToken =
-          (body['refreshToken'] ?? refreshToken).toString();
+      final nextRefreshToken = body['refreshToken']?.toString();
 
-      if (accessToken == null || accessToken.isEmpty) {
+      if (accessToken == null ||
+          accessToken.isEmpty ||
+          nextRefreshToken == null ||
+          nextRefreshToken.isEmpty) {
+        final diverged = onAuthSessionDiverged;
+        if (diverged != null) await diverged();
         return false;
       }
 
-      setAuthToken(accessToken);
-      await SecureStorage.writeSecureData('user_token', accessToken);
-      await SecureStorage.writeSecureData('refresh_token', nextRefreshToken);
       final callback = onTokenRefreshed;
-      if (callback != null) {
-        await callback();
+      if (callback == null) {
+        final diverged = onAuthSessionDiverged;
+        if (diverged != null) await diverged();
+        return false;
       }
+      final committed = await callback(Map<String, dynamic>.from(body));
+      if (!committed) return false;
       debugPrint('[ApiClient] Access token refreshed');
       return true;
     } on DioException catch (e) {
       _lastTokenRefreshFailedDueToConnectivity = _isNetworkError(e);
-      debugPrint('[ApiClient] Token refresh failed: $e');
+      final diverged = onAuthSessionDiverged;
+      if (diverged != null) await diverged();
+      debugPrint('[ApiClient] Token refresh failed');
       return false;
-    } catch (e) {
-      debugPrint('[ApiClient] Token refresh failed: $e');
+    } catch (_) {
+      final diverged = onAuthSessionDiverged;
+      if (diverged != null) await diverged();
+      debugPrint('[ApiClient] Token refresh failed');
       return false;
     } finally {
       _isLoggingIn = false;
@@ -558,10 +606,12 @@ class ApiClient {
     _refreshInFlight = null;
     _authEpoch = 0;
     _lastTokenRefreshFailedDueToConnectivity = false;
+    refreshTokenReaderOverride = null;
     authSessionExpiresAt = null;
     _pendingRequests.clear();
     onUnauthorized = null;
     onTokenRefreshed = null;
+    onAuthSessionDiverged = null;
     _isLoggingOut = false;
     _isLoggingIn = false;
   }
@@ -928,10 +978,19 @@ class ApiClient {
   /// POST request (never cached)
   static Future<Map<String, dynamic>> post(
     String endpoint,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    Map<String, String>? headers,
+    bool idempotent = false,
+  }) async {
     try {
-      final response = await dio.post(endpoint, data: data);
+      final response = await dio.post(
+        endpoint,
+        data: data,
+        options: Options(
+          headers: headers == null ? null : Map<String, String>.from(headers),
+          extra: <String, dynamic>{'idempotent': idempotent},
+        ),
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleError(e);
@@ -992,25 +1051,12 @@ class ApiClient {
         e.type == DioExceptionType.unknown;
   }
 
-  static Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
-    final redacted = <String, dynamic>{};
-    for (final entry in headers.entries) {
-      final key = entry.key.toLowerCase();
-      final sensitive = key == 'authorization' ||
-          key == 'cookie' ||
-          key == 'set-cookie' ||
-          key.contains('token') ||
-          key.contains('secret') ||
-          key.contains('key');
-      redacted[entry.key] = sensitive ? '[REDACTED]' : entry.value;
-    }
-    return redacted;
-  }
-
   static ApiException _handleError(DioException e) {
-    // Always log raw error details for diagnostics (visible in adb logcat)
+    // Never emit transport payloads, exception strings, request paths, tokens,
+    // SQL or filesystem details to client logs.
     debugPrint(
-      '[ApiClient] DioException type=${e.type} error=${e.error.runtimeType}: ${e.error}',
+      '[ApiClient] Request failed: type=${e.type} '
+      'status=${e.response?.statusCode ?? 0}',
     );
     if (e.type == DioExceptionType.cancel) {
       return ApiException(
@@ -1053,6 +1099,7 @@ class ApiClient {
       // Extract server error message + semantic code
       String? serverMessage;
       String? serverCode;
+      String? serverConfirmationId;
       if (data is Map<String, dynamic>) {
         final error = data['error'] as String?;
         final details = data['details'] as String?;
@@ -1060,6 +1107,10 @@ class ApiClient {
             ? '$error: $details'
             : (error ?? data['message'] as String?);
         serverCode = data['code'] as String?;
+        final rawConfirmationId = data['confirmationId'];
+        if (rawConfirmationId is String && rawConfirmationId.isNotEmpty) {
+          serverConfirmationId = rawConfirmationId;
+        }
       }
 
       if (statusCode == 401) {
@@ -1109,6 +1160,7 @@ class ApiClient {
           serverMessage ?? 'Conflicto con el estado actual.',
           statusCode: 409,
           code: serverCode,
+          confirmationId: serverConfirmationId,
         );
       } else if (statusCode >= 500) {
         return ApiException(
@@ -1186,14 +1238,12 @@ class _RetryInterceptor extends Interceptor {
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
     if (retryCount == 0) {
-      // Log full request details on first failure
+      // Keep diagnostics useful without leaking paths, query values, headers,
+      // bearer tokens, credentials or raw transport exceptions.
       debugPrint(
-        '[ApiClient] ❌ Request failed: ${err.requestOptions.method} ${err.requestOptions.uri}',
+        '[ApiClient] Request failed: method=${err.requestOptions.method} '
+        'type=${err.type} status=${err.response?.statusCode ?? 0}',
       );
-      debugPrint(
-        '[ApiClient] Headers sent: ${ApiClient._redactHeaders(err.requestOptions.headers)}',
-      );
-      debugPrint('[ApiClient] Error type: ${err.type}, Error: ${err.error}');
     }
 
     if (shouldRetry && retryCount < _maxRetries) {
@@ -1264,7 +1314,12 @@ class _RetryInterceptor extends Interceptor {
 }
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode, this.code});
+  ApiException(
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.confirmationId,
+  });
   final String message;
   final int? statusCode;
 
@@ -1273,6 +1328,8 @@ class ApiException implements Exception {
   /// que la UI haga mensaje específico sin parsear el texto humano.
   final String? code;
 
+  /// Server-issued confirmation identifier returned by a typed conflict.
+  final String? confirmationId;
   @override
   String toString() => code != null ? '[$code] $message' : message;
 }

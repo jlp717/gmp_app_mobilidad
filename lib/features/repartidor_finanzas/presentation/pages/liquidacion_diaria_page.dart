@@ -1,8 +1,10 @@
-// ignore_for_file: public_member_api_docs
+// ignore_for_file: public_member_api_docs, lines_longer_than_80_chars
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
@@ -17,11 +19,16 @@ class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const RepartidorLiquidacionDiariaPage({
     required this.repartidorId,
     this.showMonthlySummary = true,
+    this.canCreateAdjustments = false,
     super.key,
   });
 
   final String repartidorId;
   final bool showMonthlySummary;
+
+  /// This UI capability must be supplied by an authenticated JEFE/ADMIN
+  /// parent. Its absence is deliberately fail-closed.
+  final bool canCreateAdjustments;
 
   @override
   ConsumerState<RepartidorLiquidacionDiariaPage> createState() =>
@@ -30,35 +37,36 @@ class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
 
 class _RepartidorLiquidacionDiariaPageState
     extends ConsumerState<RepartidorLiquidacionDiariaPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _ingresoBancoController = TextEditingController();
-  final _entregadoController = TextEditingController();
   late DateTime _sessionDate;
   late String _idempotencyToken;
   bool _saving = false;
-  final _draftsByRepartidor = <String, _LiquidacionDraft>{};
+  bool _submittingEntry = false;
+  final Map<String, String> _entryTokens = <String, String>{};
+  RepartidorLiquidacionResult? _closedResult;
 
   @override
   void initState() {
     super.initState();
     _sessionDate = _today();
-    _idempotencyToken = _newToken(widget.repartidorId, _sessionDate);
+    _idempotencyToken = widget.repartidorId.isEmpty
+        ? ''
+        : buildLiquidacionIdempotencyToken(widget.repartidorId, _sessionDate);
   }
 
   @override
   void didUpdateWidget(covariant RepartidorLiquidacionDiariaPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.repartidorId != widget.repartidorId) {
-      _storeDraft(oldWidget.repartidorId);
-      _restoreDraft(widget.repartidorId);
+      _sessionDate = _today();
+      _idempotencyToken = widget.repartidorId.isEmpty
+          ? ''
+          : buildLiquidacionIdempotencyToken(
+              widget.repartidorId,
+              _sessionDate,
+            );
+      _closedResult = null;
+      _entryTokens.clear();
     }
-  }
-
-  @override
-  void dispose() {
-    _ingresoBancoController.dispose();
-    _entregadoController.dispose();
-    super.dispose();
   }
 
   @override
@@ -75,11 +83,18 @@ class _RepartidorLiquidacionDiariaPageState
       forceRefresh: false,
     );
     final asyncSummary = ref.watch(repartidorDailySummaryProvider(args));
+    final ledgerArgs = (repartidorId: widget.repartidorId, date: _sessionDate);
+    // The canonical ledger endpoint accepts one numeric repartidor only.
+    // Aggregate manager summaries remain read-only and must not issue an
+    // invalid structured-ledger request.
+    final asyncLedger = widget.repartidorId.contains(',')
+        ? null
+        : ref.watch(repartidorLiquidacionLedgerProvider(ledgerArgs));
 
     return Scaffold(
       backgroundColor: AppColors.inkSurface,
       body: asyncSummary.when(
-        data: _buildForm,
+        data: (summary) => _buildForm(summary, asyncLedger, ledgerArgs),
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.info),
         ),
@@ -97,8 +112,15 @@ class _RepartidorLiquidacionDiariaPageState
     );
   }
 
-  Widget _buildForm(RepartidorDailySummary summary) {
+  Widget _buildForm(
+    RepartidorDailySummary summary,
+    AsyncValue<RepartidorLiquidacionLedger>? asyncLedger,
+    LiquidacionLedgerArgs ledgerArgs,
+  ) {
     final isAggregate = widget.repartidorId.contains(',');
+    final canWriteEntries = asyncLedger?.hasValue == true &&
+        asyncLedger?.valueOrNull?.status == 'OPEN' &&
+        _closedResult == null;
     return Column(
       children: [
         _ModernHeader(
@@ -110,107 +132,126 @@ class _RepartidorLiquidacionDiariaPageState
         if (!isAggregate && widget.showMonthlySummary)
           RepartidorMonthlySummaryBar(repartidorId: widget.repartidorId),
         Expanded(
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionTitle(icon: Icons.payments, label: 'COBROS DEL DIA'),
-                  _PaymentMethodCard(
-                    icon: Icons.money,
-                    label: 'Efectivo',
-                    value: summary.totalEfectivo,
-                    color: AppColors.success,
-                  ),
-                  const SizedBox(height: 8),
-                  _PaymentMethodCard(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SectionTitle(
+                  icon: Icons.payments,
+                  label: 'COBROS DEL DIA',
+                ),
+                _PaymentMethodCard(
+                  icon: Icons.money,
+                  label: 'Efectivo',
+                  value: summary.totalEfectivo,
+                  color: AppColors.success,
+                ),
+                const SizedBox(height: 8),
+                _PaymentMethodCard(
+                  icon: Icons.receipt_long,
+                  label: 'Cheques',
+                  value: summary.totalCheques,
+                  color: AppColors.accentIndigo,
+                ),
+                const SizedBox(height: 8),
+                _PaymentMethodCard(
+                  icon: Icons.credit_card,
+                  label: 'Tarjeta',
+                  value: summary.totalTarjeta,
+                  color: AppColors.info,
+                ),
+                const SizedBox(height: 8),
+                _PaymentMethodCard(
+                  icon: Icons.calendar_today,
+                  label: 'Postdatados',
+                  value: summary.totalPostdatados,
+                  color: AppColors.warning,
+                ),
+                const SizedBox(height: 20),
+                const _SectionTitle(
+                  icon: Icons.account_balance_wallet,
+                  label: 'BALANCE',
+                ),
+                _BalanceCard(
+                  label: 'Saldo actual',
+                  value: summary.saldoActual,
+                  icon: Icons.wallet,
+                ),
+                const SizedBox(height: 8),
+                _BalanceCard(
+                  label: 'Total a ingresar',
+                  value: summary.totalAIngresar,
+                  icon: Icons.upload_file,
+                  highlight: true,
+                ),
+                const SizedBox(height: 24),
+                if (asyncLedger != null) ...[
+                  const _SectionTitle(
                     icon: Icons.receipt_long,
-                    label: 'Cheques',
-                    value: summary.totalCheques,
-                    color: AppColors.accentIndigo,
+                    label: 'DESGLOSE DE LIQUIDACION',
                   ),
-                  const SizedBox(height: 8),
-                  _PaymentMethodCard(
-                    icon: Icons.credit_card,
-                    label: 'Tarjeta',
-                    value: summary.totalTarjeta,
-                    color: AppColors.info,
-                  ),
-                  const SizedBox(height: 8),
-                  _PaymentMethodCard(
-                    icon: Icons.calendar_today,
-                    label: 'Postdatados',
-                    value: summary.totalPostdatados,
-                    color: AppColors.warning,
-                  ),
-                  const SizedBox(height: 20),
-                  _SectionTitle(
-                      icon: Icons.account_balance_wallet, label: 'BALANCE'),
-                  _BalanceCard(
-                    label: 'Saldo actual',
-                    value: summary.saldoActual,
-                    icon: Icons.wallet,
-                  ),
-                  const SizedBox(height: 8),
-                  _BalanceCard(
-                    label: 'Total a ingresar',
-                    value: summary.totalAIngresar,
-                    icon: Icons.upload_file,
-                    highlight: true,
-                  ),
-                  const SizedBox(height: 24),
-                  if (!isAggregate) ...[
-                    _SectionTitle(icon: Icons.input, label: 'REGISTRO'),
-                    _MoneyInputLine(
-                      label: 'Ingreso en banco',
-                      controller: _ingresoBancoController,
-                      icon: Icons.account_balance,
-                      autofocus: true,
+                  _LiquidacionLedgerPanel(
+                    ledger: asyncLedger,
+                    onRetry: () => ref.invalidate(
+                      repartidorLiquidacionLedgerProvider(ledgerArgs),
                     ),
-                    const SizedBox(height: 16),
-                    _MoneyInputLine(
-                      label: 'Entregado',
-                      controller: _entregadoController,
-                      icon: Icons.handshake,
-                    ),
-                  ],
-                  if (summary.cobros.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    _SectionTitle(icon: Icons.receipt, label: 'COBROS DETALLE'),
-                    _CobrosPreview(
-                      cobros: summary.cobros,
-                      repartidorId: widget.repartidorId,
-                      onReversed: () {
-                        final args = (
-                          repartidorId: widget.repartidorId,
-                          date: _sessionDate,
-                          forceRefresh: true,
-                        );
-                        ref.invalidate(
-                          repartidorDailySummaryProvider(args),
-                        );
-                      },
-                    ),
-                  ],
+                  ),
                 ],
-              ),
+                if (!isAggregate && canWriteEntries) ...[
+                  const SizedBox(height: 12),
+                  _LiquidacionEntryActions(
+                    isSubmitting: _submittingEntry,
+                    canCreateAdjustments: widget.canCreateAdjustments,
+                    onExpense: () => _showEntryDialog(_EntryKind.expense),
+                    onBankDeposit: () =>
+                        _showEntryDialog(_EntryKind.bankDeposit),
+                    onAdjustment: () => _showEntryDialog(_EntryKind.adjustment),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                if (_closedResult != null) ...[
+                  const SizedBox(height: 24),
+                  _LiquidacionClosedState(result: _closedResult!),
+                ],
+                if (summary.cobros.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  const _SectionTitle(
+                    icon: Icons.receipt,
+                    label: 'COBROS DETALLE',
+                  ),
+                  _CobrosPreview(
+                    cobros: summary.cobros,
+                    canReverseCobros: summary.canReverseCobros,
+                    repartidorId: widget.repartidorId,
+                    onReversed: () {
+                      final args = (
+                        repartidorId: widget.repartidorId,
+                        date: _sessionDate,
+                        forceRefresh: true,
+                      );
+                      ref.invalidate(
+                        repartidorDailySummaryProvider(args),
+                      );
+                    },
+                  ),
+                ],
+              ],
             ),
           ),
         ),
         if (!isAggregate)
           _ModernSaveBar(
             isSaving: _saving,
-            onPressed: () => _save(summary),
+            isClosed: _closedResult != null,
+            onPressed: _save,
           ),
       ],
     );
   }
 
-  Future<void> _save(RepartidorDailySummary summary) async {
+  Future<void> _save() async {
     if (_saving) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_sessionDate != _today()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -230,43 +271,151 @@ class _RepartidorLiquidacionDiariaPageState
     );
 
     try {
-      final ingresoBanco = _parseAmount(_ingresoBancoController.text);
-      final entregado = _parseAmount(_entregadoController.text);
-      await ref.read(repartidorLiquidacionActionsProvider).close(
+      final result = await ref.read(repartidorLiquidacionActionsProvider).close(
             repartidorId: widget.repartidorId,
             date: _sessionDate,
             idempotencyToken: _idempotencyToken,
-            summary: summary,
-            ingresoBanco: ingresoBanco,
-            entregado: entregado,
           );
 
       if (!mounted) return;
-      modal.success('Liquidacion grabada');
-      _draftsByRepartidor.remove(widget.repartidorId);
-      _sessionDate = _today();
-      _idempotencyToken = _newToken(widget.repartidorId, _sessionDate);
-      _ingresoBancoController.clear();
-      _entregadoController.clear();
+      setState(() => _closedResult = result);
+      modal.success(
+        result.isReplay
+            ? 'Liquidacion ya cerrada anteriormente'
+            : 'Liquidacion cerrada',
+      );
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
       modal.error(
         financeErrorMessage(
           error,
-          'No se pudo grabar. El formulario se mantiene para reintentar.',
+          'No se pudo cerrar la liquidacion. Puedes reintentar.',
         ),
-        onRetry: () => _save(summary),
+        onRetry: _save,
       );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  static String _newToken(String repartidorId, DateTime businessDate) {
-    final ymd = DateFormat('yyyyMMdd').format(businessDate);
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
-    return 'liq_${repartidorId}_${ymd}_$timestamp';
+  Future<void> _showEntryDialog(_EntryKind kind) async {
+    if (_saving || _submittingEntry || _closedResult != null) return;
+    final result =
+        await showDialog<({double amount, String detail, String? observation})>(
+      context: context,
+      builder: (_) => _LiquidacionEntryDialog(kind: kind),
+    );
+    if (result == null || !mounted) return;
+    await _submitEntry(kind, result.amount, result.detail, result.observation);
+  }
+
+  Future<void> _submitEntry(
+    _EntryKind kind,
+    double amount,
+    String detail,
+    String? observation,
+  ) async {
+    if (_submittingEntry || _closedResult != null) return;
+    final fingerprint = buildLiquidacionEntryFingerprint(
+      widget.repartidorId,
+      _sessionDate,
+      kind.name,
+      amount: amount,
+      detail: detail,
+      observation: observation,
+    );
+    final token = _entryTokens.putIfAbsent(
+      fingerprint,
+      () => createLiquidacionEntryIdempotencyToken(
+        widget.repartidorId,
+        _sessionDate,
+        kind.name,
+        amount: amount,
+        detail: detail,
+        observation: observation,
+      ),
+    );
+    setState(() => _submittingEntry = true);
+    try {
+      final actions = ref.read(repartidorLiquidacionActionsProvider);
+      late RepartidorLiquidacionEntryResult result;
+      switch (kind) {
+        case _EntryKind.expense:
+          result = await actions.createExpense(
+              repartidorId: widget.repartidorId,
+              date: _sessionDate,
+              amount: amount,
+              category: detail,
+              idempotencyToken: token,
+              observation: observation);
+          break;
+        case _EntryKind.bankDeposit:
+          result = await actions.createBankDeposit(
+              repartidorId: widget.repartidorId,
+              date: _sessionDate,
+              amount: amount,
+              reference: detail,
+              idempotencyToken: token,
+              observation: observation);
+          break;
+        case _EntryKind.adjustment:
+          result = await actions.createAdjustment(
+              repartidorId: widget.repartidorId,
+              date: _sessionDate,
+              amount: amount,
+              reason: detail,
+              idempotencyToken: token,
+              observation: observation);
+          break;
+      }
+      _entryTokens.remove(fingerprint);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.isReplay
+            ? 'Movimiento ya registrado; se recuperó el resultado anterior.'
+            : 'Movimiento creado y verificado por el servidor.'),
+        backgroundColor: AppColors.success,
+      ));
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted) return;
+      final requiresReconciliation = error is ApiException &&
+          (error.statusCode == 409 ||
+              error.code == 'LIQUIDACION_ENTRY_REPLAY_MISMATCH');
+      if (requiresReconciliation) {
+        ref
+          ..invalidate(repartidorLiquidacionLedgerProvider((
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+          )))
+          ..invalidate(repartidorDailySummaryProvider((
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+            forceRefresh: false,
+          )));
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(requiresReconciliation
+            ? 'El servidor detectó un conflicto. Conservamos este intento; recarga el desglose antes de decidir si reintentas.'
+            : financeErrorMessage(error,
+                'No se pudo registrar la entrada. Reintenta sin cerrar la aplicación.')),
+        backgroundColor: AppColors.error,
+        action: requiresReconciliation
+            ? SnackBarAction(
+                label: 'Recargar',
+                onPressed: () => ref.invalidate(
+                  repartidorLiquidacionLedgerProvider((
+                    repartidorId: widget.repartidorId,
+                    date: _sessionDate,
+                  )),
+                ),
+              )
+            : null,
+      ));
+    } finally {
+      if (mounted) setState(() => _submittingEntry = false);
+    }
   }
 
   static DateTime _today() {
@@ -276,77 +425,17 @@ class _RepartidorLiquidacionDiariaPageState
 
   void _refreshSessionDateIfSafe() {
     final today = _today();
-    final hasDraft = _ingresoBancoController.text.trim().isNotEmpty ||
-        _entregadoController.text.trim().isNotEmpty;
-    if (_saving || hasDraft || _sessionDate == today) return;
+    if (_saving || _closedResult != null || _sessionDate == today) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _saving) return;
       setState(() {
         _sessionDate = today;
-        _idempotencyToken = _newToken(widget.repartidorId, _sessionDate);
+        _entryTokens.clear();
+        _idempotencyToken =
+            buildLiquidacionIdempotencyToken(widget.repartidorId, _sessionDate);
       });
     });
   }
-
-  void _storeDraft(String repartidorId) {
-    if (repartidorId.isEmpty) return;
-    final hasDraft = _ingresoBancoController.text.trim().isNotEmpty ||
-        _entregadoController.text.trim().isNotEmpty;
-    if (!hasDraft) {
-      _draftsByRepartidor.remove(repartidorId);
-      return;
-    }
-    _draftsByRepartidor[repartidorId] = _LiquidacionDraft(
-      ingresoBanco: _ingresoBancoController.text,
-      entregado: _entregadoController.text,
-      sessionDate: _sessionDate,
-      idempotencyToken: _idempotencyToken,
-    );
-  }
-
-  void _restoreDraft(String repartidorId) {
-    final draft = _draftsByRepartidor[repartidorId];
-    if (draft == null) {
-      _ingresoBancoController.clear();
-      _entregadoController.clear();
-      _sessionDate = _today();
-      _idempotencyToken = _newToken(repartidorId, _sessionDate);
-      return;
-    }
-    _ingresoBancoController.text = draft.ingresoBanco;
-    _entregadoController.text = draft.entregado;
-    _sessionDate = draft.sessionDate;
-    _idempotencyToken = draft.idempotencyToken;
-  }
-
-  static double _parseAmount(String value) {
-    return double.tryParse(value.trim().replaceAll(',', '.')) ?? 0;
-  }
-
-  static String? _validateAmount(String? value) {
-    final normalized = (value ?? '').trim().replaceAll(',', '.');
-    if (normalized.isEmpty) return 'Obligatorio';
-    final amount = double.tryParse(normalized);
-    if (amount == null) return 'Importe invalido';
-    if (amount < 0) return 'No puede ser negativo';
-    final decimals = normalized.contains('.') ? normalized.split('.').last : '';
-    if (decimals.length > 2) return 'Maximo 2 decimales';
-    return null;
-  }
-}
-
-class _LiquidacionDraft {
-  const _LiquidacionDraft({
-    required this.ingresoBanco,
-    required this.entregado,
-    required this.sessionDate,
-    required this.idempotencyToken,
-  });
-
-  final String ingresoBanco;
-  final String entregado;
-  final DateTime sessionDate;
-  final String idempotencyToken;
 }
 
 class LiquidacionDiariaPage extends RepartidorLiquidacionDiariaPage {
@@ -354,6 +443,250 @@ class LiquidacionDiariaPage extends RepartidorLiquidacionDiariaPage {
     required super.repartidorId,
     super.key,
   });
+}
+
+enum _EntryKind {
+  expense('Registrar gasto', 'Categoría', 40),
+  bankDeposit('Registrar ingreso bancario', 'Referencia bancaria', 80),
+  adjustment('Registrar ajuste', 'Motivo del ajuste', 120);
+
+  const _EntryKind(this.title, this.detailLabel, this.detailMaxLength);
+  final String title;
+  final String detailLabel;
+  final int detailMaxLength;
+}
+
+class _LiquidacionEntryDialog extends StatefulWidget {
+  const _LiquidacionEntryDialog({required this.kind});
+  final _EntryKind kind;
+
+  @override
+  State<_LiquidacionEntryDialog> createState() =>
+      _LiquidacionEntryDialogState();
+}
+
+class _LiquidacionEntryDialogState extends State<_LiquidacionEntryDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _amountController = TextEditingController();
+  final _detailController = TextEditingController();
+  final _observationController = TextEditingController();
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _detailController.dispose();
+    _observationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.kind.title),
+        content: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _amountController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  decoration: const InputDecoration(labelText: 'Importe (EUR)'),
+                  validator: (value) {
+                    final amount = double.tryParse(
+                      (value ?? '').trim().replaceAll(',', '.'),
+                    );
+                    if (amount == null ||
+                        !amount.isFinite ||
+                        (widget.kind == _EntryKind.adjustment
+                            ? amount == 0
+                            : amount <= 0) ||
+                        amount.abs() > 99999999 ||
+                        ((amount * 100).round() - amount * 100).abs() >
+                            0.000001) {
+                      return widget.kind == _EntryKind.adjustment
+                          ? 'Indica un importe con signo distinto de cero y dos decimales como máximo.'
+                          : 'Indica un importe positivo con dos decimales como máximo.';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: _detailController,
+                  maxLength: widget.kind.detailMaxLength,
+                  decoration:
+                      InputDecoration(labelText: widget.kind.detailLabel),
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? 'Este campo es obligatorio.'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _observationController,
+                  maxLength: 250,
+                  decoration: const InputDecoration(
+                    labelText: 'Observación (opcional)',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (_formKey.currentState?.validate() != true) return;
+              Navigator.pop(context, (
+                amount: double.parse(
+                  _amountController.text.trim().replaceAll(',', '.'),
+                ),
+                detail: _detailController.text.trim(),
+                observation: _observationController.text.trim().isEmpty
+                    ? null
+                    : _observationController.text.trim(),
+              ));
+            },
+            child: const Text('Registrar'),
+          ),
+        ],
+      );
+}
+
+class _LiquidacionEntryActions extends StatelessWidget {
+  const _LiquidacionEntryActions({
+    required this.isSubmitting,
+    required this.canCreateAdjustments,
+    required this.onExpense,
+    required this.onBankDeposit,
+    required this.onAdjustment,
+  });
+
+  final bool isSubmitting;
+  final bool canCreateAdjustments;
+  final VoidCallback onExpense;
+  final VoidCallback onBankDeposit;
+  final VoidCallback onAdjustment;
+
+  @override
+  Widget build(BuildContext context) {
+    return RepartidorExecutivePanel(
+      accentColor: AppColors.info,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Registrar movimiento',
+              style: TextStyle(
+                  color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text('Los importes se validan y calculan en el servidor.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                  onPressed: isSubmitting ? null : onExpense,
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('Gasto')),
+              OutlinedButton.icon(
+                  onPressed: isSubmitting ? null : onBankDeposit,
+                  icon: const Icon(Icons.account_balance),
+                  label: const Text('Ingreso banco')),
+              if (canCreateAdjustments)
+                OutlinedButton.icon(
+                    onPressed: isSubmitting ? null : onAdjustment,
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Ajuste')),
+            ],
+          ),
+          if (isSubmitting) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LiquidacionLedgerPanel extends StatelessWidget {
+  const _LiquidacionLedgerPanel({required this.ledger, required this.onRetry});
+  final AsyncValue<RepartidorLiquidacionLedger> ledger;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => ledger.when(
+        loading: () => const RepartidorExecutivePanel(
+          accentColor: AppColors.info,
+          child: Center(
+              child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(color: AppColors.info))),
+        ),
+        error: (error, _) => RepartidorExecutivePanel(
+          accentColor: AppColors.error,
+          child: Column(children: [
+            const Text(
+                'No se pudo cargar el desglose. No registres movimientos hasta reintentar.',
+                style: TextStyle(color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar')),
+          ]),
+        ),
+        data: (value) => RepartidorExecutivePanel(
+          accentColor:
+              value.status == 'CLOSED' ? AppColors.success : AppColors.info,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+                value.status == 'CLOSED'
+                    ? 'Liquidación cerrada'
+                    : 'Jornada abierta',
+                style: const TextStyle(
+                    color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            _LedgerTotal(label: 'Gastos', value: value.expensesTotal),
+            _LedgerTotal(label: 'Ajustes', value: value.adjustmentsTotal),
+            _LedgerTotal(
+                label: 'Ingresos bancarios', value: value.bankDepositsTotal),
+            if (value.expenses.isEmpty &&
+                value.adjustments.isEmpty &&
+                value.bankDeposits.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Aún no hay movimientos estructurados.',
+                      style: TextStyle(color: AppColors.textSecondary))),
+          ]),
+        ),
+      );
+}
+
+class _LedgerTotal extends StatelessWidget {
+  const _LedgerTotal({required this.label, required this.value});
+  final String label;
+  final double value;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(children: [
+          Expanded(
+              child: Text(label,
+                  style: const TextStyle(color: AppColors.textSecondary))),
+          Text(_money(value),
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+        ]),
+      );
 }
 
 class _ModernHeader extends StatelessWidget {
@@ -366,7 +699,11 @@ class _ModernHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, MediaQuery.of(context).padding.top + 12, 16, 16),
+        16,
+        MediaQuery.of(context).padding.top + 12,
+        16,
+        16,
+      ),
       decoration: const BoxDecoration(
         color: AppColors.raisedSurface,
         border: Border(
@@ -396,7 +733,9 @@ class _ModernHeader extends StatelessWidget {
                 Text(
                   DateFormat('EEEE, d MMMM yyyy', 'es_ES').format(date),
                   style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 12),
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -547,72 +886,34 @@ class _BalanceCard extends StatelessWidget {
   }
 }
 
-class _MoneyInputLine extends StatelessWidget {
-  const _MoneyInputLine({
-    required this.label,
-    required this.controller,
-    required this.icon,
-    this.autofocus = false,
-  });
+class _LiquidacionClosedState extends StatelessWidget {
+  const _LiquidacionClosedState({required this.result});
 
-  final String label;
-  final TextEditingController controller;
-  final IconData icon;
-  final bool autofocus;
+  final RepartidorLiquidacionResult result;
 
   @override
   Widget build(BuildContext context) {
+    final status = result.isReplay
+        ? 'Cierre recuperado (reintento seguro)'
+        : 'Cierre confirmado por el servidor';
+    final outbox = result.outboxPending
+        ? 'El correo queda pendiente en la bandeja de salida.'
+        : 'No hay correos pendientes.';
     return RepartidorExecutivePanel(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      accentColor: AppColors.info,
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.info, size: 20),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
+      accentColor: AppColors.success,
+      child: ListTile(
+        leading: const Icon(Icons.verified, color: AppColors.success),
+        title: Text(
+          '$status · ${result.status}',
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
           ),
-          SizedBox(
-            width: 120,
-            child: TextFormField(
-              controller: controller,
-              autofocus: autofocus,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp('[0-9,.]'))
-              ],
-              validator: _RepartidorLiquidacionDiariaPageState._validateAmount,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: AppColors.success,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                border: InputBorder.none,
-                hintText: '0,00',
-                hintStyle:
-                    TextStyle(color: AppColors.textSecondary, fontSize: 14),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            'EUR',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-          ),
-        ],
+        ),
+        subtitle: Text(
+          '$outbox\nReferencia: ${result.marker}',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
       ),
     );
   }
@@ -621,11 +922,15 @@ class _MoneyInputLine extends StatelessWidget {
 class _CobrosPreview extends ConsumerWidget {
   const _CobrosPreview({
     required this.cobros,
+    required this.canReverseCobros,
     this.repartidorId,
     this.onReversed,
   });
 
   final List<RepartidorCobroDia> cobros;
+
+  /// Capability explícita del backend. La ausencia mantiene la UI bloqueada.
+  final bool canReverseCobros;
 
   /// Repartidor activo. Necesario para autorizar la anulación.
   final String? repartidorId;
@@ -642,14 +947,15 @@ class _CobrosPreview extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (sheetCtx) {
         return RepartidorExecutiveSheet(
           accentColor: AppColors.success,
+          height: MediaQuery.sizeOf(sheetCtx).height * 0.8,
           child: SafeArea(
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -738,8 +1044,10 @@ class _CobrosPreview extends ConsumerWidget {
                       value: cobro.fecha,
                     ),
                   const SizedBox(height: 12),
-                  // Req #16: botón Anular cobro (solo si tenemos token + repartidor).
-                  if (cobro.canBeReversed && (repartidorId ?? '').isNotEmpty)
+                  // Req #16: anulación sólo con capability, token e identidad.
+                  if (canReverseCobros &&
+                      cobro.canBeReversed &&
+                      (repartidorId ?? '').isNotEmpty)
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -755,7 +1063,9 @@ class _CobrosPreview extends ConsumerWidget {
                         },
                       ),
                     ),
-                  if (cobro.canBeReversed && (repartidorId ?? '').isNotEmpty)
+                  if (canReverseCobros &&
+                      cobro.canBeReversed &&
+                      (repartidorId ?? '').isNotEmpty)
                     const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
@@ -778,7 +1088,11 @@ class _CobrosPreview extends ConsumerWidget {
     WidgetRef ref,
     RepartidorCobroDia cobro,
   ) async {
-    if (!cobro.canBeReversed || (repartidorId ?? '').isEmpty) return;
+    if (!canReverseCobros ||
+        !cobro.canBeReversed ||
+        (repartidorId ?? '').isEmpty) {
+      return;
+    }
     final reasonCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -839,7 +1153,8 @@ class _CobrosPreview extends ConsumerWidget {
       },
     );
     if (confirmed != true) return;
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
+    if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       final service = ref.read(repartidorFinanzasServiceProvider);
@@ -853,12 +1168,13 @@ class _CobrosPreview extends ConsumerWidget {
           backgroundColor: AppColors.success,
           content: Text(
             'Cobro de ${cobro.importe.toStringAsFixed(2)} € anulado correctamente',
+            // ignore: lines_longer_than_80_chars
           ),
         ),
       );
       onReversed?.call();
     } catch (error, stackTrace) {
-      Sentry.captureException(error, stackTrace: stackTrace);
+      unawaited(Sentry.captureException(error, stackTrace: stackTrace));
       messenger.showSnackBar(
         SnackBar(
           backgroundColor: AppColors.error,
@@ -1005,16 +1321,25 @@ class _DetailRow extends StatelessWidget {
 }
 
 class _ModernSaveBar extends StatelessWidget {
-  const _ModernSaveBar({required this.isSaving, required this.onPressed});
+  const _ModernSaveBar({
+    required this.isSaving,
+    required this.isClosed,
+    required this.onPressed,
+  });
 
   final bool isSaving;
+  final bool isClosed;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
       decoration: const BoxDecoration(
         color: AppColors.raisedSurface,
         border:
@@ -1024,7 +1349,7 @@ class _ModernSaveBar extends StatelessWidget {
         width: double.infinity,
         height: 52,
         child: ElevatedButton(
-          onPressed: isSaving ? null : onPressed,
+          onPressed: isSaving || isClosed ? null : onPressed,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.success,
             foregroundColor: AppColors.inkSurface,
@@ -1037,7 +1362,9 @@ class _ModernSaveBar extends StatelessWidget {
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: AppColors.inkSurface),
+                    strokeWidth: 2.5,
+                    color: AppColors.inkSurface,
+                  ),
                 )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1047,9 +1374,12 @@ class _ModernSaveBar extends StatelessWidget {
                     Flexible(
                       child: Text(
                         // Req #16: cierre explicito de la jornada del repartidor.
-                        MediaQuery.of(context).size.width < 380
-                            ? 'Cerrar d?a'
-                            : 'Cerrar d?a y grabar liquidaci?n',
+                        isClosed
+                            ? 'LiquidaciÃ³n cerrada'
+                            : MediaQuery.of(context).size.width < 380
+                                // ignore: lines_longer_than_80_chars
+                                ? 'Cerrar d?a'
+                                : 'Cerrar d?a y grabar liquidaci?n',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -1077,7 +1407,9 @@ class _SelectSingleRepartidor extends StatelessWidget {
         child: Text(
           'Selecciona un repartidor para liquidar',
           style: TextStyle(
-              color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );

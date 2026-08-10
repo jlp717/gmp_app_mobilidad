@@ -21,7 +21,6 @@ import {
     verifyToken, 
     signAccessToken, 
     signRefreshToken, 
-    hashPassword, 
     verifyPassword,
     handleRefreshToken,
     handleLogout,
@@ -30,7 +29,6 @@ import {
 import { loginLimiter, validateBody, validationSchemas, detectSqlInjection } from '../middleware/security';
 // @ts-ignore - audit.js doesn't have type declarations
 import { auditLogin, getClientIP } from '../middleware/audit';
-import bcrypt from 'bcrypt';
 import fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import path from 'path';
@@ -86,7 +84,6 @@ async function saveLockouts(lockouts: Record<string, LockoutInfo>): Promise<void
 
 const MAX_FAILED_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
 const LOCKOUT_TIME_MS = parseInt(process.env.LOCK_TIME_MINUTES || '30', 10) * 60 * 1000;
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -279,26 +276,11 @@ router.post('/login',
                 // Bcrypt hash - use compare
                 pinValid = await verifyPassword(trimmedPwd, dbPin);
             } else if (dbPin === trimmedPwd) {
-                // Plaintext PIN (legacy) - migrate to bcrypt
+                // A legacy plaintext PIN remains valid only for this login. This
+                // retired route must never mutate ERP credentials implicitly;
+                // migration is an explicit, separately approved administrator flow.
                 pinValid = true;
-                
-                // Migrate to bcrypt asynchronously (don't block login)
-                hashPassword(trimmedPwd, BCRYPT_ROUNDS)
-                    .then(hashedPin => {
-                        queryWithParams(`
-                            UPDATE DSEDAC.VDPL1 SET CODIGOPIN = ?
-                            WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
-                        `, [hashedPin, vendedorCode], false)
-                        .then(() => {
-                            logger.info(`[${requestId}] 🔒 Migrated plaintext PIN to bcrypt for vendor ${vendedorCode}`);
-                        })
-                        .catch((err: Error) => {
-                            logger.warn(`[${requestId}] Failed to migrate PIN: ${err}`);
-                        });
-                    })
-                    .catch(err => {
-                        logger.warn(`[${requestId}] Failed to hash PIN: ${err}`);
-                    });
+                logger.warn(`[${requestId}] Legacy plaintext PIN authenticated without automatic migration`);
             } else {
                 pinValid = false;
             }
