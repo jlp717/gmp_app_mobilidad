@@ -90,6 +90,36 @@ function createAuthClaimsLoginHandler({
     let credentialProfile;
     try {
       credentialProfile = await authRepository.findByCode(username);
+      if (
+        (!credentialProfile || credentialProfile.isActive !== true || !credentialProfile._passwordHash)
+        && typeof authRepository.findNameLoginCandidates === 'function'
+      ) {
+        const candidates = await authRepository.findNameLoginCandidates(username);
+        const pinMatches = [];
+        for (const candidate of candidates) {
+          if (!candidate || candidate.isActive !== true || !candidate._passwordHash) continue;
+          const probe = await verifyVendorPin({
+            vendedorCode: candidate.code,
+            candidatePin: password,
+            dbPin: candidate._passwordHash,
+            requestId: req.requestId || 'AUTH',
+          });
+          if (probe?.valid) pinMatches.push(candidate);
+        }
+        if (pinMatches.length === 1) {
+          credentialProfile = pinMatches[0];
+        } else if (pinMatches.length > 1) {
+          try {
+            await requireLoginAudit(authRepository, null, false, req.ip);
+          } catch (error) {
+            return sendError(res, error);
+          }
+          return res.status(401).json({
+            error: 'Credenciales ambiguas',
+            code: 'AMBIGUOUS_CREDENTIALS',
+          });
+        }
+      }
     } catch (error) {
       return sendError(res, error);
     }

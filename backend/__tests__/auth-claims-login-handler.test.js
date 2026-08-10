@@ -35,6 +35,7 @@ function harness() {
     findByCode: jest.fn().mockResolvedValue({
       id: 'legacy', code: '050', name: 'Persona', isActive: true, _passwordHash: '1234',
     }),
+    findNameLoginCandidates: jest.fn().mockResolvedValue([]),
     logLoginAttempt: jest.fn().mockResolvedValue({ ok: true }),
   };
   const authClaimsResolver = { resolve: jest.fn().mockResolvedValue(claims()) };
@@ -208,5 +209,31 @@ describe('shared auth claims login handler', () => {
       error: 'Perfil de autorización no disponible', code: 'AUTH_PROFILE_UNAVAILABLE',
     });
     expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+  });
+
+  test('disambiguates ambiguous name login by unique matching PIN', async () => {
+    const { handler, authRepository, authClaimsResolver, verifyVendorPin, tokenService } = harness();
+    authRepository.findByCode.mockResolvedValue(null);
+    authRepository.findNameLoginCandidates.mockResolvedValue([
+      { id: '22', code: '22', name: '22 DIEGO ALCAZAR', isActive: true, _passwordHash: '0484' },
+      { id: '98', code: '98', name: '98 DIEGO (98)', isActive: true, _passwordHash: '9322' },
+    ]);
+    verifyVendorPin.mockImplementation(async ({ dbPin, candidatePin }) => ({
+      valid: String(dbPin).trim() === String(candidatePin).trim(),
+      method: 'test',
+    }));
+    authClaimsResolver.resolve.mockResolvedValue(claims({
+      id: 'V98', user: '98', name: '98 DIEGO (98)', vendorCodes: Object.freeze(['98']),
+      vendedorCodes: Object.freeze(['98']),
+    }));
+    const res = response();
+
+    await handler(request({ username: 'diego', password: '9322' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.user.code).toBe('98');
+    expect(authClaimsResolver.resolve).toHaveBeenCalledWith({ code: '98' });
+    expect(tokenService.signAccessToken).toHaveBeenCalled();
   });
 });

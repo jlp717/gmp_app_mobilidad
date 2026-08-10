@@ -90,6 +90,54 @@ class Db2AuthRepository extends AuthRepository {
 
     return User.fromDbRow(result[0]);
   }
+
+  /**
+   * Name login can match several vendors (e.g. "diego" → 22/25/86/98).
+   * Caller must disambiguate with PIN; never invent a single row here.
+   */
+  async findNameLoginCandidates(name, { limit = 10 } = {}) {
+    const requested = String(name || '').trim();
+    if (!requested || requested.length > 50) return [];
+    const max = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 20) : 10;
+    const searchParam = requested.replace(/ /g, '').toUpperCase();
+    const sql = `
+      SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
+        TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
+        CASE WHEN (
+          SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
+          FROM DSEDAC.VDDX X
+          WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+        ) = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        COALESCE((
+          SELECT MAX(NULLIF(TRIM(V2.TIPOVENDEDOR), ''))
+          FROM DSEDAC.VDC V2
+          WHERE V2.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+            AND V2.SUBEMPRESA = 'GMP'
+        ), '-') AS TIPOVENDEDOR,
+        COALESCE((
+          SELECT MAX(NULLIF(TRIM(E.HIDE_COMMISSIONS), ''))
+          FROM JAVIER.COMMISSION_EXCEPTIONS E
+          WHERE E.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+        ), 'N') AS HIDE_COMMISSIONS,
+        '' AS EMAIL, P.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
+      FROM DSEDAC.VDD D
+      JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+      WHERE EXISTS (
+        SELECT 1 FROM DSEDAC.VDC V
+        WHERE V.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+          AND V.SUBEMPRESA = 'GMP'
+      )
+        AND REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '')
+          LIKE '%' || CAST(? AS VARCHAR(100)) || '%'
+      ORDER BY TRIM(P.CODIGOVENDEDOR)
+      FETCH FIRST ${max} ROWS ONLY
+    `;
+    // max is a clamped integer only; never accept raw user input into SQL text.
+    const rows = await this._db.executeParams(sql, [searchParam]);
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    return rows.map((row) => User.fromDbRow(row));
+  }
+
   async findByCredentials(username, password) {
     // CAST(? AS VARCHAR(50)) avoids ODBC 22001/CWB0111 when binding to IBM i CHAR columns
     const sql = `

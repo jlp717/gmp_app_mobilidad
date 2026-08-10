@@ -105,6 +105,18 @@ describe('Db2AuthRepository reparto association', () => {
     expect(nameSql).toMatch(/ORDER BY[\s\S]+FETCH FIRST 2 ROWS ONLY/);
     expect(params).toEqual(['ANA']);
   });
+
+  test('findNameLoginCandidates returns multiple active name matches for PIN disambiguation', async () => {
+    const db = { executeParams: jest.fn().mockResolvedValue([
+      { USUARIO: '22', NOMBRE: '22 DIEGO ALCAZAR', ROL: 'COMERCIAL', PASSWORD_HASH: '0484', ACTIVO: 1 },
+      { USUARIO: '98', NOMBRE: '98 DIEGO (98)', ROL: 'COMERCIAL', PASSWORD_HASH: '9322', ACTIVO: 1 },
+    ]) };
+    const repo = new Db2AuthRepository(db);
+    const users = await repo.findNameLoginCandidates('diego');
+    expect(users.map((u) => u.code)).toEqual(['22', '98']);
+    expect(users[1]._passwordHash).toBe('9322');
+    expect(db.executeParams.mock.calls[0][1]).toEqual(['DIEGO']);
+  });
   test('resolves commercial visibility without a DB round trip', async () => {
     const db = { execute: jest.fn(), executeParams: jest.fn() };
     const repo = new Db2AuthRepository(db);
