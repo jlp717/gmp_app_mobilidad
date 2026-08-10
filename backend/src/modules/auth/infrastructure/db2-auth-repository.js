@@ -196,6 +196,8 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async logLoginAttempt(userId, success, ip) {
+    // Pre-e7cfd8ee behavior (see 5e02bfc): APP_LOGIN_LOG is optional.
+    // Missing table must never block login with AUTH_AUDIT_UNAVAILABLE / 503.
     try {
       const sql = `
         INSERT INTO JAVIER.APP_LOGIN_LOG (USUARIO, EXITO, IP, FECHA)
@@ -204,7 +206,7 @@ class Db2AuthRepository extends AuthRepository {
       await this._db.executeParamsSilent(sql, [userId || 'UNKNOWN', success ? 1 : 0, ip || 'unknown']);
       return Object.freeze({ ok: true });
     } catch (_error) {
-      return Object.freeze({ ok: false, code: 'AUTH_AUDIT_UNAVAILABLE' });
+      return Object.freeze({ ok: true, skipped: true, code: 'AUTH_AUDIT_SKIPPED' });
     }
   }
 }

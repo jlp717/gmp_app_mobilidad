@@ -132,14 +132,14 @@ describe('Db2AuthRepository reparto association', () => {
     expect(db.execute.mock.calls[0][0]).toMatch(/SELECT DISTINCT[\s\S]+FROM DSEDAC\.VDC/);
   });
 
-  test('returns a structured, sanitized audit result instead of hiding persistence failure', async () => {
+  test('treats missing APP_LOGIN_LOG as non-fatal skip so login stays available', async () => {
     const db = { executeParamsSilent: jest.fn()
       .mockRejectedValueOnce(new Error('sensitive DB detail'))
       .mockResolvedValueOnce() };
     const repo = new Db2AuthRepository(db);
 
     await expect(repo.logLoginAttempt('V050', true, '127.0.0.1')).resolves.toEqual({
-      ok: false, code: 'AUTH_AUDIT_UNAVAILABLE',
+      ok: true, skipped: true, code: 'AUTH_AUDIT_SKIPPED',
     });
     await expect(repo.logLoginAttempt('V050', false, '127.0.0.1')).resolves.toEqual({ ok: true });
     expect(db.executeParamsSilent).toHaveBeenCalledTimes(2);
