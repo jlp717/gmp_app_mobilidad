@@ -74,11 +74,10 @@ function assertRuntime(runtime) {
     tables?.confirmation?.confirmationEvidences,
     tables?.finance?.cobros,
   ];
+  // GET receipt is read-only: require valid table mappings, never write capabilities.
+  // Write capability gates belong on confirmation/mutation routes only (G2/G7).
   if (!runtime?.valid
       || !['isolated_test', 'production'].includes(runtime.tableSet)
-      || !runtime.confirmationCapabilityApproved
-      || (runtime.environment === 'production'
-        && (!runtime.productionWritesEnabled || !runtime.productionConfirmationApproved))
       || !confirmationMatches
       || !validateFinanceTableMapping(runtime).valid
       || references.some((identifier) => !IDENTIFIER.test(identifier || ''))) {
