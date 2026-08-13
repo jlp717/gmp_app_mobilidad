@@ -515,6 +515,12 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
 
         // --- Helper: compute status for a row ---
         function computeRowStatus(row) {
+            const canonical = String(row.CANONICAL_STATUS || '').trim().toUpperCase();
+            if (canonical === 'ENTREGADO') return 'delivered';
+            if (canonical === 'PARCIAL') return 'partial';
+            if (['NO_ENTREGADO', 'RECHAZADO', 'NO_REALIZADA'].includes(canonical)) {
+                return 'no_delivered';
+            }
             const appStatus = (row.DELIVERY_STATUS || '').trim().toLowerCase();
             const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase();
 
@@ -572,7 +578,8 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 amount: importe,
                 pendingAvailability,
                 status: overrides.status || status,
-                hasSignature: hasFirmaPath || hasLegacySig,
+                hasSignature: hasFirmaPath || hasLegacySig || !!row.CANONICAL_FIRMA_EVIDENCE_ID,
+                confirmationId: row.CANONICAL_CONFIRMATION_ID || null,
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_UPDATED_AT || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
@@ -1053,6 +1060,26 @@ router.get('/history/signature', verifyToken, async (req, res) => {
             }
         }
 
+        if (!firmaBase64) {
+            try {
+                const canonical = await repartidorDb.getCanonicalConfirmationSignature({
+                    year: ejercicio,
+                    serie,
+                    terminal,
+                    number: numero,
+                    ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
+                });
+                if (canonical?.base64) {
+                    firmaBase64 = canonical.base64;
+                    signatureSource = 'CANONICAL_CONFIRMATION';
+                } else if (canonical?.hasSignature) {
+                    signatureSource = signatureSource || 'CANONICAL_CONFIRMATION';
+                }
+            } catch (_error) {
+                logger.warn('[REPARTIDOR] Canonical confirmation signature lookup failed');
+            }
+        }
+
         // 4. CACFIRMAS (legacy ERP signatures) — last resort
         if (!firmaBase64) {
             try {
@@ -1353,6 +1380,24 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                 }
             } catch (e) {
                 logger.warn('[PDF] Albaran app signature lookup failed');
+            }
+        }
+
+        if (!signatureBase64) {
+            try {
+                const canonical = await repartidorDb.getCanonicalConfirmationSignature({
+                    year: parsedYear,
+                    serie,
+                    terminal: parsedTerminal,
+                    number: parsedNumber,
+                    ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
+                });
+                if (canonical?.base64) {
+                    signatureBase64 = canonical.base64;
+                    signatureSource = 'CANONICAL_CONFIRMATION';
+                }
+            } catch (e) {
+                logger.warn('[PDF] Canonical confirmation signature lookup failed');
             }
         }
 
@@ -1864,6 +1909,22 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
                     signatureSource = 'REPARTIDOR_FIRMAS';
                 }
             } catch (e) { logger.warn('[PDF] Invoice app signature lookup failed'); }
+        }
+
+        if (!signatureBase64) {
+            try {
+                const canonical = await repartidorDb.getCanonicalConfirmationSignature({
+                    year: actualEjAlb,
+                    serie: actualSerieAlb,
+                    terminal: actualTermAlb,
+                    number: actualNumAlb,
+                    ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
+                });
+                if (canonical?.base64) {
+                    signatureBase64 = canonical.base64;
+                    signatureSource = 'CANONICAL_CONFIRMATION';
+                }
+            } catch (e) { logger.warn('[PDF] Invoice canonical confirmation signature lookup failed'); }
         }
 
         // Step 3c: CACFIRMAS legacy

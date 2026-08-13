@@ -97,6 +97,34 @@ describe('repartidor history document hardening', () => {
     expect(response.body.documents[0].status).toBe('delivered');
   });
 
+  test('overlays a just-signed TEST confirmation onto DSEDAC history documents', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
+        return [{
+          DOCUMENT_ID: '2026-A-1-42-C1',
+          STATUS: 'ENTREGADO',
+          ID: 'conf-1',
+          FIRMA_EVIDENCE_ID: 'sig-1',
+        }];
+      }
+      return [historyRow({ CONFORMADOSN: 'N', DELIVERY_STATUS: null })];
+    });
+
+    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.documents[0]).toMatchObject({
+      status: 'delivered',
+      hasSignature: true,
+      confirmationId: 'conf-1',
+    });
+    const confirmSql = mockQueryWithParams.mock.calls
+      .map(([sql]) => sql)
+      .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
+    expect(confirmSql).toContain('DOCUMENT_ID IN');
+    expect(confirmSql).not.toContain('PEDIDOS_CAB');
+  });
+
   test('groups a factura after albaran dedupe without multiplying its header total', async () => {
     mockQueryWithParams.mockResolvedValue([
       historyRow({
@@ -183,7 +211,8 @@ describe('repartidor history document hardening', () => {
     expect(sql).toMatch(/TRIM\(CVC\.TIPODOCUMENTO\)\s*=\s*'CAC'/i);
     expect(sql).toMatch(/TRIM\(CVC\.ORIGENDOCUMENTO\)\s*=\s*'B'/i);
     expect(params.slice(-2)).toEqual([1, 2]);
-    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) =>
+      String(sql).includes('TEST_REPARTO_CONFIRMACIONES'))).toBe(true);
   });
 
   test('keeps the real total when the requested page is beyond the final logical document', async () => {

@@ -19,6 +19,154 @@ const {
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 
 const MUTATION_RE = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i;
+const CANONICAL_CONFIRMATION_STATUSES = Object.freeze([
+  'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO',
+]);
+
+function resolveConfirmationTables() {
+  try {
+    const runtime = resolveRepartoRuntime(process.env);
+    const confirmation = runtime?.tables?.confirmation;
+    if (runtime?.valid && confirmation?.confirmations && confirmation?.evidences) {
+      return confirmation;
+    }
+  } catch (_error) {
+    // Invalid runtime: isolated tests still overlay JAVIER.TEST_*.
+  }
+  if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production') {
+    return null;
+  }
+  return {
+    confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
+    evidences: 'JAVIER.TEST_REPARTO_EVIDENCIAS',
+  };
+}
+
+function canonicalDocumentId(row, clientCode) {
+  const ejercicio = row?.EJERCICIOALBARAN;
+  const serie = String(row?.SERIEALBARAN || '').trim();
+  const terminal = row?.TERMINALALBARAN;
+  const numero = row?.NUMEROALBARAN;
+  const cliente = String(row?.CODIGOCLIENTEALBARAN || clientCode || '').trim();
+  if (!ejercicio || !serie || numero == null || numero === '' || !cliente) return '';
+  return `${ejercicio}-${serie}-${terminal}-${numero}-${cliente}`;
+}
+
+function blobToBase64(raw) {
+  if (raw == null) return null;
+  if (Buffer.isBuffer(raw)) return raw.length ? raw.toString('base64') : null;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (raw instanceof Uint8Array) {
+    return raw.length ? Buffer.from(raw).toString('base64') : null;
+  }
+  return null;
+}
+
+async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode } = {}) {
+  if (!Array.isArray(rows) || !rows.length) return rows;
+  const tables = resolveConfirmationTables();
+  if (!tables?.confirmations) return rows;
+  const documentIds = [...new Set(rows.map((row) => canonicalDocumentId(row, clientCode)).filter(Boolean))];
+  const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!documentIds.length || !drivers.length) return rows;
+  try {
+    const documentPlaceholders = documentIds.map(() => '?').join(', ');
+    const driverPlaceholders = drivers.map(() => '?').join(', ');
+    const confirmRows = await runQueryWithParams(
+      `SELECT TRIM(DOCUMENT_ID) AS DOCUMENT_ID,
+              TRIM(STATUS) AS STATUS,
+              ID,
+              FIRMA_EVIDENCE_ID
+         FROM ${tables.confirmations}
+        WHERE DOCUMENT_ID IN (${documentPlaceholders})
+          AND TRIM(REPARTIDOR_ID) IN (${driverPlaceholders})`,
+      [...documentIds, ...drivers],
+      false,
+    );
+    const byId = new Map();
+    for (const row of Array.isArray(confirmRows) ? confirmRows : []) {
+      const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
+      const status = String(row.STATUS || row.status || '').trim().toUpperCase();
+      if (!id || !CANONICAL_CONFIRMATION_STATUSES.includes(status)) continue;
+      byId.set(id, {
+        status,
+        confirmationId: row.ID ?? row.id ?? null,
+        firmaEvidenceId: row.FIRMA_EVIDENCE_ID || row.firma_evidence_id || null,
+      });
+    }
+    if (!byId.size) return rows;
+    return rows.map((row) => {
+      const match = byId.get(canonicalDocumentId(row, clientCode));
+      if (!match) return row;
+      return {
+        ...row,
+        CANONICAL_STATUS: match.status,
+        CANONICAL_CONFIRMATION_ID: match.confirmationId,
+        CANONICAL_FIRMA_EVIDENCE_ID: match.firmaEvidenceId,
+      };
+    });
+  } catch (_error) {
+    return rows;
+  }
+}
+
+async function getCanonicalConfirmationSignature({
+  year, serie, terminal, number, ownerIds,
+} = {}) {
+  const tables = resolveConfirmationTables();
+  if (!tables?.confirmations) return null;
+  const parsedYear = Number(year);
+  const parsedTerminal = Number(terminal);
+  const parsedNumber = Number(number);
+  const serieNorm = String(serie || '').trim();
+  if (!parsedYear || !serieNorm || !Number.isFinite(parsedNumber)) return null;
+  try {
+    const rows = await runQueryWithParams(
+      `SELECT C.ID,
+              TRIM(C.STATUS) AS STATUS,
+              C.FIRMA_EVIDENCE_ID,
+              TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID
+         FROM ${tables.confirmations} C
+        WHERE C.DOCUMENTO_EJERCICIO = ?
+          AND TRIM(C.DOCUMENTO_SERIE) = ?
+          AND C.DOCUMENTO_TERMINAL = ?
+          AND C.DOCUMENTO_NUMERO = ?
+        FETCH FIRST 8 ROWS ONLY`,
+      [parsedYear, serieNorm, Number.isFinite(parsedTerminal) ? parsedTerminal : 0, parsedNumber],
+      false,
+    );
+    const allowed = new Set((ownerIds || []).map((id) => String(id || '').trim()).filter(Boolean));
+    const match = (Array.isArray(rows) ? rows : []).find((row) => {
+      const owner = String(row.REPARTIDOR_ID || row.repartidor_id || '').trim();
+      return !allowed.size || allowed.has(owner);
+    });
+    if (!match) return null;
+    const evidenceId = match.FIRMA_EVIDENCE_ID || match.firma_evidence_id;
+    let base64 = null;
+    if (evidenceId && tables.evidences) {
+      const blobs = await runQueryWithParams(
+        `SELECT CONTENT_BLOB
+           FROM ${tables.evidences}
+          WHERE EVIDENCE_ID = ?
+          FETCH FIRST 1 ROW ONLY`,
+        [evidenceId],
+        false,
+      );
+      base64 = blobToBase64(blobs?.[0]?.CONTENT_BLOB || blobs?.[0]?.content_blob);
+    }
+    return {
+      confirmationId: match.ID ?? match.id ?? null,
+      status: String(match.STATUS || match.status || '').trim().toUpperCase(),
+      hasSignature: Boolean(base64 || evidenceId),
+      base64,
+    };
+  } catch (_error) {
+    return null;
+  }
+}
 
 function assertReadOnlySql(sql) {
   const text = String(sql || '');
@@ -515,8 +663,12 @@ async function getClientDocuments({
     pageOffset + pageLimit,
   ];
   const rows = await runQueryWithParams(sql, allParams, false);
+  const overlaid = await overlayCanonicalConfirmations(rows || [], {
+    repartidorIds: ids,
+    clientCode,
+  });
   return {
-    rows,
+    rows: overlaid,
     deliveryStatusAvailability: dsAvail ? 'AVAILABLE' : 'LEGACY_ONLY',
   };
 }
@@ -1128,6 +1280,8 @@ module.exports = {
   getCollectionsSummary,
   getCollectionsDaily,
   getClientDocuments,
+  overlayCanonicalConfirmations,
+  getCanonicalConfirmationSignature,
   getObjectives,
   getObjectivesDetailClients,
   getObjectivesDetailLaclae,

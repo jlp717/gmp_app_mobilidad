@@ -514,6 +514,7 @@ class RepartidorDataService {
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
+        forceRefresh: true,
       );
 
       final docs = (response['documents'] as List? ?? [])
