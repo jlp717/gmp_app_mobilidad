@@ -31,7 +31,7 @@ describe('canonical reparto confirmation bootstrap', () => {
       REPARTO_TABLE_SET: 'isolated_test',
       REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
       ODBC_DSN: 'GMP',
-      REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
       REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
       REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
       REPARTO_WRITES_ENABLED: 'true',

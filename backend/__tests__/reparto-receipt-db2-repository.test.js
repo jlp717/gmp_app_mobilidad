@@ -1,7 +1,7 @@
 'use strict';
 const { createRepartoReceiptDb2Repository, RepartoReceiptUnavailableError, REQUIRED } = require('../repositories/reparto-receipt-db2-repository');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
-function runtime() { return resolveRepartoRuntime({ NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test', ODBC_DSN: 'GMP', REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER', REPARTO_WRITES_ENABLED: 'true', REPARTO_PRODUCTION_WRITES_APPROVED: 'false', REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false', REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'true', REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'true', REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24' }); }
+function runtime() { return resolveRepartoRuntime({ NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test', ODBC_DSN: 'GMP', REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC', REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER', REPARTO_WRITES_ENABLED: 'true', REPARTO_PRODUCTION_WRITES_APPROVED: 'false', REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false', REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'true', REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'true', REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24' }); }
 test('rejects an evil confirmation mapping before opening a connection', () => { const safe = runtime(); const evil = { ...safe, tables: { ...safe.tables, confirmation: { ...safe.tables.confirmation, confirmations: 'JAVIER.EVIL' } } }; expect(() => createRepartoReceiptDb2Repository({ runtime: evil, connectionFactory: jest.fn() })).toThrow(RepartoReceiptUnavailableError); });
 test('allows GET receipt runtime when write capabilities are false', () => {
   const readOnly = resolveRepartoRuntime({
@@ -9,7 +9,7 @@ test('allows GET receipt runtime when write capabilities are false', () => {
     REPARTO_ENVIRONMENT: 'test',
     REPARTO_TABLE_SET: 'isolated_test',
     ODBC_DSN: 'GMP',
-    REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER',
+    REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
     REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
     REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
     REPARTO_WRITES_ENABLED: 'false',

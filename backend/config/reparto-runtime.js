@@ -300,11 +300,11 @@ function resolveRepartoRuntime(env = {}) {
   if ((environment === 'test' || environment === 'staging') && erpSchema !== 'JAVIER') {
     errors.push(`${environment} reparto cannot write DSEDAC ERP tables`);
   }
+  if (readSchema !== 'DSEDAC') {
+    errors.push('reparto reads always require DSEDAC; JAVIER is write/app buffers only');
+  }
   if (environment === 'production' && tableSet !== 'production') {
     errors.push('production reparto requires REPARTO_TABLE_SET=production');
-  }
-  if (environment === 'production' && readSchema !== 'DSEDAC') {
-    errors.push('production reparto reads require DSEDAC');
   }
   const selectedTables = TABLE_MAPPINGS[tableSet] || null;
   const confirmationMappingValidation = validateConfirmationTableMapping({

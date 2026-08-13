@@ -97,6 +97,7 @@ describe('central reparto runtime configuration', () => {
     ['unknown ERP production gate', { REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'yes' }, 'REPARTO_PRODUCTION_ERP_WRITES_APPROVED'],
     ['unknown app schema', { REPARTIDOR_FINANCE_APP_SCHEMA: 'UNKNOWN' }, 'REPARTIDOR_FINANCE_APP_SCHEMA'],
     ['DSEDAC test writes', { REPARTIDOR_FINANCE_APP_SCHEMA: 'DSEDAC' }, 'DSEDAC'],
+    ['JAVIER ERP reads', { REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER' }, 'DSEDAC'],
     [
       'contradictory write schema alias',
       { DB2_WRITE_SCHEMA: 'DSEDAC', REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER' },

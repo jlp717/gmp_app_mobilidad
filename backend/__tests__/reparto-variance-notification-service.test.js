@@ -117,7 +117,7 @@ describe('reparto-variance-notification-service', () => {
       REPARTO_ENVIRONMENT: 'test',
       REPARTO_TABLE_SET: 'isolated_test',
       ODBC_DSN: 'GMP',
-      REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
       REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
       REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
       REPARTO_WRITES_ENABLED: 'false',

@@ -10,7 +10,7 @@ Object.assign(process.env, {
   REPARTO_TABLE_SET: 'isolated_test',
   REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
   ODBC_DSN: 'GMP',
-  REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER',
+  REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
   REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
   REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
   REPARTO_WRITES_ENABLED: 'true',
@@ -436,8 +436,8 @@ describe('Repartidor finanzas routes', () => {
     // Isolated test mode must use its explicit TEST_ table mapping, never a
     // production-named table selected implicitly by the route.
     expect(sqlText).toContain('FROM JAVIER.TEST_REPARTIDOR_COBROS');
-    expect(sqlText).toContain('FROM JAVIER.CPC CPC');
-    expect(sqlText).toContain('INNER JOIN JAVIER.LAC LAC');
+    expect(sqlText).toContain('FROM DSEDAC.CPC CPC');
+    expect(sqlText).toContain('INNER JOIN DSEDAC.LAC LAC');
     expect(sqlText).not.toContain('INNER JOIN JAVIER.LPC LPC');
     expect(sqlText).toContain('YEAR(CURRENT DATE) - 1');
   });
