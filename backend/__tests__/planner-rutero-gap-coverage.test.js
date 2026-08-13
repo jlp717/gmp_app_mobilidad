@@ -43,7 +43,10 @@ jest.mock('../services/laclae', () => ({
   getCachedVendorCodes: jest.fn(() => []),
 }));
 jest.mock('../services/emailService', () => ({ sendAuditEmail: jest.fn(), sendAuditEmailNow: jest.fn() }));
-jest.mock('../utils/db2-schemas', () => ({ db2WriteTable: table => `JAVIER.${table}` }));
+jest.mock('../utils/db2-schemas', () => ({
+  db2WriteTable: table => `JAVIER.${table}`,
+  db2ErpTable: table => `DSEDAC.${table}`,
+}));
 jest.mock('../utils/common', () => {
   const actual = jest.requireActual('../utils/common');
   return {
@@ -110,12 +113,10 @@ describe('mounted planner/rutero route matrix', () => {
     '/api/rutero/positions/lunes?vendedorCodes=02',
     '/api/rutero/day-direct/lunes?vendedorCodes=02',
     '/api/rutero/day/lunes?vendedorCodes=02',
-  ])('commercial ownership rejects another vendor before work: %s', async url => {
+  ])('commercial GET of another vendor is clamped to own scope: %s', async url => {
     const res = await request(makeApp(COMMERCIAL)).get(url);
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('INSUFFICIENT_ROLE');
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
-    expect(mockGetClientsForDay).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(res.body.code).not.toBe('INSUFFICIENT_ROLE');
   });
 
   test('JEFE and ADMIN can read their explicit visible vendor scope', async () => {
@@ -128,9 +129,8 @@ describe('mounted planner/rutero route matrix', () => {
   test.each([
     ['/api/rutero/day-direct/not-a-day?vendedorCodes=01', 'GET', 400],
     ['/api/rutero/day/not-a-day?vendedorCodes=01', 'GET', 400],
-    // Scope authorization intentionally precedes format validation, so an
-    // attacker cannot use the endpoint to distinguish vendor-code formats.
-    ['/api/rutero/day-direct/lunes?vendedorCodes=01;DROP', 'GET', 403],
+    // GET leftover/malformed vendor codes clamp to owned scope instead of 403.
+    ['/api/rutero/day-direct/lunes?vendedorCodes=01;DROP', 'GET', 200],
   ])('rejects invalid day/vendor input: %s', async (url, method, expectedStatus) => {
     const res = await request(makeApp(COMMERCIAL))[method.toLowerCase()](url);
     expect(res.status).toBe(expectedStatus);
@@ -143,10 +143,10 @@ describe('mounted planner/rutero route matrix', () => {
     expect(res.body.error).toBeTruthy();
   });
 
-  test('PEDIDOS_CAB status failure is a typed sanitized 503, never SIN_PEDIDO/200', async () => {
+  test('CPC overlay failure still returns the day list, never JAVIER.PEDIDOS_CAB or SQL leaks', async () => {
     mockGetClientsForDay.mockReturnValue(['4300000001']);
     mockQueryWithParams.mockImplementation(async sql => {
-      if (sql.includes('FROM JAVIER.PEDIDOS_CAB')) {
+      if (sql.includes('FROM DSEDAC.CPC')) {
         throw new Error('SQL30081N host=internal-db2 customer=secret');
       }
       if (sql.includes('FROM DSEDAC.CLI')) {
@@ -158,11 +158,16 @@ describe('mounted planner/rutero route matrix', () => {
     const res = await request(makeApp(COMMERCIAL))
       .get('/api/rutero/day/lunes?vendedorCodes=01&date=2026-08-10');
 
-    expect(res.status).toBe(503);
-    expect(res.body.code).toBe('RUTERO_ORDER_STATUS_UNAVAILABLE');
+    expect(res.status).toBe(200);
+    expect(res.body.clients).toHaveLength(1);
+    expect(res.body.clients[0].orderStatus.state).toBe('SIN_PEDIDO');
+    expect(res.body.orderStatusDegraded).toBe(true);
     expect(JSON.stringify(res.body)).not.toContain('SQL30081N');
     expect(JSON.stringify(res.body)).not.toContain('internal-db2');
-    expect(res.body.clients).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain('PEDIDOS_CAB');
+    const executedSql = mockQueryWithParams.mock.calls.map(call => call[0]).join('\n');
+    expect(executedSql).toContain('FROM DSEDAC.CPC');
+    expect(executedSql).not.toContain('PEDIDOS_CAB');
   });
 
   test('client detail rejects foreign and malformed client identifiers before detail queries', async () => {

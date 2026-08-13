@@ -14,7 +14,7 @@ const {
     lookupClientAssignedVendorCodes,
     handleRouteError
 } = require('../utils/common');
-const { db2WriteTable } = require('../utils/db2-schemas');
+const { db2ErpTable } = require('../utils/db2-schemas');
 
 // Imports from laclae service
 const {
@@ -39,8 +39,6 @@ const RUTERO_WEEKDAY_INDEX = {
     sabado: 5,
     domingo: 6
 };
-const ORDER_CONFIRMED_STATES = ['CONFIRMADO', 'ENVIADO', 'ENTREGADO', 'FACTURADO'];
-const ORDER_DRAFT_STATES = ['BORRADOR', 'CONFIRMANDO', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION'];
 const ORDER_STATUS_EMPTY_LABEL = 'SIN VENTA';
 
 function dateParts(dateValue) {
@@ -274,85 +272,66 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         statusMap.set(code, emptyRuteroOrderStatus(orderDate));
     });
 
-    if (!clientCodes.length) return statusMap;
+    if (!clientCodes.length) return { statusMap, degraded: false };
 
     const clientPlaceholders = clientCodes.map(() => '?').join(',');
-    const confirmedPlaceholders = ORDER_CONFIRMED_STATES.map(() => '?').join(',');
-    const draftPlaceholders = ORDER_DRAFT_STATES.map(() => '?').join(',');
     const vendorCodes = normalizeRuteroVendorCodes(vendedorCodes);
     const useVendorFilter = vendorCodes.length > 0 && vendorCodes.length <= 50;
     const vendorFilterSql = useVendorFilter
         ? ` AND TRIM(C.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
         : '';
 
+    // JAVIER.PEDIDOS_CAB is the app/test buffer. Commercial Ruta reads live
+    // ERP orders from DSEDAC.CPC: client=CODIGOCLIENTEALBARAN, not ESTADO.
     const sql = `
         SELECT
-            TRIM(C.CODIGOCLIENTE) AS CODE,
-            SUM(CASE WHEN TRIM(C.ESTADO) IN (${confirmedPlaceholders}) THEN 1 ELSE 0 END) AS CONFIRMED_COUNT,
-            SUM(CASE WHEN TRIM(C.ESTADO) IN (${draftPlaceholders}) THEN 1 ELSE 0 END) AS DRAFT_COUNT,
+            TRIM(C.CODIGOCLIENTEALBARAN) AS CODE,
             COUNT(*) AS TOTAL_COUNT,
-            MAX(C.ID) AS LAST_ORDER_ID,
             MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
-        FROM ${db2WriteTable('PEDIDOS_CAB')} C
-        WHERE TRIM(C.CODIGOCLIENTE) IN (${clientPlaceholders})
+        FROM ${db2ErpTable('CPC')} C
+        WHERE TRIM(C.CODIGOCLIENTEALBARAN) IN (${clientPlaceholders})
           AND C.ANODOCUMENTO = ?
           AND C.MESDOCUMENTO = ?
           AND C.DIADOCUMENTO = ?
+          AND TRIM(C.SUBEMPRESAPEDIDO) = 'GMP'
           ${vendorFilterSql}
-        GROUP BY TRIM(C.CODIGOCLIENTE)
+        GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)
     `;
 
     const params = [
-        ...ORDER_CONFIRMED_STATES,
-        ...ORDER_DRAFT_STATES,
         ...clientCodes,
         orderDate.year,
         orderDate.month,
         orderDate.day,
-        ...(useVendorFilter ? vendorCodes : [])
+        ...(useVendorFilter ? vendorCodes : []),
     ];
 
     try {
         const rows = await queryWithParams(sql, params, false, false);
-        (rows || []).forEach(row => {
+        (rows || []).forEach((row) => {
             const code = (row.CODE ?? row.code ?? '').toString().trim();
             if (!code) return;
-            const confirmedCount = parseInt(row.CONFIRMED_COUNT ?? row.confirmed_count, 10) || 0;
-            const draftCount = parseInt(row.DRAFT_COUNT ?? row.draft_count, 10) || 0;
             const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
-            const lastOrderId = parseInt(row.LAST_ORDER_ID ?? row.last_order_id, 10) || null;
             const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
-
-            let state = 'SIN_PEDIDO';
-            let label = ORDER_STATUS_EMPTY_LABEL;
-            if (confirmedCount > 0) {
-                state = 'CONFIRMADO';
-                label = 'VENTA CONFIRMADA';
-            } else if (draftCount > 0) {
-                state = 'BORRADOR';
-                label = 'PEDIDO BORRADOR';
-            }
+            if (totalCount <= 0) return;
 
             statusMap.set(code, {
-                state,
-                label,
-                hasOrder: totalCount > 0,
-                confirmedCount,
-                draftCount,
+                state: 'CONFIRMADO',
+                label: 'VENTA CONFIRMADA',
+                hasOrder: true,
+                confirmedCount: totalCount,
+                draftCount: 0,
                 totalCount,
-                lastOrderId,
+                lastOrderId: null,
                 lastOrderNumber,
-                date: orderDate.iso
+                date: orderDate.iso,
             });
         });
-    } catch (error) {
-        logger.error(`[RUTERO DAY] PEDIDOS_CAB status query failed: ${error && error.message ? error.message : error}`);
-        const unavailable = new Error('Estado de pedidos no disponible');
-        unavailable.code = 'RUTERO_ORDER_STATUS_UNAVAILABLE';
-        throw unavailable;
+        return { statusMap, degraded: false };
+    } catch (_error) {
+        logger.error('[RUTERO DAY] CPC production order status query failed');
+        return { statusMap, degraded: true };
     }
-
-    return statusMap;
 }
 
 // =============================================================================
@@ -1574,7 +1553,7 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             prevYearTotalRows,
             gpsResult,
             notesResult,
-            orderStatusMap
+            orderStatusResult
         ] = await Promise.all([
             cachedQuery(queryWithParams, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG, clientBatch),
             cachedQuery(queryWithParams, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL, [...clientBatch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent]),
@@ -1584,6 +1563,10 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
             getRuteroOrderStatusMap(clientBatch, { vendedorCodes, orderDate })
         ]);
+        const orderStatusMap = orderStatusResult?.statusMap instanceof Map
+            ? orderStatusResult.statusMap
+            : new Map();
+        const orderStatusDegraded = orderStatusResult?.degraded === true;
 
         // Build maps from results - use safe accessor to handle both uppercase/lowercase columns
         const prevYearRows = prevYearRowsResult || [];
@@ -1758,6 +1741,7 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             year: currentYear,
             compareYear: previousYear,
             orderDate: orderDate.iso,
+            orderStatusDegraded,
             period: {
                 weeks: completedWeeks, // Number of completed weeks being compared
                 current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
@@ -1766,15 +1750,6 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
         });
 
     } catch (error) {
-        if (error?.code === 'RUTERO_ORDER_STATUS_UNAVAILABLE') {
-            return handleRouteError(
-                error,
-                res,
-                'Estado de pedidos no disponible',
-                503,
-                { code: 'RUTERO_ORDER_STATUS_UNAVAILABLE' }
-            );
-        }
         return handleRouteError(error, res, 'Error obteniendo rutero diario', 500);
     }
 });

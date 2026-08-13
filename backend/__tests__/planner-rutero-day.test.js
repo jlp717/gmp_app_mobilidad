@@ -103,23 +103,12 @@ describe('Planner rutero/day route', () => {
         return [];
       }
 
-      if (sql.includes('FROM JAVIER.PEDIDOS_CAB')) {
+      if (sql.includes('FROM DSEDAC.CPC')) {
         return [
           {
             CODE: '4300000001',
-            CONFIRMED_COUNT: 1,
-            DRAFT_COUNT: 1,
             TOTAL_COUNT: 2,
-            LAST_ORDER_ID: 42,
             LAST_ORDER_NUMBER: 1001,
-          },
-          {
-            CODE: '4300000002',
-            CONFIRMED_COUNT: 0,
-            DRAFT_COUNT: 1,
-            TOTAL_COUNT: 1,
-            LAST_ORDER_ID: 43,
-            LAST_ORDER_NUMBER: 1002,
           },
         ];
       }
@@ -152,11 +141,13 @@ describe('Planner rutero/day route', () => {
     const secondClient = res.body.clients.find(c => c.code === '4300000002');
     expect(firstClient.orderStatus.state).toBe('CONFIRMADO');
     expect(firstClient.orderStatus.label).toBe('VENTA CONFIRMADA');
-    expect(secondClient.orderStatus.state).toBe('BORRADOR');
-    expect(secondClient.orderStatus.label).toBe('PEDIDO BORRADOR');
+    expect(secondClient.orderStatus.state).toBe('SIN_PEDIDO');
+    expect(secondClient.orderStatus.label).toBe('SIN VENTA');
+    expect(res.body.orderStatusDegraded).toBe(false);
 
-    const orderStatusQueries = executedSql.filter(sql => sql.includes('FROM JAVIER.PEDIDOS_CAB'));
+    const orderStatusQueries = executedSql.filter(sql => sql.includes('FROM DSEDAC.CPC'));
     expect(orderStatusQueries).toHaveLength(1);
-    expect(orderStatusQueries[0]).toContain('GROUP BY TRIM(C.CODIGOCLIENTE)');
+    expect(orderStatusQueries[0]).toContain('GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)');
+    expect(executedSql.some(sql => sql.includes('PEDIDOS_CAB'))).toBe(false);
   });
 });

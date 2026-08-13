@@ -43,6 +43,7 @@ jest.mock('../services/emailService', () => ({
 }));
 jest.mock('../utils/db2-schemas', () => ({
   db2WriteTable: (table) => `JAVIER.${table}`,
+  db2ErpTable: (table) => `DSEDAC.${table}`,
 }));
 jest.mock('../utils/common', () => {
   const actual = jest.requireActual('../utils/common');
