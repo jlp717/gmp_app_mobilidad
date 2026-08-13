@@ -362,7 +362,7 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
     const isDelivery = role === 'repartidor';
     let finalClients = new Set();
 
-    const requestedVendors = normalizeCodeList(vendedorCodes);
+    const requestedVendors = expandVendorCacheCodes(vendedorCodes);
     const vendedors = requestedVendors.length > 0 ? requestedVendors : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {
@@ -423,7 +423,7 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial', ignoreOverrid
     const counts = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
     const clientsSet = { lunes: new Set(), martes: new Set(), miercoles: new Set(), jueves: new Set(), viernes: new Set(), sabado: new Set(), domingo: new Set() };
 
-    const requestedVendors = normalizeCodeList(vendedorCodes);
+    const requestedVendors = expandVendorCacheCodes(vendedorCodes);
     const vendedors = requestedVendors.length > 0 ? requestedVendors : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {
@@ -487,7 +487,7 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
     const isDelivery = role === 'repartidor';
     const allClients = new Set();
 
-    const requestedVendors = normalizeCodeList(vendedorCodes);
+    const requestedVendors = expandVendorCacheCodes(vendedorCodes);
     const vendedors = requestedVendors.length > 0 ? requestedVendors : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {

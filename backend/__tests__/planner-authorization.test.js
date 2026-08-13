@@ -93,14 +93,19 @@ test.each([
   '/rutero/positions/lunes?vendedorCodes=02',
   '/rutero/day-direct/lunes?vendedorCodes=02',
   '/rutero/day/lunes?vendedorCodes=02',
-])('COMERCIAL cannot read another vendor and denial executes no handler DB: %s', async (url) => {
+])('COMERCIAL GET of another vendor is clamped to own scope: %s', async (url) => {
   const res = await request(makeApp(COMMERCIAL)).get(url);
+  expect(res.status).not.toBe(403);
+  expect(res.status).toBe(200);
+});
+
+test('COMERCIAL POST of another vendor stays forbidden', async () => {
+  const res = await request(makeApp(COMMERCIAL))
+    .post('/rutero/move_clients')
+    .send({ vendedor: '02', moves: [] });
   expect(res.status).toBe(403);
   expect(res.body.code).toBe('INSUFFICIENT_ROLE');
-  expect(mockQuery).not.toHaveBeenCalled();
-  expect(mockQueryWithParams).not.toHaveBeenCalled();
-  expect(mockCachedQuery).not.toHaveBeenCalled();
-  expect(mockGetClientsForDay).not.toHaveBeenCalled();
+  expect(mockGetPool).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -178,10 +183,9 @@ test('COMERCIAL reads own config and JEFE is limited to visible vendor claims', 
 });
 
 test.each([
-  '/rutero/vendedores',
   '/diagnose/client/4300000001',
   '/diagnose/vendor/01',
-])('global list/diagnose endpoint is privileged and denied before DB: %s', async (url) => {
+])('global diagnose endpoint is privileged and denied before DB: %s', async (url) => {
   const res = await request(makeApp(COMMERCIAL)).get(url);
   expect(res.status).toBe(403);
   expect(mockQuery).not.toHaveBeenCalled();
@@ -210,9 +214,68 @@ test('client detail is fail-closed and only reaches detail SQL for owned clients
 test('router source contract keeps reload guards and mounts authorization before handlers', () => {
   const routeLayers = plannerRoutes.stack.filter((layer) => layer.route);
   const byPath = (path) => routeLayers.find((layer) => layer.route.path === path);
-  expect(byPath('/rutero/vendedores').route.stack[0].name).toBe('requirePlannerPrivilege');
+  expect(byPath('/rutero/vendedores').route.stack[0].name).toBe('requirePlannerVendedoresAccess');
   expect(byPath('/diagnose/client/:code').route.stack[0].name).toBe('requirePlannerPrivilege');
   expect(byPath('/rutero/client/:code/detail').route.stack[0].name).toBe('requirePlannerClientOwnership');
   expect(byPath('/rutero/reload-cache').route.stack).toHaveLength(1);
   expect(byPath('/rutero/reload-cache-old').route.stack).toHaveLength(1);
+});
+
+test('COMERCIAL ALL is clamped to own scope and scoped team 80 can read its own vendors', async () => {
+  const team80 = {
+    code: '80',
+    role: 'COMERCIAL',
+    isJefeVentas: false,
+    vendorCodes: ['80', '72', '73', '81', '83'],
+    vendedorCodes: ['80', '72', '73', '81', '83'],
+  };
+  const laclae = require('../services/laclae');
+
+  let res = await request(makeApp(COMMERCIAL)).get('/rutero/week?vendedorCodes=ALL');
+  expect(res.status).toBe(200);
+  expect(res.body.week).toEqual({ lunes: 0 });
+  expect(laclae.getWeekCountsFromCache.mock.calls[0][0]).toBe('01');
+
+  res = await request(makeApp(team80)).get('/rutero/week?vendedorCodes=80,72');
+  expect(res.status).toBe(200);
+  expect(res.body.week).toEqual({ lunes: 0 });
+
+  res = await request(makeApp(team80)).get('/rutero/week?vendedorCodes=01');
+  expect(res.status).toBe(200);
+  expect(laclae.getWeekCountsFromCache.mock.calls.at(-1)[0]).toBe('80,72,73,81,83');
+});
+
+test('JEFE ALL expands visible claims without UNK sentinels and extra codes are intersected', async () => {
+  const laclae = require('../services/laclae');
+  const jefeWithSentinel = {
+    ...JEFE,
+    vendorCodes: ['01', '02', 'UNK'],
+    vendedorCodes: ['01', '02', 'UNK'],
+  };
+
+  let res = await request(makeApp(jefeWithSentinel)).get('/rutero/week?vendedorCodes=ALL');
+  expect(res.status).toBe(200);
+  expect(laclae.getWeekCountsFromCache.mock.calls.at(-1)[0]).toBe('01,02');
+
+  res = await request(makeApp(JEFE)).get('/rutero/week?vendedorCodes=02,99');
+  expect(res.status).toBe(200);
+
+  res = await request(makeApp(JEFE)).get('/rutero/week?vendedorCodes=03');
+  expect(res.status).toBe(403);
+});
+
+test('COMERCIAL vendedores list is scoped to own VDC codes', async () => {
+  mockCachedQuery.mockResolvedValueOnce([
+    { CODE: '01', NAME: 'Propio' },
+    { CODE: '10', NAME: 'Ajeno' },
+  ]);
+  const res = await request(makeApp(COMMERCIAL)).get('/rutero/vendedores');
+  expect(res.status).toBe(200);
+  expect(res.body.vendedores).toEqual([{ code: '01', name: 'Propio' }]);
+});
+
+test('REPARTIDOR cannot list commercial vendedores', async () => {
+  const res = await request(makeApp(REPARTIDOR)).get('/rutero/vendedores');
+  expect(res.status).toBe(403);
+  expect(mockCachedQuery).not.toHaveBeenCalled();
 });

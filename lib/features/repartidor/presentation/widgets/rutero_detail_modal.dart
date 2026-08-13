@@ -219,6 +219,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool? _lastConnectionResult;
 
   String? _nombreError;
+  String? _apellidosError;
   String? _dniError;
   String? _firmaError;
   String? _pagoError;
@@ -1076,7 +1077,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             controller: _apellidosController,
             enabled: !_isSubmitting,
             onChanged: (_) {
-              if (_nombreError != null) setState(() => _nombreError = null);
+              if (_apellidosError != null) {
+                setState(() => _apellidosError = null);
+              }
             },
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
@@ -1087,7 +1090,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
-              errorText: _nombreError,
+              errorText: _apellidosError,
               errorStyle: const TextStyle(color: AppTheme.error),
             ),
           ),
@@ -1676,6 +1679,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   void _clearValidationErrors() {
     setState(() {
       _nombreError = null;
+      _apellidosError = null;
       _dniError = null;
       _firmaError = null;
       _pagoError = null;
@@ -1725,9 +1729,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
 
     if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        (_nombreController.text.trim().isEmpty ||
-            _apellidosController.text.trim().isEmpty)) {
+        _nombreController.text.trim().isEmpty) {
       _nombreError = 'El nombre del receptor es obligatorio';
+      isValid = false;
+    }
+    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+        _apellidosController.text.trim().isEmpty) {
+      _apellidosError = 'Los apellidos del receptor son obligatorios';
       isValid = false;
     }
 

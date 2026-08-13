@@ -180,8 +180,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       _dayClients = [];
       _totalUniqueClients = 0;
       _isCacheLoading = false;
+      _error = null;
     });
-    _loadWeekData();
+    _loadWeekData(useDirectEndpoint: true);
   }
 
   Future<void> _refreshData() async {
@@ -314,27 +315,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     if (!mounted) return widget.employeeCode;
     final filterCode = ref.read(filterProvider).selectedVendor;
     final authState = ref.read(authProvider).value;
-    if (hasCommercial80VendorScope(
+    return resolveRuteroRequestVendorCodes(
       userCode: authState?.user?.code,
-      vendorCodes: authState?.vendedorCodes ?? const <String>[],
-    )) {
-      return resolveScopedVendorCodes(
-        userCode: authState?.user?.code,
-        authVendorCodes: authState?.vendedorCodes ?? const <String>[],
-        selectedVendor: filterCode,
-        fallbackVendorCodes: widget.employeeCode,
-      );
-    }
-    // JEFE "Todos" / null must use the full employeeCode join, never literal ALL.
-    if (widget.isJefeVentas == true) {
-      if (filterCode == null ||
-          filterCode.isEmpty ||
-          filterCode.toUpperCase() == 'ALL') {
-        return widget.employeeCode;
-      }
-      return filterCode;
-    }
-    return filterCode ?? widget.employeeCode;
+      authVendorCodes: authState?.vendedorCodes ?? const <String>[],
+      selectedVendor: filterCode,
+      fallbackVendorCodes: widget.employeeCode,
+      isJefeVentas: widget.isJefeVentas,
+    );
   }
 
   String _ruteroCacheScopeFor(String vendedorCodes) =>
@@ -361,11 +348,15 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       if (!widget.employeeCode.contains(',')) return widget.employeeCode;
       return null;
     }
-    if (filterCode != null) return filterCode;
-    // Si employeeCode no contiene comas, es un solo vendedor
-    if (!widget.employeeCode.contains(',')) return widget.employeeCode;
-    // Jefe de ventas sin selección específica → no se puede escribir
-    return null;
+    final ownCode = resolveRuteroRequestVendorCodes(
+      userCode: authState?.user?.code,
+      authVendorCodes: authState?.vendedorCodes ?? const <String>[],
+      selectedVendor: filterCode,
+      fallbackVendorCodes: widget.employeeCode,
+      isJefeVentas: widget.isJefeVentas,
+    );
+    if (ownCode.toUpperCase() == 'ALL' || ownCode.contains(',')) return null;
+    return ownCode;
   }
 
   /// Cambia el vendedor seleccionado para "Ver rutero como"
@@ -406,10 +397,23 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
       final response = result.data;
       if (!mounted || generation != _loadGeneration) return;
+      final weekRaw = response['week'];
+      if (weekRaw is! Map) {
+        setState(() {
+          _error =
+              (response['error'] ?? 'Respuesta de rutero inválida').toString();
+          _isLoadingWeek = false;
+        });
+        return;
+      }
       setState(() {
         _weekData = Map<String, int>.from(
-          (response['week'] as Map)
-              .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+          weekRaw.map(
+            (k, v) => MapEntry(
+              k.toString(),
+              v is num ? v.toInt() : int.tryParse('$v') ?? 0,
+            ),
+          ),
         );
         // Usar totalUniqueClients del backend para el conteo real de clientes
         _totalUniqueClients =
@@ -798,14 +802,29 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
 
     if (_error != null) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-            SizedBox(height: 16),
-            Text('Error al cargar', style: TextStyle(color: AppTheme.error)),
-          ],
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
+              const SizedBox(height: 16),
+              const Text(
+                'Error al cargar',
+                style: TextStyle(color: AppTheme.error),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

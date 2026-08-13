@@ -11,7 +11,6 @@ const {
     formatCurrency,
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
-    getVendorVisibilityScope,
     lookupClientAssignedVendorCodes,
     handleRouteError
 } = require('../utils/common');
@@ -128,6 +127,14 @@ function plannerCodesMatch(left, right) {
     return normalizePlannerVendorCode(left) === normalizePlannerVendorCode(right);
 }
 
+const PLANNER_SCOPE_SENTINELS = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0']);
+
+function sanitizePlannerScopeCodes(codes) {
+    return [...new Set((Array.isArray(codes) ? codes : [])
+        .map((code) => String(code || '').trim())
+        .filter((code) => code && !PLANNER_SCOPE_SENTINELS.has(normalizePlannerVendorCode(code))))];
+}
+
 function getPlannerUserContext(req) {
     const user = req.user || {};
     const role = String(user.role || '').trim().toUpperCase();
@@ -140,6 +147,16 @@ function getPlannerUserContext(req) {
     return { role, code, privileged, visibleCodes };
 }
 
+function writePlannerVendorField(req, location, field, value) {
+    if (!req[location] || typeof req[location] !== 'object') {
+        req[location] = {};
+    }
+    req[location][field] = value;
+    if (location !== 'query' || !req.query) return;
+    if (field !== 'vendedor') req.query.vendedor = value;
+    if (field !== 'vendedorCodes') req.query.vendedorCodes = value;
+}
+
 function plannerForbidden(res, error = 'No autorizado para este vendedor') {
     return res.status(403).json({ error, code: 'INSUFFICIENT_ROLE' });
 }
@@ -150,6 +167,17 @@ function requirePlannerPrivilege(req, res, next) {
         return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
     }
     if (!context.privileged) return plannerForbidden(res, 'Acceso restringido a responsables de ventas');
+    return next();
+}
+
+function requirePlannerVendedoresAccess(req, res, next) {
+    const context = getPlannerUserContext(req);
+    if (!context.code) {
+        return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+    }
+    if (context.role === 'REPARTIDOR' && !context.privileged) {
+        return plannerForbidden(res, 'Acceso restringido a responsables de ventas');
+    }
     return next();
 }
 
@@ -177,26 +205,45 @@ function requirePlannerVendorScope({ location, field, mutation = false, requireV
             if (requestedAll) {
                 // Expand literal ALL to the manager's visible vendor claims so
                 // "Todos los comerciales" keeps working in commercial Ruta.
-                const expanded = context.visibleCodes.join(',');
-                if (Object.prototype.hasOwnProperty.call(req.query || {}, field)) {
-                    req.query[field] = expanded;
-                }
-                if (field !== 'vendedor' && Object.prototype.hasOwnProperty.call(req.query || {}, 'vendedor')) {
-                    req.query.vendedor = expanded;
-                }
-                if (field !== 'vendedorCodes' && Object.prototype.hasOwnProperty.call(req.query || {}, 'vendedorCodes')) {
-                    req.query.vendedorCodes = expanded;
-                }
+                const expanded = sanitizePlannerScopeCodes(context.visibleCodes).join(',');
+                if (!expanded) return plannerForbidden(res);
+                writePlannerVendorField(req, location, field, expanded);
                 return next();
             }
-            const withinVisibleScope = requestedCodes.every(requested =>
+            const allowedCodes = requestedCodes.filter(requested =>
                 context.visibleCodes.some(visible => plannerCodesMatch(requested, visible)));
-            return withinVisibleScope ? next() : plannerForbidden(res);
+            if (allowedCodes.length === 0) return plannerForbidden(res);
+            if (allowedCodes.length !== requestedCodes.length) {
+                writePlannerVendorField(req, location, field, allowedCodes.join(','));
+            }
+            return next();
         }
 
-        const ownsEveryCode = requestedCodes.every(code =>
-            code.toUpperCase() !== 'ALL' && plannerCodesMatch(code, context.code));
-        return ownsEveryCode ? next() : plannerForbidden(res);
+        const ownedCodes = sanitizePlannerScopeCodes([context.code, ...context.visibleCodes]);
+        if (ownedCodes.length === 0) return plannerForbidden(res);
+
+        if (mutation) {
+            const ownsEveryCode = requestedCodes.every(code =>
+                code.toUpperCase() !== 'ALL' &&
+                ownedCodes.some(owned => plannerCodesMatch(code, owned)));
+            return ownsEveryCode ? next() : plannerForbidden(res);
+        }
+
+        // GET: never 403 a commercial over a leftover ALL / other-vendor
+        // filter. Serve their own scope so Ruta still loads.
+        const requestedAll = requestedCodes.some(code => code.toUpperCase() === 'ALL');
+        const allowedCodes = requestedAll
+            ? ownedCodes
+            : requestedCodes.filter(code =>
+                ownedCodes.some(owned => plannerCodesMatch(code, owned)));
+        const clamped = allowedCodes.length > 0 ? allowedCodes : ownedCodes;
+        const alreadyExact = !requestedAll
+            && clamped.length === requestedCodes.length
+            && requestedCodes.every((code, index) => plannerCodesMatch(code, clamped[index]));
+        if (!alreadyExact) {
+            writePlannerVendorField(req, location, field, clamped.join(','));
+        }
+        return next();
     };
 }
 
@@ -298,7 +345,8 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                 date: orderDate.iso
             });
         });
-    } catch (_error) {
+    } catch (error) {
+        logger.error(`[RUTERO DAY] PEDIDOS_CAB status query failed: ${error && error.message ? error.message : error}`);
         const unavailable = new Error('Estado de pedidos no disponible');
         unavailable.code = 'RUTERO_ORDER_STATUS_UNAVAILABLE';
         throw unavailable;
@@ -548,17 +596,13 @@ router.get('/rutero/week', requirePlannerVendorScope({ location: 'query', field:
 // =============================================================================
 // RUTERO VENDEDORES
 // =============================================================================
-router.get('/rutero/vendedores', requirePlannerPrivilege, async (req, res) => {
+router.get('/rutero/vendedores', requirePlannerVendedoresAccess, async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
-        const prevYear = currentYear - 1;
-
-        // Determine which table to query based on Role
         const { role } = req.query;
+        const context = getPlannerUserContext(req);
         let sql;
-
-        // Definitive whitelist of active commercial codes (matches comisiones)
-        const ACTIVE_COMERCIALES = ['01', '02', '03', '05', '10', '13', '15', '16', '33', '35', '72', '73', '80', '81', '83', '92', '93', '95', '97', '98'];
+        let params = [];
 
         if (role === 'repartidor') {
             sql = `
@@ -568,48 +612,39 @@ router.get('/rutero/vendedores', requirePlannerPrivilege, async (req, res) => {
                     ORDER BY D.NOMBREVENDEDOR
                 `;
         } else {
-            // Default: Commercials (Sales Reps)
-            // Use strict whitelist of known active comerciales matching comision system
-            // SECURITY: Use parameterized query (hardcoded values but consistent pattern)
-            const inList = ACTIVE_COMERCIALES.map(() => '?').join(',');
             sql = `
                     SELECT TRIM(VDD.CODIGOVENDEDOR) as code, TRIM(VDD.NOMBREVENDEDOR) as name
                     FROM DSEDAC.VDD VDD
-                    WHERE TRIM(VDD.CODIGOVENDEDOR) IN (${inList})
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM DSEDAC.VDC VDC
+                        WHERE TRIM(VDC.CODIGOVENDEDOR) = TRIM(VDD.CODIGOVENDEDOR)
+                          AND VDC.SUBEMPRESA = 'GMP'
+                    )
                     ORDER BY VDD.NOMBREVENDEDOR
                 `;
         }
 
-        // Cache 1 hour
         const cacheKey = `vendedores:active:${currentYear}:${role || 'comercial'}`;
-        const params = role === 'repartidor' ? [] : ACTIVE_COMERCIALES;
         const vendedores = await cachedQuery(queryWithParams, sql, {
             cacheKey,
             ttl: TTL.LONG,
             params
         }, params);
 
-        // Defensive mapping: DB2 column name case varies by driver config
         const mapped = vendedores.map(v => {
             const code = (v.CODE || v.code || v.Code || '').toString().trim();
             const name = (v.NAME || v.name || v.Name || '').toString().trim();
             return { code, name: name || `Vendedor ${code}` };
         }).filter(v => v.code && v.code.length > 0);
 
-        // Sort by code ascending as requested
         mapped.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-        const userCode = req.user?.code;
-        const normalizedUserCode = String(userCode || '').trim().replace(/^0+/, '') || String(userCode || '').trim();
-        const userRole = String(req.user?.role || '').toUpperCase();
-        const isPrivileged =
-            req.user?.isJefeVentas === true ||
-            ['JEFE', 'JEFE_VENTAS', 'ADMIN', 'DIRECTOR'].includes(userRole);
-        const allowedCodes = !isPrivileged && normalizedUserCode === '80'
-            ? getVendorVisibilityScope(userCode)
-            : null;
-        const scoped = allowedCodes && allowedCodes.length > 0
-            ? mapped.filter(v => allowedCodes.includes(String(v.code).trim().replace(/^0+/, '') || String(v.code).trim()))
+        const allowedCodes = context.privileged
+            ? sanitizePlannerScopeCodes(context.visibleCodes)
+            : sanitizePlannerScopeCodes([context.code, ...context.visibleCodes]);
+        const scoped = allowedCodes.length > 0
+            ? mapped.filter((vendor) => allowedCodes.some((allowed) => plannerCodesMatch(vendor.code, allowed)))
             : mapped;
 
         logger.info(`[VENDEDORES] Returning ${scoped.length} active ${role || 'comercial'} vendors`);
@@ -617,7 +652,7 @@ router.get('/rutero/vendedores', requirePlannerPrivilege, async (req, res) => {
         res.json({ vendedores: scoped });
     } catch (error) {
         logger.error(`Error fetching vendedores: ${error.message}`);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Error fetching vendedores' });
     }
 });
 

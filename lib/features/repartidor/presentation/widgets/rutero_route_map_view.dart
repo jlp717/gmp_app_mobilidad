@@ -92,15 +92,19 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
             }
           },
         )
-        ..setOnWebResourceError((error) {
-          debugPrint('[RuteroMap] web error: ${error.description}');
-          if (mounted) {
-            setState(() {
-              _useFallback = true;
-              _loadingHtml = false;
-            });
-          }
-        })
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onWebResourceError: (error) {
+              debugPrint('[RuteroMap] web error: ${error.description}');
+              if (mounted) {
+                setState(() {
+                  _useFallback = true;
+                  _loadingHtml = false;
+                });
+              }
+            },
+          ),
+        )
         ..loadHtmlString(html, baseUrl: 'https://local.rutero.map/');
 
       if (!mounted) return;

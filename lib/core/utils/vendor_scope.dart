@@ -105,3 +105,57 @@ String resolveScopedVendorCodes({
 
   return scopedFallback;
 }
+
+/// Vendor codes sent to commercial rutero APIs.
+///
+/// Jefe "Todos" must stay the literal ALL so the API expands visible claims.
+/// A plain commercial must never send ALL or another vendor persisted in
+/// SharedPreferences from a previous jefe session.
+String resolveRuteroRequestVendorCodes({
+  required String? userCode,
+  required List<String> authVendorCodes,
+  required String? selectedVendor,
+  required String fallbackVendorCodes,
+  required bool isJefeVentas,
+}) {
+  if (isJefeVentas) {
+    if (selectedVendor == null ||
+        selectedVendor.isEmpty ||
+        selectedVendor.toUpperCase() == 'ALL') {
+      return 'ALL';
+    }
+    return selectedVendor;
+  }
+
+  if (hasCommercial80VendorScope(
+    userCode: userCode,
+    vendorCodes: authVendorCodes,
+  )) {
+    return resolveScopedVendorCodes(
+      userCode: userCode,
+      authVendorCodes: authVendorCodes,
+      selectedVendor: selectedVendor,
+      fallbackVendorCodes: fallbackVendorCodes,
+    );
+  }
+
+  final ownCodes = uniqueVendorCodes(<String>[
+    if (userCode != null && userCode.trim().isNotEmpty) userCode,
+    ...authVendorCodes,
+    ...fallbackVendorCodes.split(','),
+  ]).where((code) => code.toUpperCase() != 'ALL').toList();
+  final own = ownCodes.isNotEmpty ? ownCodes.first : fallbackVendorCodes.trim();
+
+  if (selectedVendor == null ||
+      selectedVendor.isEmpty ||
+      selectedVendor.toUpperCase() == 'ALL' ||
+      selectedVendor.contains(',')) {
+    return own;
+  }
+
+  if (vendorCodeListContains(ownCodes, selectedVendor)) {
+    return selectedVendor;
+  }
+
+  return own;
+}

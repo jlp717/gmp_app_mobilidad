@@ -88,4 +88,20 @@ describe('laclae baja dual-use (sales vs visits)', () => {
         expect(counts.martes).toBe(0);
         expect(getTotalClientsFromCache('02', 'comercial')).toBe(1);
     });
+
+    test('week and day lookups resolve padded vendor codes', () => {
+        __setLaclaeCacheForTests({
+            '05': {
+                '4300001111': {
+                    visitDays: ['lunes'],
+                    deliveryDays: [],
+                    isBaja: false,
+                },
+            },
+        });
+
+        expect(getWeekCountsFromCache('5', 'comercial', true).lunes).toBe(1);
+        expect(getClientsForDay('5', 'lunes', 'comercial', true)).toEqual(['4300001111']);
+        expect(getTotalClientsFromCache('05', 'comercial')).toBe(1);
+    });
 });
