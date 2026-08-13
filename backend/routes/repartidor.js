@@ -31,8 +31,36 @@ const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptServ
 const facturasService = require('../services/facturas.service');
 const pdfService = require('../services/pdf.service');
 
+const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
+const {
+  parseRouteDate,
+  normalizeOrdenPayload,
+  normalizeOptimizeStopsPayload,
+  optimizeStops,
+  preferredStartMinute,
+  buildWindowLabel,
+  isClosedOnDate,
+  formatMinuteLabel,
+} = require('../services/repartidor-rutero-orden-service');
+
 const PRIVILEGED_REPARTIDOR_ROLES = new Set(['ADMIN', 'JEFE_VENTAS']);
 const REPARTIDOR_READ_PAGE_MAX = 100;
+
+/** Single driver only — multi-id / ALL selectors rejected with 422. */
+function authorizeSingleRepartidorId(req, res, rawId) {
+  const raw = String(rawId || '').trim();
+  if (!raw || raw.includes(',') || /^ALL$/i.test(raw)) {
+    sendRouteError(res, 422, 'REPARTIDOR_ID_MULTI_NOT_ALLOWED');
+    return null;
+  }
+  const ids = authorizedRepartidorIds(req, res, raw);
+  if (!ids) return null;
+  if (ids.length !== 1) {
+    sendRouteError(res, 422, 'REPARTIDOR_ID_MULTI_NOT_ALLOWED');
+    return null;
+  }
+  return ids[0];
+}
 
 function sendRouteError(res, status, code) {
     return res.status(status).json({ success: false, code, error: 'No se pudo completar la solicitud' });
@@ -48,10 +76,15 @@ function parseBoundedInt(value, { min, max, name, fallback }) {
 
 function parseIsoDate(value, name) {
     if (!value) return { value: null };
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return { error: `${name}_INVALID` };
-    const date = new Date(`${value}T00:00:00Z`);
-    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return { error: `${name}_INVALID` };
-    return { value: Number(value.replace(/-/g, '')) };
+    const raw = String(value).trim();
+    // Accept YYYY-MM-DD and full ISO timestamps (Flutter toIso8601String).
+    const ymd = /^(\d{4}-\d{2}-\d{2})/.exec(raw)?.[1];
+    if (!ymd) return { error: `${name}_INVALID` };
+    const date = new Date(`${ymd}T00:00:00Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== ymd) {
+        return { error: `${name}_INVALID` };
+    }
+    return { value: Number(ymd.replace(/-/g, '')) };
 }
 
 function parsePagination(query, defaultLimit = REPARTIDOR_READ_PAGE_MAX, maxOffset = REPARTIDOR_READ_PAGE_MAX) {
@@ -593,12 +626,23 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 .map((row) => Number(row.IMPORTETOTAL_FACTURA))
                 .filter(Number.isFinite)
                 .map((amount) => Number(amount.toFixed(2))))];
-            if (invoiceAmounts.length > 1) {
-                throw new Error('ambiguous invoice header amount');
+            // CAC can disagree across constituent albaranes (legacy ERP noise).
+            // Never 503 the whole client history: prefer a single CAC header when
+            // unanimous, otherwise fall back to summing CPC albaran totals.
+            let totalAmount;
+            if (invoiceAmounts.length === 1) {
+                totalAmount = invoiceAmounts[0];
+            } else {
+                if (invoiceAmounts.length > 1) {
+                    logger.warn(
+                        `[REPARTIDOR] Ambiguous invoice header for ${fKey}: ${invoiceAmounts.join(',')}; using CPC sum`,
+                    );
+                }
+                totalAmount = fRows.reduce(
+                    (sum, row) => sum + (Number.isFinite(Number(row.IMPORTETOTAL)) ? Number(row.IMPORTETOTAL) : 0),
+                    0,
+                );
             }
-            const totalAmount = invoiceAmounts.length === 1
-                ? invoiceAmounts[0]
-                : fRows.reduce((sum, row) => sum + (Number.isFinite(Number(row.IMPORTETOTAL)) ? Number(row.IMPORTETOTAL) : 0), 0);
 
             // Use the most recent row for display metadata (date, status, etc.)
             const primaryRow = fRows[0]; // Already sorted by date DESC
@@ -668,8 +712,8 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             documents
         });
 
-    } catch (_error) {
-        logger.error('[REPARTIDOR] Error in history/documents');
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in history/documents: ${String(error?.message || error).slice(0, 240)}`);
         sendRouteError(res, 503, 'REPARTIDOR_DOCUMENTS_FAILED');
     }
 });
@@ -940,9 +984,8 @@ router.get('/history/signature', verifyToken, async (req, res) => {
 
         const albId = `${ejercicio}-${(serie || 'A').trim()}-${terminal || '0'}-${numero}`;
         logger.info(`[REPARTIDOR] Getting signature for albaran ${albId}`);
-        let signatureSource = null; // Track where we found the signature
+        let signatureSource = null;
 
-        // 1. Check DELIVERY_STATUS for FIRMA_PATH (OLD schema only)
         let firmaPath = null;
         const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
         if (dsOldAvail) {
@@ -952,18 +995,21 @@ router.get('/history/signature', verifyToken, async (req, res) => {
                 firmaPath = dsRows[0].FIRMA_PATH;
             }
         }
-        // 2. Check REPARTIDOR_FIRMAS via REPARTIDOR_ENTREGAS
+
         let firmaBase64 = null;
         let firmante = null;
         let fechaFirma = null;
-        const firmaRows = await repartidorDb.getRepartidorFirmasByAlbaran(numero, ejercicio, serie);
+        const firmaRows = await repartidorDb.getRepartidorFirmasByAlbaran(
+            numero, ejercicio, serie, terminal,
+        );
         if (firmaRows.length > 0) {
             firmaBase64 = firmaRows[0].FIRMABASE64;
-            firmante = firmaRows[0].FIRMANOMBRE;
+            firmante = (firmaRows[0].FIRMANOMBRE || '').trim() || null;
             fechaFirma = (firmaRows[0].ANO > 0)
                 ? `${firmaRows[0].ANO}-${String(firmaRows[0].MES).padStart(2, '0')}-${String(firmaRows[0].DIA).padStart(2, '0')} ${String(firmaRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(firmaRows[0].HORA).padStart(6, '0').substring(2, 4)}`
                 : null;
             if (firmaBase64) signatureSource = 'REPARTIDOR_FIRMAS';
+            else if (firmante) signatureSource = 'REPARTIDOR_FIRMAS_NAME_ONLY';
             logger.info(`[REPARTIDOR] Step 2 REPARTIDOR_FIRMAS: found row, hasBase64=${!!firmaBase64}`);
         } else {
             logger.info(`[REPARTIDOR] Step 2 REPARTIDOR_FIRMAS: 0 rows for numero=${numero}, ejercicio=${ejercicio}, serie='${(serie || 'A').trim()}'`);
@@ -1009,14 +1055,15 @@ router.get('/history/signature', verifyToken, async (req, res) => {
 
         // 4. CACFIRMAS (legacy ERP signatures) — last resort
         if (!firmaBase64) {
-            // Query ALL CACFIRMAS rows for this albaran (no FIRMABASE64 filter)
+            try {
             const cacRows = await repartidorDb.getCacFirmasDetailed(ejercicio, serie, terminal, numero);
             logger.info(`[REPARTIDOR] Step 4 CACFIRMAS: ${cacRows.length} rows for ej=${ejercicio}, serie='${(serie || 'A').trim()}', term=${terminal || 0}, num=${numero}`);
 
             // Try to find one with actual base64 data
             for (const cacRow of cacRows) {
                 const rawB64 = cacRow.FIRMABASE64;
-                const b64Len = parseInt(cacRow.FIRMA_LEN) || 0;
+                const rawLen = rawB64 ? String(rawB64).length : 0;
+                const b64Len = parseInt(cacRow.FIRMA_LEN, 10) || rawLen;
                 const nombre = (cacRow.FIRMANOMBRE || '').trim();
                 logger.info(`[REPARTIDOR] CACFIRMAS row: len=${b64Len}, name='${nombre}', hasData=${!!rawB64 && b64Len > 10}`);
 
@@ -1049,6 +1096,9 @@ router.get('/history/signature', verifyToken, async (req, res) => {
                 }
             } else if (cacRows.length === 0) {
                 logger.info(`[REPARTIDOR] CACFIRMAS: NO row at all for this albaran`);
+            }
+            } catch (cacError) {
+                logger.warn(`[REPARTIDOR] Step 4 CACFIRMAS skipped: ${cacError.message}`);
             }
         }
 
@@ -1293,7 +1343,9 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
         // Step 3b: Try REPARTIDOR_FIRMAS if no file signature
         if (!signatureBase64) {
             try {
-                const firmaRows = await repartidorDb.getRepartidorFirmaBase64ByAlbaran(parsedNumber, parsedYear, serie);
+                const firmaRows = await repartidorDb.getRepartidorFirmaBase64ByAlbaran(
+                    parsedNumber, parsedYear, serie, parsedTerminal,
+                );
                 if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
                     signatureBase64 = firmaRows[0].FIRMABASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
@@ -1404,6 +1456,164 @@ router.get('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
 });
 
 // =============================================================================
+// GET /rutero/order/:repartidorId?date=YYYY-MM-DD
+// Day-scoped saved route order (not permanent weekday).
+// =============================================================================
+router.get('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
+  try {
+    const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+    if (!repartidorId) return;
+    const fecha = parseRouteDate(req.query.date);
+    if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
+    const orden = await ruteroOrdenRepo.listOrder(repartidorId, fecha);
+    return res.json({ success: true, orden });
+  } catch (error) {
+    if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') {
+      return sendRouteError(res, 503, error.code);
+    }
+    logger.error('[REPARTIDOR] Rutero order read failed');
+    return sendRouteError(res, 503, 'RUTERO_ORDER_READ_FAILED');
+  }
+});
+
+// =============================================================================
+// PUT /rutero/order/:repartidorId  { date, orden: [{documentId, cliente?, posicion}] }
+// =============================================================================
+router.put('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
+  try {
+    const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+    if (!repartidorId) return;
+    const body = req.body || {};
+    const fecha = parseRouteDate(body.date);
+    if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
+    const parsed = normalizeOrdenPayload(body.orden);
+    if (parsed.error) return sendRouteError(res, 422, parsed.error);
+    const updatedBy = String(req.user?.code || req.user?.id || req.user?.user || '').trim();
+    const orden = await ruteroOrdenRepo.replaceOrder(
+      repartidorId,
+      fecha,
+      parsed.value,
+      updatedBy,
+    );
+    return res.json({ success: true, orden });
+  } catch (error) {
+    if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') {
+      return sendRouteError(res, 503, error.code);
+    }
+    logger.error('[REPARTIDOR] Rutero order write failed');
+    return sendRouteError(res, 503, 'RUTERO_ORDER_WRITE_FAILED');
+  }
+});
+
+// =============================================================================
+// POST /rutero/order/:repartidorId/optimize
+// Suggest early→late order by CRUT preferred windows (does not persist).
+// Body: { date, stops: [{documentId, cliente}] } or { date, documentIds, clientes }
+// =============================================================================
+router.post('/rutero/order/:repartidorId/optimize', verifyToken, async (req, res) => {
+  try {
+    const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+    if (!repartidorId) return;
+    const parsed = normalizeOptimizeStopsPayload(req.body || {});
+    if (parsed.error) return sendRouteError(res, 422, parsed.error);
+
+    const clientCodes = parsed.stops.map((s) => s.cliente).filter(Boolean);
+    let windowsByCliente = new Map();
+    try {
+      windowsByCliente = await ruteroOrdenRepo.fetchClientWindows(clientCodes);
+    } catch (error) {
+      logger.warn('[REPARTIDOR] CRUT windows unavailable for optimize');
+    }
+
+    const orden = optimizeStops(parsed.stops, parsed.date, windowsByCliente);
+    return res.json({
+      success: true,
+      repartidorId,
+      date: parsed.date,
+      algorithm: 'preferred_window_asc',
+      orden,
+    });
+  } catch (error) {
+    logger.error('[REPARTIDOR] Rutero optimize failed');
+    return sendRouteError(res, 503, 'RUTERO_OPTIMIZE_FAILED');
+  }
+});
+
+// =============================================================================
+// GET /rutero/stops-geo/:repartidorId?date=YYYY-MM-DD&clientes=c1,c2
+// Lat/lng + hour windows + observaciones for day stops.
+// =============================================================================
+router.get('/rutero/stops-geo/:repartidorId', verifyToken, async (req, res) => {
+  try {
+    const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+    if (!repartidorId) return;
+    const fecha = parseRouteDate(req.query.date);
+    if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
+
+    let savedOrden = [];
+    try {
+      savedOrden = await ruteroOrdenRepo.listOrder(repartidorId, fecha);
+    } catch (error) {
+      if (error?.code !== 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') {
+        logger.warn('[REPARTIDOR] stops-geo saved order unavailable');
+      }
+    }
+
+    const queryClientes = String(req.query.clientes || '')
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const clientCodes = ruteroOrdenRepo.uniqueClientCodes([
+      ...savedOrden.map((row) => row.cliente),
+      ...queryClientes,
+    ]);
+
+    const [windowsByCliente, geoByCliente] = await Promise.all([
+      ruteroOrdenRepo.fetchClientWindows(clientCodes).catch(() => new Map()),
+      ruteroOrdenRepo.fetchClientGeo(clientCodes).catch(() => new Map()),
+    ]);
+
+    const stops = clientCodes.map((cliente, index) => {
+      const windowRow = windowsByCliente.get(cliente) || null;
+      const geo = geoByCliente.get(cliente) || null;
+      const saved = savedOrden.find((row) => row.cliente === cliente);
+      return {
+        cliente,
+        documentId: saved?.documentId || null,
+        posicion: saved?.posicion ?? index,
+        lat: geo?.lat ?? null,
+        lng: geo?.lng ?? null,
+        geoSource: geo?.source || null,
+        hasGps: Boolean(geo),
+        preferredMinute: preferredStartMinute(windowRow),
+        preferredLabel: formatMinuteLabel(preferredStartMinute(windowRow)),
+        windowLabel: buildWindowLabel(windowRow),
+        observaciones: windowRow?.observacionesReparto || null,
+        closedDay: isClosedOnDate(windowRow, fecha),
+        horaRepartoDesde: windowRow?.horaRepartoDesde ?? null,
+        horaRepartoHasta: windowRow?.horaRepartoHasta ?? null,
+        horaVisita: windowRow?.horaVisita ?? null,
+      };
+    });
+
+    return res.json({
+      success: true,
+      repartidorId,
+      date: fecha,
+      stops,
+      stats: {
+        total: stops.length,
+        withGps: stops.filter((s) => s.hasGps).length,
+        missingGps: stops.filter((s) => !s.hasGps).length,
+      },
+    });
+  } catch (error) {
+    logger.error('[REPARTIDOR] Rutero stops-geo failed');
+    return sendRouteError(res, 503, 'RUTERO_STOPS_GEO_FAILED');
+  }
+});
+
+// =============================================================================
 // GET /rutero/week/:repartidorId
 // Resumen semanal para el calendario (LUN 30, MAR 31...)
 // Estado basado en cobros de CONTADO, REPOSICION, MENSUAL
@@ -1415,7 +1625,15 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
         const dateResult = parseIsoDate(date, 'DATE');
         if (dateResult.error) return sendRouteError(res, 422, dateResult.error);
 
-        const refDate = date ? new Date(`${date}T12:00:00`) : new Date();
+        // Always build from YYYY-MM-DD. Full ISO timestamps must not be spliced
+        // again (`...T00:00:00.000T12:00:00` → Invalid Date → 503).
+        const dateYmd = dateResult.value == null
+            ? null
+            : String(dateResult.value).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+        const refDate = dateYmd ? new Date(`${dateYmd}T12:00:00`) : new Date();
+        if (Number.isNaN(refDate.getTime())) {
+            return sendRouteError(res, 422, 'DATE_INVALID');
+        }
         const currentDay = refDate.getDate();
 
         // Calculate start/end of week (Monday to Sunday)
@@ -1638,7 +1856,9 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
         // Step 3b: REPARTIDOR_FIRMAS
         if (!signatureBase64) {
             try {
-                const firmaRows = await repartidorDb.getRepartidorFirmaBase64ByAlbaran(actualNumAlb, actualEjAlb, actualSerieAlb);
+                const firmaRows = await repartidorDb.getRepartidorFirmaBase64ByAlbaran(
+                    actualNumAlb, actualEjAlb, actualSerieAlb, actualTermAlb,
+                );
                 if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
                     signatureBase64 = firmaRows[0].FIRMABASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';

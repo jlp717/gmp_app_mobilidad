@@ -14,12 +14,14 @@ abstract interface class RepartoEvidenceUploader {
     required String entregaId,
     required Uint8List pngBytes,
     required String idempotencyKey,
+    String? repartidorId,
   });
 
   Future<String> uploadPhoto({
     required String entregaId,
     required XFile photo,
     required String idempotencyKey,
+    String? repartidorId,
   });
 }
 
@@ -49,6 +51,7 @@ class RepartoEvidenceUploadService implements RepartoEvidenceUploader {
     required String entregaId,
     required Uint8List pngBytes,
     required String idempotencyKey,
+    String? repartidorId,
   }) async {
     _requireEntregaId(entregaId);
     if (pngBytes.lengthInBytes > maxSignatureBytes) {
@@ -70,6 +73,8 @@ class RepartoEvidenceUploadService implements RepartoEvidenceUploader {
       <String, dynamic>{
         'documentId': entregaId.trim(),
         'signature': 'data:image/png;base64,${base64Encode(pngBytes)}',
+        if (repartidorId != null && repartidorId.trim().isNotEmpty)
+          'repartidorId': repartidorId.trim(),
       },
       idempotencyKey,
     );
@@ -80,6 +85,7 @@ class RepartoEvidenceUploadService implements RepartoEvidenceUploader {
     required String entregaId,
     required XFile photo,
     required String idempotencyKey,
+    String? repartidorId,
   }) async {
     _requireEntregaId(entregaId);
     final bytes = await photo.readAsBytes();
@@ -102,6 +108,8 @@ class RepartoEvidenceUploadService implements RepartoEvidenceUploader {
       '/repartidor-finanzas/rutero/evidence/photo',
       FormData.fromMap(<String, dynamic>{
         'documentId': entregaId.trim(),
+        if (repartidorId != null && repartidorId.trim().isNotEmpty)
+          'repartidorId': repartidorId.trim(),
         'photo': MultipartFile.fromBytes(
           bytes,
           filename: _safeFilename(photo, mimeType),
@@ -180,6 +188,8 @@ class RepartoEvidenceUploadService implements RepartoEvidenceUploader {
   static String _messageForStatus(int? status) => switch (status) {
         401 => 'La sesión ha caducado. Inicia sesión de nuevo.',
         403 => 'No tienes permiso para adjuntar esta evidencia.',
+        410 =>
+          'Esta versión usa un endpoint retirado. Actualiza la app e inténtalo de nuevo.',
         413 => 'La evidencia supera el límite permitido (foto: 4 MiB).',
         422 => 'La evidencia no es válida. Revisa la foto o la firma.',
         503 => 'El servicio de evidencias no está disponible. Reinténtalo.',
@@ -256,6 +266,7 @@ class RepartoEvidenceConfirmationCoordinator {
     required Uint8List? signaturePngBytes,
     required List<XFile> photos,
     required Future<T> Function(RepartoUploadedEvidence evidence) confirm,
+    String? repartidorId,
   }) async {
     if (photos.length > RepartoEvidenceUploadService.maxPhotos) {
       throw const RepartoEvidenceUploadException(
@@ -275,16 +286,35 @@ class RepartoEvidenceConfirmationCoordinator {
     );
     final signatureId = signaturePngBytes == null
         ? _persistedId(entry, 'signature')
-        : await _uploadSignature(entregaId, signaturePngBytes);
+        : await _uploadSignature(
+            entregaId,
+            signaturePngBytes,
+            repartidorId: repartidorId,
+          );
     final photo0 = photos.isEmpty
         ? _persistedId(entry, 'photo-0')
-        : await _uploadPhoto(entregaId, photos[0], slot: 'photo-0');
+        : await _uploadPhoto(
+            entregaId,
+            photos[0],
+            slot: 'photo-0',
+            repartidorId: repartidorId,
+          );
     final photo1 = photos.length < 2
         ? _persistedId(entry, 'photo-1')
-        : await _uploadPhoto(entregaId, photos[1], slot: 'photo-1');
+        : await _uploadPhoto(
+            entregaId,
+            photos[1],
+            slot: 'photo-1',
+            repartidorId: repartidorId,
+          );
     final photo2 = photos.length < 3
         ? _persistedId(entry, 'photo-2')
-        : await _uploadPhoto(entregaId, photos[2], slot: 'photo-2');
+        : await _uploadPhoto(
+            entregaId,
+            photos[2],
+            slot: 'photo-2',
+            repartidorId: repartidorId,
+          );
     final evidence = RepartoUploadedEvidence(
       signatureId: signatureId,
       photoIds: List<String>.unmodifiable(<String>[
@@ -323,8 +353,9 @@ class RepartoEvidenceConfirmationCoordinator {
 
   Future<String> _uploadSignature(
     String deliveryId,
-    Uint8List bytes,
-  ) async {
+    Uint8List bytes, {
+    String? repartidorId,
+  }) async {
     const slot = 'signature';
     final record = await _journal.reserveEvidence(
       deliveryId: deliveryId,
@@ -337,6 +368,7 @@ class RepartoEvidenceConfirmationCoordinator {
       entregaId: deliveryId,
       pngBytes: bytes,
       idempotencyKey: record.idempotencyKey,
+      repartidorId: repartidorId,
     );
     await _journal.markEvidenceUploaded(
       deliveryId: deliveryId,
@@ -350,6 +382,7 @@ class RepartoEvidenceConfirmationCoordinator {
     String deliveryId,
     XFile photo, {
     required String slot,
+    String? repartidorId,
   }) async {
     final bytes = await photo.readAsBytes();
     final record = await _journal.reserveEvidence(
@@ -363,6 +396,7 @@ class RepartoEvidenceConfirmationCoordinator {
       entregaId: deliveryId,
       photo: photo,
       idempotencyKey: record.idempotencyKey,
+      repartidorId: repartidorId,
     );
     await _journal.markEvidenceUploaded(
       deliveryId: deliveryId,

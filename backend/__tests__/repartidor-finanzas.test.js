@@ -210,7 +210,14 @@ describe('Repartidor finanzas routes', () => {
           IMPORTEVENCIMIENTO: '189.60',
           IMPORTEPENDIENTE: '0',
         },
-      ]);
+      ])
+       // selectDailyStructuredSums (gastos / ingresos / ajustes)
+       .mockResolvedValueOnce([{ TOTAL: '0' }])
+       .mockResolvedValueOnce([{ TOTAL: '0' }])
+       .mockResolvedValueOnce([{ TOTAL: '0' }])
+       // selectDeliveredAmount + selectDailyErpDebt
+       .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '0' }])
+       .mockResolvedValueOnce([{ DEUDA_PENDIENTE: '0' }]);
 
     const res = await request(app)
       .get('/finanzas/daily-summary/94')
@@ -351,7 +358,12 @@ describe('Repartidor finanzas routes', () => {
         COBROS_COUNT: '3',
       }])
       .mockResolvedValueOnce([{ SALDO_PENDIENTE: '25' }])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ TOTAL: '0' }])
+      .mockResolvedValueOnce([{ TOTAL: '0' }])
+      .mockResolvedValueOnce([{ TOTAL: '0' }])
+      .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '0' }])
+      .mockResolvedValueOnce([{ DEUDA_PENDIENTE: '0' }]);
 
     const res = await request(app)
       .get('/finanzas/daily-summary/94,95')
@@ -716,17 +728,23 @@ describe('Repartidor finanzas routes', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
-  test('GET /vencimientos validates range and bounded page size before DB access', async () => {
+  test('GET /vencimientos validates range and clamps oversized page size', async () => {
     const reversed = await request(app)
       .get('/finanzas/vencimientos/94')
       .query({ from: '2026-05-01', to: '2026-04-01' });
-    const oversized = await request(app)
-      .get('/finanzas/vencimientos/94')
-      .query({ from: '2026-04-01', to: '2026-04-30', limit: 101 });
-
     expect(reversed.status).toBe(400);
-    expect(oversized.status).toBe(400);
     expect(mockQueryWithParams).not.toHaveBeenCalled();
+
+    // APK legacy sends limit=200 without from/to — clamp + defaults, then query.
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([]);
+    const legacyApk = await request(app)
+      .get('/finanzas/vencimientos/94')
+      .query({ limit: 200 });
+    expect(legacyApk.status).toBe(200);
+    expect(legacyApk.body.pagination.limit).toBe(100);
+    expect(mockQueryWithParams).toHaveBeenCalled();
   });
 
   test('GET /evolution propagates DB failures instead of returning a 200 empty state', async () => {

@@ -48,6 +48,12 @@ function sendError(res, error) {
       code: 'AUTH_SESSION_STORE_UNAVAILABLE',
     });
   }
+  if (error?.code === 'AUTH_SESSION_LIMIT_REACHED') {
+    return res.status(409).json({
+      error: 'Limite de sesiones activas alcanzado. Cierra sesion en otro dispositivo e intentalo de nuevo.',
+      code: 'AUTH_SESSION_LIMIT_REACHED',
+    });
+  }
   return res.status(503).json({
     error: 'Perfil de autorizaci\u00f3n no disponible',
     code: 'AUTH_PROFILE_UNAVAILABLE',
@@ -171,7 +177,11 @@ function createAuthClaimsLoginHandler({
           { sid, accessJti, refreshJti },
         );
       } catch (error) {
-        await tokenService.revokeSession?.(sid, { userId: resolvedClaims.id });
+        try {
+          await tokenService.revokeSession?.(sid, { userId: resolvedClaims.id });
+        } catch (_revokeError) {
+          // Best-effort compensation only; preserve the original register failure.
+        }
         throw error;
       }
 

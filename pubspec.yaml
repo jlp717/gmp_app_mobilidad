@@ -122,3 +122,4 @@ flutter:
   assets:
     - assets/load_planner/
     - assets/load_planner/lib/
+    - assets/rutero_map/

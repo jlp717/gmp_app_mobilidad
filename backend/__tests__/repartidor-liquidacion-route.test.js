@@ -84,15 +84,19 @@ describe('repartidor liquidation route boundary', () => {
     expect(closeDay).toHaveBeenCalledWith(input, { actorId: '94', actorRole: 'REPARTIDOR' });
   });
 
-  test('defaults sendEmails to false at the HTTP boundary', async () => {
-    const closeDay = jest.fn().mockResolvedValue({ created: true, liquidacion: { id: '701' }, outboxIntent: null });
+  test('defaults sendEmails to true at the HTTP boundary', async () => {
+    const closeDay = jest.fn().mockResolvedValue({
+      created: true,
+      liquidacion: { id: '701' },
+      outboxIntent: { type: 'REPARTIDOR_LIQUIDACION_EMAIL' },
+      outboxId: 9,
+    });
     routes.setCanonicalLiquidacionService({ closeDay });
     const input = body();
     delete input.sendEmails;
     const result = await request(makeApp()).post('/finanzas/liquidaciones').send(input);
     expect(result.status).toBe(201);
-    expect(closeDay.mock.calls[0][0]).toMatchObject({ sendEmails: false });
-    expect(result.body.outboxIntent).toBeNull();
+    expect(closeDay.mock.calls[0][0]).toMatchObject({ sendEmails: true });
   });
 
   test('returns 200 for replay and maps typed application errors', async () => {

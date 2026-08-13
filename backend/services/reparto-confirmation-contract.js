@@ -270,7 +270,11 @@ function buildActor(user, body) {
   const requested = normalizeCode(
     body.delivery.repartidorId || ownRepartidorId,
   );
-  const privileged = normalizeCode(current.role).toUpperCase() === 'ADMIN';
+  const role = normalizeCode(current.role).toUpperCase();
+  const activeMode = normalizeCode(current.activeMode).toUpperCase();
+  // ADMIN or JEFE supervising Perfil Reparto may confirm for the selected driver.
+  const privileged = role === 'ADMIN'
+    || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
   if (!privileged && !codesMatch(ownRepartidorId, requested)) {
     throw new RepartoContractError('La entrega no pertenece al repartidor autenticado', {
       code: 'DELIVERY_OWNERSHIP_REQUIRED',
@@ -281,7 +285,7 @@ function buildActor(user, body) {
   return Object.freeze({
     userId,
     repartidorId: privileged ? requested : ownRepartidorId,
-    role: normalizeCode(current.role).toUpperCase(),
+    role,
     privileged,
   });
 }

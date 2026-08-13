@@ -199,7 +199,7 @@ class RepartidorVencimientosPage extends ConsumerStatefulWidget {
 
 class _RepartidorVencimientosPageState
     extends ConsumerState<RepartidorVencimientosPage> {
-  static const _pageSize = 50;
+  static const _pageSize = 100;
 
   final List<RepartidorVencimiento> _items = [];
   late DateTime _from;

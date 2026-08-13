@@ -9,6 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
+import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
@@ -18,6 +21,7 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_upload_service.dart';
@@ -202,6 +206,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _isAcknowledgedTombstone = false;
   bool _isJournalBlocked = false;
   bool _isRestoringJournal = true;
+  bool _lastConfirmWasQueued = false;
   RepartoDeliveryStatus _deliveryStatus = RepartoDeliveryStatus.entregado;
   RepartoDifferenceReason _differenceReason = RepartoDifferenceReason.otro;
   RepartoIncidentType _incidentType = RepartoIncidentType.otro;
@@ -209,6 +214,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _tieneImpresora = false;
   String? _printerName;
   String? _printerAddress;
+  String? _printerProtocol;
   bool _isTestingConnection = false;
   bool? _lastConnectionResult;
 
@@ -285,11 +291,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final has = await ZebraPrintService.tieneImpresora();
     final name = await ZebraPrintService.getSavedPrinterName();
     final addr = await ZebraPrintService.getSavedPrinterAddress();
+    final protocol = await ZebraPrintService.getPrinterProtocol();
     if (mounted) {
       setState(() {
         _tieneImpresora = has;
         _printerName = name;
         _printerAddress = addr;
+        _printerProtocol = protocol;
       });
     }
   }
@@ -313,13 +321,35 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (device != null && mounted) {
       final displayName =
           device.name ?? ZebraPrintService.maskAddress(device.address);
+      final chosen = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Protocolo de impresión'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Zebra / ZPL'),
+                onTap: () => Navigator.pop(ctx, 'zpl'),
+              ),
+              ListTile(
+                title: const Text('Impresora Bluetooth genérica (ESC/POS)'),
+                onTap: () => Navigator.pop(ctx, 'escpos'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (chosen == null || !mounted) return;
       await ZebraPrintService.savePrinter(
         device.address,
         displayName,
+        protocol: chosen,
       );
       setState(() {
         _printerName = displayName;
         _printerAddress = device.address;
+        _printerProtocol = chosen;
         _lastConnectionResult = null;
       });
     }
@@ -330,6 +360,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       tieneImpresora: _tieneImpresora,
       printerName: _printerName,
       printerAddress: _printerAddress,
+      printerProtocol: _printerProtocol,
       isTestingConnection: _isTestingConnection,
       lastConnectionResult: _lastConnectionResult,
       onToggle: (val) async {
@@ -361,6 +392,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           widget.albaran.serie,
           widget.albaran.terminal,
           widget.albaran.codigoCliente,
+          deliveryId: widget.albaran.id,
         );
         if (albaranDetalle == null) {
           if (mounted) {
@@ -531,46 +563,90 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildProductsTab() {
-    return RuteroDetailProducts(
-      items: _items,
-      isLoadingItems: _isLoadingItems,
-      itemsError: _itemsError,
-      productChecked: _productChecked,
-      productQuantities: _productQuantities,
-      ordenPreparacion: widget.albaran.ordenPreparacion?.toString(),
-      onProductCheckedChanged: (lineId, value) {
-        setState(() {
-          _productChecked[lineId] = value;
-          _cachedPdfBase64 = null;
-        });
-      },
-      onQuantityChanged: (lineId, value) {
-        setState(() {
-          _productQuantities[lineId] = _boundedQuantity(lineId, value);
-          _cachedPdfBase64 = null;
-        });
-      },
-      onShowQuantityEditDialog: _showQuantityEditDialog,
-      onRetryItems: _loadItems,
-      onConfirmAll: () {
-        HapticFeedback.lightImpact();
-        final allChecked = _items.isNotEmpty &&
-            _items.every(
-              (item) => _productChecked[ruteroLineKey(item)] ?? false,
-            );
-        setState(() {
-          for (final linea in _items) {
-            _productChecked[ruteroLineKey(linea)] = !allChecked;
-          }
-        });
-      },
-      onContinueToPayment: () {
-        HapticFeedback.mediumImpact();
-        _tabController.animateTo(1);
-      },
-      onOpenFicha: _openFichaTecnica,
-      onShowFullscreenImage: _showFullscreenImage,
+    return Column(
+      children: [
+        Expanded(
+          child: RuteroDetailProducts(
+            items: _items,
+            isLoadingItems: _isLoadingItems,
+            itemsError: _itemsError,
+            productChecked: _productChecked,
+            productQuantities: _productQuantities,
+            ordenPreparacion: widget.albaran.ordenPreparacion?.toString(),
+            onProductCheckedChanged: (lineId, value) {
+              setState(() {
+                _productChecked[lineId] = value;
+                _cachedPdfBase64 = null;
+              });
+            },
+            onQuantityChanged: (lineId, value) {
+              setState(() {
+                _productQuantities[lineId] = _boundedQuantity(lineId, value);
+                _cachedPdfBase64 = null;
+              });
+            },
+            onShowQuantityEditDialog: _showQuantityEditDialog,
+            onRetryItems: _loadItems,
+            onConfirmAll: () {
+              HapticFeedback.lightImpact();
+              final allChecked = _items.isNotEmpty &&
+                  _items.every(
+                    (item) => _productChecked[ruteroLineKey(item)] ?? false,
+                  );
+              setState(() {
+                for (final linea in _items) {
+                  _productChecked[ruteroLineKey(linea)] = !allChecked;
+                }
+              });
+            },
+            onContinueToPayment: () {
+              HapticFeedback.mediumImpact();
+              _tabController.animateTo(1);
+            },
+            onOpenFicha: _openFichaTecnica,
+            onShowFullscreenImage: _showFullscreenImage,
+          ),
+        ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: OutlinedButton.icon(
+              onPressed: _isSubmitting ? null : _activateNoEntregaMode,
+              icon: const Icon(Icons.storefront_outlined),
+              label: const Text('NO ENTREGA (cerrado / no disponible)'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.warning,
+                side: const BorderSide(color: AppTheme.warning),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
+  }
+
+  void _activateNoEntregaMode() {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _deliveryStatus = RepartoDeliveryStatus.noEntregado;
+      _isPaid = false;
+      _pagoError = null;
+      _importeCobradoError = null;
+      _firmaError = null;
+      _nombreError = null;
+      _apellidosError = null;
+      _dniError = null;
+      _incidentType = RepartoIncidentType.clienteAusente;
+      _differenceReason = RepartoDifferenceReason.clienteAusente;
+      if (_incidenciaMotivoController.text.trim().isEmpty) {
+        _incidenciaMotivoController.text =
+            'Establecimiento cerrado o no disponible';
+      }
+    });
+    _tabController.animateTo(2);
   }
 
   Widget _buildPaymentTab() {
@@ -607,16 +683,41 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildFinalizeTab() {
+    final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (noEntrega) ...[
+            RepartidorExecutivePanel(
+              accentColor: AppTheme.warning,
+              padding: const EdgeInsets.all(14),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: AppTheme.warning, size: 22),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'No entrega: no hace falta firma, DNI ni cobro. '
+                      'Indica el motivo y confirma.',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           _buildDeliveryStatusSection(),
           const SizedBox(height: 16),
-          if (_deliveryStatus != RepartoDeliveryStatus.noEntregado)
-            _buildReceiverData(),
-          const SizedBox(height: 16),
+          if (!noEntrega) _buildReceiverData(),
+          if (!noEntrega) const SizedBox(height: 16),
           if (_hasDiscrepancy) ...[
             _buildDiscrepancyWarning(),
             const SizedBox(height: 12),
@@ -631,8 +732,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Observaciones',
-              hintText: 'Añadir nota sobre la entrega...',
+              labelText: noEntrega
+                  ? 'Observaciones / motivo de no entrega *'
+                  : 'Observaciones',
+              hintText: noEntrega
+                  ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
+                  : 'Añadir nota sobre la entrega...',
               alignLabelWithHint: true,
               errorText: _observacionesError,
               filled: true,
@@ -644,11 +749,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
           const SizedBox(height: 12),
           _buildEvidencePhotosSection(),
-          const SizedBox(height: 12),
-          _buildPrinterConfigSection(),
-          const SizedBox(height: 20),
-          if (_deliveryStatus != RepartoDeliveryStatus.noEntregado)
+          if (!noEntrega) ...[
+            const SizedBox(height: 12),
+            _buildPrinterConfigSection(),
+            const SizedBox(height: 20),
             _buildSignatureSection(),
+          ],
           const SizedBox(height: 24),
           _buildSubmitButton(),
           const SizedBox(height: 24),
@@ -682,28 +788,46 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   setState(() {
                     _deliveryStatus = status;
                     if (status == RepartoDeliveryStatus.noEntregado ||
-                        status == RepartoDeliveryStatus.rechazado)
+                        status == RepartoDeliveryStatus.rechazado) {
                       _isPaid = false;
+                    }
+                    if (status == RepartoDeliveryStatus.noEntregado) {
+                      _pagoError = null;
+                      _importeCobradoError = null;
+                      _firmaError = null;
+                      _nombreError = null;
+                      _apellidosError = null;
+                      _dniError = null;
+                      _incidentType = RepartoIncidentType.clienteAusente;
+                      _differenceReason =
+                          RepartoDifferenceReason.clienteAusente;
+                      if (_incidenciaMotivoController.text.trim().isEmpty) {
+                        _incidenciaMotivoController.text =
+                            'Establecimiento cerrado o no disponible';
+                      }
+                    }
                   });
                 },
         ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<RepartoDifferenceReason>(
-          value: _differenceReason,
-          decoration:
-              const InputDecoration(labelText: 'Motivo de la diferencia'),
-          items: RepartoDifferenceReason.values
-              .map((reason) => DropdownMenuItem(
-                    value: reason,
-                    child: Text(reason.apiValue.replaceAll('_', ' ')),
-                  ))
-              .toList(growable: false),
-          onChanged: _isSubmitting
-              ? null
-              : (reason) => setState(() {
-                    if (reason != null) _differenceReason = reason;
-                  }),
-        ),
+        if (!noDelivery) ...[
+          const SizedBox(height: 12),
+          DropdownButtonFormField<RepartoDifferenceReason>(
+            value: _differenceReason,
+            decoration:
+                const InputDecoration(labelText: 'Motivo de la diferencia'),
+            items: RepartoDifferenceReason.values
+                .map((reason) => DropdownMenuItem(
+                      value: reason,
+                      child: Text(reason.apiValue.replaceAll('_', ' ')),
+                    ))
+                .toList(growable: false),
+            onChanged: _isSubmitting
+                ? null
+                : (reason) => setState(() {
+                      if (reason != null) _differenceReason = reason;
+                    }),
+          ),
+        ],
         if (hasIncident) ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<RepartoIncidentType>(
@@ -1080,6 +1204,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildSubmitButton() {
+    final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     return ElevatedButton(
       onPressed: _isSubmitting ||
               _isRestoringJournal ||
@@ -1088,7 +1213,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ? null
           : _submitDelivery,
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppTheme.success,
+        backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(
@@ -1116,14 +1241,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     ),
                   ],
                 )
-              : const Row(
+              : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.check_circle, size: 24),
-                    SizedBox(width: 12),
+                    Icon(
+                      noEntrega ? Icons.cancel_outlined : Icons.check_circle,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
                     Text(
-                      'CONFIRMAR ENTREGA',
-                      style: TextStyle(
+                      noEntrega ? 'REGISTRAR NO ENTREGA' : 'CONFIRMAR ENTREGA',
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1183,7 +1311,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Cantidad original: ${_formatQuantity(linea.cantidadPedida)}',
+              'Cantidad original: ${_formatQuantity(linea.cantidadPedida)}'
+              '${(linea.unit ?? '').trim().isEmpty ? '' : ' ${linea.unit}'}',
               style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 12,
@@ -1202,7 +1331,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 fontWeight: FontWeight.bold,
               ),
               decoration: InputDecoration(
-                labelText: 'Nueva cantidad',
+                labelText: (linea.unit ?? '').trim().isEmpty
+                    ? 'Nueva cantidad'
+                    : 'Nueva cantidad (${linea.unit})',
+                hintText: 'Ej: 2,30',
                 filled: true,
                 fillColor: AppTheme.softPanel,
                 border: OutlineInputBorder(
@@ -1411,6 +1543,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       itemId: widget.albaran.id,
       status: _deliveryStatus,
       occurredAt: DateTime.now().toUtc(),
+      repartidorId: _repartidorIdsParaInvalidar().isEmpty
+          ? null
+          : _repartidorIdsParaInvalidar().first,
       lineas: _buildCanonicalLines(),
       receiver: _deliveryStatus == RepartoDeliveryStatus.noEntregado
           ? null
@@ -1436,12 +1571,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     Map<String, dynamic> response;
     try {
       await _confirmationOperation.markSubmitting(widget.albaran.id);
-      response = await ApiClient.post(
+      response = await OfflineAwareApi.post(
         '/repartidor-finanzas/rutero/confirm-delivery-cobro',
         prepared.toJson(),
         headers: prepared.headers,
         idempotent: true,
+        syncType: 'confirm_delivery',
+        queueExtras: <String, dynamic>{
+          '_journalFingerprint': prepared.fingerprint,
+          '_journalIdempotencyKey': prepared.idempotencyKey,
+        },
       );
+      if (response['queued'] == true) {
+        SyncQueueService.confirmDeliveryReconciler ??=
+            defaultConfirmDeliveryReconciler;
+        _lastConfirmWasQueued = true;
+        if (mounted) {
+          OfflineSyncNotifier.deliveryQueued();
+        }
+        return true;
+      }
+      _lastConfirmWasQueued = false;
     } on ApiException catch (error) {
       final reconciled = await _confirmationOperation.reconcileConflict(
         deliveryId: widget.albaran.id,
@@ -1660,20 +1810,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<bool> _showConfirmationDialog() async {
+    final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.check_circle_outline, color: AppTheme.success, size: 28),
-            SizedBox(width: 12),
-            Text(
-              'Confirmar Entrega',
-              style: TextStyle(
-                  color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+            Icon(
+              noEntrega ? Icons.cancel_outlined : Icons.check_circle_outline,
+              color: noEntrega ? AppTheme.warning : AppTheme.success,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                noEntrega ? 'Registrar no entrega' : 'Confirmar Entrega',
+                style: const TextStyle(
+                    color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -1681,9 +1838,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '¿Está seguro de confirmar esta entrega?',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            Text(
+              noEntrega
+                  ? 'Se registrará como no entregado sin cobro ni firma.'
+                  : '¿Está seguro de confirmar esta entrega?',
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 16),
             Container(
@@ -1711,36 +1871,57 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.person,
-                          size: 16, color: AppTheme.textTertiary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${_nombreController.text} (${_dniController.text})',
-                          style: const TextStyle(
-                              color: AppTheme.textSecondary, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_isPaid) ...[
+                  if (noEntrega) ...[
                     const SizedBox(height: 8),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.payment,
-                            size: 16, color: AppTheme.success),
+                        const Icon(Icons.notes,
+                            size: 16, color: AppTheme.textTertiary),
                         const SizedBox(width: 8),
-                        Text(
-                          'Cobrado: $_selectedPaymentMethod',
-                          style: const TextStyle(
-                              color: AppTheme.success, fontSize: 13),
+                        Expanded(
+                          child: Text(
+                            _observacionesController.text.trim().isEmpty
+                                ? _incidenciaMotivoController.text.trim()
+                                : _observacionesController.text.trim(),
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 13),
+                          ),
                         ),
                       ],
                     ),
+                  ] else ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.person,
+                            size: 16, color: AppTheme.textTertiary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${_nombreController.text} (${_dniController.text})',
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_isPaid) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.payment,
+                              size: 16, color: AppTheme.success),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Cobrado: $_selectedPaymentMethod',
+                            style: const TextStyle(
+                                color: AppTheme.success, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -1756,10 +1937,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.success,
+              backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
               foregroundColor: Colors.white,
             ),
-            child: const Text('CONFIRMAR'),
+            child: Text(noEntrega ? 'REGISTRAR' : 'CONFIRMAR'),
           ),
         ],
       ),
@@ -1824,6 +2005,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         entregaId: widget.albaran.id,
         signaturePngBytes: signaturePng,
         photos: List<XFile>.unmodifiable(_evidencePhotos),
+        repartidorId: _repartidorIdsParaInvalidar().isEmpty
+            ? null
+            : _repartidorIdsParaInvalidar().first,
         confirm: (evidence) => _confirmarEntregaCanonica(
           firmaId: evidence.signatureId,
           evidenceIds: evidence.photoIds,
@@ -1848,10 +2032,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ..estado = _localDeliveryStatus();
 
       try {
-        if (_tieneImpresora) {
-          await _showZebraPrintPreview();
+        if (!_lastConfirmWasQueued &&
+            _deliveryStatus != RepartoDeliveryStatus.noEntregado) {
+          if (_tieneImpresora) {
+            await _showZebraPrintPreview();
+          }
+          await _showShareReceiptDialog();
         }
-        await _showShareReceiptDialog();
       } catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1868,16 +2055,37 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!mounted) return;
       setState(() => _allowProgrammaticDismiss = true);
       final messenger = ScaffoldMessenger.of(context);
+      final noEntregaSnack =
+          _deliveryStatus == RepartoDeliveryStatus.noEntregado;
       Navigator.pop(context);
       messenger.showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Row(children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Entrega registrada correctamente'),
+            Icon(
+              _lastConfirmWasQueued
+                  ? Icons.cloud_off
+                  : noEntregaSnack
+                      ? Icons.cancel_outlined
+                      : Icons.check_circle,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _lastConfirmWasQueued
+                    ? 'Entrega en cola offline. Se sincronizara al recuperar conexion.'
+                    : noEntregaSnack
+                        ? 'No entrega registrada correctamente'
+                        : 'Entrega registrada correctamente',
+              ),
+            ),
           ]),
-          backgroundColor: AppTheme.success,
-          duration: Duration(seconds: 2),
+          backgroundColor: _lastConfirmWasQueued
+              ? Colors.orange.shade700
+              : noEntregaSnack
+                  ? AppTheme.warning
+                  : AppTheme.success,
+          duration: const Duration(seconds: 3),
         ),
       );
     } catch (error) {
@@ -2091,7 +2299,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                           overflow: TextOverflow.ellipsis),
                                     ),
                                     Text(
-                                      'x${item.cantidadPedida.toStringAsFixed(0)}  ${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
+                                      'x${_formatQuantity(item.cantidadPedida)}'
+                                      '${(item.unit ?? '').trim().isEmpty ? '' : ' ${item.unit}'}  '
+                                      '${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
                                       style: const TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 12),
@@ -2153,7 +2363,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     ? null
                     : () async {
                         setDialogState(() => isPrinting = true);
-                        final success = await ZebraPrintService.printZpl(zpl);
+                        final albaranLabel = widget.albaran.numeroFactura > 0
+                            ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
+                            : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}';
+                        final escPos = ZebraPrintService.generateEscPosTicket(
+                          clientName: widget.albaran.nombreCliente,
+                          albaranLabel: albaranLabel,
+                          lines: _items
+                              .map((item) => <String, dynamic>{
+                                    'desc': item.descripcion,
+                                    'qty': item.cantidadPedida,
+                                    'importe': item.cantidadPedida *
+                                        item.precioUnitario,
+                                  })
+                              .toList(),
+                          total: widget.albaran.importeTotal,
+                        );
+                        final success = await ZebraPrintService.printTicket(
+                          zpl: zpl,
+                          escPosBytes: escPos,
+                        );
                         if (!ctx.mounted) return;
                         setDialogState(() => isPrinting = false);
                         if (success) {

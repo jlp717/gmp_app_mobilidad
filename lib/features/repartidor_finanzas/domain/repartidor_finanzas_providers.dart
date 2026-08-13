@@ -572,7 +572,7 @@ class RepartidorLiquidacionActions {
     required String idempotencyToken,
     String? matricula,
     String? codigoVehiculo,
-    bool sendEmails = false,
+    bool sendEmails = true,
   }) async {
     final result =
         await _ref.read(repartidorFinanzasServiceProvider).closeLiquidacion(

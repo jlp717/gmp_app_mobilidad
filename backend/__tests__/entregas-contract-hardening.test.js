@@ -192,6 +192,9 @@ describe('GET /albaran exact identity and canonical quantities', () => {
         { SECUENCIA: 2, CODIGOARTICULO: 'DUP', DESCRIPCION: 'Segunda', CANTIDADUNIDADES: 3, CANTIDADENVASES: 1, IMPORTEVENTA: 15 },
       ];
     mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('SELECT DISTINCT') && sql.includes('CODIGOCLIENTEALBARAN')) {
+        return Promise.resolve([{ CLIENTE: 'C1' }]);
+      }
       if (sql.includes('FROM DSEDAC.CPC CPC')) return Promise.resolve([header()]);
       if (sql.includes('FROM DSEDAC.LAC')) return Promise.resolve(items);
       if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
@@ -209,10 +212,15 @@ describe('GET /albaran exact identity and canonical quantities', () => {
     });
   }
 
-  test('accepts only the canonical cliente query name', async () => {
-    const wrong = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&codigoCliente=C1');
-    expect(wrong.status).toBe(400);
-    expect(wrong.body.code).toBe('CLIENT_REQUIRED');
+  test('accepts cliente and legacy codigoCliente query names', async () => {
+    detailMocks();
+    const legacy = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&codigoCliente=C1');
+    expect(legacy.status).toBe(200);
+    expect(legacy.body.success).toBe(true);
+
+    const canonical = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    expect(canonical.status).toBe(200);
+    expect(canonical.body.success).toBe(true);
   });
 
   test('projects partial quantities by line identity without merging duplicate article codes', async () => {
@@ -221,8 +229,8 @@ describe('GET /albaran exact identity and canonical quantities', () => {
     expect(response.status).toBe(200);
     expect(response.body.albaran.confirmationAvailability).toBe('AVAILABLE');
     expect(response.body.albaran.items).toEqual([
-      expect.objectContaining({ itemId: 1, codigoArticulo: 'DUP', cantidadEntregada: 2, confirmationState: 'CONFIRMED' }),
-      expect.objectContaining({ itemId: 2, codigoArticulo: 'DUP', cantidadEntregada: null, confirmationState: 'NOT_CONFIRMED' }),
+      expect.objectContaining({ itemId: '1', codigoArticulo: 'DUP', cantidadEntregada: 2, confirmationState: 'CONFIRMED' }),
+      expect.objectContaining({ itemId: '2', codigoArticulo: 'DUP', cantidadEntregada: null, confirmationState: 'NOT_CONFIRMED' }),
     ]);
   });
 

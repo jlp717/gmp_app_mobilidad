@@ -12,12 +12,14 @@ class RuteroPrinterConfig extends StatelessWidget {
     required this.onToggle,
     required this.onSelectPrinter,
     required this.onTestConnection,
+    this.printerProtocol,
     super.key,
   });
 
   final bool tieneImpresora;
   final String? printerName;
   final String? printerAddress;
+  final String? printerProtocol;
   final bool isTestingConnection;
   final bool? lastConnectionResult;
   final void Function(bool) onToggle;
@@ -50,7 +52,7 @@ class RuteroPrinterConfig extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Imprimir ticket (Zebra)',
+                  'Imprimir ticket (Bluetooth)',
                   style: TextStyle(
                     color: tieneImpresora
                         ? AppTheme.textPrimary
@@ -83,7 +85,7 @@ class RuteroPrinterConfig extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '${printerName ?? "Zebra"} · '
+                      '${printerName ?? "Impresora BT"} · '
                       '${ZebraPrintService.maskAddress(printerAddress!)}',
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
@@ -93,6 +95,19 @@ class RuteroPrinterConfig extends StatelessWidget {
                   ),
                 ],
               ),
+              if (printerProtocol != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, left: 20),
+                  child: Text(
+                    printerProtocol == 'escpos'
+                        ? 'Protocolo: ESC/POS'
+                        : 'Protocolo: ZPL',
+                    style: const TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
               if (lastConnectionResult != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 4, left: 20),

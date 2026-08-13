@@ -1,94 +1,116 @@
 /**
  * DELIVERY_STATUS Table Availability & Schema Check
- * 
- * Tracks whether JAVIER.DELIVERY_STATUS table exists and which schema version it uses.
- * - OLD schema (pre-migration 024): ID VARCHAR(160) composite key
- * - NEW schema (post-migration 024): EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN
+ *
+ * Tracks whether the runtime-mapped delivery overlay table exists and which
+ * schema version it uses.
+ * - OLD schema (pre-migration 024): ID VARCHAR composite key + FIRMA_PATH
+ * - NEW schema (post-migration 024): EJERCICIOALBARAN / SERIEALBARAN / ...
+ *
+ * isolated_test uses JAVIER.TEST_DELIVERY_STATUS when present in TABLE_MAPPINGS.
  */
 
 const { queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 
 let _isAvailable = false;
 let _isNewSchema = false;
 let _schemaChecked = false;
+let _tableQualified = 'JAVIER.DELIVERY_STATUS';
+let _tableName = 'DELIVERY_STATUS';
+
+function resolveDeliveryStatusTable(env = process.env) {
+  try {
+    const runtime = resolveRepartoRuntime(env);
+    const mapped = runtime?.tables?.notifications?.deliveryStatus;
+    if (mapped && /^JAVIER\.[A-Z][A-Z0-9_]*$/.test(mapped)) {
+      return mapped;
+    }
+  } catch (_) {
+    /* fall through */
+  }
+  return 'JAVIER.DELIVERY_STATUS';
+}
 
 async function checkSchema() {
-    if (_schemaChecked) return;
-    _schemaChecked = true;
+  if (_schemaChecked) return;
+  _schemaChecked = true;
+  _tableQualified = resolveDeliveryStatusTable();
+  _tableName = _tableQualified.split('.')[1];
 
-    try {
-        const rows = await queryWithParams(`
-            SELECT COLUMN_NAME 
-            FROM QSYS2.SYSCOLUMNS 
-            WHERE TABLE_SCHEMA = 'JAVIER' 
-              AND TABLE_NAME = 'DELIVERY_STATUS' 
-              AND COLUMN_NAME = 'EJERCICIOALBARAN'
-            FETCH FIRST 1 ROW ONLY
-        `, [], false, false);
-        _isNewSchema = rows && rows.length > 0;
-        _isAvailable = true;
-        logger.info(`[DELIVERY_STATUS] Table available, schema: ${_isNewSchema ? 'NEW (albaran columns)' : 'OLD (ID composite)'}`);
-    } catch (e) {
-        _isAvailable = false;
-        _isNewSchema = false;
-        logger.warn(`[DELIVERY_STATUS] Table not available: ${e.message}`);
+  try {
+    const exists = await queryWithParams(`
+      SELECT 1 AS OK FROM QSYS2.SYSTABLES
+       WHERE TABLE_SCHEMA = 'JAVIER' AND TABLE_NAME = ?
+       FETCH FIRST 1 ROW ONLY
+    `, [_tableName], false, false);
+    if (!exists?.length) {
+      _isAvailable = false;
+      _isNewSchema = false;
+      logger.warn(`[DELIVERY_STATUS] ${_tableQualified} missing`);
+      return;
     }
+
+    const rows = await queryWithParams(`
+      SELECT COLUMN_NAME
+        FROM QSYS2.SYSCOLUMNS
+       WHERE TABLE_SCHEMA = 'JAVIER'
+         AND TABLE_NAME = ?
+         AND COLUMN_NAME = 'EJERCICIOALBARAN'
+       FETCH FIRST 1 ROW ONLY
+    `, [_tableName], false, false);
+    _isNewSchema = rows && rows.length > 0;
+    _isAvailable = true;
+    logger.info(`[DELIVERY_STATUS] ${_tableQualified} schema=${_isNewSchema ? 'NEW' : 'OLD'}`);
+  } catch (e) {
+    _isAvailable = false;
+    _isNewSchema = false;
+    logger.warn(`[DELIVERY_STATUS] check failed: ${e.message}`);
+  }
 }
 
 module.exports = {
-    async initSchemaCheck() {
-        await checkSchema();
-    },
+  async initSchemaCheck() {
+    await checkSchema();
+  },
 
-    /** @returns {boolean} Whether DELIVERY_STATUS table is available */
-    isDeliveryStatusAvailable() {
-        return _isAvailable;
-    },
+  isDeliveryStatusAvailable() {
+    return _isAvailable;
+  },
 
-    /** @returns {boolean} Whether NEW schema (albaran columns) is in use */
-    isDeliveryStatusNewSchema() {
-        return _isNewSchema;
-    },
+  isDeliveryStatusNewSchema() {
+    return _isNewSchema;
+  },
 
-    /** Set availability flag (called from server.js startup) */
-    setDeliveryStatusAvailable(available) {
-        _isAvailable = !!available;
-    },
+  getDeliveryStatusTable() {
+    return _tableQualified;
+  },
 
-    /**
-     * Returns the LEFT JOIN clause for DELIVERY_STATUS if available, empty string otherwise.
-     * Automatically uses OLD or NEW schema JOIN based on detected schema.
-     * @param {string} cpcAlias - Alias for CPC table (default: 'CPC')
-     * @param {string} dsAlias - Alias for DS table (default: 'DS')
-     */
-    getDeliveryStatusJoin(cpcAlias = 'CPC', dsAlias = 'DS') {
-        if (!_isAvailable) return '';
-        if (_isNewSchema) {
-            return `
-                LEFT JOIN JAVIER.DELIVERY_STATUS ${dsAlias} ON 
+  setDeliveryStatusAvailable(available) {
+    _isAvailable = !!available;
+  },
+
+  getDeliveryStatusJoin(cpcAlias = 'CPC', dsAlias = 'DS') {
+    if (!_isAvailable) return '';
+    const table = _tableQualified;
+    if (_isNewSchema) {
+      return `
+                LEFT JOIN ${table} ${dsAlias} ON
                     ${dsAlias}.EJERCICIOALBARAN = ${cpcAlias}.EJERCICIOALBARAN
                     AND ${dsAlias}.SERIEALBARAN = ${cpcAlias}.SERIEALBARAN
                     AND ${dsAlias}.TERMINALALBARAN = ${cpcAlias}.TERMINALALBARAN
                     AND ${dsAlias}.NUMEROALBARAN = ${cpcAlias}.NUMEROALBARAN
             `;
-        }
-        return `
-            LEFT JOIN JAVIER.DELIVERY_STATUS ${dsAlias} ON 
+    }
+    return `
+            LEFT JOIN ${table} ${dsAlias} ON
                 ${dsAlias}.ID = TRIM(CAST(${cpcAlias}.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(${cpcAlias}.SERIEALBARAN, '')) || '-' || TRIM(CAST(${cpcAlias}.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(${cpcAlias}.NUMEROALBARAN AS VARCHAR(10)))
         `;
-    },
+  },
 
-    /**
-     * Returns DS column references if table is available, NULL aliases otherwise.
-     * Uses OLD or NEW column names based on detected schema.
-     * 
-     * OLD schema (020): ID, STATUS, OBSERVACIONES, FIRMA_PATH, FECHAACTUALIZACION, REPARTIDOR_ID
-     * NEW schema (024): STATUS, UPDATED_AT, OPERADOR — NO FIRMA_PATH, OBSERVACIONES, REPARTIDOR_ID
-     */
-    getDeliveryStatusColumns(dsAlias = 'DS') {
-        if (!_isAvailable) {
-            return `
+  getDeliveryStatusColumns(dsAlias = 'DS') {
+    if (!_isAvailable) {
+      return `
                 CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS,
                 CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT,
                 CAST(NULL AS VARCHAR(255)) as FIRMA_PATH,
@@ -96,10 +118,9 @@ module.exports = {
                 CAST(NULL AS VARCHAR(255)) as DS_FIRMA,
                 CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR
             `;
-        }
-        if (_isNewSchema) {
-            // NEW schema (024) has STATUS and UPDATED_AT but NOT FIRMA_PATH, OBSERVACIONES, REPARTIDOR_ID
-            return `
+    }
+    if (_isNewSchema) {
+      return `
                 ${dsAlias}.STATUS as DELIVERY_STATUS,
                 ${dsAlias}.UPDATED_AT as DELIVERY_UPDATED_AT,
                 CAST(NULL AS VARCHAR(255)) as FIRMA_PATH,
@@ -108,9 +129,8 @@ module.exports = {
                 CAST(NULL AS VARCHAR(255)) as DS_FIRMA,
                 CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR
             `;
-        }
-        // OLD schema (020) has all columns (UPDATED_AT is the actual column name, not FECHAACTUALIZACION)
-        return `
+    }
+    return `
                 ${dsAlias}.STATUS as DELIVERY_STATUS,
                 ${dsAlias}.UPDATED_AT as DELIVERY_UPDATED_AT,
                 ${dsAlias}.FIRMA_PATH,
@@ -119,5 +139,5 @@ module.exports = {
                 ${dsAlias}.FIRMA_PATH as DS_FIRMA,
                 ${dsAlias}.REPARTIDOR_ID as DELIVERY_REPARTIDOR
         `;
-    }
+  },
 };

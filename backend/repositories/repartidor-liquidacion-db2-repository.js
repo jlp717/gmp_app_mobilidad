@@ -300,8 +300,25 @@ function dateParts(date) {
   return { year, month, day };
 }
 function timestamp(value) {
+  if (value == null || value === '') {
+    return new Date().toISOString();
+  }
   const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+function scalarId(value) {
+  if (value == null) return '';
+  if (typeof value === 'bigint') return String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'object') {
+    if (typeof value.toString === 'function') {
+      const text = value.toString();
+      if (text && text !== '[object Object]') return text.trim();
+    }
+    if (value.low != null) return String(value.low);
+  }
+  return String(value).trim();
 }
 function money(value, field = 'importe') {
   if (value == null || typeof value === 'boolean'
@@ -390,6 +407,14 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
   const mappings = assertRuntime(runtime);
   if (typeof connectionFactory !== 'function') throw new TypeError('connectionFactory is required');
   const sequence = qualifiedParts(mappings.finance.liquidationSequence);
+  // isolated_test keeps a byte-exact catalog contract. Production tables are
+  // additive (CVC-shaped cobros, REPARTO_* confirmations with extra columns);
+  // require presence + compatible metadata, allow extras/order drift.
+  // Byte-exact catalog only in automated NODE_ENV=test. Staging/demo isolated_test
+  // keeps required columns but allows additive confirmation/finance columns (033/CVC).
+  const catalogMode = runtime?.tableSet === 'isolated_test' && process.env.NODE_ENV === 'test'
+    ? 'exact'
+    : 'compatible';
   let catalogVerified = false;
 
   function catalogObjects(requiresOutbox) {
@@ -460,7 +485,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         .filter((name) => !expected.has(name))
         .map((name) => `${schema}.${object}.${name}`);
     });
-    if (unexpectedColumns.length) {
+    if (catalogMode === 'exact' && unexpectedColumns.length) {
       throw new LiquidacionRepositoryUnavailableError(
         'El catalogo contiene columnas fuera del manifiesto de liquidacion', { unexpectedColumns },
       );
@@ -470,8 +495,12 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
       return Object.entries(REQUIRED_COLUMN_MANIFEST[key])
         .filter(([name, expected], index) => {
           const row = objectColumns.get(name);
-          return Number(rowValue(row, 'ORDINAL_POSITION')) !== index + 1
-            || columnMetadataMismatch(row, expected);
+          if (!row) return true;
+          if (catalogMode === 'exact'
+            && Number(rowValue(row, 'ORDINAL_POSITION')) !== index + 1) {
+            return true;
+          }
+          return columnMetadataMismatch(row, expected);
         })
         .map(([name]) => `${schema}.${object}.${name}`);
     });
@@ -520,7 +549,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
       return multisetDifference(actual, REQUIRED_CONSTRAINT_SIGNATURES[key] || [])
         .map((signature) => `${schema}.${object}:${signature}`);
     });
-    if (unexpectedConstraints.length) {
+    if (unexpectedConstraints.length && catalogMode === 'exact') {
       throw new LiquidacionRepositoryUnavailableError(
         'El catalogo contiene constraints fuera del manifiesto de liquidacion',
         { unexpectedConstraints },
@@ -557,7 +586,22 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
     }
     const missingIndexes = indexedObjects.flatMap(({ key, schema, object }) => {
       const actual = actualIndexes.get(`${schema}.${object}`) || [];
-      return multisetDifference(REQUIRED_INDEX_SIGNATURES[key] || [], actual)
+      let required = REQUIRED_INDEX_SIGNATURES[key] || [];
+      // On IBM i, PRIMARY KEY uniqueness often does not appear in SYSINDEXES.
+      // Compatible production catalogs treat those U: signatures as covered by PK.
+      if (catalogMode === 'compatible') {
+        const pkCols = new Set(
+          (REQUIRED_CONSTRAINT_SIGNATURES[key] || [])
+            .filter((signature) => signature.startsWith('PRIMARY KEY:'))
+            .map((signature) => signature.slice('PRIMARY KEY:'.length)),
+        );
+        required = required.filter((signature) => {
+          if (!signature.startsWith('U:')) return true;
+          const cols = signature.slice(2).split(',').map((part) => part.split(':')[0]).join(',');
+          return !pkCols.has(cols);
+        });
+      }
+      return multisetDifference(required, actual)
         .map((signature) => `${schema}.${object}:${signature}`);
     });
     const missingUniqueIndexes = missingIndexes
@@ -573,7 +617,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
       return multisetDifference(actual, REQUIRED_INDEX_SIGNATURES[key] || [])
         .map((signature) => `${schema}.${object}:${signature}`);
     });
-    if (unexpectedIndexes.length) {
+    if (unexpectedIndexes.length && catalogMode === 'exact') {
       throw new LiquidacionRepositoryUnavailableError(
         'El catalogo contiene indices fuera del manifiesto de liquidacion', { unexpectedIndexes },
       );
@@ -641,7 +685,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         ? `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
         : '';
       return Object.freeze({
-        id: rowValue(row, 'ID'), type,
+        id: scalarId(rowValue(row, 'ID')), type,
         repartidorId: String(rowValue(row, 'CODIGO_REPARTIDOR') || '').trim(),
         date, amount: money(rowValue(row, 'IMPORTE')),
         [config.detailKey]: String(rowValue(row, config.detailColumn) || '').trim(),
@@ -652,7 +696,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
     }
 
     function structuredSelect(config) {
-      return `SELECT ID, CODIGO_REPARTIDOR, DIA, MES, ANO, IMPORTE, ${config.detailColumn}, `
+      return `SELECT CAST(ID AS VARCHAR(20)) AS ID, CODIGO_REPARTIDOR, DIA, MES, ANO, IMPORTE, ${config.detailColumn}, `
         + `OBSERVACION, STATUS, CREATED_AT FROM ${config.table}`;
     }
 
@@ -899,6 +943,10 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           `INSERT INTO ${finance.liquidationOutbox} `
             + '(LIQUIDACION_ID, OUTBOX_TYPE, STATUS, PAYLOAD_JSON) VALUES (?, ?, ?, ?)',
           [intent.liquidacionId, intent.type, 'PENDING', json(intent)]);
+        const idRows = await execute(connection,
+          'SELECT IDENTITY_VAL_LOCAL() AS OUTBOX_ID FROM SYSIBM.SYSDUMMY1');
+        const outboxId = idRows?.[0]?.OUTBOX_ID ?? idRows?.[0]?.outbox_id ?? null;
+        return outboxId == null ? null : Number(outboxId);
       },
     });
   }

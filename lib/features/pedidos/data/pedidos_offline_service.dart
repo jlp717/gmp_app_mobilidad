@@ -377,6 +377,11 @@ class PedidosOfflineService {
           throw StateError(
               "Confirmacion no completada; pedido conservado para retry.");
         }
+        if (confirmResult.containsKey("success") &&
+            confirmResult["success"] != true) {
+          throw StateError(
+              "Confirmacion rechazada por servidor; conservada para revision.");
+        }
         await box.delete(syncKey);
         synced++;
       } catch (e) {

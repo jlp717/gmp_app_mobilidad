@@ -38,7 +38,13 @@ const SALES_FILTERS = {
     clientColumn: 'LCCDCL',
 };
 
-// For LAC table (long column names) - alias mapping
+/**
+ * For LAC table (long column names) - alias mapping to LACLAE short system names.
+ *
+ * CONTRACT: these short names are ERP physical columns on DSED.LACLAE.
+ * Validated at server boot by services/erp-column-contract.js.
+ * If ERP renames a column, update BOTH this map and the guard — never rely on silent drift.
+ */
 const LAC_COLUMN_MAPPING = {
     'ANODOCUMENTO': 'LCAADC',
     'MESDOCUMENTO': 'LCMMDC',

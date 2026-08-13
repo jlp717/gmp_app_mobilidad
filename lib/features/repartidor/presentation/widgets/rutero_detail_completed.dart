@@ -45,7 +45,7 @@ class RuteroDetailCompleted extends StatelessWidget {
             const SizedBox(height: 10),
             _ShareButton(
               icon: Icons.print,
-              label: 'Imprimir Ticket (Zebra)',
+              label: 'Imprimir ticket',
               color: AppTheme.info,
               onTap: onShowZebraPrintPreview,
             ),

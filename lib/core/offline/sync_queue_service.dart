@@ -1,7 +1,10 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/offline/sync_audit_log.dart';
+import 'package:gmp_app_mobilidad/core/offline/sync_mutation_policy.dart';
 import 'package:gmp_app_mobilidad/core/storage/hive_secure_box.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -14,8 +17,10 @@ class SyncOperation {
     required this.endpoint,
     required this.method,
     required this.payload,
+    this.headers,
     this.attempts = 0,
     this.createdAt,
+    this.lastAttemptAt,
     this.lastError,
     this.failedAt,
     this.sessionScope,
@@ -26,8 +31,10 @@ class SyncOperation {
   final String endpoint; // '/repartidor-finanzas/cobros'
   final String method; // 'POST', 'PUT', 'DELETE'
   final Map<String, dynamic> payload;
+  final Map<String, String>? headers;
   int attempts;
   DateTime? createdAt;
+  DateTime? lastAttemptAt;
   String? lastError;
   DateTime? failedAt;
   String? sessionScope;
@@ -40,8 +47,10 @@ class SyncOperation {
         'endpoint': endpoint,
         'method': method,
         'payload': payload,
+        if (headers != null) 'headers': headers,
         'attempts': attempts,
         'createdAt': createdAt?.toIso8601String(),
+        'lastAttemptAt': lastAttemptAt?.toIso8601String(),
         'lastError': lastError,
         'failedAt': failedAt?.toIso8601String(),
         'sessionScope': sessionScope,
@@ -53,9 +62,19 @@ class SyncOperation {
         endpoint: json['endpoint'] as String,
         method: json['method'] as String,
         payload: Map<String, dynamic>.from(json['payload'] as Map),
+        headers: json['headers'] is Map
+            ? Map<String, String>.from(
+                (json['headers'] as Map).map(
+                  (k, v) => MapEntry(k.toString(), v.toString()),
+                ),
+              )
+            : null,
         attempts: json['attempts'] as int? ?? 0,
         createdAt: json['createdAt'] != null
             ? DateTime.parse(json['createdAt'] as String)
+            : null,
+        lastAttemptAt: json['lastAttemptAt'] != null
+            ? DateTime.parse(json['lastAttemptAt'] as String)
             : null,
         lastError: json['lastError'] as String?,
         failedAt: json['failedAt'] != null
@@ -65,12 +84,35 @@ class SyncOperation {
       );
 }
 
+class SyncProcessResult {
+  const SyncProcessResult({
+    required this.synced,
+    required this.failed,
+    required this.pending,
+    this.skippedBackoff = 0,
+  });
+
+  final int synced;
+  final int failed;
+  final int pending;
+  final int skippedBackoff;
+}
+
+class _HttpMutationResult {
+  const _HttpMutationResult({
+    required this.statusCode,
+    required this.body,
+  });
+
+  final int statusCode;
+  final Map<String, dynamic> body;
+}
+
 /// Queue of offline mutations that are processed when connectivity is restored.
 /// Backed by Hive for persistence across app restarts.
 class SyncQueueService {
   static const String _boxName = 'sync_queue';
-  static const int _maxAttempts = 5;
-  static const Duration _baseDelay = Duration(seconds: 2);
+  static const int _maxAttempts = SyncMutationPolicy.defaultMaxAttempts;
   static const Duration _maxAge =
       Duration(days: 7); // Stale operations require manual review.
   static const String _anonymousScope = 'anonymous';
@@ -91,13 +133,15 @@ class SyncQueueService {
       _boxName,
       migrateUnencryptedLegacy: true,
     );
+    await SyncAuditLog.initialize();
     await _purgeStale();
     debugPrint(
       '[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations',
     );
   }
 
-  int get pendingCount => pending.length;
+  int get pendingCount =>
+      pending.where((operation) => !operation.isFailed).length;
   int get failedCount => failed.length;
 
   List<SyncOperation> get failed =>
@@ -149,65 +193,164 @@ class SyncQueueService {
   /// Process all pending operations.
   /// Returns the number of successfully processed operations.
   Future<int> processAll() async {
-    final ops = pending;
-    if (ops.isEmpty) return 0;
+    final result = await processAllWithResult();
+    return result.synced;
+  }
 
-    int successCount = 0;
+  /// Process queue with strong server-acceptance verification.
+  /// Never silently drops: dequeue only on verified success / idempotent 409.
+  Future<SyncProcessResult> processAllWithResult() async {
+    final ops = pending;
+    if (ops.isEmpty) {
+      return SyncProcessResult(
+        synced: 0,
+        failed: failedCount,
+        pending: pendingCount,
+      );
+    }
+
+    var successCount = 0;
+    var skippedBackoff = 0;
+    final now = DateTime.now();
+
     for (final op in ops) {
       if (op.isFailed) {
-        debugPrint('[SyncQueue] Operation is failed; manual review required');
-        continue;
-      }
-
-      // Skip if backoff delay not yet elapsed
-      final backoff = _calculateBackoff(op.attempts);
-      final nextRetry = (op.createdAt ?? DateTime.now()).add(backoff);
-      if (DateTime.now().isBefore(nextRetry) && op.attempts > 0) {
         debugPrint(
-          '[SyncQueue] Operation in backoff, retry at ${nextRetry.toIso8601String()}',
+          '[SyncQueue] Operation ${op.id} failed; manual review required '
+          '(${op.lastError ?? 'sin detalle'})',
         );
         continue;
       }
 
+      if (!SyncMutationPolicy.isBackoffElapsed(
+        attempts: op.attempts,
+        now: now,
+        anchor: op.lastAttemptAt ?? op.createdAt,
+      )) {
+        skippedBackoff++;
+        debugPrint('[SyncQueue] Operation in backoff: ${op.type}');
+        continue;
+      }
+
+      final startedAt = DateTime.now();
+      int? httpStatus;
       try {
-        await _processOperation(op);
+        final response = await _processOperation(op);
+        httpStatus = response.statusCode;
+
+        if (!SyncMutationPolicy.isAcceptedSuccess(
+          type: op.type,
+          body: response.body,
+          httpStatus: response.statusCode,
+        )) {
+          throw StateError(
+            'Servidor no confirmo exito (HTTP ${response.statusCode})',
+          );
+        }
+
+        if (op.type == 'confirm_delivery') {
+          await _reconcileConfirmDelivery(op, response.body);
+        }
+
         await dequeue(op.id);
         successCount++;
-        debugPrint('[SyncQueue] Synced: ${op.type}');
+        await SyncAuditLog.record(
+          opId: op.id,
+          type: op.type,
+          endpoint: op.endpoint,
+          startedAt: startedAt,
+          finishedAt: DateTime.now(),
+          httpStatus: httpStatus,
+          success: true,
+        );
+        debugPrint('[SyncQueue] Synced: ${op.type} HTTP $httpStatus');
       } catch (e) {
+        final apiError = e is ApiException ? e : null;
+        httpStatus ??= apiError?.statusCode;
+
+        if (apiError != null &&
+            SyncMutationPolicy.isIdempotentConflict(
+              type: op.type,
+              statusCode: apiError.statusCode,
+              code: apiError.code,
+            )) {
+          final reconciled = await _reconcileIdempotentConflict(op, apiError);
+          if (reconciled) {
+            await dequeue(op.id);
+            successCount++;
+            await SyncAuditLog.record(
+              opId: op.id,
+              type: op.type,
+              endpoint: op.endpoint,
+              startedAt: startedAt,
+              finishedAt: DateTime.now(),
+              httpStatus: 409,
+              success: true,
+              error: 'idempotent_conflict:${apiError.code}',
+            );
+            debugPrint('[SyncQueue] Idempotent 409 accepted: ${op.type}');
+            continue;
+          }
+        }
+
         op.attempts++;
-        op.lastError = e.toString();
-        if (_requiresManualReview(e) || op.attempts >= _maxAttempts) {
+        op.lastAttemptAt = DateTime.now();
+        op.lastError = _formatLastError(e);
+        final markFailed = SyncMutationPolicy.shouldMarkManualReview(
+          attemptsAfterFailure: op.attempts,
+          maxAttempts: _maxAttempts,
+          statusCode: apiError?.statusCode,
+          code: apiError?.code,
+          type: op.type,
+        );
+        if (markFailed) {
           op.failedAt ??= DateTime.now();
           await _box?.put(op.id, jsonEncode(op.toJson()));
           debugPrint(
-              '[SyncQueue] Preserving failed operation for manual review');
+            '[SyncQueue] Manual review: ${op.type} — ${op.lastError}',
+          );
         } else {
-          // Update with incremented attempts
           await _box?.put(op.id, jsonEncode(op.toJson()));
-          final delay = _calculateBackoff(op.attempts);
+          final delay = SyncMutationPolicy.calculateBackoff(op.attempts);
           debugPrint(
-              '[SyncQueue] Operation failed (${op.attempts}/$_maxAttempts), retry in ${delay.inSeconds}s: ${_shortError(e)}');
+            '[SyncQueue] Retry ${op.attempts}/$_maxAttempts in '
+            '${delay.inSeconds}s: ${op.lastError}',
+          );
         }
+        await SyncAuditLog.record(
+          opId: op.id,
+          type: op.type,
+          endpoint: op.endpoint,
+          startedAt: startedAt,
+          finishedAt: DateTime.now(),
+          httpStatus: httpStatus,
+          success: false,
+          error: op.lastError,
+        );
       }
     }
-    return successCount;
+
+    return SyncProcessResult(
+      synced: successCount,
+      failed: failedCount,
+      pending: pendingCount,
+      skippedBackoff: skippedBackoff,
+    );
   }
 
-  /// Calculate exponential backoff delay: baseDelay * 2^attempts
-  Duration _calculateBackoff(int attempts) {
-    final seconds = _baseDelay.inSeconds * (1 << attempts); // 2, 4, 8, 16, 32
-    return Duration(seconds: seconds.clamp(2, 300)); // Cap at 5 min
+  String _formatLastError(Object error) {
+    if (error is ApiException) {
+      final status = error.statusCode ?? 0;
+      final code = error.code;
+      final base = code != null ? '[$code] ${error.message}' : error.message;
+      return 'HTTP $status: ${_shortError(base)}';
+    }
+    return _shortError(error);
   }
 
   String _shortError(Object error) {
     final text = error.toString();
-    return text.length <= 100 ? text : text.substring(0, 100);
-  }
-
-  bool _requiresManualReview(Object error) {
-    return error is ApiException &&
-        (error.statusCode == 409 || error.statusCode == 412);
+    return text.length <= 160 ? text : text.substring(0, 160);
   }
 
   /// Move old operations to manual review instead of deleting business writes.
@@ -230,7 +373,7 @@ class SyncQueueService {
           stale++;
         }
       } catch (_) {
-        corrupt.add(key); // Corrupted entry cannot be recovered safely.
+        corrupt.add(key.toString());
       }
     }
     for (final key in corrupt) {
@@ -243,24 +386,182 @@ class SyncQueueService {
     }
   }
 
-  Future<void> _processOperation(SyncOperation op) async {
-    switch (op.method) {
-      case 'POST':
-        await ApiClient.post(op.endpoint, op.payload);
-        return;
-      case 'PUT':
-        await ApiClient.put(op.endpoint, data: op.payload);
-        return;
-      case 'DELETE':
-        await ApiClient.delete(
-          op.endpoint,
-          data: op.payload.isNotEmpty ? op.payload : null,
+  Future<_HttpMutationResult> _processOperation(SyncOperation op) async {
+    final cleanPayload = Map<String, dynamic>.from(op.payload)
+      ..remove('_journalFingerprint')
+      ..remove('_journalIdempotencyKey');
+
+    try {
+      late final Response<dynamic> response;
+      final options = Options(
+        headers:
+            op.headers == null ? null : Map<String, String>.from(op.headers!),
+        extra: <String, dynamic>{
+          if (op.type == 'confirm_delivery' ||
+              op.headers?.containsKey('Idempotency-Key') == true)
+            'idempotent': true,
+        },
+      );
+
+      switch (op.method) {
+        case 'POST':
+          response = await ApiClient.dio.post(
+            op.endpoint,
+            data: cleanPayload,
+            options: options,
+          );
+          break;
+        case 'PUT':
+          response = await ApiClient.dio.put(
+            op.endpoint,
+            data: cleanPayload,
+            options: options,
+          );
+          break;
+        case 'DELETE':
+          response = await ApiClient.dio.delete(
+            op.endpoint,
+            data: cleanPayload.isNotEmpty ? cleanPayload : null,
+            options: options,
+          );
+          break;
+        default:
+          throw UnsupportedError('Method ${op.method} not supported for sync');
+      }
+
+      final status = response.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        throw ApiException(
+          'HTTP $status sin cuerpo de exito',
+          statusCode: status,
         );
-        return;
-      default:
-        throw UnsupportedError('Method ${op.method} not supported for sync');
+      }
+
+      final raw = response.data;
+      final body = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{'success': true, 'raw': raw};
+
+      return _HttpMutationResult(statusCode: status, body: body);
+    } on DioException catch (e) {
+      throw _mapDioException(e);
     }
   }
+
+  ApiException _mapDioException(DioException e) {
+    final status = e.response?.statusCode ?? 0;
+    final data = e.response?.data;
+    String? code;
+    String? confirmationId;
+    String message = e.message ?? 'Error de red durante sync';
+    if (data is Map) {
+      code = data['code']?.toString();
+      confirmationId = data['confirmationId']?.toString();
+      message =
+          data['error']?.toString() ?? data['message']?.toString() ?? message;
+    }
+    return ApiException(
+      message,
+      statusCode: status,
+      code: code,
+      confirmationId: confirmationId,
+    );
+  }
+
+  Future<bool> _reconcileIdempotentConflict(
+    SyncOperation op,
+    ApiException error,
+  ) async {
+    if (op.type != 'confirm_delivery') {
+      return true;
+    }
+    final deliveryId =
+        (op.payload['itemId'] ?? op.payload['deliveryId'])?.toString().trim();
+    final fingerprint = op.payload['_journalFingerprint']?.toString();
+    final idempotencyKey = op.headers?['Idempotency-Key'] ??
+        op.payload['_journalIdempotencyKey']?.toString();
+    final confirmationId = error.confirmationId;
+    if (deliveryId == null ||
+        deliveryId.isEmpty ||
+        fingerprint == null ||
+        idempotencyKey == null ||
+        confirmationId == null) {
+      debugPrint(
+        '[SyncQueue] 409 idempotent but journal keys incomplete — keep queued',
+      );
+      return false;
+    }
+    final reconciler = confirmDeliveryReconciler;
+    if (reconciler == null) {
+      debugPrint('[SyncQueue] 409 without reconciler — keep queued');
+      return false;
+    }
+    try {
+      await reconciler(
+        deliveryId: deliveryId,
+        confirmationId: confirmationId,
+        cobroId: null,
+        fingerprint: fingerprint,
+        idempotencyKey: idempotencyKey,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[SyncQueue] 409 reconcile failed: $e');
+      return false;
+    }
+  }
+
+  /// Best-effort journal reconcile after offline confirm_delivery sync.
+  Future<void> _reconcileConfirmDelivery(
+    SyncOperation op,
+    Map<String, dynamic> response,
+  ) async {
+    try {
+      final deliveryId =
+          (op.payload['itemId'] ?? op.payload['deliveryId'])?.toString().trim();
+      if (deliveryId == null || deliveryId.isEmpty) return;
+      final acknowledgement = response['confirmation'] is Map
+          ? Map<String, dynamic>.from(response['confirmation'] as Map)
+          : response;
+      final confirmationId = (acknowledgement['confirmationId'] ??
+              acknowledgement['id'] ??
+              response['confirmationId'])
+          ?.toString();
+      final cobroId = acknowledgement['cobroId']?.toString();
+      final fingerprint = op.payload['_journalFingerprint']?.toString();
+      final idempotencyKey = op.headers?['Idempotency-Key'] ??
+          op.payload['_journalIdempotencyKey']?.toString();
+      if (confirmationId == null ||
+          fingerprint == null ||
+          idempotencyKey == null) {
+        debugPrint(
+          '[SyncQueue] confirm_delivery synced without full journal keys',
+        );
+        return;
+      }
+      final reconciler = confirmDeliveryReconciler;
+      if (reconciler != null) {
+        await reconciler(
+          deliveryId: deliveryId,
+          confirmationId: confirmationId,
+          cobroId: cobroId,
+          fingerprint: fingerprint,
+          idempotencyKey: idempotencyKey,
+        );
+      }
+    } catch (e) {
+      debugPrint('[SyncQueue] confirm_delivery reconcile skipped: $e');
+    }
+  }
+
+  /// Optional hook set by app bootstrap / repartidor feature.
+  static Future<void> Function({
+    required String deliveryId,
+    required String confirmationId,
+    String? cobroId,
+    required String fingerprint,
+    required String idempotencyKey,
+  })? confirmDeliveryReconciler;
 
   /// Clear all pending operations.
   Future<void> clear() async {

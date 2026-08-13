@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 
 /// Represents current connectivity state.
 ///
@@ -151,12 +152,33 @@ class ConnectivityService {
   }
 
   void _setStatus(ConnectivityStatus newStatus) {
+    final wasOnline = _status == ConnectivityStatus.online;
     if (newStatus != _status) {
       _status = newStatus;
       _controller.add(newStatus);
       debugPrint('[ConnectivityService] Status changed: $newStatus');
+      // Bridge: online transition always drains SyncQueue + Pedidos queue.
+      if (!wasOnline && newStatus == ConnectivityStatus.online) {
+        unawaited(_triggerOfflineSyncBridge());
+      }
     }
   }
+
+  Future<void> _triggerOfflineSyncBridge() async {
+    final gate = onOnlineSyncGate;
+    if (gate != null && !await gate()) {
+      debugPrint('[ConnectivityService] Online sync gated (not authenticated)');
+      return;
+    }
+    try {
+      await OfflineSyncBridge.syncAll(notify: true);
+    } catch (e) {
+      debugPrint('[ConnectivityService] Offline sync bridge failed: $e');
+    }
+  }
+
+  /// Optional auth/session gate before reconnect sync. Return false to skip.
+  static Future<bool> Function()? onOnlineSyncGate;
 
   /// Force an immediate connectivity re-check.
   /// Useful when user manually triggers "retry connection".

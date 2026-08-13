@@ -14,7 +14,9 @@ const {
   isDeliveryStatusNewSchema,
   getDeliveryStatusJoin,
   getDeliveryStatusColumns,
+  getDeliveryStatusTable,
 } = require('../utils/delivery-status-check');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 
 const MUTATION_RE = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i;
 
@@ -61,7 +63,7 @@ async function resolveAlbaranOwners(key) {
         FROM DSEDAC.CPC CPC
         INNER JOIN DSEDAC.OPP OPP
             ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+            AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
             AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
         WHERE CPC.EJERCICIOALBARAN = ?
           AND TRIM(CPC.SERIEALBARAN) = ?
@@ -82,7 +84,7 @@ async function resolveInvoiceOwners(key) {
             AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
         INNER JOIN DSEDAC.OPP OPP
             ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+            AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
             AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
         WHERE CAC.EJERCICIOFACTURA = ?
           AND TRIM(CAC.SERIEFACTURA) = ?
@@ -125,7 +127,7 @@ async function getCollectionsSummary(selectedMonth, selectedYear, repartidorPara
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC
                     ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                    AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                    AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 LEFT JOIN DSEDAC.CLI CLI
                     ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
@@ -231,7 +233,7 @@ async function getCollectionsDaily(selectedYear, selectedMonth, repartidorIdList
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC
                     ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                    AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                    AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 WHERE OPP.ANOREPARTO = ?
                   AND OPP.MESREPARTO = ?
@@ -322,7 +324,7 @@ async function getClientDocuments({
   const repartidorJoin = `
             INNER JOIN DSEDAC.OPP OPP
                 ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                AND OPP.SUBEMPRESA = CPC.SUBEMPRESA
+                AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
                 AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
                 AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
 
@@ -488,23 +490,30 @@ async function getClientDocuments({
             ),
             PAGED_DOCUMENTS AS (
                 SELECT * FROM NUMBERED_DOCUMENTS
-                ORDER BY LOGICAL_POSITION
-                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+                WHERE LOGICAL_POSITION > ?
+                  AND LOGICAL_POSITION <= ?
             ),
             TOTAL_META AS (
                 SELECT COUNT(*) AS TOTAL_COUNT FROM LOGICAL_DOCUMENTS
             )
-            SELECT DOC.*, COALESCE(PAGE.TOTAL_COUNT, META.TOTAL_COUNT) AS TOTAL_COUNT,
-                PAGE.LOGICAL_POSITION,
-                CASE WHEN PAGE.LOGICAL_KEY IS NULL THEN 1 ELSE 0 END AS META_ONLY
+            SELECT DOC.*, COALESCE(PAGED_ROW.TOTAL_COUNT, META.TOTAL_COUNT) AS TOTAL_COUNT,
+                PAGED_ROW.LOGICAL_POSITION,
+                CASE WHEN PAGED_ROW.LOGICAL_KEY IS NULL THEN 1 ELSE 0 END AS META_ONLY
             FROM TOTAL_META META
-            LEFT JOIN PAGED_DOCUMENTS PAGE ON 1 = 1
-            LEFT JOIN DOCUMENT_ROWS DOC ON DOC.LOGICAL_KEY = PAGE.LOGICAL_KEY
-            ORDER BY PAGE.LOGICAL_POSITION, DOC.ANO DESC, DOC.MES DESC, DOC.DIA DESC,
+            LEFT JOIN PAGED_DOCUMENTS PAGED_ROW ON META.TOTAL_COUNT = META.TOTAL_COUNT
+            LEFT JOIN DOCUMENT_ROWS DOC ON DOC.LOGICAL_KEY = PAGED_ROW.LOGICAL_KEY
+            ORDER BY PAGED_ROW.LOGICAL_POSITION, DOC.ANO DESC, DOC.MES DESC, DOC.DIA DESC,
                 DOC.NUMEROALBARAN DESC, DOC.SERIEALBARAN DESC,
                 DOC.TERMINALALBARAN DESC
         `;
-  const allParams = [...ids, clientCode, ...yearFilterParams, ...dateParams, pageOffset, pageLimit];
+  const allParams = [
+    ...ids,
+    clientCode,
+    ...yearFilterParams,
+    ...dateParams,
+    pageOffset,
+    pageOffset + pageLimit,
+  ];
   const rows = await runQueryWithParams(sql, allParams, false);
   return {
     rows,
@@ -533,7 +542,7 @@ async function getObjectives(cleanRepartidorIds, normalizedClientId) {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                 AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
             LEFT JOIN DSEDAC.CVC CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
@@ -568,7 +577,7 @@ async function getObjectivesDetailClients(repartidorIdList, selectedYear, client
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                 AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
@@ -633,26 +642,52 @@ async function getFiFilterCatalog() {
 }
 
 
-async function getDeliveryStatusFirmaPath(albId) {
-  return runQueryWithParams(`
-                SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?
-            `, [albId], false);
+function appFirmasTable() {
+  try {
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.tableSet === 'isolated_test') return 'JAVIER.TEST_REPARTIDOR_FIRMAS';
+  } catch (_) { /* fall through */ }
+  return 'JAVIER.REPARTIDOR_FIRMAS';
 }
 
-async function getRepartidorFirmasByAlbaran(numero, ejercicio, serie) {
+async function getDeliveryStatusFirmaPath(albId) {
+  if (!isDeliveryStatusAvailable() || isDeliveryStatusNewSchema()) return [];
+  const table = getDeliveryStatusTable();
+  return runQueryWithParams(
+    `SELECT FIRMA_PATH FROM ${table} WHERE ID = ?`,
+    [albId],
+    false,
+  );
+}
+
+async function getRepartidorFirmasByAlbaran(numero, ejercicio, serie, terminal) {
+  const table = appFirmasTable();
   return runQueryWithParams(`
-            SELECT RF.FIRMABASE64, RF.FIRMANOMBRE, RF.DIA, RF.MES, RF.ANO, RF.HORA
-            FROM JAVIER.REPARTIDOR_FIRMAS RF
-            INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-            WHERE RE.NUMEROORDENPREPARACION = ?
-              AND RE.EJERCICIOALBARAN = ?
-              AND TRIM(RE.SERIEALBARAN) = ?
+            SELECT FIRMABASE64, TRIM(FIRMANOMBRE) AS FIRMANOMBRE, TRIM(FIRMADNI) AS FIRMADNI,
+                   DIA, MES, ANO, HORA
+            FROM ${table}
+            WHERE EJERCICIOALBARAN = ?
+              AND TRIM(SERIEALBARAN) = ?
+              AND TERMINALALBARAN = ?
+              AND NUMEROALBARAN = ?
             FETCH FIRST 1 ROW ONLY
-        `, [parseInt(numero, 10), parseInt(ejercicio, 10), (serie || 'A').trim()], false);
+        `, [
+    parseInt(ejercicio, 10),
+    (serie || 'A').trim(),
+    parseInt(terminal || 0, 10),
+    parseInt(numero, 10),
+  ], false);
 }
 
 async function getCacFirmasDetailed(ejercicio, serie, terminal, numero) {
-  return runQueryWithParams(`
+  const params = [
+    parseInt(ejercicio, 10),
+    (serie || 'A').trim(),
+    parseInt(terminal || 0, 10),
+    parseInt(numero, 10),
+  ];
+  try {
+    return await runQueryWithParams(`
                 SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA,
                        LENGTH(FIRMABASE64) as FIRMA_LEN
                 FROM DSEDAC.CACFIRMAS
@@ -661,7 +696,18 @@ async function getCacFirmasDetailed(ejercicio, serie, terminal, numero) {
                   AND TERMINALALBARAN = ?
                   AND NUMEROALBARAN = ?
                 FETCH FIRST 5 ROWS ONLY
-            `, [parseInt(ejercicio, 10), (serie || 'A').trim(), parseInt(terminal || 0, 10), parseInt(numero, 10)], false);
+            `, params, false);
+  } catch (_) {
+    return runQueryWithParams(`
+                SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA
+                FROM DSEDAC.CACFIRMAS
+                WHERE EJERCICIOALBARAN = ?
+                  AND TRIM(SERIEALBARAN) = ?
+                  AND TERMINALALBARAN = ?
+                  AND NUMEROALBARAN = ?
+                FETCH FIRST 5 ROWS ONLY
+            `, params, false);
+  }
 }
 
 async function getDebugCacSignatures() {
@@ -709,15 +755,16 @@ async function getLegacySignatureBase64(year, series, terminal, number) {
         `, [year, (series || '').trim(), terminal, number], false);
 }
 
-async function getRepartidorFirmaBase64ByAlbaran(numero, year, serie) {
+async function getRepartidorFirmaBase64ByAlbaran(numero, year, serie, terminal) {
+  const table = appFirmasTable();
   return runQueryWithParams(`
-                    SELECT RF.FIRMABASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
-                    INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMEROORDENPREPARACION = ?
-                      AND RE.EJERCICIOALBARAN = ?
-                      AND TRIM(RE.SERIEALBARAN) = ?
+                    SELECT FIRMABASE64 FROM ${table}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 1 ROW ONLY
-                `, [numero, year, serie], false);
+                `, [year, (serie || 'A').trim(), parseInt(terminal || 0, 10), parseInt(numero, 10)], false);
 }
 
 async function getCacFirmaBase64(year, serie, terminal, number) {
@@ -784,7 +831,7 @@ const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC
                     ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                    AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                    AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 ${dsJoinSub}
                 WHERE OPP.ANOREPARTO = ?
@@ -829,7 +876,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC
                     ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                    AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                    AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 ${dsWeekAvail ? dsWeekJoin : ''}
                 WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
@@ -870,7 +917,7 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.SUBEMPRESA = OPP.SUBEMPRESA
+                AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                 AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
             INNER JOIN DSEDAC.CAC CAC 
                 ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
@@ -919,7 +966,7 @@ async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {
                 FROM DSEDAC.CPC CPC
                 INNER JOIN DSEDAC.OPP OPP
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND OPP.SUBEMPRESA = CPC.SUBEMPRESA
+                    AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
                     AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
                 WHERE @IN_IDS@
                   AND CPC.NUMEROALBARAN < 900000
@@ -1026,7 +1073,8 @@ async function getAlbaranLines(parsedYear, serie, parsedTerminal, parsedNumber) 
                 TRIM(LAC.CODIGOIVA) as CODIGOIVA,
                 0 as PORCENTAJERECARGOARTICULO,
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
-                LAC.PRECIOVENTA as PRECIOARTICULO
+                LAC.PRECIOVENTA as PRECIOARTICULO,
+                TRIM(COALESCE(LAC.UNIDADMEDIDA, '')) as UNIDADMEDIDA
             FROM DSEDAC.LAC LAC
             WHERE LAC.EJERCICIOALBARAN = ?
               AND TRIM(LAC.SERIEALBARAN) = ?

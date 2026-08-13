@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
 import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 
 /// KPI Dashboard widget for Rutero tab
 /// Shows deliveries completed, pending payments, and weekly progress
@@ -161,7 +163,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         Icon(icon, color: color, size: 18), // Icon only, no box
         const SizedBox(height: 2),
         Text(
-          '${amount.toStringAsFixed(0)}€',
+          CurrencyFormatter.format(amount),
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.bold,

@@ -190,10 +190,18 @@ class OfflineAwareApi {
     Map<String, dynamic> data, {
     String? syncType,
     String? cacheKey,
+    Map<String, String>? headers,
+    bool idempotent = false,
+    Map<String, dynamic>? queueExtras,
   }) async {
     if (_isOnline) {
       try {
-        final response = await ApiClient.post(endpoint, data);
+        final response = await ApiClient.post(
+          endpoint,
+          data,
+          headers: headers,
+          idempotent: idempotent,
+        );
         // Update cache if cacheKey provided
         if (cacheKey != null) {
           await CacheService.set(cacheKey, response,
@@ -212,6 +220,9 @@ class OfflineAwareApi {
     final operationId =
         '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}';
     final queuedPayload = Map<String, dynamic>.from(data);
+    if (queueExtras != null) {
+      queuedPayload.addAll(queueExtras);
+    }
     queuedPayload.putIfAbsent('clientRequestId', () => operationId);
     final operation = SyncOperation(
       id: operationId,
@@ -219,6 +230,7 @@ class OfflineAwareApi {
       endpoint: endpoint,
       method: 'POST',
       payload: queuedPayload,
+      headers: headers == null ? null : Map<String, String>.from(headers),
     );
     await SyncQueueService.instance.enqueue(operation);
     debugPrint('[OfflineAware] Queued for sync: $endpoint');

@@ -1178,9 +1178,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       'ALMACEN' => 'ALMACEN',
       _ => '',
     };
+    // Managers keep JEFE_VENTAS authorization in Perfil Reparto (activeMode
+    // REPARTIDOR). Pure drivers keep role REPARTIDOR.
     final expectedRole = switch (selectedMode) {
       'VENTAS' => requestedRole,
-      'REPARTO' => 'REPARTIDOR',
+      'REPARTO' => currentUser.availableRoles.contains('JEFE_VENTAS')
+          ? 'JEFE_VENTAS'
+          : 'REPARTIDOR',
       'ALMACEN' => 'JEFE_VENTAS',
       _ => '',
     };

@@ -26,10 +26,25 @@ class EntregasPayloadException implements Exception {
 
 String _requiredText(Map<String, dynamic> json, String key) {
   final value = json[key];
-  if (value is! String || value.trim().isEmpty) {
-    throw EntregasPayloadException(key);
+  if (value is String && value.trim().isNotEmpty) {
+    return value.trim();
   }
-  return value.trim();
+  // DB2/ODBC may emit numeric ids (SECUENCIA) as numbers.
+  if (value is num && value.isFinite) {
+    return value.toString();
+  }
+  throw EntregasPayloadException(key);
+}
+
+/// Recovers client code from canonical delivery id:
+/// `ejercicio-serie-terminal-numero-cliente`.
+String? clientCodeFromDeliveryId(String? deliveryId) {
+  final raw = deliveryId?.trim() ?? '';
+  if (raw.isEmpty) return null;
+  final parts = raw.split('-');
+  if (parts.length < 5) return null;
+  final cliente = parts.sublist(4).join('-').trim();
+  return cliente.isEmpty ? null : cliente;
 }
 
 double _requiredDoubleAlias(Map<String, dynamic> json, List<String> keys) {
@@ -735,14 +750,34 @@ class EntregasNotifier extends Notifier<EntregasState> {
     int ejercicio,
     String serie,
     int terminal,
-    String codigoCliente,
-  ) async {
+    String codigoCliente, {
+    String? deliveryId,
+  }) async {
+    final resolvedCliente = codigoCliente.trim().isNotEmpty
+        ? codigoCliente.trim()
+        : (clientCodeFromDeliveryId(deliveryId) ?? '');
+    if (resolvedCliente.isEmpty) {
+      state = state.copyWith(
+        error: 'Falta el codigo de cliente para cargar el detalle.',
+      );
+      return null;
+    }
+
     try {
+      // Prefer Dio queryParameters — embedding `?` in the path is fragile with
+      // baseUrl resolution and has caused CLIENT_REQUIRED 400s in production.
       final response = await ApiClient.get(
-        '/entregas/albaran/$numero/$ejercicio?serie=${Uri.encodeQueryComponent(serie)}&terminal=$terminal&cliente=${Uri.encodeQueryComponent(codigoCliente)}',
+        '/entregas/albaran/$numero/$ejercicio',
+        queryParameters: <String, dynamic>{
+          'serie': serie,
+          'terminal': terminal,
+          'cliente': resolvedCliente,
+        },
         cacheKey:
-            'entregas:albaran:$numero:$ejercicio:$serie:$terminal:$codigoCliente',
+            'entregas:albaran:$numero:$ejercicio:$serie:$terminal:$resolvedCliente',
         cacheTTL: const Duration(minutes: 2),
+        forceRefresh: true,
+        allowStale: false,
       );
 
       if (response['success'] == true && response['albaran'] != null) {

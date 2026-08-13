@@ -341,8 +341,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             status = _DeliveryStatus.partial;
           case 'en_ruta':
             status = _DeliveryStatus.enRuta;
-          default:
+          case 'no_delivered':
+          case 'rechazado':
+          case 'rejected':
             status = _DeliveryStatus.notDelivered;
+          case 'pending':
+            status = _DeliveryStatus.pending;
+          default:
+            status = _DeliveryStatus.pending;
         }
 
         final parsedDate = DateTime.tryParse(d.date);
@@ -1679,6 +1685,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       case _DeliveryStatus.notDelivered:
         statusColor = AppTheme.error;
         statusIcon = Icons.cancel;
+        statusLabel = 'No entregado';
+      case _DeliveryStatus.pending:
+        statusColor = AppTheme.warning;
+        statusIcon = Icons.schedule;
         statusLabel = 'Pendiente';
       case _DeliveryStatus.enRuta:
         statusColor = AppTheme.info;
@@ -2598,6 +2608,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       } else if (_filterStatus == _DeliveryStatus.partial) {
         _filterStatus = _DeliveryStatus.notDelivered;
       } else if (_filterStatus == _DeliveryStatus.notDelivered) {
+        _filterStatus = _DeliveryStatus.pending;
+      } else if (_filterStatus == _DeliveryStatus.pending) {
         _filterStatus = _DeliveryStatus.enRuta;
       } else {
         _filterStatus = null;
@@ -2613,6 +2625,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         return Icons.pie_chart;
       case _DeliveryStatus.notDelivered:
         return Icons.cancel;
+      case _DeliveryStatus.pending:
+        return Icons.schedule;
       case _DeliveryStatus.enRuta:
         return Icons.local_shipping;
       default:
@@ -2627,6 +2641,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       case _DeliveryStatus.partial:
         return 'Parcial';
       case _DeliveryStatus.notDelivered:
+        return 'No entregado';
+      case _DeliveryStatus.pending:
         return 'Pendiente';
       case _DeliveryStatus.enRuta:
         return 'En Ruta';
@@ -2643,6 +2659,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         return AppTheme.warning;
       case _DeliveryStatus.notDelivered:
         return AppTheme.error;
+      case _DeliveryStatus.pending:
+        return AppTheme.warning;
       case _DeliveryStatus.enRuta:
         return AppTheme.info;
       default:
@@ -2674,7 +2692,7 @@ class _ClientItem {
 
 enum _DocType { albaran, factura }
 
-enum _DeliveryStatus { delivered, partial, notDelivered, enRuta }
+enum _DeliveryStatus { delivered, partial, notDelivered, pending, enRuta }
 
 class _DocumentItem {
   _DocumentItem({

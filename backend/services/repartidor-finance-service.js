@@ -7,6 +7,10 @@ const {
 } = require('../repositories/reparto-finance-db2-repository');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
+const {
+  resolveLiquidacionRecipients,
+  resolveVendorEmail,
+} = require('./staff-email-directory-service');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { validateFinanceTableMapping } = require('../config/reparto-runtime');
 const {
@@ -130,6 +134,13 @@ async function getFinanceSchemaInfo() {
     cobrosHasCreatedAt: has('REPARTIDOR_COBROS', 'CREATED_AT'),
     cobrosHasFechaCobro: has('REPARTIDOR_COBROS', 'FECHA_COBRO'),
     cobrosHasNumeroLiquidacion: has('REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'),
+    // Slim isolated_test cobros (034) lack CVC document columns; production has them.
+    cobrosHasDocumentColumns: (
+      (has('REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN') || has('REPARTIDOR_COBROS', 'CODIGO_CLIENTE'))
+      && (has('REPARTIDOR_COBROS', 'TIPODOCUMENTO') || has('REPARTIDOR_COBROS', 'TIPO_DOCUMENTO'))
+      && (has('REPARTIDOR_COBROS', 'NUMERODOCUMENTO') || has('REPARTIDOR_COBROS', 'NUMERO_DOCUMENTO'))
+    ),
+    cobrosHasIdempotencyToken: has('REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'),
     balanceCodeColumn: has('REPARTIDOR_FINANCIAL_BALANCES', 'CODIGOVENDEDOR')
       ? 'CODIGOVENDEDOR'
       : 'CODIGO_REPARTIDOR',
@@ -803,7 +814,8 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       summary: {
         totalEfectivo: 0, totalCheques: 0, totalTarjeta: 0, totalPostdatados: 0,
         saldoActual: 0, totalCobrosDia: 0, gastos: 0, totalAIngresar: 0,
-        ingresoBanco: 0, totalEfectivo2: 0, entregado: 0, cobrosCount: 0,
+        ingresoBanco: 0, totalEfectivo2: 0, entregado: 0, deudaPendiente: 0,
+        cobrosCount: 0,
       },
       cobros: [],
     };
@@ -811,35 +823,67 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
 
   const dateYmd = compactDate(date);
 
-  const totalsRows = await financeRepo.selectDailyTotals({ info, ids, dateYmd });
-  const balanceRows = await financeRepo.selectBalanceSum({ info, ids });
-  const cobroRows = await financeRepo.selectDailyCobros({ info, ids, dateYmd });
-  const structured = await financeRepo.selectDailyStructuredSums({ ids, dateYmd });
+  const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows] =
+    await Promise.all([
+      financeRepo.selectDailyTotals({ info, ids, dateYmd }),
+      financeRepo.selectBalanceSum({ info, ids }),
+      financeRepo.selectDailyCobros({ info, ids, dateYmd }),
+      financeRepo.selectDailyStructuredSums({ ids, dateYmd }),
+      financeRepo.selectDeliveredAmount({ ids, fromYmd: dateYmd, toYmd: dateYmd }),
+      financeRepo.selectDailyErpDebt({ ids, dateYmd }),
+    ]);
 
   const totals = firstRow(totalsRows);
   const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
   const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
   const gastos = roundMoney(structured.gastos);
   const ingresoBanco = roundMoney(structured.ingresoBanco);
+  const entregado = roundMoney(value(firstRow(deliveredRows), 'TOTAL_REPARTIDO', 0));
+  const deudaPendiente = roundMoney(value(firstRow(debtRows), 'DEUDA_PENDIENTE', 0));
+
+  const totalEfectivo = roundMoney(value(totals, 'TOTAL_EFECTIVO'));
+  const totalCheques = roundMoney(value(totals, 'TOTAL_CHEQUES'));
+  const totalTarjeta = roundMoney(value(totals, 'TOTAL_TARJETA'));
+  const totalPostdatados = roundMoney(value(totals, 'TOTAL_POSTDATADOS'));
+  const totalAIngresar = roundMoney(saldoActual + totalCobrosDia - gastos);
+  const cobrosCount = toInt(value(totals, 'COBROS_COUNT'));
+  const ajustes = roundMoney(structured.ajustes);
+
+  // camelCase = contrato Flutter actual; UPPER = alias legacy APK/parsers.
+  const summary = {
+    totalEfectivo,
+    totalCheques,
+    totalTarjeta,
+    totalPostdatados,
+    saldoActual,
+    totalCobrosDia,
+    gastos,
+    totalAIngresar,
+    ingresoBanco,
+    totalEfectivo2: totalEfectivo,
+    entregado,
+    deudaPendiente,
+    cobrosCount,
+    ajustes,
+    TOTAL_EFECTIVO: totalEfectivo,
+    TOTAL_CHEQUES: totalCheques,
+    TOTAL_TARJETA: totalTarjeta,
+    TOTAL_POSTDATADOS: totalPostdatados,
+    SALDO_PENDIENTE: saldoActual,
+    TOTAL_COBROS_DIA: totalCobrosDia,
+    TOTAL_GASTOS: gastos,
+    TOTAL_A_INGRESAR: totalAIngresar,
+    TOTAL_REPARTIDO: entregado,
+    DEUDA_PENDIENTE: deudaPendiente,
+    COBROS_COUNT: cobrosCount,
+  };
 
   return {
     repartidorId,
     date,
-    summary: {
-      totalEfectivo: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
-      totalCheques: roundMoney(value(totals, 'TOTAL_CHEQUES')),
-      totalTarjeta: roundMoney(value(totals, 'TOTAL_TARJETA')),
-      totalPostdatados: roundMoney(value(totals, 'TOTAL_POSTDATADOS')),
-      saldoActual,
-      totalCobrosDia,
-      gastos,
-      totalAIngresar: roundMoney(saldoActual + totalCobrosDia - gastos),
-      ingresoBanco,
-      totalEfectivo2: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
-      entregado: 0,
-      cobrosCount: toInt(value(totals, 'COBROS_COUNT')),
-      ajustes: roundMoney(structured.ajustes),
-    },
+    summary,
+    // Compatibility alias for older Flutter parsers that read `totals`.
+    totals: summary,
     cobros: cobroRows.map(mapCobro),
   };
 }
@@ -1009,11 +1053,12 @@ async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCo
     repartidorId: ids.join(','), from, to, clientCode, estado,
   });
   const { offset, todayYmd, fingerprint } = cursorState;
-  await getFinanceSchemaInfo();
+  const info = await getFinanceSchemaInfo();
   const fromYmd = compactDate(from);
   const toYmd = compactDate(to);
 
   const rows = await financeRepo.selectVencimientosPage({
+    info,
     ids,
     fromYmd,
     toYmd,
@@ -1368,44 +1413,173 @@ async function deleteTestData() {
 }
 
 function simplePdfBuffer(title, lines) {
+  return buildLiquidacionPdfBuffer({
+    title,
+    repartidorLabel: lines[0] || '',
+    totals: null,
+    detailLines: lines.slice(1),
+  });
+}
+
+function buildLiquidacionPdfBuffer({
+  title,
+  repartidorLabel,
+  dateLabel,
+  totals,
+  detailLines = [],
+}) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 48, size: 'A4' });
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
     const chunks = [];
     doc.on('data', (chunk) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
-    doc.fontSize(18).text(title, { align: 'center' });
-    doc.moveDown();
-    for (const line of lines) {
-      doc.fontSize(10).text(line);
+
+    const headerColor = '#003d7a';
+    const pageWidth = doc.page.width;
+
+    doc.rect(0, 0, pageWidth, 72).fill(headerColor);
+    doc.fillColor('#FFFFFF').fontSize(18).text(title || 'Liquidacion Diaria', 40, 24, {
+      width: pageWidth - 80,
+      align: 'left',
+    });
+    doc.fontSize(10).fillColor('#DCEBFA').text('Granja Mari Pepa', 40, 48);
+
+    let y = 96;
+    doc.fillColor('#111827').fontSize(11);
+    if (repartidorLabel) {
+      doc.text(repartidorLabel, 40, y);
+      y += 18;
     }
+    if (dateLabel) {
+      doc.fillColor('#6B7280').fontSize(10).text(dateLabel, 40, y);
+      y += 22;
+    }
+
+    if (totals) {
+      const cards = [
+        { label: 'Total efectivo', value: totals.totalEfectivo },
+        { label: 'Total a ingresar', value: totals.totalAIngresar },
+        { label: 'Ingreso banco', value: totals.ingresoBanco },
+        { label: 'Diferencia', value: totals.diff },
+      ];
+      const cardWidth = (pageWidth - 80 - 24) / 4;
+      cards.forEach((card, index) => {
+        const x = 40 + index * (cardWidth + 8);
+        doc.roundedRect(x, y, cardWidth, 52, 6).fillAndStroke('#F3F8FC', '#B7C3D0');
+        doc.fillColor('#6B7280').fontSize(8).text(card.label, x + 8, y + 8, { width: cardWidth - 16 });
+        const amount = Number(card.value);
+        const amountText = `${(Number.isFinite(amount) ? amount : 0).toFixed(2)} EUR`;
+        const amountColor = card.label === 'Diferencia' && amount !== 0 ? '#B91C1C' : '#003d7a';
+        doc.fillColor(amountColor).fontSize(11).text(amountText, x + 8, y + 26, { width: cardWidth - 16 });
+      });
+      y += 70;
+    }
+
+    doc.fillColor('#003d7a').fontSize(12).text('Detalle de cobros', 40, y);
+    y += 18;
+    doc.moveTo(40, y).lineTo(pageWidth - 40, y).strokeColor('#B7C3D0').stroke();
+    y += 10;
+
+    doc.fillColor('#111827').fontSize(9);
+    if (!detailLines.length) {
+      doc.fillColor('#6B7280').text('Sin cobros en el periodo.', 40, y);
+    } else {
+      for (const line of detailLines) {
+        if (y > doc.page.height - 60) {
+          doc.addPage();
+          y = 48;
+        }
+        doc.fillColor('#111827').text(String(line), 40, y, { width: pageWidth - 80 });
+        y += 14;
+      }
+    }
+
     doc.end();
   });
 }
 
 async function sendLiquidacionEmails({ liquidacion, repartidorEmail, repartidorName, cobros }) {
   if (!liquidacion) return [];
-  if (!normalizeText(repartidorEmail)) throw new LiquidacionEmailRecipientRequiredError();
-  const subject = `Liquidacion Diaria - GMP ${liquidacion.numero.display}`;
-  const lines = [
-    `Vendedor: ${liquidacion.repartidorId} ${repartidorName || ''}`,
-    `Total Efectivo: ${liquidacion.totals.totalEfectivo.toFixed(2)} EUR`,
-    `Total a Ingresar: ${liquidacion.totals.totalAIngresar.toFixed(2)} EUR`,
-    `Ingreso en Banco: ${liquidacion.totals.ingresoBanco.toFixed(2)} EUR`,
-    ...cobros.map((c) => `${c.fecha} ${c.codigoCliente} ${c.nombreCliente} ${c.documento} ${c.importe.toFixed(2)}`),
+
+  const repartidorId = normalizeText(liquidacion.repartidorId);
+  const resolvedRepartidorEmail = normalizeText(repartidorEmail)
+    || (repartidorId ? await resolveVendorEmail(repartidorId) : null);
+
+  const directory = await resolveLiquidacionRecipients({ repartidorId });
+  const recipients = new Set(
+    [...(directory.emails || [])].map((email) => String(email).trim().toLowerCase()).filter(Boolean),
+  );
+  if (resolvedRepartidorEmail) {
+    recipients.add(String(resolvedRepartidorEmail).trim().toLowerCase());
+  }
+  for (const hardcoded of INTERNAL_LIQUIDATION_RECIPIENTS) {
+    if (normalizeText(hardcoded)) recipients.add(String(hardcoded).trim().toLowerCase());
+  }
+
+  if (recipients.size === 0) {
+    throw new LiquidacionEmailRecipientRequiredError();
+  }
+
+  const displayNumber = liquidacion.numero?.display
+    || liquidacion.numero
+    || liquidacion.id
+    || '';
+  const subject = `Liquidacion Diaria - GMP ${displayNumber}`;
+  const totals = {
+    totalEfectivo: roundMoney(liquidacion.totals?.totalEfectivo),
+    totalAIngresar: roundMoney(liquidacion.totals?.totalAIngresar),
+    ingresoBanco: roundMoney(liquidacion.totals?.ingresoBanco),
+    diff: roundMoney(
+      liquidacion.totals?.diff
+        ?? (roundMoney(liquidacion.totals?.totalAIngresar) - roundMoney(liquidacion.totals?.ingresoBanco)),
+    ),
+  };
+  const detailLines = (cobros || []).map((c) => (
+    `${c.fecha || ''} ${c.codigoCliente || ''} ${c.nombreCliente || ''} ${c.documento || ''} ${Number(c.importe || 0).toFixed(2)}`
+  ));
+  const textLines = [
+    `Vendedor: ${repartidorId} ${repartidorName || ''}`.trim(),
+    `Fecha: ${liquidacion.date || ''}`,
+    `Total Efectivo: ${totals.totalEfectivo.toFixed(2)} EUR`,
+    `Total a Ingresar: ${totals.totalAIngresar.toFixed(2)} EUR`,
+    `Ingreso en Banco: ${totals.ingresoBanco.toFixed(2)} EUR`,
+    `Diferencia: ${totals.diff.toFixed(2)} EUR`,
+    ...detailLines,
   ];
-  const pdfBuffer = await simplePdfBuffer(subject, lines);
-  const recipients = [repartidorEmail, ...INTERNAL_LIQUIDATION_RECIPIENTS];
+
+  const pdfBuffer = await buildLiquidacionPdfBuffer({
+    title: subject,
+    repartidorLabel: `Vendedor: ${repartidorId} ${repartidorName || ''}`.trim(),
+    dateLabel: liquidacion.date ? `Fecha liquidacion: ${liquidacion.date}` : '',
+    totals,
+    detailLines,
+  });
+
   const results = [];
   for (const to of recipients) {
     try {
       const result = await sendEmailWithPdf({
         to,
         subject,
-        htmlBody: `<p>${subject}</p>`,
-        textBody: lines.join('\n'),
+        htmlBody: `
+          <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;">
+            <div style="background:linear-gradient(135deg,#003d7a 0%,#1a5490 100%);padding:20px;border-radius:12px 12px 0 0;">
+              <h1 style="margin:0;color:#fff;font-size:20px;">${subject}</h1>
+            </div>
+            <div style="background:#f8f9fa;padding:20px;border-radius:0 0 12px 12px;">
+              <p style="color:#333;font-size:14px;">Adjunto PDF de liquidacion diaria.</p>
+              <ul style="color:#555;font-size:13px;">
+                <li>Efectivo: ${totals.totalEfectivo.toFixed(2)} EUR</li>
+                <li>A ingresar: ${totals.totalAIngresar.toFixed(2)} EUR</li>
+                <li>Banco: ${totals.ingresoBanco.toFixed(2)} EUR</li>
+                <li>Diff: ${totals.diff.toFixed(2)} EUR</li>
+              </ul>
+            </div>
+          </div>`,
+        textBody: textLines.join('\n'),
         pdfBuffer,
-        pdfFilename: `${subject.replace(/\s+/g, '_')}.pdf`,
+        pdfFilename: `${String(subject).replace(/\s+/g, '_')}.pdf`,
       });
       results.push({ to, success: true, result });
     } catch (error) {

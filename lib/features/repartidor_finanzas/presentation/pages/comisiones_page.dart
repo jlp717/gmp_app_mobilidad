@@ -10,8 +10,42 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
-import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+
+/// Visual surface aligned with comercial `CommissionsPage` cards.
+BoxDecoration _commissionSurfaceDecoration({
+  Color color = AppTheme.raisedSurface,
+  Color borderColor = AppTheme.borderColor,
+  double borderAlpha = 1,
+  double radius = AppTheme.radiusMd,
+}) {
+  final hasVisibleSurface = color != Colors.transparent;
+  return BoxDecoration(
+    color: color,
+    gradient: hasVisibleSurface
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color,
+              AppTheme.softPanel.withValues(alpha: 0.88),
+              borderColor.withValues(alpha: 0.035),
+            ],
+          )
+        : null,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: borderColor.withValues(alpha: borderAlpha)),
+    boxShadow: hasVisibleSurface
+        ? [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ]
+        : null,
+  );
+}
 
 class RepartidorComisionesFinanzasPage extends ConsumerStatefulWidget {
   const RepartidorComisionesFinanzasPage({
@@ -26,13 +60,45 @@ class RepartidorComisionesFinanzasPage extends ConsumerStatefulWidget {
       _RepartidorComisionesFinanzasPageState();
 }
 
+String _spanishMonthName(int month) {
+  const names = <String>[
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
+  ];
+  if (month < 1 || month > 12) return '-';
+  return names[month - 1];
+}
+
+class _MonthCommissionRow {
+  const _MonthCommissionRow({
+    required this.period,
+    required this.summary,
+    this.isFuture = false,
+  });
+
+  final DateTime period;
+  final RepartidorCommissionSummary summary;
+  final bool isFuture;
+}
+
 class _RepartidorComisionesFinanzasPageState
     extends ConsumerState<RepartidorComisionesFinanzasPage> {
   bool _isLoading = true;
   Object? _error;
   DateTime? _lastFetchTime;
   late DateTime _selectedPeriod;
-  late RepartidorCommissionSummary? _summary;
+  RepartidorCommissionSummary? _summary;
+  List<_MonthCommissionRow> _monthRows = const [];
   List<RepartidorCommissionTier> _tiers = const [];
   int _loadGeneration = 0;
 
@@ -77,29 +143,82 @@ class _RepartidorComisionesFinanzasPageState
       _error = null;
     });
     try {
-      final from = DateTime(_selectedPeriod.year, _selectedPeriod.month);
-      final to = DateTime(_selectedPeriod.year, _selectedPeriod.month + 1, 0);
-      final summaryArgs = (
-        repartidorId: widget.repartidorId,
-        from: from,
-        to: to,
-        forceRefresh: forceRefresh,
-      );
+      final service = ref.read(repartidorFinanzasServiceProvider);
       if (forceRefresh) {
         ref.invalidate(repartidorCommissionTiersProvider);
       }
+      final now = DateTime.now();
+      final year = _selectedPeriod.year;
+      final currentMonthCursor = DateTime(now.year, now.month);
+      final monthFutures = <Future<_MonthCommissionRow>>[];
+      for (var month = 1; month <= 12; month++) {
+        final from = DateTime(year, month);
+        final to = DateTime(year, month + 1, 0);
+        final isFuture = from.isAfter(currentMonthCursor);
+        if (isFuture) {
+          monthFutures.add(
+            Future.value(
+              _MonthCommissionRow(
+                period: from,
+                isFuture: true,
+                summary: RepartidorCommissionSummary(
+                  repartidorId: widget.repartidorId,
+                  deliveredAmount: 0,
+                  collectedAmount: 0,
+                  collectedPct: 0,
+                  commission: 0,
+                ),
+              ),
+            ),
+          );
+          continue;
+        }
+        monthFutures.add(
+          service
+              .getCommissionSummary(
+                repartidorId: widget.repartidorId,
+                from: from,
+                to: to,
+                forceRefresh: forceRefresh,
+              )
+              .then(
+                (summary) => _MonthCommissionRow(
+                  period: from,
+                  summary: summary,
+                ),
+              ),
+        );
+      }
       final results = await Future.wait<dynamic>([
-        ref.read(repartidorCommissionSummaryProvider(summaryArgs).future),
+        Future.wait(monthFutures),
         if (forceRefresh)
-          ref
-              .read(repartidorFinanzasServiceProvider)
-              .getCommissionTiers(forceRefresh: true)
+          service.getCommissionTiers(forceRefresh: true)
         else
           ref.read(repartidorCommissionTiersProvider.future),
       ]);
       if (!mounted || generation != _loadGeneration) return;
+      final rows = List<_MonthCommissionRow>.from(results[0] as List);
+      _MonthCommissionRow? selected;
+      for (final row in rows) {
+        if (row.period.year == _selectedPeriod.year &&
+            row.period.month == _selectedPeriod.month) {
+          selected = row;
+          break;
+        }
+      }
+      // Prefer current/past month for KPI cards when selected period is future.
+      if (selected == null || selected.isFuture) {
+        for (var i = rows.length - 1; i >= 0; i--) {
+          if (!rows[i].isFuture) {
+            selected = rows[i];
+            break;
+          }
+        }
+      }
+      selected ??= rows.isEmpty ? null : rows.last;
       setState(() {
-        _summary = results[0] as RepartidorCommissionSummary;
+        _monthRows = rows;
+        _summary = selected?.summary;
         _tiers = results[1] as List<RepartidorCommissionTier>;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
@@ -140,7 +259,10 @@ class _RepartidorComisionesFinanzasPageState
             lastSync: _lastFetchTime,
             onSync: () => _loadData(forceRefresh: true),
           ),
-          _Header(period: DateFormat('MM/yyyy').format(_selectedPeriod)),
+          _Header(
+            period:
+                '${_spanishMonthName(_selectedPeriod.month)} ${_selectedPeriod.year}',
+          ),
           _PeriodSelector(
             onPrevious: () => _changePeriod(-1),
             onNext: canMoveNext ? () => _changePeriod(1) : null,
@@ -192,9 +314,19 @@ class _RepartidorComisionesFinanzasPageState
                 ),
               ),
             )
+          else if (_summary == null || _monthRows.isEmpty)
+            const Expanded(
+              child: Center(
+                child: Text(
+                  'No hay comisiones para el periodo seleccionado',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+              ),
+            )
           else
             _Content(
               summary: _summary!,
+              monthRows: _monthRows,
               tiers: _tiers,
               now: _selectedPeriod,
             ),
@@ -243,12 +375,8 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.borderColor, width: 0.5),
-        ),
-      ),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      decoration: _commissionSurfaceDecoration(borderColor: AppTheme.success),
       child: Row(
         children: [
           const RepartidorExecutiveIcon(
@@ -285,11 +413,13 @@ class _Header extends StatelessWidget {
 class _Content extends StatelessWidget {
   const _Content({
     required this.summary,
+    required this.monthRows,
     required this.tiers,
     required this.now,
   });
 
   final RepartidorCommissionSummary summary;
+  final List<_MonthCommissionRow> monthRows;
   final List<RepartidorCommissionTier> tiers;
   final DateTime now;
 
@@ -304,82 +434,98 @@ class _Content extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          if (!_isLoadingPlaceholder) ...[
-            _SummaryCards(
-              period: now,
-              totalTarget: totalTarget,
-              totalActual: totalActual,
-              commission: summary.commission,
-              overallCompliance: overallCompliance,
-              isOnRhythm: isOnRhythm,
-              collectedPct: summary.collectedPct,
-            ),
-          ],
+          _SummaryCards(
+            period: now,
+            totalTarget: totalTarget,
+            totalActual: totalActual,
+            commission: summary.commission,
+            overallCompliance: overallCompliance,
+            isOnRhythm: isOnRhythm,
+            collectedPct: summary.collectedPct,
+          ),
           Expanded(
-            child: _buildTable(context, tiers, summary),
+            child: _buildTable(context, tiers, monthRows),
           ),
         ],
       ),
     );
   }
 
-  static const _isLoadingPlaceholder = false;
-
   Widget _buildTable(
     BuildContext context,
     List<RepartidorCommissionTier> tiers,
-    RepartidorCommissionSummary summary,
+    List<_MonthCommissionRow> monthRows,
   ) {
-    final rows = <DataRow>[];
     final orderedTiers = [...tiers]..sort((a, b) {
         final byThreshold = a.thresholdPct.compareTo(b.thresholdPct);
         if (byThreshold != 0) return byThreshold;
         return a.sortOrder.compareTo(b.sortOrder);
       });
-    final appliedTier =
-        summary.reached.isNotEmpty ? summary.reached.last : null;
-    final firstTier = orderedTiers.isNotEmpty ? orderedTiers.first : null;
-    final tierIndex = appliedTier == null
-        ? 0
-        : orderedTiers.indexWhere(
-              (tier) =>
-                  tier.thresholdPct == appliedTier.thresholdPct &&
-                  tier.commissionPct == appliedTier.commissionPct,
-            ) +
-            1;
-    final isPositive = appliedTier != null;
-    final color = isPositive ? AppTheme.success : AppTheme.error;
-    final thresholdAmount = appliedTier?.thresholdAmount ??
-        (firstTier == null
-            ? 0.0
-            : summary.deliveredAmount * (firstTier.thresholdPct / 100));
-    final tierText = appliedTier == null
-        ? '-'
-        : 'F$tierIndex > '
-            '${appliedTier.thresholdPct.toStringAsFixed(0)}%';
-    final rateText = appliedTier == null
-        ? '-'
-        : '${appliedTier.commissionPct.toStringAsFixed(1)}%';
 
-    rows.add(
-      DataRow(
-        color: WidgetStateProperty.all(AppTheme.raisedSurface),
+    DataRow buildRow(_MonthCommissionRow monthRow) {
+      final summary = monthRow.summary;
+      final isFuture = monthRow.isFuture;
+      final appliedTier =
+          summary.reached.isNotEmpty ? summary.reached.last : null;
+      final firstTier = orderedTiers.isNotEmpty ? orderedTiers.first : null;
+      final tierIndex = appliedTier == null
+          ? 0
+          : orderedTiers.indexWhere(
+                (tier) =>
+                    tier.thresholdPct == appliedTier.thresholdPct &&
+                    tier.commissionPct == appliedTier.commissionPct,
+              ) +
+              1;
+      final isPositive = !isFuture && appliedTier != null;
+      final color = isFuture
+          ? AppTheme.textTertiary
+          : (isPositive ? AppTheme.success : AppTheme.error);
+      final textOpacity = isFuture ? 0.45 : 1.0;
+      final thresholdAmount = appliedTier?.thresholdAmount ??
+          (firstTier == null
+              ? 0.0
+              : summary.deliveredAmount * (firstTier.thresholdPct / 100));
+      final tierText = appliedTier == null
+          ? '-'
+          : 'F$tierIndex > '
+              '${appliedTier.thresholdPct.toStringAsFixed(0)}%';
+      final rateText = appliedTier == null
+          ? '-'
+          : '${appliedTier.commissionPct.toStringAsFixed(1)}%';
+      final monthLabel = isFuture
+          ? '${_spanishMonthName(monthRow.period.month)}  (Futuro)'
+          : _spanishMonthName(monthRow.period.month);
+
+      return DataRow(
+        color: WidgetStateProperty.all(
+          isFuture ? AppTheme.mutedPanel : AppTheme.raisedSurface,
+        ),
         cells: [
           DataCell(
             Text(
-              DateFormat('MMMM').format(now),
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+              monthLabel,
+              style: TextStyle(
+                color: AppTheme.textPrimary.withValues(alpha: textOpacity),
+                fontSize: 11,
+              ),
             ),
           ),
           DataCell(
             Text(
-              CurrencyFormatter.format(summary.deliveredAmount),
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10),
+              isFuture
+                  ? '-'
+                  : CurrencyFormatter.format(summary.deliveredAmount),
+              style: TextStyle(
+                color: AppTheme.textPrimary.withValues(alpha: textOpacity),
+                fontSize: 10,
+              ),
             ),
           ),
           DataCell(
             Text(
-              CurrencyFormatter.format(summary.collectedAmount),
+              isFuture
+                  ? '-'
+                  : CurrencyFormatter.format(summary.collectedAmount),
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.bold,
@@ -388,38 +534,47 @@ class _Content extends StatelessWidget {
             ),
           ),
           DataCell(
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isPositive ? Icons.check_circle : Icons.cancel,
-                  color: color,
-                  size: 12,
-                ),
-                if (isPositive) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    tierText,
-                    style: const TextStyle(
-                      fontSize: 8,
-                      color: AppTheme.info,
+            isFuture
+                ? Text(
+                    '-',
+                    style: TextStyle(
+                      color:
+                          AppTheme.textTertiary.withValues(alpha: textOpacity),
+                      fontSize: 10,
                     ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPositive ? Icons.check_circle : Icons.cancel,
+                        color: color,
+                        size: 12,
+                      ),
+                      if (isPositive) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          tierText,
+                          style: const TextStyle(
+                            fontSize: 8,
+                            color: AppTheme.info,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
           ),
           DataCell(
             Text(
-              '${summary.collectedPct.toStringAsFixed(1)}%',
+              isFuture ? '-' : '${summary.collectedPct.toStringAsFixed(1)}%',
               style: TextStyle(color: color, fontSize: 9),
             ),
           ),
           DataCell(
             Text(
-              CurrencyFormatter.format(summary.commission),
-              style: const TextStyle(
-                color: AppTheme.success,
+              isFuture ? '-' : CurrencyFormatter.format(summary.commission),
+              style: TextStyle(
+                color: isFuture ? AppTheme.textTertiary : AppTheme.success,
                 fontWeight: FontWeight.bold,
                 fontSize: 10,
               ),
@@ -427,29 +582,31 @@ class _Content extends StatelessWidget {
           ),
           DataCell(
             Text(
-              tierText,
-              style: const TextStyle(
-                color: AppTheme.info,
+              isFuture ? '-' : tierText,
+              style: TextStyle(
+                color: AppTheme.info.withValues(alpha: textOpacity),
                 fontSize: 9,
               ),
             ),
           ),
           DataCell(
             Text(
-              CurrencyFormatter.format(thresholdAmount),
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
+              isFuture ? '-' : CurrencyFormatter.format(thresholdAmount),
+              style: TextStyle(
+                color: AppTheme.textSecondary.withValues(alpha: textOpacity),
                 fontSize: 9,
               ),
             ),
           ),
           DataCell(
             Text(
-              appliedTier == null
+              isFuture || appliedTier == null
                   ? '-'
                   : CurrencyFormatter.format(appliedTier.excess),
               style: TextStyle(
-                color: isPositive ? AppTheme.success : AppTheme.textSecondary,
+                color: isFuture
+                    ? AppTheme.textTertiary
+                    : (isPositive ? AppTheme.success : AppTheme.textSecondary),
                 fontWeight: FontWeight.bold,
                 fontSize: 9,
               ),
@@ -457,14 +614,16 @@ class _Content extends StatelessWidget {
           ),
           DataCell(
             Text(
-              rateText,
-              style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
+              isFuture ? '-' : rateText,
+              style: TextStyle(
+                color: AppTheme.textSecondary.withValues(alpha: textOpacity),
+                fontSize: 9,
+              ),
             ),
           ),
         ],
-      ),
-    );
+      );
+    }
 
     return SingleChildScrollView(
       child: SingleChildScrollView(
@@ -493,7 +652,7 @@ class _Content extends StatelessWidget {
               ),
               DataColumn(
                 label: Text(
-                  'OBJETIVO',
+                  'ENTREGADO',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.textSecondary,
@@ -582,7 +741,7 @@ class _Content extends StatelessWidget {
                 ),
               ),
             ],
-            rows: rows,
+            rows: monthRows.map(buildRow).toList(),
           ),
         ),
       ),
@@ -625,7 +784,7 @@ class _SummaryCards extends StatelessWidget {
               accentColor: AppTheme.info,
               icon: Icons.calendar_today,
               iconColor: AppTheme.info,
-              title: DateFormat('MMMM').format(period).toUpperCase(),
+              title: _spanishMonthName(period.month).toUpperCase(),
               value: CurrencyFormatter.format(totalActual),
               subtitle: 'de ${CurrencyFormatter.format(totalTarget)}',
               progressValue: totalTarget > 0
@@ -648,9 +807,10 @@ class _SummaryCards extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: RepartidorExecutivePanel(
+            child: Container(
               padding: const EdgeInsets.all(12),
-              accentColor: rhythmColor,
+              decoration:
+                  _commissionSurfaceDecoration(borderColor: rhythmColor),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -722,9 +882,9 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepartidorExecutivePanel(
+    return Container(
       padding: const EdgeInsets.all(12),
-      accentColor: accentColor,
+      decoration: _commissionSurfaceDecoration(borderColor: accentColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/liquidacion_pdf_builder.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -80,7 +81,8 @@ class _RepartidorLiquidacionDiariaPageState
     final args = (
       repartidorId: widget.repartidorId,
       date: _sessionDate,
-      forceRefresh: false,
+      // Always revalidate with server: stale Hive cache was showing zeros.
+      forceRefresh: true,
     );
     final asyncSummary = ref.watch(repartidorDailySummaryProvider(args));
     final ledgerArgs = (repartidorId: widget.repartidorId, date: _sessionDate);
@@ -126,6 +128,8 @@ class _RepartidorLiquidacionDiariaPageState
         _ModernHeader(
           title: 'Liquidacion Diaria',
           date: _sessionDate,
+          onGeneratePdf: () => _generatePdf(summary, asyncLedger?.valueOrNull),
+          onSharePdf: () => _sharePdf(summary, asyncLedger?.valueOrNull),
         ),
         // Resumen acumulado del mes: cobrado / liquidado / pendiente.
         // Da contexto al repartidor antes de cerrar el dia.
@@ -173,6 +177,18 @@ class _RepartidorLiquidacionDiariaPageState
                   icon: Icons.account_balance_wallet,
                   label: 'BALANCE',
                 ),
+                _BalanceCard(
+                  label: 'Entregado ERP (día)',
+                  value: summary.entregado,
+                  icon: Icons.local_shipping,
+                ),
+                const SizedBox(height: 8),
+                _BalanceCard(
+                  label: 'Deuda pendiente ERP',
+                  value: summary.deudaPendiente,
+                  icon: Icons.money_off,
+                ),
+                const SizedBox(height: 8),
                 _BalanceCard(
                   label: 'Saldo actual',
                   value: summary.saldoActual,
@@ -250,6 +266,54 @@ class _RepartidorLiquidacionDiariaPageState
     );
   }
 
+  Future<void> _generatePdf(
+    RepartidorDailySummary summary,
+    RepartidorLiquidacionLedger? ledger,
+  ) async {
+    try {
+      await LiquidacionPdfBuilder.preview(
+        repartidorId: widget.repartidorId,
+        date: _sessionDate,
+        summary: summary,
+        ledger: ledger,
+      );
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            financeErrorMessage(error, 'No se pudo generar el PDF'),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _sharePdf(
+    RepartidorDailySummary summary,
+    RepartidorLiquidacionLedger? ledger,
+  ) async {
+    try {
+      await LiquidacionPdfBuilder.shareViaSystem(
+        repartidorId: widget.repartidorId,
+        date: _sessionDate,
+        summary: summary,
+        ledger: ledger,
+      );
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            financeErrorMessage(error, 'No se pudo compartir el PDF'),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     if (_sessionDate != _today()) {
@@ -275,6 +339,7 @@ class _RepartidorLiquidacionDiariaPageState
             repartidorId: widget.repartidorId,
             date: _sessionDate,
             idempotencyToken: _idempotencyToken,
+            sendEmails: true,
           );
 
       if (!mounted) return;
@@ -690,10 +755,17 @@ class _LedgerTotal extends StatelessWidget {
 }
 
 class _ModernHeader extends StatelessWidget {
-  const _ModernHeader({required this.title, required this.date});
+  const _ModernHeader({
+    required this.title,
+    required this.date,
+    this.onGeneratePdf,
+    this.onSharePdf,
+  });
 
   final String title;
   final DateTime date;
+  final VoidCallback? onGeneratePdf;
+  final VoidCallback? onSharePdf;
 
   @override
   Widget build(BuildContext context) {
@@ -739,6 +811,16 @@ class _ModernHeader extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Generar PDF',
+            onPressed: onGeneratePdf,
+            icon: const Icon(Icons.picture_as_pdf, color: AppColors.info),
+          ),
+          IconButton(
+            tooltip: 'Compartir (WhatsApp/Gmail)',
+            onPressed: onSharePdf,
+            icon: const Icon(Icons.share, color: AppColors.info),
           ),
         ],
       ),

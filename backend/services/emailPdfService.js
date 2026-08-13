@@ -329,6 +329,84 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
 }
 
 /**
+ * HTML email without PDF attachment (variance alerts / digests).
+ * Shares SMTP transporter + port fallback with sendEmailWithPdf.
+ */
+async function sendHtmlEmail({ to, subject, htmlBody, textBody }) {
+    if (!to || typeof to !== 'string') {
+        throw new Error('Destinatario (to) es requerido');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to)) {
+        throw new Error('Email destinatario inválido');
+    }
+
+    if (!htmlBody && !textBody) {
+        throw new Error('htmlBody o textBody es requerido');
+    }
+
+    const portsToTry = [SMTP_CONFIG.port, ...SMTP_FALLBACK_PORTS.filter((p) => p !== SMTP_CONFIG.port)];
+    let lastError;
+    let lastAttempt = 0;
+
+    for (let attempt = 0; attempt < portsToTry.length; attempt++) {
+        lastAttempt = attempt;
+        const currentPort = portsToTry[attempt];
+        try {
+            const transport = attempt === 0
+                ? getTransporter()
+                : nodemailer.createTransport(buildFallbackConfig(currentPort));
+
+            const mailOptions = {
+                from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+                to,
+                subject: subject || `Aviso - ${FROM_NAME}`,
+                html: htmlBody || undefined,
+                text: textBody || 'Aviso GMP',
+            };
+
+            if (attempt === 0) {
+                logger.info(`Enviando email HTML a ${to}...`, { subject });
+            } else {
+                logger.debug(`Reintento email HTML a ${to} (intento ${attempt + 1}/${MAX_RETRIES})...`);
+            }
+
+            const info = await transport.sendMail(mailOptions);
+            logger.info('✅ Email HTML enviado correctamente', { to, subject, messageId: info.messageId });
+            return { success: true, messageId: info.messageId };
+        } catch (error) {
+            lastError = error;
+            const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(error.code);
+            const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(error.code);
+            const isAuth = error.code === 'EAUTH';
+
+            if (isTimeout || isConnection) {
+                invalidateTransporter();
+            } else if (isAuth) {
+                throw new Error('Error de autenticación SMTP. Verifica las credenciales del servidor de correo.');
+            }
+
+            if (!isAuth && attempt + 1 < portsToTry.length) {
+                await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 1000));
+            } else {
+                break;
+            }
+        }
+    }
+
+    const errorCode = lastError?.code || 'UNKNOWN';
+    const isTimeoutError = ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(errorCode);
+    const triedPorts = portsToTry.slice(0, Math.max(1, lastAttempt + 1)).join(', ');
+    let userFriendlyMessage = lastError?.message || 'Error desconocido enviando email';
+    if (isTimeoutError) {
+        userFriendlyMessage = `Timeout conectando al servidor de correo (${SMTP_CONFIG.host}, puertos ${triedPorts}).`;
+    }
+    logger.error(`❌ Email HTML fallido tras ${MAX_RETRIES} intentos`, { to, errorCode, message: userFriendlyMessage });
+    throw new Error(userFriendlyMessage);
+}
+
+/**
  * Generar HTML personalizado para facturas
  */
 function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, customBody }) {
@@ -434,6 +512,7 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
 
 module.exports = {
     sendEmailWithPdf,
+    sendHtmlEmail,
     generateInvoiceEmailHtml,
     generateDeliveryEmailHtml,
     cachePdf,

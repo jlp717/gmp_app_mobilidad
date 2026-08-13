@@ -214,30 +214,51 @@ class HistoryDocument {
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
+    int asInt(dynamic value, [int fallback = 0]) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? fallback;
+    }
+
+    double asDouble(dynamic value) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    bool asBool(dynamic value) {
+      if (value is bool) return value;
+      final normalized = value?.toString().toLowerCase();
+      return normalized == 'true' || normalized == '1' || normalized == 'yes';
+    }
+
     return HistoryDocument(
-      id: (json['id'] as String?) ?? '',
-      type: (json['type'] as String?) ?? 'albaran',
-      number: (json['number'] as int?) ?? 0,
-      albaranNumber: json['albaranNumber'] as int?,
-      facturaNumber: json['facturaNumber'] as int?,
-      serieFactura: json['serieFactura'] as String?,
-      ejercicioFactura: json['ejercicioFactura'] as int?,
-      serie: (json['serie'] as String?) ?? 'A',
-      ejercicio: (json['ejercicio'] as int?) ?? 0,
-      terminal: (json['terminal'] as int?) ?? 0,
-      date: (json['date'] as String?) ?? '',
-      amount: ((json['amount'] ?? 0) as num).toDouble(),
-      pending: ((json['pending'] ?? 0) as num).toDouble(),
-      status: (json['status'] as String?) ?? 'notDelivered',
-      hasSignature: (json['hasSignature'] as bool?) ?? false,
-      signaturePath: json['signaturePath'] as String?,
-      deliveryDate: json['deliveryDate'] as String?,
-      deliveryRepartidor: json['deliveryRepartidor'] as String?,
-      deliveryObs: json['deliveryObs'] as String?,
-      time: json['time'] as String?,
-      legacySignatureName: json['legacySignatureName'] as String?,
-      hasLegacySignature: (json['hasLegacySignature'] as bool?) ?? false,
-      legacyDate: json['legacyDate'] as String?,
+      id: json['id']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'albaran',
+      number: asInt(json['number']),
+      albaranNumber:
+          json['albaranNumber'] == null ? null : asInt(json['albaranNumber']),
+      facturaNumber:
+          json['facturaNumber'] == null ? null : asInt(json['facturaNumber']),
+      serieFactura: json['serieFactura']?.toString(),
+      ejercicioFactura: json['ejercicioFactura'] == null
+          ? null
+          : asInt(json['ejercicioFactura']),
+      serie: json['serie']?.toString() ?? 'A',
+      ejercicio: asInt(json['ejercicio']),
+      terminal: asInt(json['terminal']),
+      date: json['date']?.toString() ?? '',
+      amount: asDouble(json['amount']),
+      pending: asDouble(json['pending']),
+      status: json['status']?.toString() ?? 'notDelivered',
+      hasSignature: asBool(json['hasSignature']),
+      signaturePath: json['signaturePath']?.toString(),
+      deliveryDate: json['deliveryDate']?.toString(),
+      deliveryRepartidor: json['deliveryRepartidor']?.toString(),
+      deliveryObs: json['deliveryObs']?.toString(),
+      time: json['time']?.toString(),
+      legacySignatureName: json['legacySignatureName']?.toString(),
+      hasLegacySignature: asBool(json['hasLegacySignature']),
+      legacyDate: json['legacyDate']?.toString(),
     );
   }
   final String id;

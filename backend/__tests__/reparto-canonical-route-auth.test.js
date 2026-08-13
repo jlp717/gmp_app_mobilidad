@@ -48,12 +48,28 @@ describe('canonical reparto confirmation authorization', () => {
   test.each([
     [{ id: 'C1', code: 'C1', role: 'COMERCIAL' }],
     [{ id: 'J1', code: 'J1', role: 'JEFE_VENTAS', isJefeVentas: true }],
+    [{ id: 'J1', code: 'J1', role: 'JEFE_VENTAS', activeMode: 'COMERCIAL', isJefeVentas: true }],
   ])('rejects non-reparto role with 403', async (user) => {
     mockUser = user;
     const response = await request(app()).post('/finanzas/rutero/confirm-delivery-cobro')
       .set('Idempotency-Key', 'route-role-denied').send(payload());
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ success: false, code: 'REPARTO_CONFIRMATION_ROLE_REQUIRED' });
+  });
+
+  test('allows JEFE in Perfil Reparto mode past the confirmation role gate', async () => {
+    mockUser = {
+      id: 'V98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      activeMode: 'REPARTIDOR',
+      isJefeVentas: true,
+    };
+    const response = await request(app()).post('/finanzas/rutero/confirm-delivery-cobro')
+      .set('Idempotency-Key', 'route-jefe-supervision').send(payload('05'));
+    // Role gate passed; ownership/catalog may still reject the fake payload.
+    expect(response.status).not.toBe(403);
+    expect(response.body.code).not.toBe('REPARTO_CONFIRMATION_ROLE_REQUIRED');
   });
 
   test('requires an authenticated actor with 401', async () => {

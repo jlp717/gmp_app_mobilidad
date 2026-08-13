@@ -197,6 +197,20 @@ describe('shared auth claims login handler', () => {
     expect(tokenService.revokeSession).toHaveBeenCalledWith('sid-1', { userId: 'V050' });
     expect(storedSids.size).toBe(0);
   });
+  test('maps session limit failures to typed 409 without pretending the profile is missing', async () => {
+    const { handler, tokenService } = harness();
+    tokenService.registerSession.mockRejectedValue(Object.assign(
+      new Error('Maximum active sessions reached'),
+      { code: 'AUTH_SESSION_LIMIT_REACHED', status: 409 },
+    ));
+    const res = response();
+
+    await handler(request(), res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe('AUTH_SESSION_LIMIT_REACHED');
+  });
+
   test('maps credential profile/store failures to typed 503', async () => {
     const { handler, authRepository, tokenService } = harness();
     authRepository.findByCode.mockRejectedValue(new Error('sensitive DB detail'));

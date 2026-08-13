@@ -7,9 +7,12 @@ const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { sanitizeCodeListForParams } = require('../utils/common');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
+const { applySavedOrder } = require('../services/repartidor-rutero-orden-service');
 
 /**
- * Strip leading vendor code from VDD names (e.g., "08 DAMIAN" → "DAMIAN")
+ * Strip leading vendor code from VDD names (e.g., "08 DAMIAN" â†’ "DAMIAN")
  */
 function stripVendorCode(name) {
     if (!name) return '';
@@ -125,7 +128,7 @@ function sendEntregasUnavailable(res, code, message) {
 }
 function sendRepartoError(res, error) {
     if (error instanceof RepartoHttpError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
-    return res.status(503).json({ success: false, code: 'CANONICAL_RECEIPT_UNAVAILABLE', error: 'No se pudo generar el recibo canónico' });
+    return res.status(503).json({ success: false, code: 'CANONICAL_RECEIPT_UNAVAILABLE', error: 'No se pudo generar el recibo canÃ³nico' });
 }
 const moment = require('moment'); // Ensure moment is available
 
@@ -191,15 +194,15 @@ function getSmartSuggestions(albaranes) {
         .reduce((sum, a) => sum + (a.importe || 0), 0);
 
     if (totalCash > 1000) {
-        suggestions.push(`⚠️ Llevas ${totalCash.toFixed(0)}€ en efectivo. Considera hacer un ingreso.`);
+        suggestions.push(`âš ï¸ Llevas ${totalCash.toFixed(0)}â‚¬ en efectivo. Considera hacer un ingreso.`);
     } else if (totalCash > 500) {
-        suggestions.push(`ℹ️ Acumulas ${totalCash.toFixed(0)}€ en cobros.`);
+        suggestions.push(`â„¹ï¸ Acumulas ${totalCash.toFixed(0)}â‚¬ en cobros.`);
     }
 
     // 2. Urgent Deliveries
     const urgentCount = albaranes.filter(a => a.esCTR).length;
     if (urgentCount > 3) {
-        suggestions.push(`🔥 Tienes ${urgentCount} clientes con cobro obligatorio prioritario.`);
+        suggestions.push(`ðŸ”¥ Tienes ${urgentCount} clientes con cobro obligatorio prioritario.`);
     }
 
     // 3. Efficiency (Duplicate clients)
@@ -209,7 +212,7 @@ function getSmartSuggestions(albaranes) {
     });
     const multiDrop = Object.entries(clientCounts).find(([_, count]) => count > 1);
     if (multiDrop) {
-        suggestions.push(`📦 ${multiDrop[0]} tiene ${multiDrop[1]} entregas. ¡Agrúpalas!`);
+        suggestions.push(`ðŸ“¦ ${multiDrop[0]} tiene ${multiDrop[1]} entregas. Â¡AgrÃºpalas!`);
     }
 
     return suggestions.length > 0 ? suggestions[0] : null; // Return top suggestion
@@ -281,7 +284,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         }
 
 
-        // CORRECTO: Usar OPP → CPC → CAC para repartidores
+        // CORRECTO: Usar OPP â†’ CPC â†’ CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con CAC
         // IMPORTANTE: Usar IMPORTEBRUTO (sin IVA) para cobros
         // FIX: ID format must match exactly with frontend and update endpoint
@@ -295,7 +298,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 ? `DS.STATUS as DS_STATUS,
                   CAST(NULL AS VARCHAR(512)) as DS_OBS,
                   CAST(NULL AS VARCHAR(255)) as DS_FIRMA`
-                : `DS.ESTADO as DS_STATUS,
+                : `DS.STATUS as DS_STATUS,
                   DS.OBSERVACIONES as DS_OBS,
                   DS.FIRMA_PATH as DS_FIRMA`)
             : `CAST(NULL AS VARCHAR(20)) as DS_STATUS,
@@ -602,7 +605,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 numero: row.NUMEROALBARAN,
                 numeroFactura: numeroFactura,
                 serieFactura: serieFactura,
-                documentoTipo: esFactura ? 'FACTURA' : 'ALBARÁN',
+                documentoTipo: esFactura ? 'FACTURA' : 'ALBARÃN',
                 codigoCliente: cliente,
                 nombreCliente: row.NOMBRE_CLIENTE?.trim(),
                 nombreComercial: (row.NOMBRE_COMERCIAL || '').trim() || row.NOMBRE_CLIENTE?.trim(),
@@ -639,7 +642,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             };
         });
 
-        // --- FILTERING: Search by client name, code, albarán or factura number ---
+        // --- FILTERING: Search by client name, code, albarÃ¡n or factura number ---
         const searchQuery = req.query.search?.toLowerCase().trim() || '';
         let filteredAlbaranes = albaranes;
         if (searchQuery) {
@@ -687,7 +690,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // --- FILTER BY DOCUMENT TYPE (ALBARAN/FACTURA) ---
         const filterDocTipo = req.query.docTipo; // 'ALBARAN' or 'FACTURA'
         if (filterDocTipo === 'ALBARAN') {
-            filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'ALBARÁN');
+            filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'ALBARÃN');
         } else if (filterDocTipo === 'FACTURA') {
             filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'FACTURA');
         }
@@ -698,8 +701,15 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             filteredAlbaranes.sort((a, b) => b.importe - a.importe);
         } else if (sortBy === 'importe_asc') {
             filteredAlbaranes.sort((a, b) => a.importe - b.importe);
+        } else if ((sortBy === 'default' || !req.query.sortBy) && idList.length === 1) {
+            try {
+                const fechaYmd = `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+                const savedOrden = await ruteroOrdenRepo.listOrder(idList[0], fechaYmd);
+                filteredAlbaranes = applySavedOrder(filteredAlbaranes, savedOrden);
+            } catch (ordenError) {
+                logger.warn(`[ENTREGAS] Saved rutero order unavailable: ${ordenError?.message || ordenError}`);
+            }
         }
-        // 'default' keeps the original ORDER BY CAC.NUMEROALBARAN from SQL
 
         // Calculate totals for summary (always from unfiltered `albaranes` for accurate KPIs)
         const totalBruto = albaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
@@ -721,7 +731,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const totalUnfiltered = albaranes.length;
         const paginatedAlbaranes = filteredAlbaranes;
 
-        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${paginatedAlbaranes.length} (offset=${pageOffset}, limit=${pageLimit}), totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
+        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} â†’ albaranes=${paginatedAlbaranes.length} (offset=${pageOffset}, limit=${pageLimit}), totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
 
         res.json({
             success: true,
@@ -783,11 +793,32 @@ router.get('/payment-conditions', verifyToken, async (req, res) => {
 // ===================================
 // GET /albaran/:numero/:ejercicio
 // ===================================
+function confirmationTables() {
+    try {
+        const runtime = resolveRepartoRuntime(process.env);
+        const confirmation = runtime?.tables?.confirmation;
+        if (confirmation?.confirmations && confirmation?.lines) {
+            return confirmation;
+        }
+    } catch (_error) {
+        // Invalid/partial runtime: keep legacy isolated projection names so
+        // detail reads still soft-fail cleanly instead of hard-crashing.
+    }
+    return {
+        confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
+        lines: 'JAVIER.TEST_REPARTO_LINEAS',
+    };
+}
+
 async function loadCanonicalDetailProjection(documentId, repartidorId, clientCode) {
+    const tables = confirmationTables();
+    if (!tables?.confirmations || !tables?.lines) {
+        return { availability: 'UNAVAILABLE', confirmation: null, linesById: new Map() };
+    }
     try {
         const confirmations = await queryWithParams(`
             SELECT ID, STATUS, CONFIRMED_AT
-            FROM JAVIER.TEST_REPARTO_CONFIRMACIONES
+            FROM ${tables.confirmations}
             WHERE DOCUMENT_ID = ?
               AND REPARTIDOR_ID = ?
               AND CLIENTE_CODIGO = ?
@@ -802,7 +833,7 @@ async function loadCanonicalDetailProjection(documentId, repartidorId, clientCod
         const lines = await queryWithParams(`
             SELECT LINEA_ID, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA, CANTIDAD_PENDIENTE,
                    MOTIVO_DIFERENCIA, OBSERVACIONES
-            FROM JAVIER.TEST_REPARTO_LINEAS
+            FROM ${tables.lines}
             WHERE CONFIRMACION_ID = ?
             ORDER BY LINEA_ID
         `, [confirmation.ID], false, false);
@@ -828,19 +859,61 @@ function confirmedQuantity(value) {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+async function resolveClienteForDetail({ numero, ejercicio, serie, terminal, clienteHint }) {
+    let cliente = normalizeCode(clienteHint);
+    if (cliente) return cliente;
+
+    // Compat: old clients omit cliente but still send serie+terminal.
+    // Resolve only when the delivery identity is unique.
+    if (serie === undefined || serie === null || terminal === undefined || terminal === null || terminal === '') {
+        return '';
+    }
+    const rows = await queryWithParams(`
+        SELECT DISTINCT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE
+        FROM DSEDAC.CPC CPC
+        WHERE CPC.NUMEROALBARAN = ?
+          AND CPC.EJERCICIOALBARAN = ?
+          AND TRIM(CPC.SERIEALBARAN) = ?
+          AND CPC.TERMINALALBARAN = ?
+    `, [numero, ejercicio, String(serie).trim(), terminal], false, false);
+    if (rows.length === 1) {
+        return normalizeCode(rows[0].CLIENTE);
+    }
+    return '';
+}
+
 router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
     try {
         const { numero, ejercicio } = req.params;
         const serie = req.query.serie;
         const terminal = req.query.terminal;
-        const cliente = normalizeCode(req.query.cliente);
-        if (!cliente) return res.status(400).json({ success: false, code: 'CLIENT_REQUIRED', error: 'El cliente es obligatorio para identificar el albarán' });
+        // Accept canonical `cliente` and legacy `codigoCliente` alias.
+        const cliente = await resolveClienteForDetail({
+            numero,
+            ejercicio,
+            serie,
+            terminal,
+            clienteHint: req.query.cliente || req.query.codigoCliente,
+        });
+        if (!cliente) {
+            return res.status(400).json({
+                success: false,
+                code: 'CLIENT_REQUIRED',
+                error: 'El cliente es obligatorio para identificar el albarÃ¡n',
+            });
+        }
 
         // 1. Build WHERE clause with parameterized query
         const headerParams = [numero, ejercicio, cliente];
         let whereClause = `CPC.NUMEROALBARAN = ? AND CPC.EJERCICIOALBARAN = ? AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?`;
-        if (serie) { whereClause += ` AND CPC.SERIEALBARAN = ?`; headerParams.push(serie); }
-        if (terminal) { whereClause += ` AND CPC.TERMINALALBARAN = ?`; headerParams.push(terminal); }
+        if (serie !== undefined && serie !== null && String(serie).length > 0) {
+            whereClause += ` AND TRIM(CPC.SERIEALBARAN) = ?`;
+            headerParams.push(String(serie).trim());
+        }
+        if (terminal !== undefined && terminal !== null && String(terminal).length > 0) {
+            whereClause += ` AND CPC.TERMINALALBARAN = ?`;
+            headerParams.push(terminal);
+        }
 
         // 2. Get Header from CPC (uses IMPORTETOTAL - correct final amount)
         const headerSql = `
@@ -884,7 +957,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
 
         const headers = await queryWithParams(headerSql, headerParams);
         if (headers.length === 0) return res.status(404).json({ success: false, error: 'Albaran not found' });
-        if (headers.length !== 1) return res.status(409).json({ success: false, code: 'AMBIGUOUS_DELIVERY_IDENTITY', error: 'La identidad del albarán no es inequívoca' });
+        if (headers.length !== 1) return res.status(409).json({ success: false, code: 'AMBIGUOUS_DELIVERY_IDENTITY', error: 'La identidad del albarÃ¡n no es inequÃ­voca' });
 
         const header = { ...headers[0] };
         if (!ensureRepartidorAccess(req, res, header.CODIGO_REPARTIDOR)) return;
@@ -952,7 +1025,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             poblacion: header.POB,
             numeroFactura: header.NUMEROFACTURA || 0,
             serieFactura: (header.SERIEFACTURA || '').trim(),
-            documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARÁN',
+            documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARÃN',
             fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
             importe: parseFloat(header.IMPORTE) || 0,
             importeBruto: parseFloat(header.IMPORTE_BRUTO) || 0,
@@ -966,8 +1039,8 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
                 const cantidadPedida = parseFloat(i.CANTIDADUNIDADES) || 0;
                 const cantidadEntregada = confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_ENTREGADA) : null;
                 return {
-                    itemId: i.SECUENCIA,
-                    codigoArticulo: i.CODIGOARTICULO,
+                    itemId: String(i.SECUENCIA),
+                    codigoArticulo: String(i.CODIGOARTICULO ?? '').trim(),
                     descripcion: i.DESCRIPCION,
                     cantidadPedida,
                     bultos: parseFloat(i.CANTIDADENVASES) || 0,
@@ -1010,7 +1083,7 @@ function canonicalEndpointRequired(endpoint) {
     return (_req, res) => res.status(410).json({
         success: false,
         code: 'REPARTO_CANONICAL_ENDPOINT_REQUIRED',
-        error: 'Este endpoint ha sido retirado; usa el flujo canónico de reparto',
+        error: 'Este endpoint ha sido retirado; usa el flujo canÃ³nico de reparto',
         canonicalEndpoint: endpoint,
     });
 }
@@ -1019,8 +1092,15 @@ router.post('/update', verifyToken, canonicalEndpointRequired(
     '/api/repartidor-finanzas/rutero/confirm-delivery-cobro',
 ));
 
+router.post('/uploads/photo', verifyToken, canonicalEndpointRequired(
+    '/api/repartidor-finanzas/rutero/evidence/photo',
+));
+router.post('/uploads/signature', verifyToken, canonicalEndpointRequired(
+    '/api/repartidor-finanzas/rutero/evidence/signature',
+));
+
 async function requireDeliveryOwnership(req, entregaId) {
-    if (!parseDeliveryItemId(entregaId)) throw new RepartoHttpError(400, 'INVALID_DELIVERY_ID', 'Identificador de entrega inválido');
+    if (!parseDeliveryItemId(entregaId)) throw new RepartoHttpError(400, 'INVALID_DELIVERY_ID', 'Identificador de entrega invÃ¡lido');
     const owner = await getDeliveryOwner(entregaId);
     if (!owner) throw new RepartoHttpError(404, 'DELIVERY_NOT_FOUND', 'Entrega no encontrada');
     if (!canAccessRepartidor(req, owner)) throw new RepartoHttpError(403, 'DELIVERY_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega');
@@ -1042,7 +1122,7 @@ async function canonicalReceiptProjection(req, entregaId) {
     `, [entregaId, owner, parsed.cliente], false, false);
     if (headers.length > 1) throw new RepartoHttpError(409, 'AMBIGUOUS_CONFIRMATION', 'Existe mas de una confirmacion autorizada para esta entrega');
     const header = headers[0];
-    if (!header) throw new RepartoHttpError(503, 'CANONICAL_RECEIPT_UNAVAILABLE', 'No hay una confirmación estructurada para generar el recibo');
+    if (!header) throw new RepartoHttpError(503, 'CANONICAL_RECEIPT_UNAVAILABLE', 'No hay una confirmaciÃ³n estructurada para generar el recibo');
     const lines = await queryWithParams(`
         SELECT LINEA_ID, CODIGO_ARTICULO, DESCRIPCION, CANTIDAD_PEDIDA,
                CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA, CANTIDAD_PENDIENTE, PRECIO_UNITARIO
@@ -1067,7 +1147,7 @@ async function canonicalReceiptProjection(req, entregaId) {
         signatureBuffer = Buffer.isBuffer(evidenceRows[0].CONTENT_BLOB) ? evidenceRows[0].CONTENT_BLOB : Buffer.from(evidenceRows[0].CONTENT_BLOB);
         signatureMimeType = String(evidenceRows[0].MIME_TYPE || '').trim() || null;
     }
-    if (!lines.length) throw new RepartoHttpError(503, 'CANONICAL_RECEIPT_UNAVAILABLE', 'Faltan líneas estructuradas de la entrega');
+    if (!lines.length) throw new RepartoHttpError(503, 'CANONICAL_RECEIPT_UNAVAILABLE', 'Faltan lÃ­neas estructuradas de la entrega');
     const receiptLines = lines.filter((line) => Number(line.CANTIDAD_ENTREGADA || 0) > 0).map((line) => ({
         SECUENCIA: line.LINEA_ID,
         ARTICULO: line.CODIGO_ARTICULO,
@@ -1096,18 +1176,11 @@ async function canonicalReceiptProjection(req, entregaId) {
     };
 }
 
-router.post('/uploads/photo', verifyToken, canonicalEndpointRequired(
-    '/api/repartidor-finanzas/rutero/evidence/photo',
-));
-router.post('/uploads/signature', verifyToken, canonicalEndpointRequired(
-    '/api/repartidor-finanzas/rutero/evidence/signature',
-));
-
 function canonicalReceiptEndpointRequired(_req, res) {
     return res.status(410).json({
         success: false,
         code: 'REPARTO_CANONICAL_RECEIPT_ENDPOINT_REQUIRED',
-        error: 'Este comprobante se obtiene desde la confirmación canónica de reparto',
+        error: 'Este comprobante se obtiene desde la confirmaciÃ³n canÃ³nica de reparto',
         canonicalEndpoint: '/api/repartidor-finanzas/rutero/confirmations/:confirmationId/receipt',
     });
 }
@@ -1129,14 +1202,14 @@ router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
 router.post('/receipt/:entregaId/email', verifyToken, async (req, res) => {
     try {
         await canonicalReceiptProjection(req, req.params.entregaId);
-        throw new RepartoHttpError(503, 'CANONICAL_RECIPIENT_UNAVAILABLE', 'No hay un destinatario de correo canónico disponible');
+        throw new RepartoHttpError(503, 'CANONICAL_RECIPIENT_UNAVAILABLE', 'No hay un destinatario de correo canÃ³nico disponible');
     } catch (error) { return sendRepartoError(res, error); }
 });
 
 router.post('/receipt/:entregaId/whatsapp', verifyToken, async (req, res) => {
     try {
         await canonicalReceiptProjection(req, req.params.entregaId);
-        throw new RepartoHttpError(503, 'CANONICAL_RECIPIENT_UNAVAILABLE', 'No hay un destinatario de mensajería canónico disponible');
+        throw new RepartoHttpError(503, 'CANONICAL_RECIPIENT_UNAVAILABLE', 'No hay un destinatario de mensajerÃ­a canÃ³nico disponible');
     } catch (error) { return sendRepartoError(res, error); }
 });
 

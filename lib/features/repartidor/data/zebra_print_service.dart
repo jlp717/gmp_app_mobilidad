@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -8,8 +9,12 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Service for printing delivery notes on Zebra ZQ520
-/// via Bluetooth Classic (SPP/RFCOMM) using raw ZPL commands.
+/// Bluetooth ticket printer for repartidor deliveries.
+///
+/// Transport is model-agnostic: any paired Bluetooth SPP printer can be
+/// selected. Payload is ZPL or ESC/POS based on the saved protocol
+/// (`zpl` | `escpos`). Zebra/ZPL printers use raw ZPL; generic BT printers
+/// use ESC/POS text. Changing device = pick in the BT picker + set protocol.
 class ZebraPrintService {
   // NOTE: Printer MAC addresses stored in SharedPreferences are low-risk
   // (they are public identifiers, not secrets), but should migrate to
@@ -17,6 +22,7 @@ class ZebraPrintService {
   static const String _prefKey = 'repartidor_tiene_impresora';
   static const String _prefAddress = 'repartidor_printer_address';
   static const String _prefName = 'repartidor_printer_name';
+  static const String _prefProtocol = 'repartidor_printer_protocol';
 
   // -- Printer configuration persistence --
 
@@ -40,13 +46,33 @@ class ZebraPrintService {
     return prefs.getString(_prefName);
   }
 
+  /// Saved print protocol: `zpl` (default) or `escpos`.
+  static Future<String> getPrinterProtocol() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefProtocol);
+    return value == 'escpos' ? 'escpos' : 'zpl';
+  }
+
+  static Future<void> setPrinterProtocol(String protocol) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefProtocol,
+      protocol == 'escpos' ? 'escpos' : 'zpl',
+    );
+  }
+
   static Future<void> savePrinter(
     String address,
-    String name,
-  ) async {
+    String name, {
+    String protocol = 'zpl',
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefAddress, address);
     await prefs.setString(_prefName, name);
+    await prefs.setString(
+      _prefProtocol,
+      protocol == 'escpos' ? 'escpos' : 'zpl',
+    );
   }
 
   // -- Bluetooth permissions --
@@ -492,6 +518,68 @@ class ZebraPrintService {
     return buf.toString();
   }
 
+  // -- ESC/POS generation --
+
+  static const int _escPosLineWidth = 32;
+
+  /// Simple ESC/POS ticket bytes for generic Bluetooth printers.
+  /// ESC @ init, ASCII text lines (<=32 chars), GS V 0 cut.
+  static Uint8List generateEscPosTicket({
+    required String clientName,
+    required String albaranLabel,
+    required List<Map<String, dynamic>> lines,
+    required double total,
+    String? paymentLabel,
+  }) {
+    final out = BytesBuilder(copy: false);
+    out.add(const [0x1B, 0x40]); // ESC @ initialize
+
+    void writeLine(String text) {
+      final line = _truncate(_toAscii(text), _escPosLineWidth);
+      out.add(ascii.encode('$line\n'));
+    }
+
+    writeLine('GRANJA MARI PEPA S.L.');
+    writeLine(albaranLabel);
+    writeLine(clientName);
+    writeLine('-' * _escPosLineWidth);
+
+    for (final line in lines) {
+      final desc = (line['desc'] ?? line['descripcion'] ?? '').toString();
+      final qty = line['qty'] ?? line['cantidad'];
+      final importe = line['importe'] ?? line['amount'];
+      if (desc.isNotEmpty) {
+        writeLine(desc);
+      }
+      final parts = <String>[];
+      if (qty != null)
+        parts.add(
+            'x${_formatQuantity(qty is num ? qty : num.tryParse(qty.toString()) ?? 0)}');
+      if (importe != null) {
+        final amount = importe is num
+            ? importe.toDouble()
+            : double.tryParse(importe.toString()) ?? 0;
+        parts.add('${amount.toStringAsFixed(2)} EUR');
+      }
+      if (parts.isNotEmpty) {
+        writeLine(parts.join(' '));
+      }
+    }
+
+    writeLine('-' * _escPosLineWidth);
+    writeLine('TOTAL: ${total.toStringAsFixed(2)} EUR');
+    if (paymentLabel != null && paymentLabel.isNotEmpty) {
+      writeLine(paymentLabel);
+    }
+    writeLine('');
+    writeLine('Gracias');
+    writeLine('');
+    writeLine('');
+
+    out.add(const [0x1D, 0x56, 0x00]); // GS V 0 full cut
+    return out.toBytes();
+  }
+
   // -- Print execution --
 
   /// Sends raw ZPL to the saved (or given) printer.
@@ -548,7 +636,88 @@ class ZebraPrintService {
     }
   }
 
+  /// Print ticket using saved protocol (`zpl` | `escpos`).
+  static Future<bool> printTicket({
+    String? zpl,
+    Uint8List? escPosBytes,
+    String? address,
+  }) async {
+    final protocol = await getPrinterProtocol();
+    if (protocol == 'escpos') {
+      if (escPosBytes == null || escPosBytes.isEmpty) {
+        debugPrint('[ZEBRA] ESC/POS bytes missing');
+        return false;
+      }
+      try {
+        final addr = address ?? await getSavedPrinterAddress();
+        if (addr == null) {
+          debugPrint('[ZEBRA] No printer address configured');
+          return false;
+        }
+
+        final granted = await requestBluetoothPermissions();
+        if (!granted) return false;
+
+        for (var attempt = 0; attempt < 2; attempt++) {
+          try {
+            final ok = await FlutterBluetoothPrinter.printBytes(
+              address: addr,
+              data: escPosBytes,
+              keepConnected: false,
+            ).timeout(const Duration(seconds: 15), onTimeout: () => false);
+
+            debugPrint('[ZEBRA] ESC/POS attempt ${attempt + 1}: $ok');
+            if (ok) return true;
+          } catch (_) {
+            debugPrint('[ZEBRA] ESC/POS attempt ${attempt + 1} failed');
+          }
+          if (attempt == 0) {
+            await Future<void>.delayed(const Duration(seconds: 2));
+          }
+        }
+        return false;
+      } catch (_) {
+        debugPrint('[ZEBRA] ESC/POS print failed');
+        return false;
+      }
+    }
+
+    if (zpl == null || zpl.isEmpty) {
+      debugPrint('[ZEBRA] ZPL payload missing');
+      return false;
+    }
+    return printZpl(zpl, address: address);
+  }
+
   // -- Helpers --
+
+  static String _toAscii(String text) {
+    const replacements = <String, String>{
+      'á': 'a',
+      'é': 'e',
+      'í': 'i',
+      'ó': 'o',
+      'ú': 'u',
+      'Á': 'A',
+      'É': 'E',
+      'Í': 'I',
+      'Ó': 'O',
+      'Ú': 'U',
+      'ñ': 'n',
+      'Ñ': 'N',
+      'ü': 'u',
+      'Ü': 'U',
+      '€': 'EUR',
+      '·': '-',
+    };
+    var result = text;
+    replacements.forEach((from, to) {
+      result = result.replaceAll(from, to);
+    });
+    return String.fromCharCodes(
+      result.codeUnits.where((c) => c >= 32 && c < 127),
+    );
+  }
 
   static String _formatQuantity(num value) {
     final fixed = value.toDouble().toStringAsFixed(3);

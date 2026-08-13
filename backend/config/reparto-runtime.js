@@ -27,6 +27,14 @@ const TABLE_MAPPINGS = Object.freeze({
       liquidationSequence: 'JAVIER.TEST_REPARTIDOR_LIQUIDACION_SEQ',
       commercialCobros: 'JAVIER.TEST_COBROS',
     }),
+    routing: Object.freeze({
+      order: 'JAVIER.TEST_REPARTIDOR_RUTERO_ORDEN',
+    }),
+    notifications: Object.freeze({
+      roleTargets: 'JAVIER.TEST_NOTIFICATION_ROLE_TARGETS',
+      varianceOutbox: 'JAVIER.TEST_REPARTO_VARIANCE_OUTBOX',
+      deliveryStatus: 'JAVIER.TEST_DELIVERY_STATUS',
+    }),
   }),
   production: Object.freeze({
     confirmation: Object.freeze({
@@ -48,6 +56,14 @@ const TABLE_MAPPINGS = Object.freeze({
       liquidationOutbox: 'JAVIER.REPARTIDOR_LIQUIDACION_OUTBOX',
       liquidationSequence: 'JAVIER.REPARTIDOR_LIQUIDACION_SEQ',
       commercialCobros: 'JAVIER.COBROS',
+    }),
+    routing: Object.freeze({
+      order: 'JAVIER.REPARTIDOR_RUTERO_ORDEN',
+    }),
+    notifications: Object.freeze({
+      roleTargets: 'JAVIER.NOTIFICATION_ROLE_TARGETS',
+      varianceOutbox: 'JAVIER.REPARTO_VARIANCE_OUTBOX',
+      deliveryStatus: 'JAVIER.DELIVERY_STATUS',
     }),
   }),
 });

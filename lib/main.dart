@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
@@ -16,8 +17,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -149,13 +150,19 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _router = _createRouter();
-    // Auto-sync pending operations when connectivity is restored.
+    SyncQueueService.confirmDeliveryReconciler ??=
+        defaultConfirmDeliveryReconciler;
+    // Auth gate for ConnectivityService online → OfflineSyncBridge.
+    ConnectivityService.onOnlineSyncGate = () async {
+      final authState = ref.read(authProvider).value;
+      return authState?.isAuthenticated ?? false;
+    };
+    // Notifications on online; sync itself runs via OfflineSyncBridge hook.
     _connectivitySubscription =
         ConnectivityService.instance.stream.listen((status) {
       if (status == ConnectivityStatus.online) {
         final authState = ref.read(authProvider).value;
         if (!(authState?.isAuthenticated ?? false)) return;
-        _runAutoSync();
         unawaited(
           NotificationOrchestrator.instance.refreshAll(
             reason: 'connectivity_online',
@@ -241,24 +248,11 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
 
     _autoSyncInProgress = true;
     try {
-      final genericCount = await SyncQueueService.instance.processAll();
-      if (genericCount > 0) {
-        debugPrint('[AutoSync] $genericCount generic operations synced');
-        OfflineSyncNotifier.genericSyncSucceeded(genericCount);
-      }
-
-      await PedidosOfflineService.init();
-      final result = await PedidosOfflineService.syncPendingOrdersWithResult();
-      final synced = result['synced'] as int? ?? 0;
-      final failed = result['failed'] as int? ?? 0;
-      if (synced > 0) {
-        debugPrint('[AutoSync] $synced offline orders synced');
-        OfflineSyncNotifier.orderSyncSucceeded(synced);
-      }
-      if (failed > 0) {
-        debugPrint('[AutoSync] $failed offline orders preserved as failed');
-        OfflineSyncNotifier.orderSyncFailed(failed);
-      }
+      final result = await OfflineSyncBridge.syncAll();
+      debugPrint(
+        '[AutoSync] queue=${result.queueSynced}/${result.queueFailed} '
+        'pedidos=${result.pedidosSynced}/${result.pedidosFailed}',
+      );
       await NotificationOrchestrator.instance.refreshOrderReminders(
         reason: 'auto_sync_complete',
       );

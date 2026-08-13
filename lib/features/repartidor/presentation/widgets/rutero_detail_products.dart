@@ -16,6 +16,33 @@ String _deliveryQuantityText(num value) {
   return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
+/// Step for +/- controls: weight units use 0.1, piece units use 1.
+double quantityStepForUnit(String? unit) {
+  final u = (unit ?? '').trim().toUpperCase();
+  if (u.isEmpty) return 1;
+  if (u.contains('KG') ||
+      u.contains('KILO') ||
+      u == 'G' ||
+      u == 'GR' ||
+      u.contains('GRAM') ||
+      u == 'LT' ||
+      u == 'L' ||
+      u.contains('LITR')) {
+    return 0.1;
+  }
+  return 1;
+}
+
+/// Prefer unit; if unit empty but ordered qty is fractional (carne a peso), use 0.1.
+double quantityStepForLine({String? unit, required num cantidadPedida}) {
+  if (quantityStepForUnit(unit) < 1) return 0.1;
+  final ordered = cantidadPedida.toDouble();
+  if ((ordered - ordered.roundToDouble()).abs() > 0.0001) return 0.1;
+  return 1;
+}
+
+bool isWeightLikeUnit(String? unit) => quantityStepForUnit(unit) < 1;
+
 /// Returns the only valid UI identity for a delivery line.
 String ruteroLineKey(EntregaItem item) => item.itemId.trim();
 
@@ -542,6 +569,11 @@ class _ProductCard extends StatelessWidget {
   }
 
   Widget _buildQuantityControls(BuildContext context) {
+    final step = quantityStepForLine(
+      unit: linea.unit,
+      cantidadPedida: linea.cantidadPedida,
+    );
+    final unitLabel = (linea.unit ?? '').trim();
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.softPanel,
@@ -557,7 +589,7 @@ class _ProductCard extends StatelessWidget {
                 ? () {
                     HapticFeedback.selectionClick();
                     onQuantityChanged(
-                      (quantity - 1).clamp(0.0, linea.cantidadPedida),
+                      (quantity - step).clamp(0.0, linea.cantidadPedida),
                     );
                   }
                 : null,
@@ -565,14 +597,17 @@ class _ProductCard extends StatelessWidget {
           GestureDetector(
             onTap: onShowEditDialog,
             child: Container(
-              width: 52,
+              constraints: const BoxConstraints(minWidth: 64),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               alignment: Alignment.center,
               child: Text(
-                _deliveryQuantityText(quantity),
+                unitLabel.isEmpty
+                    ? _deliveryQuantityText(quantity)
+                    : '${_deliveryQuantityText(quantity)} $unitLabel',
                 style: TextStyle(
                   color: isModified ? AppTheme.warning : AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontSize: 14,
                   decoration: TextDecoration.underline,
                   decorationStyle: TextDecorationStyle.dotted,
                 ),
@@ -584,8 +619,9 @@ class _ProductCard extends StatelessWidget {
             onTap: quantity + 0.0001 < linea.cantidadPedida
                 ? () {
                     HapticFeedback.selectionClick();
+                    final next = quantity + step;
                     onQuantityChanged(
-                      (quantity + 1).clamp(0.0, linea.cantidadPedida),
+                      next > linea.cantidadPedida ? linea.cantidadPedida : next,
                     );
                   }
                 : null,

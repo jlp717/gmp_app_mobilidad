@@ -173,11 +173,28 @@ describe('entregas route coverage gaps', () => {
   });
 
   test('requires complete albaran identity before querying the header', async () => {
-    const response = await authorized('get', '/albaran/42/2026?serie=A&terminal=1');
+    // Without serie/terminal there is no safe unique-client fallback.
+    const response = await authorized('get', '/albaran/42/2026');
 
     expect(response.status).toBe(400);
     expect(response.body.code).toBe('CLIENT_REQUIRED');
     expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('resolves a unique client when legacy callers omit cliente but send serie+terminal', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('SELECT DISTINCT') && sql.includes('CODIGOCLIENTEALBARAN')) {
+        return Promise.resolve([{ CLIENTE: 'C1' }]);
+      }
+      if (sql.includes('FROM DSEDAC.CPC CPC')) return Promise.resolve([detailHeader()]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) return Promise.resolve([]);
+      if (sql.includes('FROM DSEDAC.LAC')) return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/albaran/42/2026?serie=A&terminal=1');
+    expect(response.status).toBe(200);
+    expect(response.body.albaran.codigoCliente).toBe('C1');
   });
 
   test('enforces the database-resolved albaran owner', async () => {

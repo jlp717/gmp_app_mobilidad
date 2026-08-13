@@ -79,13 +79,46 @@ function createRedisDouble() {
     sMembers: jest.fn(async (key) => [...(sets.get(key) || [])]),
     expire: jest.fn(async (key, ttl) => { ttlSeconds.set(key, Number(ttl)); return 1; }),
     eval: jest.fn(async (script, { keys, arguments: args }) => {
-      if (script.includes('AUTH_REGISTER_V2')) {
+      if (script.includes('AUTH_REGISTER_V2') || script.includes('AUTH_REGISTER_V3')) {
         const entries = sets.get(keys[1]) || new Set();
         for (const sid of [...entries]) {
           if (!values.has(`${args[4]}${sid}`)) entries.delete(sid);
         }
         if (entries.size > Number(args[5])) return -1;
-        if (!entries.has(args[0]) && entries.size >= Number(args[3])) return 0;
+        if (!entries.has(args[0]) && script.includes('AUTH_REGISTER_V3')) {
+          const limit = Number(args[3]);
+          while (entries.size >= limit) {
+            let oldestSid = null;
+            let oldestCreated = null;
+            for (const sid of [...entries]) {
+              const raw = values.get(`${args[4]}${sid}`);
+              if (!raw) {
+                entries.delete(sid);
+                continue;
+              }
+              let created = 0;
+              try {
+                const parsed = JSON.parse(raw);
+                created = Number(parsed.createdAt) || 0;
+              } catch (_error) {
+                created = 0;
+              }
+              if (oldestCreated === null || created < oldestCreated) {
+                oldestCreated = created;
+                oldestSid = sid;
+              }
+            }
+            if (!oldestSid) break;
+            const oldKey = `${args[4]}${oldestSid}`;
+            const ttl = ttlSeconds.get(oldKey) || Number(args[2]);
+            values.set(`${args[6]}${oldestSid}`, '1');
+            ttlSeconds.set(`${args[6]}${oldestSid}`, Number(ttl));
+            values.delete(oldKey);
+            entries.delete(oldestSid);
+          }
+        } else if (!entries.has(args[0]) && entries.size >= Number(args[3])) {
+          return 0;
+        }
         values.set(keys[0], args[1]);
         ttlSeconds.set(keys[0], Number(args[2]));
         entries.add(args[0]);
@@ -276,8 +309,9 @@ test('two simulated workers share Redis state and preserve atomic rotation', asy
   expect(outcomes.sort()).toEqual([false, true]);
 });
 
-test('Redis rejects the sixth session atomically without an orphan or index drift', async () => {
+test('Redis sixth session evicts the oldest live session instead of blocking login', async () => {
   const client = createRedisDouble();
+  let clock = 1_800_000_000_000;
   const store = createAuthClaimsSessionStore({
     mode: 'redis',
     production: true,
@@ -285,9 +319,11 @@ test('Redis rejects the sixth session atomically without an orphan or index drif
     verifyRefreshToken,
     refreshTtlMs: REFRESH_TTL_MS,
     maxSessionsPerUser: 5,
+    now: () => clock,
   });
 
   for (let index = 1; index <= 5; index += 1) {
+    clock += 1000;
     await store.register(sessionInput({
       sid: `sid-${index}`,
       userId: 'V050',
@@ -296,17 +332,21 @@ test('Redis rejects the sixth session atomically without an orphan or index drif
     }));
   }
 
+  clock += 1000;
   const sixth = sessionInput({ sid: 'sid-6', accessJti: 'access-6', refreshJti: 'refresh-6' });
-  await expect(store.register(sixth)).rejects.toMatchObject({
-    code: 'AUTH_SESSION_LIMIT_REACHED', status: 409,
-  });
-  expect(client.values.has('gmp:auth:session:sid-6')).toBe(false);
-  expect(client.sets.get('gmp:auth:user:V050')?.size).toBe(5);
-  await expect(store.isActive('sid-6', 'V050', 'access-6')).resolves.toBe(false);
+  await expect(store.register(sixth)).resolves.toEqual({ ok: true, sid: 'sid-6' });
+  expect(client.values.has('gmp:auth:session:sid-6')).toBe(true);
+  expect(client.values.has('gmp:auth:session:sid-1')).toBe(false);
+  expect(client.sets.get('gmp:auth:user:V050')).toEqual(new Set([
+    'sid-2', 'sid-3', 'sid-4', 'sid-5', 'sid-6',
+  ]));
+  await expect(store.isActive('sid-1', 'V050', 'access-1')).resolves.toBe(false);
+  await expect(store.isActive('sid-6', 'V050', 'access-6')).resolves.toBe(true);
 });
 
-test('concurrent Redis registrations have exactly one winner for the last slot', async () => {
+test('concurrent Redis registrations both succeed by evicting older sessions under the cap', async () => {
   const client = createRedisDouble();
+  let clock = 1_800_000_000_000;
   const store = createAuthClaimsSessionStore({
     mode: 'redis',
     production: true,
@@ -314,26 +354,31 @@ test('concurrent Redis registrations have exactly one winner for the last slot',
     verifyRefreshToken,
     refreshTtlMs: REFRESH_TTL_MS,
     maxSessionsPerUser: 5,
+    now: () => clock,
   });
 
   for (let index = 1; index <= 4; index += 1) {
+    clock += 1000;
     await store.register(sessionInput({ sid: `race-${index}`, accessJti: `race-access-${index}`, refreshJti: `race-refresh-${index}` }));
   }
 
+  clock += 1000;
   const contenders = [
     sessionInput({ sid: 'race-5', accessJti: 'race-access-5', refreshJti: 'race-refresh-5' }),
     sessionInput({ sid: 'race-6', accessJti: 'race-access-6', refreshJti: 'race-refresh-6' }),
   ];
-  const outcomes = await Promise.allSettled(contenders.map((input) => store.register(input)));
-  expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
-  expect(outcomes.filter(({ status }) => status === 'rejected')).toHaveLength(1);
+  const outcomes = await Promise.allSettled(contenders.map((input) => {
+    clock += 1000;
+    return store.register(input);
+  }));
+  expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(2);
   expect(client.sets.get('gmp:auth:user:V050')?.size).toBe(5);
 
   const active = await Promise.all([
     store.isActive('race-5', 'V050', 'race-access-5'),
     store.isActive('race-6', 'V050', 'race-access-6'),
   ]);
-  expect(active.filter(Boolean)).toHaveLength(1);
+  expect(active.filter(Boolean)).toHaveLength(2);
 });
 
 test('Redis invalidateUser revokes every indexed sid even above the configured limit', async () => {

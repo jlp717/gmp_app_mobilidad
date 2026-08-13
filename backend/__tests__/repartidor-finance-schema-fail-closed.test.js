@@ -149,7 +149,7 @@ describe('repartidor finance detalle ownership binding', () => {
     jest.clearAllMocks();
   });
 
-  test('binds the owner independently for both vendor columns', async () => {
+  test('binds detalle ownership to the authorized OPP repartidor', async () => {
     mockQueryWithParams.mockResolvedValue([]);
 
     await expect(financeService.getDetalleVencimiento({
@@ -163,9 +163,12 @@ describe('repartidor finance detalle ownership binding', () => {
     })).resolves.toBeNull();
 
     const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toContain('TRIM(CVC.CODIGOVENDEDOR) = ? OR TRIM(CVC.CODIGOVENDEDORCOBRO) = ?');
-    expect(params).toEqual(['CAC', 2026, 'A', 1, 42, 1, '94', '94']);
-    expect(params).toHaveLength(8);
+    expect(sql).toMatch(/TRIM\(OPP\.CODIGOREPARTIDOR\) = \?/i);
+    expect(sql).toMatch(/OPP\.SUBEMPRESA = CPC\.SUBEMPRESAPEDIDO/i);
+    expect(sql).not.toMatch(/AND\s+TRIM\(CVC\.CODIGOVENDEDOR(?:COBRO)?\)\s*=/i);
+    expect(sql).not.toMatch(/AND\s+CVC\.CODIGOVENDEDORCOBRO\s*=/i);
+    expect(params).toEqual(['CAC', 2026, 'A', 1, 42, 1, '94']);
+    expect(params).toHaveLength(7);
   });
 });
 

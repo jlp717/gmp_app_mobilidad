@@ -29,6 +29,7 @@ describe('canonical reparto actor privilege', () => {
   test.each([
     { id: 'J1', code: '17', role: 'JEFE_VENTAS' },
     { id: 'J1', code: '17', role: 'JEFE_VENTAS', isJefeVentas: true },
+    { id: 'J1', code: '17', role: 'JEFE_VENTAS', activeMode: 'COMERCIAL', isJefeVentas: true },
   ])('does not let sales-manager flags act for another repartidor', (user) => {
     expect(() => buildConfirmationCommand({
       user,
@@ -37,6 +38,25 @@ describe('canonical reparto actor privilege', () => {
       code: 'DELIVERY_OWNERSHIP_REQUIRED',
       statusCode: 403,
     }));
+  });
+
+  test('allows JEFE supervising Perfil Reparto to confirm for selected driver', () => {
+    const command = buildConfirmationCommand({
+      user: {
+        id: 'V98',
+        code: '98',
+        role: 'JEFE_VENTAS',
+        activeMode: 'REPARTIDOR',
+        isJefeVentas: true,
+      },
+      ...requestFor('95'),
+    });
+
+    expect(command.actor).toMatchObject({
+      repartidorId: '95',
+      privileged: true,
+      role: 'JEFE_VENTAS',
+    });
   });
 
   test('allows only ADMIN to select another repartidor in the internal contract', () => {

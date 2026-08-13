@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Holographic KPI Dashboard with futuristic design
@@ -342,7 +343,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                   final displayAmount = amount * _progressController.value;
                   return FittedBox(
                     child: Text(
-                      '${displayAmount.toStringAsFixed(0)}€',
+                      CurrencyFormatter.format(displayAmount),
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.bold,

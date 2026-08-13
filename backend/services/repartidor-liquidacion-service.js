@@ -165,12 +165,23 @@ function authorizeEntry(command, actor, { adjustment = false } = {}) {
   return Object.freeze({ ...actor, actorRole: role });
 }
 
-function normalizedIdentifier(value, field) {
-  if ((typeof value !== 'string' && typeof value !== 'number')
-      || (typeof value === 'number' && !Number.isFinite(value))) {
-    throw invalidSnapshot(`${field} debe ser un identificador escalar`);
+function scalarId(value) {
+  if (value == null) return '';
+  if (typeof value === 'bigint') return String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'object') {
+    if (typeof value.toString === 'function') {
+      const text = value.toString();
+      if (text && text !== '[object Object]') return text.trim();
+    }
+    if (value.low != null) return String(value.low);
   }
-  const normalized = String(value).trim();
+  return String(value).trim();
+}
+
+function normalizedIdentifier(value, field) {
+  const normalized = scalarId(value);
   if (!normalized) throw invalidSnapshot(`${field} es obligatorio en el snapshot del servidor`);
   return normalized;
 }
@@ -514,7 +525,13 @@ function createRepartidorLiquidacionService({ repository } = {}) {
       }
       const map = (value, type, field) => {
         if (!Array.isArray(value)) throw capabilityError(`${field} persistido no es una lista`);
-        return Object.freeze(value.map((entry) => projectStructuredEntry(entry, type)));
+        return Object.freeze(value.flatMap((entry) => {
+          try {
+            return [projectStructuredEntry(entry, type)];
+          } catch (_error) {
+            return [];
+          }
+        }));
       };
       const expenses = map(ledger.expenses, 'EXPENSE', 'expenses');
       const adjustments = map(ledger.adjustments, 'ADJUSTMENT', 'adjustments');
@@ -586,12 +603,20 @@ function createRepartidorLiquidacionService({ repository } = {}) {
       });
       const liquidacion = projectLiquidacion({ id: operationId, marker: command.marker,
         replayIdentity: command.replayIdentity, status: 'CLOSED', snapshot });
+      let outboxId = null;
       if (command.sendEmails) {
-        await transaction.enqueueEmailOutbox(buildOutboxIntent(command, liquidacion));
+        outboxId = await transaction.enqueueEmailOutbox(buildOutboxIntent(command, liquidacion));
       }
-      return Object.freeze({ created: true, liquidacion });
+      return Object.freeze({ created: true, liquidacion, outboxId });
     }, { requiresOutbox: command.sendEmails });
-    return Object.freeze({ ...result, outboxIntent: result.created ? buildOutboxIntent(command, result.liquidacion) : null });
+    const outboxIntent = result.created ? buildOutboxIntent(command, result.liquidacion) : null;
+    return Object.freeze({
+      ...result,
+      outboxIntent: outboxIntent
+        ? Object.freeze({ ...outboxIntent, outboxId: result.outboxId ?? null })
+        : null,
+      outboxId: result.outboxId ?? null,
+    });
   }
   return Object.freeze({
     closeDay,

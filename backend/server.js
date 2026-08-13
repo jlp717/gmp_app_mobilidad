@@ -39,10 +39,21 @@ const repartoFinanceWriteGuard = createRepartoWriteGuard(
   repartoRuntime,
   { requiredCapability: 'finance' },
 );
+const repartoWritesEnabledGuard = createRepartoWriteGuard(
+  repartoRuntime,
+  { requiredCapability: null },
+);
 function repartoFinanzasWriteGuard(req, res, next) {
   const isConfirmationWrite = req.path === '/rutero/confirm-delivery-cobro'
     || req.path.startsWith('/rutero/evidence/');
   return (isConfirmationWrite ? repartoConfirmationWriteGuard : repartoFinanceWriteGuard)(req, res, next);
+}
+function repartoFamilyWriteGuard(req, res, next) {
+  // Day-scoped rutero order is app routing metadata, not confirmation ledger.
+  if (req.path.startsWith('/rutero/order')) {
+    return repartoWritesEnabledGuard(req, res, next);
+  }
+  return repartoConfirmationWriteGuard(req, res, next);
 }
 const USE_TS_ROUTES = repartoRouteMode.useTsRoutes;
 const USE_DDD_ROUTES = repartoRouteMode.useDddRoutes;
@@ -721,7 +732,7 @@ app.get('/api/app/version', (req, res) => {
 // selected application route family. Keep the guard before every reparto
 // family mount so an invalid runtime can never fall through to legacy writes.
 app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);
-app.use('/api/repartidor', verifyToken, repartoConfirmationWriteGuard);
+app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);
 app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
 
 if (USE_TS_ROUTES && global.__TS_APP__) {
@@ -861,6 +872,29 @@ async function startServer() {
     if (process.send) {
       process.send('ready');
     }
+
+    try {
+      const {
+        startRepartoNotificationScheduler,
+      } = require('./services/reparto-notification-scheduler');
+      startRepartoNotificationScheduler();
+      logger.info('Reparto notification scheduler started (digest 18:00 Europe/Madrid)');
+    } catch (schedErr) {
+      logger.warn(`Reparto notification scheduler unavailable: ${schedErr.message}`);
+    }
+
+    // Non-blocking ERP column contract probe (sales/email/CRUT).
+    setImmediate(async () => {
+      try {
+        const { validateErpColumnContracts } = require('./services/erp-column-contract');
+        const report = await validateErpColumnContracts();
+        if (!report.ok) {
+          logger.error('[erp-column-contract] One or more ERP column contracts failed — check logs');
+        }
+      } catch (contractErr) {
+        logger.warn(`[erp-column-contract] skipped: ${contractErr.message}`);
+      }
+    });
   });
   server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
   server.headersTimeout = Math.min(65000, HTTP_REQUEST_TIMEOUT_MS + 5000);
@@ -1097,6 +1131,17 @@ const gracefulShutdown = async (signal, exitCode = 0) => {
   }
   
   // 6. Rate limiter (security.js globalLimiter is express-rate-limit, no stopCleanup needed)
+
+  // 7. Stop reparto notification scheduler
+  try {
+    const {
+      stopRepartoNotificationScheduler,
+    } = require('./services/reparto-notification-scheduler');
+    stopRepartoNotificationScheduler();
+    logger.info('Reparto notification scheduler stopped');
+  } catch (e) {
+    logger.warn(`Reparto notification scheduler stop error: ${e.message}`);
+  }
   
   logger.info('📴 Graceful shutdown complete');
   process.exit(exitCode);

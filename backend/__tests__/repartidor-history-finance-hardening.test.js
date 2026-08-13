@@ -175,11 +175,14 @@ describe('repartidor history document hardening', () => {
     expect(response.body.pagination).toEqual({ limit: 1, offset: 1, hasMore: true, nextOffset: 2 });
     const [sql, params] = mockQueryWithParams.mock.calls[0];
     expect(sql).toMatch(/LOGICAL_DOCUMENTS[\s\S]*PAGED_DOCUMENTS/i);
-    expect(sql).toMatch(/ORDER BY[\s\S]*OFFSET \? ROWS[\s\S]*FETCH NEXT \? ROWS ONLY/i);
+    // DB2 for i rejects OFFSET inside CTEs; paginate by ROW_NUMBER bounds.
+    expect(sql).toContain('LOGICAL_POSITION > ?');
+    expect(sql).toContain('LOGICAL_POSITION <= ?');
+    expect(sql).not.toMatch(/OFFSET \? ROWS/i);
     expect(sql).toMatch(/CVC\.TIPODOCUMENTO[\s\S]*CVC\.ORIGENDOCUMENTO[\s\S]*CVC\.SUBEMPRESADOCUMENTO[\s\S]*CVC\.EJERCICIODOCUMENTO[\s\S]*CVC\.SERIEDOCUMENTO[\s\S]*CVC\.TERMINALDOCUMENTO[\s\S]*CVC\.NUMERODOCUMENTO[\s\S]*CVC\.XDEDOCUMENTO[\s\S]*CVC\.DEXDOCUMENTO/i);
     expect(sql).toMatch(/TRIM\(CVC\.TIPODOCUMENTO\)\s*=\s*'CAC'/i);
     expect(sql).toMatch(/TRIM\(CVC\.ORIGENDOCUMENTO\)\s*=\s*'B'/i);
-    expect(params.slice(-2)).toEqual([1, 1]);
+    expect(params.slice(-2)).toEqual([1, 2]);
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
   });
 
@@ -206,7 +209,7 @@ describe('repartidor history document hardening', () => {
     expect(response.status).toBe(200);
     expect(response.body.documents).toHaveLength(50);
     expect(response.body.pagination).toEqual({ limit: 50, offset: 200, hasMore: true, nextOffset: 250 });
-    expect(mockQueryWithParams.mock.calls[0][1].slice(-2)).toEqual([200, 50]);
+    expect(mockQueryWithParams.mock.calls[0][1].slice(-2)).toEqual([200, 250]);
   });
 
   test.each([

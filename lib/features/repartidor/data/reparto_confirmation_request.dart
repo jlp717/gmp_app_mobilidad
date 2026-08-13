@@ -148,14 +148,15 @@ class RepartoPayment {
 }
 
 /// Immutable payload builder for the canonical reparto confirmation endpoint.
-/// Identity and repartidor ownership are intentionally omitted: the backend
-/// derives both from the authenticated bearer token.
+/// Ownership is derived from the bearer token; JEFE in Perfil Reparto must
+/// also send [repartidorId] for the selected driver (Ver como).
 class RepartoConfirmationRequest {
   const RepartoConfirmationRequest({
     required this.itemId,
     required this.status,
     required this.occurredAt,
     required this.lineas,
+    this.repartidorId,
     this.receiver,
     this.firma,
     this.evidencias = const <String>[],
@@ -170,6 +171,7 @@ class RepartoConfirmationRequest {
   final RepartoDeliveryStatus status;
   final DateTime occurredAt;
   final List<RepartoDeliveryLine> lineas;
+  final String? repartidorId;
   final RepartoReceiver? receiver;
   final String? firma;
   final List<String> evidencias;
@@ -186,6 +188,7 @@ class RepartoConfirmationRequest {
         'itemId': itemId.trim(),
         'status': status.apiValue,
         'occurredAt': occurredAt.toUtc().toIso8601String(),
+        if (_hasText(repartidorId)) 'repartidorId': repartidorId!.trim(),
         'lineas': lineas.map((line) => line.toJson()).toList(growable: false),
         if (receiver != null) 'receiver': receiver!.toJson(),
         if (_hasText(firma)) 'firma': firma!.trim(),

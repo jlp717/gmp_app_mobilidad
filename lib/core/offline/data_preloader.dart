@@ -28,6 +28,53 @@ class DataPreloaderService {
     '/pedidos/brands',
   ];
 
+  /// Extra preload keys for repartidor tabs (built dynamically with ids/dates).
+  Future<void> preloadRepartidorTabData({
+    required String repartidorId,
+    DateTime? date,
+  }) async {
+    final id = repartidorId.trim();
+    if (id.isEmpty || id.contains(',')) return;
+    if (ConnectivityService.instance.currentStatus !=
+        ConnectivityStatus.online) {
+      return;
+    }
+    final day = date ?? DateTime.now();
+    final ymd =
+        '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    final endpoints =
+        <({String endpoint, String cacheKey, Map<String, dynamic>? query})>[
+      (
+        endpoint: '/entregas/pendientes/$id',
+        cacheKey: 'entregas:pendientes:$id:$ymd::::::0:',
+        query: {'date': ymd, 'limit': 100, 'offset': 0},
+      ),
+      (
+        endpoint: '/repartidor-finanzas/daily-summary/$id',
+        cacheKey: 'repartidor_finanzas_liquidacion_${id}_$ymd',
+        query: {'date': ymd},
+      ),
+      (
+        endpoint: '/repartidor/rutero/order/$id',
+        cacheKey: 'preload:_repartidor_rutero_order_${id}_$ymd',
+        query: {'date': ymd},
+      ),
+    ];
+    for (final item in endpoints) {
+      try {
+        await OfflineAwareApi.get(
+          item.endpoint,
+          queryParameters: item.query,
+          cacheKey: item.cacheKey,
+          forceRefresh: false,
+        );
+        debugPrint('[DataPreloader] repartidor ${item.endpoint}: SUCCESS');
+      } catch (e) {
+        debugPrint('[DataPreloader] repartidor ${item.endpoint}: $e');
+      }
+    }
+  }
+
   /// Precarga datos críticos cuando hay conectividad
   Future<PreloadResult> preloadCriticalData({
     String? vendorCode,
@@ -100,6 +147,12 @@ class DataPreloaderService {
           results[endpoint] = false;
           debugPrint('[DataPreloader] Error preloading $endpoint: $e');
         }
+      }
+
+      if (vendorCode != null &&
+          vendorCode.trim().isNotEmpty &&
+          !vendorCode.contains(',')) {
+        await preloadRepartidorTabData(repartidorId: vendorCode.trim());
       }
 
       // Actualizar marca de tiempo de última sincronización

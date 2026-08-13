@@ -7,6 +7,12 @@ const logger = require('../middleware/logger');
 const { verifyToken, requireRoles } = require('../middleware/auth');
 const financeService = require('../services/repartidor-finance-service');
 const {
+  notifyAfterConfirm,
+} = require('../services/reparto-variance-notification-service');
+const {
+  processLiquidacionOutboxIntent,
+} = require('../services/repartidor-liquidacion-outbox-service');
+const {
   buildConfirmationCommand,
   RepartoContractError,
 } = require('../services/reparto-confirmation-contract');
@@ -101,7 +107,12 @@ function requireCanonicalConfirmationRole(req, res, next) {
     });
   }
   const role = String(user.role || '').trim().toUpperCase();
-  if (role !== 'REPARTIDOR' && role !== 'ADMIN') {
+  const activeMode = String(user.activeMode || '').trim().toUpperCase();
+  // JEFE in Perfil Reparto (activeMode=REPARTIDOR) may supervise confirmations.
+  const allowed = role === 'REPARTIDOR'
+    || role === 'ADMIN'
+    || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
+  if (!allowed) {
     return res.status(403).json({
       success: false,
       code: 'REPARTO_CONFIRMATION_ROLE_REQUIRED',
@@ -124,10 +135,22 @@ function actorCode(user) {
 
 function evidenceRepartidorId(req, requested) {
   const role = String(req.user?.role || '').trim().toUpperCase();
+  const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
   const authenticated = actorCode(req.user);
   const target = String(requested || '').trim();
   if (role === 'ADMIN') {
     if (!target) throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'repartidorId es obligatorio para administrador', 400);
+    return target;
+  }
+  // JEFE in Perfil Reparto stages evidence for the selected driver (Ver como).
+  if (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR') {
+    if (!target) {
+      throw new EvidenceError(
+        'EVIDENCE_REPARTIDOR_REQUIRED',
+        'repartidorId es obligatorio para jefe en perfil reparto',
+        400,
+      );
+    }
     return target;
   }
   if (target && !codesMatch(authenticated, target)) {
@@ -232,10 +255,29 @@ const summaryQuerySchema = z.object({
   month: z.coerce.number().int().min(1).max(12).default(new Date().getMonth() + 1),
 });
 
+// Compat: APK 4.1.2+52 envia solo limit (a veces 200) sin from/to.
+// Defaults = ventana ±180 dias; limit se clampea a 100.
+const vencimientosDefaultFromIso = () => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - 180);
+  return d.toISOString().slice(0, 10);
+};
+const vencimientosDefaultToIso = () => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 180);
+  return d.toISOString().slice(0, 10);
+};
 const vencimientosQuerySchema = z.object({
-  from: dateSchema,
-  to: dateSchema,
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  from: dateSchema.default(vencimientosDefaultFromIso),
+  to: dateSchema.default(vencimientosDefaultToIso),
+  limit: z.preprocess(
+    (raw) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return 50;
+      return Math.min(100, Math.max(1, Math.trunc(n)));
+    },
+    z.number().int().min(1).max(100),
+  ).default(50),
   cursor: z.string().trim().min(1).max(512).optional(),
   clientCode: z.string().trim().max(20).optional(),
   estado: z.enum(['pendiente', 'vencido']).optional(),
@@ -297,7 +339,7 @@ const liquidacionCloseSchema = z.object({
   idempotencyToken: idempotencyTokenSchema,
   matricula: z.string().trim().max(20).optional(),
   codigoVehiculo: z.string().trim().max(10).optional(),
-  sendEmails: z.boolean().optional().default(false),
+  sendEmails: z.boolean().optional().default(true),
 }).strict();
 
 const LIQUIDACION_DERIVED_FIELDS = new Set([
@@ -885,6 +927,13 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfi
     await canonicalConfirmationRuntime.catalogService.validateConfirmation(command);
     const result = await canonicalConfirmationRuntime.confirmationService.confirm(command);
     await invalidateFinanceCaches(command.delivery.repartidorId);
+    if (result.created) {
+      Promise.resolve()
+        .then(() => notifyAfterConfirm({ command, result }))
+        .catch((notifyError) => {
+          logger.warn(`[variance] post-confirm notify failed: ${notifyError?.message || notifyError}`);
+        });
+    }
     return res.status(result.created ? 201 : 200).json({
       success: true,
       ...result,
@@ -924,6 +973,18 @@ router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.
     // Cache invalidation is a post-commit concern and only applies to a
     // newly created close. Replays must remain read-only.
     if (result.created) await invalidateFinanceCaches(body.repartidorId);
+
+    if (result.created && result.outboxIntent) {
+      Promise.resolve()
+        .then(() => processLiquidacionOutboxIntent({
+          liquidacion: result.liquidacion,
+          repartidorId: body.repartidorId,
+          outboxId: result.outboxId ?? result.outboxIntent?.outboxId ?? null,
+        }))
+        .catch((emailError) => {
+          logger.warn('[liq-outbox] post-close send failed: ' + (emailError && emailError.message ? emailError.message : emailError));
+        });
+    }
 
     return res.status(result.created ? 201 : 200).json({
       success: true,
@@ -1174,6 +1235,11 @@ router.get('/evolution/:repartidorId', verifyToken, requireRepartidorAccess((req
 // flags, so an automated test cannot accidentally enable DB2 writes.
 router.setCanonicalConfirmationRuntime = setCanonicalConfirmationRuntime;
 router.resetCanonicalConfirmationRuntime = resetCanonicalConfirmationRuntime;
+router.getCanonicalConfirmationRuntime = () => canonicalConfirmationRuntime;
+router.requireCanonicalConfirmationRole = requireCanonicalConfirmationRole;
+router.evidenceRepartidorId = evidenceRepartidorId;
+router.evidenceDocumentId = evidenceDocumentId;
+router.sendEvidenceError = sendEvidenceError;
 router.setCanonicalReceiptTimeoutMs = setCanonicalReceiptTimeoutMs;
 router.setCanonicalLiquidacionService = setCanonicalLiquidacionService;
 router.resetCanonicalLiquidacionService = resetCanonicalLiquidacionService;

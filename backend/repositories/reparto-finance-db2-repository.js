@@ -37,6 +37,8 @@ function resolveFinanceBindings(env = process.env) {
   return Object.freeze({
     runtime,
     tables: Object.freeze({ ...runtime.tables.finance }),
+    deliveryStatusTable: runtime.tables?.notifications?.deliveryStatus
+      || (runtime.schemas.app + '.DELIVERY_STATUS'),
     erpDataSchema: runtime.schemas.read,
     erpAppSchema: runtime.schemas.app,
     commissionConfigSchema,
@@ -118,7 +120,16 @@ function cobrosAmountColumn(info, alias = '') {
 
 function cobrosPendingColumn(info, alias = '') {
   const prefix = alias ? `${alias}.` : '';
-  return info.cobrosAligned ? `${prefix}IMPORTEPENDIENTE` : `${prefix}IMPORTE_PENDIENTE`;
+  if (typeof info.has === 'function') {
+    if (info.has('REPARTIDOR_COBROS', 'IMPORTEPENDIENTE')) return `${prefix}IMPORTEPENDIENTE`;
+    if (info.has('REPARTIDOR_COBROS', 'IMPORTE_PENDIENTE')) return `${prefix}IMPORTE_PENDIENTE`;
+    return 'CAST(0 AS DECIMAL(15,2))';
+  }
+  if (info.cobrosAligned && info.cobrosHasDocumentColumns !== false) {
+    return `${prefix}IMPORTEPENDIENTE`;
+  }
+  if (info.cobrosLegacy) return `${prefix}IMPORTE_PENDIENTE`;
+  return 'CAST(0 AS DECIMAL(15,2))';
 }
 
 function cobrosPaymentColumn(info, alias = '') {
@@ -261,9 +272,9 @@ function cobroDocumentCriteria(info, input) {
 
 function db2DateFromParts(yearExpression, monthExpression, dayExpression) {
   return `DATE(
-    RIGHT('0000' || TRIM(CHAR(${yearExpression})), 4) || '-' ||
-    RIGHT('00' || TRIM(CHAR(${monthExpression})), 2) || '-' ||
-    RIGHT('00' || TRIM(CHAR(${dayExpression})), 2)
+    DIGITS(DECIMAL(${yearExpression}, 4, 0)) || '-' ||
+    DIGITS(DECIMAL(${monthExpression}, 2, 0)) || '-' ||
+    DIGITS(DECIMAL(${dayExpression}, 2, 0))
   )`;
 }
 
@@ -290,7 +301,10 @@ function createRepartoFinanceDb2Repository(options = {}) {
     erpDataSchema,
     erpAppSchema,
     commissionConfigSchema,
+    deliveryStatusTable,
   } = bindings;
+  const deliveryStatus = deliveryStatusTable
+    || (erpAppSchema + '.DELIVERY_STATUS');
   const qwp = options.queryWithParams || queryWithParams;
   const poolFn = options.getPool || getPool;
   const initFn = options.initDb || initDb;
@@ -343,7 +357,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async lockDeliveryStatusTable(conn) {
-      await conn.query(`LOCK TABLE ${erpAppSchema}.DELIVERY_STATUS IN EXCLUSIVE MODE`);
+      await conn.query(`LOCK TABLE ${deliveryStatus} IN EXCLUSIVE MODE`);
     },
 
     async sumAppCollectedForDocument(conn, info, input) {
@@ -490,25 +504,41 @@ function createRepartoFinanceDb2Repository(options = {}) {
       const orderBy = cobrosDateOrderBy(info);
       const repFilterRc = inClause(`TRIM(${cobrosCodeColumn(info, 'RC')})`, ids);
       const notLiquidatedRc = cobrosNotLiquidatedCondition(info, 'RC');
+      const hasDocs = info.cobrosHasDocumentColumns !== false;
+      const idToken = info.cobrosHasIdempotencyToken === false
+        ? 'CAST(NULL AS VARCHAR(64)) AS IDEMPOTENCY_TOKEN'
+        : 'RC.IDEMPOTENCY_TOKEN';
+      const clientCol = hasDocs
+        ? (info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE AS CODIGOCLIENTEALBARAN')
+        : "CAST(NULL AS VARCHAR(20)) AS CODIGOCLIENTEALBARAN";
+      const clientJoinCol = hasDocs
+        ? (info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE')
+        : null;
+      const cliJoin = clientJoinCol
+        ? `LEFT JOIN ${erpDataSchema}.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${clientJoinCol})`
+        : '';
+      const clientName = clientJoinCol
+        ? "TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE"
+        : "CAST(NULL AS VARCHAR(80)) AS NOMBRE_CLIENTE";
       return run(`
     SELECT
       RC.ID,
-      RC.IDEMPOTENCY_TOKEN,
+      ${idToken},
       ${selectCols},
-      ${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE AS CODIGOCLIENTEALBARAN'},
-      TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE,
+      ${clientCol},
+      ${clientName},
       ${info.cobrosAligned ? 'RC.CODIGOFORMAPAGO' : 'RC.FORMA_PAGO AS CODIGOFORMAPAGO'},
-      ${info.cobrosAligned ? 'RC.TIPODOCUMENTO' : 'RC.TIPO_DOCUMENTO AS TIPODOCUMENTO'},
-      ${info.cobrosAligned ? 'RC.ORIGENDOCUMENTO' : "COALESCE(RC.ORIGEN_DOCUMENTO, 'B') AS ORIGENDOCUMENTO"},
-      ${info.cobrosAligned ? 'RC.SERIEDOCUMENTO' : "COALESCE(RC.SERIE_DOCUMENTO, '') AS SERIEDOCUMENTO"},
-      ${info.cobrosAligned ? 'RC.TERMINALDOCUMENTO' : 'COALESCE(RC.TERMINAL_DOCUMENTO, 0) AS TERMINALDOCUMENTO'},
-      ${info.cobrosAligned ? 'RC.NUMERODOCUMENTO' : 'RC.NUMERO_DOCUMENTO AS NUMERODOCUMENTO'},
-      ${info.cobrosAligned ? 'RC.EJERCICIODOCUMENTO' : 'RC.EJERCICIO_DOCUMENTO AS EJERCICIODOCUMENTO'},
-      ${info.cobrosAligned ? 'RC.XDEDOCUMENTO' : 'COALESCE(RC.XDE_DOCUMENTO, 1) AS XDEDOCUMENTO'},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.TIPODOCUMENTO' : 'RC.TIPO_DOCUMENTO AS TIPODOCUMENTO') : "CAST(NULL AS VARCHAR(10)) AS TIPODOCUMENTO"},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.ORIGENDOCUMENTO' : "COALESCE(RC.ORIGEN_DOCUMENTO, 'B') AS ORIGENDOCUMENTO") : "CAST('B' AS VARCHAR(10)) AS ORIGENDOCUMENTO"},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.SERIEDOCUMENTO' : "COALESCE(RC.SERIE_DOCUMENTO, '') AS SERIEDOCUMENTO") : "CAST('' AS VARCHAR(10)) AS SERIEDOCUMENTO"},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.TERMINALDOCUMENTO' : 'COALESCE(RC.TERMINAL_DOCUMENTO, 0) AS TERMINALDOCUMENTO') : 'CAST(0 AS INTEGER) AS TERMINALDOCUMENTO'},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.NUMERODOCUMENTO' : 'RC.NUMERO_DOCUMENTO AS NUMERODOCUMENTO') : 'CAST(0 AS INTEGER) AS NUMERODOCUMENTO'},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.EJERCICIODOCUMENTO' : 'RC.EJERCICIO_DOCUMENTO AS EJERCICIODOCUMENTO') : 'CAST(0 AS INTEGER) AS EJERCICIODOCUMENTO'},
+      ${hasDocs ? (info.cobrosAligned ? 'RC.XDEDOCUMENTO' : 'COALESCE(RC.XDE_DOCUMENTO, 1) AS XDEDOCUMENTO') : 'CAST(1 AS INTEGER) AS XDEDOCUMENTO'},
       ${cobrosAmountColumn(info, 'RC')} AS IMPORTEVENCIMIENTO,
       ${cobrosPendingColumn(info, 'RC')} AS IMPORTEPENDIENTE
     FROM ${tables.cobros} RC
-    LEFT JOIN ${erpDataSchema}.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE'})
+    ${cliJoin}
     WHERE ${repFilterRc.sql}
       AND ${aliasedDateCol} = ?
       AND ${notLiquidatedRc}
@@ -549,11 +579,12 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async selectVencimientosPage({
-      ids, fromYmd, toYmd, clientCode, estado, todayYmd, offset, pageLimit,
+      info, ids, fromYmd, toYmd, clientCode, estado, todayYmd, offset, pageLimit,
     }) {
       const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
       const dueYmd = vencimientosDueYmdExpression();
       const params = [...repFilter.params, fromYmd, toYmd];
+      const hasAppDocs = info?.cobrosHasDocumentColumns !== false;
       let clientFilter = '';
       if (clientCode) {
         clientFilter = ' AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?';
@@ -567,6 +598,43 @@ function createRepartoFinanceDb2Repository(options = {}) {
         params.push(todayYmd);
       }
       params.push(offset, offset + pageLimit);
+
+      const pendingExpr = hasAppDocs
+        ? 'CAST(CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0) AS DECIMAL(15,2)) AS IMPORTEPENDIENTE'
+        : 'CAST(CVC.IMPORTEPENDIENTE AS DECIMAL(15,2)) AS IMPORTEPENDIENTE';
+      const appCobrosJoin = hasAppDocs ? `
+        LEFT JOIN (
+          SELECT
+            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+            TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
+            TRIM(TIPODOCUMENTO) AS TIPODOCUMENTO,
+            TRIM(ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
+            TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,
+            EJERCICIODOCUMENTO,
+            TRIM(SERIEDOCUMENTO) AS SERIEDOCUMENTO,
+            TERMINALDOCUMENTO,
+            NUMERODOCUMENTO,
+            XDEDOCUMENTO,
+            DEXDOCUMENTO,
+            SUM(COALESCE(IMPORTEVENCIMIENTO, 0)) AS IMPORTE_COBRADO_APP
+          FROM ${tables.cobros}
+          GROUP BY TRIM(CODIGOVENDEDOR), TRIM(CODIGOCLIENTEALBARAN),
+            TRIM(TIPODOCUMENTO), TRIM(ORIGENDOCUMENTO),
+            TRIM(SUBEMPRESADOCUMENTO), EJERCICIODOCUMENTO,
+            TRIM(SERIEDOCUMENTO), TERMINALDOCUMENTO,
+            NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO
+        ) APP_COBROS
+          ON APP_COBROS.CODIGOVENDEDOR = TRIM(OPP.CODIGOREPARTIDOR)
+          AND APP_COBROS.CODIGOCLIENTEALBARAN = TRIM(CVC.CODIGOCLIENTEALBARAN)
+          AND APP_COBROS.TIPODOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
+          AND APP_COBROS.ORIGENDOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
+          AND APP_COBROS.SUBEMPRESADOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
+          AND APP_COBROS.EJERCICIODOCUMENTO = CVC.EJERCICIODOCUMENTO
+          AND APP_COBROS.SERIEDOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
+          AND APP_COBROS.TERMINALDOCUMENTO = CVC.TERMINALDOCUMENTO
+          AND APP_COBROS.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
+          AND COALESCE(APP_COBROS.XDEDOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
+          AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)` : '';
 
       return run(`
     SELECT *
@@ -609,7 +677,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
           CLCL1.DIASLIMITECREDITO,
           CLCL1.DIASLIMITECREDITOCONFECHAALB,
           CVC.IMPORTEVENCIMIENTO,
-          CAST(CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0) AS DECIMAL(15,2)) AS IMPORTEPENDIENTE,
+          ${pendingExpr},
           ${dueYmd} AS DUE_YMD
         FROM ${erpDataSchema}.CVC CVC
         INNER JOIN ${erpDataSchema}.CPC CPC
@@ -621,42 +689,12 @@ function createRepartoFinanceDb2Repository(options = {}) {
         INNER JOIN ${erpDataSchema}.OPP OPP
           ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
           AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+          AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
         LEFT JOIN ${erpDataSchema}.CLI CLI
           ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
         LEFT JOIN ${erpDataSchema}.CLCL1 CLCL1
           ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-        LEFT JOIN (
-          SELECT
-            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
-            TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
-            TRIM(TIPODOCUMENTO) AS TIPODOCUMENTO,
-            TRIM(ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
-            TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,
-            EJERCICIODOCUMENTO,
-            TRIM(SERIEDOCUMENTO) AS SERIEDOCUMENTO,
-            TERMINALDOCUMENTO,
-            NUMERODOCUMENTO,
-            XDEDOCUMENTO,
-            DEXDOCUMENTO,
-            SUM(COALESCE(IMPORTEVENCIMIENTO, 0)) AS IMPORTE_COBRADO_APP
-          FROM ${tables.cobros}
-          GROUP BY TRIM(CODIGOVENDEDOR), TRIM(CODIGOCLIENTEALBARAN),
-            TRIM(TIPODOCUMENTO), TRIM(ORIGENDOCUMENTO),
-            TRIM(SUBEMPRESADOCUMENTO), EJERCICIODOCUMENTO,
-            TRIM(SERIEDOCUMENTO), TERMINALDOCUMENTO,
-            NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO
-        ) APP_COBROS
-          ON APP_COBROS.CODIGOVENDEDOR = TRIM(OPP.CODIGOREPARTIDOR)
-          AND APP_COBROS.CODIGOCLIENTEALBARAN = TRIM(CVC.CODIGOCLIENTEALBARAN)
-          AND APP_COBROS.TIPODOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
-          AND APP_COBROS.ORIGENDOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
-          AND APP_COBROS.SUBEMPRESADOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
-          AND APP_COBROS.EJERCICIODOCUMENTO = CVC.EJERCICIODOCUMENTO
-          AND APP_COBROS.SERIEDOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
-          AND APP_COBROS.TERMINALDOCUMENTO = CVC.TERMINALDOCUMENTO
-          AND APP_COBROS.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
-          AND COALESCE(APP_COBROS.XDEDOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
-          AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
+        ${appCobrosJoin}
         WHERE ${repFilter.sql}
           AND ${dueYmd} BETWEEN ? AND ?
           AND COALESCE(CVC.ANULADOSN, '') <> 'S'
@@ -769,7 +807,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     async selectDeliveryStatusByToken(idempotencyToken) {
       return run(`
       SELECT CONFORMADOSN
-      FROM ${erpAppSchema}.DELIVERY_STATUS
+      FROM ${deliveryStatus}
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
     `, [idempotencyToken]);
@@ -778,7 +816,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     async selectDeliveryStatus(conn, { statusCol, repCol, lookupCol, lookupVal }) {
       return runOn(conn, `
         SELECT ${statusCol}, UPDATED_AT, ${repCol}
-        FROM ${erpAppSchema}.DELIVERY_STATUS
+        FROM ${deliveryStatus}
         WHERE ${lookupCol} = ?
         FETCH FIRST 1 ROW ONLY
       `, [lookupVal]);
@@ -786,7 +824,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
 
     async deleteDeliveryStatus(conn, { lookupCol, lookupVal }) {
       await runOn(conn, `
-        DELETE FROM ${erpAppSchema}.DELIVERY_STATUS
+        DELETE FROM ${deliveryStatus}
         WHERE ${lookupCol} = ?
       `, [lookupVal]);
     },
@@ -795,7 +833,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       status, lat, lon, repartidorId, idempotencyToken,
     }) {
       await runOn(conn, `
-          INSERT INTO ${erpAppSchema}.DELIVERY_STATUS (
+          INSERT INTO ${deliveryStatus} (
             STATUS,
             LATITUD,
             LONGITUD,
@@ -817,7 +855,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       itemId, status, observaciones, firma, lat, lon, repartidorId,
     }) {
       await runOn(conn, `
-          INSERT INTO ${erpAppSchema}.DELIVERY_STATUS (
+          INSERT INTO ${deliveryStatus} (
             ID,
             CONFORMADOSN,
             OBSERVACIONES,
@@ -904,7 +942,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     async selectCommissionTiers() {
       return run(`
     SELECT ID, THRESHOLD_PCT, COMMISSION_PCT, SORT_ORDER, ACTIVE_SN
-    FROM ${commissionConfigSchema}.REPARTIDOR_COMMISSION_TIERS
+    FROM ${tables.commissionTiers}
     WHERE ACTIVE_SN = 'S'
     ORDER BY SORT_ORDER, THRESHOLD_PCT
   `, []);
@@ -940,9 +978,30 @@ function createRepartoFinanceDb2Repository(options = {}) {
     INNER JOIN ${erpDataSchema}.CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
       AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+      AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
     WHERE ${repFilter.sql}
       AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
   `, [...repFilter.params, fromYmd, toYmd]);
+    },
+
+    async selectDailyErpDebt({ ids, dateYmd }) {
+      const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
+      return run(`
+    SELECT COALESCE(SUM(COALESCE(CVC.IMPORTEPENDIENTE, 0)), 0) AS DEUDA_PENDIENTE
+    FROM ${erpDataSchema}.OPP OPP
+    INNER JOIN ${erpDataSchema}.CPC CPC
+      ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+      AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+      AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
+    LEFT JOIN ${erpDataSchema}.CVC CVC
+      ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+      AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+      AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+      AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
+      AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+    WHERE ${repFilter.sql}
+      AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) = ?
+  `, [...repFilter.params, dateYmd]);
     },
 
     async selectCollectedFromErp({ ids, fromYmd, toYmd }) {
@@ -957,6 +1016,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     INNER JOIN ${erpDataSchema}.CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
       AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+      AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
     LEFT JOIN ${erpDataSchema}.CVC CVC
       ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
       AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
@@ -970,7 +1030,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
 
     async deactivateCommissionTiers(conn, updatedBy) {
       await runOn(conn, `
-      UPDATE ${commissionConfigSchema}.REPARTIDOR_COMMISSION_TIERS
+      UPDATE ${tables.commissionTiers}
       SET ACTIVE_SN = 'N',
           UPDATED_BY = ?,
           UPDATED_AT = CURRENT_TIMESTAMP
@@ -982,7 +1042,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       for (let index = 0; index < tiers.length; index++) {
         const tier = tiers[index];
         await runOn(conn, `
-        INSERT INTO ${commissionConfigSchema}.REPARTIDOR_COMMISSION_TIERS (
+        INSERT INTO ${tables.commissionTiers} (
           THRESHOLD_PCT,
           COMMISSION_PCT,
           SORT_ORDER,
@@ -1024,6 +1084,16 @@ function createRepartoFinanceDb2Repository(options = {}) {
         TRIM(COALESCE(CVC.CODIGOVENDEDORCOBRO, '')) AS CODIGOVENDEDORCOBRO,
         TRIM(COALESCE(CVC.ANULADOSN, '')) AS ANULADOSN
       FROM ${erpDataSchema}.CVC CVC
+      INNER JOIN ${erpDataSchema}.CPC CPC
+        ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+        AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+        AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(CPC.SERIEALBARAN)
+        AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
+        AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+      INNER JOIN ${erpDataSchema}.OPP OPP
+        ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+        AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+        AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
       LEFT JOIN ${erpDataSchema}.CLI CLI
         ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
       WHERE TRIM(CVC.TIPODOCUMENTO) = ?
@@ -1032,9 +1102,9 @@ function createRepartoFinanceDb2Repository(options = {}) {
         AND CVC.TERMINALDOCUMENTO = ?
         AND CVC.NUMERODOCUMENTO = ?
         AND COALESCE(CVC.XDEDOCUMENTO, 1) = ?
-        AND (TRIM(CVC.CODIGOVENDEDOR) = ? OR TRIM(CVC.CODIGOVENDEDORCOBRO) = ?)
+        AND TRIM(OPP.CODIGOREPARTIDOR) = ?
       FETCH FIRST 1 ROW ONLY
-    `, [...params, repartidorId, repartidorId]);
+    `, [...params, repartidorId]);
     },
 
     async selectSaldoFromBalances(repartidorId) {

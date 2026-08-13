@@ -107,21 +107,53 @@ function createAuthClaimsSessionStore({
 
   async function redisRegisterSession(client, sessionKey, userKey, session) {
     if (typeof client.eval !== 'function') throw unavailable();
+    // AUTH_REGISTER_V3: prune ghosts first, then drop oldest live sessions
+    // until under the soft limit so a new mobile login is never blocked by
+    // abandoned refresh tokens (common after cert probes / app kills).
     const script = `
-      -- AUTH_REGISTER_V2
+      -- AUTH_REGISTER_V3
       local members = redis.call('SMEMBERS', KEYS[2])
-      if #members > tonumber(ARGV[6]) then
-        return -1
-      end
       for _, sid in ipairs(members) do
         if redis.call('EXISTS', ARGV[5] .. sid) == 0 then
           redis.call('SREM', KEYS[2], sid)
         end
       end
+      members = redis.call('SMEMBERS', KEYS[2])
+      if #members > tonumber(ARGV[6]) then
+        return -1
+      end
       local is_member = redis.call('SISMEMBER', KEYS[2], ARGV[1])
-      local session_count = redis.call('SCARD', KEYS[2])
-      if is_member == 0 and session_count >= tonumber(ARGV[4]) then
-        return 0
+      if is_member == 0 then
+        local limit = tonumber(ARGV[4])
+        while redis.call('SCARD', KEYS[2]) >= limit do
+          local oldest_sid = nil
+          local oldest_created = nil
+          for _, sid in ipairs(redis.call('SMEMBERS', KEYS[2])) do
+            local raw = redis.call('GET', ARGV[5] .. sid)
+            if not raw then
+              redis.call('SREM', KEYS[2], sid)
+            else
+              local ok, parsed = pcall(cjson.decode, raw)
+              local created = 0
+              if ok and type(parsed) == 'table' and parsed.createdAt then
+                created = tonumber(parsed.createdAt) or 0
+              end
+              if oldest_created == nil or created < oldest_created then
+                oldest_created = created
+                oldest_sid = sid
+              end
+            end
+          end
+          if not oldest_sid then
+            break
+          end
+          local old_key = ARGV[5] .. oldest_sid
+          local ttl = redis.call('TTL', old_key)
+          if ttl < 1 then ttl = tonumber(ARGV[3]) end
+          redis.call('SET', ARGV[7] .. oldest_sid, '1', 'EX', ttl)
+          redis.call('DEL', old_key)
+          redis.call('SREM', KEYS[2], oldest_sid)
+        end
       end
       redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
       redis.call('SADD', KEYS[2], ARGV[1])
@@ -138,6 +170,7 @@ function createAuthClaimsSessionStore({
         String(sessionLimit),
         SESSION_PREFIX,
         String(redisIndexHardLimit),
+        REVOKED_PREFIX,
       ],
     }));
     const numericResult = Number(result);

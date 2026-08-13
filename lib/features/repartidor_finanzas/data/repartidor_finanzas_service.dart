@@ -144,7 +144,11 @@ class RepartidorFinanzasService {
   }
 
   static String _isoDate(DateTime value) {
-    return value.toIso8601String().substring(0, 10);
+    // Calendar date in local components — never UTC-shift via toIso8601String.
+    final year = value.year.toString().padLeft(4, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 
   static String dailyLiquidacionCacheKey(String repartidorId, String date) =>
@@ -306,7 +310,7 @@ class RepartidorFinanzasService {
     required String idempotencyToken,
     String? matricula,
     String? codigoVehiculo,
-    bool sendEmails = false,
+    bool sendEmails = true,
   }) async {
     final payload = <String, dynamic>{
       'repartidorId': repartidorId,

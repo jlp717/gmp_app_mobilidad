@@ -216,11 +216,17 @@ describe('delivery detail identity and ownership', () => {
   });
 
   test('requires client code before querying a non-unique albarán number', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([
+      { CLIENTE: '4300009479' },
+      { CLIENTE: '4300001111' },
+    ]);
+
     const res = await request(makeApp()).get('/albaran/404/2026?serie=S&terminal=10');
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual(expect.objectContaining({ code: 'CLIENT_REQUIRED' }));
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/SELECT DISTINCT/i);
   });
 
   test('returns 409 instead of selecting an arbitrary header for an ambiguous identity', async () => {

@@ -256,60 +256,17 @@ class CobrosProvider extends ChangeNotifier {
     double? latitud,
     double? longitud,
   }) async {
-    try {
-      final response = await ApiClient.post('/entregas/update', {
-        'itemId': itemId,
-        'status': estado.name.toUpperCase(),
-        'repartidorId': employeeCode,
-        'cantidadEntregada': cantidadEntregada,
-        'observaciones': observaciones,
-        'latitud': latitud,
-        'longitud': longitud,
-      });
-      if (response['success'] == true) {
-        await CacheService.invalidateByPrefix(
-          'entregas:pendientes:$employeeCode:',
-        );
-        final index = _albaranesPendientes
-            .indexWhere((a) => a.items.any((i) => i.itemId == itemId));
-        if (index >= 0) {
-          final item = _albaranesPendientes[index]
-              .items
-              .firstWhere((i) => i.itemId == itemId);
-          item.estado = estado;
-          item.cantidadEntregada = cantidadEntregada ?? item.cantidadEntregada;
-          final albaran = _albaranesPendientes[index];
-          if (albaran.completo) albaran.estado = EstadoEntrega.entregado;
-          notifyListeners();
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      _error = 'Error actualizando entrega: $e';
-      notifyListeners();
-      return false;
-    }
+    _error =
+        'Endpoint retirado (410). Usa el flujo canónico de confirmación de entrega.';
+    notifyListeners();
+    return false;
   }
 
   Future<bool> registrarFirma(String entregaId, String base64Firma) async {
-    try {
-      final response = await ApiClient.post('/entregas/uploads/signature', {
-        'entregaId': entregaId,
-        'firma': base64Firma,
-      });
-      if (response['success'] == true) {
-        if (_albaranActual != null) {
-          _albaranActual!.firmaBase64 = base64Firma;
-          notifyListeners();
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      _error = 'Error guardando firma: $e';
-      return false;
-    }
+    _error =
+        'Endpoint retirado (410). La firma se sube por el flujo canónico de evidencias.';
+    notifyListeners();
+    return false;
   }
 
   String _buildEntregaCompletionIdempotencyKey(String albaranId) {
@@ -329,62 +286,10 @@ class CobrosProvider extends ChangeNotifier {
     String albaranId, {
     String? observaciones,
   }) async {
-    final albaran = _albaranesPendientes.firstWhere(
-      (a) => a.id == albaranId,
-      orElse: () => throw Exception('Albarán no encontrado'),
-    );
-    final pendingItems = albaran.items
-        .where((item) => item.estado != EstadoEntrega.entregado)
-        .toList(growable: false);
-
-    if (pendingItems.isEmpty) {
-      albaran.estado = EstadoEntrega.entregado;
-      notifyListeners();
-      return true;
-    }
-
-    try {
-      final response = await ApiClient.post('/entregas/update', {
-        'idempotencyKey': _buildEntregaCompletionIdempotencyKey(albaranId),
-        'albaranId': albaran.id,
-        'status': EstadoEntrega.entregado.name.toUpperCase(),
-        'repartidorId': employeeCode,
-        'observaciones': observaciones,
-        'items': pendingItems
-            .map(
-              (item) => {
-                'itemId': item.itemId,
-                'status': EstadoEntrega.entregado.name.toUpperCase(),
-                'cantidadEntregada': item.cantidadPedida,
-                'observaciones': observaciones,
-              },
-            )
-            .toList(growable: false),
-      });
-
-      if (response['success'] == true) {
-        await CacheService.invalidateByPrefix(
-          'entregas:pendientes:$employeeCode:',
-        );
-        for (final item in pendingItems) {
-          item.estado = EstadoEntrega.entregado;
-          item.cantidadEntregada = item.cantidadPedida;
-        }
-        albaran.estado = EstadoEntrega.entregado;
-        _error = null;
-        notifyListeners();
-        return true;
-      }
-
-      _error = (response['error'] as String?) ??
-          'No se pudieron completar todos los ítems de la entrega';
-      notifyListeners();
-      return false;
-    } catch (e) {
-      _error = 'Error completando entrega: $e';
-      notifyListeners();
-      return false;
-    }
+    _error =
+        'Endpoint retirado (410). Completa la entrega desde el detalle canónico del rutero.';
+    notifyListeners();
+    return false;
   }
 
   Future<void> cargarPendingSummary(

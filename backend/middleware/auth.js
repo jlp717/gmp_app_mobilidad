@@ -444,22 +444,7 @@ exports.verifyToken = async (req, res, next) => {
             });
         }
 
-        req.user = {
-            id: payload.id,
-            code: payload.user,
-            name: payload.name, // INCLUDE name from token
-            role: payload.role || 'COMERCIAL',
-            isJefeVentas: payload.isJefeVentas || false,
-            isRepartidor: payload.role === 'REPARTIDOR' && payload.isRepartidor === true,
-            codigoConductor: payload.role === 'REPARTIDOR' && payload.isRepartidor === true
-                ? payload.codigoConductor || null
-                : null,
-            matricula: payload.role === 'REPARTIDOR' && payload.isRepartidor === true
-                ? payload.matricula || null
-                : null,
-            vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
-            vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
-        };
+        req.user = projectAuthenticatedUser(payload);
 
         req.tokenPayload = payload;
         next();
@@ -491,22 +476,7 @@ exports.optionalAuth = async (req, res, next) => {
         } catch (_error) {
             return next();
         }
-        req.user = {
-            id: payload.id,
-            code: payload.user,
-            name: payload.name, // INCLUDE name from token
-            role: payload.role || 'COMERCIAL',
-            isJefeVentas: payload.isJefeVentas || false,
-            isRepartidor: payload.role === 'REPARTIDOR' && payload.isRepartidor === true,
-            codigoConductor: payload.role === 'REPARTIDOR' && payload.isRepartidor === true
-                ? payload.codigoConductor || null
-                : null,
-            matricula: payload.role === 'REPARTIDOR' && payload.isRepartidor === true
-                ? payload.matricula || null
-                : null,
-            vendorCodes: Array.isArray(payload.vendorCodes) ? payload.vendorCodes : [],
-            vendedorCodes: Array.isArray(payload.vendedorCodes) ? payload.vendedorCodes : []
-        };
+        req.user = projectAuthenticatedUser(payload);
         req.tokenPayload = payload;
     }
 

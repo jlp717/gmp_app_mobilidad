@@ -945,24 +945,47 @@ class RepartidorDailySummary {
     required this.gastos,
     required this.totalAIngresar,
     required this.cobrosCount,
+    this.entregado = 0,
+    this.deudaPendiente = 0,
     this.canReverseCobros = false,
     List<RepartidorCobroDia> cobros = const [],
   }) : cobros = List.unmodifiable(cobros);
 
   factory RepartidorDailySummary.fromJson(JsonMap json) {
-    final totals = _jsonMap(json['totals']);
+    // Canonical API field is `summary`; keep `totals` as compatibility fallback.
+    final summaryBlock = _jsonMap(json['summary']);
+    final totalsBlock = _jsonMap(json['totals']);
+    final resolved = summaryBlock.isNotEmpty ? summaryBlock : totalsBlock;
+    double money(List<String> keys) {
+      for (final key in keys) {
+        if (!resolved.containsKey(key) || resolved[key] == null) continue;
+        return _doubleValue(resolved[key]);
+      }
+      return 0;
+    }
+
+    int count(List<String> keys) {
+      for (final key in keys) {
+        if (!resolved.containsKey(key) || resolved[key] == null) continue;
+        return _intValue(resolved[key]);
+      }
+      return 0;
+    }
+
     return RepartidorDailySummary(
       repartidorId: _stringValue(json, const ['repartidorId']),
       date: _stringValue(json, const ['date']),
-      totalEfectivo: _doubleValue(totals['totalEfectivo']),
-      totalCheques: _doubleValue(totals['totalCheques']),
-      totalTarjeta: _doubleValue(totals['totalTarjeta']),
-      totalPostdatados: _doubleValue(totals['totalPostdatados']),
-      saldoActual: _doubleValue(totals['saldoActual']),
-      totalCobrosDia: _doubleValue(totals['totalCobrosDia']),
-      gastos: _doubleValue(totals['gastos']),
-      totalAIngresar: _doubleValue(totals['totalAIngresar']),
-      cobrosCount: _intValue(totals['cobrosCount']),
+      totalEfectivo: money(const ['totalEfectivo', 'TOTAL_EFECTIVO']),
+      totalCheques: money(const ['totalCheques', 'TOTAL_CHEQUES']),
+      totalTarjeta: money(const ['totalTarjeta', 'TOTAL_TARJETA']),
+      totalPostdatados: money(const ['totalPostdatados', 'TOTAL_POSTDATADOS']),
+      saldoActual: money(const ['saldoActual', 'SALDO_PENDIENTE']),
+      totalCobrosDia: money(const ['totalCobrosDia', 'TOTAL_COBROS_DIA']),
+      gastos: money(const ['gastos', 'TOTAL_GASTOS']),
+      totalAIngresar: money(const ['totalAIngresar', 'TOTAL_A_INGRESAR']),
+      cobrosCount: count(const ['cobrosCount', 'COBROS_COUNT']),
+      entregado: money(const ['entregado', 'TOTAL_REPARTIDO']),
+      deudaPendiente: money(const ['deudaPendiente', 'DEUDA_PENDIENTE']),
       canReverseCobros: json['canReverseCobros'] == true,
       cobros: _jsonMapList(json['cobros'])
           .map(RepartidorCobroDia.fromJson)
@@ -981,6 +1004,8 @@ class RepartidorDailySummary {
   final double gastos;
   final double totalAIngresar;
   final int cobrosCount;
+  final double entregado;
+  final double deudaPendiente;
 
   /// Capability autorizada explícitamente por el backend. Fail-closed.
   final bool canReverseCobros;

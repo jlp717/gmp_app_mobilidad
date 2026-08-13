@@ -100,7 +100,7 @@ describe('legacy repartidor read security contracts', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQueryWithParams.mock.calls[0];
     expect(params).toEqual([8, 2026, '05']);
-    expect(sql).toContain('CPC.SUBEMPRESA = OPP.SUBEMPRESA');
+    expect(sql).toContain('CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA');
     expect(sql).toContain('CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION');
   });
 
@@ -166,9 +166,11 @@ describe('legacy repartidor read security contracts', () => {
     const [sql, params] = mockQueryWithParams.mock.calls[0];
     expect(sql).toMatch(/LOGICAL_DOCUMENTS[\s\S]*NUMBERED_DOCUMENTS[\s\S]*PAGED_DOCUMENTS/i);
     expect(sql).toContain('ORDER BY SORT_DATE DESC, SORT_NUMBER DESC, LOGICAL_KEY DESC');
-    expect(sql).toContain('OFFSET ? ROWS');
-    expect(sql).toContain('FETCH NEXT ? ROWS ONLY');
-    expect(params).toEqual(['05', '4300030041', 2026, 20260801, 20260803, 10, 25]);
+    // DB2 for i rejects OFFSET inside CTEs (SQLSTATE 42000). Paginate by ROW_NUMBER bounds.
+    expect(sql).toContain('LOGICAL_POSITION > ?');
+    expect(sql).toContain('LOGICAL_POSITION <= ?');
+    expect(sql).not.toContain('OFFSET ? ROWS');
+    expect(params).toEqual(['05', '4300030041', 2026, 20260801, 20260803, 10, 35]);
     expect(response.body.pagination).toEqual({ limit: 25, offset: 10, hasMore: false, nextOffset: 10 });
   });
 
