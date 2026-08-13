@@ -31,13 +31,12 @@ function harness({ user = profile(), reparto = null } = {}) {
 }
 
 describe('authoritative auth claims resolver', () => {
-  test.each([
-    ['commercial', profile(), null, 'COMERCIAL', ['COMERCIAL']],
-    ['sales manager', profile({ isJefeVentas: true }), null, 'JEFE_VENTAS', ['COMERCIAL', 'JEFE_VENTAS']],
-    ['driver', profile(), { isRepartidor: true, codigoConductor: '050', matricula: '1234ABC' }, 'REPARTIDOR', ['COMERCIAL', 'REPARTIDOR']],
-    ['manager and driver', profile({ isJefeVentas: true }), { isRepartidor: true, codigoConductor: '050', matricula: '1234ABC' }, 'JEFE_VENTAS', ['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR']],
-  ])('resolves the %s role matrix', async (_label, user, reparto, role, availableRoles) => {
-    const { repository, resolver } = harness({ user, reparto });
+  test('targets claims version 2', () => {
+    expect(AUTH_CLAIMS_VERSION).toBe(2);
+  });
+
+  test('uses the authenticated profile as the authoritative COMERCIAL base', async () => {
+    const { repository, resolver } = harness();
 
     const claims = await resolver.resolve({ code: '050' });
 
@@ -45,36 +44,76 @@ describe('authoritative auth claims resolver', () => {
       id: 'V050',
       user: '050',
       name: 'Persona',
-      role,
-      availableRoles,
-      activeMode: role === 'JEFE_VENTAS' ? 'COMERCIAL' : role,
-      availableModes: [
-        'COMERCIAL',
-        ...(availableRoles.includes('JEFE_VENTAS') ? ['ALMACEN', 'REPARTIDOR'] : []),
-        ...(!availableRoles.includes('JEFE_VENTAS') && availableRoles.includes('REPARTIDOR')
-          ? ['REPARTIDOR']
-          : []),
-      ],
-      isJefeVentas: role === 'JEFE_VENTAS',
-      isRepartidor: role === 'REPARTIDOR',
-      codigoConductor: role === 'REPARTIDOR' ? '050' : null,
-      matricula: role === 'REPARTIDOR' ? '1234ABC' : null,
-      vendorCodes: role === 'JEFE_VENTAS' ? ['050', '051', 'UNK'] : ['050'],
-      vendedorCodes: role === 'JEFE_VENTAS' ? ['050', '051', 'UNK'] : ['050'],
+      role: 'COMERCIAL',
+      availableRoles: ['COMERCIAL'],
+      activeMode: 'COMERCIAL',
+      availableModes: ['COMERCIAL'],
+      isJefeVentas: false,
+      isRepartidor: false,
+      codigoConductor: null,
+      matricula: null,
+      vendorCodes: ['050'],
+      vendedorCodes: ['050'],
       tipoVendedor: 'R',
       showCommissions: false,
       claimsVersion: AUTH_CLAIMS_VERSION,
     });
     expect(repository.findByCode).toHaveBeenCalledWith('050');
     expect(repository.findRepartidorAssociation).toHaveBeenCalledWith('050');
-    if (role === 'REPARTIDOR') {
-      expect(repository.getVendorVisibilityScope).not.toHaveBeenCalled();
-    } else {
-      expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('050', { role });
-    }
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('050', { role: 'COMERCIAL' });
     expect(Object.isFrozen(claims)).toBe(true);
     expect(Object.isFrozen(claims.availableRoles)).toBe(true);
     expect(Object.isFrozen(claims.vendorCodes)).toBe(true);
+  });
+
+  test('adds REPARTIDOR without replacing the default COMERCIAL role', async () => {
+    const { resolver } = harness({
+      reparto: { isRepartidor: true, codigoConductor: '050', matricula: null },
+    });
+
+    await expect(resolver.resolve({ code: '050' })).resolves.toEqual(expect.objectContaining({
+      role: 'COMERCIAL',
+      availableRoles: ['COMERCIAL', 'REPARTIDOR'],
+      activeMode: 'COMERCIAL',
+      isRepartidor: false,
+      codigoConductor: null,
+      matricula: null,
+      vendorCodes: ['050'],
+    }));
+  });
+
+  test('projects an explicitly selected REPARTIDOR with only the canonical vendor code', async () => {
+    const { repository, resolver } = harness({
+      reparto: { isRepartidor: true, codigoConductor: '050', matricula: null },
+    });
+
+    await expect(resolver.resolve({ code: '050', selectedRole: 'REPARTIDOR' })).resolves.toEqual(
+      expect.objectContaining({
+        role: 'REPARTIDOR',
+        isRepartidor: true,
+        codigoConductor: '050',
+        matricula: null,
+        vendorCodes: ['050'],
+        vendedorCodes: ['050'],
+      }),
+    );
+    expect(repository.getVendorVisibilityScope).not.toHaveBeenCalled();
+  });
+
+  test('derives manager behavior from the profile for any canonical code', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: 'MGR7', isJefeVentas: true }),
+    });
+    repository.getVendorVisibilityScope.mockResolvedValue(['MGR7', 'TEAM']);
+
+    await expect(resolver.resolve({ code: 'mgr7' })).resolves.toEqual(expect.objectContaining({
+      id: 'VMGR7',
+      role: 'JEFE_VENTAS',
+      availableRoles: ['COMERCIAL', 'JEFE_VENTAS'],
+      isJefeVentas: true,
+      vendorCodes: ['MGR7', 'TEAM'],
+    }));
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('MGR7', { role: 'JEFE_VENTAS' });
   });
 
   test('projects only the selected role and never retains manager scope', async () => {
@@ -104,23 +143,6 @@ describe('authoritative auth claims resolver', () => {
     );
   });
 
-  test('keeps vendor 80 out of manager scope and gives drivers only their canonical code', async () => {
-    const { repository, resolver } = harness({
-      user: profile({ code: '80', isJefeVentas: true }),
-      reparto: { isRepartidor: true, codigoConductor: '80', matricula: '8080GMP' },
-    });
-    repository.getVendorVisibilityScope.mockResolvedValue(['80', '72', '73', '81', '83']);
-
-    await expect(resolver.resolve({ code: '80' })).resolves.toEqual(expect.objectContaining({
-      id: 'V80',
-      role: 'REPARTIDOR',
-      availableRoles: ['COMERCIAL', 'REPARTIDOR'],
-      isJefeVentas: false,
-      vendorCodes: ['80'],
-      vendedorCodes: ['80'],
-    }));
-    expect(repository.getVendorVisibilityScope).not.toHaveBeenCalled();
-  });
   test('projects ALMACEN only as a manager UI mode without minting a new role', async () => {
     const { resolver } = harness({ user: profile({ isJefeVentas: true }) });
 

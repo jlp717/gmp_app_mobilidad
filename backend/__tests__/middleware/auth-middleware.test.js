@@ -26,6 +26,7 @@ const {
     ACCESS_TTL_MS,
 } = require('../../middleware/auth');
 const logger = require('../../middleware/logger');
+const { AUTH_CLAIMS_VERSION } = require('../../src/modules/auth/application/auth-claims-resolver');
 
 let sessionSequence = 0;
 
@@ -35,7 +36,7 @@ async function canonicalAccessToken(payload, label = 'session') {
     const sid = `sid-${label}-${sessionSequence}`;
     const accessJti = `access-${label}-${sessionSequence}`;
     const refreshJti = `refresh-${label}-${sessionSequence}`;
-    const claims = { ...payload, sub: subject, sid };
+    const claims = { claimsVersion: AUTH_CLAIMS_VERSION, ...payload, sub: subject, sid };
     const refreshToken = signRefreshToken({ ...claims, jti: refreshJti });
     await registerSession(subject, refreshToken, 'jest', '127.0.0.1', {
         sid,
@@ -100,6 +101,22 @@ describe('Auth Middleware - verifyToken', () => {
         expect(req.user).toBeDefined();
         expect(req.user.code).toBe('001');
         expect(req.user.role).toBe('COMERCIAL');
+        expect(req.user.claimsVersion).toBe(2);
+    });
+
+    test('should reject a stale v1 token and require login without calling next', async () => {
+        const token = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Stale User', role: 'COMERCIAL', claimsVersion: 1,
+        }, 'stale-v1');
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+
+        await verifyToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            code: 'AUTH_RELOGIN_REQUIRED',
+        }));
+        expect(next).not.toHaveBeenCalled();
     });
 
     test('should reject missing authorization header', async () => {
@@ -295,6 +312,19 @@ describe('Auth Middleware - optionalAuth', () => {
 
         expect(next).toHaveBeenCalled();
         expect(req.user).toBeNull();
+    });
+
+    test('should ignore a stale v1 token', async () => {
+        const token = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Stale Optional', role: 'COMERCIAL', claimsVersion: 1,
+        }, 'optional-stale-v1');
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+
+        await optionalAuth(req, res, next);
+
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(req.user).toBeNull();
+        expect(req.tokenPayload).toBeNull();
     });
 
     test('should handle non-Bearer auth gracefully', async () => {

@@ -63,6 +63,7 @@ const {
     registerSession,
     setAuthClaimsResolver,
 } = require('../middleware/auth');
+const { AUTH_CLAIMS_VERSION } = require('../src/modules/auth/application/auth-claims-resolver');
 
 const authRoutes = require('../routes/auth');
 
@@ -99,7 +100,7 @@ describe('Auth Flow Tests', () => {
             vendedorCodes: [code],
             tipoVendedor: 'COMERCIAL',
             showCommissions: true,
-            claimsVersion: 1,
+            claimsVersion: AUTH_CLAIMS_VERSION,
             ...overrides,
         };
     }
@@ -171,7 +172,7 @@ describe('Auth Flow Tests', () => {
             expect(Array.isArray(res.body.vendedorCodes)).toBe(true);
         });
 
-        test('should detect REPARTIDOR role from VEH table', async () => {
+        test('should keep COMERCIAL default when a DB reparto association exists', async () => {
             mockAuthRepository.findByCode.mockResolvedValue(profile({
                 code: '050', name: 'Repartidor', _passwordHash: '5678',
             }));
@@ -184,8 +185,10 @@ describe('Auth Flow Tests', () => {
                 .send({ username: '050', password: '5678' });
 
             expect(res.status).toBe(200);
-            expect(res.body.user.isRepartidor).toBe(true);
-            expect(res.body.user.role).toBe('REPARTIDOR');
+            expect(res.body.user.role).toBe('COMERCIAL');
+            expect(res.body.user.isRepartidor).toBe(false);
+            expect(res.body.user.availableRoles).toEqual(['COMERCIAL', 'REPARTIDOR']);
+            expect(res.body.user.availableModes).toEqual(['COMERCIAL', 'REPARTIDOR']);
         });
     });
 

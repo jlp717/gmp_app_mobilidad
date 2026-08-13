@@ -1,6 +1,6 @@
 'use strict';
 
-const AUTH_CLAIMS_VERSION = 1;
+const AUTH_CLAIMS_VERSION = 2;
 const COMERCIAL = 'COMERCIAL';
 const JEFE_VENTAS = 'JEFE_VENTAS';
 const REPARTIDOR = 'REPARTIDOR';
@@ -66,9 +66,9 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         throw profileUnavailable();
       }
 
-      // Vendor 80 is an explicit commercial-only exception. Keep it here so
-      // every login/refresh/switch path applies the same authorization rule.
-      const hasManagerRole = profile.isJefeVentas === true && canonicalCode !== '80';
+      // COMERCIAL comes from the authenticated VDC/VDD profile. JEFE comes from
+      // VDDX. REPARTIDOR is additive from the DB association, never a code list.
+      const hasManagerRole = profile.isJefeVentas === true;
       const hasDriverRole = repartoAssociation?.isRepartidor === true
         && normalizeCode(repartoAssociation.codigoConductor) === canonicalCode;
       const availableRoles = [COMERCIAL];
@@ -77,7 +77,6 @@ function createAuthClaimsResolver({ authRepository } = {}) {
 
       // ALMACEN and REPARTIDOR UI modes for managers are supervision surfaces,
       // not a change of the underlying JEFE_VENTAS authorization role.
-      // Personal OPP/VEH still grants a real REPARTIDOR role for drivers.
       const availableModes = [COMERCIAL];
       if (hasManagerRole) {
         availableModes.push(ALMACEN, REPARTIDOR);
@@ -85,7 +84,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         availableModes.push(REPARTIDOR);
       }
 
-      const defaultRole = hasManagerRole ? JEFE_VENTAS : hasDriverRole ? REPARTIDOR : COMERCIAL;
+      const defaultRole = hasManagerRole ? JEFE_VENTAS : COMERCIAL;
       const requestedMode = normalizeCode(selectedMode);
       const warehouseMode = requestedMode === ALMACEN
         || (!requestedMode && normalizeCode(selectedRole) === ALMACEN);
@@ -107,7 +106,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         || (role === JEFE_VENTAS ? COMERCIAL : role);
       const modeMatchesRole = (activeMode === ALMACEN && role === JEFE_VENTAS && hasManagerRole)
         || (activeMode === COMERCIAL && [COMERCIAL, JEFE_VENTAS].includes(role))
-        // Supervision UI only when the subject is manager without personal OPP.
+        // Supervision UI only when the subject is manager without a driver association.
         || (activeMode === REPARTIDOR && role === JEFE_VENTAS && hasManagerRole && !hasDriverRole)
         || (activeMode === REPARTIDOR && role === REPARTIDOR && hasDriverRole);
       if (!availableModes.includes(activeMode) || !modeMatchesRole) {

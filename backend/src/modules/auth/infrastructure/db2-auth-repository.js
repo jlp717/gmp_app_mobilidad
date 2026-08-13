@@ -159,53 +159,29 @@ class Db2AuthRepository extends AuthRepository {
     return null;
   }
 
-  async findRepartidorAssociation(code, year = new Date().getFullYear()) {
+  async findRepartidorAssociation(code) {
     const normalizedCode = String(code || '').trim().toUpperCase();
-    const normalizedYear = Number.parseInt(year, 10);
     if (!normalizedCode || normalizedCode.length > 50 || !/^[A-Z0-9]+$/.test(normalizedCode)) return null;
-    if (!Number.isInteger(normalizedYear) || normalizedYear < 2000 || normalizedYear > 9999) return null;
 
-    // Resolve both legacy reparto sources in one parameterized query. Ambiguous
-    // conductor/vehicle associations fail closed instead of assigning a role.
     const sql = `
-      SELECT CODIGO_CONDUCTOR, MATRICULA, ORIGEN
-      FROM (
-        SELECT DISTINCT TRIM(CODIGOCONDUCTOR) AS CODIGO_CONDUCTOR,
-          NULLIF(TRIM(MATRICULA), '') AS MATRICULA, 'VEH' AS ORIGEN
-        FROM DSEDAC.VEH
-        WHERE TRIM(CODIGOCONDUCTOR) = CAST(? AS VARCHAR(50))
-          AND TRIM(CODIGOCONDUCTOR) <> '98'
-
-        UNION ALL
-
-        SELECT TRIM(CODIGOREPARTIDOR) AS CODIGO_CONDUCTOR,
-          CAST(NULL AS VARCHAR(30)) AS MATRICULA, 'OPP' AS ORIGEN
-        FROM DSEDAC.OPP
-        WHERE TRIM(CODIGOREPARTIDOR) = CAST(? AS VARCHAR(50))
-          AND TRIM(CODIGOREPARTIDOR) <> '98'
-          AND ANOREPARTO = ?
-        GROUP BY TRIM(CODIGOREPARTIDOR)
-        HAVING COUNT(*) >= 100
-      ) REPARTO_ASOCIACION
-      ORDER BY ORIGEN, MATRICULA
+      SELECT DISTINCT TRIM(VENDEDOR) AS CODIGO_CONDUCTOR,
+        CAST(NULL AS VARCHAR(30)) AS MATRICULA
+      FROM JAVIER.RUTERO_CONFIG
+      WHERE TRIM(VENDEDOR) = CAST(? AS VARCHAR(50))
+        AND ORDEN >= 0
+      FETCH FIRST 2 ROWS ONLY
     `;
-    const rows = await this._db.executeParams(sql, [normalizedCode, normalizedCode, normalizedYear]);
-    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const rows = await this._db.executeParams(sql, [normalizedCode]);
+    if (!Array.isArray(rows) || rows.length !== 1) return null;
 
-    const associations = rows
-      .map((row) => ({
-        codigoConductor: String(row.CODIGO_CONDUCTOR || row.codigo_conductor || '').trim().toUpperCase(),
-        matricula: String(row.MATRICULA || row.matricula || '').trim() || null,
-      }))
-      .filter((row) => row.codigoConductor && row.codigoConductor !== '98');
-    const conductorCodes = new Set(associations.map((row) => row.codigoConductor));
-    const matriculas = new Set(associations.map((row) => row.matricula).filter(Boolean));
-
-    if (conductorCodes.size !== 1 || !conductorCodes.has(normalizedCode) || matriculas.size > 1) return null;
+    const associationCode = String(
+      rows[0].CODIGO_CONDUCTOR || rows[0].codigo_conductor || rows[0].VENDEDOR || rows[0].vendedor || '',
+    ).trim().toUpperCase();
+    if (associationCode !== normalizedCode) return null;
     return {
       isRepartidor: true,
       codigoConductor: normalizedCode,
-      matricula: matriculas.size === 1 ? [...matriculas][0] : null,
+      matricula: String(rows[0].MATRICULA || rows[0].matricula || '').trim() || null,
     };
   }
 

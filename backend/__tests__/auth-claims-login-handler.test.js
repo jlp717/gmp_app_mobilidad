@@ -1,6 +1,6 @@
 'use strict';
 
-const { AuthClaimsError } = require('../src/modules/auth/application/auth-claims-resolver');
+const { AUTH_CLAIMS_VERSION, AuthClaimsError } = require('../src/modules/auth/application/auth-claims-resolver');
 const {
   createAuthClaimsLoginHandler,
 } = require('../src/modules/auth/application/auth-claims-login-handler');
@@ -25,7 +25,7 @@ function claims(overrides = {}) {
     codigoConductor: '050', matricula: '1234ABC',
     vendorCodes: Object.freeze(['050']), vendedorCodes: Object.freeze(['050']),
     tipoVendedor: 'R', showCommissions: false,
-    claimsVersion: 1,
+    claimsVersion: AUTH_CLAIMS_VERSION,
     ...overrides,
   });
 }
@@ -93,7 +93,7 @@ describe('shared auth claims login handler', () => {
         codigoConductor: '050', matricula: '1234ABC',
         vendorCodes: ['050'], vendedorCodes: ['050'],
         tipoVendedor: 'R', TIPOVENDEDOR: 'R',
-        showCommissions: false, claimsVersion: 1,
+        showCommissions: false, claimsVersion: AUTH_CLAIMS_VERSION,
       },
       role: 'REPARTIDOR',
       availableRoles: ['COMERCIAL', 'REPARTIDOR'],
@@ -107,7 +107,7 @@ describe('shared auth claims login handler', () => {
       vendedorCodes: ['050'],
       tipoVendedor: 'R',
       showCommissions: false,
-      claimsVersion: 1,
+      claimsVersion: AUTH_CLAIMS_VERSION,
       latestVersion: '3.3.1',
       token: ['access', 'token', 'fixture'].join('-'),
       refreshToken: 'refresh-token',

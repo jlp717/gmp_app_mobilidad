@@ -104,7 +104,7 @@ beforeEach(() => {
   mockDbPool.execute.mockResolvedValue([]);
 });
 
-test('DDD login returns real REPARTIDOR ownership and coherent claims', async () => {
+test('DDD login keeps COMERCIAL default and adds REPARTIDOR as a switchable role', async () => {
   mockAuthRepo.findRepartidorAssociation.mockResolvedValue({
     isRepartidor: true, codigoConductor: '050', matricula: '1234ABC',
   });
@@ -112,8 +112,10 @@ test('DDD login returns real REPARTIDOR ownership and coherent claims', async ()
     .send({ username: '050', password: '1234' });
   expect(res.status).toBe(200);
   expect(res.body.user).toEqual(expect.objectContaining({
-    role: 'REPARTIDOR', isRepartidor: true,
-    codigoConductor: '050', matricula: '1234ABC',
+    role: 'COMERCIAL', isRepartidor: false,
+    codigoConductor: null, matricula: null,
+    availableRoles: ['COMERCIAL', 'REPARTIDOR'],
+    availableModes: ['COMERCIAL', 'REPARTIDOR'],
     tipoVendedor: 'R', showCommissions: false,
   }));
   expect(res.body).toEqual(expect.objectContaining({
@@ -121,7 +123,8 @@ test('DDD login returns real REPARTIDOR ownership and coherent claims', async ()
   }));
   expect(res.body.vendedorCodes).toEqual(['050']);
   expect(mockAccess).toHaveBeenCalledWith(expect.objectContaining({
-    role: 'REPARTIDOR', isRepartidor: true, codigoConductor: '050',
+    role: 'COMERCIAL', isRepartidor: false,
+    availableRoles: ['COMERCIAL', 'REPARTIDOR'],
     vendedorCodes: ['050'],
   }));
 });

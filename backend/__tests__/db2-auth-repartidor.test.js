@@ -9,41 +9,38 @@ jest.mock('../middleware/logger', () => ({
 const { Db2AuthRepository } = require('../src/modules/auth/infrastructure/db2-auth-repository');
 
 describe('Db2AuthRepository reparto association', () => {
-  test('detects one real conductor with one parameterized VEH/OPP batch', async () => {
-    const db = { executeParams: jest.fn().mockResolvedValue([
-      { CODIGO_CONDUCTOR: ' 050 ', MATRICULA: ' 1234ABC ' },
-      { CODIGO_CONDUCTOR: '050', MATRICULA: null },
-    ]) };
+  test('queries only active JAVIER.RUTERO_CONFIG rows with a parameterized vendor code', async () => {
+    const db = { executeParams: jest.fn().mockResolvedValue([]) };
     const repo = new Db2AuthRepository(db);
 
-    await expect(repo.findRepartidorAssociation(' 050 ', 2026)).resolves.toEqual({
-      isRepartidor: true, codigoConductor: '050', matricula: '1234ABC',
-    });
+    await expect(repo.findRepartidorAssociation(' a17 ')).resolves.toBeNull();
     expect(db.executeParams).toHaveBeenCalledTimes(1);
     const [sql, params] = db.executeParams.mock.calls[0];
-    expect(sql).toContain('FROM DSEDAC.VEH');
-    expect(sql).toContain('FROM DSEDAC.OPP');
-    expect(sql).toContain('UNION ALL');
-    expect(sql).toContain('HAVING COUNT(*) >= 100');
-    expect((sql.match(/\?/g) || [])).toHaveLength(3);
-    expect(sql).not.toContain("'050'");
-    expect(params).toEqual(['050', '050', 2026]);
+    expect(sql).toMatch(/FROM\s+JAVIER\.RUTERO_CONFIG/i);
+    expect(sql).toMatch(/TRIM\(VENDEDOR\)\s*=\s*CAST\(\?\s+AS VARCHAR\(50\)\)/i);
+    expect(sql).toMatch(/ORDEN\s*>=\s*0/i);
+    expect(sql).not.toMatch(/DSEDAC\.(?:OPP|VEH)/i);
+    expect((sql.match(/\?/g) || [])).toHaveLength(1);
+    expect(sql).not.toContain("'A17'");
+    expect(params).toEqual(['A17']);
   });
 
-  test('does not escalate absent or ambiguous reparto', async () => {
-    const absent = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([]) });
-    const conductors = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([
-      { CODIGO_CONDUCTOR: '052', MATRICULA: null },
-      { CODIGO_CONDUCTOR: '053', MATRICULA: null },
-    ]) });
-    const vehicles = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([
-      { CODIGO_CONDUCTOR: '052', MATRICULA: '1111AAA' },
-      { CODIGO_CONDUCTOR: '052', MATRICULA: '2222BBB' },
+  test('returns null when RUTERO_CONFIG has no active association', async () => {
+    const repo = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([]) });
+
+    await expect(repo.findRepartidorAssociation('A17')).resolves.toBeNull();
+  });
+
+  test('maps an active RUTERO_CONFIG association with nullable matricula', async () => {
+    const repo = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([
+      { VENDEDOR: ' A17 ', MATRICULA: null },
     ]) });
 
-    await expect(absent.findRepartidorAssociation('052', 2026)).resolves.toBeNull();
-    await expect(conductors.findRepartidorAssociation('052', 2026)).resolves.toBeNull();
-    await expect(vehicles.findRepartidorAssociation('052', 2026)).resolves.toBeNull();
+    await expect(repo.findRepartidorAssociation('A17')).resolves.toEqual({
+      isRepartidor: true,
+      codigoConductor: 'A17',
+      matricula: null,
+    });
   });
 
   test('rejects invalid identity input without querying DB2', async () => {

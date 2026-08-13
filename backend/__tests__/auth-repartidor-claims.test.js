@@ -9,6 +9,7 @@ jest.mock('../services/redis-cache', () => ({
   redisCache: { isConnected: false, client: null },
 }));
 const auth = require('../middleware/auth');
+const { AUTH_CLAIMS_VERSION } = require('../src/modules/auth/application/auth-claims-resolver');
 
 function response() {
   const res = {
@@ -24,7 +25,7 @@ async function rotate(payload) {
   const refreshJti = `refresh-${payload.user}`;
   const claims = {
     availableRoles: [payload.role], tipoVendedor: '-', showCommissions: true,
-    claimsVersion: 1, isRepartidor: false, codigoConductor: null, matricula: null,
+    claimsVersion: AUTH_CLAIMS_VERSION, isRepartidor: false, codigoConductor: null, matricula: null,
     ...payload,
   };
   auth.setAuthClaimsResolver({ resolve: jest.fn(async () => claims) });
@@ -82,6 +83,7 @@ test('verifyToken projects coherent reparto claims and rejects invalid tokens', 
     id: 'V050', user: '050', name: 'Repartidor real', role: 'REPARTIDOR',
     isJefeVentas: false, isRepartidor: true, codigoConductor: '050',
     matricula: '1234ABC', vendorCodes: ['050'], vendedorCodes: ['050'],
+    claimsVersion: AUTH_CLAIMS_VERSION,
   };
   const refreshToken = auth.signRefreshToken({ ...claims, sub: claims.id, sid, jti: refreshJti });
   await auth.registerSession(claims.id, refreshToken, 'jest', '127.0.0.1', {
@@ -137,6 +139,7 @@ test('switch-role re-resolves DB-backed claims and revokes the prior access jti'
   const currentClaims = {
     id: 'V050', user: '050', name: 'Persona', role: 'COMERCIAL',
     isJefeVentas: false, isRepartidor: false, vendorCodes: ['050'], vendedorCodes: ['050'],
+    claimsVersion: AUTH_CLAIMS_VERSION,
   };
   const resolvedClaims = {
     ...currentClaims, role: 'REPARTIDOR', isRepartidor: true,
@@ -178,7 +181,10 @@ test('refresh revokes the session when DB-backed authorization no longer permits
   const sid = 'sid-refresh-revalidation';
   const accessJti = 'access-refresh-revalidation';
   const refreshJti = 'refresh-refresh-revalidation';
-  const claims = { id: 'V050', user: '050', role: 'REPARTIDOR', isRepartidor: true };
+  const claims = {
+    id: 'V050', user: '050', role: 'REPARTIDOR', isRepartidor: true,
+    claimsVersion: AUTH_CLAIMS_VERSION,
+  };
   const refreshToken = auth.signRefreshToken({ ...claims, sub: 'V050', sid, jti: refreshJti });
   const accessToken = auth.signAccessToken({ ...claims, sub: 'V050', sid, jti: accessJti });
   await auth.registerSession('V050', refreshToken, 'jest', '127.0.0.1', { sid, accessJti, refreshJti });
@@ -203,7 +209,10 @@ test('logout revokes the current access token immediately', async () => {
   const sid = 'sid-logout';
   const accessJti = 'access-logout';
   const refreshJti = 'refresh-logout';
-  const claims = { id: 'V050', user: '050', role: 'REPARTIDOR', sub: 'V050', sid };
+  const claims = {
+    id: 'V050', user: '050', role: 'REPARTIDOR', sub: 'V050', sid,
+    claimsVersion: AUTH_CLAIMS_VERSION,
+  };
   const refreshToken = auth.signRefreshToken({ ...claims, jti: refreshJti });
   const accessToken = auth.signAccessToken({ ...claims, jti: accessJti });
   await auth.registerSession('V050', refreshToken, 'jest', '127.0.0.1', {

@@ -10,6 +10,7 @@ const {
     AuthSessionStoreError,
     createAuthClaimsSessionStore,
 } = require('../src/modules/auth/application/auth-claims-session-store');
+const { AUTH_CLAIMS_VERSION } = require('../src/modules/auth/application/auth-claims-resolver');
 
 const AUTH_LOG = Object.freeze({
     redacted: 'AUTH_EVENT_REDACTED',
@@ -437,6 +438,17 @@ exports.verifyToken = async (req, res, next) => {
                 code: 'AUTH_RELOGIN_REQUIRED',
             });
         }
+        if (payload.claimsVersion !== AUTH_CLAIMS_VERSION) {
+            try {
+                await canonicalSessionStore.revoke(identity.sid, { userId: identity.subject });
+            } catch (_error) {
+                // Relogin remains mandatory even if the session store cannot revoke.
+            }
+            return res.status(401).json({
+                error: 'La sesi\u00f3n debe renovarse iniciando sesi\u00f3n de nuevo.',
+                code: 'AUTH_RELOGIN_REQUIRED',
+            });
+        }
         if (!await canonicalSessionStore.isActive(identity.sid, identity.subject, identity.jti)) {
             return res.status(401).json({
                 error: 'Sesi\u00f3n revocada. Inicia sesi\u00f3n de nuevo.',
@@ -468,7 +480,7 @@ exports.optionalAuth = async (req, res, next) => {
     const payload = exports.verifyAccessToken(token);
     const identity = canonicalAccessIdentity(payload);
 
-    if (payload && identity) {
+    if (payload && identity && payload.claimsVersion === AUTH_CLAIMS_VERSION) {
         try {
             if (!await canonicalSessionStore.isActive(identity.sid, identity.subject, identity.jti)) {
                 return next();
