@@ -115,7 +115,7 @@ describe('DB2 reparto evidence repository', () => {
     const insert = fake.calls.find((call) => call.sql.startsWith('INSERT INTO JAVIER.TEST_REPARTO_EVIDENCIAS'));
     expect(insert.sql).toContain('EXPIRES_AT');
     expect(insert.params.at(-2)).toEqual(record().content);
-    expect(insert.params.at(-1)).toEqual(FUTURE_EXPIRY);
+    expect(insert.params.at(-1)).toBe('2026-08-08 10:00:00.000');
     expect(fake.calls.map((call) => call.sql)).toEqual(expect.arrayContaining([
       expect.stringContaining('QSYS2.SYSTABLES'),
       expect.stringContaining('QSYS2.SYSCOLUMNS'),

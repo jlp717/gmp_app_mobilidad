@@ -82,7 +82,7 @@ describe('repartidor-liquidacion-service', () => {
     };
     const { repository, transaction } = transactionalRepository({ replay });
     const result = await createRepartidorLiquidacionService({ repository }).closeDay(command, validActor());
-    expect(result).toEqual({ created: false, liquidacion: { id: 'OPS-OLD', marker: buildLiquidacionCommand(command).marker, repartidorId: 'R-17', date: command.date, status: 'CLOSED', snapshot: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 4, pending: 2, openingBalance: 4, balance: 21 } }, outboxIntent: null });
+    expect(result).toEqual({ created: false, liquidacion: { id: 'OPS-OLD', marker: buildLiquidacionCommand(command).marker, repartidorId: 'R-17', date: command.date, status: 'CLOSED', snapshot: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 4, pending: 2, openingBalance: 4, balance: 21 } }, outboxId: null, outboxIntent: null });
     expect(JSON.stringify(result)).not.toMatch(/COB-1|dni|internalToken|idempotency/i);
     expect(transaction.deriveDaySnapshot).not.toHaveBeenCalled();
     expect(transaction.enqueueEmailOutbox).not.toHaveBeenCalled();

@@ -75,7 +75,7 @@ describe('canonical reparto server mounts', () => {
     expect(countOccurrences(source, plannerMount)).toBe(1);
     expect(source.indexOf(plannerMount)).toBeGreaterThan(0);
     expect(source).toContain("app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);");
-    expect(source).toContain("app.use('/api/repartidor', verifyToken, repartoConfirmationWriteGuard);");
+    expect(source).toContain("app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);");
     expect(source).toContain("app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);");
   });
 

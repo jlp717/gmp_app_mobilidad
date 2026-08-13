@@ -544,8 +544,8 @@ describe('DB2 reparto confirmation repository', () => {
     expect(insert.params.slice(9, 18)).toEqual([
       'FRA', 'C', 'FIN', 2027, 'Z', 23, 7654321, 37, 73,
     ]);
-    expect(insert.params[19]).toBeInstanceOf(Date);
-    expect(insert.params[20]).toBeInstanceOf(Date);
+    expect(insert.params[19]).toBe('2026-08-03 08:00:00.000');
+    expect(insert.params[20]).toBe('2026-08-03 08:01:00.000');
     expect(insert.params.slice(25, 28)).toEqual([
       'PRODUCTO_DANADO', 'Envase roto', 'Foto adjunta',
     ]);

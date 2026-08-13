@@ -176,6 +176,7 @@ function scalarId(value) {
       if (text && text !== '[object Object]') return text.trim();
     }
     if (value.low != null) return String(value.low);
+    return '';
   }
   return String(value).trim();
 }

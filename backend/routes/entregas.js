@@ -507,7 +507,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         }
 
         // Process rows
-        const albaranes = uniqueRows.map(row => {
+        const projectedAlbaranes = uniqueRows.map(row => {
             const serie = (row.SERIEALBARAN || '').trim();
             const cliente = (row.CLIENTE || '').trim();
             const importeAlbaran = parseMoney(row.IMPORTETOTAL);
@@ -641,6 +641,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 firma: row.DS_FIRMA
             };
         });
+        const albaranes = await overlayCanonicalConfirmationStatuses(projectedAlbaranes, idList);
 
         // --- FILTERING: Search by client name, code, albarÃ¡n or factura number ---
         const searchQuery = req.query.search?.toLowerCase().trim() || '';
@@ -808,6 +809,44 @@ function confirmationTables() {
         confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
         lines: 'JAVIER.TEST_REPARTO_LINEAS',
     };
+}
+
+const CANONICAL_LIST_STATUSES = Object.freeze(['ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO']);
+
+async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
+    if (!Array.isArray(albaranes) || !albaranes.length) return albaranes;
+    const documentIds = [...new Set(albaranes.map((item) => String(item.id || '').trim()).filter(Boolean))];
+    const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (!documentIds.length || !drivers.length) return albaranes;
+    const tables = confirmationTables();
+    if (!tables?.confirmations) return albaranes;
+    const documentPlaceholders = documentIds.map(() => '?').join(', ');
+    const driverPlaceholders = drivers.map(() => '?').join(', ');
+    const rows = await queryWithParams(
+        `SELECT DOCUMENT_ID, STATUS
+           FROM ${tables.confirmations}
+          WHERE DOCUMENT_ID IN (${documentPlaceholders})
+            AND REPARTIDOR_ID IN (${driverPlaceholders})`,
+        [...documentIds, ...drivers],
+        false,
+        false,
+    );
+    const byId = new Map();
+    for (const row of Array.isArray(rows) ? rows : []) {
+        const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
+        const status = String(row.STATUS || row.status || '').trim().toUpperCase();
+        if (id && CANONICAL_LIST_STATUSES.includes(status)) byId.set(id, status);
+    }
+    if (!byId.size) return albaranes;
+    return albaranes.map((item) => {
+        const status = byId.get(item.id);
+        if (!status) return item;
+        return {
+            ...item,
+            estado: status,
+            colorEstado: status === 'ENTREGADO' ? 'green' : item.colorEstado,
+        };
+    });
 }
 
 async function loadCanonicalDetailProjection(documentId, repartidorId, clientCode) {

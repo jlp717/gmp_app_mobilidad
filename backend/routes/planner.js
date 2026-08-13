@@ -298,11 +298,10 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                 date: orderDate.iso
             });
         });
-    } catch (error) {
-        // Never wipe the whole day list when PEDIDOS_CAB is down. Clients and
-        // sales must still render; order badges degrade to unavailable.
-        logger.error(`[RUTERO DAY] PEDIDOS_CAB status query failed: ${error && error.message ? error.message : error}`);
-        return new Map();
+    } catch (_error) {
+        const unavailable = new Error('Estado de pedidos no disponible');
+        unavailable.code = 'RUTERO_ORDER_STATUS_UNAVAILABLE';
+        throw unavailable;
     }
 
     return statusMap;

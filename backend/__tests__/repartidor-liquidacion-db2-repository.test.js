@@ -404,7 +404,7 @@ describe('repartidor-liquidacion-db2-repository', () => {
         actorId: '94', actorRole: 'REPARTIDOR',
       })).resolves.toMatchObject({ type: 'EXPENSE', status: 'PENDING', category: 'PEAJE' });
       await expect(tx.listStructuredEntries({ repartidorId: '94', date: '2026-08-09' }))
-        .resolves.toMatchObject({ expenses: [expect.objectContaining({ id: 31 })], closed: false });
+        .resolves.toMatchObject({ expenses: [expect.objectContaining({ id: '31' })], closed: false });
     });
     const sql = conn.query.mock.calls.map(([statement]) => statement)
       .filter((statement) => statement.includes('TEST_REPARTIDOR_LIQUIDACION_GASTOS')).join('\n');

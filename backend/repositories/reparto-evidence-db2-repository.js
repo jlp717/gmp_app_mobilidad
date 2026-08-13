@@ -2,6 +2,7 @@
 
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
 const { TABLE_MAPPINGS } = require('../config/reparto-runtime');
+const { db2Timestamp } = require('./reparto-confirmation-db2-repository');
 
 const TEST_SCHEMA = 'JAVIER';
 // Legacy exports preserve the isolated-test contract; runtime selection is
@@ -202,8 +203,10 @@ function createRepartoEvidenceDb2Repository({
   const table = tables.evidences;
   const confirmationEvidenceTable = tables.confirmationEvidences;
   const evidenceTableName = table.split('.')[1];
+  let capabilitiesVerified = false;
 
   async function assertCapabilities(connection, { signal } = {}) {
+    if (capabilitiesVerified) return;
     const tableRows = await rows(connection,
       'SELECT TABLE_NAME FROM QSYS2.SYSTABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
       [safeSchema, evidenceTableName], signal);
@@ -221,6 +224,7 @@ function createRepartoEvidenceDb2Repository({
         { details: { missingColumns } },
       );
     }
+    capabilitiesVerified = true;
   }
 
   function bound(connection) {
@@ -346,7 +350,7 @@ function createRepartoEvidenceDb2Repository({
             `INSERT INTO ${table} (EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STORAGE_REFERENCE, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, CONTENT_BLOB, STATUS, CREATED_AT, EXPIRES_AT) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', CURRENT TIMESTAMP, ?)`,
             [record.evidenceId, record.documentId, record.repartidorId, record.kind,
               record.storageReference, record.mimeType, record.contentSha256,
-              record.contentBytes, record.content, expiresAt]);
+              record.contentBytes, record.content, db2Timestamp(expiresAt, 'expiresAt')]);
           await connection.commit();
           active = false;
           return { evidenceId: record.evidenceId, created: true, idempotent: false };
@@ -358,6 +362,11 @@ function createRepartoEvidenceDb2Repository({
           }
           if (attempt === 0 && isUniqueConstraintError(error)) continue;
           if (error instanceof RepartoPersistenceError) throw error;
+          const odbc = Array.isArray(error?.odbcErrors) ? error.odbcErrors[0] : null;
+          logger.error?.('reparto evidence persist failed', {
+            odbcState: odbc?.state || error?.state || null,
+            odbcCode: odbc?.code ?? error?.code ?? null,
+          });
           throw new RepartoEvidenceRepositoryError('No se pudo persistir la evidencia', {
             code: isUniqueConstraintError(error) ? 'EVIDENCE_ID_CONFLICT' : 'REPARTO_EVIDENCE_PERSISTENCE_FAILED',
             statusCode: isUniqueConstraintError(error) ? 409 : 503,

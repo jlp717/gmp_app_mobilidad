@@ -334,6 +334,7 @@ const pool = {
 
     async close() {
         this._closed = true;
+        this._initPromise = null;
         this._odbcPool = null;
         for (const entry of this.connections) {
             try { await entry.conn.close(); } catch (_) {}
@@ -447,6 +448,9 @@ async function ensureUtf8(conn) {
 
 async function initDb() {
     assertDbCredentialsConfigured();
+    if (pool._odbcPool && !pool._closed) {
+        return pool._odbcPool;
+    }
     if (pool._initPromise) {
         await pool._initPromise;
         return pool._odbcPool;
@@ -454,16 +458,16 @@ async function initDb() {
     pool._initPromise = (async () => {
         try {
             pool._odbcPool = await odbc.pool(DB_CONFIG);
+            pool._closed = false;
             dbPool = pool._odbcPool;
             await pool._ensureMinConnections();
             logger.info(`✅ Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
             startKeepalive();
             startPoolMetrics();
         } catch (error) {
+            pool._initPromise = null;
             logger.error(`❌ Database connection failed during init: ${error.message}`);
             throw error;
-        } finally {
-            pool._initPromise = null;
         }
     })();
     await pool._initPromise;

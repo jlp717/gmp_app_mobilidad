@@ -156,7 +156,7 @@ describe('repartidor finance HTTP guard coverage', () => {
     const response = await request(server).post('/finanzas/liquidaciones').send(validClose());
     expect(response.status).toBe(201);
     expect(closeDay).toHaveBeenCalledWith(
-      expect.objectContaining({ ...validClose(), sendEmails: false }),
+      expect.objectContaining({ ...validClose(), sendEmails: true }),
       expect.objectContaining({ actorId: '94', actorRole: 'REPARTIDOR' }),
     );
     expect(mockQuery).not.toHaveBeenCalled();

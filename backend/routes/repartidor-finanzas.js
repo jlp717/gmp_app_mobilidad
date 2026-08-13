@@ -122,7 +122,7 @@ function requireCanonicalConfirmationRole(req, res, next) {
   return next();
 }
 
-const EVIDENCE_REQUEST_TIMEOUT_MS = 15000;
+const EVIDENCE_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.REPARTO_EVIDENCE_REQUEST_TIMEOUT_MS, 10) || 15000;
 const EVIDENCE_TIMEOUT_CODES = new Set(['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'HYT00', 'HYT01']);
 const evidenceUpload = multer({
   storage: multer.memoryStorage(),

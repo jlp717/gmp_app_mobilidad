@@ -140,6 +140,23 @@ describe('entregas route coverage gaps', () => {
     expect(deliveryQuery[1].slice(-2)).toEqual([0, 2]);
   });
 
+  test('overlays canonical confirmation status onto the pending list', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
+        return Promise.resolve([{ DOCUMENT_ID: '2026-A-1-42-C1', STATUS: 'ENTREGADO' }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.albaranes[0]).toMatchObject({
+      id: '2026-A-1-42-C1', estado: 'ENTREGADO',
+    });
+  });
+
   test('returns a typed redacted error when the authorized pending query fails', async () => {
     mockQueryWithParams.mockRejectedValueOnce(new Error('DB2 diagnostic must not leak'));
 

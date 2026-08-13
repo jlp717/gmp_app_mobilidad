@@ -179,7 +179,9 @@ function db2Timestamp(value, field) {
       statusCode: 422,
     });
   }
-  return parsed;
+  // IBM i ODBC rejects JS Date binds (HY003). ISO-like strings bind as TIMESTAMP.
+  const iso = parsed.toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 23)}`;
 }
 
 
@@ -300,6 +302,11 @@ function createRepartoConfirmationDb2Repository({
           // an exact replay or the appropriate 409 conflict.
           if (attempt === 0 && isUniqueConstraintError(error)) continue;
           if (error instanceof RepartoPersistenceError) throw error;
+          const odbc = Array.isArray(error?.odbcErrors) ? error.odbcErrors[0] : null;
+          logger.error?.('reparto confirmation persist failed', {
+            odbcState: odbc?.state || error?.state || null,
+            odbcCode: odbc?.code ?? error?.code ?? null,
+          });
           throw new RepartoPersistenceError('No se pudo persistir la confirmación de reparto', {
             code: isUniqueConstraintError(error)
               ? 'REPARTO_CONCURRENT_CONFIRMATION_CONFLICT'
@@ -409,4 +416,5 @@ module.exports = {
   QUALIFIED_TABLES,
   REQUIRED_COLUMNS,
   TABLES,
+  db2Timestamp,
 };

@@ -416,6 +416,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
     ? 'exact'
     : 'compatible';
   let catalogVerified = false;
+  let catalogVerifiedWithOutbox = false;
 
   function catalogObjects(requiresOutbox) {
     const financeKeys = requiresOutbox ? TABLE_KEYS : BASE_TABLE_KEYS;
@@ -442,7 +443,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
   }
 
   async function assertCatalog(connection, requiresOutbox) {
-    catalogVerified = false;
+    if (catalogVerified && (!requiresOutbox || catalogVerifiedWithOutbox)) return;
     const requested = catalogObjects(requiresOutbox);
     const predicates = requested.map(() => '(TABLE_SCHEMA = ? AND TABLE_NAME = ?)').join(' OR ');
     const params = requested.flatMap(({ schema, object }) => [schema, object]);
@@ -643,6 +644,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
       );
     }
     catalogVerified = true;
+    if (requiresOutbox) catalogVerifiedWithOutbox = true;
   }
 
   function transaction(connection) {
