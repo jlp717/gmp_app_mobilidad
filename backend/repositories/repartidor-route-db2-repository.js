@@ -1062,6 +1062,8 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
                 CAC.SERIEFACTURA,
                 CAC.EJERCICIOFACTURA,
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGO_CLIENTE,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEALBARAN,
+                CPC.TERMINALALBARAN,
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.IMPORTETOTAL as TOTAL,
                 ${dsHistAvail ? "DS.STATUS as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
@@ -1096,7 +1098,15 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
   sql += ` ORDER BY FECHA DESC, CPC.EJERCICIOALBARAN DESC, CPC.NUMEROALBARAN DESC, CPC.SERIEALBARAN DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
   sqlParams.push(offset, limit);
-  return (await runQueryWithParams(sql, sqlParams, false)) || [];
+  const rows = (await runQueryWithParams(sql, sqlParams, false)) || [];
+  const overlaid = await overlayCanonicalConfirmations(rows, {
+    repartidorIds: repartidorIdList,
+  });
+  return overlaid.map((row) => {
+    const canonical = String(row.CANONICAL_STATUS || '').trim().toUpperCase();
+    if (!canonical) return row;
+    return { ...row, ESTADO_ENTREGA: canonical };
+  });
 }
 
 async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {

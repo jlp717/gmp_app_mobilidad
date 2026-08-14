@@ -126,6 +126,48 @@ describe('repartidor history document hardening', () => {
     expect(confirmSql).not.toContain('PEDIDOS_CAB');
   });
 
+  test('overlays a just-signed TEST confirmation onto GET /history by route date', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
+        return [{
+          DOCUMENT_ID: '2026-A-1-42-C1',
+          STATUS: 'ENTREGADO',
+          ID: 'conf-1',
+          FIRMA_EVIDENCE_ID: 'sig-1',
+        }];
+      }
+      return [{
+        FECHA: '2026-08-15',
+        NUMEROALBARAN: 42,
+        SERIEALBARAN: 'A',
+        EJERCICIOALBARAN: 2026,
+        NUMEROFACTURA: 0,
+        SERIEFACTURA: '',
+        EJERCICIOFACTURA: 0,
+        CODIGO_CLIENTE: 'C1',
+        CODIGOCLIENTEALBARAN: 'C1',
+        TERMINALALBARAN: 1,
+        NOMBRE_CLIENTE: 'Cliente',
+        TOTAL: 40,
+        ESTADO_ENTREGA: null,
+        FIRMA_PATH: null,
+      }];
+    });
+
+    const response = await get('/history/05').query({
+      startDate: '2026-08-15',
+      endDate: '2026-08-15',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data[0].ESTADO_ENTREGA).toBe('ENTREGADO');
+    const historySql = mockQueryWithParams.mock.calls
+      .map(([sql]) => sql)
+      .find((sql) => String(sql).includes('ANOREPARTO'));
+    expect(historySql).toContain('CODIGOCLIENTEALBARAN');
+    expect(historySql).toContain('TERMINALALBARAN');
+  });
+
   test('groups a factura after albaran dedupe without multiplying its header total', async () => {
     mockQueryWithParams.mockResolvedValue([
       historyRow({

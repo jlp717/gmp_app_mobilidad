@@ -1,6 +1,9 @@
 'use strict';
 
-const { createRepartidorLiquidacionService } = require('../services/repartidor-liquidacion-service');
+const {
+  createRepartidorLiquidacionService,
+  normalizeDaySnapshot,
+} = require('../services/repartidor-liquidacion-service');
 const { buildLiquidacionCommand } = require('../services/repartidor-liquidacion-contract');
 
 const validInput = (overrides = {}) => ({
@@ -218,6 +221,24 @@ describe('repartidor-liquidacion-service', () => {
     const result = await createRepartidorLiquidacionService({ repository }).closeDay(input, validActor());
     expect(result.outboxIntent).toBeNull();
     expect(repository.assertCapabilities).toHaveBeenCalledWith(expect.objectContaining({ requiresOutbox: false }));
+  });
+
+  test('el saldo baja si se ingresa de mas y sube si se ingresa de menos', () => {
+    const command = buildLiquidacionCommand(validInput({ sendEmails: false }));
+    const under = normalizeDaySnapshot({
+      ...validSnapshot(),
+      bankDeposits: [{ id: 'ING-1', amount: 1 }],
+      breakdown: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 1, pending: 2 },
+      balance: 24,
+    }, command);
+    const over = normalizeDaySnapshot({
+      ...validSnapshot(),
+      bankDeposits: [{ id: 'ING-1', amount: 40 }],
+      breakdown: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 40, pending: 2 },
+      balance: -15,
+    }, command);
+    expect(under.balance).toBe(24);
+    expect(over.balance).toBe(-15);
   });
 
   test('los datos derivados del cliente siguen prohibidos y rollback queda delegado al repositorio', async () => {

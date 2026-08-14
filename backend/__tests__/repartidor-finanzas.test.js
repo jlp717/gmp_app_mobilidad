@@ -237,6 +237,36 @@ describe('Repartidor finanzas routes', () => {
     expect(totalsCall[1]).toEqual(['94', 20260423]);
   });
 
+  test('GET /daily-summary includes signed adjustments in totalAIngresar', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
+        TOTAL_EFECTIVO: '100',
+        TOTAL_CHEQUES: '0',
+        TOTAL_TARJETA: '0',
+        TOTAL_POSTDATADOS: '0',
+        TOTAL_COBROS_DIA: '100',
+        COBROS_COUNT: '1',
+      }])
+      .mockResolvedValueOnce([{ SALDO_PENDIENTE: '50' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ TOTAL: '10' }])
+      .mockResolvedValueOnce([{ TOTAL: '20' }])
+      .mockResolvedValueOnce([{ TOTAL: '-5' }])
+      .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '0' }])
+      .mockResolvedValueOnce([{ DEUDA_PENDIENTE: '0' }]);
+
+    const res = await request(app)
+      .get('/finanzas/daily-summary/94')
+      .query({ date: '2026-08-15' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.summary.gastos).toBe(10);
+    expect(res.body.summary.ingresoBanco).toBe(20);
+    expect(res.body.summary.ajustes).toBe(-5);
+    expect(res.body.summary.totalAIngresar).toBe(135);
+  });
+
   test('GET /summary returns real monthly cobros, liquidaciones and pending balance', async () => {
     mockQueryWithParams
       .mockResolvedValueOnce(alignedSchemaRows)

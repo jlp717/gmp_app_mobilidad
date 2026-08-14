@@ -846,9 +846,9 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   const totalCheques = roundMoney(value(totals, 'TOTAL_CHEQUES'));
   const totalTarjeta = roundMoney(value(totals, 'TOTAL_TARJETA'));
   const totalPostdatados = roundMoney(value(totals, 'TOTAL_POSTDATADOS'));
-  const totalAIngresar = roundMoney(saldoActual + totalCobrosDia - gastos);
-  const cobrosCount = toInt(value(totals, 'COBROS_COUNT'));
   const ajustes = roundMoney(structured.ajustes);
+  const totalAIngresar = roundMoney(saldoActual + totalCobrosDia - gastos + ajustes);
+  const cobrosCount = toInt(value(totals, 'COBROS_COUNT'));
 
   // camelCase = contrato Flutter actual; UPPER = alias legacy APK/parsers.
   const summary = {
@@ -866,6 +866,7 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
     deudaPendiente,
     cobrosCount,
     ajustes,
+    TOTAL_AJUSTES: ajustes,
     TOTAL_EFECTIVO: totalEfectivo,
     TOTAL_CHEQUES: totalCheques,
     TOTAL_TARJETA: totalTarjeta,
