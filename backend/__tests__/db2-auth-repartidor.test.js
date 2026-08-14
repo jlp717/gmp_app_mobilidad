@@ -9,31 +9,31 @@ jest.mock('../middleware/logger', () => ({
 const { Db2AuthRepository } = require('../src/modules/auth/infrastructure/db2-auth-repository');
 
 describe('Db2AuthRepository reparto association', () => {
-  test('queries only active JAVIER.RUTERO_CONFIG rows with a parameterized vendor code', async () => {
+  test('queries only ERP VDDX rows with PERMITEREPARTOSN and a parameterized vendor code', async () => {
     const db = { executeParams: jest.fn().mockResolvedValue([]) };
     const repo = new Db2AuthRepository(db);
 
     await expect(repo.findRepartidorAssociation(' a17 ')).resolves.toBeNull();
     expect(db.executeParams).toHaveBeenCalledTimes(1);
     const [sql, params] = db.executeParams.mock.calls[0];
-    expect(sql).toMatch(/FROM\s+JAVIER\.RUTERO_CONFIG/i);
-    expect(sql).toMatch(/TRIM\(VENDEDOR\)\s*=\s*CAST\(\?\s+AS VARCHAR\(50\)\)/i);
-    expect(sql).toMatch(/ORDEN\s*>=\s*0/i);
-    expect(sql).not.toMatch(/DSEDAC\.(?:OPP|VEH)/i);
+    expect(sql).toMatch(/FROM\s+DSEDAC\.VDDX/i);
+    expect(sql).toMatch(/TRIM\(X\.CODIGOVENDEDOR\)\s*=\s*CAST\(\?\s+AS VARCHAR\(50\)\)/i);
+    expect(sql).toMatch(/TRIM\(X\.PERMITEREPARTOSN\)\s*=\s*'S'/i);
+    expect(sql).not.toMatch(/JAVIER\.RUTERO_CONFIG/i);
     expect((sql.match(/\?/g) || [])).toHaveLength(1);
     expect(sql).not.toContain("'A17'");
     expect(params).toEqual(['A17']);
   });
 
-  test('returns null when RUTERO_CONFIG has no active association', async () => {
+  test('returns null when ERP has no repartidor flag', async () => {
     const repo = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([]) });
 
     await expect(repo.findRepartidorAssociation('A17')).resolves.toBeNull();
   });
 
-  test('maps an active RUTERO_CONFIG association with nullable matricula', async () => {
+  test('maps an ERP repartidor association with nullable matricula', async () => {
     const repo = new Db2AuthRepository({ executeParams: jest.fn().mockResolvedValue([
-      { VENDEDOR: ' A17 ', MATRICULA: null },
+      { CODIGO_CONDUCTOR: ' A17 ', MATRICULA: null },
     ]) });
 
     await expect(repo.findRepartidorAssociation('A17')).resolves.toEqual({
@@ -50,10 +50,11 @@ describe('Db2AuthRepository reparto association', () => {
     expect(db.executeParams).not.toHaveBeenCalled();
   });
 
-  test('findByCode derives manager status with scalar VDDX subselect and deterministic vendor membership', async () => {
+  test('findByCode derives mobility flags from DSEDAC.VDDX and deterministic vendor membership', async () => {
     const db = { executeParams: jest.fn().mockResolvedValue([{
       USUARIO: '050', NOMBRE: 'Persona', ROL: 'JEFE_VENTAS', PASSWORD_HASH: '1234', ACTIVO: 1,
       TIPOVENDEDOR: 'R', HIDE_COMMISSIONS: 'Y',
+      PREVENTISTA_SN: 'S', REPARTIDOR_SN: 'N', JEFE_SN: 'S', MATRICULA: ' 02 ',
     }]) };
     const repo = new Db2AuthRepository(db);
 
@@ -62,17 +63,17 @@ describe('Db2AuthRepository reparto association', () => {
     expect(user.code).toBe('050');
     expect(user.tipoVendedor).toBe('R');
     expect(user.showCommissions).toBe(false);
+    expect(user.permitePreventa).toBe(true);
+    expect(user.permiteReparto).toBe(false);
+    expect(user.isJefeVentas).toBe(true);
+    expect(user.matricula).toBe('02');
     const [sql, params] = db.executeParams.mock.calls[0];
-    // DB2 for i rejects EXISTS in the SELECT-list CASE (SQLCODE -104 / ODBC 42000).
-    // Use scalar MAX subselect (same pattern as TIPOVENDEDOR / HIDE_COMMISSIONS).
-    expect(sql).toMatch(/CASE WHEN \([\s\S]+MAX\(NULLIF\(TRIM\(X\.JEFEVENTASSN\)[\s\S]+FROM DSEDAC\.VDDX/);
+    expect(sql).toMatch(/PERMITEPREVENTASN/);
+    expect(sql).toMatch(/PERMITEREPARTOSN/);
+    expect(sql).toMatch(/JEFEVENTASSN/);
     expect(sql).toMatch(/WHERE EXISTS[\s\S]+FROM DSEDAC\.VDC/);
-    expect(sql).not.toMatch(/LEFT JOIN DSEDAC\.VDDX|JOIN DSEDAC\.VDC V ON/);
-    expect(sql).not.toMatch(/SELECT DISTINCT TRIM\(P\.CODIGOVENDEDOR\)/);
+    expect(sql).not.toMatch(/JAVIER\.RUTERO_CONFIG/i);
     expect(sql).toMatch(/ORDER BY[\s\S]+FETCH FIRST 2 ROWS ONLY/);
-    expect(sql).toMatch(/MAX\(NULLIF\(TRIM\(V2\.TIPOVENDEDOR\)/);
-    expect(sql).toMatch(/MAX\(NULLIF\(TRIM\(E\.HIDE_COMMISSIONS\)/);
-    expect(sql).not.toMatch(/CASE WHEN EXISTS[\s\S]+FROM DSEDAC\.VDDX/);
     expect(params).toEqual(['050']);
   });
 

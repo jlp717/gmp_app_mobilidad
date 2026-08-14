@@ -76,8 +76,11 @@ describe('Auth Flow Tests', () => {
             name: 'Test Vendor',
             isActive: true,
             isJefeVentas: false,
+            permitePreventa: true,
+            permiteReparto: false,
             tipoVendedor: 'COMERCIAL',
             showCommissions: true,
+            matricula: null,
             _passwordHash: '1234',
             ...overrides,
         };
@@ -172,13 +175,11 @@ describe('Auth Flow Tests', () => {
             expect(Array.isArray(res.body.vendedorCodes)).toBe(true);
         });
 
-        test('should keep COMERCIAL default when a DB reparto association exists', async () => {
+        test('should keep COMERCIAL default when ERP marks preventista and repartidor', async () => {
             mockAuthRepository.findByCode.mockResolvedValue(profile({
                 code: '050', name: 'Repartidor', _passwordHash: '5678',
+                permitePreventa: true, permiteReparto: true, matricula: '1234ABC',
             }));
-            mockAuthRepository.findRepartidorAssociation.mockResolvedValue({
-                isRepartidor: true, codigoConductor: '050', matricula: '1234ABC',
-            });
 
             const res = await request(app)
                 .post('/api/auth/login')

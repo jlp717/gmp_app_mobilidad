@@ -39,7 +39,6 @@ function profileUnavailable() {
 function createAuthClaimsResolver({ authRepository } = {}) {
   if (!authRepository
     || typeof authRepository.findByCode !== 'function'
-    || typeof authRepository.findRepartidorAssociation !== 'function'
     || typeof authRepository.getVendorVisibilityScope !== 'function') {
     throw new TypeError('authRepository must implement the complete auth claims profile contract');
   }
@@ -61,27 +60,20 @@ function createAuthClaimsResolver({ authRepository } = {}) {
       if (!canonicalCode) throw subjectInvalid();
       const normalizedTipoVendedor = normalizeCode(profile.tipoVendedor);
 
-      let repartoAssociation;
-      try {
-        repartoAssociation = await authRepository.findRepartidorAssociation(canonicalCode);
-      } catch (_error) {
-        throw profileUnavailable();
-      }
-
-      // COMERCIAL comes from the authenticated VDC/VDD profile. ADMIN comes from
-      // its normalized type, JEFE from VDDX, and REPARTIDOR from the DB association.
-      const hasAdminRole = normalizedTipoVendedor === ADMIN;
+      // ERP mobility flags (DSEDAC.VDDX): Preventista, Jefe de ventas, Repartidor.
+      const hasCommercialRole = profile.permitePreventa === true;
       const hasManagerRole = profile.isJefeVentas === true;
-      const hasDriverRole = repartoAssociation?.isRepartidor === true
-        && normalizeCode(repartoAssociation.codigoConductor) === canonicalCode;
+      const hasDriverRole = profile.permiteReparto === true;
+      const hasAdminRole = normalizedTipoVendedor === ADMIN;
       const supervisionRole = hasAdminRole ? ADMIN : (hasManagerRole ? JEFE_VENTAS : null);
-      const availableRoles = [COMERCIAL];
+
+      const availableRoles = [];
+      if (hasCommercialRole) availableRoles.push(COMERCIAL);
       if (hasAdminRole) availableRoles.push(ADMIN);
       if (hasManagerRole) availableRoles.push(JEFE_VENTAS);
       if (hasDriverRole && !hasAdminRole) availableRoles.push(REPARTIDOR);
+      if (availableRoles.length === 0) availableRoles.push(COMERCIAL);
 
-      // ALMACEN and REPARTIDOR UI modes are supervision surfaces, not a change
-      // of the underlying ADMIN or JEFE_VENTAS authorization role.
       const availableModes = [COMERCIAL];
       if (supervisionRole) {
         availableModes.push(ALMACEN, REPARTIDOR);
@@ -89,7 +81,10 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         availableModes.push(REPARTIDOR);
       }
 
-      const defaultRole = supervisionRole || COMERCIAL;
+      const defaultRole = supervisionRole
+        || (hasDriverRole && !hasCommercialRole ? REPARTIDOR : null)
+        || (hasCommercialRole ? COMERCIAL : null)
+        || (hasDriverRole ? REPARTIDOR : COMERCIAL);
       const requestedMode = normalizeCode(selectedMode);
       const warehouseMode = requestedMode === ALMACEN
         || (!requestedMode && normalizeCode(selectedRole) === ALMACEN);
@@ -111,7 +106,6 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         || ([ADMIN, JEFE_VENTAS].includes(role) ? COMERCIAL : role);
       const modeMatchesRole = (activeMode === ALMACEN && role === supervisionRole)
         || (activeMode === COMERCIAL && [COMERCIAL, ADMIN, JEFE_VENTAS].includes(role))
-        // ADMIN supervision takes precedence; JEFE supervision requires no driver association.
         || (activeMode === REPARTIDOR && role === supervisionRole && repartoSupervisionMode)
         || (activeMode === REPARTIDOR && role === REPARTIDOR && hasDriverRole);
       if (!availableModes.includes(activeMode) || !modeMatchesRole) {
@@ -143,7 +137,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
         isRepartidor: projectedDriver,
         codigoConductor: projectedDriver ? canonicalCode : null,
         matricula: projectedDriver
-          ? String(repartoAssociation.matricula || '').trim() || null
+          ? String(profile.matricula || '').trim() || null
           : null,
         vendorCodes,
         vendedorCodes: freezeList(vendorCodes),

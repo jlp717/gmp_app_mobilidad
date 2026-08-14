@@ -6,6 +6,50 @@ const { User } = require('../domain/user');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { getVendorVisibilityScope } = require('../../../../utils/common');
 
+const ERP_MOBILITY_PROFILE_SELECT = `
+        COALESCE((
+          SELECT MAX(NULLIF(TRIM(X.PERMITEPREVENTASN), ''))
+          FROM DSEDAC.VDDX X
+          WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+        ), '') AS PREVENTISTA_SN,
+        COALESCE((
+          SELECT MAX(NULLIF(TRIM(X.PERMITEREPARTOSN), ''))
+          FROM DSEDAC.VDDX X
+          WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+        ), '') AS REPARTIDOR_SN,
+        COALESCE((
+          SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
+          FROM DSEDAC.VDDX X
+          WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+        ), '') AS JEFE_SN,
+        COALESCE((
+          SELECT TRIM(V.CODIGOVEHICULO)
+          FROM DSEDAC.VEH V
+          WHERE TRIM(V.CODIGOCONDUCTOR) = P.CODIGOVENDEDOR
+          FETCH FIRST 1 ROW ONLY
+        ), '') AS MATRICULA`;
+
+const ERP_ROLE_SELECT = `
+        CASE
+          WHEN (
+            SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
+            FROM DSEDAC.VDDX X
+            WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+          ) = 'S' THEN 'JEFE_VENTAS'
+          WHEN (
+            SELECT MAX(NULLIF(TRIM(X.PERMITEREPARTOSN), ''))
+            FROM DSEDAC.VDDX X
+            WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+          ) = 'S'
+          AND COALESCE((
+            SELECT MAX(NULLIF(TRIM(X.PERMITEPREVENTASN), ''))
+            FROM DSEDAC.VDDX X
+            WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+          ), '') <> 'S'
+          THEN 'REPARTIDOR'
+          ELSE 'COMERCIAL'
+        END AS ROL`;
+
 class Db2AuthRepository extends AuthRepository {
   constructor(dbPool) {
     super();
@@ -19,11 +63,8 @@ class Db2AuthRepository extends AuthRepository {
     const codeSql = `
       SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
         TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
-        CASE WHEN (
-          SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
-          FROM DSEDAC.VDDX X
-          WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-        ) = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        ${ERP_ROLE_SELECT},
+        ${ERP_MOBILITY_PROFILE_SELECT},
         COALESCE((
           SELECT MAX(NULLIF(TRIM(V2.TIPOVENDEDOR), ''))
           FROM DSEDAC.VDC V2
@@ -54,11 +95,8 @@ class Db2AuthRepository extends AuthRepository {
       const nameSql = `
         SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
           TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
-          CASE WHEN (
-            SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
-            FROM DSEDAC.VDDX X
-            WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-          ) = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+          ${ERP_ROLE_SELECT},
+          ${ERP_MOBILITY_PROFILE_SELECT},
           COALESCE((
             SELECT MAX(NULLIF(TRIM(V2.TIPOVENDEDOR), ''))
             FROM DSEDAC.VDC V2
@@ -103,11 +141,8 @@ class Db2AuthRepository extends AuthRepository {
     const sql = `
       SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
         TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
-        CASE WHEN (
-          SELECT MAX(NULLIF(TRIM(X.JEFEVENTASSN), ''))
-          FROM DSEDAC.VDDX X
-          WHERE X.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-        ) = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        ${ERP_ROLE_SELECT},
+        ${ERP_MOBILITY_PROFILE_SELECT},
         COALESCE((
           SELECT MAX(NULLIF(TRIM(V2.TIPOVENDEDOR), ''))
           FROM DSEDAC.VDC V2
@@ -142,7 +177,14 @@ class Db2AuthRepository extends AuthRepository {
     // CAST(? AS VARCHAR(50)) avoids ODBC 22001/CWB0111 when binding to IBM i CHAR columns
     const sql = `
       SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
-        CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        CASE
+          WHEN TRIM(VX.JEFEVENTASSN) = 'S' THEN 'JEFE_VENTAS'
+          WHEN TRIM(VX.PERMITEREPARTOSN) = 'S' AND TRIM(VX.PERMITEPREVENTASN) <> 'S' THEN 'REPARTIDOR'
+          ELSE 'COMERCIAL'
+        END AS ROL,
+        TRIM(VX.PERMITEPREVENTASN) AS PREVENTISTA_SN,
+        TRIM(VX.PERMITEREPARTOSN) AS REPARTIDOR_SN,
+        TRIM(VX.JEFEVENTASSN) AS JEFE_SN,
         '' AS EMAIL, TRIM(PL.CODIGOPIN) AS PASSWORD_HASH, 1 AS ACTIVO
       FROM DSEDAC.VDD V
       LEFT JOIN DSEDAC.VDDX VX ON V.CODIGOVENDEDOR = VX.CODIGOVENDEDOR
@@ -164,18 +206,23 @@ class Db2AuthRepository extends AuthRepository {
     if (!normalizedCode || normalizedCode.length > 50 || !/^[A-Z0-9]+$/.test(normalizedCode)) return null;
 
     const sql = `
-      SELECT DISTINCT TRIM(VENDEDOR) AS CODIGO_CONDUCTOR,
-        CAST(NULL AS VARCHAR(30)) AS MATRICULA
-      FROM JAVIER.RUTERO_CONFIG
-      WHERE TRIM(VENDEDOR) = CAST(? AS VARCHAR(50))
-        AND ORDEN >= 0
+      SELECT TRIM(X.CODIGOVENDEDOR) AS CODIGO_CONDUCTOR,
+        COALESCE((
+          SELECT TRIM(V.CODIGOVEHICULO)
+          FROM DSEDAC.VEH V
+          WHERE TRIM(V.CODIGOCONDUCTOR) = TRIM(X.CODIGOVENDEDOR)
+          FETCH FIRST 1 ROW ONLY
+        ), '') AS MATRICULA
+      FROM DSEDAC.VDDX X
+      WHERE TRIM(X.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+        AND TRIM(X.PERMITEREPARTOSN) = 'S'
       FETCH FIRST 2 ROWS ONLY
     `;
     const rows = await this._db.executeParams(sql, [normalizedCode]);
     if (!Array.isArray(rows) || rows.length !== 1) return null;
 
     const associationCode = String(
-      rows[0].CODIGO_CONDUCTOR || rows[0].codigo_conductor || rows[0].VENDEDOR || rows[0].vendedor || '',
+      rows[0].CODIGO_CONDUCTOR || rows[0].codigo_conductor || '',
     ).trim().toUpperCase();
     if (associationCode !== normalizedCode) return null;
     return {

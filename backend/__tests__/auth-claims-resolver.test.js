@@ -13,16 +13,18 @@ function profile(overrides = {}) {
     name: 'Persona',
     isActive: true,
     isJefeVentas: false,
+    permitePreventa: true,
+    permiteReparto: false,
     tipoVendedor: 'R',
     showCommissions: false,
+    matricula: null,
     ...overrides,
   };
 }
 
-function harness({ user = profile(), reparto = null } = {}) {
+function harness({ user = profile() } = {}) {
   const repository = {
     findByCode: jest.fn().mockResolvedValue(user),
-    findRepartidorAssociation: jest.fn().mockResolvedValue(reparto),
     getVendorVisibilityScope: jest.fn(async (code, { role }) => (
       role === 'JEFE_VENTAS' ? [code, '051', 'UNK'] : [code]
     )),
@@ -35,7 +37,7 @@ describe('authoritative auth claims resolver', () => {
     expect(AUTH_CLAIMS_VERSION).toBe(3);
   });
 
-  test('uses the authenticated profile as the authoritative COMERCIAL base', async () => {
+  test('uses ERP preventista flag as the authoritative COMERCIAL base', async () => {
     const { repository, resolver } = harness();
 
     const claims = await resolver.resolve({ code: '050' });
@@ -59,16 +61,37 @@ describe('authoritative auth claims resolver', () => {
       claimsVersion: AUTH_CLAIMS_VERSION,
     });
     expect(repository.findByCode).toHaveBeenCalledWith('050');
-    expect(repository.findRepartidorAssociation).toHaveBeenCalledWith('050');
     expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('050', { role: 'COMERCIAL' });
     expect(Object.isFrozen(claims)).toBe(true);
     expect(Object.isFrozen(claims.availableRoles)).toBe(true);
     expect(Object.isFrozen(claims.vendorCodes)).toBe(true);
   });
 
-  test('adds REPARTIDOR without replacing the default COMERCIAL role', async () => {
+  test('defaults pure ERP repartidores to REPARTIDOR', async () => {
     const { resolver } = harness({
-      reparto: { isRepartidor: true, codigoConductor: '050', matricula: null },
+      user: profile({
+        code: '044',
+        name: '44 ROMERA',
+        permitePreventa: false,
+        permiteReparto: true,
+        tipoVendedor: 'P',
+      }),
+    });
+
+    await expect(resolver.resolve({ code: '44' })).resolves.toEqual(expect.objectContaining({
+      role: 'REPARTIDOR',
+      availableRoles: ['REPARTIDOR'],
+      activeMode: 'REPARTIDOR',
+      availableModes: ['COMERCIAL', 'REPARTIDOR'],
+      isRepartidor: true,
+      codigoConductor: '044',
+      vendorCodes: ['044'],
+    }));
+  });
+
+  test('adds REPARTIDOR without replacing the default COMERCIAL role for dual profiles', async () => {
+    const { resolver } = harness({
+      user: profile({ permitePreventa: true, permiteReparto: true, matricula: '1234ABC' }),
     });
 
     await expect(resolver.resolve({ code: '050' })).resolves.toEqual(expect.objectContaining({
@@ -85,7 +108,7 @@ describe('authoritative auth claims resolver', () => {
 
   test('projects an explicitly selected REPARTIDOR with only the canonical vendor code', async () => {
     const { repository, resolver } = harness({
-      reparto: { isRepartidor: true, codigoConductor: '050', matricula: null },
+      user: profile({ permitePreventa: true, permiteReparto: true, matricula: '1234ABC' }),
     });
 
     await expect(resolver.resolve({ code: '050', selectedRole: 'REPARTIDOR' })).resolves.toEqual(
@@ -93,7 +116,7 @@ describe('authoritative auth claims resolver', () => {
         role: 'REPARTIDOR',
         isRepartidor: true,
         codigoConductor: '050',
-        matricula: null,
+        matricula: '1234ABC',
         vendorCodes: ['050'],
         vendedorCodes: ['050'],
       }),
@@ -101,9 +124,9 @@ describe('authoritative auth claims resolver', () => {
     expect(repository.getVendorVisibilityScope).not.toHaveBeenCalled();
   });
 
-  test('derives manager behavior from the profile for any canonical code', async () => {
+  test('derives manager behavior from the ERP jefe flag for any canonical code', async () => {
     const { repository, resolver } = harness({
-      user: profile({ code: 'MGR7', isJefeVentas: true }),
+      user: profile({ code: 'MGR7', isJefeVentas: true, permitePreventa: true }),
     });
     repository.getVendorVisibilityScope.mockResolvedValue(['MGR7', 'TEAM']);
 
@@ -119,8 +142,12 @@ describe('authoritative auth claims resolver', () => {
 
   test('projects only the selected role and never retains manager scope', async () => {
     const { resolver } = harness({
-      user: profile({ isJefeVentas: true }),
-      reparto: { isRepartidor: true, codigoConductor: '050', matricula: '1234ABC' },
+      user: profile({
+        isJefeVentas: true,
+        permitePreventa: true,
+        permiteReparto: true,
+        matricula: '1234ABC',
+      }),
     });
 
     await expect(resolver.resolve({ code: '050', selectedRole: 'COMERCIAL' })).resolves.toEqual(
@@ -145,7 +172,7 @@ describe('authoritative auth claims resolver', () => {
   });
 
   test('projects ALMACEN only as a manager UI mode without minting a new role', async () => {
-    const { resolver } = harness({ user: profile({ isJefeVentas: true }) });
+    const { resolver } = harness({ user: profile({ isJefeVentas: true, permitePreventa: true }) });
 
     await expect(resolver.resolve({ code: '050', selectedMode: 'ALMACEN' })).resolves.toEqual(
       expect.objectContaining({
@@ -158,7 +185,7 @@ describe('authoritative auth claims resolver', () => {
 
   test('projects REPARTIDOR as JEFE supervision mode without personal association', async () => {
     const { repository, resolver } = harness({
-      user: profile({ code: 'J17', isJefeVentas: true }),
+      user: profile({ code: 'J17', isJefeVentas: true, permitePreventa: true }),
     });
     repository.getVendorVisibilityScope.mockResolvedValue(['J17', 'TEAM']);
 
@@ -179,7 +206,7 @@ describe('authoritative auth claims resolver', () => {
 
   test('uses production JEFE visibility lookup while emitting normalized ADMIN claims', async () => {
     const { repository, resolver } = harness({
-      user: profile({ code: 'A17', tipoVendedor: ' admin ' }),
+      user: profile({ code: 'A17', tipoVendedor: ' admin ', permitePreventa: true }),
     });
     await expect(resolver.resolve({ code: 'a17' })).resolves.toEqual(expect.objectContaining({
       id: 'VA17',
@@ -199,7 +226,12 @@ describe('authoritative auth claims resolver', () => {
 
   test('preserves JEFE visibility when an ADMIN profile is also a sales manager', async () => {
     const { repository, resolver } = harness({
-      user: profile({ code: 'A17', tipoVendedor: ' admin ', isJefeVentas: true }),
+      user: profile({
+        code: 'A17',
+        tipoVendedor: ' admin ',
+        isJefeVentas: true,
+        permitePreventa: true,
+      }),
     });
     repository.getVendorVisibilityScope.mockResolvedValue(['A17', 'TEAM']);
 
@@ -215,7 +247,7 @@ describe('authoritative auth claims resolver', () => {
 
   test('projects REPARTIDOR as ADMIN supervision mode without personal association', async () => {
     const { repository, resolver } = harness({
-      user: profile({ code: 'A17', tipoVendedor: ' admin ' }),
+      user: profile({ code: 'A17', tipoVendedor: ' admin ', permitePreventa: true }),
     });
     repository.getVendorVisibilityScope.mockResolvedValue(['A17', 'TEAM']);
 
@@ -234,10 +266,15 @@ describe('authoritative auth claims resolver', () => {
     }));
   });
 
-  test('gives ADMIN supervision precedence over a personal REPARTIDOR association', async () => {
+  test('gives ADMIN supervision precedence over a personal ERP repartidor flag', async () => {
     const { repository, resolver } = harness({
-      user: profile({ code: 'A17', tipoVendedor: ' admin ' }),
-      reparto: { isRepartidor: true, codigoConductor: 'A17', matricula: '1234ABC' },
+      user: profile({
+        code: 'A17',
+        tipoVendedor: ' admin ',
+        permitePreventa: true,
+        permiteReparto: true,
+        matricula: '1234ABC',
+      }),
     });
     repository.getVendorVisibilityScope.mockResolvedValue(['A17', 'TEAM']);
 
@@ -281,7 +318,7 @@ describe('authoritative auth claims resolver', () => {
 
   test('maps repository failures to typed 503 without leaking their message', async () => {
     const { repository, resolver } = harness();
-    repository.findRepartidorAssociation.mockRejectedValue(new Error('sensitive DB detail'));
+    repository.findByCode.mockRejectedValue(new Error('sensitive DB detail'));
 
     await expect(resolver.resolve({ code: '050' })).rejects.toMatchObject({
       status: 503,

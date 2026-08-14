@@ -19,11 +19,9 @@ function repository({ manager, driver = false }) {
   return {
     findByCode: jest.fn(async (code) => ({
       code, name: manager ? 'Jefe' : 'Comercial', isActive: true,
-      isJefeVentas: manager, tipoVendedor: 'R', showCommissions: true,
+      isJefeVentas: manager, permitePreventa: true, permiteReparto: driver,
+      tipoVendedor: 'R', showCommissions: true, matricula: driver ? '1234ABC' : null,
     })),
-    findRepartidorAssociation: jest.fn(async (code) => driver
-      ? { isRepartidor: true, codigoConductor: code, matricula: '1234ABC' }
-      : null),
     getVendorVisibilityScope: jest.fn(async (code, { role }) => (
       role === 'JEFE_VENTAS' ? [code, '051'] : [code]
     )),

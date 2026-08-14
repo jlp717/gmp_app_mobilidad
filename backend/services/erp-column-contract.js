@@ -26,6 +26,9 @@ const LACLAE_REQUIRED = Object.freeze([
 const VDDX_REQUIRED = Object.freeze([
   'CODIGOVENDEDOR',
   'CORREOELECTRONICO',
+  'PERMITEPREVENTASN',
+  'PERMITEREPARTOSN',
+  'JEFEVENTASSN',
 ]);
 
 const VDD_REQUIRED = Object.freeze([

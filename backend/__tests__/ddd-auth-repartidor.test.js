@@ -88,7 +88,8 @@ function user(overrides = {}) {
   return {
     id: 'V050', code: '050', name: 'Persona real', role: 'COMERCIAL',
     isJefeVentas: false, isActive: true, _passwordHash: '1234',
-    tipoVendedor: 'R', showCommissions: false, ...overrides,
+    permitePreventa: true, permiteReparto: false,
+    tipoVendedor: 'R', showCommissions: false, matricula: null, ...overrides,
   };
 }
 beforeEach(() => {
@@ -105,9 +106,9 @@ beforeEach(() => {
 });
 
 test('DDD login keeps COMERCIAL default and adds REPARTIDOR as a switchable role', async () => {
-  mockAuthRepo.findRepartidorAssociation.mockResolvedValue({
-    isRepartidor: true, codigoConductor: '050', matricula: '1234ABC',
-  });
+  mockAuthRepo.findByCode.mockResolvedValue(user({
+    permitePreventa: true, permiteReparto: true, matricula: '1234ABC',
+  }));
   const res = await request(app()).post('/api/auth/login')
     .send({ username: '050', password: '1234' });
   expect(res.status).toBe(200);
@@ -159,7 +160,7 @@ test('DDD login preserves exact COMERCIAL and JEFE_VENTAS scopes', async () => {
   }));
 
   mockAuthRepo.findByCode.mockResolvedValue(user({
-    id: 'V001', code: '001', role: 'JEFE_VENTAS', isJefeVentas: true,
+    id: 'V001', code: '001', role: 'JEFE_VENTAS', isJefeVentas: true, permitePreventa: true,
   }));
   mockDbPool.execute.mockResolvedValue([{ CODE: '001' }, { CODE: '002' }]);
   res = await request(app()).post('/api/auth/login')
@@ -168,11 +169,11 @@ test('DDD login preserves exact COMERCIAL and JEFE_VENTAS scopes', async () => {
     role: 'JEFE_VENTAS', isRepartidor: false,
     vendedorCodes: ['001', '002', '82', '20', 'UNK'],
   }));
-  expect(mockAuthRepo.findRepartidorAssociation).toHaveBeenCalledTimes(2);
+  expect(mockAuthRepo.findByCode.mock.calls.length).toBeGreaterThanOrEqual(2);
 });
 
-test('reparto lookup failure returns typed 503 without token or identity leakage', async () => {
-  mockAuthRepo.findRepartidorAssociation.mockRejectedValue(new Error('DB unavailable'));
+test('profile lookup failure returns typed 503 without token or identity leakage', async () => {
+  mockAuthRepo.findByCode.mockRejectedValue(new Error('DB unavailable'));
   const res = await request(app()).post('/api/auth/login')
     .send({ username: '050', password: '1234' });
   expect(res.status).toBe(503);
