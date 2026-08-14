@@ -45,7 +45,7 @@ android {
 
     defaultConfig {
         // Play Console production package (GMP Movilidad).
-        applicationId = "com.maripepa.gmp_movilidad"
+        applicationId = "com.maripepa.gmp_mobilidad"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

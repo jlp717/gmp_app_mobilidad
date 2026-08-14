@@ -9,7 +9,7 @@ import workmanager_apple
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     WorkmanagerPlugin.registerPeriodicTask(
-      withIdentifier: "com.maripepa.gmp_movilidad.notifications.refresh",
+      withIdentifier: "com.maripepa.gmp_mobilidad.notifications.refresh",
       frequency: NSNumber(value: 30 * 60)
     )
     GeneratedPluginRegistrant.register(with: self)
