@@ -52,7 +52,7 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.gmp_movilidad_pedidos_test.notifications.refresh</string>
+		<string>com.maripepa.gmp_movilidad.notifications.refresh</string>
 	</array>
 </dict>
 </plist>

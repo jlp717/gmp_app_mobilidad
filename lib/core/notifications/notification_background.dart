@@ -15,7 +15,7 @@ class NotificationBackgroundTaskNames {
   const NotificationBackgroundTaskNames._();
 
   static const periodicRefresh =
-      'com.gmp_movilidad_pedidos_test.notifications.refresh';
+      'com.maripepa.gmp_movilidad.notifications.refresh';
   static const uniquePeriodicRefresh = 'gmp_notifications_periodic_refresh';
 }
 

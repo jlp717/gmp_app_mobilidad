@@ -358,7 +358,7 @@ class AuthState {
   bool get isAuthenticated => user != null;
   bool get isDirector => user?.isDirector ?? false;
   String get playStoreUrl =>
-      'https://play.google.com/store/apps/details?id=com.jlp.gmp_mobilidad';
+      'https://play.google.com/store/apps/details?id=com.maripepa.gmp_movilidad';
 
   AuthState copyWith({
     UserModel? user,
