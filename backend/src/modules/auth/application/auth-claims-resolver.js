@@ -71,7 +71,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
       if (hasCommercialRole) availableRoles.push(COMERCIAL);
       if (hasAdminRole) availableRoles.push(ADMIN);
       if (hasManagerRole) availableRoles.push(JEFE_VENTAS);
-      if (hasDriverRole && !hasAdminRole) availableRoles.push(REPARTIDOR);
+      if (hasDriverRole && !supervisionRole) availableRoles.push(REPARTIDOR);
       if (availableRoles.length === 0) availableRoles.push(COMERCIAL);
 
       const availableModes = [COMERCIAL];
@@ -88,7 +88,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
       const requestedMode = normalizeCode(selectedMode);
       const warehouseMode = requestedMode === ALMACEN
         || (!requestedMode && normalizeCode(selectedRole) === ALMACEN);
-      const repartoSupervisionMode = supervisionRole && (hasAdminRole || !hasDriverRole) && (
+      const repartoSupervisionMode = Boolean(supervisionRole) && (
         requestedMode === REPARTIDOR
         || (!requestedMode && normalizeCode(selectedRole) === REPARTIDOR)
       );

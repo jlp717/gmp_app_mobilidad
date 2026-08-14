@@ -178,16 +178,16 @@ describe('warehouse is an authorized UI mode, not a privilege role', () => {
 
     expect(reparto.status).toBe(200);
     expect(reparto.body).toEqual(expect.objectContaining({
-      role: 'REPARTIDOR', activeMode: 'REPARTIDOR',
-      isJefeVentas: false, isRepartidor: true,
-      codigoConductor: '050', vendedorCodes: ['050'],
-      availableRoles: ['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR'],
+      role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+      isJefeVentas: true, isRepartidor: false,
+      codigoConductor: null, vendedorCodes: ['050', '051'],
+      availableRoles: ['COMERCIAL', 'JEFE_VENTAS'],
       availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
       user: expect.objectContaining({
-        role: 'REPARTIDOR', activeMode: 'REPARTIDOR',
-        isJefeVentas: false, isRepartidor: true,
-        codigoConductor: '050', matricula: '1234ABC',
-        vendedorCodes: ['050'],
+        role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+        isJefeVentas: true, isRepartidor: false,
+        codigoConductor: null, matricula: null,
+        vendedorCodes: ['050', '051'],
       }),
     }));
     const repartoClaims = auth.verifyAccessToken(reparto.body.token);
@@ -208,7 +208,7 @@ describe('warehouse is an authorized UI mode, not a privilege role', () => {
       isJefeVentas: true, isRepartidor: false,
       codigoConductor: null, matricula: null,
       vendedorCodes: ['050', '051'],
-      availableRoles: ['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR'],
+      availableRoles: ['COMERCIAL', 'JEFE_VENTAS'],
       availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
       user: expect.objectContaining({
         role: 'JEFE_VENTAS', activeMode: 'COMERCIAL',

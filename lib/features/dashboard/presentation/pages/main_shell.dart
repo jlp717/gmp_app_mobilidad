@@ -432,7 +432,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       );
     }
 
-    final isJefeVentas = user.isJefeVentas;
+    final isJefeVentas =
+        user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
     if (_forceRepartidorMode && isJefeVentas && _selectedRepartidor == null) {
       _selectedRepartidor = 'ALL';
     }
@@ -1151,9 +1152,13 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (!currentUser.availableModes.contains(allowedMode)) return;
 
     final requestedRole = switch (selectedMode) {
-      'VENTAS' => currentUser.availableRoles.contains('JEFE_VENTAS')
-          ? 'JEFE_VENTAS'
-          : 'COMERCIAL',
+      'VENTAS' => currentUser.availableRoles.contains('ADMIN') &&
+              !currentUser.availableRoles.contains('JEFE_VENTAS')
+          ? 'ADMIN'
+          : currentUser.availableRoles.contains('JEFE_VENTAS')
+              ? 'JEFE_VENTAS'
+              : 'COMERCIAL',
+      // Backend maps this to JEFE/ADMIN + activeMode REPARTIDOR for managers.
       'REPARTO' => 'REPARTIDOR',
       'ALMACEN' => 'ALMACEN',
       _ => null,
@@ -1182,10 +1187,16 @@ class _MainShellState extends ConsumerState<MainShell> {
     // REPARTIDOR). Pure drivers keep role REPARTIDOR.
     final expectedRole = switch (selectedMode) {
       'VENTAS' => requestedRole,
-      'REPARTO' => currentUser.availableRoles.contains('JEFE_VENTAS')
-          ? 'JEFE_VENTAS'
-          : 'REPARTIDOR',
-      'ALMACEN' => 'JEFE_VENTAS',
+      'REPARTO' => currentUser.availableRoles.contains('ADMIN') &&
+              !currentUser.availableRoles.contains('JEFE_VENTAS')
+          ? 'ADMIN'
+          : currentUser.availableRoles.contains('JEFE_VENTAS')
+              ? 'JEFE_VENTAS'
+              : 'REPARTIDOR',
+      'ALMACEN' => currentUser.availableRoles.contains('ADMIN') &&
+              !currentUser.availableRoles.contains('JEFE_VENTAS')
+          ? 'ADMIN'
+          : 'JEFE_VENTAS',
       _ => '',
     };
     final committed = switched &&
@@ -1202,6 +1213,11 @@ class _MainShellState extends ConsumerState<MainShell> {
         ),
       );
       return;
+    }
+
+    if (expectedMode == 'REPARTIDOR' &&
+        (expectedRole == 'JEFE_VENTAS' || expectedRole == 'ADMIN')) {
+      _fetchRepartidores();
     }
 
     setState(() {

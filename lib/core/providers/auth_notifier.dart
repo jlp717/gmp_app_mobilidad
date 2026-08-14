@@ -257,12 +257,18 @@ String restoreAuthorizedActiveMode(
   }
 
   final (expectedRole, expectedMode) = switch (normalizedRequest) {
-    'ALMACEN' => ('JEFE_VENTAS', 'ALMACEN'),
+    'ALMACEN' => (
+        responseRole == 'ADMIN' ? 'ADMIN' : 'JEFE_VENTAS',
+        'ALMACEN',
+      ),
     'JEFE_VENTAS' => ('JEFE_VENTAS', 'COMERCIAL'),
+    'ADMIN' => ('ADMIN', 'COMERCIAL'),
     'COMERCIAL' => ('COMERCIAL', 'COMERCIAL'),
-    // Managers keep JEFE_VENTAS in Perfil Reparto; pure drivers use REPARTIDOR.
+    // Managers keep JEFE_VENTAS/ADMIN in Perfil Reparto; pure drivers use REPARTIDOR.
     'REPARTIDOR' => (
-        responseRole == 'JEFE_VENTAS' ? 'JEFE_VENTAS' : 'REPARTIDOR',
+        (responseRole == 'JEFE_VENTAS' || responseRole == 'ADMIN')
+            ? responseRole
+            : 'REPARTIDOR',
         'REPARTIDOR',
       ),
     _ => throw StateError('Modo solicitado no válido'),

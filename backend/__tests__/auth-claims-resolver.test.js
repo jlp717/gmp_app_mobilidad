@@ -140,7 +140,7 @@ describe('authoritative auth claims resolver', () => {
     expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('MGR7', { role: 'JEFE_VENTAS' });
   });
 
-  test('projects only the selected role and never retains manager scope', async () => {
+  test('projects only the selected COMERCIAL role and never retains manager scope', async () => {
     const { resolver } = harness({
       user: profile({
         isJefeVentas: true,
@@ -160,15 +160,32 @@ describe('authoritative auth claims resolver', () => {
         vendorCodes: ['050'],
       }),
     );
+  });
+
+  test('keeps JEFE supervision when Perfil Reparto is selected even with ERP driver flag', async () => {
+    const { repository, resolver } = harness({
+      user: profile({
+        isJefeVentas: true,
+        permitePreventa: true,
+        permiteReparto: true,
+        matricula: '1234ABC',
+      }),
+    });
+    repository.getVendorVisibilityScope.mockResolvedValue(['050', 'TEAM']);
+
     await expect(resolver.resolve({ code: '050', selectedRole: 'REPARTIDOR' })).resolves.toEqual(
       expect.objectContaining({
-        role: 'REPARTIDOR',
-        isJefeVentas: false,
-        isRepartidor: true,
-        codigoConductor: '050',
-        vendorCodes: ['050'],
+        role: 'JEFE_VENTAS',
+        activeMode: 'REPARTIDOR',
+        availableRoles: ['COMERCIAL', 'JEFE_VENTAS'],
+        isJefeVentas: true,
+        isRepartidor: false,
+        codigoConductor: null,
+        matricula: null,
+        vendorCodes: ['050', 'TEAM'],
       }),
     );
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('050', { role: 'JEFE_VENTAS' });
   });
 
   test('projects ALMACEN only as a manager UI mode without minting a new role', async () => {

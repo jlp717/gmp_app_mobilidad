@@ -637,12 +637,13 @@ exports.handleSwitchRole = async (req, res) => {
         if (selectedRole === 'ALMACEN') {
             claims = await authClaimsResolver.resolve({
                 code: requestedUser,
-                selectedRole: 'JEFE_VENTAS',
+                selectedRole: 'ALMACEN',
                 selectedMode: 'ALMACEN',
             });
         } else if (selectedRole === 'REPARTIDOR') {
-            // Prefer personal driver role when OPP/VEH exists; otherwise JEFE
-            // supervision UI mode (keep JEFE_VENTAS claims + Ver como).
+            // Jefe/Admin keep supervision in Perfil Reparto even if VDDX
+            // PERMITEREPARTOSN=S. Personal REPARTIDOR only when they are not
+            // a manager. Fallback covers older JEFE tokens without driver role.
             try {
                 claims = await authClaimsResolver.resolve({
                     code: requestedUser,
