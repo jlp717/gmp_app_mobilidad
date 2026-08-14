@@ -85,6 +85,47 @@ describe('PM2 reparto configuration', () => {
     expect(source).not.toContain('REPARTO_CONFIRMATION_TABLE_SET');
   });
 
+  test('honors staging isolated_test from the PM2 environment without changing the fail-closed default', () => {
+    const names = [
+      'REPARTO_ENVIRONMENT',
+      'REPARTO_TABLE_SET',
+      'REPARTO_WRITES_ENABLED',
+      'REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED',
+      'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED',
+    ];
+    const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    let configured;
+    try {
+      process.env.REPARTO_ENVIRONMENT = 'staging';
+      process.env.REPARTO_TABLE_SET = 'isolated_test';
+      process.env.REPARTO_WRITES_ENABLED = 'true';
+      process.env.REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED = 'true';
+      process.env.REPARTO_FINANCE_DB2_CAPABILITY_APPROVED = 'true';
+      jest.resetModules();
+      configured = require('../ecosystem.config');
+    } finally {
+      for (const name of names) {
+        if (previous[name] === undefined) delete process.env[name];
+        else process.env[name] = previous[name];
+      }
+      jest.resetModules();
+    }
+    const configuredApp = configured.apps.find((candidate) => candidate.name === 'gmp-api');
+    expect(configuredApp.env).toMatchObject({
+      REPARTO_ENVIRONMENT: 'staging',
+      REPARTO_TABLE_SET: 'isolated_test',
+      REPARTO_WRITES_ENABLED: 'true',
+    });
+    const runtime = resolveRepartoRuntime({ ODBC_DSN: 'GMP', ...configuredApp.env });
+    expect(runtime).toMatchObject({
+      valid: true,
+      environment: 'staging',
+      tableSet: 'isolated_test',
+      writesEnabled: true,
+      productionWritesEnabled: false,
+    });
+  });
+
   test('preserves explicit valid approval booleans from the PM2 environment', () => {
     const flagNames = [
       'REPARTO_WRITES_ENABLED',

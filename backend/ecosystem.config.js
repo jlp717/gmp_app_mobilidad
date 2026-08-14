@@ -64,16 +64,23 @@ function explicitRepartoBoolean(name) {
     return normalized === 'true' || normalized === 'false' ? normalized : String(value);
 }
 
+function explicitRepartoValue(name, fallback) {
+    const value = process.env[name];
+    if (value === undefined || value === '') return fallback;
+    return String(value).trim();
+}
+
 const repartoConfiguredBooleans = Object.freeze(
     Object.fromEntries(REPARTO_BOOLEAN_FLAGS.map((name) => [name, explicitRepartoBoolean(name)])),
 );
 
-// PM2 always starts reparto in a known, fail-closed production profile.
-// Enabling writes requires a reviewed configuration change after all gates.
+// Default PM2 profile is fail-closed production. Staging isolated_test is only
+// applied when those values are already present in the PM2/shell environment
+// (sourced from backend/.env) before an env-updating process recycle.
 const repartoFailClosedEnv = Object.freeze({
-    REPARTO_ENVIRONMENT: 'production',
-    REPARTO_TABLE_SET: 'production',
-    REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    REPARTO_ENVIRONMENT: explicitRepartoValue('REPARTO_ENVIRONMENT', 'production'),
+    REPARTO_TABLE_SET: explicitRepartoValue('REPARTO_TABLE_SET', 'production'),
+    REPARTO_EVIDENCE_PENDING_TTL_HOURS: explicitRepartoValue('REPARTO_EVIDENCE_PENDING_TTL_HOURS', '24'),
     ...repartoConfiguredBooleans,
     REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
     REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
