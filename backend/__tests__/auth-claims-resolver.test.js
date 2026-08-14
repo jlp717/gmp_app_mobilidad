@@ -31,8 +31,8 @@ function harness({ user = profile(), reparto = null } = {}) {
 }
 
 describe('authoritative auth claims resolver', () => {
-  test('targets claims version 2', () => {
-    expect(AUTH_CLAIMS_VERSION).toBe(2);
+  test('targets claims version 3', () => {
+    expect(AUTH_CLAIMS_VERSION).toBe(3);
   });
 
   test('uses the authenticated profile as the authoritative COMERCIAL base', async () => {
@@ -75,6 +75,7 @@ describe('authoritative auth claims resolver', () => {
       role: 'COMERCIAL',
       availableRoles: ['COMERCIAL', 'REPARTIDOR'],
       activeMode: 'COMERCIAL',
+      availableModes: ['COMERCIAL', 'REPARTIDOR'],
       isRepartidor: false,
       codigoConductor: null,
       matricula: null,
@@ -155,24 +156,105 @@ describe('authoritative auth claims resolver', () => {
     );
   });
 
-  test('projects REPARTIDOR as JEFE supervision mode without personal OPP', async () => {
-    const { resolver } = harness({ user: profile({ code: '98', isJefeVentas: true }) });
+  test('projects REPARTIDOR as JEFE supervision mode without personal association', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: 'J17', isJefeVentas: true }),
+    });
+    repository.getVendorVisibilityScope.mockResolvedValue(['J17', 'TEAM']);
 
     await expect(resolver.resolve({
-      code: '98',
+      code: 'j17',
       selectedRole: 'JEFE_VENTAS',
       selectedMode: 'REPARTIDOR',
-    })).resolves.toEqual(
+    })).resolves.toEqual(expect.objectContaining({
+      role: 'JEFE_VENTAS',
+      activeMode: 'REPARTIDOR',
+      isJefeVentas: true,
+      isRepartidor: false,
+      codigoConductor: null,
+      matricula: null,
+      vendorCodes: ['J17', 'TEAM'],
+    }));
+  });
+
+  test('uses production JEFE visibility lookup while emitting normalized ADMIN claims', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: 'A17', tipoVendedor: ' admin ' }),
+    });
+    await expect(resolver.resolve({ code: 'a17' })).resolves.toEqual(expect.objectContaining({
+      id: 'VA17',
+      role: 'ADMIN',
+      availableRoles: ['COMERCIAL', 'ADMIN'],
+      activeMode: 'COMERCIAL',
+      availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
+      isJefeVentas: false,
+      isRepartidor: false,
+      codigoConductor: null,
+      matricula: null,
+      vendorCodes: ['A17', '051', 'UNK'],
+      tipoVendedor: 'admin',
+    }));
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('A17', { role: 'JEFE_VENTAS' });
+  });
+
+  test('preserves JEFE visibility when an ADMIN profile is also a sales manager', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: 'A17', tipoVendedor: ' admin ', isJefeVentas: true }),
+    });
+    repository.getVendorVisibilityScope.mockResolvedValue(['A17', 'TEAM']);
+
+    await expect(resolver.resolve({ code: 'a17' })).resolves.toEqual(expect.objectContaining({
+      role: 'ADMIN',
+      availableRoles: ['COMERCIAL', 'ADMIN', 'JEFE_VENTAS'],
+      activeMode: 'COMERCIAL',
+      isJefeVentas: true,
+      vendorCodes: ['A17', 'TEAM'],
+    }));
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('A17', { role: 'JEFE_VENTAS' });
+  });
+
+  test('projects REPARTIDOR as ADMIN supervision mode without personal association', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: 'A17', tipoVendedor: ' admin ' }),
+    });
+    repository.getVendorVisibilityScope.mockResolvedValue(['A17', 'TEAM']);
+
+    await expect(resolver.resolve({
+      code: 'a17',
+      selectedRole: 'ADMIN',
+      selectedMode: 'REPARTIDOR',
+    })).resolves.toEqual(expect.objectContaining({
+      role: 'ADMIN',
+      activeMode: 'REPARTIDOR',
+      isJefeVentas: false,
+      isRepartidor: false,
+      codigoConductor: null,
+      matricula: null,
+      vendorCodes: ['A17', 'TEAM'],
+    }));
+  });
+
+  test('gives ADMIN supervision precedence over a personal REPARTIDOR association', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: 'A17', tipoVendedor: ' admin ' }),
+      reparto: { isRepartidor: true, codigoConductor: 'A17', matricula: '1234ABC' },
+    });
+    repository.getVendorVisibilityScope.mockResolvedValue(['A17', 'TEAM']);
+
+    await expect(resolver.resolve({ code: 'a17', selectedRole: 'REPARTIDOR' })).resolves.toEqual(
       expect.objectContaining({
-        role: 'JEFE_VENTAS',
+        role: 'ADMIN',
+        availableRoles: ['COMERCIAL', 'ADMIN'],
         activeMode: 'REPARTIDOR',
-        isJefeVentas: true,
+        availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
+        isJefeVentas: false,
         isRepartidor: false,
         codigoConductor: null,
-        availableModes: ['COMERCIAL', 'ALMACEN', 'REPARTIDOR'],
-        vendorCodes: ['98', '051', 'UNK'],
+        matricula: null,
+        vendorCodes: ['A17', 'TEAM'],
       }),
     );
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('A17', { role: 'JEFE_VENTAS' });
   });
 
   test('rejects ALMACEN for non-managers and every role not associated with the subject', async () => {
@@ -182,6 +264,9 @@ describe('authoritative auth claims resolver', () => {
       name: 'AuthClaimsError', status: 403, code: 'ROLE_NOT_ASSOCIATED',
     });
     await expect(resolver.resolve({ code: '050', selectedRole: 'JEFE_VENTAS' })).rejects.toBeInstanceOf(AuthClaimsError);
+    await expect(resolver.resolve({ code: '050', selectedRole: 'ADMIN' })).rejects.toMatchObject({
+      name: 'AuthClaimsError', status: 403, code: 'ROLE_NOT_ASSOCIATED',
+    });
   });
 
   test.each([

@@ -101,13 +101,13 @@ describe('Auth Middleware - verifyToken', () => {
         expect(req.user).toBeDefined();
         expect(req.user.code).toBe('001');
         expect(req.user.role).toBe('COMERCIAL');
-        expect(req.user.claimsVersion).toBe(2);
+        expect(req.user.claimsVersion).toBe(3);
     });
 
-    test('should reject a stale v1 token and require login without calling next', async () => {
+    test('should reject a stale v2 token and require login without calling next', async () => {
         const token = await canonicalAccessToken({
-            id: 'V001', user: '001', name: 'Stale User', role: 'COMERCIAL', claimsVersion: 1,
-        }, 'stale-v1');
+            id: 'V001', user: '001', name: 'Stale User', role: 'COMERCIAL', claimsVersion: 2,
+        }, 'stale-v2');
         const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
 
         await verifyToken(req, res, next);
@@ -241,6 +241,35 @@ describe('Auth Middleware - verifyToken', () => {
         expect(req.tokenPayload).toBeDefined();
     });
 
+    test('should preserve ADMIN supervisor claims in a valid token', async () => {
+        const token = await canonicalAccessToken({
+            id: 'VA17',
+            user: 'A17',
+            name: 'Admin Supervisor',
+            role: 'ADMIN',
+            activeMode: 'REPARTIDOR',
+            availableRoles: ['COMERCIAL', 'ADMIN', 'JEFE_VENTAS'],
+            isJefeVentas: true,
+            isRepartidor: false,
+            codigoConductor: null,
+            matricula: null,
+        }, 'admin-supervisor');
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+
+        await verifyToken(req, res, next);
+
+        expect(next).toHaveBeenCalled();
+        expect(req.user).toEqual(expect.objectContaining({
+            code: 'A17',
+            role: 'ADMIN',
+            activeMode: 'REPARTIDOR',
+            isJefeVentas: true,
+            isRepartidor: false,
+            codigoConductor: null,
+            matricula: null,
+        }));
+    });
+
     test('should handle malformed token gracefully', async () => {
         const req = createMockReq({
             headers: { authorization: 'Bearer eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ==' }
@@ -314,10 +343,10 @@ describe('Auth Middleware - optionalAuth', () => {
         expect(req.user).toBeNull();
     });
 
-    test('should ignore a stale v1 token', async () => {
+    test('should ignore a stale v2 token', async () => {
         const token = await canonicalAccessToken({
-            id: 'V001', user: '001', name: 'Stale Optional', role: 'COMERCIAL', claimsVersion: 1,
-        }, 'optional-stale-v1');
+            id: 'V001', user: '001', name: 'Stale Optional', role: 'COMERCIAL', claimsVersion: 2,
+        }, 'optional-stale-v2');
         const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
 
         await optionalAuth(req, res, next);
@@ -367,6 +396,18 @@ describe('Auth Middleware - requireRoles', () => {
         middleware(req, res, next);
 
         expect(next).toHaveBeenCalled();
+    });
+
+    test('should allow ADMIN when ADMIN is required', () => {
+        const middleware = requireRoles('ADMIN');
+        const req = createMockReq({
+            user: { id: 'VA17', code: 'A17', role: 'ADMIN', isJefeVentas: true }
+        });
+
+        middleware(req, res, next);
+
+        expect(next).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
     });
 
     test('should reject when user lacks required role', () => {
