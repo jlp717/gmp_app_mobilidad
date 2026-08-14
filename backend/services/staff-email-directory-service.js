@@ -354,8 +354,106 @@ async function resolveDeliveryVarianceRecipients({
   return { emails: [...emails], details };
 }
 
+function parseIsoDateParts(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalizeText(value));
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function uniqueVendorCodes(values) {
+  return [...new Set(
+    (Array.isArray(values) ? values : [])
+      .map(normalizeVendorCode)
+      .filter(Boolean),
+  )];
+}
+
+function collectComercialCodes(rows) {
+  return uniqueVendorCodes(
+    (Array.isArray(rows) ? rows : []).map((row) => rowValue(row, 'COMERCIAL')),
+  );
+}
+
+/**
+ * Comerciales of the driver's deliveries and cobros that day (CPC live).
+ * Used so liquidacion PDF goes to the commercial of those routes.
+ */
+async function resolveDayRouteComercialCodes({
+  repartidorId,
+  date,
+} = {}, {
+  query = queryWithParams,
+  env = process.env,
+} = {}) {
+  const driver = normalizeVendorCode(repartidorId);
+  const parts = parseIsoDateParts(date);
+  if (!driver || !parts) return [];
+
+  let runtime;
+  try {
+    runtime = resolveRepartoRuntime(env);
+  } catch (error) {
+    logger.warn(`[staff-email] day comercial runtime failed: ${error.message}`);
+    return [];
+  }
+  const confirmations = runtime?.tables?.confirmation?.confirmations;
+  const cobros = runtime?.tables?.finance?.cobros;
+  if (!runtime?.valid || !confirmations || !cobros) return [];
+
+  const codes = new Set();
+
+  try {
+    const rows = await query(
+      `
+      SELECT DISTINCT TRIM(COALESCE(NULLIF(TRIM(CPC.CODIGOCOMERCIAL), ''), NULLIF(TRIM(CPC.CODIGOVENDEDOR), ''))) AS COMERCIAL
+        FROM ${confirmations} C
+        INNER JOIN DSEDAC.CPC CPC
+          ON CPC.EJERCICIOALBARAN = C.DOCUMENTO_EJERCICIO
+         AND TRIM(CPC.SERIEALBARAN) = TRIM(C.DOCUMENTO_SERIE)
+         AND CPC.TERMINALALBARAN = C.DOCUMENTO_TERMINAL
+         AND CPC.NUMEROALBARAN = C.DOCUMENTO_NUMERO
+       WHERE TRIM(C.REPARTIDOR_ID) = ?
+         AND DATE(C.CONFIRMED_AT) = ?
+      `,
+      [driver, date],
+    );
+    for (const code of collectComercialCodes(rows)) codes.add(code);
+  } catch (error) {
+    logger.warn(`[staff-email] day comercial from confirmations failed: ${error.message}`);
+  }
+
+  try {
+    const rows = await query(
+      `
+      SELECT DISTINCT TRIM(COALESCE(NULLIF(TRIM(CPC.CODIGOCOMERCIAL), ''), NULLIF(TRIM(CPC.CODIGOVENDEDOR), ''))) AS COMERCIAL
+        FROM ${cobros} P
+        INNER JOIN DSEDAC.CPC CPC
+          ON CPC.EJERCICIOALBARAN = P.EJERCICIODOCUMENTO
+         AND TRIM(CPC.SERIEALBARAN) = TRIM(P.SERIEDOCUMENTO)
+         AND CPC.TERMINALALBARAN = P.TERMINALDOCUMENTO
+         AND CPC.NUMEROALBARAN = P.NUMERODOCUMENTO
+       WHERE TRIM(P.CODIGOVENDEDOR) = ?
+         AND P.DIACOBRO = ?
+         AND P.MESCOBRO = ?
+         AND P.ANOCOBRO = ?
+      `,
+      [driver, parts.day, parts.month, parts.year],
+    );
+    for (const code of collectComercialCodes(rows)) codes.add(code);
+  } catch (error) {
+    logger.warn(`[staff-email] day comercial from cobros failed: ${error.message}`);
+  }
+
+  return [...codes];
+}
+
 async function resolveLiquidacionRecipients({
   repartidorId,
+  comercialCodes,
 } = {}, {
   query = queryWithParams,
   env = process.env,
@@ -363,15 +461,25 @@ async function resolveLiquidacionRecipients({
   const emails = new Set();
   const details = [];
 
-  if (normalizeVendorCode(repartidorId)) {
-    const profile = await resolveVendorProfile(repartidorId, { query });
+  async function addVendor(label, code) {
+    const profile = await resolveVendorProfile(code, { query });
     details.push({
-      label: 'repartidor',
+      label,
       vendorCode: profile.vendorCode,
       email: profile.email,
       nombre: profile.nombre,
     });
     if (profile.email) emails.add(profile.email.toLowerCase());
+  }
+
+  const driver = normalizeVendorCode(repartidorId);
+  if (driver) {
+    await addVendor('repartidor', driver);
+  }
+
+  for (const code of uniqueVendorCodes(comercialCodes)) {
+    if (code === driver) continue;
+    await addVendor(`comercial:${code}`, code);
   }
 
   const roles = await resolveRoleEmails([...LIQUIDACION_ROLE_KEYS], { query, env });
@@ -398,6 +506,7 @@ module.exports = {
   resolveVendorByNameMatch,
   resolveRoleEmails,
   resolveDeliveryVarianceRecipients,
+  resolveDayRouteComercialCodes,
   resolveLiquidacionRecipients,
   clearCache,
   normalizeVendorCode,

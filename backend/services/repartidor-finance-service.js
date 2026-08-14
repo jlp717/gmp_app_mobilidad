@@ -9,6 +9,7 @@ const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
 const {
   resolveLiquidacionRecipients,
+  resolveDayRouteComercialCodes,
   resolveVendorEmail,
 } = require('./staff-email-directory-service');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
@@ -1499,14 +1500,32 @@ function buildLiquidacionPdfBuffer({
   });
 }
 
-async function sendLiquidacionEmails({ liquidacion, repartidorEmail, repartidorName, cobros }) {
+async function sendLiquidacionEmails({
+  liquidacion, repartidorEmail, repartidorName, cobros, comercialCodes,
+}) {
   if (!liquidacion) return [];
 
   const repartidorId = normalizeText(liquidacion.repartidorId);
   const resolvedRepartidorEmail = normalizeText(repartidorEmail)
     || (repartidorId ? await resolveVendorEmail(repartidorId) : null);
 
-  const directory = await resolveLiquidacionRecipients({ repartidorId });
+  let resolvedComercialCodes = Array.isArray(comercialCodes) ? comercialCodes : null;
+  if (!resolvedComercialCodes) {
+    try {
+      resolvedComercialCodes = await resolveDayRouteComercialCodes({
+        repartidorId,
+        date: liquidacion.date,
+      });
+    } catch (error) {
+      logger.warn(`[REPARTIDOR_FINANZAS] comercial resolve failed: ${error.message}`);
+      resolvedComercialCodes = [];
+    }
+  }
+
+  const directory = await resolveLiquidacionRecipients({
+    repartidorId,
+    comercialCodes: resolvedComercialCodes,
+  });
   const recipients = new Set(
     [...(directory.emails || [])].map((email) => String(email).trim().toLowerCase()).filter(Boolean),
   );

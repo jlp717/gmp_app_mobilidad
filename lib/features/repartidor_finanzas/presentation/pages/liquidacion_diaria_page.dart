@@ -260,7 +260,7 @@ class _RepartidorLiquidacionDiariaPageState
           _ModernSaveBar(
             isSaving: _saving,
             isClosed: _closedResult != null,
-            onPressed: _save,
+            onPressed: () => _save(summary, asyncLedger?.valueOrNull),
           ),
       ],
     );
@@ -314,7 +314,10 @@ class _RepartidorLiquidacionDiariaPageState
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save(
+    RepartidorDailySummary summary,
+    RepartidorLiquidacionLedger? ledger,
+  ) async {
     if (_saving) return;
     if (_sessionDate != _today()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -347,8 +350,9 @@ class _RepartidorLiquidacionDiariaPageState
       modal.success(
         result.isReplay
             ? 'Liquidacion ya cerrada anteriormente'
-            : 'Liquidacion cerrada',
+            : 'Liquidacion cerrada. Abriendo PDF...',
       );
+      await _generatePdf(summary, ledger);
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
@@ -357,7 +361,7 @@ class _RepartidorLiquidacionDiariaPageState
           error,
           'No se pudo cerrar la liquidacion. Puedes reintentar.',
         ),
-        onRetry: _save,
+        onRetry: () => _save(summary, ledger),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
