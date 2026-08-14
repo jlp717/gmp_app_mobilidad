@@ -459,12 +459,12 @@ class RepartoConfirmationJournal {
     }
     if (confirmationId != null && !isValidRepartoServerId(confirmationId)) {
       throw const RepartoJournalCorruptionException(
-        'La confirmaciÃ³n del servidor no tiene un identificador vÃ¡lido.',
+        'La confirmación del servidor no tiene un identificador válido.',
       );
     }
     if (cobroId != null && !isValidRepartoServerId(cobroId)) {
       throw const RepartoJournalCorruptionException(
-        'El cobro del servidor no tiene un identificador vÃ¡lido.',
+        'El cobro del servidor no tiene un identificador válido.',
       );
     }
     await _store.write(
@@ -557,7 +557,7 @@ class RepartoReceiptUnavailableException implements Exception {
 
   @override
   String toString() =>
-      'El recibo todavÃ­a no estÃ¡ disponible. Reintenta cuando la confirmaciÃ³n quede sincronizada.';
+      'El recibo todavía no está disponible. Reintenta cuando la confirmación quede sincronizada.';
 }
 
 bool isValidRepartoServerId(String value) =>

@@ -93,35 +93,67 @@ int _optionalIntAlias(
 
 String _requiredDate(Map<String, dynamic> json) {
   final value = _requiredText(json, 'fecha');
-  final iso = RegExp(r'^\d{4}-\d{2}-\d{2}(?:[T ].*)?$').firstMatch(value);
-  final slash = RegExp(r'^\d{2}/\d{2}/\d{4}$').firstMatch(value);
+  final iso =
+      RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$').firstMatch(value);
   if (iso != null) {
-    final date = value.substring(0, 10).split('-').map(int.parse).toList();
-    final parsed = DateTime(date[0], date[1], date[2]);
-    if (parsed.year == date[0] &&
-        parsed.month == date[1] &&
-        parsed.day == date[2] &&
-        DateTime.tryParse(value) != null) {
-      return value;
+    final year = int.parse(iso.group(1)!);
+    final month = int.parse(iso.group(2)!);
+    final day = int.parse(iso.group(3)!);
+    final parsed = DateTime(year, month, day);
+    if (parsed.year == year && parsed.month == month && parsed.day == day) {
+      return '${year.toString().padLeft(4, '0')}-'
+          '${month.toString().padLeft(2, '0')}-'
+          '${day.toString().padLeft(2, '0')}';
     }
   }
+  final slash = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(value);
   if (slash != null) {
-    final parts = value.split('/').map(int.parse).toList(growable: false);
-    final parsed = DateTime(parts[2], parts[1], parts[0]);
-    if (parsed.year == parts[2] &&
-        parsed.month == parts[1] &&
-        parsed.day == parts[0]) {
-      return value;
+    final day = int.parse(slash.group(1)!);
+    final month = int.parse(slash.group(2)!);
+    final year = int.parse(slash.group(3)!);
+    final parsed = DateTime(year, month, day);
+    if (parsed.year == year && parsed.month == month && parsed.day == day) {
+      return '${year.toString().padLeft(4, '0')}-'
+          '${month.toString().padLeft(2, '0')}-'
+          '${day.toString().padLeft(2, '0')}';
     }
   }
   throw const EntregasPayloadException('fecha');
+}
+
+List<IvaBreakdownItem> _parseIvaBreakdown(Object? raw) {
+  if (raw is! List) return const [];
+  final items = <IvaBreakdownItem>[];
+  for (final entry in raw) {
+    if (entry is! Map) continue;
+    try {
+      items.add(IvaBreakdownItem.fromJson(Map<String, dynamic>.from(entry)));
+    } catch (_) {
+      continue;
+    }
+  }
+  return items;
+}
+
+List<EntregaItem> _parseEntregaItems(Object? raw) {
+  if (raw is! List) return const [];
+  final items = <EntregaItem>[];
+  for (final entry in raw) {
+    if (entry is! Map) continue;
+    try {
+      items.add(EntregaItem.fromJson(Map<String, dynamic>.from(entry)));
+    } catch (_) {
+      continue;
+    }
+  }
+  return items;
 }
 
 String _safeDeliveryError(Object error, {required bool detail}) {
   if (error is EntregasPayloadException) {
     return detail
         ? 'El detalle recibido no cumple el contrato de reparto.'
-        : 'Los datos de entregas recibidos no son validos.';
+        : 'Los datos de entregas recibidos no son válidos.';
   }
   return detail
       ? 'No se pudo obtener el detalle del albaran.'
@@ -170,10 +202,8 @@ class EntregaItem {
           : _requiredDoubleAlias(json, const <String>['cantidadEntregada']),
       confirmationState:
           json['confirmationState']?.toString() ?? 'NOT_CONFIRMED',
-      estado: EstadoEntrega.fromString(
-        (json['estado'] ?? 'PENDIENTE') as String,
-      ),
-      observacion: json['observacion'] as String?,
+      estado: EstadoEntrega.fromString('${json['estado'] ?? 'PENDIENTE'}'),
+      observacion: json['observacion']?.toString(),
     );
   }
   final String itemId;
@@ -257,6 +287,8 @@ class AlbaranEntrega {
   });
 
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
+    final codigoCliente = _requiredText(json, 'codigoCliente');
+    final nombreRaw = json['nombreCliente']?.toString().trim() ?? '';
     return AlbaranEntrega(
       id: _requiredText(json, 'id'),
       numeroAlbaran:
@@ -266,8 +298,8 @@ class AlbaranEntrega {
       terminal: _optionalIntAlias(json, const <String>['terminal']),
       numeroFactura: _optionalIntAlias(json, const <String>['numeroFactura']),
       serieFactura: json['serieFactura']?.toString() ?? '',
-      codigoCliente: _requiredText(json, 'codigoCliente'),
-      nombreCliente: _requiredText(json, 'nombreCliente'),
+      codigoCliente: codigoCliente,
+      nombreCliente: nombreRaw.isNotEmpty ? nombreRaw : codigoCliente,
       nombreComercial: json['nombreComercial']?.toString(),
       nombreFiscal: json['nombreFiscal']?.toString(),
       direccion: json['direccion']?.toString() ?? '',
@@ -282,12 +314,7 @@ class AlbaranEntrega {
       importeBruto: _optionalDoubleAlias(json, const <String>['importeBruto']),
       importeNeto: _optionalDoubleAlias(json, const <String>['netoSum']),
       importeIva: _optionalDoubleAlias(json, const <String>['ivaSum']),
-      ivaBreakdown: (json['ivaBreakdown'] as List<dynamic>?)
-              ?.map(
-                (e) => IvaBreakdownItem.fromJson(e as Map<String, dynamic>),
-              )
-              .toList() ??
-          [],
+      ivaBreakdown: _parseIvaBreakdown(json['ivaBreakdown']),
       checksum: json['checksum']?.toString(),
       formaPago: json['formaPago']?.toString() ?? '',
       formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
@@ -306,16 +333,14 @@ class AlbaranEntrega {
           : _requiredIntAlias(json, const <String>['ordenPreparacion']),
       discrepancy: json['discrepancy'] == true,
       lineSum: _optionalDoubleAlias(json, const <String>['lineSum']),
-      estado: EstadoEntrega.fromString(
-        (json['estado'] ?? 'PENDIENTE') as String,
-      ),
-      items: (json['items'] as List<dynamic>?)
-              ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
+      estado: EstadoEntrega.fromString('${json['estado'] ?? 'PENDIENTE'}'),
+      items: _parseEntregaItems(json['items']),
+      observaciones: json['observaciones']?.toString(),
+      fotos: (json['fotos'] as List<dynamic>?)
+              ?.map((item) => item.toString())
               .toList() ??
           [],
-      observaciones: json['observaciones'] as String?,
-      fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
-      firma: json['firma'] as String?,
+      firma: json['firma']?.toString(),
       horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
     );
   }
@@ -687,9 +712,20 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
-        final page = lista
-            .map((e) => AlbaranEntrega.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final page = <AlbaranEntrega>[];
+        for (final raw in lista) {
+          if (raw is! Map) continue;
+          try {
+            page.add(
+              AlbaranEntrega.fromJson(Map<String, dynamic>.from(raw)),
+            );
+          } catch (_) {
+            continue;
+          }
+        }
+        if (lista.isNotEmpty && page.isEmpty) {
+          throw const EntregasPayloadException('albaranes');
+        }
         final byId = <String, AlbaranEntrega>{
           if (append)
             for (final albaran in requestState.albaranes) albaran.id: albaran,

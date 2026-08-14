@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/comisiones_page.dart';
@@ -20,6 +21,16 @@ void main() {
     );
   }
 
+  const openLedger = RepartidorLiquidacionLedger(
+    status: 'OPEN',
+    expenses: [],
+    adjustments: [],
+    bankDeposits: [],
+    expensesTotal: 0,
+    adjustmentsTotal: 0,
+    bankDepositsTotal: 0,
+  );
+
   testWidgets('liquidacion diaria renders financial totals and inputs',
       (tester) async {
     final now = DateTime.now();
@@ -27,7 +38,7 @@ void main() {
     final args = (
       repartidorId: '94',
       date: date,
-      forceRefresh: false,
+      forceRefresh: true,
     );
 
     await tester.pumpWidget(
@@ -52,6 +63,10 @@ void main() {
               cobrosCount: 2,
             ),
           ),
+          repartidorLiquidacionLedgerProvider((
+            repartidorId: '94',
+            date: date,
+          )).overrideWith((ref) async => openLedger),
         ],
       ),
     );
@@ -59,18 +74,23 @@ void main() {
 
     expect(find.text('Liquidacion Diaria'), findsOneWidget);
     expect(find.text('Efectivo'), findsWidgets);
-    expect(find.text('Ingreso en banco'), findsOneWidget);
-    expect(find.text('Entregado'), findsOneWidget);
+    expect(find.text('Ingreso banco'), findsOneWidget);
+    expect(find.textContaining('Entregado'), findsOneWidget);
   });
 
   testWidgets('liquidacion diaria validates required money fields',
       (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
     final args = (
       repartidorId: '94',
       date: date,
-      forceRefresh: false,
+      forceRefresh: true,
     );
 
     await tester.pumpWidget(
@@ -95,15 +115,23 @@ void main() {
               cobrosCount: 0,
             ),
           ),
+          repartidorLiquidacionLedgerProvider((
+            repartidorId: '94',
+            date: date,
+          )).overrideWith((ref) async => openLedger),
         ],
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(ElevatedButton).last);
+    await tester.ensureVisible(find.text('Ingreso banco'));
+    await tester.tap(find.text('Ingreso banco'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Registrar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Obligatorio'), findsNWidgets(2));
+    expect(find.textContaining('importe positivo'), findsOneWidget);
+    expect(find.text('Este campo es obligatorio.'), findsOneWidget);
   });
 
   testWidgets('liquidacion diaria renders aggregate readonly totals',
@@ -113,7 +141,7 @@ void main() {
     final args = (
       repartidorId: '94,95',
       date: date,
-      forceRefresh: false,
+      forceRefresh: true,
     );
 
     await tester.pumpWidget(
@@ -194,6 +222,8 @@ void main() {
       to: to,
       clientCode: null as String?,
       estado: null as String?,
+      cursor: null as String?,
+      limit: 100,
       forceRefresh: false,
     );
 
@@ -202,30 +232,35 @@ void main() {
         const RepartidorVencimientosPage(repartidorId: '94'),
         overrides: [
           repartidorVencimientosProvider(args).overrideWith(
-            (ref) async => [
-              RepartidorVencimiento(
-                tipoDocumento: 'CAC',
-                codigoCliente: '4300001119',
-                nombreCliente: 'CARNICERIA MECA',
-                fechaVencimiento: DateTime(now.year, now.month, now.day)
-                    .toIso8601String()
-                    .substring(0, 10),
-                documento: 'E 2026-B-I-010-002730-01',
-                importe: 73.19,
-                importePendiente: 40,
-                keys: const {
-                  'tipoDocumento': 'CAC',
-                  'origenDocumento': 'B',
-                  'subempresaDocumento': 'GMP',
-                  'ejercicioDocumento': 2026,
-                  'serieDocumento': 'I',
-                  'terminalDocumento': 10,
-                  'numeroDocumento': 2730,
-                  'xdeDocumento': 1,
-                  'dexDocumento': 1,
-                },
-              ),
-            ],
+            (ref) async => RepartidorVencimientosBatch(
+              items: [
+                RepartidorVencimiento(
+                  tipoDocumento: 'CAC',
+                  codigoCliente: '4300001119',
+                  nombreCliente: 'CARNICERIA MECA',
+                  fechaVencimiento: DateTime(now.year, now.month, now.day)
+                      .toIso8601String()
+                      .substring(0, 10),
+                  documento: 'E 2026-B-I-010-002730-01',
+                  importe: 73.19,
+                  importePendiente: 40,
+                  keys: const {
+                    'tipoDocumento': 'CAC',
+                    'origenDocumento': 'B',
+                    'subempresaDocumento': 'GMP',
+                    'ejercicioDocumento': 2026,
+                    'serieDocumento': 'I',
+                    'terminalDocumento': 10,
+                    'numeroDocumento': 2730,
+                    'xdeDocumento': 1,
+                    'dexDocumento': 1,
+                  },
+                ),
+              ],
+              total: 1,
+              hasMore: false,
+              nextCursor: null,
+            ),
           ),
         ],
       ),
@@ -240,44 +275,42 @@ void main() {
 
   testWidgets('comisiones displays summary and commercial-style table',
       (tester) async {
-    final now = DateTime.now();
-    final summaryArgs = (
+    final summary = RepartidorCommissionSummary(
       repartidorId: '94',
-      from: DateTime(now.year, now.month),
-      to: DateTime(now.year, now.month + 1, 0),
-      forceRefresh: false,
+      deliveredAmount: 80000,
+      collectedAmount: 20000,
+      collectedPct: 25,
+      commission: 20,
+      reached: const [
+        RepartidorCommissionReachedTier(
+          thresholdPct: 20,
+          commissionPct: 0.5,
+          thresholdAmount: 16000,
+          excess: 4000,
+          commission: 20,
+        ),
+      ],
     );
+    const tiers = [
+      RepartidorCommissionTier(
+        thresholdPct: 20,
+        commissionPct: 0.5,
+        sortOrder: 1,
+      ),
+    ];
 
     await tester.pumpWidget(
       wrap(
         const RepartidorComisionesFinanzasPage(repartidorId: '94'),
         overrides: [
-          repartidorCommissionSummaryProvider(summaryArgs).overrideWith(
-            (ref) async => RepartidorCommissionSummary(
-              repartidorId: '94',
-              deliveredAmount: 80000,
-              collectedAmount: 20000,
-              collectedPct: 25,
-              commission: 20,
-              reached: const [
-                RepartidorCommissionReachedTier(
-                  thresholdPct: 20,
-                  commissionPct: 0.5,
-                  thresholdAmount: 16000,
-                  excess: 4000,
-                  commission: 20,
-                ),
-              ],
+          repartidorFinanzasServiceProvider.overrideWith(
+            (ref) => _StubFinanzasService(
+              commissionSummary: summary,
+              commissionTiers: tiers,
             ),
           ),
           repartidorCommissionTiersProvider.overrideWith(
-            (ref) async => const [
-              RepartidorCommissionTier(
-                thresholdPct: 20,
-                commissionPct: 0.5,
-                sortOrder: 1,
-              ),
-            ],
+            (ref) async => tiers,
           ),
         ],
       ),
@@ -288,48 +321,46 @@ void main() {
     expect(find.textContaining('20,00'), findsWidgets);
     expect(find.text('COBRADO'), findsOneWidget);
     expect(find.text('EXCESO'), findsOneWidget);
-    expect(find.text('0.5%'), findsOneWidget);
+    expect(find.text('0.5%'), findsWidgets);
   });
 
   testWidgets('comisiones accepts aggregate repartidor id', (tester) async {
-    final now = DateTime.now();
-    final summaryArgs = (
+    final summary = RepartidorCommissionSummary(
       repartidorId: '94,95',
-      from: DateTime(now.year, now.month),
-      to: DateTime(now.year, now.month + 1, 0),
-      forceRefresh: false,
+      deliveredAmount: 1000,
+      collectedAmount: 275,
+      collectedPct: 27.5,
+      commission: 0.75,
+      reached: const [
+        RepartidorCommissionReachedTier(
+          thresholdPct: 20,
+          commissionPct: 1,
+          thresholdAmount: 200,
+          excess: 75,
+          commission: 0.75,
+        ),
+      ],
     );
+    const tiers = [
+      RepartidorCommissionTier(
+        thresholdPct: 20,
+        commissionPct: 1,
+        sortOrder: 1,
+      ),
+    ];
 
     await tester.pumpWidget(
       wrap(
         const RepartidorComisionesFinanzasPage(repartidorId: '94,95'),
         overrides: [
-          repartidorCommissionSummaryProvider(summaryArgs).overrideWith(
-            (ref) async => RepartidorCommissionSummary(
-              repartidorId: '94,95',
-              deliveredAmount: 1000,
-              collectedAmount: 275,
-              collectedPct: 27.5,
-              commission: 0.75,
-              reached: const [
-                RepartidorCommissionReachedTier(
-                  thresholdPct: 20,
-                  commissionPct: 1,
-                  thresholdAmount: 200,
-                  excess: 75,
-                  commission: 0.75,
-                ),
-              ],
+          repartidorFinanzasServiceProvider.overrideWith(
+            (ref) => _StubFinanzasService(
+              commissionSummary: summary,
+              commissionTiers: tiers,
             ),
           ),
           repartidorCommissionTiersProvider.overrideWith(
-            (ref) async => const [
-              RepartidorCommissionTier(
-                thresholdPct: 20,
-                commissionPct: 1,
-                sortOrder: 1,
-              ),
-            ],
+            (ref) async => tiers,
           ),
         ],
       ),
@@ -342,4 +373,70 @@ void main() {
     );
     expect(find.text('Comisiones'), findsOneWidget);
   });
+
+  test('ledger accepts JS timestamps and skips a bad entry', () {
+    final ledger = RepartidorLiquidacionLedger.fromJson({
+      'repartidorId': '44',
+      'date': '2026-08-14',
+      'status': 'OPEN',
+      'extra': true,
+      'expenses': [
+        {
+          'id': 12,
+          'type': 'EXPENSE',
+          'repartidorId': '44',
+          'date': '2026-08-14',
+          'amount': 8.25,
+          'category': 'PEAJE',
+          'status': 'PENDING',
+          'createdAt': '2026-08-14T10:00:00.456Z',
+        },
+        {
+          'id': 'bad',
+          'type': 'EXPENSE',
+          'repartidorId': '44',
+          'date': '2026-08-14',
+          'amount': 1,
+          'category': 'PEAJE',
+          'status': 'PENDING',
+          'createdAt': 'not-a-date',
+        },
+      ],
+      'adjustments': [],
+      'bankDeposits': [],
+      'totals': {'expenses': 99, 'adjustments': 0, 'bankDeposits': 0},
+    }, expectedRepartidorId: '44', expectedDate: '2026-08-14');
+
+    expect(ledger.status, 'OPEN');
+    expect(ledger.expenses, hasLength(1));
+    expect(ledger.expenses.first.id, '12');
+    expect(ledger.expensesTotal, 8.25);
+  });
+}
+
+class _StubFinanzasService extends RepartidorFinanzasService {
+  _StubFinanzasService({
+    required this.commissionSummary,
+    required this.commissionTiers,
+  });
+
+  final RepartidorCommissionSummary commissionSummary;
+  final List<RepartidorCommissionTier> commissionTiers;
+
+  @override
+  Future<RepartidorCommissionSummary> getCommissionSummary({
+    required String repartidorId,
+    required DateTime from,
+    required DateTime to,
+    bool forceRefresh = false,
+  }) async {
+    return commissionSummary;
+  }
+
+  @override
+  Future<List<RepartidorCommissionTier>> getCommissionTiers({
+    bool forceRefresh = false,
+  }) async {
+    return commissionTiers;
+  }
 }

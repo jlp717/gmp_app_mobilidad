@@ -104,6 +104,20 @@ async function getDeliveryOwner(itemId, clientCode) {
  * @returns {boolean} true if format is valid
  */
 class RepartoHttpError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
+function isoDocumentDate(row, fallbackIso) {
+    const year = Number(row?.ANODOCUMENTO);
+    const month = Number(row?.MESDOCUMENTO);
+    const day = Number(row?.DIADOCUMENTO);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+        return fallbackIso;
+    }
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() + 1 !== month || parsed.getUTCDate() !== day) {
+        return fallbackIso;
+    }
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 function parseIsoCalendarDate(raw) {
     if (raw === undefined) {
         const now = new Date();
@@ -128,7 +142,7 @@ function sendEntregasUnavailable(res, code, message) {
 }
 function sendRepartoError(res, error) {
     if (error instanceof RepartoHttpError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
-    return res.status(503).json({ success: false, code: 'CANONICAL_RECEIPT_UNAVAILABLE', error: 'No se pudo generar el recibo canÃ³nico' });
+    return res.status(503).json({ success: false, code: 'CANONICAL_RECEIPT_UNAVAILABLE', error: 'No se pudo generar el recibo canonico' });
 }
 const moment = require('moment'); // Ensure moment is available
 
@@ -605,9 +619,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 numero: row.NUMEROALBARAN,
                 numeroFactura: numeroFactura,
                 serieFactura: serieFactura,
-                documentoTipo: esFactura ? 'FACTURA' : 'ALBARÃN',
+                documentoTipo: esFactura ? 'FACTURA' : 'ALBARAN',
                 codigoCliente: cliente,
-                nombreCliente: row.NOMBRE_CLIENTE?.trim(),
+                nombreCliente: (row.NOMBRE_CLIENTE || '').trim() || cliente || 'CLIENTE',
                 nombreComercial: (row.NOMBRE_COMERCIAL || '').trim() || row.NOMBRE_CLIENTE?.trim(),
                 nombreFiscal: (row.NOMBRE_FISCAL || '').trim() || '',
                 direccion: row.DIRECCION?.trim(),
@@ -631,7 +645,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 limiteCredito: limiteCredito,
                 riesgoCreditoActual: riesgoActual,
                 colorEstado: colorEstado,
-                fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
+                fecha: isoDocumentDate(row, targetDate.date),
                 ruta: row.RUTA?.trim(),
                 codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
                 nombreRepartidor: stripVendorCode(row.NOMBRE_REPARTIDOR) || row.CODIGO_REPARTIDOR?.trim() || '',
@@ -650,7 +664,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             filteredAlbaranes = albaranes.filter(a =>
                 a.nombreCliente?.toLowerCase().includes(searchQuery) ||
                 a.codigoCliente?.toLowerCase().includes(searchQuery) ||
-                String(a.numeroAlbaran).includes(searchQuery) ||
+                String(a.numero).includes(searchQuery) ||
                 String(a.numeroFactura).includes(searchQuery)
             );
         }
@@ -667,7 +681,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const searchAlbaran = req.query.searchAlbaran?.trim() || '';
         if (searchAlbaran) {
             filteredAlbaranes = filteredAlbaranes.filter(a =>
-                String(a.numeroAlbaran).includes(searchAlbaran) ||
+                String(a.numero).includes(searchAlbaran) ||
                 String(a.numeroFactura).includes(searchAlbaran)
             );
         }
@@ -691,7 +705,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // --- FILTER BY DOCUMENT TYPE (ALBARAN/FACTURA) ---
         const filterDocTipo = req.query.docTipo; // 'ALBARAN' or 'FACTURA'
         if (filterDocTipo === 'ALBARAN') {
-            filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'ALBARÃN');
+            filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'ALBARAN');
         } else if (filterDocTipo === 'FACTURA') {
             filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'FACTURA');
         }
@@ -820,33 +834,38 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
     if (!documentIds.length || !drivers.length) return albaranes;
     const tables = confirmationTables();
     if (!tables?.confirmations) return albaranes;
-    const documentPlaceholders = documentIds.map(() => '?').join(', ');
-    const driverPlaceholders = drivers.map(() => '?').join(', ');
-    const rows = await queryWithParams(
-        `SELECT DOCUMENT_ID, STATUS
-           FROM ${tables.confirmations}
-          WHERE DOCUMENT_ID IN (${documentPlaceholders})
-            AND REPARTIDOR_ID IN (${driverPlaceholders})`,
-        [...documentIds, ...drivers],
-        false,
-        false,
-    );
-    const byId = new Map();
-    for (const row of Array.isArray(rows) ? rows : []) {
-        const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
-        const status = String(row.STATUS || row.status || '').trim().toUpperCase();
-        if (id && CANONICAL_LIST_STATUSES.includes(status)) byId.set(id, status);
+    try {
+        const documentPlaceholders = documentIds.map(() => '?').join(', ');
+        const driverPlaceholders = drivers.map(() => '?').join(', ');
+        const rows = await queryWithParams(
+            `SELECT TRIM(DOCUMENT_ID) AS DOCUMENT_ID, TRIM(STATUS) AS STATUS
+               FROM ${tables.confirmations}
+              WHERE TRIM(DOCUMENT_ID) IN (${documentPlaceholders})
+                AND TRIM(REPARTIDOR_ID) IN (${driverPlaceholders})`,
+            [...documentIds, ...drivers],
+            false,
+            false,
+        );
+        const byId = new Map();
+        for (const row of Array.isArray(rows) ? rows : []) {
+            const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
+            const status = String(row.STATUS || row.status || '').trim().toUpperCase();
+            if (id && CANONICAL_LIST_STATUSES.includes(status)) byId.set(id, status);
+        }
+        if (!byId.size) return albaranes;
+        return albaranes.map((item) => {
+            const status = byId.get(String(item.id || '').trim());
+            if (!status) return item;
+            return {
+                ...item,
+                estado: status,
+                colorEstado: status === 'ENTREGADO' ? 'green' : item.colorEstado,
+            };
+        });
+    } catch (_error) {
+        logger.warn('[ENTREGAS] Canonical confirmation overlay unavailable');
+        return albaranes;
     }
-    if (!byId.size) return albaranes;
-    return albaranes.map((item) => {
-        const status = byId.get(item.id);
-        if (!status) return item;
-        return {
-            ...item,
-            estado: status,
-            colorEstado: status === 'ENTREGADO' ? 'green' : item.colorEstado,
-        };
-    });
 }
 
 async function loadCanonicalDetailProjection(documentId, repartidorId, clientCode) {
@@ -858,9 +877,9 @@ async function loadCanonicalDetailProjection(documentId, repartidorId, clientCod
         const confirmations = await queryWithParams(`
             SELECT ID, STATUS, CONFIRMED_AT
             FROM ${tables.confirmations}
-            WHERE DOCUMENT_ID = ?
-              AND REPARTIDOR_ID = ?
-              AND CLIENTE_CODIGO = ?
+            WHERE TRIM(DOCUMENT_ID) = ?
+              AND TRIM(REPARTIDOR_ID) = ?
+              AND TRIM(CLIENTE_CODIGO) = ?
         `, [documentId, repartidorId, clientCode], false, false);
         if (confirmations.length === 0) {
             return { availability: 'NONE', confirmation: null, linesById: new Map() };
@@ -1064,8 +1083,8 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             poblacion: header.POB,
             numeroFactura: header.NUMEROFACTURA || 0,
             serieFactura: (header.SERIEFACTURA || '').trim(),
-            documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARÃN',
-            fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
+            documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARAN',
+            fecha: isoDocumentDate(header, null),
             importe: parseFloat(header.IMPORTE) || 0,
             importeBruto: parseFloat(header.IMPORTE_BRUTO) || 0,
             netoSum: netoSum,

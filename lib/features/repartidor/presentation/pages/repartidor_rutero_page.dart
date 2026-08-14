@@ -580,7 +580,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             const SizedBox(width: 6),
 
             _buildQuickFilterChip(
-              label: 'CrÃ©dito',
+              label: 'Crédito',
               isSelected: filterTipoPago == 'CREDITO',
               color: AppTheme.credito,
               icon: Icons.credit_card,
@@ -827,7 +827,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
             const SizedBox(height: 24),
             const Text(
-              'No hay entregas para este dÃ­a',
+              'No hay entregas para este día',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 18,
@@ -836,7 +836,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Selecciona otro dÃ­a en el calendario\no usa el buscador',
+              'Selecciona otro día en el calendario\no usa el buscador',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppTheme.textTertiary,
@@ -930,7 +930,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            hintText: 'AÃ±adir nota...',
+            hintText: 'Añadir nota...',
             hintStyle:
                 TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
             filled: true,

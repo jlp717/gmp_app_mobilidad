@@ -133,6 +133,7 @@ describe('entregas route coverage gaps', () => {
       albaranes: [expect.objectContaining({
         id: '2026-A-1-42-C1', codigoRepartidor: '94', formaPago: 'CTR',
         esCTR: true, puedeCobrarse: true, estado: 'PENDIENTE',
+        fecha: '2026-08-03', documentoTipo: 'ALBARAN',
       })],
     });
     const deliveryQuery = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('FROM DSEDAC.OPP OPP'));
@@ -155,6 +156,11 @@ describe('entregas route coverage gaps', () => {
     expect(response.body.albaranes[0]).toMatchObject({
       id: '2026-A-1-42-C1', estado: 'ENTREGADO',
     });
+    const overlaySql = mockQueryWithParams.mock.calls
+      .map(([sql]) => sql)
+      .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
+    expect(overlaySql).toContain('TRIM(DOCUMENT_ID) IN');
+    expect(overlaySql).toContain('TRIM(REPARTIDOR_ID) IN');
   });
 
   test('returns a typed redacted error when the authorized pending query fails', async () => {

@@ -1457,11 +1457,11 @@ class _ModernSaveBar extends StatelessWidget {
                       child: Text(
                         // Req #16: cierre explicito de la jornada del repartidor.
                         isClosed
-                            ? 'LiquidaciÃ³n cerrada'
+                            ? 'Liquidación cerrada'
                             : MediaQuery.of(context).size.width < 380
                                 // ignore: lines_longer_than_80_chars
-                                ? 'Cerrar d?a'
-                                : 'Cerrar d?a y grabar liquidaci?n',
+                                ? 'Cerrar día'
+                                : 'Cerrar día y grabar liquidación',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,

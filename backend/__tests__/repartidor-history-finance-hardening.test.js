@@ -121,7 +121,8 @@ describe('repartidor history document hardening', () => {
     const confirmSql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
       .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
-    expect(confirmSql).toContain('DOCUMENT_ID IN');
+    expect(confirmSql).toContain('TRIM(DOCUMENT_ID) IN');
+    expect(confirmSql).toContain('TRIM(REPARTIDOR_ID) IN');
     expect(confirmSql).not.toContain('PEDIDOS_CAB');
   });
 

@@ -24,6 +24,7 @@ void main() {
         'puedeCobrarse': false,
         'colorEstado': 'green',
         'estado': 'ENTREGADO',
+        'fecha': '2026-03-02',
         'items': [],
       };
 
@@ -147,6 +148,28 @@ void main() {
       expect(factura.numeroFactura, 219);
       expect(albaran.numeroFactura, 0);
     });
+
+    test('accepts unpadded slash dates and empty client name', () {
+      final albaran = AlbaranEntrega.fromJson({
+        'id': '2026-A-1-42-C1',
+        'numero': 42,
+        'ejercicio': 2026,
+        'importe': 12.5,
+        'codigoCliente': 'C1',
+        'nombreCliente': '  ',
+        'fecha': '14/8/2026',
+        'estado': 0,
+        'ivaBreakdown': [
+          {'base': 10, 'pct': 21, 'iva': 2.1},
+          {'base': 'bad'},
+        ],
+      });
+
+      expect(albaran.fecha, '2026-08-14');
+      expect(albaran.nombreCliente, 'C1');
+      expect(albaran.ivaBreakdown, hasLength(1));
+      expect(albaran.estado, EstadoEntrega.pendiente);
+    });
   });
 
   group('EntregaItem.fromJson', () {
@@ -170,12 +193,13 @@ void main() {
         'itemId': '1',
         'codigoArticulo': '7865',
         'descripcion': 'Test',
+        'cantidadPedida': 4,
       };
 
       final item = EntregaItem.fromJson(json);
-      expect(item.cantidadPedida, 0.0);
+      expect(item.cantidadPedida, 4.0);
       expect(item.precioUnitario, 0.0);
-      expect(item.cantidadEntregada, 0.0);
+      expect(item.cantidadEntregada, isNull);
     });
   });
 }

@@ -347,22 +347,36 @@ class RepartidorFinanzasService {
     required DateTime date,
   }) async {
     _validateLiquidacionIdentity(repartidorId, date);
-    final response = await _liquidacionGet(
-      '/repartidor-finanzas/liquidaciones/$repartidorId/desglose',
-      queryParameters: {'date': _isoDate(date)},
-    );
-    if (response.keys.toSet().difference({'success', 'ledger'}).isNotEmpty ||
-        response.length != 2 ||
-        response['success'] != true ||
-        response['ledger'] is! Map) {
-      throw const FormatException(
-          'Respuesta de desglose de liquidacion invalida');
+    FormatException? lastError;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await _liquidacionGet(
+          '/repartidor-finanzas/liquidaciones/$repartidorId/desglose',
+          queryParameters: {'date': _isoDate(date)},
+        );
+        final ledger = response['ledger'];
+        if (response['success'] != true || ledger is! Map) {
+          throw const FormatException(
+              'Respuesta de desglose de liquidacion invalida');
+        }
+        return RepartidorLiquidacionLedger.fromJson(
+          Map<String, dynamic>.from(ledger),
+          expectedRepartidorId: repartidorId,
+          expectedDate: _isoDate(date),
+        );
+      } catch (error) {
+        lastError = error is FormatException
+            ? error
+            : FormatException(error.toString());
+        if (attempt == 1) {
+          if (error is FormatException) rethrow;
+          throw lastError;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
     }
-    return RepartidorLiquidacionLedger.fromJson(
-      Map<String, dynamic>.from(response['ledger'] as Map),
-      expectedRepartidorId: repartidorId,
-      expectedDate: _isoDate(date),
-    );
+    throw lastError ??
+        const FormatException('Respuesta de desglose de liquidacion invalida');
   }
 
   Future<RepartidorLiquidacionEntryResult> createLiquidacionExpense({

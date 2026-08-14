@@ -81,7 +81,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
               ID,
               FIRMA_EVIDENCE_ID
          FROM ${tables.confirmations}
-        WHERE DOCUMENT_ID IN (${documentPlaceholders})
+        WHERE TRIM(DOCUMENT_ID) IN (${documentPlaceholders})
           AND TRIM(REPARTIDOR_ID) IN (${driverPlaceholders})`,
       [...documentIds, ...drivers],
       false,

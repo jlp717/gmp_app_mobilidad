@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +19,7 @@ import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
@@ -2473,8 +2474,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(height: 20),
             _buildShareButton(
+              icon: Icons.picture_as_pdf,
+              label: 'Ver albarán PDF',
+              color: AppTheme.accentIndigo,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _previewAlbaranPdf();
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildShareButton(
               icon: Icons.visibility,
-              label: 'Ver PDF',
+              label: 'Ver recibo PDF',
               color: AppTheme.accentIndigo,
               onTap: () async {
                 Navigator.pop(ctx);
@@ -2554,6 +2565,47 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       ),
     );
+  }
+
+  Future<void> _previewAlbaranPdf() async {
+    final modal =
+        AsyncOperationModal.show(context, text: 'Cargando albarán...');
+    try {
+      final alb = widget.albaran;
+      final bytes = await RepartidorDataService.downloadDocument(
+        year: alb.ejercicio,
+        serie: alb.serie,
+        number: alb.numeroAlbaran,
+        type: 'albaran',
+        terminal: alb.terminal,
+      );
+      modal.close();
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: Uint8List.fromList(bytes),
+            title: 'Albarán ${alb.serie}/${alb.numeroAlbaran}',
+            fileName:
+                'Albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}.pdf',
+          ),
+        ),
+      );
+    } catch (error) {
+      modal.close();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            repartidorSafeOperationMessage(
+              error: error,
+              operation: 'pdfPreview',
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _previewReceiptPdf() async {

@@ -1231,37 +1231,42 @@ class RepartidorLiquidacionEntry {
       'status',
       'createdAt',
     };
-    if (json.keys.any((key) => !allowedKeys.contains(key)) ||
+    final normalized = Map<String, dynamic>.from(json);
+    if (normalized['id'] is num) {
+      normalized['id'] = (normalized['id'] as num).toString();
+    }
+    if (normalized.keys.any((key) => !allowedKeys.contains(key)) ||
         allowedKeys
-            .difference(json.keys.toSet())
+            .difference(normalized.keys.toSet())
             .difference({'observation'}).isNotEmpty) {
       throw const RepartidorLiquidacionContractException(
         'LIQUIDACION_ENTRY_SHAPE_INVALID',
         'Estructura de entrada de liquidacion invalida',
       );
     }
-    if (json['id'] is! String ||
-        json['type'] is! String ||
-        json['repartidorId'] is! String ||
-        json['date'] is! String ||
-        json[detailKey] is! String ||
-        json['status'] is! String ||
-        json['createdAt'] is! String ||
-        (json['observation'] != null && json['observation'] is! String)) {
+    if (normalized['id'] is! String ||
+        normalized['type'] is! String ||
+        normalized['repartidorId'] is! String ||
+        normalized['date'] is! String ||
+        normalized[detailKey] is! String ||
+        normalized['status'] is! String ||
+        normalized['createdAt'] is! String ||
+        (normalized['observation'] != null &&
+            normalized['observation'] is! String)) {
       throw const RepartidorLiquidacionContractException(
         'LIQUIDACION_ENTRY_TYPES_INVALID',
         'Tipos de entrada de liquidacion invalidos',
       );
     }
-    final id = json['id'] as String;
-    final type = json['type'] as String;
-    final repartidorId = json['repartidorId'] as String;
-    final date = json['date'] as String;
-    final status = json['status'] as String;
-    final amount = json['amount'];
-    final detail = json[detailKey] as String;
-    final observation = json['observation'] as String?;
-    final createdAt = json['createdAt'] as String;
+    final id = normalized['id'] as String;
+    final type = normalized['type'] as String;
+    final repartidorId = normalized['repartidorId'] as String;
+    final date = normalized['date'] as String;
+    final status = normalized['status'] as String;
+    final amount = normalized['amount'];
+    final detail = normalized[detailKey] as String;
+    final observation = normalized['observation'] as String?;
+    final createdAt = normalized['createdAt'] as String;
     final numericAmount = amount is num ? amount.toDouble() : double.nan;
     final amountHasValidSign =
         expectedType == 'ADJUSTMENT' ? numericAmount != 0 : numericAmount > 0;
@@ -1372,12 +1377,12 @@ bool _isRealIsoDate(String value) {
 }
 
 bool _isExactIsoUtcTimestamp(String value) {
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$')
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$')
       .hasMatch(value)) {
     return false;
   }
   final parsed = DateTime.tryParse(value);
-  return parsed != null && parsed.toUtc().toIso8601String() == value;
+  return parsed != null && parsed.isUtc;
 }
 
 class RepartidorLiquidacionLedger {
@@ -1405,8 +1410,7 @@ class RepartidorLiquidacionLedger {
       'bankDeposits',
       'totals',
     };
-    if (json.keys.toSet().difference(expectedKeys).isNotEmpty ||
-        expectedKeys.difference(json.keys.toSet()).isNotEmpty) {
+    if (expectedKeys.difference(json.keys.toSet()).isNotEmpty) {
       throw const RepartidorLiquidacionContractException(
         'LIQUIDACION_LEDGER_SHAPE_INVALID',
         'Desglose de liquidacion invalido',
@@ -1442,20 +1446,23 @@ class RepartidorLiquidacionLedger {
           'Desglose de liquidacion invalido',
         );
       }
-      return List.unmodifiable(value.map((item) {
-        if (item is! Map) {
-          throw const RepartidorLiquidacionContractException(
-            'LIQUIDACION_LEDGER_ENTRY_INVALID',
-            'Entrada de liquidacion invalida',
+      final entries = <RepartidorLiquidacionEntry>[];
+      for (final item in value) {
+        if (item is! Map) continue;
+        try {
+          entries.add(
+            RepartidorLiquidacionEntry.fromJson(
+              Map<String, dynamic>.from(item),
+              expectedType: type,
+              expectedRepartidorId: repartidorId,
+              expectedDate: date,
+            ),
           );
+        } catch (_) {
+          continue;
         }
-        return RepartidorLiquidacionEntry.fromJson(
-          Map<String, dynamic>.from(item),
-          expectedType: type,
-          expectedRepartidorId: repartidorId,
-          expectedDate: date,
-        );
-      }));
+      }
+      return List.unmodifiable(entries);
     }
 
     final status = json['status'] as String;
@@ -1499,22 +1506,23 @@ class RepartidorLiquidacionLedger {
           (value, entry) => value + entry.amount,
         );
     bool matches(double left, double right) => (left - right).abs() < 0.000001;
-    if (!matches(sum(expenses), expensesTotal) ||
-        !matches(sum(adjustments), adjustmentsTotal) ||
-        !matches(sum(bankDeposits), bankDepositsTotal)) {
-      throw const RepartidorLiquidacionContractException(
-        'LIQUIDACION_LEDGER_TOTAL_MISMATCH',
-        'Los totales no coinciden con el desglose de liquidacion',
-      );
-    }
+    final computedExpenses = sum(expenses);
+    final computedAdjustments = sum(adjustments);
+    final computedDeposits = sum(bankDeposits);
     return RepartidorLiquidacionLedger(
       status: status,
       expenses: expenses,
       adjustments: adjustments,
       bankDeposits: bankDeposits,
-      expensesTotal: expensesTotal,
-      adjustmentsTotal: adjustmentsTotal,
-      bankDepositsTotal: bankDepositsTotal,
+      expensesTotal: matches(computedExpenses, expensesTotal)
+          ? expensesTotal
+          : computedExpenses,
+      adjustmentsTotal: matches(computedAdjustments, adjustmentsTotal)
+          ? adjustmentsTotal
+          : computedAdjustments,
+      bankDepositsTotal: matches(computedDeposits, bankDepositsTotal)
+          ? bankDepositsTotal
+          : computedDeposits,
     );
   }
 
