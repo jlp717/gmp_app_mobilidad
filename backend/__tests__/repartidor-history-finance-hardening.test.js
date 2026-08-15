@@ -103,7 +103,7 @@ describe('repartidor history document hardening', () => {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'ENTREGADO',
-          ID: 'conf-1',
+          ID: BigInt(7),
           FIRMA_EVIDENCE_ID: 'sig-1',
         }];
       }
@@ -116,7 +116,7 @@ describe('repartidor history document hardening', () => {
     expect(response.body.documents[0]).toMatchObject({
       status: 'delivered',
       hasSignature: true,
-      confirmationId: 'conf-1',
+      confirmationId: '7',
     });
     const confirmSql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
@@ -132,13 +132,13 @@ describe('repartidor history document hardening', () => {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'ENTREGADO',
-          ID: 'conf-1',
+          ID: BigInt(9),
           FIRMA_EVIDENCE_ID: 'sig-1',
         }];
       }
       return [{
         FECHA: '2026-08-15',
-        NUMEROALBARAN: 42,
+        NUMEROALBARAN: BigInt(42),
         SERIEALBARAN: 'A',
         EJERCICIOALBARAN: 2026,
         NUMEROFACTURA: 0,
@@ -146,7 +146,7 @@ describe('repartidor history document hardening', () => {
         EJERCICIOFACTURA: 0,
         CODIGO_CLIENTE: 'C1',
         CODIGOCLIENTEALBARAN: 'C1',
-        TERMINALALBARAN: 1,
+        TERMINALALBARAN: BigInt(1),
         NOMBRE_CLIENTE: 'Cliente',
         TOTAL: 40,
         ESTADO_ENTREGA: null,

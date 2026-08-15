@@ -579,7 +579,9 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 pendingAvailability,
                 status: overrides.status || status,
                 hasSignature: hasFirmaPath || hasLegacySig || !!row.CANONICAL_FIRMA_EVIDENCE_ID,
-                confirmationId: row.CANONICAL_CONFIRMATION_ID || null,
+                confirmationId: row.CANONICAL_CONFIRMATION_ID == null
+                    ? null
+                    : String(row.CANONICAL_CONFIRMATION_ID),
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_UPDATED_AT || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,

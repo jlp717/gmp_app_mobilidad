@@ -42,6 +42,20 @@ function resolveConfirmationTables() {
   };
 }
 
+function jsonSafeScalar(value) {
+  if (typeof value === 'bigint') return Number(value);
+  return value;
+}
+
+function jsonSafeRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  const out = { ...row };
+  for (const key of Object.keys(out)) {
+    out[key] = jsonSafeScalar(out[key]);
+  }
+  return out;
+}
+
 function canonicalDocumentId(row, clientCode) {
   const ejercicio = row?.EJERCICIOALBARAN;
   const serie = String(row?.SERIEALBARAN || '').trim();
@@ -93,16 +107,17 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
       if (!id || !CANONICAL_CONFIRMATION_STATUSES.includes(status)) continue;
       byId.set(id, {
         status,
-        confirmationId: row.ID ?? row.id ?? null,
+        confirmationId: jsonSafeScalar(row.ID ?? row.id ?? null),
         firmaEvidenceId: row.FIRMA_EVIDENCE_ID || row.firma_evidence_id || null,
       });
     }
     if (!byId.size) return rows;
     return rows.map((row) => {
       const match = byId.get(canonicalDocumentId(row, clientCode));
-      if (!match) return row;
+      const safe = jsonSafeRow(row);
+      if (!match) return safe;
       return {
-        ...row,
+        ...safe,
         CANONICAL_STATUS: match.status,
         CANONICAL_CONFIRMATION_ID: match.confirmationId,
         CANONICAL_FIRMA_EVIDENCE_ID: match.firmaEvidenceId,
@@ -1104,8 +1119,9 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
   });
   return overlaid.map((row) => {
     const canonical = String(row.CANONICAL_STATUS || '').trim().toUpperCase();
-    if (!canonical) return row;
-    return { ...row, ESTADO_ENTREGA: canonical };
+    const safe = jsonSafeRow(row);
+    if (!canonical) return safe;
+    return { ...safe, ESTADO_ENTREGA: canonical };
   });
 }
 
