@@ -209,7 +209,7 @@ InputDecoration ruteroErrorInputDecoration({
   final radius = BorderRadius.circular(AppTheme.radiusMd);
   final errorBorder = OutlineInputBorder(
     borderRadius: radius,
-    borderSide: const BorderSide(color: AppTheme.error, width: 2),
+    borderSide: const BorderSide(color: AppTheme.error, width: 2.5),
   );
   return InputDecoration(
     labelText: label,
@@ -219,13 +219,13 @@ InputDecoration ruteroErrorInputDecoration({
     alignLabelWithHint: alignLabelWithHint,
     filled: true,
     fillColor:
-        hasError ? AppTheme.error.withValues(alpha: 0.12) : AppTheme.softPanel,
+        hasError ? AppTheme.error.withValues(alpha: 0.22) : AppTheme.softPanel,
     errorText: errorText,
     errorMaxLines: 4,
     errorStyle: const TextStyle(
       color: AppTheme.error,
-      fontSize: 13,
-      fontWeight: FontWeight.w700,
+      fontSize: 15,
+      fontWeight: FontWeight.w800,
       height: 1.3,
     ),
     border: OutlineInputBorder(borderRadius: radius),
@@ -244,4 +244,59 @@ InputDecoration ruteroErrorInputDecoration({
     errorBorder: errorBorder,
     focusedErrorBorder: errorBorder,
   );
+}
+
+class RuteroErrorSpotlight extends StatelessWidget {
+  const RuteroErrorSpotlight({
+    required this.active,
+    required this.child,
+    this.message,
+    super.key,
+  });
+
+  final bool active;
+  final String? message;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      padding: active ? const EdgeInsets.all(8) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: active ? AppTheme.error.withValues(alpha: 0.16) : null,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: active
+            ? Border.all(color: AppTheme.error, width: 2.5)
+            : Border.all(color: Colors.transparent, width: 0),
+        boxShadow: active
+            ? [
+                BoxShadow(
+                  color: AppTheme.error.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (message != null && message!.isNotEmpty) ...[
+            Text(
+              message!,
+              style: const TextStyle(
+                color: AppTheme.error,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                height: 1.25,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
 }

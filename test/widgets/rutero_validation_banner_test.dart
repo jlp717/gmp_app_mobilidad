@@ -33,4 +33,28 @@ void main() {
     expect(find.text('Revisa este dato para confirmar'), findsOneWidget);
     expect(find.textContaining('DNI/NIF'), findsOneWidget);
   });
+
+  testWidgets('error spotlight paints the field message in red',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: const Scaffold(
+          body: RuteroErrorSpotlight(
+            active: true,
+            message: 'El DNI/NIF es obligatorio.',
+            child: SizedBox(height: 48, width: 200),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('El DNI/NIF es obligatorio.'), findsOneWidget);
+    final container = tester.widget<AnimatedContainer>(
+      find.byType(AnimatedContainer),
+    );
+    final decoration = container.decoration as BoxDecoration;
+    expect(decoration.border, isA<Border>());
+    expect((decoration.border as Border).top.width, 2.5);
+  });
 }

@@ -20,6 +20,8 @@ class RuteroDetailPayment extends StatelessWidget {
     required this.onContinueToFinalize,
     required this.getPaymentTypeLabel,
     this.importeFieldKey,
+    this.errorBannerKey,
+    this.highlightPayment = false,
     super.key,
   });
 
@@ -34,6 +36,8 @@ class RuteroDetailPayment extends StatelessWidget {
   final VoidCallback onContinueToFinalize;
   final String Function() getPaymentTypeLabel;
   final Key? importeFieldKey;
+  final Key? errorBannerKey;
+  final bool highlightPayment;
 
   bool get _isUrgent => albaran.esCTR;
 
@@ -45,8 +49,11 @@ class RuteroDetailPayment extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (pagoError != null || importeCobradoError != null) ...[
-            _buildPaymentError(
-              pagoError ?? importeCobradoError ?? '',
+            RuteroErrorSpotlight(
+              key: errorBannerKey,
+              active: highlightPayment,
+              message: pagoError ?? importeCobradoError,
+              child: const SizedBox.shrink(),
             ),
             const SizedBox(height: 16),
           ],
@@ -278,54 +285,25 @@ class RuteroDetailPayment extends StatelessWidget {
   }
 
   Widget _buildCollectedAmountField() {
-    return TextField(
+    return RuteroErrorSpotlight(
       key: importeFieldKey,
-      controller: importeCobradoController,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-      ],
-      style: const TextStyle(
-        color: AppTheme.textPrimary,
-        fontWeight: FontWeight.bold,
-      ),
-      decoration: ruteroErrorInputDecoration(
-        label: 'Importe cobrado',
-        suffixText: 'EUR',
-        errorText: importeCobradoError,
-      ),
-    );
-  }
-
-  Widget _buildPaymentError(String message) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.error.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error, width: 1.6),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            color: AppTheme.error,
-            size: 22,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: AppTheme.error,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                height: 1.3,
-              ),
-            ),
-          ),
+      active: highlightPayment && importeCobradoError != null,
+      message: importeCobradoError,
+      child: TextField(
+        controller: importeCobradoController,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
         ],
+        style: const TextStyle(
+          color: AppTheme.textPrimary,
+          fontWeight: FontWeight.bold,
+        ),
+        decoration: ruteroErrorInputDecoration(
+          label: 'Importe cobrado',
+          suffixText: 'EUR',
+          errorText: importeCobradoError,
+        ),
       ),
     );
   }

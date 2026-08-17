@@ -84,6 +84,16 @@ void main() {
     expect(result.messageFor('dni'), contains('Formato no válido'));
   });
 
+  test('missing DNI is the first finalize issue to jump to', () {
+    final result = validateRuteroDeliveryForm(
+      _base(dni: '', nombre: 'Ana', apellidos: 'Lopez'),
+    );
+    expect(result.isValid, isFalse);
+    expect(result.firstTabIndex, 2);
+    expect(result.issues.first.field, 'dni');
+    expect(result.messageFor('dni'), contains('obligatorio'));
+  });
+
   test('paid amount above total is visible on cobro', () {
     final result = validateRuteroDeliveryForm(
       _base(isPaid: true, importeCobradoText: '20,00', importeTotal: 10),

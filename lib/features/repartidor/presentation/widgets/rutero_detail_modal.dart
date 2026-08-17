@@ -174,6 +174,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final _observacionesFieldKey = GlobalKey();
   final _firmaFieldKey = GlobalKey();
   final _importeFieldKey = GlobalKey();
+  final _productsErrorKey = GlobalKey();
+  final _paymentErrorKey = GlobalKey();
   final _finalizeScrollController = ScrollController();
 
   final SignatureController _signatureController = SignatureController(
@@ -221,6 +223,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String? _observacionesError;
   String? _productsStatusError;
   List<RuteroFieldIssue> _validationIssues = const [];
+  String? _spotlightField;
 
   String? _cachedPdfBase64;
 
@@ -235,6 +238,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _evidenceCoordinator = RepartoEvidenceConfirmationCoordinator(
         RepartoEvidenceUploadService(), _confirmationJournal);
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onDeliveryTabChanged);
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
@@ -443,6 +447,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   @override
   void dispose() {
+    _tabController.removeListener(_onDeliveryTabChanged);
     _tabController.dispose();
     _slideController.dispose();
     _observacionesController.dispose();
@@ -457,6 +462,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _finalizeScrollController.dispose();
     _signatureController.dispose();
     super.dispose();
+  }
+
+  void _onDeliveryTabChanged() {
+    if (!mounted || _tabController.indexIsChanging) return;
+    setState(() {});
   }
 
   static double _normalizeQuantity(num value) =>
@@ -537,13 +547,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   onIssueTap: _focusValidationIssue,
                 ),
                 Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    physics: const NeverScrollableScrollPhysics(),
+                  child: IndexedStack(
+                    index: _tabController.index,
                     children: [
-                      _buildProductsTab(),
-                      _buildPaymentTab(),
-                      _buildFinalizeTab(),
+                      SizedBox.expand(child: _buildProductsTab()),
+                      SizedBox.expand(child: _buildPaymentTab()),
+                      SizedBox.expand(child: _buildFinalizeTab()),
                     ],
                   ),
                 ),
@@ -573,24 +582,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       children: [
         if (_productsStatusError != null)
           Padding(
+            key: _productsErrorKey,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.error, width: 1.6),
-              ),
-              child: Text(
-                _productsStatusError!,
-                style: const TextStyle(
-                  color: AppTheme.error,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  height: 1.3,
-                ),
-              ),
+            child: RuteroErrorSpotlight(
+              active: _spotlightField == 'productsStatus' ||
+                  _spotlightField == 'items',
+              message: _productsStatusError,
+              child: const SizedBox.shrink(),
             ),
           ),
         Expanded(
@@ -694,6 +692,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       importeCobradoController: _importeCobradoController,
       importeCobradoError: _importeCobradoError,
       importeFieldKey: _importeFieldKey,
+      errorBannerKey: _paymentErrorKey,
+      highlightPayment:
+          _spotlightField == 'pago' || _spotlightField == 'importe',
       onPaymentMethodChanged: (method) {
         setState(() => _selectedPaymentMethod = method);
       },
@@ -762,28 +763,32 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _buildDiscrepancyWarning(),
             const SizedBox(height: 12),
           ],
-          TextField(
+          RuteroErrorSpotlight(
             key: _observacionesFieldKey,
-            controller: _observacionesController,
-            maxLines: 3,
-            onChanged: (_) {
-              if (_observacionesError != null) {
-                setState(() {
-                  _observacionesError = null;
-                  _removeIssue('observaciones');
-                });
-              }
-            },
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: ruteroErrorInputDecoration(
-              label: noEntrega
-                  ? 'Observaciones / motivo de no entrega *'
-                  : 'Observaciones',
-              hintText: noEntrega
-                  ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
-                  : 'Añadir nota sobre la entrega...',
-              errorText: _observacionesError,
-              alignLabelWithHint: true,
+            active: _spotlightField == 'observaciones',
+            message: _observacionesError,
+            child: TextField(
+              controller: _observacionesController,
+              maxLines: 3,
+              onChanged: (_) {
+                if (_observacionesError != null) {
+                  setState(() {
+                    _observacionesError = null;
+                    _removeIssue('observaciones');
+                  });
+                }
+              },
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: ruteroErrorInputDecoration(
+                label: noEntrega
+                    ? 'Observaciones / motivo de no entrega *'
+                    : 'Observaciones',
+                hintText: noEntrega
+                    ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
+                    : 'Añadir nota sobre la entrega...',
+                errorText: _observacionesError,
+                alignLabelWithHint: true,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -1088,66 +1093,79 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ],
           ),
           const SizedBox(height: 16),
-          TextField(
+          const SizedBox(height: 16),
+          RuteroErrorSpotlight(
             key: _nombreFieldKey,
-            controller: _nombreController,
-            focusNode: _nombreFocusNode,
-            enabled: !_isSubmitting,
-            onChanged: (_) {
-              if (_nombreError != null) {
-                setState(() {
-                  _nombreError = null;
-                  _removeIssue('nombre');
-                });
-              }
-            },
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: ruteroErrorInputDecoration(
-              label: 'Nombre *',
-              prefixIcon: const Icon(Icons.person_outline, size: 20),
-              errorText: _nombreError,
+            active: _spotlightField == 'nombre',
+            message: _nombreError,
+            child: TextField(
+              controller: _nombreController,
+              focusNode: _nombreFocusNode,
+              enabled: !_isSubmitting,
+              onChanged: (_) {
+                if (_nombreError != null) {
+                  setState(() {
+                    _nombreError = null;
+                    _removeIssue('nombre');
+                  });
+                }
+              },
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: ruteroErrorInputDecoration(
+                label: 'Nombre *',
+                prefixIcon: const Icon(Icons.person_outline, size: 20),
+                errorText: _nombreError,
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
+          RuteroErrorSpotlight(
             key: _apellidosFieldKey,
-            controller: _apellidosController,
-            focusNode: _apellidosFocusNode,
-            enabled: !_isSubmitting,
-            onChanged: (_) {
-              if (_apellidosError != null) {
-                setState(() {
-                  _apellidosError = null;
-                  _removeIssue('apellidos');
-                });
-              }
-            },
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: ruteroErrorInputDecoration(
-              label: 'Apellidos *',
-              prefixIcon: const Icon(Icons.person_outline, size: 20),
-              errorText: _apellidosError,
+            active: _spotlightField == 'apellidos',
+            message: _apellidosError,
+            child: TextField(
+              controller: _apellidosController,
+              focusNode: _apellidosFocusNode,
+              enabled: !_isSubmitting,
+              onChanged: (_) {
+                if (_apellidosError != null) {
+                  setState(() {
+                    _apellidosError = null;
+                    _removeIssue('apellidos');
+                  });
+                }
+              },
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: ruteroErrorInputDecoration(
+                label: 'Apellidos *',
+                prefixIcon: const Icon(Icons.person_outline, size: 20),
+                errorText: _apellidosError,
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
+          RuteroErrorSpotlight(
             key: _dniFieldKey,
-            controller: _dniController,
-            focusNode: _dniFocusNode,
-            enabled: !_isSubmitting,
-            onChanged: (_) {
-              if (_dniError != null) {
-                setState(() {
-                  _dniError = null;
-                  _removeIssue('dni');
-                });
-              }
-            },
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: ruteroErrorInputDecoration(
-              label: 'DNI / NIF *',
-              prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-              errorText: _dniError,
+            active: _spotlightField == 'dni',
+            message: _dniError,
+            child: TextField(
+              controller: _dniController,
+              focusNode: _dniFocusNode,
+              enabled: !_isSubmitting,
+              onChanged: (_) {
+                if (_dniError != null) {
+                  setState(() {
+                    _dniError = null;
+                    _removeIssue('dni');
+                  });
+                }
+              },
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: ruteroErrorInputDecoration(
+                label: 'DNI / NIF *',
+                prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+                errorText: _dniError,
+              ),
             ),
           ),
         ],
@@ -1177,71 +1195,63 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildSignatureSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Row(
-              children: [
-                RepartidorExecutiveIcon(
-                  icon: Icons.draw,
-                  color: AppTheme.info,
-                  size: 20,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'FIRMA DEL CLIENTE *',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+    return RuteroErrorSpotlight(
+      key: _firmaFieldKey,
+      active: _spotlightField == 'firma',
+      message: _firmaError,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  RepartidorExecutiveIcon(
+                    icon: Icons.draw,
+                    color: AppTheme.info,
+                    size: 20,
                   ),
+                  SizedBox(width: 8),
+                  Text(
+                    'FIRMA DEL CLIENTE *',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              TextButton.icon(
+                onPressed: _signatureController.clear,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Borrar'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.error,
                 ),
-              ],
-            ),
-            TextButton.icon(
-              onPressed: _signatureController.clear,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Borrar'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.error,
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        RepartidorExecutivePanel(
-          key: _firmaFieldKey,
-          accentColor: _firmaError != null ? AppTheme.error : AppTheme.info,
-          padding: EdgeInsets.zero,
-          child: SizedBox(
-            height: Responsive.isLandscape(context)
-                ? 120.0
-                : Responsive.value(context, phone: 120, desktop: 160),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              child: Signature(
-                controller: _signatureController,
-                backgroundColor: Colors.white,
-              ),
-            ),
+            ],
           ),
-        ),
-        if (_firmaError != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            _firmaError!,
-            style: const TextStyle(
-              color: AppTheme.error,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              height: 1.3,
+          const SizedBox(height: 8),
+          RepartidorExecutivePanel(
+            accentColor: _firmaError != null ? AppTheme.error : AppTheme.info,
+            padding: EdgeInsets.zero,
+            child: SizedBox(
+              height: Responsive.isLandscape(context)
+                  ? 120.0
+                  : Responsive.value(context, phone: 120, desktop: 160),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                child: Signature(
+                  controller: _signatureController,
+                  backgroundColor: Colors.white,
+                ),
+              ),
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 
@@ -1726,6 +1736,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _observacionesError = null;
       _productsStatusError = null;
       _validationIssues = const [];
+      _spotlightField = null;
     });
   }
 
@@ -1737,6 +1748,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _validationIssues.where((issue) => issue.field != field).toList();
     if (field == 'productsStatus') {
       _productsStatusError = null;
+    }
+    if (_spotlightField == field) {
+      _spotlightField =
+          _validationIssues.isEmpty ? null : _validationIssues.first.field;
     }
   }
 
@@ -1753,21 +1768,60 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       case 'firma':
         return _firmaFieldKey;
       case 'importe':
-      case 'pago':
         return _importeFieldKey;
+      case 'pago':
+        return _paymentErrorKey;
+      case 'productsStatus':
+      case 'items':
+        return _productsErrorKey;
       default:
         return null;
     }
   }
 
   void _focusValidationIssue(RuteroFieldIssue issue) {
+    unawaited(_revealValidationIssue(issue));
+  }
+
+  Future<void> _revealValidationIssue(RuteroFieldIssue issue) async {
     FocusManager.instance.primaryFocus?.unfocus();
+    if (!mounted) return;
+    setState(() => _spotlightField = issue.field);
     if (_tabController.index != issue.tabIndex) {
       _tabController.animateTo(issue.tabIndex);
+      await Future<void>.delayed(const Duration(milliseconds: 16));
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureFieldVisible(issue.field);
-    });
+    while (mounted && _tabController.indexIsChanging) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted) return;
+    setState(() {});
+    for (var attempt = 0; attempt < 12; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      if (_tabController.index == issue.tabIndex &&
+          _keyForField(issue.field)?.currentContext != null) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+    if (!mounted) return;
+    _ensureFieldVisible(issue.field);
+    _requestFieldFocus(issue.field);
+  }
+
+  void _requestFieldFocus(String field) {
+    if (field == 'nombre') {
+      _nombreFocusNode.requestFocus();
+      return;
+    }
+    if (field == 'apellidos') {
+      _apellidosFocusNode.requestFocus();
+      return;
+    }
+    if (field == 'dni') {
+      _dniFocusNode.requestFocus();
+    }
   }
 
   void _ensureFieldVisible(String field) {
@@ -1776,9 +1830,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (ctx == null) return;
     Scrollable.ensureVisible(
       ctx,
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 320),
       curve: Curves.easeOutCubic,
-      alignment: 0.12,
+      alignment: 0.08,
     );
   }
 
@@ -1827,6 +1881,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _validationIssues = result.issues;
+      _spotlightField = result.isValid ? null : result.issues.first.field;
       _itemsError = result.messageFor('items') ?? _itemsError;
       _productsStatusError = result.messageFor('productsStatus');
       _pagoError = result.messageFor('pago');
@@ -1840,17 +1895,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
     if (!result.isValid) {
       HapticFeedback.heavyImpact();
-      final first = result.issues.first;
-      if (_tabController.index != result.firstTabIndex) {
-        _tabController.animateTo(result.firstTabIndex);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final target = result.issues.firstWhere(
-          (issue) => issue.tabIndex == result.firstTabIndex,
-          orElse: () => first,
-        );
-        _ensureFieldVisible(target.field);
-      });
+      final target = result.issues.firstWhere(
+        (issue) => issue.tabIndex == result.firstTabIndex,
+        orElse: () => result.issues.first,
+      );
+      unawaited(_revealValidationIssue(target));
     }
 
     return result.isValid;
