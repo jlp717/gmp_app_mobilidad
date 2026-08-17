@@ -45,7 +45,9 @@ class PrinterJobResult {
       case PrinterFailureCode.missingPayload:
         return 'No se pudo generar el ticket.';
       case PrinterFailureCode.sendFailed:
-        return 'No se pudo enviar el ticket. Revisa que la impresora esté vinculada y con papel.';
+        return 'No se pudo enviar el ticket. Comprueba que está encendida '
+            'y, si no sale papel, pulsa Cambiar y elige ZPL (Zebra) o '
+            'ESC/POS (genérica).';
       case null:
         return 'Ticket enviado a la impresora.';
     }
@@ -120,45 +122,70 @@ class ZebraPrintService {
 
   // -- Bluetooth permissions --
 
-  /// Check and request BT permissions. Skips re-request if already granted.
+  /// Android 12+ can print to a known MAC with CONNECT (SCAN for picker).
+  /// Location is not required: `BLUETOOTH_SCAN` uses `neverForLocation`.
   static Future<bool> requestBluetoothPermissions() async {
-    // Fast path: check if already granted before triggering system dialog
     final connectStatus = await Permission.bluetoothConnect.status;
     final scanStatus = await Permission.bluetoothScan.status;
-    final locationStatus = await Permission.locationWhenInUse.status;
-
-    if ((connectStatus.isGranted || connectStatus.isLimited) &&
-        (scanStatus.isGranted || scanStatus.isLimited) &&
-        (locationStatus.isGranted || locationStatus.isLimited)) {
+    if (_isGranted(connectStatus) && _isGranted(scanStatus)) {
       return true;
     }
 
     final statuses = await [
       Permission.bluetoothConnect,
       Permission.bluetoothScan,
-      Permission.locationWhenInUse,
     ].request();
+    final connect = statuses[Permission.bluetoothConnect] ?? connectStatus;
+    final scan = statuses[Permission.bluetoothScan] ?? scanStatus;
+    if (_isGranted(connect) && _isGranted(scan)) return true;
 
-    final allGranted = statuses.values.every(
-      (s) => s.isGranted || s.isLimited,
-    );
-    if (!allGranted) {
-      debugPrint('[ZEBRA] BT permissions not granted');
-    }
-    return allGranted;
+    // Print to a saved address only needs CONNECT on Android 12+.
+    if (_isGranted(connect)) return true;
+
+    final bluetooth = await Permission.bluetooth.request();
+    if (_isGranted(bluetooth)) return true;
+
+    debugPrint('[ZEBRA] BT permissions not granted');
+    return false;
   }
+
+  static bool _isGranted(PermissionStatus status) =>
+      status.isGranted || status.isLimited;
 
   // -- Bluetooth state --
 
   /// Check if Bluetooth adapter is enabled.
+  /// Unknown / plugin errors do not block printing; only a real disabled adapter does.
   static Future<bool> isBluetoothEnabled() async {
     try {
-      final state = await FlutterBluetoothPrinter.getState();
-      return state == BluetoothState.enabled ||
-          state == BluetoothState.permitted;
+      final state = await FlutterBluetoothPrinter.getState().timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => BluetoothState.unknown,
+      );
+      if (state == BluetoothState.disabled) return false;
+      return state != BluetoothState.notPermitted;
     } catch (_) {
-      return false;
+      return true;
     }
+  }
+
+  /// Returns a hard blocker, or null when printing should still be attempted.
+  static Future<PrinterFailureCode?> _bluetoothBlocker() async {
+    try {
+      final state = await FlutterBluetoothPrinter.getState().timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => BluetoothState.unknown,
+      );
+      if (state == BluetoothState.disabled) {
+        return PrinterFailureCode.bluetoothOff;
+      }
+      if (state == BluetoothState.notPermitted) {
+        return PrinterFailureCode.permissionsDenied;
+      }
+    } catch (e) {
+      debugPrint('[ZEBRA] getState skipped, trying print anyway: $e');
+    }
+    return null;
   }
 
   static Future<void> _safeDisconnect(String address) async {
@@ -640,56 +667,79 @@ class ZebraPrintService {
 
   // -- Print execution --
 
-  static const Duration _printAttemptTimeout = Duration(seconds: 12);
+  /// Sleeping Zebra RFCOMM connect often exceeds 12s. Aborting mid-write
+  /// leaves incomplete ZPL and the printer ejects nothing.
+  static const Duration _printAttemptTimeout = Duration(seconds: 28);
+  static const Duration _flushAfterPrint = Duration(milliseconds: 500);
+  static const Duration _retryPause = Duration(seconds: 2);
+  static const Duration _busyClearPause = Duration(seconds: 3);
 
   static Future<PrinterJobResult> _sendBytes(
     Uint8List bytes, {
     String? address,
   }) async {
-    String? addr;
-    try {
-      addr = address ?? await getSavedPrinterAddress();
-      if (addr == null || addr.isEmpty) {
-        return const PrinterJobResult.fail(PrinterFailureCode.noAddress);
-      }
+    final addr = address ?? await getSavedPrinterAddress();
+    if (addr == null || addr.isEmpty) {
+      return const PrinterJobResult.fail(PrinterFailureCode.noAddress);
+    }
 
-      final granted = await requestBluetoothPermissions();
-      if (!granted) {
-        return const PrinterJobResult.fail(
-          PrinterFailureCode.permissionsDenied,
-        );
-      }
-
-      final btOn = await isBluetoothEnabled()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
-      if (!btOn) {
-        return const PrinterJobResult.fail(PrinterFailureCode.bluetoothOff);
-      }
-
-      var timedOut = false;
-      final ok = await FlutterBluetoothPrinter.printBytes(
-        address: addr,
-        data: bytes,
-        keepConnected: false,
-      ).timeout(_printAttemptTimeout, onTimeout: () {
-        timedOut = true;
-        return false;
-      });
-      debugPrint('[ZEBRA] Print result ok=$ok timedOut=$timedOut');
-      if (ok) return const PrinterJobResult.success();
-      return PrinterJobResult.fail(
-        timedOut ? PrinterFailureCode.timeout : PrinterFailureCode.sendFailed,
+    final granted = await requestBluetoothPermissions();
+    if (!granted) {
+      return const PrinterJobResult.fail(
+        PrinterFailureCode.permissionsDenied,
       );
-    } on TimeoutException {
-      return const PrinterJobResult.fail(PrinterFailureCode.timeout);
-    } catch (_) {
-      debugPrint('[ZEBRA] Print failed');
-      return const PrinterJobResult.fail(PrinterFailureCode.sendFailed);
-    } finally {
-      if (addr != null && addr.isNotEmpty) {
+    }
+
+    final blocker = await _bluetoothBlocker();
+    if (blocker != null) {
+      return PrinterJobResult.fail(blocker);
+    }
+
+    var lastFailure = PrinterFailureCode.sendFailed;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      var timedOut = false;
+      try {
+        final ok = await FlutterBluetoothPrinter.printBytes(
+          address: addr,
+          data: bytes,
+          keepConnected: true,
+          delayTime: 20,
+          maxBufferSize: bytes.length,
+        ).timeout(
+          _printAttemptTimeout,
+          onTimeout: () {
+            timedOut = true;
+            return false;
+          },
+        );
+        debugPrint(
+          '[ZEBRA] Print result ok=$ok timedOut=$timedOut attempt=$attempt',
+        );
+        if (ok) {
+          await Future<void>.delayed(_flushAfterPrint);
+          return const PrinterJobResult.success();
+        }
+        lastFailure = timedOut
+            ? PrinterFailureCode.timeout
+            : PrinterFailureCode.sendFailed;
+      } on TimeoutException {
+        timedOut = true;
+        lastFailure = PrinterFailureCode.timeout;
+      } catch (e) {
+        debugPrint('[ZEBRA] Print failed: $e');
+        lastFailure = PrinterFailureCode.sendFailed;
+      } finally {
         await _safeDisconnect(addr);
       }
+
+      if (attempt == 0) {
+        await Future<void>.delayed(
+          timedOut ? _busyClearPause : _retryPause,
+        );
+      }
     }
+
+    return PrinterJobResult.fail(lastFailure);
   }
 
   /// Sends raw ZPL to the saved (or given) printer.

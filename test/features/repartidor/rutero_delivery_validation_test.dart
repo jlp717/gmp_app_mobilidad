@@ -108,4 +108,11 @@ void main() {
     expect(result.message.toLowerCase(), contains('impresora'));
     expect(result.message.toLowerCase(), isNot(contains('zebra')));
   });
+
+  test('printer sendFailed tells user to switch ZPL or ESC/POS', () {
+    const result = PrinterJobResult.fail(PrinterFailureCode.sendFailed);
+    expect(result.ok, isFalse);
+    expect(result.message.toLowerCase(), contains('zpl'));
+    expect(result.message.toLowerCase(), contains('esc/pos'));
+  });
 }

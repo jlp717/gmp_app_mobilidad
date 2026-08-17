@@ -376,7 +376,9 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
               if (_isPrinting) ...[
                 const SizedBox(height: 12),
                 const Text(
-                  'Enviando a la impresora. Si no responde, cancela y vuelve a intentar.',
+                  'Enviando a la impresora. Puede tardar unos 30 segundos '
+                  'si está despertando. Si no responde, cancela y vuelve '
+                  'a intentar.',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
