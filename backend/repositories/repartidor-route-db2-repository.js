@@ -16,7 +16,7 @@ const {
   getDeliveryStatusColumns,
   getDeliveryStatusTable,
 } = require('../utils/delivery-status-check');
-const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { resolveRepartoRuntime, TABLE_MAPPINGS } = require('../config/reparto-runtime');
 
 const MUTATION_RE = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i;
 const CANONICAL_CONFIRMATION_STATUSES = Object.freeze([
@@ -40,6 +40,31 @@ function resolveConfirmationTables() {
     confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
     evidences: 'JAVIER.TEST_REPARTO_EVIDENCIAS',
   };
+}
+
+/// History reads ERP (DSEDAC) documents and overlays confirmations.
+/// Isolated_test writes go to TEST_*; still overlay those onto production docs,
+/// and also read production confirmation tables for older signatures.
+function resolveConfirmationReadTables() {
+  const primary = resolveConfirmationTables();
+  const list = [];
+  const seen = new Set();
+  const push = (table) => {
+    if (!table?.confirmations || seen.has(table.confirmations)) return;
+    seen.add(table.confirmations);
+    list.push(table);
+  };
+  try {
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.tableSet === 'isolated_test') {
+      push(TABLE_MAPPINGS.production.confirmation);
+      push(TABLE_MAPPINGS.isolated_test.confirmation);
+    }
+  } catch (_error) {
+    // Keep the primary mapping only.
+  }
+  push(primary);
+  return list;
 }
 
 function jsonSafeScalar(value) {
@@ -81,35 +106,37 @@ function blobToBase64(raw) {
 
 async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode } = {}) {
   if (!Array.isArray(rows) || !rows.length) return rows;
-  const tables = resolveConfirmationTables();
-  if (!tables?.confirmations) return rows;
+  const tablesList = resolveConfirmationReadTables();
+  if (!tablesList.length) return rows;
   const documentIds = [...new Set(rows.map((row) => canonicalDocumentId(row, clientCode)).filter(Boolean))];
   const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (!documentIds.length || !drivers.length) return rows;
   try {
     const documentPlaceholders = documentIds.map(() => '?').join(', ');
     const driverPlaceholders = drivers.map(() => '?').join(', ');
-    const confirmRows = await runQueryWithParams(
-      `SELECT TRIM(DOCUMENT_ID) AS DOCUMENT_ID,
+    const byId = new Map();
+    for (const tables of tablesList) {
+      const confirmRows = await runQueryWithParams(
+        `SELECT TRIM(DOCUMENT_ID) AS DOCUMENT_ID,
               TRIM(STATUS) AS STATUS,
               ID,
               FIRMA_EVIDENCE_ID
          FROM ${tables.confirmations}
         WHERE TRIM(DOCUMENT_ID) IN (${documentPlaceholders})
           AND TRIM(REPARTIDOR_ID) IN (${driverPlaceholders})`,
-      [...documentIds, ...drivers],
-      false,
-    );
-    const byId = new Map();
-    for (const row of Array.isArray(confirmRows) ? confirmRows : []) {
-      const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
-      const status = String(row.STATUS || row.status || '').trim().toUpperCase();
-      if (!id || !CANONICAL_CONFIRMATION_STATUSES.includes(status)) continue;
-      byId.set(id, {
-        status,
-        confirmationId: jsonSafeScalar(row.ID ?? row.id ?? null),
-        firmaEvidenceId: row.FIRMA_EVIDENCE_ID || row.firma_evidence_id || null,
-      });
+        [...documentIds, ...drivers],
+        false,
+      );
+      for (const row of Array.isArray(confirmRows) ? confirmRows : []) {
+        const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
+        const status = String(row.STATUS || row.status || '').trim().toUpperCase();
+        if (!id || !CANONICAL_CONFIRMATION_STATUSES.includes(status)) continue;
+        byId.set(id, {
+          status,
+          confirmationId: jsonSafeScalar(row.ID ?? row.id ?? null),
+          firmaEvidenceId: row.FIRMA_EVIDENCE_ID || row.firma_evidence_id || null,
+        });
+      }
     }
     if (!byId.size) return rows;
     return rows.map((row) => {
@@ -131,40 +158,51 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
 async function getCanonicalConfirmationSignature({
   year, serie, terminal, number, ownerIds,
 } = {}) {
-  const tables = resolveConfirmationTables();
-  if (!tables?.confirmations) return null;
+  const tablesList = resolveConfirmationReadTables();
+  if (!tablesList.length) return null;
   const parsedYear = Number(year);
   const parsedTerminal = Number(terminal);
   const parsedNumber = Number(number);
   const serieNorm = String(serie || '').trim();
   if (!parsedYear || !serieNorm || !Number.isFinite(parsedNumber)) return null;
   try {
-    const rows = await runQueryWithParams(
-      `SELECT C.ID,
+    const allowed = new Set((ownerIds || []).map((id) => String(id || '').trim()).filter(Boolean));
+    let match = null;
+    let evidencesTable = null;
+    for (const tables of tablesList) {
+      const rows = await runQueryWithParams(
+        `SELECT C.ID,
               TRIM(C.STATUS) AS STATUS,
               C.FIRMA_EVIDENCE_ID,
-              TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID
+              TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID,
+              TRIM(C.RECEPTOR_NOMBRE) AS RECEPTOR_NOMBRE,
+              TRIM(C.RECEPTOR_APELLIDOS) AS RECEPTOR_APELLIDOS,
+              TRIM(C.RECEPTOR_DNI) AS RECEPTOR_DNI
          FROM ${tables.confirmations} C
         WHERE C.DOCUMENTO_EJERCICIO = ?
           AND TRIM(C.DOCUMENTO_SERIE) = ?
           AND C.DOCUMENTO_TERMINAL = ?
           AND C.DOCUMENTO_NUMERO = ?
         FETCH FIRST 8 ROWS ONLY`,
-      [parsedYear, serieNorm, Number.isFinite(parsedTerminal) ? parsedTerminal : 0, parsedNumber],
-      false,
-    );
-    const allowed = new Set((ownerIds || []).map((id) => String(id || '').trim()).filter(Boolean));
-    const match = (Array.isArray(rows) ? rows : []).find((row) => {
-      const owner = String(row.REPARTIDOR_ID || row.repartidor_id || '').trim();
-      return !allowed.size || allowed.has(owner);
-    });
+        [parsedYear, serieNorm, Number.isFinite(parsedTerminal) ? parsedTerminal : 0, parsedNumber],
+        false,
+      );
+      const found = (Array.isArray(rows) ? rows : []).find((row) => {
+        const owner = String(row.REPARTIDOR_ID || row.repartidor_id || '').trim();
+        return !allowed.size || allowed.has(owner);
+      });
+      if (found) {
+        match = found;
+        evidencesTable = tables.evidences;
+      }
+    }
     if (!match) return null;
     const evidenceId = match.FIRMA_EVIDENCE_ID || match.firma_evidence_id;
     let base64 = null;
-    if (evidenceId && tables.evidences) {
+    if (evidenceId && evidencesTable) {
       const blobs = await runQueryWithParams(
         `SELECT CONTENT_BLOB
-           FROM ${tables.evidences}
+           FROM ${evidencesTable}
           WHERE EVIDENCE_ID = ?
           FETCH FIRST 1 ROW ONLY`,
         [evidenceId],
@@ -177,6 +215,9 @@ async function getCanonicalConfirmationSignature({
       status: String(match.STATUS || match.status || '').trim().toUpperCase(),
       hasSignature: Boolean(base64 || evidenceId),
       base64,
+      receptorNombre: String(match.RECEPTOR_NOMBRE || match.receptor_nombre || '').trim(),
+      receptorApellidos: String(match.RECEPTOR_APELLIDOS || match.receptor_apellidos || '').trim(),
+      receptorDni: String(match.RECEPTOR_DNI || match.receptor_dni || '').trim(),
     };
   } catch (_error) {
     return null;

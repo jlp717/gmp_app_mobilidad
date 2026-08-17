@@ -202,7 +202,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _hasPersistedSignature = false;
   bool _isAcknowledgedTombstone = false;
   bool _isJournalBlocked = false;
-  bool _isRestoringJournal = true;
+  bool _isRestoringJournal = false;
   bool _lastConfirmWasQueued = false;
   RepartoDeliveryStatus _deliveryStatus = RepartoDeliveryStatus.entregado;
   RepartoDifferenceReason _differenceReason = RepartoDifferenceReason.otro;
@@ -255,12 +255,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
     _loadItems();
     _loadPrinterConfig();
-    unawaited(_restorePendingEvidence());
+    unawaited(_restorePendingEvidence().timeout(
+      const Duration(seconds: 3),
+      onTimeout: () {
+        debugPrint('[RUTERO] journal restore timed out, allowing confirm');
+        if (mounted) {
+          setState(() {
+            _isJournalBlocked = false;
+            _isRestoringJournal = false;
+          });
+        }
+      },
+    ));
   }
 
   Future<void> _restorePendingEvidence() async {
     try {
-      final entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
+      var entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
       if (entry.state == RepartoOperationState.acknowledged) {
         if (mounted) {
           setState(() {
@@ -270,19 +281,37 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         }
         return;
       }
+      if (entry.state == RepartoOperationState.manualReview) {
+        try {
+          await _confirmationJournal.resetIfNotAcknowledged(widget.albaran.id);
+          entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
+        } on RepartoAlreadyAcknowledgedException {
+          if (mounted) {
+            setState(() {
+              _isAcknowledgedTombstone = true;
+              _isRestoringJournal = false;
+            });
+          }
+          return;
+        }
+      }
       final signatureId = entry.evidences['signature']?.evidenceId;
       if (mounted) {
         setState(() {
-          _isJournalBlocked = entry.state == RepartoOperationState.manualReview;
+          _isJournalBlocked = false;
           _hasPersistedSignature = signatureId != null &&
               RepartoEvidenceUploadService.isValidEvidenceId(signatureId);
           _isRestoringJournal = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[RUTERO] journal restore failed, allowing confirm: $e');
+      try {
+        await _confirmationJournal.resetIfNotAcknowledged(widget.albaran.id);
+      } catch (_) {}
       if (mounted) {
         setState(() {
-          _isJournalBlocked = true;
+          _isJournalBlocked = false;
           _isRestoringJournal = false;
         });
       }
@@ -728,94 +757,130 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  List<String> get _finalizeGaps {
+    if (_deliveryStatus == RepartoDeliveryStatus.noEntregado) {
+      return const <String>[];
+    }
+    final gaps = <String>[];
+    if (_nombreController.text.trim().isEmpty) gaps.add('Nombre');
+    if (_apellidosController.text.trim().isEmpty) gaps.add('Apellidos');
+    if (_dniController.text.trim().isEmpty) gaps.add('DNI');
+    if (_signatureController.isEmpty && !_hasPersistedSignature) {
+      gaps.add('Firma');
+    }
+    return gaps;
+  }
+
   Widget _buildFinalizeTab() {
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
-    return SingleChildScrollView(
-      controller: _finalizeScrollController,
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        28 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (noEntrega) ...[
-            RepartidorExecutivePanel(
-              accentColor: AppTheme.warning,
-              padding: const EdgeInsets.all(14),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, color: AppTheme.warning, size: 22),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'No entrega: no hace falta firma, DNI ni cobro. '
-                      'Indica el motivo y confirma.',
-                      style: TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
+    final gaps = _finalizeGaps;
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _finalizeScrollController,
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              16 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (noEntrega) ...[
+                  RepartidorExecutivePanel(
+                    accentColor: AppTheme.warning,
+                    padding: const EdgeInsets.all(14),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: AppTheme.warning, size: 22),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'No entrega: no hace falta firma, DNI ni cobro. '
+                            'Indica el motivo y confirma.',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 13,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 16),
                 ],
-              ),
+                _buildDeliveryStatusSection(),
+                const SizedBox(height: 16),
+                if (_hasDiscrepancy) ...[
+                  _buildDiscrepancyWarning(),
+                  const SizedBox(height: 12),
+                ],
+                RuteroErrorSpotlight(
+                  key: _observacionesFieldKey,
+                  active: _spotlightField == 'observaciones',
+                  message: _observacionesError,
+                  child: TextField(
+                    controller: _observacionesController,
+                    focusNode: _observacionesFocusNode,
+                    maxLines: 3,
+                    onChanged: (_) {
+                      if (_observacionesError != null) {
+                        setState(() {
+                          _observacionesError = null;
+                          _removeIssue('observaciones');
+                        });
+                      }
+                    },
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: ruteroErrorInputDecoration(
+                      label: noEntrega
+                          ? 'Observaciones / motivo de no entrega *'
+                          : 'Observaciones',
+                      hintText: noEntrega
+                          ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
+                          : 'Añadir nota sobre la entrega...',
+                      errorText: _observacionesError,
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildEvidencePhotosSection(),
+                if (!noEntrega) ...[
+                  const SizedBox(height: 12),
+                  _buildPrinterConfigSection(),
+                  const SizedBox(height: 20),
+                  _buildSignatureSection(),
+                  const SizedBox(height: 16),
+                  _buildReceiverData(),
+                ],
+                const SizedBox(height: 12),
+              ],
             ),
-            const SizedBox(height: 16),
-          ],
-          _buildDeliveryStatusSection(),
-          const SizedBox(height: 16),
-          if (!noEntrega) _buildReceiverData(),
-          if (!noEntrega) const SizedBox(height: 16),
-          if (_hasDiscrepancy) ...[
-            _buildDiscrepancyWarning(),
-            const SizedBox(height: 12),
-          ],
-          RuteroErrorSpotlight(
-            key: _observacionesFieldKey,
-            active: _spotlightField == 'observaciones',
-            message: _observacionesError,
-            child: TextField(
-              controller: _observacionesController,
-              focusNode: _observacionesFocusNode,
-              maxLines: 3,
-              onChanged: (_) {
-                if (_observacionesError != null) {
-                  setState(() {
-                    _observacionesError = null;
-                    _removeIssue('observaciones');
-                  });
-                }
-              },
-              style: const TextStyle(color: AppTheme.textPrimary),
-              decoration: ruteroErrorInputDecoration(
-                label: noEntrega
-                    ? 'Observaciones / motivo de no entrega *'
-                    : 'Observaciones',
-                hintText: noEntrega
-                    ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
-                    : 'Añadir nota sobre la entrega...',
-                errorText: _observacionesError,
-                alignLabelWithHint: true,
+          ),
+        ),
+        if (gaps.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              'Falta: ${gaps.join(', ')}. Está justo encima del botón.',
+              style: const TextStyle(
+                color: AppTheme.warning,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _buildEvidencePhotosSection(),
-          if (!noEntrega) ...[
-            const SizedBox(height: 12),
-            _buildPrinterConfigSection(),
-            const SizedBox(height: 20),
-            _buildSignatureSection(),
-          ],
-          const SizedBox(height: 24),
-          _buildSubmitButton(),
-          const SizedBox(height: 24),
-        ],
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: _buildSubmitButton(),
+        ),
+      ],
     );
   }
 
@@ -1269,12 +1334,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Widget _buildSubmitButton() {
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     return ElevatedButton(
-      onPressed: _isSubmitting ||
-              _isRestoringJournal ||
-              _isAcknowledgedTombstone ||
-              _isJournalBlocked
-          ? null
-          : _submitDelivery,
+      onPressed:
+          _isSubmitting || _isAcknowledgedTombstone ? null : _submitDelivery,
       style: ElevatedButton.styleFrom(
         backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
         foregroundColor: Colors.white,
@@ -1848,10 +1909,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   bool _validateFields() {
-    if (_isRestoringJournal || _isAcknowledgedTombstone || _isJournalBlocked) {
-      _showError(_isAcknowledgedTombstone
-          ? 'Esta entrega ya fue confirmada.'
-          : 'La operación local requiere revisión manual.');
+    if (_isAcknowledgedTombstone) {
+      _showError('Esta entrega ya fue confirmada.');
       return false;
     }
 
@@ -2069,7 +2128,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _submitDelivery() async {
-    if (_isSubmitting || !_validateFields()) return;
+    if (_isSubmitting) return;
+    if (_isJournalBlocked) {
+      try {
+        await _confirmationJournal.resetIfNotAcknowledged(widget.albaran.id);
+        if (mounted) setState(() => _isJournalBlocked = false);
+      } on RepartoAlreadyAcknowledgedException {
+        if (mounted) {
+          setState(() => _isAcknowledgedTombstone = true);
+        }
+        _showError('Esta entrega ya fue confirmada.');
+        return;
+      }
+    }
+    if (!_validateFields()) return;
     if (!_confirmationOperation.beginSubmit()) return;
 
     setState(() => _isSubmitting = true);

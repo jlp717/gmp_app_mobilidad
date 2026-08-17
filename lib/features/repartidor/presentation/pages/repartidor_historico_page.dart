@@ -19,6 +19,7 @@ import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -376,6 +377,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           legacySignatureName: d.legacySignatureName,
           hasLegacySignature: d.hasLegacySignature,
           legacyDate: d.legacyDate,
+          confirmationId: d.confirmationId,
         );
       }).toList();
       setState(() {
@@ -1822,6 +1824,38 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     ),
                   ),
                 ],
+                if ((doc.confirmationId ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.receipt_long,
+                          size: 11,
+                          color: AppTheme.success,
+                        ),
+                        SizedBox(width: 2),
+                        Text(
+                          'Nota',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.success,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (hasAnySignature) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -1958,11 +1992,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             if (doc.hasValidDate) ...[
               _buildActionTile(
                 icon: Icons.visibility,
-                label: 'Ver PDF',
+                label: isFactura ? 'Ver factura / albarán' : 'Ver albarán',
                 color: AppTheme.info,
                 onTap: () {
                   Navigator.pop(ctx);
                   _previewDocument(doc);
+                },
+              ),
+              _buildActionTile(
+                icon: Icons.receipt_long,
+                label: 'Ver nota de entrega',
+                color: AppTheme.success,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _previewDeliveryNote(doc);
                 },
               ),
               _buildActionTile(
@@ -1977,6 +2020,36 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   _showShareOptions(doc);
                 },
               ),
+              _buildActionTile(
+                icon: Icons.print,
+                label: 'Imprimir nota de entrega',
+                color: AppTheme.success,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _printDeliveryNote(doc);
+                },
+              ),
+              if (widget.canEmailDocuments) ...[
+                _buildActionTile(
+                  icon: Icons.email_outlined,
+                  label:
+                      isFactura ? 'Email factura / albarán' : 'Email albarán',
+                  color: AppTheme.info,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _emailCommercialDocument(doc);
+                  },
+                ),
+                _buildActionTile(
+                  icon: Icons.outgoing_mail,
+                  label: 'Email nota de entrega',
+                  color: AppTheme.accentIndigo,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _emailHistoryDeliveryNote(doc);
+                  },
+                ),
+              ],
               if (hasAnySignature)
                 _buildActionTile(
                   icon: Icons.draw,
@@ -2157,6 +2230,63 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // ACTIONS
   // ==========================================================================
 
+  Future<void> _previewDeliveryNote(_DocumentItem doc) async {
+    final confirmationId = doc.confirmationId?.trim() ?? '';
+    if (confirmationId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Cargando nota de entrega...',
+    );
+    try {
+      final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+        confirmationId: confirmationId,
+      );
+      modal.close();
+      if (!mounted) return;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      if (!mounted) return;
+      final pdfBytes = Uint8List.fromList(bytes);
+      final safeClientName =
+          _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
+      final docRef =
+          '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: pdfBytes,
+            title: 'Nota de entrega $docRef',
+            fileName: 'Nota_entrega_${docRef}_$safeClientName.pdf',
+            onEmailTap: widget.canEmailDocuments
+                ? () {
+                    Navigator.pop(context);
+                    _emailHistoryDeliveryNote(doc);
+                  }
+                : null,
+          ),
+        ),
+      );
+    } catch (e) {
+      modal.error(
+        _sanitizedDocumentActionError(
+          e,
+          fallback: 'No se pudo visualizar la nota de entrega.',
+        ),
+      );
+    }
+  }
+
   Future<void> _previewDocument(_DocumentItem doc) async {
     final modal = AsyncOperationModal.show(
       context,
@@ -2314,17 +2444,198 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _emailDocument(_DocumentItem doc) async {
-    if (!mounted) return;
-    if (!widget.canEmailDocuments) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        key: ValueKey('history-email-unavailable'),
-        content: Text(
-          'Email no disponible: pendiente de habilitar el registro de entrega.',
+    await _emailCommercialDocument(doc);
+  }
+
+  Future<String?> _askEmailAddress() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.raisedSurface,
+        title: const Text(
+          'Enviar por email',
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
-        backgroundColor: AppTheme.warning,
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: const InputDecoration(
+            labelText: 'Destinatario',
+            hintText: 'cliente@empresa.com',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Enviar'),
+          ),
+        ],
       ),
     );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _emailCommercialDocument(_DocumentItem doc) async {
+    if (!mounted) return;
+    if (!widget.canEmailDocuments) return;
+    final email = await _askEmailAddress();
+    if (email == null || email.isEmpty || !mounted) return;
+    if (!email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email inválido'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+    final isFactura = doc.type == _DocType.factura;
+    final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
+    try {
+      await RepartidorDataService.sendCommercialDocumentEmail(
+        serie: isFactura ? (doc.serieFactura ?? doc.serie) : doc.serie,
+        numero: isFactura
+            ? (doc.facturaNumber ?? doc.number)
+            : (doc.albaranNumber ?? doc.number),
+        ejercicio:
+            isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : doc.ejercicio,
+        terminal: doc.terminal,
+        documentType: isFactura ? 'factura' : 'albaran',
+        destinatario: email,
+        clienteNombre: _selectedClientName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Email enviado a $email'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_sanitizedDocumentActionError(
+            error,
+            fallback: 'No se pudo enviar el documento.',
+          )),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      modal.close();
+    }
+  }
+
+  Future<void> _emailHistoryDeliveryNote(_DocumentItem doc) async {
+    final confirmationId = doc.confirmationId?.trim() ?? '';
+    if (confirmationId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+    final email = await _askEmailAddress();
+    if (email == null || email.isEmpty || !mounted) return;
+    final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
+    try {
+      await RepartidorDataService.emailDeliveryNote(
+        confirmationId: confirmationId,
+        destinatario: email,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Nota de entrega enviada a $email'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_sanitizedDocumentActionError(
+            error,
+            fallback: 'No se pudo enviar la nota de entrega.',
+          )),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      modal.close();
+    }
+  }
+
+  Future<void> _printDeliveryNote(_DocumentItem doc) async {
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando nota de entrega...',
+    );
+    try {
+      final loader =
+          widget.signatureLoader ?? RepartidorDataService.getSignature;
+      final data = await loader(
+        ejercicio: doc.ejercicio,
+        serie: doc.serie,
+        terminal: doc.terminal,
+        numero: doc.albaranNumber ?? doc.number,
+      );
+      String? grf;
+      final raw = data?['base64']?.toString();
+      if (raw != null && raw.isNotEmpty) {
+        final bytes = base64Decode(raw);
+        grf = await ZebraPrintService.convertSignatureToGrf(bytes);
+      }
+      final isFactura = doc.type == _DocType.factura;
+      final title = isFactura && (doc.facturaNumber ?? 0) > 0
+          ? 'FACTURA F-${doc.facturaNumber}'
+          : 'ALBARAN ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+      final zpl = ZebraPrintService.generateHistoryDeliveryZpl(
+        title: title,
+        clientName: _selectedClientName ?? '',
+        dateLabel:
+            doc.hasValidDate ? DateFormat('dd/MM/yyyy').format(doc.date!) : '',
+        total: doc.amount,
+        signatureGrf: grf,
+        receptorNombre: data?['nombre']?.toString(),
+        receptorApellidos: data?['apellidos']?.toString(),
+        receptorDni: data?['dni']?.toString(),
+      );
+      final result = await ZebraPrintService.printTicket(zpl: zpl);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: result.ok ? AppTheme.success : AppTheme.error,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_sanitizedDocumentActionError(
+            error,
+            fallback: 'No se pudo imprimir la nota de entrega.',
+          )),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      modal.close();
+    }
   }
 
   Future<void> _runShareAction(Future<void> Function() action) async {
@@ -2719,6 +3030,7 @@ class _DocumentItem {
     this.legacySignatureName,
     this.hasLegacySignature = false,
     this.legacyDate,
+    this.confirmationId,
   });
   final String id;
   final bool hasValidDate;
@@ -2744,6 +3056,7 @@ class _DocumentItem {
   final String? legacySignatureName;
   final bool hasLegacySignature;
   final String? legacyDate;
+  final String? confirmationId;
 }
 
 // =============================================================================
@@ -2777,6 +3090,9 @@ class _SignatureDialog extends StatefulWidget {
 class _SignatureDialogState extends State<_SignatureDialog> {
   Uint8List? _signatureBytes;
   String? _firmante;
+  String? _nombre;
+  String? _apellidos;
+  String? _dni;
   String? _fecha;
   String? _source;
   bool _loading = true;
@@ -2819,17 +3135,25 @@ class _SignatureDialogState extends State<_SignatureDialog> {
             _source = source;
             _signatureBytes = signatureBytes;
             _firmante = data['firmante'] as String?;
+            _nombre = data['nombre'] as String?;
+            _apellidos = data['apellidos'] as String?;
+            _dni = data['dni'] as String?;
             _fecha = data['fecha'] as String?;
             _loading = false;
           });
         } else if (source == 'CACFIRMAS_NAME_ONLY' ||
             (data['firmante'] != null &&
-                (data['firmante'] as String).isNotEmpty)) {
+                (data['firmante'] as String).isNotEmpty) ||
+            (data['nombre'] != null && (data['nombre'] as String).isNotEmpty) ||
+            (data['dni'] != null && (data['dni'] as String).isNotEmpty)) {
           // Name-only signature from CACFIRMAS (no image, but record exists)
           if (!mounted || requestGeneration != _requestGeneration) return;
           setState(() {
             _source = source;
             _firmante = data['firmante'] as String?;
+            _nombre = data['nombre'] as String?;
+            _apellidos = data['apellidos'] as String?;
+            _dni = data['dni'] as String?;
             _fecha = data['fecha'] as String?;
             _loading = false;
             _error = null;
@@ -2928,6 +3252,29 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      if ((_nombre != null && _nombre!.isNotEmpty) ||
+                          (_apellidos != null && _apellidos!.isNotEmpty))
+                        Text(
+                          [
+                            _nombre,
+                            _apellidos,
+                          ]
+                              .where((part) => part != null && part.isNotEmpty)
+                              .join(' '),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      if (_dni != null && _dni!.isNotEmpty)
+                        Text(
+                          'DNI: $_dni',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
                       if (_firmante != null && _firmante!.isNotEmpty)
                         Text(
                           'Firmante: $_firmante',
@@ -2983,6 +3330,16 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                                 fontSize: 14,
                               ),
                             ),
+                            if (_dni != null && _dni!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'DNI: $_dni',
+                                style: const TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
                             if (_fecha != null) ...[
                               const SizedBox(height: 4),
                               Text(

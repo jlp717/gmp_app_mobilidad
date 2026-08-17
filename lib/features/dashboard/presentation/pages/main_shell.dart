@@ -1789,6 +1789,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
             initialClientId: _pendingClientId,
             initialClientName: _pendingClientName,
+            canEmailDocuments: true,
           );
         }
         if (label == 'Asistente') {

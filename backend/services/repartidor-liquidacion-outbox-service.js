@@ -7,6 +7,10 @@
 const { queryWithParams } = require('../config/db');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const logger = require('../middleware/logger');
+const {
+  formatGmpLiquidacionDisplay,
+  cashToDeposit,
+} = require('./liquidacion-pdf-service');
 
 function getSendLiquidacionEmails() {
   // Lazy require avoids circular load with finance service.
@@ -55,13 +59,45 @@ function mapLiquidacionFromOps(row) {
     || (Number.isFinite(ano) && Number.isFinite(mes) && Number.isFinite(dia)
       ? `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
       : '');
-  const numero = Number(rowValue(row, 'NUMEROLIQUIDACION')) || Number(rowValue(row, 'ID'));
-  const payments = Number(snapshot?.breakdown?.payments ?? snapshot?.payments ?? 0);
-  const expenses = Number(snapshot?.breakdown?.expenses ?? snapshot?.expenses ?? 0);
+  const numeroValue = Number(rowValue(row, 'NUMEROLIQUIDACION')) || Number(rowValue(row, 'ID'));
+  const year = Number(rowValue(row, 'ANOLIQUIDACION'))
+    || Number(rowValue(row, 'EJERCICIOLIQUIDACION'))
+    || (date ? Number(String(date).slice(0, 4)) : new Date().getFullYear());
+  const totalEfectivo = Number(rowValue(row, 'IMPORTEEFECTIVO') ?? snapshot?.breakdown?.cash);
+  const totalCheques = Number(rowValue(row, 'IMPORTECHEQUES') ?? 0);
+  const totalTarjeta = Number(rowValue(row, 'IMPORTETARJETA') ?? 0);
+  const totalPostdatados = Number(rowValue(row, 'IMPORTEPOSTDATADOS') ?? 0);
+  const saldoActual = Number(rowValue(row, 'IMPORTESALDOACTUAL') ?? snapshot?.openingBalance ?? 0);
+  const expenses = Number(
+    rowValue(row, 'IMPORTEGASTOS')
+      ?? snapshot?.breakdown?.expenses
+      ?? snapshot?.expenses
+      ?? 0,
+  );
   const adjustments = Number(snapshot?.breakdown?.adjustments ?? snapshot?.adjustments ?? 0);
-  const bankDeposits = Number(snapshot?.breakdown?.bankDeposits ?? snapshot?.bankDeposits ?? 0);
-  const totalEfectivo = Number.isFinite(payments) ? payments : 0;
-  const totalAIngresar = Math.round((totalEfectivo - expenses + adjustments + Number.EPSILON) * 100) / 100;
+  const bankDeposits = Number(
+    rowValue(row, 'IMPORTEINGRESOENBANCO')
+      ?? snapshot?.breakdown?.bankDeposits
+      ?? snapshot?.bankDeposits
+      ?? 0,
+  );
+  const payments = Number(
+    snapshot?.breakdown?.payments
+      ?? snapshot?.payments
+      ?? (totalEfectivo + totalCheques + totalTarjeta + totalPostdatados),
+  );
+  const totalAIngresar = Number(rowValue(row, 'IMPORTETOTALAINGRESAR'));
+  const resolvedEfectivo = Number.isFinite(totalEfectivo) ? totalEfectivo : Number(payments) || 0;
+  const resolvedIngresar = Number.isFinite(totalAIngresar)
+    ? totalAIngresar
+    : cashToDeposit({
+      totalEfectivo: resolvedEfectivo,
+      totalCheques: Number.isFinite(totalCheques) ? totalCheques : 0,
+      totalPostdatados: Number.isFinite(totalPostdatados) ? totalPostdatados : 0,
+      saldoActual: Number.isFinite(saldoActual) ? saldoActual : 0,
+      gastos: Number.isFinite(expenses) ? expenses : 0,
+      ajustes: Number.isFinite(adjustments) ? adjustments : 0,
+    });
   const ingresoBanco = Number.isFinite(bankDeposits) ? bankDeposits : 0;
 
   return {
@@ -70,17 +106,31 @@ function mapLiquidacionFromOps(row) {
     date,
     status: String(rowValue(row, 'STATUS') || 'CLOSED').trim(),
     numero: {
-      display: `LQ-${numero}`,
-      value: numero,
+      display: formatGmpLiquidacionDisplay({
+        year,
+        vendorCode: repartidorId,
+        serie: rowValue(row, 'SERIELIQUIDACION') || 'A',
+        numero: numeroValue,
+      }),
+      value: numeroValue,
+      ejercicio: year,
+      serie: String(rowValue(row, 'SERIELIQUIDACION') || 'A').trim() || 'A',
+      numero: numeroValue,
     },
     totals: {
-      totalEfectivo,
-      totalAIngresar,
+      totalEfectivo: resolvedEfectivo,
+      totalCheques: Number.isFinite(totalCheques) ? totalCheques : 0,
+      totalTarjeta: Number.isFinite(totalTarjeta) ? totalTarjeta : 0,
+      totalPostdatados: Number.isFinite(totalPostdatados) ? totalPostdatados : 0,
+      saldoActual: Number.isFinite(saldoActual) ? saldoActual : 0,
+      gastos: Number.isFinite(expenses) ? expenses : 0,
+      ajustes: Number.isFinite(adjustments) ? adjustments : 0,
+      totalAIngresar: resolvedIngresar,
       ingresoBanco,
-      diff: Math.round((totalAIngresar - ingresoBanco + Number.EPSILON) * 100) / 100,
-      payments: totalEfectivo,
-      expenses,
-      adjustments,
+      diff: Math.round((resolvedIngresar - ingresoBanco + Number.EPSILON) * 100) / 100,
+      payments: Number.isFinite(payments) ? payments : resolvedEfectivo,
+      expenses: Number.isFinite(expenses) ? expenses : 0,
+      adjustments: Number.isFinite(adjustments) ? adjustments : 0,
       bankDeposits: ingresoBanco,
     },
     snapshot,
@@ -119,6 +169,8 @@ async function processLiquidacionOutboxIntent({
     fecha: liquidacion.date || '',
     codigoCliente: p.codigoCliente || '',
     nombreCliente: p.nombreCliente || '',
+    tipoCobro: p.paymentMethod || p.tipoCobro || '',
+    tipoDocumento: p.tipoDocumento || '',
     documento: p.documento || p.id || '',
     importe: Number(p.amount) || 0,
   }));
@@ -133,7 +185,16 @@ async function processLiquidacionOutboxIntent({
   const shaped = {
     ...liquidacion,
     repartidorId: repartidorId || liquidacion.repartidorId,
-    numero: liquidacion.numero || { display: `LQ-${liquidacion.id}` },
+    numero: liquidacion.numero?.display
+      ? liquidacion.numero
+      : {
+        display: formatGmpLiquidacionDisplay({
+          year: liquidacion.date ? Number(String(liquidacion.date).slice(0, 4)) : 0,
+          vendorCode: repartidorId || liquidacion.repartidorId,
+          numero: liquidacion.numero?.value || liquidacion.numero?.numero || liquidacion.id,
+        }),
+        value: liquidacion.numero?.value || liquidacion.id,
+      },
     totals: {
       totalEfectivo: Number(totals.totalEfectivo ?? liquidacion.snapshot?.payments ?? 0),
       totalAIngresar: Number(totals.totalAIngresar ?? liquidacion.snapshot?.balance ?? 0),

@@ -665,6 +665,69 @@ class ZebraPrintService {
     return out.toBytes();
   }
 
+  /// Compact reprint ticket for history (albaran/factura + optional GRF).
+  static String generateHistoryDeliveryZpl({
+    required String title,
+    required String clientName,
+    required String dateLabel,
+    required double total,
+    String? signatureGrf,
+    String? receptorNombre,
+    String? receptorApellidos,
+    String? receptorDni,
+  }) {
+    final buf = StringBuffer();
+    var y = 25;
+    buf.writeln('^XA');
+    buf.writeln('^CI28');
+    buf.writeln('^MNN');
+    buf.writeln('^CF0,28');
+    buf.writeln('^FO20,$y^FDGRANJA MARI PEPA S.L.^FS');
+    y += 34;
+    buf.writeln('^CF0,22');
+    buf.writeln('^FO20,$y^FD${_sanitizeZpl(title)}^FS');
+    y += 28;
+    buf.writeln('^CF0,18');
+    buf.writeln('^FO20,$y^FD${_truncate(_sanitizeZpl(clientName), 42)}^FS');
+    y += 24;
+    buf.writeln('^FO20,$y^FDFecha: ${_sanitizeZpl(dateLabel)}^FS');
+    y += 24;
+    buf.writeln('^CF0,24');
+    buf.writeln(
+      '^FO20,$y^FDTOTAL: ${_sanitizeZpl(total.toStringAsFixed(2))} EUR^FS',
+    );
+    y += 32;
+    final receptorFull = [
+      receptorNombre?.trim() ?? '',
+      receptorApellidos?.trim() ?? '',
+    ].where((part) => part.isNotEmpty).join(' ');
+    if (receptorFull.isNotEmpty) {
+      buf.writeln('^CF0,16');
+      buf.writeln(
+        '^FO20,$y^FDReceptor: ${_truncate(_sanitizeZpl(receptorFull), 40)}^FS',
+      );
+      y += 22;
+    }
+    final dni = receptorDni?.trim() ?? '';
+    if (dni.isNotEmpty) {
+      buf.writeln('^CF0,16');
+      buf.writeln('^FO20,$y^FDDNI: ${_sanitizeZpl(dni)}^FS');
+      y += 22;
+    }
+    if (signatureGrf != null && signatureGrf.isNotEmpty) {
+      buf.writeln('^FO20,$y$signatureGrf^FS');
+      y += 106;
+    }
+    buf.writeln('^FO20,$y^GB550,1,1^FS');
+    y += 16;
+    buf.writeln('^CF0,14');
+    buf.writeln('^FO20,$y^FDReimpresion nota de entrega^FS');
+    y += 20;
+    buf.writeln('^LL${y + 10}');
+    buf.writeln('^XZ');
+    return buf.toString();
+  }
+
   // -- Print execution --
 
   /// Sleeping Zebra RFCOMM connect often exceeds 12s. Aborting mid-write

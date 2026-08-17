@@ -140,6 +140,21 @@ describe('invoice PDF total/footer layout', () => {
     expectTotalBeforeFooter(pages, 'TOTAL CON IVA');
   });
 
+  test('prints receptor name and DNI next to the signature', async () => {
+    const buffer = await documentPdfService.generateInvoicePDF({
+      ...buildDocumentInvoice(2),
+      receptorNombre: 'Ana',
+      receptorApellidos: 'Lopez',
+      receptorDni: '12345678Z',
+    });
+    const pages = await parsePages(buffer);
+    const text = pages.join(' ');
+    expect(text).toContain('Receptor');
+    expect(text).toContain('Ana');
+    expect(text).toContain('Lopez');
+    expect(text).toContain('12345678Z');
+  });
+
   test('keeps long delivery receipt content and total before closing terms', async () => {
     const buffer = await deliveryReceiptService.generateDeliveryReceipt(buildLongDeliveryReceipt(120));
     const pages = await parsePages(buffer);

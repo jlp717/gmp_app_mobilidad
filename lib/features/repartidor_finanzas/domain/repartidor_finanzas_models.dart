@@ -945,6 +945,7 @@ class RepartidorDailySummary {
     required this.gastos,
     required this.totalAIngresar,
     required this.cobrosCount,
+    this.ingresoBanco = 0,
     this.entregado = 0,
     this.deudaPendiente = 0,
     this.canReverseCobros = false,
@@ -983,6 +984,11 @@ class RepartidorDailySummary {
       totalCobrosDia: money(const ['totalCobrosDia', 'TOTAL_COBROS_DIA']),
       gastos: money(const ['gastos', 'TOTAL_GASTOS']),
       totalAIngresar: money(const ['totalAIngresar', 'TOTAL_A_INGRESAR']),
+      ingresoBanco: money(const [
+        'ingresoBanco',
+        'TOTAL_INGRESO_BANCO',
+        'IMPORTEINGRESOENBANCO'
+      ]),
       cobrosCount: count(const ['cobrosCount', 'COBROS_COUNT']),
       entregado: money(const ['entregado', 'TOTAL_REPARTIDO']),
       deudaPendiente: money(const ['deudaPendiente', 'DEUDA_PENDIENTE']),
@@ -1003,6 +1009,7 @@ class RepartidorDailySummary {
   final double totalCobrosDia;
   final double gastos;
   final double totalAIngresar;
+  final double ingresoBanco;
   final int cobrosCount;
   final double entregado;
   final double deudaPendiente;

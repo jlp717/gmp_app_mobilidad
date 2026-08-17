@@ -1008,12 +1008,16 @@ router.get('/history/signature', verifyToken, async (req, res) => {
         let firmaBase64 = null;
         let firmante = null;
         let fechaFirma = null;
+        let receptorNombre = null;
+        let receptorApellidos = null;
+        let receptorDni = null;
         const firmaRows = await repartidorDb.getRepartidorFirmasByAlbaran(
             numero, ejercicio, serie, terminal,
         );
         if (firmaRows.length > 0) {
             firmaBase64 = firmaRows[0].FIRMABASE64;
             firmante = (firmaRows[0].FIRMANOMBRE || '').trim() || null;
+            receptorDni = (firmaRows[0].FIRMADNI || '').trim() || null;
             fechaFirma = (firmaRows[0].ANO > 0)
                 ? `${firmaRows[0].ANO}-${String(firmaRows[0].MES).padStart(2, '0')}-${String(firmaRows[0].DIA).padStart(2, '0')} ${String(firmaRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(firmaRows[0].HORA).padStart(6, '0').substring(2, 4)}`
                 : null;
@@ -1062,24 +1066,32 @@ router.get('/history/signature', verifyToken, async (req, res) => {
             }
         }
 
-        if (!firmaBase64) {
-            try {
-                const canonical = await repartidorDb.getCanonicalConfirmationSignature({
-                    year: ejercicio,
-                    serie,
-                    terminal,
-                    number: numero,
-                    ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
-                });
-                if (canonical?.base64) {
+        try {
+            const canonical = await repartidorDb.getCanonicalConfirmationSignature({
+                year: ejercicio,
+                serie,
+                terminal,
+                number: numero,
+                ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
+            });
+            if (canonical) {
+                receptorNombre = canonical.receptorNombre || receptorNombre;
+                receptorApellidos = canonical.receptorApellidos || receptorApellidos;
+                receptorDni = canonical.receptorDni || receptorDni;
+                if (!firmante) {
+                    const fullName = [canonical.receptorNombre, canonical.receptorApellidos]
+                        .filter(Boolean).join(' ').trim();
+                    if (fullName) firmante = fullName;
+                }
+                if (!firmaBase64 && canonical.base64) {
                     firmaBase64 = canonical.base64;
                     signatureSource = 'CANONICAL_CONFIRMATION';
-                } else if (canonical?.hasSignature) {
+                } else if (!firmaBase64 && canonical.hasSignature) {
                     signatureSource = signatureSource || 'CANONICAL_CONFIRMATION';
                 }
-            } catch (_error) {
-                logger.warn('[REPARTIDOR] Canonical confirmation signature lookup failed');
             }
+        } catch (_error) {
+            logger.warn('[REPARTIDOR] Canonical confirmation signature lookup failed');
         }
 
         // 4. CACFIRMAS (legacy ERP signatures) — last resort
@@ -1131,7 +1143,8 @@ router.get('/history/signature', verifyToken, async (req, res) => {
             }
         }
 
-        const hasSignature = !!(firmaBase64 || firmaPath || signatureSource);
+        const receptorFull = [receptorNombre, receptorApellidos].filter(Boolean).join(' ').trim();
+        const hasSignature = !!(firmaBase64 || firmaPath || signatureSource || receptorFull || receptorDni);
 
         logger.info(`[REPARTIDOR] Signature result for ${albId}: hasSignature=${hasSignature}, source=${signatureSource || 'none'}, hasBase64=${!!firmaBase64}, firmante='${firmante || ''}'`);
 
@@ -1144,7 +1157,10 @@ router.get('/history/signature', verifyToken, async (req, res) => {
             signature: hasSignature ? {
                 base64: firmaBase64 || null,
                 path: firmaPath ? 'stored' : null,
-                firmante: firmante || null,
+                firmante: firmante || receptorFull || null,
+                nombre: receptorNombre || null,
+                apellidos: receptorApellidos || null,
+                dni: receptorDni || null,
                 fecha: fechaFirma || null,
                 source: safeSource || null
             } : null
@@ -1385,22 +1401,28 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
             }
         }
 
-        if (!signatureBase64) {
-            try {
-                const canonical = await repartidorDb.getCanonicalConfirmationSignature({
-                    year: parsedYear,
-                    serie,
-                    terminal: parsedTerminal,
-                    number: parsedNumber,
-                    ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
-                });
-                if (canonical?.base64) {
+        let receptorNombre = '';
+        let receptorApellidos = '';
+        let receptorDni = '';
+        try {
+            const canonical = await repartidorDb.getCanonicalConfirmationSignature({
+                year: parsedYear,
+                serie,
+                terminal: parsedTerminal,
+                number: parsedNumber,
+                ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
+            });
+            if (canonical) {
+                receptorNombre = canonical.receptorNombre || '';
+                receptorApellidos = canonical.receptorApellidos || '';
+                receptorDni = canonical.receptorDni || '';
+                if (!signatureBase64 && canonical.base64) {
                     signatureBase64 = canonical.base64;
                     signatureSource = 'CANONICAL_CONFIRMATION';
                 }
-            } catch (e) {
-                logger.warn('[PDF] Canonical confirmation signature lookup failed');
             }
+        } catch (e) {
+            logger.warn('[PDF] Canonical confirmation signature lookup failed');
         }
 
         // Step 3c: Try CACFIRMAS (legacy ERP signatures) as last resort
@@ -1422,7 +1444,16 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
         logger.info(`[PDF] Signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
         // 4. Generate PDF with optional signature (documentType = albaran)
-        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'albaran' });
+        const buffer = await generateInvoicePDF({
+            header,
+            lines,
+            signatureBase64,
+            signatureSource,
+            documentType: 'albaran',
+            receptorNombre,
+            receptorApellidos,
+            receptorDni,
+        });
 
         const safeFilename = `Albaran_${parsedYear}_${serie}_${parsedNumber}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
         res.set({
@@ -1913,21 +1944,27 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
             } catch (e) { logger.warn('[PDF] Invoice app signature lookup failed'); }
         }
 
-        if (!signatureBase64) {
-            try {
-                const canonical = await repartidorDb.getCanonicalConfirmationSignature({
-                    year: actualEjAlb,
-                    serie: actualSerieAlb,
-                    terminal: actualTermAlb,
-                    number: actualNumAlb,
-                    ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
-                });
-                if (canonical?.base64) {
+        let receptorNombre = '';
+        let receptorApellidos = '';
+        let receptorDni = '';
+        try {
+            const canonical = await repartidorDb.getCanonicalConfirmationSignature({
+                year: actualEjAlb,
+                serie: actualSerieAlb,
+                terminal: actualTermAlb,
+                number: actualNumAlb,
+                ownerIds: req.documentOwnerId ? [req.documentOwnerId] : [],
+            });
+            if (canonical) {
+                receptorNombre = canonical.receptorNombre || '';
+                receptorApellidos = canonical.receptorApellidos || '';
+                receptorDni = canonical.receptorDni || '';
+                if (!signatureBase64 && canonical.base64) {
                     signatureBase64 = canonical.base64;
                     signatureSource = 'CANONICAL_CONFIRMATION';
                 }
-            } catch (e) { logger.warn('[PDF] Invoice canonical confirmation signature lookup failed'); }
-        }
+            }
+        } catch (e) { logger.warn('[PDF] Invoice canonical confirmation signature lookup failed'); }
 
         // Step 3c: CACFIRMAS legacy
         if (!signatureBase64) {
@@ -1945,7 +1982,16 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
         logger.info(`[PDF] Invoice signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
         // 4. Generate PDF with signature (documentType = factura)
-        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'factura' });
+        const buffer = await generateInvoicePDF({
+            header,
+            lines,
+            signatureBase64,
+            signatureSource,
+            documentType: 'factura',
+            receptorNombre,
+            receptorApellidos,
+            receptorDni,
+        });
 
         // 5. Send Response
         const factNum = header.NUMEROFACTURA || number;

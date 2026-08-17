@@ -13,13 +13,25 @@ class LiquidacionPdfBuilder {
 
   static const _primary = '#003d7a';
   static const _secondary = '#1a5490';
-  static const _light = '#f8f9fa';
+  static const _greenDark = '#067a58';
+  static const _light = '#eef6ff';
+  static const _cardGreen = '#e7f8f1';
+  static const _cardAmber = '#fff6e0';
 
   static final _money = NumberFormat.currency(
     locale: 'es_ES',
     symbol: '€',
     decimalDigits: 2,
   );
+
+  static String gmpNumber(String repartidorId, DateTime date,
+      {int sequence = 0}) {
+    final digits = repartidorId.replaceAll(RegExp(r'\D'), '');
+    final vendor = (digits.isEmpty ? '0' : digits).padLeft(3, '0');
+    final safeVendor =
+        vendor.length > 3 ? vendor.substring(vendor.length - 3) : vendor;
+    return 'GMP ${date.year} A $safeVendor ${sequence.toString().padLeft(6, '0')}';
+  }
 
   static Future<Uint8List> buildBytes({
     required String repartidorId,
@@ -28,111 +40,52 @@ class LiquidacionPdfBuilder {
     RepartidorLiquidacionLedger? ledger,
   }) async {
     final pdf = pw.Document();
-    final dateLabel = DateFormat('EEEE d MMMM yyyy', 'es_ES').format(date);
-    final diferencia = summary.totalAIngresar - summary.saldoActual;
-    final balanced = diferencia.abs() < 0.01;
+    final dateLabel = DateFormat('yyyy-MM-dd HH:mm:ss').format(date);
+    final displayNumber = gmpNumber(repartidorId, date);
+    final diferencia = summary.totalAIngresar - summary.ingresoBanco;
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(36),
-        header: (_) => _header(repartidorId, dateLabel),
+        margin: const pw.EdgeInsets.fromLTRB(28, 28, 28, 36),
+        header: (_) => _header(displayNumber, repartidorId, dateLabel),
         footer: (ctx) => pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Text(
-            'Página ${ctx.pageNumber}/${ctx.pagesCount} · GMP Mobilidad · datos live',
+            'Página ${ctx.pageNumber}/${ctx.pagesCount} · Granja Mari Pepa',
             style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
           ),
         ),
         build: (_) => [
-          // Hero total (same signal as commercial liquidacion UI)
-          pw.Container(
-            width: double.infinity,
-            padding: const pw.EdgeInsets.all(16),
-            decoration: pw.BoxDecoration(
-              color: PdfColor.fromHex(_secondary),
-              borderRadius: pw.BorderRadius.circular(8),
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'TOTAL A INGRESAR',
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 6),
-                pw.Text(
-                  _money.format(summary.totalAIngresar),
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 26,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  balanced
-                      ? 'Cuadrada'
-                      : 'Descuadre ${_money.format(diferencia)}',
-                  style: pw.TextStyle(
-                    color:
-                        balanced ? PdfColors.lightGreen100 : PdfColors.amber100,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _metaCard(repartidorId, dateLabel),
           pw.SizedBox(height: 16),
-          _sectionTitle('COBROS DEL DÍA'),
-          _kpiGrid([
-            ('Efectivo', summary.totalEfectivo),
-            ('Cheques', summary.totalCheques),
-            ('Tarjeta', summary.totalTarjeta),
-            ('Postdatados', summary.totalPostdatados),
-          ]),
-          pw.SizedBox(height: 16),
-          _sectionTitle('BALANCE ERP / APP'),
-          _row('Entregado ERP', summary.entregado),
-          _row('Deuda pendiente ERP', summary.deudaPendiente),
-          _row('Saldo actual', summary.saldoActual),
-          _row('Gastos', summary.gastos),
-          _row('Total a ingresar', summary.totalAIngresar, emphasize: true),
-          _row('Diferencia (ingreso − saldo)', diferencia),
-          if (ledger != null) ...[
-            pw.SizedBox(height: 16),
-            _sectionTitle('DESGLOSE LIQUIDACIÓN (DB)'),
-            _row('Estado', 0, textValue: ledger.status),
-            ...ledger.expenses.map(
-              (e) => _row('Gasto · ${e.detail}', e.amount),
-            ),
-            ...ledger.bankDeposits.map(
-              (e) => _row('Ingreso · ${e.detail}', e.amount),
-            ),
-            ...ledger.adjustments.map(
-              (e) => _row('Ajuste · ${e.detail}', e.amount),
-            ),
-            _row('Total gastos', ledger.expensesTotal),
-            _row('Total ingresos', ledger.bankDepositsTotal),
-            _row('Total ajustes', ledger.adjustmentsTotal),
-          ],
-          if (summary.cobros.isNotEmpty) ...[
-            pw.SizedBox(height: 18),
-            _sectionTitle('COBROS DETALLE'),
+          _sectionTitle('Cobros de la liquidación'),
+          if (summary.cobros.isEmpty)
+            pw.Text(
+              'Sin cobros en el periodo.',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+            )
+          else
             pw.TableHelper.fromTextArray(
-              headers: const ['Cliente', 'Tipo', 'Importe'],
+              headers: const [
+                'Fecha',
+                'Cliente',
+                'Nombre',
+                'Tipo cobro',
+                'Documento',
+                'Importe',
+              ],
               data: summary.cobros
-                  .take(40)
+                  .take(80)
                   .map(
                     (c) => [
+                      c.fecha,
+                      c.codigoCliente,
                       c.nombreCliente.isEmpty
                           ? c.codigoCliente
                           : c.nombreCliente,
                       c.tipoCobro,
+                      c.documento,
                       _money.format(c.importe),
                     ],
                   )
@@ -140,14 +93,81 @@ class LiquidacionPdfBuilder {
               headerStyle: pw.TextStyle(
                 color: PdfColors.white,
                 fontWeight: pw.FontWeight.bold,
-                fontSize: 10,
+                fontSize: 8,
               ),
               headerDecoration:
                   pw.BoxDecoration(color: PdfColor.fromHex(_primary)),
-              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellStyle: const pw.TextStyle(fontSize: 8),
               cellAlignment: pw.Alignment.centerLeft,
               headerAlignment: pw.Alignment.centerLeft,
+              oddRowDecoration: pw.BoxDecoration(
+                color: PdfColor.fromHex(_light),
+              ),
             ),
+          pw.SizedBox(height: 8),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              padding:
+                  const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex(_greenDark),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Text(
+                'Total cobros ${_money.format(summary.totalCobrosDia)}',
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 18),
+          _sectionTitle('Resumen tesorería'),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  children: [
+                    _treasuryRow('Total efectivo', summary.totalEfectivo,
+                        green: true),
+                    _treasuryRow('Total cheques', summary.totalCheques),
+                    _treasuryRow('Total tarjeta', summary.totalTarjeta),
+                    _treasuryRow('Total postdatados', summary.totalPostdatados),
+                    _treasuryRow('Total cobros día', summary.totalCobrosDia,
+                        green: true),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.Expanded(
+                child: pw.Column(
+                  children: [
+                    _treasuryRow('Saldo actual', summary.saldoActual,
+                        warn: summary.saldoActual < 0),
+                    _treasuryRow('Gastos', summary.gastos),
+                    _treasuryRow('Total a ingresar', summary.totalAIngresar,
+                        green: true),
+                    _treasuryRow('Ingreso en banco', summary.ingresoBanco),
+                    _treasuryRow('Diferencia', diferencia,
+                        warn: diferencia.abs() >= 0.01),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (ledger != null) ...[
+            pw.SizedBox(height: 16),
+            _sectionTitle('Movimientos del día'),
+            ...ledger.expenses
+                .map((e) => _row('Gasto · ${e.detail}', e.amount)),
+            ...ledger.bankDeposits
+                .map((e) => _row('Ingreso · ${e.detail}', e.amount)),
+            ...ledger.adjustments
+                .map((e) => _row('Ajuste · ${e.detail}', e.amount)),
           ],
         ],
       ),
@@ -217,38 +237,109 @@ class LiquidacionPdfBuilder {
     );
   }
 
-  static pw.Widget _header(String repartidorId, String dateLabel) {
+  static pw.Widget _header(
+      String displayNumber, String repartidorId, String dateLabel) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 18),
+      margin: const pw.EdgeInsets.only(bottom: 14),
       padding: const pw.EdgeInsets.all(14),
       decoration: pw.BoxDecoration(
         color: PdfColor.fromHex(_primary),
+        borderRadius: pw.BorderRadius.circular(10),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'Liquidación Diaria - $displayNumber',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            'Granja Mari Pepa · Vendedor $repartidorId',
+            style: const pw.TextStyle(color: PdfColors.white, fontSize: 11),
+          ),
+          pw.Text(
+            dateLabel,
+            style:
+                pw.TextStyle(color: PdfColor.fromHex('#d7ecff'), fontSize: 9),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _metaCard(String repartidorId, String dateLabel) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex(_light),
+        borderRadius: pw.BorderRadius.circular(8),
+        border: pw.Border.all(color: PdfColor.fromHex('#c5d4e8')),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'Vendedor: $repartidorId',
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColor.fromHex(_primary),
+            ),
+          ),
+          pw.Text(
+            'Usuario: $repartidorId',
+            style: const pw.TextStyle(fontSize: 10),
+          ),
+          pw.Text(
+            dateLabel,
+            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _treasuryRow(
+    String label,
+    double value, {
+    bool green = false,
+    bool warn = false,
+  }) {
+    final bg = green
+        ? _cardGreen
+        : warn
+            ? _cardAmber
+            : _light;
+    final color = green
+        ? PdfColor.fromHex(_greenDark)
+        : warn
+            ? PdfColors.red800
+            : PdfColor.fromHex(_primary);
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 6),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex(bg),
         borderRadius: pw.BorderRadius.circular(8),
       ),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                'LIQUIDACIÓN DIARIA',
-                style: pw.TextStyle(
-                  color: PdfColors.white,
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'Repartidor $repartidorId',
-                style: const pw.TextStyle(color: PdfColors.white, fontSize: 11),
-              ),
-            ],
-          ),
+          pw.Text(label,
+              style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
           pw.Text(
-            dateLabel,
-            style: const pw.TextStyle(color: PdfColors.white, fontSize: 11),
+            _money.format(value),
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+            ),
           ),
         ],
       ),
@@ -265,43 +356,6 @@ class LiquidacionPdfBuilder {
           fontSize: 12,
           fontWeight: pw.FontWeight.bold,
         ),
-      ),
-    );
-  }
-
-  static pw.Widget _kpiGrid(List<(String, double)> items) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(
-        color: PdfColor.fromHex(_light),
-        borderRadius: pw.BorderRadius.circular(8),
-      ),
-      child: pw.Row(
-        children: [
-          for (final item in items)
-            pw.Expanded(
-              child: pw.Column(
-                children: [
-                  pw.Text(
-                    item.$1,
-                    style: const pw.TextStyle(
-                      fontSize: 9,
-                      color: PdfColors.grey700,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    _money.format(item.$2),
-                    style: pw.TextStyle(
-                      fontSize: 12,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColor.fromHex(_primary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
       ),
     );
   }

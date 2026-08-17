@@ -604,6 +604,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
             repartidorId: widget.repartidorId,
             initialClientId: client.id,
             initialClientName: client.name,
+            canEmailDocuments: true,
           ),
         ),
       );

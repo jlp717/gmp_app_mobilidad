@@ -3,10 +3,14 @@
 /// OPTIMIZED: Full caching support with intelligent TTLs
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 
 class RepartidorDataException implements Exception {
   const RepartidorDataException(
@@ -211,6 +215,7 @@ class HistoryDocument {
     this.legacySignatureName,
     this.hasLegacySignature = false,
     this.legacyDate,
+    this.confirmationId,
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
@@ -259,6 +264,7 @@ class HistoryDocument {
       legacySignatureName: json['legacySignatureName']?.toString(),
       hasLegacySignature: asBool(json['hasLegacySignature']),
       legacyDate: json['legacyDate']?.toString(),
+      confirmationId: json['confirmationId']?.toString(),
     );
   }
   final String id;
@@ -285,6 +291,7 @@ class HistoryDocument {
   final String? legacySignatureName;
   final bool hasLegacySignature;
   final String? legacyDate;
+  final String? confirmationId;
 }
 
 /// Objetivo mensual
@@ -673,6 +680,32 @@ class RepartidorDataService {
     );
   }
 
+  /// PDF de la nota de entrega canónica (líneas y firma persistidas).
+  static Future<List<int>> downloadDeliveryNotePdf({
+    required String confirmationId,
+  }) async {
+    try {
+      final response = await ApiClient.get(
+        RepartoCanonicalReceiptRequest(confirmationId).endpoint,
+        forceRefresh: true,
+        allowStale: false,
+        receiveTimeout: const Duration(seconds: 20),
+      );
+      return base64Decode(RepartoReceiptPdf.fromResponse(response).base64);
+    } on RepartoReceiptUnavailableException {
+      throw const RepartidorDataException(
+        'La nota de entrega no está disponible.',
+        statusCode: 503,
+      );
+    } on ApiException catch (error) {
+      throw mapDocumentDownloadError(error);
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo descargar la nota de entrega',
+      );
+    }
+  }
+
   /// Obtener firma real de un albarán
   static Future<Map<String, dynamic>?> getSignature({
     required int ejercicio,
@@ -694,7 +727,7 @@ class RepartidorDataService {
         cacheTTL: const Duration(hours: 6),
       );
 
-      if (response['hasSignature'] == true && response['signature'] != null) {
+      if (response['signature'] != null) {
         return Map<String, dynamic>.from(response['signature'] as Map);
       }
       return null;
@@ -806,6 +839,60 @@ class RepartidorDataService {
     } catch (_) {
       throw const RepartidorDataException(
         'El envío por email no está disponible',
+      );
+    }
+  }
+
+  static Future<void> sendCommercialDocumentEmail({
+    required String serie,
+    required int numero,
+    required int ejercicio,
+    required String destinatario,
+    String? documentType,
+    int? terminal,
+    String? clienteNombre,
+  }) async {
+    try {
+      final response = await ApiClient.post('/facturas/send-email', {
+        'serie': serie,
+        'numero': numero,
+        'ejercicio': ejercicio,
+        'destinatario': destinatario,
+        if (terminal != null) 'terminal': terminal,
+        if (documentType != null) 'documentType': documentType,
+        if (clienteNombre != null) 'clienteNombre': clienteNombre,
+      });
+      if (response['success'] == true) return;
+      throw const RepartidorDataException(
+        'El envío por email no está disponible',
+      );
+    } on RepartidorDataException {
+      rethrow;
+    } catch (_) {
+      throw const RepartidorDataException(
+        'El envío por email no está disponible',
+      );
+    }
+  }
+
+  static Future<void> emailDeliveryNote({
+    required String confirmationId,
+    required String destinatario,
+  }) async {
+    try {
+      final response = await ApiClient.post(
+        '/repartidor-finanzas/rutero/confirmations/$confirmationId/receipt/email',
+        {'destinatario': destinatario},
+      );
+      if (response['success'] == true) return;
+      throw const RepartidorDataException(
+        'No se pudo enviar la nota de entrega',
+      );
+    } on RepartidorDataException {
+      rethrow;
+    } catch (_) {
+      throw const RepartidorDataException(
+        'No se pudo enviar la nota de entrega',
       );
     }
   }

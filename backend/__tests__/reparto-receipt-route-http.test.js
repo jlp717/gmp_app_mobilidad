@@ -6,12 +6,16 @@ const { EvidenceError } = require('../services/delivery-evidence-service');
 const { networkOptimizer, responseCoalescing } = require('../middleware/network-optimizer');
 let mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR' };
 jest.mock('../middleware/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
+jest.mock('../services/emailPdfService', () => ({
+  sendEmailWithPdf: jest.fn().mockResolvedValue({ messageId: 'm1' }),
+  generateDeliveryEmailHtml: jest.fn().mockReturnValue('<p>nota</p>'),
+}));
 jest.mock('../middleware/auth', () => ({ verifyToken: (req, _res, next) => { req.user = mockUser; next(); }, requireRoles: () => (_req, _res, next) => next() }));
 jest.mock('../services/repartidor-finance-service', () => ({}));
 jest.mock('../services/redis-cache', () => ({ deleteCachePattern: jest.fn(), invalidateCache: jest.fn() }));
 const routes = require('../routes/repartidor-finanzas');
 const sig = `ev_${'a'.repeat(64)}`;
-function app() { const value = express(); value.use('/finanzas', routes); return value; }
+function app() { const value = express(); value.use(express.json()); value.use('/finanzas', routes); return value; }
 function productionMountedApp() { const value = express(); value.use(networkOptimizer); value.use(responseCoalescing); value.use('/api/repartidor-finanzas', routes); return value; }
 function receipt() { return { confirmationId: '7', repartidorId: 'R1', firmaEvidenceId: sig, lineas: [{ cantidadPedida: 1, cantidadEntregada: 1, cantidadRechazada: 0, cantidadPendiente: 0, precioUnitario: 1 }], cliente: {}, receptor: {}, incidencia: {} }; }
 function inject(overrides = {}) { routes.setCanonicalConfirmationRuntime({ catalogService: { validateConfirmation: jest.fn() }, confirmationService: { confirm: jest.fn() }, receiptService: { getReceipt: overrides.getReceipt || jest.fn().mockResolvedValue(receipt()) }, evidenceService: { stageSignature: jest.fn(), stagePhoto: jest.fn(), retrieve: overrides.retrieve || jest.fn().mockResolvedValue({ kind: 'FIRMA', contentBase64: 'iVBORw0KGgo=' }) }, receiptPdfService: { render: overrides.render || jest.fn().mockResolvedValue({ pdf: Buffer.from('%PDF-1.4'), fileName: 'RECIBO_REPARTO_7.pdf' }) } }); }
@@ -108,4 +112,31 @@ test('production mount keeps every receipt outcome private no-store and outside 
   expect(second.headers['x-cache-status']).toBeUndefined();
   expect(second.headers['x-coalesced']).toBeUndefined();
   expect(render).toHaveBeenCalledTimes(2);
+});
+
+test('POST receipt email rejects invalid destinatario before rendering', async () => {
+  const emailPdf = require('../services/emailPdfService');
+  inject();
+  emailPdf.sendEmailWithPdf.mockClear();
+  const res = await request(app())
+    .post('/finanzas/rutero/confirmations/7/receipt/email')
+    .send({ destinatario: 'not-an-email' });
+  expect(res.status).toBe(422);
+  expect(res.body.code).toBe('EMAIL_INVALID');
+  expect(emailPdf.sendEmailWithPdf).not.toHaveBeenCalled();
+});
+
+test('POST receipt email sends the canonical PDF', async () => {
+  const emailPdf = require('../services/emailPdfService');
+  inject();
+  emailPdf.sendEmailWithPdf.mockClear();
+  const res = await request(app())
+    .post('/finanzas/rutero/confirmations/7/receipt/email')
+    .send({ destinatario: 'cliente@empresa.com' });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(emailPdf.sendEmailWithPdf).toHaveBeenCalledWith(expect.objectContaining({
+    to: 'cliente@empresa.com',
+    pdfFilename: 'RECIBO_REPARTO_7.pdf',
+  }));
 });

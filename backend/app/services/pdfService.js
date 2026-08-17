@@ -810,11 +810,34 @@ async function generateInvoicePDF(facturaData) {
                     .text('Fecha: ' + new Date().toLocaleDateString('es-ES'), 305, y + 88);
             }
 
-            // "COPIA" watermark label (left side, like the physical paper)
-            doc.fontSize(36)
-                .font('Helvetica-Bold')
-                .fillColor('#E0E0E0')
-                .text('COPIA', 50, y + 25);
+            const receptorNombre = String(facturaData.receptorNombre || '').trim();
+            const receptorApellidos = String(facturaData.receptorApellidos || '').trim();
+            const receptorDni = String(facturaData.receptorDni || '').trim();
+            const receptorFull = [receptorNombre, receptorApellidos].filter(Boolean).join(' ');
+            if (receptorFull || receptorDni) {
+                doc.fontSize(9)
+                    .font('Helvetica-Bold')
+                    .fillColor(COLORS.secondary)
+                    .text('Receptor', 50, y + 8);
+                if (receptorFull) {
+                    doc.fontSize(10)
+                        .font('Helvetica')
+                        .fillColor(COLORS.darkGray)
+                        .text(receptorFull, 50, y + 24, { width: 230 });
+                }
+                if (receptorDni) {
+                    doc.fontSize(10)
+                        .font('Helvetica-Bold')
+                        .fillColor(COLORS.darkGray)
+                        .text('DNI: ' + receptorDni, 50, y + 48);
+                }
+            } else {
+                // "COPIA" watermark label (left side, like the physical paper)
+                doc.fontSize(36)
+                    .font('Helvetica-Bold')
+                    .fillColor('#E0E0E0')
+                    .text('COPIA', 50, y + 25);
+            }
 
             y += 110;
 

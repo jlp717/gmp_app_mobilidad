@@ -165,6 +165,8 @@ describe('reparto-variance-notification-service', () => {
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       to: 'oficina@example.test',
       subject: expect.stringContaining('2026-A-1-100-4300001'),
+      pdfBuffer: expect.any(Buffer),
+      pdfFilename: expect.stringContaining('Diferencia_entrega_'),
     }));
     expect(result.skipped).toBe(false);
     expect(result.sent).toBe(1);

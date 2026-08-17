@@ -25,6 +25,7 @@ const {
   unavailableDeliveryEvidenceService,
 } = require('../services/delivery-evidence-service');
 const { deleteCachePattern, invalidateCache } = require('../services/redis-cache');
+const { sendEmailWithPdf, generateDeliveryEmailHtml } = require('../services/emailPdfService');
 
 let Sentry = null;
 try {
@@ -806,25 +807,37 @@ function setCanonicalArtifactHeaders(_req, res, next) {
   return next();
 }
 
+async function renderCanonicalReceipt(req, lookup) {
+  const actor = { role: req.user?.role, repartidorId: actorCode(req.user) };
+  return withCanonicalReceiptTimeout(async (signal) => {
+    const receipt = await canonicalConfirmationRuntime.receiptService.getReceipt({
+      ...lookup, actor, signal,
+    });
+    let signature = null;
+    if (receipt.firmaEvidenceId) {
+      signature = await canonicalConfirmationRuntime.evidenceService.retrieve({
+        evidenceId: receipt.firmaEvidenceId, actor, signal,
+      });
+      if (signature.kind !== 'FIRMA') {
+        throw new RepartoPersistenceError(
+          'La firma del recibo no esta disponible',
+          { code: 'REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', statusCode: 503 },
+        );
+      }
+    }
+    const rendered = await canonicalConfirmationRuntime.receiptPdfService.render({
+      receipt, signature, signal,
+    });
+    return { receipt, rendered };
+  });
+}
+
 async function serveCanonicalReceipt(req, res, lookup) {
   req.setTimeout?.(canonicalReceiptTimeoutMs + 1000);
   res.setTimeout?.(canonicalReceiptTimeoutMs + 1000);
   setCanonicalReceiptHeaders(res);
   try {
-    const actor = { role: req.user?.role, repartidorId: actorCode(req.user) };
-    const { receipt, rendered } = await withCanonicalReceiptTimeout(async (signal) => {
-      const receipt = await canonicalConfirmationRuntime.receiptService.getReceipt({ ...lookup, actor, signal });
-    let signature = null;
-    if (receipt.firmaEvidenceId) {
-      // getReceipt authorizes confirmation ownership before this evidence read.
-      signature = await canonicalConfirmationRuntime.evidenceService.retrieve({ evidenceId: receipt.firmaEvidenceId, actor, signal });
-      if (signature.kind !== 'FIRMA') {
-        throw new RepartoPersistenceError('La firma del recibo no estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ disponible', { code: 'REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', statusCode: 503 });
-      }
-    }
-      const rendered = await canonicalConfirmationRuntime.receiptPdfService.render({ receipt, signature, signal });
-      return { receipt, rendered };
-    });
+    const { receipt, rendered } = await renderCanonicalReceipt(req, lookup);
     return res.status(200).json({
       success: true,
       confirmationId: receipt.confirmationId,
@@ -913,6 +926,66 @@ router.get('/rutero/confirmations/:confirmationId/receipt', setCanonicalArtifact
     }
     return serveCanonicalReceipt(req, res, { confirmationId: req.params.confirmationId });
   });
+
+router.post(
+  '/rutero/confirmations/:confirmationId/receipt/email',
+  verifyToken,
+  requireCanonicalConfirmationRole,
+  async (req, res) => {
+    const parsed = z.string().trim().email().max(180).safeParse(req.body?.destinatario);
+    if (!parsed.success) {
+      return res.status(422).json({
+        success: false,
+        code: 'EMAIL_INVALID',
+        error: 'Destinatario de email invalido',
+      });
+    }
+    try {
+      const { receipt, rendered } = await renderCanonicalReceipt(req, {
+        confirmationId: req.params.confirmationId,
+      });
+      const clienteNombre = receipt.cliente?.nombre || receipt.clienteNombre || '';
+      const numero = receipt.documento?.numero || receipt.confirmationId;
+      const serie = receipt.documento?.serie || '';
+      const lineTotal = (Array.isArray(receipt.lineas) ? receipt.lineas : [])
+        .reduce((sum, line) => (
+          sum + (Number(line.cantidadEntregada || 0) * Number(line.precioUnitario || 0))
+        ), 0);
+      await sendEmailWithPdf({
+        to: parsed.data,
+        subject: `Nota de entrega ${serie}-${numero} - Granja Mari Pepa`,
+        htmlBody: generateDeliveryEmailHtml({
+          numero,
+          serie,
+          fecha: receipt.confirmedAt || '',
+          total: receipt.importeTotal || receipt.total || lineTotal || 0,
+          clienteNombre,
+        }),
+        pdfBuffer: rendered.pdf,
+        pdfFilename: rendered.fileName || `nota_entrega_${numero}.pdf`,
+      });
+      return res.status(200).json({
+        success: true,
+        message: `Email enviado correctamente a ${parsed.data}`,
+      });
+    } catch (error) {
+      if (error instanceof EvidenceError || isEvidenceTimeout(error)) {
+        return sendEvidenceError(res, error, 'POST canonical receipt email');
+      }
+      if (error instanceof RepartoPersistenceError) {
+        const safeMessage = error.statusCode >= 500
+          ? 'Servicio temporalmente no disponible'
+          : error.message;
+        return res.status(error.statusCode).json({
+          success: false,
+          code: error.code,
+          error: safeMessage,
+        });
+      }
+      return sendError(res, error, { action: 'POST receipt email' });
+    }
+  },
+);
 
 router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
   try {

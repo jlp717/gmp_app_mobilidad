@@ -406,6 +406,18 @@ class RepartoConfirmationJournal {
     );
   }
 
+  /// Drop a local journal that is not acknowledged so the driver can confirm.
+  /// Acknowledged deliveries stay locked to avoid duplicate confirms.
+  Future<void> resetIfNotAcknowledged(String deliveryId) async {
+    final normalized = deliveryId.trim();
+    final entry = await _store.read(normalized);
+    if (entry == null) return;
+    if (entry.state == RepartoOperationState.acknowledged) {
+      throw const RepartoAlreadyAcknowledgedException();
+    }
+    await _store.delete(normalized);
+  }
+
   Future<RepartoConfirmationJournalEntry> recoverSubmittingForRetry(
     String deliveryId,
   ) async {

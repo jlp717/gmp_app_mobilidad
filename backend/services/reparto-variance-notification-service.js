@@ -8,7 +8,8 @@
 const { queryWithParams } = require('../config/db');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const logger = require('../middleware/logger');
-const { sendHtmlEmail } = require('./emailPdfService');
+const { sendHtmlEmail, sendEmailWithPdf } = require('./emailPdfService');
+const { buildVariancePdfBuffer } = require('./reparto-variance-pdf-service');
 const {
   resolveDeliveryVarianceRecipients,
   normalizeVendorCode,
@@ -256,7 +257,7 @@ async function markOutboxStatus(id, { status, error = null, query = queryWithPar
   );
 }
 
-async function sendVarianceEmail(payload, recipients, { sendEmail = sendHtmlEmail } = {}) {
+async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWithPdf } = {}) {
   if (!recipients.length) {
     logger.warn('[variance] no recipients — email skipped');
     return { sent: 0, results: [] };
@@ -272,11 +273,28 @@ async function sendVarianceEmail(payload, recipients, { sendEmail = sendHtmlEmai
       `${line.codigoArticulo}: pedida ${line.cantidadPedida} / entregada ${line.cantidadEntregada} (diff ${line.diff})`
     )),
   ].join('\n');
+  let pdfBuffer = payload.pdfBuffer;
+  if (!pdfBuffer) {
+    try {
+      pdfBuffer = await buildVariancePdfBuffer(payload);
+    } catch (error) {
+      logger.warn(`[variance] pdf build failed: ${error.message}`);
+    }
+  }
 
   const results = [];
   for (const to of recipients) {
     try {
-      const result = await sendEmail({ to, subject, htmlBody, textBody });
+      const result = await sendEmail({
+        to,
+        subject,
+        htmlBody,
+        textBody,
+        ...(pdfBuffer ? {
+          pdfBuffer,
+          pdfFilename: `Diferencia_entrega_${String(payload.documentId || 'albaran').replace(/\s+/g, '_')}.pdf`,
+        } : {}),
+      });
       results.push({ to, success: true, result });
     } catch (error) {
       logger.error(`[variance] email failed to ${to}: ${error.message}`);
@@ -296,7 +314,7 @@ async function notifyAfterConfirm({
 } = {}, {
   query = queryWithParams,
   env = process.env,
-  sendEmail = sendHtmlEmail,
+  sendEmail = sendEmailWithPdf,
   resolveRecipients = resolveDeliveryVarianceRecipients,
   resolveComercial = resolveDocumentComercialCode,
 } = {}) {
@@ -508,4 +526,5 @@ module.exports = {
   notifyAfterConfirm,
   sendDailyVarianceDigest,
   enqueueVarianceOutbox,
+  sendVarianceEmail,
 };

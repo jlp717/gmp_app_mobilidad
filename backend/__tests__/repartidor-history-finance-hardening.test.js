@@ -126,6 +126,52 @@ describe('repartidor history document hardening', () => {
     expect(confirmSql).not.toContain('PEDIDOS_CAB');
   });
 
+  test('isolated_test reads production confirmations then overlays TEST quantities/status', async () => {
+    Object.assign(process.env, {
+      NODE_ENV: 'test',
+      REPARTO_ENVIRONMENT: 'test',
+      REPARTO_TABLE_SET: 'isolated_test',
+      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+      REPARTO_WRITES_ENABLED: 'true',
+      ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+    });
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      const text = String(sql);
+      if (text.includes('TEST_REPARTO_CONFIRMACIONES')) {
+        return [{
+          DOCUMENT_ID: '2026-A-1-42-C1',
+          STATUS: 'ENTREGADO',
+          ID: 11,
+          FIRMA_EVIDENCE_ID: 'sig-test',
+        }];
+      }
+      if (text.includes('REPARTO_CONFIRMACIONES')) {
+        return [{
+          DOCUMENT_ID: '2026-A-1-42-C1',
+          STATUS: 'PARCIAL',
+          ID: 3,
+          FIRMA_EVIDENCE_ID: 'sig-prod',
+        }];
+      }
+      return [historyRow({ CONFORMADOSN: 'N', DELIVERY_STATUS: null })];
+    });
+
+    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.documents[0]).toMatchObject({
+      status: 'delivered',
+      confirmationId: '11',
+      hasSignature: true,
+    });
+    const sqls = mockQueryWithParams.mock.calls.map(([sql]) => String(sql));
+    expect(sqls.some((sql) => sql.includes('JAVIER.REPARTO_CONFIRMACIONES') && !sql.includes('TEST_'))).toBe(true);
+    expect(sqls.some((sql) => sql.includes('JAVIER.TEST_REPARTO_CONFIRMACIONES'))).toBe(true);
+  });
+
   test('overlays a just-signed TEST confirmation onto GET /history by route date', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {

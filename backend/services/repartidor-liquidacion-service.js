@@ -465,6 +465,18 @@ function buildOutboxIntent(command, liquidacion) {
   });
 }
 
+async function seedIsolatedTestFinanceCopy({ repartidorId, date }) {
+  if (process.env.JEST_WORKER_ID) return;
+  try {
+    const financeService = require('./repartidor-finance-service');
+    if (typeof financeService.ensureIsolatedTestFinanceSeed === 'function') {
+      await financeService.ensureIsolatedTestFinanceSeed({ repartidorId, date });
+    }
+  } catch (_error) {
+    // Overlay read remains available if the durable copy fails.
+  }
+}
+
 function createRepartidorLiquidacionService({ repository } = {}) {
   assertRepository(repository);
 
@@ -472,6 +484,9 @@ function createRepartidorLiquidacionService({ repository } = {}) {
     const command = normalizeEntryInput(type, input);
     const authenticatedActor = authorizeEntry(command, normalizeActor(actor), {
       adjustment: type === 'ADJUSTMENT',
+    });
+    await seedIsolatedTestFinanceCopy({
+      repartidorId: command.repartidorId, date: command.date,
     });
     await repository.assertCapabilities({ requiredTransactionMethods: ENTRY_TRANSACTION_METHODS });
     return repository.withTransaction(async (transaction) => {
@@ -556,6 +571,9 @@ function createRepartidorLiquidacionService({ repository } = {}) {
     await repository.assertCapabilities({
       requiredTransactionMethods: REQUIRED_TRANSACTION_METHODS,
       requiresOutbox: command.sendEmails,
+    });
+    await seedIsolatedTestFinanceCopy({
+      repartidorId: command.repartidorId, date: command.date,
     });
 
     const result = await repository.withTransaction(async (transaction) => {

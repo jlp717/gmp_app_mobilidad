@@ -7,7 +7,12 @@
  */
 
 const { queryWithParams, getPool, initDb } = require('../config/db');
-const { resolveRepartoRuntime, validateFinanceTableMapping } = require('../config/reparto-runtime');
+const logger = require('../middleware/logger');
+const {
+  resolveRepartoRuntime,
+  validateFinanceTableMapping,
+  TABLE_MAPPINGS,
+} = require('../config/reparto-runtime');
 
 class FinanceRepoSchemaError extends Error {
   constructor(message = 'El catálogo DB2 de reparto no está disponible') {
@@ -95,6 +100,56 @@ function cobrosDateOrderBy(info, alias = 'RC') {
   if (info.cobrosHasCollectionDate) return `${prefix}ANOCOBRO, ${prefix}MESCOBRO, ${prefix}DIACOBRO`;
   if (info.cobrosHasFechaCobro) return `${prefix}FECHA_COBRO`;
   return `${prefix}ANOVENCIMIENTO, ${prefix}MESVENCIMIENTO, ${prefix}DIAVENCIMIENTO`;
+}
+
+function financeReadOverlay(writeTables, runtime) {
+  if (runtime?.tableSet !== 'isolated_test') {
+    return { write: writeTables, sources: [writeTables], overlay: false, production: null };
+  }
+  const production = TABLE_MAPPINGS.production.finance;
+  if (!production?.cobros || production.cobros === writeTables.cobros) {
+    return { write: writeTables, sources: [writeTables], overlay: false, production: null };
+  }
+  return { write: writeTables, sources: [production, writeTables], overlay: true, production };
+}
+
+function skipIsolatedTestFinanceSeed(env = process.env) {
+  return Boolean(env.JEST_WORKER_ID);
+}
+
+function assertIsolatedTestWriteTable(table) {
+  const identifier = String(table || '').trim().toUpperCase();
+  if (!identifier.startsWith('JAVIER.TEST_')) {
+    throw new FinanceRepoSchemaError(
+      `Refusing non-TEST finance write target: ${identifier || '(empty)'}`,
+    );
+  }
+}
+
+function cobroKeyExcludeSql(prodAlias, testTable, info) {
+  if (info.cobrosHasDocumentColumns === false) return '';
+  const aligned = info.cobrosAligned !== false;
+  const pClient = aligned ? `${prodAlias}.CODIGOCLIENTEALBARAN` : `${prodAlias}.CODIGO_CLIENTE`;
+  const tClient = aligned ? 'OVRL.CODIGOCLIENTEALBARAN' : 'OVRL.CODIGO_CLIENTE';
+  const pTipo = aligned ? `${prodAlias}.TIPODOCUMENTO` : `${prodAlias}.TIPO_DOCUMENTO`;
+  const tTipo = aligned ? 'OVRL.TIPODOCUMENTO' : 'OVRL.TIPO_DOCUMENTO';
+  const pSerie = aligned ? `${prodAlias}.SERIEDOCUMENTO` : `${prodAlias}.SERIE_DOCUMENTO`;
+  const tSerie = aligned ? 'OVRL.SERIEDOCUMENTO' : 'OVRL.SERIE_DOCUMENTO';
+  const pTerm = aligned ? `${prodAlias}.TERMINALDOCUMENTO` : `${prodAlias}.TERMINAL_DOCUMENTO`;
+  const tTerm = aligned ? 'OVRL.TERMINALDOCUMENTO' : 'OVRL.TERMINAL_DOCUMENTO';
+  const pNum = aligned ? `${prodAlias}.NUMERODOCUMENTO` : `${prodAlias}.NUMERO_DOCUMENTO`;
+  const tNum = aligned ? 'OVRL.NUMERODOCUMENTO' : 'OVRL.NUMERO_DOCUMENTO';
+  const pCode = cobrosCodeColumn(info, prodAlias);
+  const tCode = cobrosCodeColumn(info, 'OVRL');
+  return `AND NOT EXISTS (
+    SELECT 1 FROM ${testTable} OVRL
+     WHERE TRIM(${tCode}) = TRIM(${pCode})
+       AND TRIM(${tClient}) = TRIM(${pClient})
+       AND TRIM(${tTipo}) = TRIM(${pTipo})
+       AND TRIM(${tSerie}) = TRIM(${pSerie})
+       AND ${tTerm} = ${pTerm}
+       AND ${tNum} = ${pNum}
+  )`;
 }
 
 function cobrosNotLiquidatedCondition(info, alias = '') {
@@ -441,53 +496,124 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async selectDailyTotals({ info, ids, dateYmd }) {
+      const overlay = financeReadOverlay(tables, bindings.runtime);
       const dateCol = cobrosDateFilterColumn(info);
-      const repFilter = inClause(`TRIM(${cobrosCodeColumn(info)})`, ids);
       const amountCol = cobrosAmountColumn(info);
       const paymentCol = cobrosPaymentColumn(info);
       const notLiquidated = cobrosNotLiquidatedCondition(info);
-      return run(`
-    SELECT
+      const branchSql = (fromTable, alias, excludeSql = '') => {
+        const repFilter = inClause(`TRIM(${cobrosCodeColumn(info)})`, ids);
+        return {
+          sql: `SELECT
       COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('EFECTIVO', 'EF', 'F0', 'E', 'CONTADO', 'CT') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_EFECTIVO,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('CHEQUE', 'CH', 'TALON', 'TALON BANCARIO') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_CHEQUES,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('TARJETA', 'TJ', 'TPV', 'TRANSFERENCIA', 'TR', 'T0', 'BIZUM', 'BI') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_TARJETA,
       COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('POSTDATADO', 'PD', 'POSTDATADOS') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
       COALESCE(SUM(${amountCol}), 0) AS TOTAL_COBROS_DIA,
       COUNT(*) AS COBROS_COUNT
-    FROM ${tables.cobros}
+    FROM ${fromTable} ${alias}
     WHERE ${repFilter.sql}
       AND ${dateCol} = ?
       AND ${notLiquidated}
-  `, [...repFilter.params, dateYmd]);
+      ${excludeSql}`,
+          params: [...repFilter.params, dateYmd],
+        };
+      };
+      if (!overlay.overlay) {
+        const single = branchSql(tables.cobros, '');
+        return run(single.sql, single.params);
+      }
+      const prod = branchSql(
+        overlay.production.cobros,
+        'P',
+        cobroKeyExcludeSql('P', tables.cobros, info),
+      );
+      const test = branchSql(tables.cobros, 'T');
+      return run(`
+    SELECT
+      COALESCE(SUM(TOTAL_EFECTIVO), 0) AS TOTAL_EFECTIVO,
+      COALESCE(SUM(TOTAL_CHEQUES), 0) AS TOTAL_CHEQUES,
+      COALESCE(SUM(TOTAL_TARJETA), 0) AS TOTAL_TARJETA,
+      COALESCE(SUM(TOTAL_POSTDATADOS), 0) AS TOTAL_POSTDATADOS,
+      COALESCE(SUM(TOTAL_COBROS_DIA), 0) AS TOTAL_COBROS_DIA,
+      COALESCE(SUM(COBROS_COUNT), 0) AS COBROS_COUNT
+    FROM (
+      ${prod.sql}
+      UNION ALL
+      ${test.sql}
+    ) DAILY_COBROS_OVERLAY
+  `, [...prod.params, ...test.params]);
     },
 
     async selectBalanceSum({ info, ids }) {
+      const overlay = financeReadOverlay(tables, bindings.runtime);
       const balanceFilter = inClause(`TRIM(${info.balanceCodeColumn})`, ids);
-      return run(`
+      if (!overlay.overlay) {
+        return run(`
     SELECT COALESCE(SUM(SALDO_PENDIENTE), 0) AS SALDO_PENDIENTE
     FROM ${tables.balances}
     WHERE ${balanceFilter.sql}
   `, balanceFilter.params);
+      }
+      const testFilter = inClause(`TRIM(${info.balanceCodeColumn})`, ids);
+      const prodFilter = inClause(`TRIM(${info.balanceCodeColumn})`, ids);
+      return run(`
+    SELECT COALESCE(
+      (SELECT SUM(SALDO_PENDIENTE) FROM ${tables.balances} WHERE ${testFilter.sql}),
+      (SELECT SUM(SALDO_PENDIENTE) FROM ${overlay.production.balances} WHERE ${prodFilter.sql}),
+      0
+    ) AS SALDO_PENDIENTE
+    FROM SYSIBM.SYSDUMMY1
+  `, [...testFilter.params, ...prodFilter.params]);
     },
 
     async selectDailyStructuredSums({ ids, dateYmd }) {
+      const overlay = financeReadOverlay(tables, bindings.runtime);
       const year = Math.trunc(dateYmd / 10000);
       const month = Math.trunc((dateYmd % 10000) / 100);
       const day = dateYmd % 100;
       const vendor = inClause('CODIGO_REPARTIDOR', ids);
       const baseParams = [...vendor.params, day, month, year];
-      const sumSql = (table) => (
-        `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL
-           FROM ${table}
-          WHERE ${vendor.sql}
-            AND DIA = ?
-            AND MES = ?
-            AND ANO = ?`
-      );
+      const sumSql = (writeTable, productionTable) => {
+        if (!overlay.overlay || !productionTable) {
+          return {
+            sql: `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL
+             FROM ${writeTable}
+            WHERE ${vendor.sql}
+              AND DIA = ?
+              AND MES = ?
+              AND ANO = ?`,
+            params: baseParams,
+          };
+        }
+        // TEST wins once it has rows (seeded copy + later inserts).
+        // Empty TEST falls back to production. Never ADD after a copy.
+        return {
+          sql: `SELECT COALESCE(
+              CASE WHEN (
+                SELECT COUNT(*) FROM ${writeTable}
+                 WHERE ${vendor.sql} AND DIA = ? AND MES = ? AND ANO = ?
+              ) > 0
+              THEN (
+                SELECT COALESCE(SUM(IMPORTE), 0) FROM ${writeTable}
+                 WHERE ${vendor.sql} AND DIA = ? AND MES = ? AND ANO = ?
+              )
+              ELSE NULL END,
+              (SELECT COALESCE(SUM(IMPORTE), 0) FROM ${productionTable}
+                WHERE ${vendor.sql} AND DIA = ? AND MES = ? AND ANO = ?),
+              0
+            ) AS TOTAL
+            FROM SYSIBM.SYSDUMMY1`,
+          params: [...baseParams, ...baseParams, ...baseParams],
+        };
+      };
+      const gastosQuery = sumSql(tables.expenses, overlay.production?.expenses);
+      const ingresosQuery = sumSql(tables.bankDeposits, overlay.production?.bankDeposits);
+      const ajustesQuery = sumSql(tables.adjustments, overlay.production?.adjustments);
       const [gastoRows, ingresoRows, ajusteRows] = await Promise.all([
-        queryWithParams(sumSql(tables.expenses), baseParams, false, false),
-        queryWithParams(sumSql(tables.bankDeposits), baseParams, false, false),
-        queryWithParams(sumSql(tables.adjustments), baseParams, false, false),
+        run(gastosQuery.sql, gastosQuery.params),
+        run(ingresosQuery.sql, ingresosQuery.params),
+        run(ajustesQuery.sql, ajustesQuery.params),
       ]);
       const first = (rows) => (Array.isArray(rows) && rows.length ? rows[0] : {});
       const money = (row) => roundMoney(row?.TOTAL ?? row?.total ?? 0);
@@ -498,11 +624,213 @@ function createRepartoFinanceDb2Repository(options = {}) {
       });
     },
 
+    async seedIsolatedTestFinanceFromProduction({ info, ids, dateYmd, force = false } = {}) {
+      const overlay = financeReadOverlay(tables, bindings.runtime);
+      if (!overlay.overlay || !overlay.production) {
+        return Object.freeze({ skipped: true, reason: 'no_overlay' });
+      }
+      if (!force && skipIsolatedTestFinanceSeed()) {
+        return Object.freeze({ skipped: true, reason: 'test' });
+      }
+      if (!Array.isArray(ids) || ids.length === 0 || !Number.isInteger(dateYmd)) {
+        return Object.freeze({ skipped: true, reason: 'invalid_scope' });
+      }
+
+      assertIsolatedTestWriteTable(tables.cobros);
+      assertIsolatedTestWriteTable(tables.balances);
+      assertIsolatedTestWriteTable(tables.expenses);
+      assertIsolatedTestWriteTable(tables.adjustments);
+      assertIsolatedTestWriteTable(tables.bankDeposits);
+
+      const year = Math.trunc(dateYmd / 10000);
+      const month = Math.trunc((dateYmd % 10000) / 100);
+      const day = dateYmd % 100;
+      const copied = {
+        cobros: 0, balances: 0, expenses: 0, adjustments: 0, bankDeposits: 0,
+      };
+
+      try {
+        const dateCol = cobrosDateFilterColumn(info, 'SRC');
+        const notLiquidated = cobrosNotLiquidatedCondition(info, 'SRC');
+        const vendorFilter = inClause(`TRIM(${cobrosCodeColumn(info, 'SRC')})`, ids);
+        const excludeCopied = cobroKeyExcludeSql('SRC', tables.cobros, info);
+        if (info.cobrosAligned && info.cobrosHasDocumentColumns !== false) {
+          const cobroColumns = [
+            'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO',
+            'TIPODOCUMENTO', 'ORIGENDOCUMENTO', 'SUBEMPRESADOCUMENTO', 'EJERCICIODOCUMENTO',
+            'SERIEDOCUMENTO', 'TERMINALDOCUMENTO', 'NUMERODOCUMENTO', 'XDEDOCUMENTO', 'DEXDOCUMENTO',
+            'IMPORTEVENCIMIENTO', 'IMPORTEPENDIENTE', 'CODIGOFORMAPAGO',
+            'DIACOBRO', 'MESCOBRO', 'ANOCOBRO', 'IDEMPOTENCY_TOKEN', 'PANTALLA_ORIGEN', 'OPERADOR',
+            'OBSERVACIONES',
+          ].filter((column) => !info.has || info.has('REPARTIDOR_COBROS', column));
+          if (info.has && info.has('REPARTIDOR_COBROS', 'LIQUIDADO_SN')) {
+            cobroColumns.push('LIQUIDADO_SN');
+          }
+          if (info.has && info.has('REPARTIDOR_COBROS', 'NUMEROLIQUIDACION')) {
+            cobroColumns.push('NUMEROLIQUIDACION');
+          }
+          const cobroSelect = cobroColumns.map((column) => {
+            if (column === 'IDEMPOTENCY_TOKEN') {
+              return `'SEED-' CONCAT TRIM(VARCHAR(SRC.ID))`;
+            }
+            if (column === 'PANTALLA_ORIGEN') return `'SEED_COPY'`;
+            if (column === 'OPERADOR') return `'SYSTEM'`;
+            return `SRC.${column}`;
+          });
+          if (cobroColumns.length > 0) {
+            await run(`
+              INSERT INTO ${tables.cobros} (${cobroColumns.join(', ')})
+              SELECT ${cobroSelect.join(', ')}
+                FROM ${overlay.production.cobros} SRC
+               WHERE ${vendorFilter.sql}
+                 AND ${dateCol} = ?
+                 AND ${notLiquidated}
+                 ${excludeCopied}
+            `, [...vendorFilter.params, dateYmd]);
+            copied.cobros = 1;
+          }
+        }
+
+        const lqdVendor = inClause('TRIM(LQD.CODIGOVENDEDOR)', ids);
+        const lqdDateParams = [...lqdVendor.params, year, month, day];
+        const lqdSplits = [
+          ['EF', 'IMPORTEEFECTIVO'],
+          ['CH', 'IMPORTECHEQUES'],
+          ['TJ', 'IMPORTETARJETA'],
+          ['PD', 'IMPORTEPOSTDATADOS'],
+        ];
+        for (const [forma, column] of lqdSplits) {
+          const token = `'SEED-LQD-${forma}-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd}))`;
+          await run(`
+            INSERT INTO ${tables.cobros} (
+              CODIGOVENDEDOR, CODIGOVENDEDORCOBRO, DIACOBRO, MESCOBRO, ANOCOBRO,
+              IMPORTEVENCIMIENTO, IMPORTEPENDIENTE, CODIGOFORMAPAGO,
+              IDEMPOTENCY_TOKEN, PANTALLA_ORIGEN, OPERADOR, OBSERVACIONES, LIQUIDADO_SN
+            )
+            SELECT TRIM(LQD.CODIGOVENDEDOR), TRIM(LQD.CODIGOVENDEDOR),
+                   LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION,
+                   LQD.${column}, CAST(0 AS DECIMAL(15,2)), '${forma}',
+                   ${token}, 'SEED_LQD', 'SYSTEM', 'ERP DSEDAC.LQD', 'N'
+              FROM ${erpDataSchema}.LQD LQD
+             WHERE ${lqdVendor.sql}
+               AND LQD.ANOLIQUIDACION = ?
+               AND LQD.MESLIQUIDACION = ?
+               AND LQD.DIALIQUIDACION = ?
+               AND LQD.${column} > 0
+               AND NOT EXISTS (
+                 SELECT 1 FROM ${tables.cobros} DST
+                  WHERE DST.IDEMPOTENCY_TOKEN = ${token}
+               )
+          `, lqdDateParams);
+        }
+        copied.cobros = 1;
+
+        const lqdStructVendor = inClause('TRIM(LQD.CODIGOVENDEDOR)', ids);
+        await run(`
+          INSERT INTO ${tables.expenses} (
+            IDEMPOTENCY_TOKEN, CODIGO_REPARTIDOR, DIA, MES, ANO, IMPORTE,
+            CATEGORIA, OBSERVACION, STATUS, ACTOR_ID, ACTOR_ROLE
+          )
+          SELECT 'SEED-LQD-GAS-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd})),
+                 TRIM(LQD.CODIGOVENDEDOR), LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION,
+                 LQD.IMPORTEGASTOS, 'ERP', 'ERP DSEDAC.LQD', 'PENDING', 'SEED', 'SYSTEM'
+            FROM ${erpDataSchema}.LQD LQD
+           WHERE ${lqdStructVendor.sql}
+             AND LQD.ANOLIQUIDACION = ? AND LQD.MESLIQUIDACION = ? AND LQD.DIALIQUIDACION = ?
+             AND LQD.IMPORTEGASTOS > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM ${tables.expenses} DST
+                WHERE DST.IDEMPOTENCY_TOKEN = 'SEED-LQD-GAS-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd}))
+             )
+        `, [...lqdStructVendor.params, year, month, day]);
+        await run(`
+          INSERT INTO ${tables.bankDeposits} (
+            IDEMPOTENCY_TOKEN, CODIGO_REPARTIDOR, DIA, MES, ANO, IMPORTE,
+            REFERENCIA, OBSERVACION, STATUS, ACTOR_ID, ACTOR_ROLE
+          )
+          SELECT 'SEED-LQD-ING-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd})),
+                 TRIM(LQD.CODIGOVENDEDOR), LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION,
+                 LQD.IMPORTEINGRESOENBANCO, 'ERP-LQD', 'ERP DSEDAC.LQD', 'PENDING', 'SEED', 'SYSTEM'
+            FROM ${erpDataSchema}.LQD LQD
+           WHERE ${lqdStructVendor.sql}
+             AND LQD.ANOLIQUIDACION = ? AND LQD.MESLIQUIDACION = ? AND LQD.DIALIQUIDACION = ?
+             AND LQD.IMPORTEINGRESOENBANCO > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM ${tables.bankDeposits} DST
+                WHERE DST.IDEMPOTENCY_TOKEN = 'SEED-LQD-ING-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd}))
+             )
+        `, [...lqdStructVendor.params, year, month, day]);
+        await run(`
+          INSERT INTO ${tables.balances} (CODIGO_REPARTIDOR, SALDO_PENDIENTE)
+          SELECT TRIM(LQD.CODIGOVENDEDOR), LQD.IMPORTESALDOACTUAL
+            FROM ${erpDataSchema}.LQD LQD
+           WHERE ${lqdStructVendor.sql}
+             AND LQD.ANOLIQUIDACION = ? AND LQD.MESLIQUIDACION = ? AND LQD.DIALIQUIDACION = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM ${tables.balances} DST
+                WHERE TRIM(DST.CODIGO_REPARTIDOR) = TRIM(LQD.CODIGOVENDEDOR)
+             )
+        `, [...lqdStructVendor.params, year, month, day]);
+
+        const balanceFilter = inClause(`TRIM(${info.balanceCodeColumn || 'CODIGO_REPARTIDOR'})`, ids);
+        const prodBalanceCode = info.balanceCodeColumn || 'CODIGO_REPARTIDOR';
+        await run(`
+          INSERT INTO ${tables.balances} (CODIGO_REPARTIDOR, SALDO_PENDIENTE)
+          SELECT TRIM(SRC.${prodBalanceCode}), SRC.SALDO_PENDIENTE
+            FROM ${overlay.production.balances} SRC
+           WHERE ${balanceFilter.sql.replace(prodBalanceCode, `SRC.${prodBalanceCode}`)}
+             AND NOT EXISTS (
+               SELECT 1 FROM ${tables.balances} DST
+                WHERE TRIM(DST.CODIGO_REPARTIDOR) = TRIM(SRC.${prodBalanceCode})
+             )
+        `, balanceFilter.params);
+        copied.balances = 1;
+
+        const structuredVendor = inClause('SRC.CODIGO_REPARTIDOR', ids);
+        const copyStructured = async (dest, source, detailColumn) => {
+          assertIsolatedTestWriteTable(dest);
+          await run(`
+            INSERT INTO ${dest} (
+              IDEMPOTENCY_TOKEN, CODIGO_REPARTIDOR, DIA, MES, ANO, IMPORTE,
+              ${detailColumn}, OBSERVACION, STATUS, ACTOR_ID, ACTOR_ROLE
+            )
+            SELECT 'SEED-' CONCAT TRIM(VARCHAR(SRC.ID)), SRC.CODIGO_REPARTIDOR, SRC.DIA, SRC.MES, SRC.ANO,
+                   SRC.IMPORTE, SRC.${detailColumn}, SRC.OBSERVACION, SRC.STATUS, 'SEED', 'SYSTEM'
+              FROM ${source} SRC
+             WHERE ${structuredVendor.sql}
+               AND SRC.DIA = ? AND SRC.MES = ? AND SRC.ANO = ?
+               AND COALESCE(SRC.STATUS, 'PENDING') = 'PENDING'
+               AND NOT EXISTS (
+                 SELECT 1 FROM ${dest} DST
+                  WHERE DST.IDEMPOTENCY_TOKEN = 'SEED-' CONCAT TRIM(VARCHAR(SRC.ID))
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM ${dest} DST
+                  WHERE TRIM(DST.CODIGO_REPARTIDOR) = TRIM(SRC.CODIGO_REPARTIDOR)
+                    AND DST.DIA = SRC.DIA AND DST.MES = SRC.MES AND DST.ANO = SRC.ANO
+                    AND DST.IMPORTE = SRC.IMPORTE
+                    AND COALESCE(DST.${detailColumn}, '') = COALESCE(SRC.${detailColumn}, '')
+               )
+          `, [...structuredVendor.params, day, month, year]);
+        };
+        await copyStructured(tables.expenses, overlay.production.expenses, 'CATEGORIA');
+        copied.expenses = 1;
+        await copyStructured(tables.adjustments, overlay.production.adjustments, 'MOTIVO');
+        copied.adjustments = 1;
+        await copyStructured(tables.bankDeposits, overlay.production.bankDeposits, 'REFERENCIA');
+        copied.bankDeposits = 1;
+        return Object.freeze({ skipped: false, copied });
+      } catch (error) {
+        logger.warn(`[FINANCE_SEED] isolated_test copy skipped: ${String(error?.message || error).slice(0, 180)}`);
+        return Object.freeze({ skipped: true, reason: 'error', copied });
+      }
+    },
+
     async selectDailyCobros({ info, ids, dateYmd }) {
+      const overlay = financeReadOverlay(tables, bindings.runtime);
       const aliasedDateCol = cobrosDateFilterColumn(info, 'RC');
       const selectCols = cobrosDateSelectColumns(info);
       const orderBy = cobrosDateOrderBy(info);
-      const repFilterRc = inClause(`TRIM(${cobrosCodeColumn(info, 'RC')})`, ids);
       const notLiquidatedRc = cobrosNotLiquidatedCondition(info, 'RC');
       const hasDocs = info.cobrosHasDocumentColumns !== false;
       const idToken = info.cobrosHasIdempotencyToken === false
@@ -520,8 +848,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       const clientName = clientJoinCol
         ? "TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE"
         : "CAST(NULL AS VARCHAR(80)) AS NOMBRE_CLIENTE";
-      return run(`
-    SELECT
+      const selectList = `
       RC.ID,
       ${idToken},
       ${selectCols},
@@ -536,14 +863,38 @@ function createRepartoFinanceDb2Repository(options = {}) {
       ${hasDocs ? (info.cobrosAligned ? 'RC.EJERCICIODOCUMENTO' : 'RC.EJERCICIO_DOCUMENTO AS EJERCICIODOCUMENTO') : 'CAST(0 AS INTEGER) AS EJERCICIODOCUMENTO'},
       ${hasDocs ? (info.cobrosAligned ? 'RC.XDEDOCUMENTO' : 'COALESCE(RC.XDE_DOCUMENTO, 1) AS XDEDOCUMENTO') : 'CAST(1 AS INTEGER) AS XDEDOCUMENTO'},
       ${cobrosAmountColumn(info, 'RC')} AS IMPORTEVENCIMIENTO,
-      ${cobrosPendingColumn(info, 'RC')} AS IMPORTEPENDIENTE
-    FROM ${tables.cobros} RC
+      ${cobrosPendingColumn(info, 'RC')} AS IMPORTEPENDIENTE`;
+      const branch = (fromTable, excludeSql = '') => {
+        const repFilterRc = inClause(`TRIM(${cobrosCodeColumn(info, 'RC')})`, ids);
+        return {
+          sql: `SELECT ${selectList}
+    FROM ${fromTable} RC
     ${cliJoin}
     WHERE ${repFilterRc.sql}
       AND ${aliasedDateCol} = ?
       AND ${notLiquidatedRc}
-    ORDER BY ${orderBy}, RC.ID
-  `, [...repFilterRc.params, dateYmd]);
+      ${excludeSql}`,
+          params: [...repFilterRc.params, dateYmd],
+        };
+      };
+      if (!overlay.overlay) {
+        const single = branch(tables.cobros);
+        return run(`${single.sql}
+    ORDER BY ${orderBy}, RC.ID`, single.params);
+      }
+      const prod = branch(
+        overlay.production.cobros,
+        cobroKeyExcludeSql('RC', tables.cobros, info),
+      );
+      const test = branch(tables.cobros);
+      return run(`
+    SELECT * FROM (
+      ${prod.sql}
+      UNION ALL
+      ${test.sql}
+    ) DAILY_COBROS_ROWS
+    ORDER BY ID
+  `, [...prod.params, ...test.params]);
     },
 
     async selectMonthlyCobrosTotals({ info, ids, firstDay, firstDayNextMonth }) {
@@ -1215,4 +1566,6 @@ module.exports = {
   resetRepartoFinanceDb2RepositoryForTests,
   resolveFinanceBindings,
   FinanceRepoSchemaError,
+  skipIsolatedTestFinanceSeed,
+  assertIsolatedTestWriteTable,
 };

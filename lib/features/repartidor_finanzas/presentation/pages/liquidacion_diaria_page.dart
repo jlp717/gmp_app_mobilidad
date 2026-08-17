@@ -127,6 +127,10 @@ class _RepartidorLiquidacionDiariaPageState
       children: [
         _ModernHeader(
           title: 'Liquidacion Diaria',
+          subtitle: LiquidacionPdfBuilder.gmpNumber(
+            widget.repartidorId,
+            _sessionDate,
+          ),
           date: _sessionDate,
           onGeneratePdf: () => _generatePdf(summary, asyncLedger?.valueOrNull),
           onSharePdf: () => _sharePdf(summary, asyncLedger?.valueOrNull),
@@ -762,11 +766,13 @@ class _ModernHeader extends StatelessWidget {
   const _ModernHeader({
     required this.title,
     required this.date,
+    this.subtitle,
     this.onGeneratePdf,
     this.onSharePdf,
   });
 
   final String title;
+  final String? subtitle;
   final DateTime date;
   final VoidCallback? onGeneratePdf;
   final VoidCallback? onSharePdf;
@@ -806,6 +812,15 @@ class _ModernHeader extends StatelessWidget {
                     fontSize: 18,
                   ),
                 ),
+                if (subtitle != null && subtitle!.isNotEmpty)
+                  Text(
+                    subtitle!,
+                    style: const TextStyle(
+                      color: AppColors.info,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
                 Text(
                   DateFormat('EEEE, d MMMM yyyy', 'es_ES').format(date),
                   style: const TextStyle(

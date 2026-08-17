@@ -1,12 +1,16 @@
 'use strict';
 
 const crypto = require('crypto');
-const PDFDocument = require('pdfkit');
 const {
   getRepartoFinanceDb2Repository,
 } = require('../repositories/reparto-finance-db2-repository');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
+const {
+  buildLiquidacionPdfBuffer,
+  formatGmpLiquidacionDisplay,
+  cashToDeposit,
+} = require('./liquidacion-pdf-service');
 const {
   resolveLiquidacionRecipients,
   resolveDayRouteComercialCodes,
@@ -161,6 +165,25 @@ async function getFinanceSchemaInfo() {
 async function getCobrosSchemaInfo() {
   const info = await getFinanceSchemaInfo();
   return info.cobrosHasCollectionDate;
+}
+
+async function ensureIsolatedTestFinanceSeed({
+  info, ids, dateYmd, repartidorId, date,
+} = {}) {
+  if (typeof financeRepo.seedIsolatedTestFinanceFromProduction !== 'function') {
+    return { skipped: true, reason: 'unavailable' };
+  }
+  try {
+    const schema = info || await getFinanceSchemaInfo();
+    const vendorIds = ids || codeList(repartidorId);
+    const compact = dateYmd || compactDate(date);
+    return await financeRepo.seedIsolatedTestFinanceFromProduction({
+      info: schema, ids: vendorIds, dateYmd: compact,
+    });
+  } catch (error) {
+    logger.warn(`[FINANCE_SEED] ${sanitizeErrorMessage(error)}`);
+    return { skipped: true, reason: 'error' };
+  }
 }
 
 function codeList(raw) {
@@ -385,7 +408,13 @@ function mapLiquidacion(row) {
       serie: value(row, 'SERIELIQUIDACION'),
       terminal: toInt(value(row, 'TERMINALLIQUIDACION')),
       numero: toInt(value(row, 'NUMEROLIQUIDACION')),
-      display: `${value(row, 'EJERCICIOLIQUIDACION')}-${value(row, 'SERIELIQUIDACION')}-${pad(value(row, 'TERMINALLIQUIDACION'), 3)}-${pad(value(row, 'NUMEROLIQUIDACION'), 6)}`,
+      display: formatGmpLiquidacionDisplay({
+        year: toInt(value(row, 'EJERCICIOLIQUIDACION'))
+          || toInt(value(row, 'ANOLIQUIDACION')),
+        vendorCode: value(row, 'CODIGOVENDEDOR'),
+        serie: value(row, 'SERIELIQUIDACION') || 'A',
+        numero: toInt(value(row, 'NUMEROLIQUIDACION')),
+      }),
     },
     totals: {
       totalEfectivo: roundMoney(value(row, 'IMPORTEEFECTIVO')),
@@ -823,6 +852,7 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   }
 
   const dateYmd = compactDate(date);
+  await ensureIsolatedTestFinanceSeed({ info, ids, dateYmd });
 
   const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows] =
     await Promise.all([
@@ -847,7 +877,14 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   const totalTarjeta = roundMoney(value(totals, 'TOTAL_TARJETA'));
   const totalPostdatados = roundMoney(value(totals, 'TOTAL_POSTDATADOS'));
   const ajustes = roundMoney(structured.ajustes);
-  const totalAIngresar = roundMoney(saldoActual + totalCobrosDia - gastos + ajustes);
+  const totalAIngresar = cashToDeposit({
+    totalEfectivo,
+    totalCheques,
+    totalPostdatados,
+    saldoActual,
+    gastos,
+    ajustes,
+  });
   const cobrosCount = toInt(value(totals, 'COBROS_COUNT'));
 
   // camelCase = contrato Flutter actual; UPPER = alias legacy APK/parsers.
@@ -1417,87 +1454,10 @@ async function deleteTestData() {
 function simplePdfBuffer(title, lines) {
   return buildLiquidacionPdfBuffer({
     title,
+    displayNumber: title,
     repartidorLabel: lines[0] || '',
+    cobros: [],
     totals: null,
-    detailLines: lines.slice(1),
-  });
-}
-
-function buildLiquidacionPdfBuffer({
-  title,
-  repartidorLabel,
-  dateLabel,
-  totals,
-  detailLines = [],
-}) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    const chunks = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-
-    const headerColor = '#003d7a';
-    const pageWidth = doc.page.width;
-
-    doc.rect(0, 0, pageWidth, 72).fill(headerColor);
-    doc.fillColor('#FFFFFF').fontSize(18).text(title || 'Liquidacion Diaria', 40, 24, {
-      width: pageWidth - 80,
-      align: 'left',
-    });
-    doc.fontSize(10).fillColor('#DCEBFA').text('Granja Mari Pepa', 40, 48);
-
-    let y = 96;
-    doc.fillColor('#111827').fontSize(11);
-    if (repartidorLabel) {
-      doc.text(repartidorLabel, 40, y);
-      y += 18;
-    }
-    if (dateLabel) {
-      doc.fillColor('#6B7280').fontSize(10).text(dateLabel, 40, y);
-      y += 22;
-    }
-
-    if (totals) {
-      const cards = [
-        { label: 'Total efectivo', value: totals.totalEfectivo },
-        { label: 'Total a ingresar', value: totals.totalAIngresar },
-        { label: 'Ingreso banco', value: totals.ingresoBanco },
-        { label: 'Diferencia', value: totals.diff },
-      ];
-      const cardWidth = (pageWidth - 80 - 24) / 4;
-      cards.forEach((card, index) => {
-        const x = 40 + index * (cardWidth + 8);
-        doc.roundedRect(x, y, cardWidth, 52, 6).fillAndStroke('#F3F8FC', '#B7C3D0');
-        doc.fillColor('#6B7280').fontSize(8).text(card.label, x + 8, y + 8, { width: cardWidth - 16 });
-        const amount = Number(card.value);
-        const amountText = `${(Number.isFinite(amount) ? amount : 0).toFixed(2)} EUR`;
-        const amountColor = card.label === 'Diferencia' && amount !== 0 ? '#B91C1C' : '#003d7a';
-        doc.fillColor(amountColor).fontSize(11).text(amountText, x + 8, y + 26, { width: cardWidth - 16 });
-      });
-      y += 70;
-    }
-
-    doc.fillColor('#003d7a').fontSize(12).text('Detalle de cobros', 40, y);
-    y += 18;
-    doc.moveTo(40, y).lineTo(pageWidth - 40, y).strokeColor('#B7C3D0').stroke();
-    y += 10;
-
-    doc.fillColor('#111827').fontSize(9);
-    if (!detailLines.length) {
-      doc.fillColor('#6B7280').text('Sin cobros en el periodo.', 40, y);
-    } else {
-      for (const line of detailLines) {
-        if (y > doc.page.height - 60) {
-          doc.addPage();
-          y = 48;
-        }
-        doc.fillColor('#111827').text(String(line), 40, y, { width: pageWidth - 80 });
-        y += 14;
-      }
-    }
-
-    doc.end();
   });
 }
 
@@ -1541,13 +1501,31 @@ async function sendLiquidacionEmails({
     throw new LiquidacionEmailRecipientRequiredError();
   }
 
-  const displayNumber = liquidacion.numero?.display
-    || liquidacion.numero
-    || liquidacion.id
-    || '';
-  const subject = `Liquidacion Diaria - GMP ${displayNumber}`;
+  const numero = liquidacion.numero && typeof liquidacion.numero === 'object'
+    ? liquidacion.numero
+    : {};
+  const gmpNumber = formatGmpLiquidacionDisplay({
+    year: numero.ejercicio || (liquidacion.date ? Number(String(liquidacion.date).slice(0, 4)) : 0),
+    vendorCode: repartidorId,
+    serie: numero.serie || 'A',
+    numero: numero.numero || numero.value || liquidacion.id,
+  });
+  const displayNumber = numero.display && String(numero.display).startsWith('GMP ')
+    ? numero.display
+    : gmpNumber;
+  const subject = `Liquidación Diaria - ${displayNumber}`;
   const totals = {
     totalEfectivo: roundMoney(liquidacion.totals?.totalEfectivo),
+    totalCheques: roundMoney(liquidacion.totals?.totalCheques),
+    totalTarjeta: roundMoney(liquidacion.totals?.totalTarjeta),
+    totalPostdatados: roundMoney(liquidacion.totals?.totalPostdatados),
+    totalCobrosDia: roundMoney(liquidacion.totals?.totalCobrosDia
+      ?? liquidacion.totals?.payments),
+    saldoActual: roundMoney(liquidacion.totals?.saldoActual
+      ?? liquidacion.totals?.saldoAnterior
+      ?? liquidacion.snapshot?.openingBalance),
+    gastos: roundMoney(liquidacion.totals?.gastos ?? liquidacion.totals?.expenses),
+    ajustes: roundMoney(liquidacion.totals?.ajustes ?? liquidacion.totals?.adjustments),
     totalAIngresar: roundMoney(liquidacion.totals?.totalAIngresar),
     ingresoBanco: roundMoney(liquidacion.totals?.ingresoBanco),
     diff: roundMoney(
@@ -1555,25 +1533,38 @@ async function sendLiquidacionEmails({
         ?? (roundMoney(liquidacion.totals?.totalAIngresar) - roundMoney(liquidacion.totals?.ingresoBanco)),
     ),
   };
-  const detailLines = (cobros || []).map((c) => (
-    `${c.fecha || ''} ${c.codigoCliente || ''} ${c.nombreCliente || ''} ${c.documento || ''} ${Number(c.importe || 0).toFixed(2)}`
-  ));
+  const cobroRows = (cobros || []).map((c) => ({
+    fecha: c.fecha || liquidacion.date || '',
+    codigoCliente: c.codigoCliente || '',
+    nombreCliente: c.nombreCliente || '',
+    tipoCobro: c.tipoCobro || c.paymentMethod || '',
+    tipoDocumento: c.tipoDocumento || '',
+    documento: c.documento || c.id || '',
+    importe: Number(c.importe || c.amount || 0),
+  }));
   const textLines = [
     `Vendedor: ${repartidorId} ${repartidorName || ''}`.trim(),
+    `Usuario: ${repartidorId} ${repartidorName || ''}`.trim(),
     `Fecha: ${liquidacion.date || ''}`,
+    `Número: ${displayNumber}`,
     `Total Efectivo: ${totals.totalEfectivo.toFixed(2)} EUR`,
+    `Total Tarjeta: ${totals.totalTarjeta.toFixed(2)} EUR`,
     `Total a Ingresar: ${totals.totalAIngresar.toFixed(2)} EUR`,
     `Ingreso en Banco: ${totals.ingresoBanco.toFixed(2)} EUR`,
     `Diferencia: ${totals.diff.toFixed(2)} EUR`,
-    ...detailLines,
+    ...cobroRows.map((c) => (
+      `${c.fecha || ''} ${c.codigoCliente || ''} ${c.nombreCliente || ''} ${c.tipoCobro || ''} ${c.documento || ''} ${Number(c.importe || 0).toFixed(2)}`
+    )),
   ];
 
   const pdfBuffer = await buildLiquidacionPdfBuffer({
     title: subject,
-    repartidorLabel: `Vendedor: ${repartidorId} ${repartidorName || ''}`.trim(),
-    dateLabel: liquidacion.date ? `Fecha liquidacion: ${liquidacion.date}` : '',
+    displayNumber,
+    repartidorId,
+    repartidorName,
+    dateLabel: liquidacion.date || '',
     totals,
-    detailLines,
+    cobros: cobroRows,
   });
 
   const results = [];
@@ -1588,9 +1579,10 @@ async function sendLiquidacionEmails({
               <h1 style="margin:0;color:#fff;font-size:20px;">${subject}</h1>
             </div>
             <div style="background:#f8f9fa;padding:20px;border-radius:0 0 12px 12px;">
-              <p style="color:#333;font-size:14px;">Adjunto PDF de liquidacion diaria.</p>
+              <p style="color:#333;font-size:14px;">Adjunto PDF de liquidación diaria (${displayNumber}).</p>
               <ul style="color:#555;font-size:13px;">
                 <li>Efectivo: ${totals.totalEfectivo.toFixed(2)} EUR</li>
+                <li>Tarjeta: ${totals.totalTarjeta.toFixed(2)} EUR</li>
                 <li>A ingresar: ${totals.totalAIngresar.toFixed(2)} EUR</li>
                 <li>Banco: ${totals.ingresoBanco.toFixed(2)} EUR</li>
                 <li>Diff: ${totals.diff.toFixed(2)} EUR</li>
@@ -1771,6 +1763,7 @@ module.exports = {
   INTERNAL_LIQUIDATION_RECIPIENTS,
   findLiquidacionByToken,
   getDailySummary,
+  ensureIsolatedTestFinanceSeed,
   getSummary,
   getVencimientos,
   getDetalleVencimiento,
@@ -1787,6 +1780,8 @@ module.exports = {
   calculateCommission,
   deleteTestData,
   sendLiquidacionEmails,
+  formatGmpLiquidacionDisplay,
+  cashToDeposit,
   // Error classes (Req #16: facilita catch tipado en routes)
   AlreadyDeliveredError,
   IdempotencyConflictError,

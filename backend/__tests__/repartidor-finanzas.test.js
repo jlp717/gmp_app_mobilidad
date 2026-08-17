@@ -234,7 +234,7 @@ describe('Repartidor finanzas routes', () => {
     expect(sqlText).toContain('CODIGO_REPARTIDOR');
     // First call is schema detection, second is the totals query
     const totalsCall = mockQueryWithParams.mock.calls.find(c => c[1] && c[1][0] === '94');
-    expect(totalsCall[1]).toEqual(['94', 20260423]);
+    expect(totalsCall[1]).toEqual(['94', 20260423, '94', 20260423]);
   });
 
   test('GET /daily-summary includes signed adjustments in totalAIngresar', async () => {
@@ -402,13 +402,15 @@ describe('Repartidor finanzas routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.repartidorId).toBe('94,95');
     expect(res.body.summary.totalCobrosDia).toBe(350);
-    expect(res.body.summary.totalAIngresar).toBe(375);
+    expect(res.body.summary.totalAIngresar).toBe(325);
 
     const totalsCall = mockQueryWithParams.mock.calls.find(([sql]) =>
       /SUM\(CASE WHEN UPPER\(TRIM\(CODIGOFORMAPAGO\)\)/i.test(sql)
     );
     expect(totalsCall[0]).toContain('TRIM(CODIGOVENDEDOR) IN (?, ?)');
-    expect(totalsCall[1]).toEqual(['94', '95', 20260423]);
+    expect(totalsCall[0]).toContain('JAVIER.REPARTIDOR_COBROS');
+    expect(totalsCall[0]).toContain('JAVIER.TEST_REPARTIDOR_COBROS');
+    expect(totalsCall[1]).toEqual(['94', '95', 20260423, '94', '95', 20260423]);
   });
 
   test('GET /daily-summary blocks repartidor access to another repartidor', async () => {
