@@ -246,7 +246,7 @@ InputDecoration ruteroErrorInputDecoration({
   );
 }
 
-class RuteroErrorSpotlight extends StatelessWidget {
+class RuteroErrorSpotlight extends StatefulWidget {
   const RuteroErrorSpotlight({
     required this.active,
     required this.child,
@@ -259,42 +259,95 @@ class RuteroErrorSpotlight extends StatelessWidget {
   final Widget child;
 
   @override
+  State<RuteroErrorSpotlight> createState() => _RuteroErrorSpotlightState();
+}
+
+class _RuteroErrorSpotlightState extends State<RuteroErrorSpotlight>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    if (widget.active) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(RuteroErrorSpotlight oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.active && _pulse.isAnimating) {
+      _pulse
+        ..stop()
+        ..reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      padding: active ? const EdgeInsets.all(8) : EdgeInsets.zero,
-      decoration: BoxDecoration(
-        color: active ? AppTheme.error.withValues(alpha: 0.16) : null,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: active
-            ? Border.all(color: AppTheme.error, width: 2.5)
-            : Border.all(color: Colors.transparent, width: 0),
-        boxShadow: active
-            ? [
-                BoxShadow(
-                  color: AppTheme.error.withValues(alpha: 0.45),
-                  blurRadius: 18,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final t = widget.active && !reduceMotion ? _pulse.value : 0.0;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: widget.active ? const EdgeInsets.all(10) : EdgeInsets.zero,
+          decoration: BoxDecoration(
+            color: widget.active
+                ? AppTheme.error.withValues(alpha: 0.18 + (0.10 * t))
+                : null,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: widget.active
+                ? Border.all(
+                    color: AppTheme.error,
+                    width: 2.5 + (1.5 * t),
+                  )
+                : Border.all(color: Colors.transparent, width: 0),
+            boxShadow: widget.active
+                ? [
+                    BoxShadow(
+                      color:
+                          AppTheme.error.withValues(alpha: 0.38 + (0.28 * t)),
+                      blurRadius: 16 + (10 * t),
+                      spreadRadius: 1 + t,
+                    ),
+                  ]
+                : null,
+          ),
+          child: child,
+        );
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (message != null && message!.isNotEmpty) ...[
+          if (widget.message != null && widget.message!.isNotEmpty) ...[
             Text(
-              message!,
+              widget.message!,
               style: const TextStyle(
                 color: AppTheme.error,
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
                 height: 1.25,
               ),
             ),
             const SizedBox(height: 8),
           ],
-          child,
+          widget.child,
         ],
       ),
     );

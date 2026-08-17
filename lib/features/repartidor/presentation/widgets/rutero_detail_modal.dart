@@ -168,6 +168,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final FocusNode _nombreFocusNode = FocusNode();
   final FocusNode _apellidosFocusNode = FocusNode();
   final FocusNode _dniFocusNode = FocusNode();
+  final FocusNode _observacionesFocusNode = FocusNode();
   final _nombreFieldKey = GlobalKey();
   final _apellidosFieldKey = GlobalKey();
   final _dniFieldKey = GlobalKey();
@@ -459,6 +460,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _nombreFocusNode.dispose();
     _apellidosFocusNode.dispose();
     _dniFocusNode.dispose();
+    _observacionesFocusNode.dispose();
     _finalizeScrollController.dispose();
     _signatureController.dispose();
     super.dispose();
@@ -578,16 +580,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildProductsTab() {
+    final productsBanner = _productsStatusError ??
+        (_validationIssues.any((issue) => issue.field == 'items')
+            ? _itemsError
+            : null);
     return Column(
       children: [
-        if (_productsStatusError != null)
+        if (productsBanner != null)
           Padding(
             key: _productsErrorKey,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: RuteroErrorSpotlight(
               active: _spotlightField == 'productsStatus' ||
                   _spotlightField == 'items',
-              message: _productsStatusError,
+              message: productsBanner,
               child: const SizedBox.shrink(),
             ),
           ),
@@ -726,7 +732,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     return SingleChildScrollView(
       controller: _finalizeScrollController,
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        28 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -769,6 +780,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             message: _observacionesError,
             child: TextField(
               controller: _observacionesController,
+              focusNode: _observacionesFocusNode,
               maxLines: 3,
               onChanged: (_) {
                 if (_observacionesError != null) {
@@ -1092,7 +1104,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
             ],
           ),
-          const SizedBox(height: 16),
           const SizedBox(height: 16),
           RuteroErrorSpotlight(
             key: _nombreFieldKey,
@@ -1789,17 +1800,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     setState(() => _spotlightField = issue.field);
     if (_tabController.index != issue.tabIndex) {
       _tabController.animateTo(issue.tabIndex);
-      await Future<void>.delayed(const Duration(milliseconds: 16));
     }
-    while (mounted && _tabController.indexIsChanging) {
-      await WidgetsBinding.instance.endOfFrame;
-    }
-    if (!mounted) return;
-    setState(() {});
-    for (var attempt = 0; attempt < 12; attempt++) {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
+    final deadline = DateTime.now().add(const Duration(milliseconds: 900));
+    while (mounted && DateTime.now().isBefore(deadline)) {
       if (_tabController.index == issue.tabIndex &&
+          !_tabController.indexIsChanging &&
           _keyForField(issue.field)?.currentContext != null) {
         break;
       }
@@ -1808,19 +1813,25 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (!mounted) return;
     _ensureFieldVisible(issue.field);
     _requestFieldFocus(issue.field);
+    await Future<void>.delayed(const Duration(milliseconds: 360));
+    if (!mounted) return;
+    _ensureFieldVisible(issue.field);
   }
 
   void _requestFieldFocus(String field) {
-    if (field == 'nombre') {
-      _nombreFocusNode.requestFocus();
-      return;
-    }
-    if (field == 'apellidos') {
-      _apellidosFocusNode.requestFocus();
-      return;
-    }
-    if (field == 'dni') {
-      _dniFocusNode.requestFocus();
+    switch (field) {
+      case 'nombre':
+        _nombreFocusNode.requestFocus();
+        return;
+      case 'apellidos':
+        _apellidosFocusNode.requestFocus();
+        return;
+      case 'dni':
+        _dniFocusNode.requestFocus();
+        return;
+      case 'observaciones':
+        _observacionesFocusNode.requestFocus();
+        return;
     }
   }
 
