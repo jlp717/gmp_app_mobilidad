@@ -4,6 +4,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_tab_bar.dart';
 import 'package:intl/intl.dart';
 
 class RuteroDetailPayment extends StatelessWidget {
@@ -18,6 +19,7 @@ class RuteroDetailPayment extends StatelessWidget {
     required this.onPaidChanged,
     required this.onContinueToFinalize,
     required this.getPaymentTypeLabel,
+    this.importeFieldKey,
     super.key,
   });
 
@@ -31,6 +33,7 @@ class RuteroDetailPayment extends StatelessWidget {
   final VoidCallback onPaidChanged;
   final VoidCallback onContinueToFinalize;
   final String Function() getPaymentTypeLabel;
+  final Key? importeFieldKey;
 
   bool get _isUrgent => albaran.esCTR;
 
@@ -41,6 +44,12 @@ class RuteroDetailPayment extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (pagoError != null || importeCobradoError != null) ...[
+            _buildPaymentError(
+              pagoError ?? importeCobradoError ?? '',
+            ),
+            const SizedBox(height: 16),
+          ],
           _buildAmountCard(context),
           const SizedBox(height: 24),
           _buildPaymentMethodSelector(),
@@ -49,10 +58,6 @@ class RuteroDetailPayment extends StatelessWidget {
           if (isPaid) ...[
             const SizedBox(height: 16),
             _buildCollectedAmountField(),
-          ],
-          if (pagoError != null) ...[
-            const SizedBox(height: 8),
-            _buildPaymentError(),
           ],
           const SizedBox(height: 24),
           _buildContinueButton(),
@@ -274,6 +279,7 @@ class RuteroDetailPayment extends StatelessWidget {
 
   Widget _buildCollectedAmountField() {
     return TextField(
+      key: importeFieldKey,
       controller: importeCobradoController,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -283,52 +289,39 @@ class RuteroDetailPayment extends StatelessWidget {
         color: AppTheme.textPrimary,
         fontWeight: FontWeight.bold,
       ),
-      decoration: InputDecoration(
-        labelText: 'Importe cobrado',
+      decoration: ruteroErrorInputDecoration(
+        label: 'Importe cobrado',
         suffixText: 'EUR',
         errorText: importeCobradoError,
-        filled: true,
-        fillColor: AppTheme.softPanel,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.info),
-        ),
       ),
     );
   }
 
-  Widget _buildPaymentError() {
+  Widget _buildPaymentError(String message) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.error.withValues(alpha: 0.1),
+        color: AppTheme.error.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withValues(alpha: 0.5)),
+        border: Border.all(color: AppTheme.error, width: 1.6),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.warning_amber_rounded,
             color: AppTheme.error,
-            size: 20,
+            size: 22,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              pagoError!,
+              message,
               style: const TextStyle(
                 color: AppTheme.error,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                height: 1.3,
               ),
             ),
           ),

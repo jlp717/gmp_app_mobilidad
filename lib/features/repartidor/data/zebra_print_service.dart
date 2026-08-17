@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -8,6 +9,48 @@ import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+enum PrinterFailureCode {
+  noAddress,
+  permissionsDenied,
+  bluetoothOff,
+  timeout,
+  payloadTooLarge,
+  missingPayload,
+  sendFailed,
+}
+
+class PrinterJobResult {
+  const PrinterJobResult.success()
+      : ok = true,
+        failure = null;
+
+  const PrinterJobResult.fail(this.failure) : ok = false;
+
+  final bool ok;
+  final PrinterFailureCode? failure;
+
+  String get message {
+    switch (failure) {
+      case PrinterFailureCode.noAddress:
+        return 'No hay impresora seleccionada. Elige una en Bluetooth.';
+      case PrinterFailureCode.permissionsDenied:
+        return 'Faltan permisos de Bluetooth. Actívalos en Ajustes.';
+      case PrinterFailureCode.bluetoothOff:
+        return 'Bluetooth está apagado. Enciéndelo e inténtalo de nuevo.';
+      case PrinterFailureCode.timeout:
+        return 'La impresora no responde. Comprueba que está encendida, cerca y vinculada.';
+      case PrinterFailureCode.payloadTooLarge:
+        return 'El ticket es demasiado grande para la impresora.';
+      case PrinterFailureCode.missingPayload:
+        return 'No se pudo generar el ticket.';
+      case PrinterFailureCode.sendFailed:
+        return 'No se pudo enviar el ticket. Revisa que la impresora esté vinculada y con papel.';
+      case null:
+        return 'Ticket enviado a la impresora.';
+    }
+  }
+}
 
 /// Bluetooth ticket printer for repartidor deliveries.
 ///
@@ -118,26 +161,34 @@ class ZebraPrintService {
     }
   }
 
+  static Future<void> _safeDisconnect(String address) async {
+    try {
+      await FlutterBluetoothPrinter.disconnect(address)
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {}
+  }
+
   /// Test connection to the saved (or given) printer.
   /// Returns true if the printer is reachable via BT.
-  /// Includes a 12s timeout to prevent indefinite hangs.
+  /// Includes a hard timeout so the rutero sheet cannot freeze.
   static Future<bool> testConnection({String? address}) async {
+    String? addr;
     try {
-      final addr = address ?? await getSavedPrinterAddress();
-      if (addr == null) return false;
+      addr = address ?? await getSavedPrinterAddress();
+      if (addr == null || addr.isEmpty) return false;
 
       final granted = await requestBluetoothPermissions();
       if (!granted) return false;
 
-      final connected = await FlutterBluetoothPrinter.connect(addr)
-          .timeout(const Duration(seconds: 12), onTimeout: () => false);
-      if (connected) {
-        await FlutterBluetoothPrinter.disconnect(addr);
-      }
-      return connected;
+      return await FlutterBluetoothPrinter.connect(addr)
+          .timeout(const Duration(seconds: 10), onTimeout: () => false);
     } catch (_) {
       debugPrint('[ZEBRA] Connection test failed');
       return false;
+    } finally {
+      if (addr != null && addr.isNotEmpty) {
+        await _safeDisconnect(addr);
+      }
     }
   }
 
@@ -190,53 +241,60 @@ class ZebraPrintService {
     int maxHeight = 100,
   }) async {
     try {
-      final codec = await ui.instantiateImageCodec(pngBytes);
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
+      return await () async {
+        final codec = await ui.instantiateImageCodec(
+          pngBytes,
+          targetWidth: maxWidth,
+          targetHeight: maxHeight,
+        );
+        final frame = await codec.getNextFrame();
+        final image = frame.image;
 
-      final byteData = await image.toByteData();
-      if (byteData == null) return null;
+        final byteData = await image.toByteData();
+        if (byteData == null) return null;
 
-      final pixels = byteData.buffer.asUint8List();
-      final srcW = image.width;
-      final srcH = image.height;
+        final pixels = byteData.buffer.asUint8List();
+        final srcW = image.width;
+        final srcH = image.height;
 
-      // Scale to fit within maxWidth x maxHeight
-      final scaleX = srcW > maxWidth ? maxWidth / srcW : 1.0;
-      final scaleY = srcH > maxHeight ? maxHeight / srcH : 1.0;
-      final scale = scaleX < scaleY ? scaleX : scaleY;
-      final outW = (srcW * scale).toInt();
-      final outH = (srcH * scale).toInt();
+        // Scale to fit within maxWidth x maxHeight
+        final scaleX = srcW > maxWidth ? maxWidth / srcW : 1.0;
+        final scaleY = srcH > maxHeight ? maxHeight / srcH : 1.0;
+        final scale = scaleX < scaleY ? scaleX : scaleY;
+        final outW = (srcW * scale).toInt();
+        final outH = (srcH * scale).toInt();
 
-      final bytesPerRow = (outW + 7) ~/ 8;
-      final totalBytes = bytesPerRow * outH;
-      final hex = StringBuffer();
+        final bytesPerRow = (outW + 7) ~/ 8;
+        final totalBytes = bytesPerRow * outH;
+        final hex = StringBuffer();
 
-      for (var row = 0; row < outH; row++) {
-        for (var col = 0; col < bytesPerRow; col++) {
-          var byte = 0;
-          for (var bit = 0; bit < 8; bit++) {
-            final x = col * 8 + bit;
-            if (x < outW) {
-              final srcX = (x / scale).round().clamp(0, srcW - 1);
-              final srcY = (row / scale).round().clamp(0, srcH - 1);
-              final pixelIdx = (srcY * srcW + srcX) * 4;
-              final r = pixels[pixelIdx];
-              final g = pixels[pixelIdx + 1];
-              final b = pixels[pixelIdx + 2];
-              // Luminance < 128 = black (ink on paper)
-              if ((r * 299 + g * 587 + b * 114) ~/ 1000 < 128) {
-                byte |= 0x80 >> bit;
+        for (var row = 0; row < outH; row++) {
+          for (var col = 0; col < bytesPerRow; col++) {
+            var byte = 0;
+            for (var bit = 0; bit < 8; bit++) {
+              final x = col * 8 + bit;
+              if (x < outW) {
+                final srcX = (x / scale).round().clamp(0, srcW - 1);
+                final srcY = (row / scale).round().clamp(0, srcH - 1);
+                final pixelIdx = (srcY * srcW + srcX) * 4;
+                final r = pixels[pixelIdx];
+                final g = pixels[pixelIdx + 1];
+                final b = pixels[pixelIdx + 2];
+                // Luminance < 128 = black (ink on paper)
+                if ((r * 299 + g * 587 + b * 114) ~/ 1000 < 128) {
+                  byte |= 0x80 >> bit;
+                }
               }
             }
+            hex.write(byte.toRadixString(16).padLeft(2, '0').toUpperCase());
           }
-          hex.write(byte.toRadixString(16).padLeft(2, '0').toUpperCase());
         }
-      }
 
-      return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,$hex';
+        return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,$hex';
+      }()
+          .timeout(const Duration(seconds: 4));
     } catch (_) {
-      debugPrint('[ZEBRA] GRF conversion failed');
+      debugPrint('[ZEBRA] GRF conversion failed or timed out');
       return null;
     }
   }
@@ -582,62 +640,82 @@ class ZebraPrintService {
 
   // -- Print execution --
 
-  /// Sends raw ZPL to the saved (or given) printer.
-  /// Returns true on success, false on failure.
-  /// Retries once on failure with a 2s backoff.
-  static Future<bool> printZpl(
-    String zplData, {
+  static const Duration _printAttemptTimeout = Duration(seconds: 12);
+
+  static Future<PrinterJobResult> _sendBytes(
+    Uint8List bytes, {
     String? address,
   }) async {
+    String? addr;
     try {
-      // DoS prevention: reject oversized payloads
-      final payloadBytes = utf8.encode(zplData).length;
-      if (payloadBytes > _maxZplPayloadBytes) {
-        debugPrint(
-          '[ZEBRA] ZPL payload too large: $payloadBytes bytes '
-          '(max $_maxZplPayloadBytes)',
-        );
-        return false;
-      }
-
-      final addr = address ?? await getSavedPrinterAddress();
-      if (addr == null) {
-        debugPrint('[ZEBRA] No printer address configured');
-        return false;
+      addr = address ?? await getSavedPrinterAddress();
+      if (addr == null || addr.isEmpty) {
+        return const PrinterJobResult.fail(PrinterFailureCode.noAddress);
       }
 
       final granted = await requestBluetoothPermissions();
-      if (!granted) return false;
-
-      final bytes = Uint8List.fromList(utf8.encode(zplData));
-
-      // Attempt with 1 automatic retry on failure
-      for (var attempt = 0; attempt < 2; attempt++) {
-        try {
-          final ok = await FlutterBluetoothPrinter.printBytes(
-            address: addr,
-            data: bytes,
-            keepConnected: false,
-          ).timeout(const Duration(seconds: 15), onTimeout: () => false);
-
-          debugPrint('[ZEBRA] Print attempt ${attempt + 1}: $ok');
-          if (ok) return true;
-        } catch (_) {
-          debugPrint('[ZEBRA] Print attempt ${attempt + 1} failed');
-        }
-        if (attempt == 0) {
-          await Future<void>.delayed(const Duration(seconds: 2));
-        }
+      if (!granted) {
+        return const PrinterJobResult.fail(
+          PrinterFailureCode.permissionsDenied,
+        );
       }
-      return false;
+
+      final btOn = await isBluetoothEnabled()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      if (!btOn) {
+        return const PrinterJobResult.fail(PrinterFailureCode.bluetoothOff);
+      }
+
+      var timedOut = false;
+      final ok = await FlutterBluetoothPrinter.printBytes(
+        address: addr,
+        data: bytes,
+        keepConnected: false,
+      ).timeout(_printAttemptTimeout, onTimeout: () {
+        timedOut = true;
+        return false;
+      });
+      debugPrint('[ZEBRA] Print result ok=$ok timedOut=$timedOut');
+      if (ok) return const PrinterJobResult.success();
+      return PrinterJobResult.fail(
+        timedOut ? PrinterFailureCode.timeout : PrinterFailureCode.sendFailed,
+      );
+    } on TimeoutException {
+      return const PrinterJobResult.fail(PrinterFailureCode.timeout);
     } catch (_) {
       debugPrint('[ZEBRA] Print failed');
-      return false;
+      return const PrinterJobResult.fail(PrinterFailureCode.sendFailed);
+    } finally {
+      if (addr != null && addr.isNotEmpty) {
+        await _safeDisconnect(addr);
+      }
     }
   }
 
+  /// Sends raw ZPL to the saved (or given) printer.
+  static Future<PrinterJobResult> printZpl(
+    String zplData, {
+    String? address,
+  }) async {
+    final payloadBytes = utf8.encode(zplData).length;
+    if (payloadBytes > _maxZplPayloadBytes) {
+      debugPrint(
+        '[ZEBRA] ZPL payload too large: $payloadBytes bytes '
+        '(max $_maxZplPayloadBytes)',
+      );
+      return const PrinterJobResult.fail(PrinterFailureCode.payloadTooLarge);
+    }
+    if (zplData.trim().isEmpty) {
+      return const PrinterJobResult.fail(PrinterFailureCode.missingPayload);
+    }
+    return _sendBytes(
+      Uint8List.fromList(utf8.encode(zplData)),
+      address: address,
+    );
+  }
+
   /// Print ticket using saved protocol (`zpl` | `escpos`).
-  static Future<bool> printTicket({
+  static Future<PrinterJobResult> printTicket({
     String? zpl,
     Uint8List? escPosBytes,
     String? address,
@@ -646,45 +724,14 @@ class ZebraPrintService {
     if (protocol == 'escpos') {
       if (escPosBytes == null || escPosBytes.isEmpty) {
         debugPrint('[ZEBRA] ESC/POS bytes missing');
-        return false;
+        return const PrinterJobResult.fail(PrinterFailureCode.missingPayload);
       }
-      try {
-        final addr = address ?? await getSavedPrinterAddress();
-        if (addr == null) {
-          debugPrint('[ZEBRA] No printer address configured');
-          return false;
-        }
-
-        final granted = await requestBluetoothPermissions();
-        if (!granted) return false;
-
-        for (var attempt = 0; attempt < 2; attempt++) {
-          try {
-            final ok = await FlutterBluetoothPrinter.printBytes(
-              address: addr,
-              data: escPosBytes,
-              keepConnected: false,
-            ).timeout(const Duration(seconds: 15), onTimeout: () => false);
-
-            debugPrint('[ZEBRA] ESC/POS attempt ${attempt + 1}: $ok');
-            if (ok) return true;
-          } catch (_) {
-            debugPrint('[ZEBRA] ESC/POS attempt ${attempt + 1} failed');
-          }
-          if (attempt == 0) {
-            await Future<void>.delayed(const Duration(seconds: 2));
-          }
-        }
-        return false;
-      } catch (_) {
-        debugPrint('[ZEBRA] ESC/POS print failed');
-        return false;
-      }
+      return _sendBytes(escPosBytes, address: address);
     }
 
     if (zpl == null || zpl.isEmpty) {
       debugPrint('[ZEBRA] ZPL payload missing');
-      return false;
+      return const PrinterJobResult.fail(PrinterFailureCode.missingPayload);
     }
     return printZpl(zpl, address: address);
   }

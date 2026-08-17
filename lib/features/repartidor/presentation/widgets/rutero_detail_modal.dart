@@ -26,6 +26,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_upload_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_operation_safety.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
@@ -36,28 +37,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
 
 import 'rutero_detail_completed.dart';
-import 'rutero_detail_finalize.dart';
 import 'rutero_detail_header.dart';
 import 'rutero_detail_payment.dart';
 import 'rutero_detail_products.dart';
-import 'rutero_detail_signature.dart';
 import 'rutero_detail_tab_bar.dart';
+import 'rutero_print_preview_dialog.dart';
 import 'rutero_printer_config.dart';
-
-bool _isValidDniNie(String value) {
-  final cleaned = value.trim().toUpperCase();
-  final regex = RegExp(r'^([XYZ]\d{7}|\d{8})[A-Z]$');
-  if (!regex.hasMatch(cleaned)) return false;
-  const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
-  var numStr = cleaned.substring(0, cleaned.length - 1);
-  numStr = numStr
-      .replaceFirst('X', '0')
-      .replaceFirst('Y', '1')
-      .replaceFirst('Z', '2');
-  final num = int.tryParse(numStr);
-  if (num == null) return false;
-  return cleaned[cleaned.length - 1] == letters[num % 23];
-}
 
 enum RepartoConfirmationErrorDisposition {
   alreadyConfirmed,
@@ -181,7 +166,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final TextEditingController _importeCobradoController =
       TextEditingController();
   final FocusNode _nombreFocusNode = FocusNode();
+  final FocusNode _apellidosFocusNode = FocusNode();
   final FocusNode _dniFocusNode = FocusNode();
+  final _nombreFieldKey = GlobalKey();
+  final _apellidosFieldKey = GlobalKey();
+  final _dniFieldKey = GlobalKey();
+  final _observacionesFieldKey = GlobalKey();
+  final _firmaFieldKey = GlobalKey();
+  final _importeFieldKey = GlobalKey();
+  final _finalizeScrollController = ScrollController();
 
   final SignatureController _signatureController = SignatureController(
     exportBackgroundColor: Colors.white,
@@ -226,6 +219,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String? _pagoError;
   String? _importeCobradoError;
   String? _observacionesError;
+  String? _productsStatusError;
+  List<RuteroFieldIssue> _validationIssues = const [];
 
   String? _cachedPdfBase64;
 
@@ -457,7 +452,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _incidenciaMotivoController.dispose();
     _importeCobradoController.dispose();
     _nombreFocusNode.dispose();
+    _apellidosFocusNode.dispose();
     _dniFocusNode.dispose();
+    _finalizeScrollController.dispose();
     _signatureController.dispose();
     super.dispose();
   }
@@ -531,6 +528,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 RuteroDetailTabBar(
                   tabController: _tabController,
                   isUrgent: _isUrgent,
+                  productErrorCount: _countIssues(RuteroDeliveryTab.products),
+                  paymentErrorCount: _countIssues(RuteroDeliveryTab.payment),
+                  finalizeErrorCount: _countIssues(RuteroDeliveryTab.finalize),
+                ),
+                RuteroValidationBanner(
+                  issues: _validationIssues,
+                  onIssueTap: _focusValidationIssue,
                 ),
                 Expanded(
                   child: TabBarView(
@@ -567,6 +571,28 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Widget _buildProductsTab() {
     return Column(
       children: [
+        if (_productsStatusError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.error, width: 1.6),
+              ),
+              child: Text(
+                _productsStatusError!,
+                style: const TextStyle(
+                  color: AppTheme.error,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: RuteroDetailProducts(
             items: _items,
@@ -579,12 +605,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               setState(() {
                 _productChecked[lineId] = value;
                 _cachedPdfBase64 = null;
+                if (_productsStatusError != null) {
+                  _productsStatusError = null;
+                  _removeIssue('productsStatus');
+                }
               });
             },
             onQuantityChanged: (lineId, value) {
               setState(() {
                 _productQuantities[lineId] = _boundedQuantity(lineId, value);
                 _cachedPdfBase64 = null;
+                if (_productsStatusError != null) {
+                  _productsStatusError = null;
+                  _removeIssue('productsStatus');
+                }
               });
             },
             onShowQuantityEditDialog: _showQuantityEditDialog,
@@ -659,6 +693,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       pagoError: _pagoError,
       importeCobradoController: _importeCobradoController,
       importeCobradoError: _importeCobradoError,
+      importeFieldKey: _importeFieldKey,
       onPaymentMethodChanged: (method) {
         setState(() => _selectedPaymentMethod = method);
       },
@@ -668,6 +703,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           if (_isPaid) {
             _pagoError = null;
             _importeCobradoError = null;
+            _removeIssue('pago');
+            _removeIssue('importe');
             if (_importeCobradoController.text.trim().isEmpty) {
               _importeCobradoController.text = widget.albaran.importeTotal
                   .toStringAsFixed(2)
@@ -687,6 +724,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Widget _buildFinalizeTab() {
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     return SingleChildScrollView(
+      controller: _finalizeScrollController,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -725,28 +763,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 12),
           ],
           TextField(
+            key: _observacionesFieldKey,
             controller: _observacionesController,
             maxLines: 3,
             onChanged: (_) {
               if (_observacionesError != null) {
-                setState(() => _observacionesError = null);
+                setState(() {
+                  _observacionesError = null;
+                  _removeIssue('observaciones');
+                });
               }
             },
             style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              labelText: noEntrega
+            decoration: ruteroErrorInputDecoration(
+              label: noEntrega
                   ? 'Observaciones / motivo de no entrega *'
                   : 'Observaciones',
               hintText: noEntrega
                   ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
                   : 'Añadir nota sobre la entrega...',
-              alignLabelWithHint: true,
               errorText: _observacionesError,
-              filled: true,
-              fillColor: AppTheme.softPanel,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              ),
+              alignLabelWithHint: true,
             ),
           ),
           const SizedBox(height: 12),
@@ -1052,70 +1089,65 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
           const SizedBox(height: 16),
           TextField(
+            key: _nombreFieldKey,
             controller: _nombreController,
             focusNode: _nombreFocusNode,
             enabled: !_isSubmitting,
             onChanged: (_) {
               if (_nombreError != null) {
-                setState(() => _nombreError = null);
+                setState(() {
+                  _nombreError = null;
+                  _removeIssue('nombre');
+                });
               }
             },
             style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Nombre *',
+            decoration: ruteroErrorInputDecoration(
+              label: 'Nombre *',
               prefixIcon: const Icon(Icons.person_outline, size: 20),
-              filled: true,
-              fillColor: AppTheme.softPanel,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
               errorText: _nombreError,
-              errorStyle: const TextStyle(color: AppTheme.error),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
+            key: _apellidosFieldKey,
             controller: _apellidosController,
+            focusNode: _apellidosFocusNode,
             enabled: !_isSubmitting,
             onChanged: (_) {
               if (_apellidosError != null) {
-                setState(() => _apellidosError = null);
+                setState(() {
+                  _apellidosError = null;
+                  _removeIssue('apellidos');
+                });
               }
             },
             style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Apellidos *',
+            decoration: ruteroErrorInputDecoration(
+              label: 'Apellidos *',
               prefixIcon: const Icon(Icons.person_outline, size: 20),
-              filled: true,
-              fillColor: AppTheme.softPanel,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
               errorText: _apellidosError,
-              errorStyle: const TextStyle(color: AppTheme.error),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
+            key: _dniFieldKey,
             controller: _dniController,
             focusNode: _dniFocusNode,
             enabled: !_isSubmitting,
             onChanged: (_) {
               if (_dniError != null) {
-                setState(() => _dniError = null);
+                setState(() {
+                  _dniError = null;
+                  _removeIssue('dni');
+                });
               }
             },
             style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'DNI / NIF *',
+            decoration: ruteroErrorInputDecoration(
+              label: 'DNI / NIF *',
               prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-              filled: true,
-              fillColor: AppTheme.softPanel,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
               errorText: _dniError,
-              errorStyle: const TextStyle(color: AppTheme.error),
             ),
           ),
         ],
@@ -1181,6 +1213,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
         const SizedBox(height: 8),
         RepartidorExecutivePanel(
+          key: _firmaFieldKey,
           accentColor: _firmaError != null ? AppTheme.error : AppTheme.info,
           padding: EdgeInsets.zero,
           child: SizedBox(
@@ -1200,7 +1233,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           const SizedBox(height: 6),
           Text(
             _firmaError!,
-            style: const TextStyle(color: AppTheme.error, fontSize: 12),
+            style: const TextStyle(
+              color: AppTheme.error,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              height: 1.3,
+            ),
           ),
         ],
       ],
@@ -1686,7 +1724,62 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _pagoError = null;
       _importeCobradoError = null;
       _observacionesError = null;
+      _productsStatusError = null;
+      _validationIssues = const [];
     });
+  }
+
+  int _countIssues(RuteroDeliveryTab tab) =>
+      _validationIssues.where((issue) => issue.tab == tab).length;
+
+  void _removeIssue(String field) {
+    _validationIssues =
+        _validationIssues.where((issue) => issue.field != field).toList();
+    if (field == 'productsStatus') {
+      _productsStatusError = null;
+    }
+  }
+
+  GlobalKey? _keyForField(String field) {
+    switch (field) {
+      case 'nombre':
+        return _nombreFieldKey;
+      case 'apellidos':
+        return _apellidosFieldKey;
+      case 'dni':
+        return _dniFieldKey;
+      case 'observaciones':
+        return _observacionesFieldKey;
+      case 'firma':
+        return _firmaFieldKey;
+      case 'importe':
+      case 'pago':
+        return _importeFieldKey;
+      default:
+        return null;
+    }
+  }
+
+  void _focusValidationIssue(RuteroFieldIssue issue) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_tabController.index != issue.tabIndex) {
+      _tabController.animateTo(issue.tabIndex);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureFieldVisible(issue.field);
+    });
+  }
+
+  void _ensureFieldVisible(String field) {
+    final key = _keyForField(field);
+    final ctx = key?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      alignment: 0.12,
+    );
   }
 
   bool _validateFields() {
@@ -1696,126 +1789,71 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           : 'La operación local requiere revisión manual.');
       return false;
     }
-    var isValid = true;
-    _clearValidationErrors();
 
     final linesError = validateRuteroLoadedDeliveryLines(
       items: _items,
       isLoading: _isLoadingItems,
       loadError: _itemsError,
     );
-    if (linesError != null) {
-      setState(() => _itemsError = linesError);
-      _tabController.animateTo(0);
-      return false;
-    }
-
-    final observations = _observacionesController.text.trim();
-    if (observations.length > 1000) {
-      _observacionesError =
-          'Las observaciones no pueden superar 1000 caracteres';
-      isValid = false;
-      _tabController.animateTo(2);
-    }
-
-    final requiresIncident =
-        _deliveryStatus == RepartoDeliveryStatus.noEntregado ||
-            _deliveryStatus == RepartoDeliveryStatus.rechazado;
-    if (requiresIncident &&
-        (_incidenciaMotivoController.text.trim().isEmpty ||
-            _observacionesController.text.trim().isEmpty)) {
-      _observacionesError =
-          'La no entrega o rechazo exige incidencia y observaciones';
-      isValid = false;
-    }
-
-    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        _nombreController.text.trim().isEmpty) {
-      _nombreError = 'El nombre del receptor es obligatorio';
-      isValid = false;
-    }
-    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        _apellidosController.text.trim().isEmpty) {
-      _apellidosError = 'Los apellidos del receptor son obligatorios';
-      isValid = false;
-    }
-
-    final dniText = _dniController.text.trim();
-    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        dniText.isEmpty) {
-      _dniError = 'El DNI/NIF es obligatorio';
-      isValid = false;
-    } else if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        !_isValidDniNie(dniText)) {
-      _dniError = 'Formato no válido (ej: 12345678A o X1234567B)';
-      isValid = false;
-    }
-
     final anyQtyModified = _items.any((item) => _quantityDiffers(
           _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
           item.cantidadPedida,
         ));
     final anyUnchecked =
         _items.any((item) => !(_productChecked[ruteroLineKey(item)] ?? false));
-    final hasDiscrepancy = anyQtyModified || anyUnchecked;
-    if (_deliveryStatus == RepartoDeliveryStatus.entregado && hasDiscrepancy) {
-      _observacionesError =
-          'Selecciona PARCIAL, NO ENTREGADO o RECHAZADO para registrar diferencias';
-      isValid = false;
-      _tabController.animateTo(0);
-    }
-    if (_deliveryStatus == RepartoDeliveryStatus.parcial && !hasDiscrepancy) {
-      _observacionesError =
-          'PARCIAL requiere al menos una cantidad pendiente o un producto no entregado';
-      isValid = false;
-      _tabController.animateTo(0);
-    }
-    if (hasDiscrepancy && _observacionesController.text.trim().isEmpty) {
-      _observacionesError = anyUnchecked
-          ? 'Obligatorio: hay productos sin marcar como entregados'
-          : 'Obligatorio cuando se modifican cantidades';
-      isValid = false;
-      _tabController.animateTo(2);
-    }
 
-    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        _signatureController.isEmpty &&
-        !_hasPersistedSignature) {
-      _firmaError = anyQtyModified
-          ? 'FIRMA OBLIGATORIA: las cantidades no coinciden con el pedido'
-          : 'La firma es obligatoria';
-      _tabController.animateTo(2);
-      isValid = false;
-    }
+    final result = validateRuteroDeliveryForm(
+      RuteroDeliveryValidationInput(
+        isLoadingItems: _isLoadingItems,
+        loadError: linesError,
+        hasItems: _items.isNotEmpty,
+        anyQtyModified: anyQtyModified,
+        anyUnchecked: anyUnchecked,
+        status: _deliveryStatus,
+        nombre: _nombreController.text,
+        apellidos: _apellidosController.text,
+        dni: _dniController.text,
+        observaciones: _observacionesController.text,
+        incidenciaMotivo: _incidenciaMotivoController.text,
+        isUrgent: _isUrgent,
+        isPaid: _isPaid,
+        signatureEmpty: _signatureController.isEmpty,
+        hasPersistedSignature: _hasPersistedSignature,
+        importeCobradoText: _importeCobradoController.text,
+        importeTotal: widget.albaran.importeTotal,
+      ),
+    );
 
-    if (_deliveryStatus != RepartoDeliveryStatus.noEntregado &&
-        _isUrgent &&
-        !_isPaid) {
-      _pagoError = '⚠️ COBRO OBLIGATORIO';
-      _tabController.animateTo(1);
-      isValid = false;
-    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _validationIssues = result.issues;
+      _itemsError = result.messageFor('items') ?? _itemsError;
+      _productsStatusError = result.messageFor('productsStatus');
+      _pagoError = result.messageFor('pago');
+      _importeCobradoError = result.messageFor('importe');
+      _nombreError = result.messageFor('nombre');
+      _apellidosError = result.messageFor('apellidos');
+      _dniError = result.messageFor('dni');
+      _observacionesError = result.messageFor('observaciones');
+      _firmaError = result.messageFor('firma');
+    });
 
-    if (_isPaid) {
-      final importeCobrado = _parseMoney(_importeCobradoController.text);
-      if (importeCobrado == null || importeCobrado <= 0) {
-        _importeCobradoError = 'Importe obligatorio';
-        _tabController.animateTo(1);
-        isValid = false;
-      } else if (importeCobrado - widget.albaran.importeTotal > 0.01) {
-        _importeCobradoError = 'No puede superar el total del documento';
-        _tabController.animateTo(1);
-        isValid = false;
-      }
-    }
-
-    setState(() {});
-
-    if (!isValid) {
+    if (!result.isValid) {
       HapticFeedback.heavyImpact();
+      final first = result.issues.first;
+      if (_tabController.index != result.firstTabIndex) {
+        _tabController.animateTo(result.firstTabIndex);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = result.issues.firstWhere(
+          (issue) => issue.tabIndex == result.firstTabIndex,
+          orElse: () => first,
+        );
+        _ensureFieldVisible(target.field);
+      });
     }
 
-    return isValid;
+    return result.isValid;
   }
 
   Future<bool> _showConfirmationDialog() async {
@@ -2195,252 +2233,33 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _showZebraPrintPreview() async {
-    final obsController = TextEditingController(
-      text: _observacionesController.text.trim(),
-    );
-    var isPrinting = false;
-    final parentMessenger = ScaffoldMessenger.of(context);
-
-    String? signatureGrf;
-    if (_signatureController.isNotEmpty) {
-      try {
-        final sigPng = await _signatureController.toPngBytes();
-        if (sigPng != null) {
-          signatureGrf = await ZebraPrintService.convertSignatureToGrf(sigPng);
-        }
-      } catch (_) {}
-    }
-
     if (!mounted) return;
-
-    return showDialog<void>(
+    await showRuteroPrintPreviewDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final zpl = ZebraPrintService.generateDeliveryZpl(
-            albaran: widget.albaran,
-            items: _items,
-            observaciones: obsController.text.trim(),
-            receptorNombre: _nombreController.text.trim(),
-            receptorDni: _dniController.text.trim(),
-            signatureGrf: signatureGrf,
-            fechaFirma: DateTime.now(),
-          );
-
-          return AlertDialog(
-            backgroundColor: AppTheme.raisedSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              side: BorderSide(color: AppTheme.info.withValues(alpha: 0.28)),
-            ),
-            title: const Row(
-              children: [
-                RepartidorExecutiveIcon(
-                  icon: Icons.print,
-                  color: AppTheme.info,
-                ),
-                SizedBox(width: 12),
-                Text('Imprimir Ticket',
-                    style: TextStyle(color: AppTheme.textPrimary)),
-              ],
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.softPanel,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Granja Mari Pepa S.L.',
-                              style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16)),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.albaran.numeroFactura > 0
-                                ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
-                                : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
-                            style: const TextStyle(
-                                color: AppTheme.info, fontSize: 14),
-                          ),
-                          Text('Fecha: ${widget.albaran.fecha}',
-                              style: const TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 13)),
-                          const Divider(color: AppTheme.textTertiary),
-                          Text('Cliente: ${widget.albaran.nombreCliente}',
-                              style: const TextStyle(
-                                  color: AppTheme.textPrimary, fontSize: 13)),
-                          if (widget.albaran.nombreFiscal != null &&
-                              widget.albaran.nombreFiscal!.isNotEmpty &&
-                              widget.albaran.nombreFiscal!.toUpperCase() !=
-                                  widget.albaran.nombreCliente.toUpperCase())
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                'N. fiscal: ${widget.albaran.nombreFiscal}',
-                                style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 11),
-                              ),
-                            ),
-                          const SizedBox(height: 8),
-                          ...(_items.take(5).map((item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 2),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(item.descripcion,
-                                          style: const TextStyle(
-                                              color: AppTheme.textSecondary,
-                                              fontSize: 12),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Text(
-                                      'x${_formatQuantity(item.cantidadPedida)}'
-                                      '${(item.unit ?? '').trim().isEmpty ? '' : ' ${item.unit}'}  '
-                                      '${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
-                                      style: const TextStyle(
-                                          color: AppTheme.textSecondary,
-                                          fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ))),
-                          if (_items.length > 5)
-                            Text('... +${_items.length - 5} más',
-                                style: const TextStyle(
-                                    color: AppTheme.textTertiary,
-                                    fontSize: 11)),
-                          const Divider(color: AppTheme.textTertiary),
-                          Text(
-                              'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
-                              style: const TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Observaciones (editable):',
-                        style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 13)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: obsController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        hintText: 'Añadir observaciones para el ticket...',
-                        hintStyle:
-                            const TextStyle(color: AppTheme.textTertiary),
-                        filled: true,
-                        fillColor: AppTheme.softPanel,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppTheme.info)),
-                      ),
-                      style: const TextStyle(
-                          color: AppTheme.textPrimary, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isPrinting ? null : () => Navigator.pop(ctx),
-                child: const Text('Omitir',
-                    style: TextStyle(color: AppTheme.textTertiary)),
-              ),
-              ElevatedButton.icon(
-                onPressed: isPrinting
-                    ? null
-                    : () async {
-                        setDialogState(() => isPrinting = true);
-                        final albaranLabel = widget.albaran.numeroFactura > 0
-                            ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
-                            : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}';
-                        final escPos = ZebraPrintService.generateEscPosTicket(
-                          clientName: widget.albaran.nombreCliente,
-                          albaranLabel: albaranLabel,
-                          lines: _items
-                              .map((item) => <String, dynamic>{
-                                    'desc': item.descripcion,
-                                    'qty': item.cantidadPedida,
-                                    'importe': item.cantidadPedida *
-                                        item.precioUnitario,
-                                  })
-                              .toList(),
-                          total: widget.albaran.importeTotal,
-                        );
-                        final success = await ZebraPrintService.printTicket(
-                          zpl: zpl,
-                          escPosBytes: escPos,
-                        );
-                        if (!ctx.mounted) return;
-                        setDialogState(() => isPrinting = false);
-                        if (success) {
-                          Navigator.pop(ctx);
-                          parentMessenger.showSnackBar(
-                            const SnackBar(
-                              content: Row(children: [
-                                Icon(Icons.check_circle, color: Colors.white),
-                                SizedBox(width: 12),
-                                Text('Ticket enviado a impresora'),
-                              ]),
-                              backgroundColor: AppTheme.success,
-                            ),
-                          );
-                        } else {
-                          parentMessenger.showSnackBar(
-                            const SnackBar(
-                              content: Row(children: [
-                                Icon(Icons.error_outline, color: Colors.white),
-                                SizedBox(width: 12),
-                                Expanded(
-                                    child: Text(
-                                        'Error al imprimir. Verifica que la Zebra está encendida y vinculada.')),
-                              ]),
-                              backgroundColor: AppTheme.error,
-                            ),
-                          );
-                        }
-                      },
-                icon: isPrinting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.print),
-                label:
-                    Text(isPrinting ? 'Imprimiendo...' : 'Imprimir en Zebra'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.info,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+      albaran: widget.albaran,
+      items: _items,
+      observaciones: _observacionesController.text.trim(),
+      receptorNombre: _nombreController.text.trim(),
+      receptorDni: _dniController.text.trim(),
+      signatureController: _signatureController,
+      printerName: _printerName,
+      printerProtocol: _printerProtocol,
+      onEnsurePrinter: () async {
+        final addr = await ZebraPrintService.getSavedPrinterAddress();
+        if (addr != null && addr.isNotEmpty) return true;
+        await _selectAndSavePrinter();
+        final saved = await ZebraPrintService.getSavedPrinterAddress();
+        return saved != null && saved.isNotEmpty;
+      },
+      onPrinted: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ticket enviado a la impresora'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      },
     );
   }
 
@@ -2796,6 +2615,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         RepartoCanonicalReceiptRequest(confirmationId).endpoint,
         forceRefresh: true,
         allowStale: false,
+        receiveTimeout: const Duration(seconds: 20),
       );
       return RepartoReceiptPdf.fromResponse(response).base64;
     } on RepartoReceiptUnavailableException {
