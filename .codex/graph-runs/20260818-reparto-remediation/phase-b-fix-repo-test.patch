@@ -1,0 +1,8 @@
+diff --git a/backend/__tests__/repartidor-liquidacion-db2-repository.test.js b/backend/__tests__/repartidor-liquidacion-db2-repository.test.js
+--- a/backend/__tests__/repartidor-liquidacion-db2-repository.test.js
++++ b/backend/__tests__/repartidor-liquidacion-db2-repository.test.js
+@@ -417,2 +417,3 @@
+       expect(conn.query.mock.calls.filter(([statement]) =>
+-        statement.includes('COUNT(DISTINCT TRIM(CODIGOVENDEDOR))'))).toHaveLength(1);
++        statement.includes('COUNT(DISTINCT TRIM(CODIGOVENDEDOR))')
++          && statement.includes('IN (?, ?)'))).toHaveLength(1);

@@ -19,6 +19,7 @@ import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:intl/intl.dart';
@@ -80,6 +81,7 @@ typedef RepartidorHistoryDocumentDownloader = Future<List<int>> Function({
   String? albaranSerie,
   int? albaranTerminal,
   int? albaranYear,
+  String? repartidorId,
 });
 
 typedef RepartidorHistorySignatureLoader = Future<Map<String, dynamic>?>
@@ -88,6 +90,7 @@ typedef RepartidorHistorySignatureLoader = Future<Map<String, dynamic>?>
   required String serie,
   required int terminal,
   required int numero,
+  required String repartidorId,
 });
 
 class RepartidorHistoricoPage extends StatefulWidget {
@@ -96,6 +99,7 @@ class RepartidorHistoricoPage extends StatefulWidget {
     super.key,
     this.initialClientId,
     this.initialClientName,
+    this.initialRepartidorId,
     this.clientsLoader,
     this.clientsPageLoader,
     this.documentsLoader,
@@ -106,6 +110,7 @@ class RepartidorHistoricoPage extends StatefulWidget {
   final String repartidorId;
   final String? initialClientId;
   final String? initialClientName;
+  final String? initialRepartidorId;
   final RepartidorHistoryClientsLoader? clientsLoader;
   final RepartidorHistoryClientsPageLoader? clientsPageLoader;
   final RepartidorHistoryDocumentsLoader? documentsLoader;
@@ -132,6 +137,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   bool _isSharingDocument = false;
   String? _selectedClientId;
   String? _selectedClientName;
+  String? _selectedClientRepartidorId;
   List<_ClientItem> _clients = [];
   List<_DocumentItem> _documents = [];
   bool _hasMoreClients = false;
@@ -156,12 +162,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       // Navigate directly to client documents – set state immediately to show loading
       _selectedClientId = widget.initialClientId;
       _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
+      _selectedClientRepartidorId = resolveRepartoDocumentOwner(
+        documentOwner: widget.initialRepartidorId,
+        selectedOwner: widget.repartidorId,
+      );
       _isLoading = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _loadClientDocuments(
           widget.initialClientId!,
           widget.initialClientName ?? widget.initialClientId!,
+          repartidorId: _selectedClientRepartidorId,
         );
       });
       // Load clients list in background (won't conflict since _loadClientDocuments manages _isLoading)
@@ -252,13 +263,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               totalDocuments: c.totalDocuments,
               totalAmount: c.totalAmount,
               lastVisit: c.lastVisit,
+              repartidorId: c.repCode,
             ),
           )
           .toList();
       final merged =
           append ? <_ClientItem>[..._clients, ...mappedClients] : mappedClients;
       final byId = <String, _ClientItem>{
-        for (final client in merged) client.id: client,
+        for (final client in merged) client.selectionKey: client,
       };
       final ordered = byId.values.toList()
         ..sort((a, b) {
@@ -273,6 +285,23 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         _clientsError = null;
         _clientsLoadMoreError = null;
       });
+      if (_selectedClientId != null &&
+          _selectedClientRepartidorId == null &&
+          _documents.isEmpty) {
+        final matches = ordered
+            .where((client) =>
+                client.id == _selectedClientId &&
+                isValidRepartoOwnerId(client.repartidorId ?? ''))
+            .toList(growable: false);
+        if (matches.length == 1) {
+          final client = matches.single;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _loadClientDocuments(client.id, client.name,
+                repartidorId: client.repartidorId);
+          });
+        }
+      }
     } catch (_) {
       if (!mounted || requestGeneration != _clientRequestGeneration) return;
       setState(() {
@@ -294,7 +323,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     });
   }
 
-  Future<void> _loadClientDocuments(String clientId, String clientName) async {
+  Future<void> _loadClientDocuments(
+    String clientId,
+    String clientName, {
+    String? repartidorId,
+  }) async {
+    final owner = resolveRepartoDocumentOwner(
+      documentOwner: repartidorId ?? _selectedClientRepartidorId,
+      selectedOwner: widget.repartidorId,
+    );
     final requestGeneration = ++_documentsRequestGeneration;
     final selectedYear = _selectedYear;
     final dateFrom = _dateFrom;
@@ -304,7 +341,16 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       _documentsError = null;
       _selectedClientId = clientId;
       _selectedClientName = clientName;
+      _selectedClientRepartidorId = owner;
     });
+    if (owner == null) {
+      setState(() {
+        _isLoading = false;
+        _documents = const [];
+        _documentsError = 'Selecciona una ficha con un repartidor concreto.';
+      });
+      return;
+    }
 
     try {
       final dateFromStr = dateFrom != null
@@ -318,14 +364,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final docs = loader != null
           ? await loader(
               clientId: clientId,
-              repartidorId: widget.repartidorId,
+              repartidorId: owner,
               dateFrom: dateFromStr,
               dateTo: dateToStr,
               year: selectedYear,
             )
           : await RepartidorDataService.getClientDocuments(
               clientId: clientId,
-              repartidorId: widget.repartidorId,
+              repartidorId: owner,
               dateFrom: dateFromStr,
               dateTo: dateToStr,
               year: selectedYear,
@@ -378,6 +424,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           hasLegacySignature: d.hasLegacySignature,
           legacyDate: d.legacyDate,
           confirmationId: d.confirmationId,
+          repartidorId: resolveRepartoDocumentOwner(
+            documentOwner: d.deliveryRepartidor,
+            selectedOwner: owner,
+          ),
         );
       }).toList();
       setState(() {
@@ -556,6 +606,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     setState(() {
       _selectedClientId = null;
       _selectedClientName = null;
+      _selectedClientRepartidorId = null;
       _documents = [];
       _clearFilters();
       _selectedYear = null;
@@ -596,9 +647,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       ),
       itemBuilder: (context) => _clients.take(20).map((client) {
-        final isSelected = client.id == _selectedClientId;
+        final isSelected = client.id == _selectedClientId &&
+            client.repartidorId == _selectedClientRepartidorId;
         return PopupMenuItem<String>(
-          value: client.id,
+          value: client.selectionKey,
           child: Row(
             children: [
               Container(
@@ -646,9 +698,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           ),
         );
       }).toList(),
-      onSelected: (clientId) {
-        final client = _clients.firstWhere((c) => c.id == clientId);
-        _loadClientDocuments(clientId, client.name);
+      onSelected: (selectionKey) {
+        final client =
+            _clients.firstWhere((c) => c.selectionKey == selectionKey);
+        _loadClientDocuments(client.id, client.name,
+            repartidorId: client.repartidorId);
       },
     );
   }
@@ -862,7 +916,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Widget _buildClientCard(_ClientItem client) {
     return GestureDetector(
-      onTap: () => _loadClientDocuments(client.id, client.name),
+      onTap: () => _loadClientDocuments(client.id, client.name,
+          repartidorId: client.repartidorId),
       child: RepartidorExecutivePanel(
         margin: const EdgeInsets.only(bottom: 10),
         padding: EdgeInsets.all(
@@ -2230,6 +2285,23 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // ACTIONS
   // ==========================================================================
 
+  String? _documentOwner(_DocumentItem doc) => resolveRepartoDocumentOwner(
+        documentOwner: doc.repartidorId,
+        selectedOwner: widget.repartidorId,
+      );
+
+  void _showDocumentOwnerRequired() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Selecciona un repartidor concreto para este documento.',
+        ),
+        backgroundColor: AppTheme.warning,
+      ),
+    );
+  }
+
   Future<void> _previewDeliveryNote(_DocumentItem doc) async {
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
@@ -2244,6 +2316,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
       return;
     }
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final modal = AsyncOperationModal.show(
       context,
       text: 'Cargando nota de entrega...',
@@ -2251,6 +2328,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     try {
       final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
         confirmationId: confirmationId,
+        repartidorId: owner,
       );
       modal.close();
       if (!mounted) return;
@@ -2288,6 +2366,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _previewDocument(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final modal = AsyncOperationModal.show(
       context,
       text: 'Cargando previsualización...',
@@ -2313,6 +2396,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranSerie: doc.serie,
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
+        repartidorId: owner,
       );
       modal.close();
 
@@ -2361,6 +2445,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _downloadDocument(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     if (_isDownloadingDocument) return;
     _isDownloadingDocument = true;
     final modal = AsyncOperationModal.show(
@@ -2388,6 +2477,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranSerie: doc.serie,
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
+        repartidorId: owner,
       );
       modal.close();
 
@@ -2486,6 +2576,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Future<void> _emailCommercialDocument(_DocumentItem doc) async {
     if (!mounted) return;
     if (!widget.canEmailDocuments) return;
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final email = await _askEmailAddress();
     if (email == null || email.isEmpty || !mounted) return;
     if (!email.contains('@')) {
@@ -2500,17 +2595,25 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final isFactura = doc.type == _DocType.factura;
     final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
     try {
-      await RepartidorDataService.sendCommercialDocumentEmail(
+      await RepartidorDataService.sendEmail(
+        year:
+            isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : doc.ejercicio,
+        type: isFactura ? 'factura' : 'albaran',
         serie: isFactura ? (doc.serieFactura ?? doc.serie) : doc.serie,
-        numero: isFactura
+        number: isFactura
             ? (doc.facturaNumber ?? doc.number)
             : (doc.albaranNumber ?? doc.number),
-        ejercicio:
-            isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : doc.ejercicio,
         terminal: doc.terminal,
-        documentType: isFactura ? 'factura' : 'albaran',
         destinatario: email,
-        clienteNombre: _selectedClientName,
+        repartidorId: owner,
+        canEmailDocuments: widget.canEmailDocuments,
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2548,12 +2651,24 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
       return;
     }
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final email = await _askEmailAddress();
     if (email == null || email.isEmpty || !mounted) return;
     final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
+    if (!isValidRepartoReceiptEmailAddress(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid email address.')),
+      );
+      return;
+    }
     try {
       await RepartidorDataService.emailDeliveryNote(
         confirmationId: confirmationId,
+        repartidorId: owner,
         destinatario: email,
       );
       if (!mounted) return;
@@ -2580,6 +2695,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _printDeliveryNote(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega...',
@@ -2592,6 +2712,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         serie: doc.serie,
         terminal: doc.terminal,
         numero: doc.albaranNumber ?? doc.number,
+        repartidorId: owner,
       );
       String? grf;
       final raw = data?['base64']?.toString();
@@ -2653,6 +2774,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _shareLocalDocumentUnlocked(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final isFactura = doc.type == _DocType.factura;
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final clientName = _selectedClientName ?? 'Cliente';
@@ -2691,6 +2817,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranSerie: doc.serie,
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
+        repartidorId: owner,
       );
 
       // Save PDF to temp file
@@ -2711,6 +2838,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         terminal: doc.terminal,
         type: isFactura ? 'factura' : 'albaran',
         telefono: result.phone,
+        repartidorId: owner,
         clienteNombre: clientName,
         facturaNumber: doc.facturaNumber,
         serieFactura: doc.serieFactura,
@@ -2771,6 +2899,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Future<void> _shareSystemDocumentUnlocked(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando documento...',
@@ -2796,6 +2929,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranSerie: doc.serie,
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
+        repartidorId: owner,
       );
       modal.close();
 
@@ -2837,6 +2971,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   void _showSignatureDialog(_DocumentItem doc) {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => _SignatureDialog(
@@ -2844,6 +2983,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         serie: doc.serie,
         terminal: doc.terminal,
         numero: doc.albaranNumber ?? doc.number,
+        repartidorId: owner,
         docLabel:
             '${doc.type == _DocType.factura ? "Factura" : "Albarán"} #${doc.number}',
         legacySignatureName: doc.legacySignatureName,
@@ -2992,13 +3132,16 @@ class _ClientItem {
     required this.totalDocuments,
     this.totalAmount = 0,
     this.lastVisit,
+    this.repartidorId,
   });
+  String get selectionKey => '${repartidorId ?? ''}:$id';
   final String id;
   final String name;
   final String address;
   final int totalDocuments;
   final double totalAmount;
   final String? lastVisit;
+  final String? repartidorId;
 }
 
 enum _DocType { albaran, factura }
@@ -3031,6 +3174,7 @@ class _DocumentItem {
     this.hasLegacySignature = false,
     this.legacyDate,
     this.confirmationId,
+    this.repartidorId,
   });
   final String id;
   final bool hasValidDate;
@@ -3057,6 +3201,7 @@ class _DocumentItem {
   final bool hasLegacySignature;
   final String? legacyDate;
   final String? confirmationId;
+  final String? repartidorId;
 }
 
 // =============================================================================
@@ -3069,6 +3214,7 @@ class _SignatureDialog extends StatefulWidget {
     required this.serie,
     required this.terminal,
     required this.numero,
+    required this.repartidorId,
     required this.docLabel,
     this.legacySignatureName,
     this.legacyDate,
@@ -3078,6 +3224,7 @@ class _SignatureDialog extends StatefulWidget {
   final String serie;
   final int terminal;
   final int numero;
+  final String repartidorId;
   final String docLabel;
   final String? legacySignatureName;
   final String? legacyDate;
@@ -3121,6 +3268,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
         serie: widget.serie,
         terminal: widget.terminal,
         numero: widget.numero,
+        repartidorId: widget.repartidorId,
       );
       if (!mounted || requestGeneration != _requestGeneration) return;
 

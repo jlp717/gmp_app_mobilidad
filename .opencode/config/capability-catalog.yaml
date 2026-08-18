@@ -1,0 +1,124 @@
+version: 7
+purpose: >
+  Javier puede pedir cualquier tipo de tarea en lenguaje natural.
+  El Chief enruta. Esto NO es un organigrama: es un catalogo de capacidades.
+  Agencia: .opencode/config/agency-capability-map.yaml (escritorios + skills).
+  Fuentes: Anthropic Building Effective Agents + Multi-agent Research + Managed Agents;
+  OpenAI Practical Guide (manager + guardrails); Google ADK (A2A no adoptado);
+  NVIDIA NeMo Agent Toolkit (experts as tools, max_iterations); Claude Code subagents.
+user_interface: "Solo Chief. Especialistas = tools del manager. Nunca handoff de la conversacion."
+phased_playbooks: ".opencode/config/task-playbooks.yaml"
+agency_map: ".opencode/config/agency-capability-map.yaml"
+model_aliases:
+  sol: openai/gpt-5.6-sol
+  terra: openai/gpt-5.6-terra
+  luna: openai/gpt-5.6-luna
+  rank: { luna: 1, terra: 2, sol: 3 }
+
+# Politica de coste planificador/ejecutor. No es convencion tacita.
+# Hallazgos: Anthropic orquestador caro + workers baratos ~96% score / 46% coste (research web);
+# COPE: planificador grande mejora ejecutor pequeno (no simetrico);
+# 44 pares / 40 builds: ~4x ahorro en ejecucion, el mejor par NO es el mas barato.
+cost_policy:
+  planner_never_downgrades:
+    model: sol
+    agents: [chief-engineer-assistant, Architect-Planner]
+    exceptions: none
+  executor_cheap_when:
+    model: terra
+    only_if:
+      - "riesgo bajo"
+      - "spec EARS clara"
+    examples: [typo, formateo, query ya parametrizada, refactor mecanico, traduccion de copy, maker frontend/backend con spec]
+  executor_stays_high:
+    model: sol
+    when:
+      - SECURE
+      - "PROD que toque BD, secretos o deploy"
+      - "db_migration"
+      - "calculos financieros / comisiones / objetivos / Proxenos"
+  critic_never_cheaper_than_maker:
+    critic: sol
+    rule: "rank(critic) >= rank(executor). Critic terra revisando maker sol = teatro, BLOCK."
+  apply_in: [decision-router, flow-policy-check, chief spawn model override]
+
+tasks:
+  - when: ["typo", "pregunta corta", "correccion", "saludo"]
+    playbook: tiny
+    pattern: routing
+  - when: ["donde esta X", "audita", "mapear repo", "logs readonly"]
+    playbook: explore
+    pattern: prompt_chaining
+  - when: ["busca en internet", "compara librerias", "documentacion oficial", "estado del arte"]
+    playbook: explore
+    pattern: orchestrator_workers_parallel
+    workers: "3-5 Web-Researcher en paralelo. Citation pass (Technical-Verifier). Sintesis al Chief."
+    citations: required
+  - when: ["app completa", "desde cero para un cliente", "fabrica", "entregable", "SEO + backend", "web para un", "saas", "ecommerce"]
+    playbook: build
+    task_playbook: factory
+    pattern: "agencia: departments[] auto. Skills = oficios. 1 maker. product-delivery-contract. PR != prod."
+  - when: ["stripe", "pagos", "i18n", "analytics", "gdpr", "cookies", "seo", "accesibilidad", "cms", "pdf", "push"]
+    playbook: build
+    note: "Escritorio de agencia se enciende solo. Ver agency-capability-map.yaml. No crear agente nuevo."
+  - when: ["abre PR", "pull request"]
+    playbook: build
+    task_playbook: ship_pr
+  - when: ["no pares hasta que pase", "CI verde"]
+    playbook: build
+    task_playbook: bug_loop
+  - when: ["migracion", "50+ files", "reorganizar directorios"]
+    playbook: sweep
+    pattern: orchestrator_workers
+    isolation: worktree
+  - when: ["XSS", "SQL injection", "secreto", "OWASP", "auth rota"]
+    playbook: secure
+    pattern: evaluator_optimizer
+    rule: "AppSec no escribe el parche"
+  - when: ["deploy", "pm2", "rollback", "ALTER TABLE", "rotar secreto"]
+    playbook: prod
+    pattern: prompt_chaining_gated
+  - when: ["comisiones", "objetivos", "R1_T8CDVD", "facturas", "cobros", "pedidos", "Proxenos"]
+    playbook: build
+    task_playbook: financial
+    extra: [DB2-AS400-Specialist]
+    cost: sol
+  - when: ["diseno", "UX", "impecable", "animacion"]
+    playbook: build
+    extra: [product-ux]
+  - when: ["por que esta lento", "N+1", "Redis"]
+    playbook: build
+    extra: [maker]
+  - when: ["redacta docs", "ADR", "changelog"]
+    playbook: tiny
+    note: "Docs en docs/. No en raiz."
+
+not_a_task:
+  - "Elegir agente: el Chief lo hace"
+  - "Pegar passwords: credentials_ref"
+  - "A2A/Google remoto: un solo runtime OpenCode. No hay frontera de lenguaje que lo justifique."
+
+scale_effort:
+  # Anthropic Research: simple=1 agent 3-10 tools; comparison=2-4; complex=10+ only if parallelizable
+  tiny: { agents: 1, tool_calls: "3-10", max_turns: 8 }
+  explore: { agents: "1-3", writers: 0, max_turns: 20 }
+  explore_research: { agents: "3-5 parallel", writers: 0, max_turns: 25, citation_agent: Technical-Verifier }
+  factory: { agents: "5-8", writers: 1, max_turns: 80, repair_loops: 12, completion: product-delivery-contract, desks: "client_delivery_defaults" }
+  build: { agents: "3-5", writers: 1, max_turns: 40, repair_loops: 3 }
+  sweep: { agents: "5-8 isolated", max_turns: 50 }
+  secure: { agents: "4-6", max_turns: 30 }
+  prod: { agents: "1-3", max_turns: 15, autonomy: 0 }
+
+sources:
+  - "https://www.anthropic.com/engineering/building-effective-agents"
+  - "https://www.anthropic.com/engineering/multi-agent-research-system"
+  - "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+  - "https://www.anthropic.com/engineering/managed-agents"
+  - "https://code.claude.com/docs/en/sub-agents"
+  - "https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf"
+  - "https://openai.github.io/openai-agents-python/multi_agent/"
+  - "https://developers.googleblog.com/en/agents-adk-agent-engine-a2a-enhancements-google-io/"
+  - "https://docs.nvidia.com/nemo/agent-toolkit/latest/build-workflows/workflow-configuration.html"
+  - "Anthropic: orquestador caro + workers baratos, research web (96% score / 46% coste)"
+  - "COPE planner-executor: planner grande mejora executor pequeno; no simetrico"
+  - "44 pares / 40 app builds: ~4x ahorro ejecucion; el mejor par no es el mas barato"

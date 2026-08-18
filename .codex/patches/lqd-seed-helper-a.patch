@@ -1,0 +1,40 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1068,0 +1069,1 @@
++const LQD_COBROS_SEED_COLUMNS = Object.freeze([
++  'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO', 'DIACOBRO', 'MESCOBRO', 'ANOCOBRO',
++  'IMPORTEVENCIMIENTO', 'IMPORTEPENDIENTE', 'CODIGOFORMAPAGO', 'IDEMPOTENCY_TOKEN',
++  'PANTALLA_ORIGEN', 'OPERADOR', 'LIQUIDADO_SN', 'LIQUIDACION_TOKEN', 'NUMEROLIQUIDACION',
++]);
++
++function assertLqdCobrosSeedCoverage(destinationColumns) {
++  const id = destinationColumns.find((column) => column.name === 'ID');
++  if (!id?.identity) throw new Error('ERP LQD COBROS PREFLIGHT BLOCK: destination ID must be identity before DELETE');
++  const covered = new Set(LQD_COBROS_SEED_COLUMNS);
++  const gaps = destinationColumns
++    .filter((column) => column.isNullable === 'NO' && !column.hasDefault && !column.identity)
++    .map((column) => column.name)
++    .filter((name) => !covered.has(name));
++  if (gaps.length) throw new Error(`ERP LQD COBROS PREFLIGHT BLOCK: mandatory columns missing=[${gaps.join(',')}]`);
++}
++
++function lqdCobrosSplitCte() {
++  return `
++    WITH LQD_DEDUP AS (${lqdDedupeSubquery()}),
++    SPLIT AS (
++      SELECT CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION, NUMEROLIQUIDACION, 'EF' AS FORMA, IMPORTEEFECTIVO AS IMPORTE
++        FROM LQD_DEDUP WHERE RN = 1 AND IMPORTEEFECTIVO > 0
++      UNION ALL
++      SELECT CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION, NUMEROLIQUIDACION, 'CH', IMPORTECHEQUES
++        FROM LQD_DEDUP WHERE RN = 1 AND IMPORTECHEQUES > 0
++      UNION ALL
++      SELECT CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION, NUMEROLIQUIDACION, 'TJ', IMPORTETARJETA
++        FROM LQD_DEDUP WHERE RN = 1 AND IMPORTETARJETA > 0
++      UNION ALL
++      SELECT CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION, NUMEROLIQUIDACION, 'PD', IMPORTEPOSTDATADOS
++        FROM LQD_DEDUP WHERE RN = 1 AND IMPORTEPOSTDATADOS > 0
++    )
++  `;
++}
++

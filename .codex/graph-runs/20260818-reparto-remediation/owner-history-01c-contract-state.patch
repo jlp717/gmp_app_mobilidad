@@ -1,0 +1,31 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -88,6 +88,7 @@ typedef RepartidorHistorySignatureLoader = Future<Map<String, dynamic>?>
+     Function({
+   required int ejercicio,
+   required String serie,
+   required int terminal,
+   required int numero,
++  required String repartidorId,
+ });
+@@ -134,5 +135,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   bool _isSharingDocument = false;
+   String? _selectedClientId;
+   String? _selectedClientName;
++  String? _selectedClientRepartidorId;
+   List<_ClientItem> _clients = [];
+   List<_DocumentItem> _documents = [];
+@@ -159,4 +161,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       _selectedClientId = widget.initialClientId;
+       _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
++      _selectedClientRepartidorId = resolveRepartoDocumentOwner(
++        selectedOwner: widget.repartidorId,
++      );
+       _isLoading = true;
+@@ -164,4 +169,5 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+         _loadClientDocuments(
+           widget.initialClientId!,
+           widget.initialClientName ?? widget.initialClientId!,
++          repartidorId: _selectedClientRepartidorId,
+         );

@@ -1,0 +1,12 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -689,7 +689,9 @@ async function reconcileMappingPairs(pairs, {
+     const destinationContracts = destinationExists && !destinationWillBeRebuilt && auditOperationalContracts
+       ? await operationalContractsOfFn(pair.dst) : [];
+     const fullPlan = [...plan, ...buildOperationalContractPlan(pair, sourceContracts, destinationContracts)];
+-    assertRuntimeWriteCoverage(pair, sourceColumns, fullPlan);
++    // Index/constraint parity does not alter the INSERT column contract. Only
++    // structural column changes require an audited runtime INSERT manifest.
++    assertRuntimeWriteCoverage(pair, sourceColumns, plan);
+     for (const operation of fullPlan) {

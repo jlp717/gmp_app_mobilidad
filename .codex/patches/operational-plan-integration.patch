@@ -1,0 +1,40 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -545,0 +546 @@
++  operationalContractsOfFn = operationalContractsOf,
+@@ -575,2 +577,8 @@
+-    assertRuntimeWriteCoverage(pair, sourceColumns, plan);
+-    for (const operation of plan) {
++    const destinationWillBeRebuilt = plan.some((operation) => operation.kind === 'DROP_TEST_TABLE');
++    const sourceContracts = sourceExists ? await operationalContractsOfFn(pair.src) : [];
++    const destinationContracts = destinationExists && !destinationWillBeRebuilt
++      ? await operationalContractsOfFn(pair.dst) : [];
++    const fullPlan = [...plan, ...buildOperationalContractPlan(pair, sourceContracts, destinationContracts)];
++    assertRuntimeWriteCoverage(pair, sourceColumns, fullPlan);
++    for (const operation of fullPlan) {
+@@ -581 +589 @@
+-    report.push({ pair, operations: plan });
++    report.push({ pair, operations: fullPlan });
+@@ -641,0 +650 @@
++  operationalContractsOfFn = operationalContractsOf,
+@@ -654,4 +664,6 @@
+-    const comparison = compareTableMetadata(
+-      await columnsOfFn(pair.src),
+-      await columnsOfFn(pair.dst),
+-    );
++    const sourceColumns = await columnsOfFn(pair.src);
++    const destinationColumns = await columnsOfFn(pair.dst);
++    const comparison = compareTableMetadata(sourceColumns, destinationColumns);
++    const sourceContracts = await operationalContractsOfFn(pair.src);
++    const destinationContracts = await operationalContractsOfFn(pair.dst);
++    const missingContracts = buildOperationalContractPlan(pair, sourceContracts, destinationContracts);
+@@ -662 +674,2 @@
+-        + `deltas=[${comparison.deltas.map((delta) => delta.name).join(',')}]`,
++        + `deltas=[${comparison.deltas.map((delta) => delta.name).join(',')}], `
++        + `identity=[${comparison.exemptIdentityDeltas.join(',')}]`,
+@@ -665,3 +678,4 @@
+-    if (comparison.exemptIdentityDeltas.length) {
+-      console.log(`PREFLIGHT EXEMPT_IDENTITY ${pair.src} -> ${pair.dst}: [${comparison.exemptIdentityDeltas.join(',')}]`);
++    if (missingContracts.length) {
++      throw new Error(`OPERATIONAL PREFLIGHT BLOCK ${pair.src} -> ${pair.dst}: missing=[${missingContracts.map((operation) => operation.signature).join(';')}]`);

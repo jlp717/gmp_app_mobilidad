@@ -47,6 +47,7 @@ describe('canonical reparto actor privilege', () => {
         code: '98',
         role: 'JEFE_VENTAS',
         activeMode: 'REPARTIDOR',
+        repartidorCodes: ['95'],
         isJefeVentas: true,
       },
       ...requestFor('95'),
@@ -61,7 +62,7 @@ describe('canonical reparto actor privilege', () => {
 
   test('allows only ADMIN to select another repartidor in the internal contract', () => {
     const command = buildConfirmationCommand({
-      user: { id: 'A1', code: '17', role: 'ADMIN' },
+      user: { id: 'A1', code: '17', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['95'] },
       ...requestFor('95'),
     });
 

@@ -17,6 +17,11 @@ const repartidorDb = require('../repositories/repartidor-route-db2-repository');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const {
+    RepartoEmailDeliveryPolicyError,
+    resolveRepartoEmailDelivery,
+    buildRepartoMessageId,
+} = require('../services/reparto-email-delivery-policy');
 const { verifyToken } = require('../middleware/auth');
 const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
 
@@ -43,8 +48,23 @@ const {
   formatMinuteLabel,
 } = require('../services/repartidor-rutero-orden-service');
 
-const PRIVILEGED_REPARTIDOR_ROLES = new Set(['ADMIN', 'JEFE_VENTAS']);
 const REPARTIDOR_READ_PAGE_MAX = 100;
+
+function normalizedRole(user) {
+    return String(user?.role || '').trim().toUpperCase();
+}
+
+function isRepartoPrivileged(user) {
+    const role = normalizedRole(user);
+    const activeMode = String(user?.activeMode || '').trim().toUpperCase();
+    return (role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR';
+}
+
+function canonicalRepartidorCode(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{1,2}$/.test(raw) || raw === 'ALL') return '';
+    return /^\d{1,2}$/.test(raw) ? raw.padStart(2, '0') : raw;
+}
 
 /** Single driver only — multi-id / ALL selectors rejected with 422. */
 function authorizeSingleRepartidorId(req, res, rawId) {
@@ -105,9 +125,10 @@ function parsePagination(query, defaultLimit = REPARTIDOR_READ_PAGE_MAX, maxOffs
 
 function authorizedRepartidorIds(req, res, rawIds) {
     const rawParts = String(rawIds || '').split(',').map((id) => id.trim()).filter(Boolean);
-    const ids = [...new Set(rawParts)];
-    if (ids.length > REPARTIDOR_READ_PAGE_MAX || ids.some((id) => !/^[A-Za-z0-9]{1,2}$/.test(id))) {
-        sendRouteError(res, 400, 'REPARTIDOR_ID_INVALID');
+    const normalized = rawParts.map(canonicalRepartidorCode);
+    const ids = [...new Set(normalized)];
+    if (ids.length > REPARTIDOR_READ_PAGE_MAX || normalized.some((id) => !id)) {
+        sendRouteError(res, 422, 'REPARTIDOR_ID_INVALID');
         return null;
     }
     if (!ids.length) {
@@ -119,14 +140,26 @@ function authorizedRepartidorIds(req, res, rawIds) {
         sendRouteError(res, 401, 'AUTH_REQUIRED');
         return null;
     }
-    const role = String(user.role || '').trim().toUpperCase();
-    if (PRIVILEGED_REPARTIDOR_ROLES.has(role)) return ids;
+    const role = normalizedRole(user);
+    const allowed = uniqueActorCodes(user.repartidorCodes);
+    if (isRepartoPrivileged(user)) {
+        if (allowed.length > 0 && ids.every((id) => allowed.some((code) =>
+            normalizeVendorCode(code) === normalizeVendorCode(id)))) return ids;
+        sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
+        return null;
+    }
+    if (role === 'JEFE_VENTAS') {
+        sendRouteError(res, 403, 'REPARTIDOR_MODE_REQUIRED');
+        return null;
+    }
     if (role !== 'REPARTIDOR') {
         sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
         return null;
     }
-    const ownIds = String(user.code || user.id || '').trim();
-    if (ids.length !== 1 || !/^[A-Za-z0-9]{1,2}$/.test(ownIds) || ids[0] !== ownIds) {
+    const ownId = canonicalRepartidorCode(user.code || user.id || '');
+    if (ids.length !== 1 || !ownId || allowed.length !== 1
+        || normalizeVendorCode(ids[0]) !== normalizeVendorCode(allowed[0])
+        || normalizeVendorCode(ownId) !== normalizeVendorCode(allowed[0])) {
         sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
         return null;
     }
@@ -166,37 +199,79 @@ async function resolveDeliveryOwners(entregaId) {
     return repartidorDb.resolveDeliveryOwners(entregaId);
 }
 
-function authorizeResolvedOwner(req, res, rows) {
-    const owners = [...new Set((rows || []).map((row) => String(row.OWNER_ID || '').trim()).filter(Boolean))];
-    if (owners.length === 0) {
+function rawRepartidorId(req) {
+    return String(req.query?.repartidorId || req.body?.repartidorId || '').trim();
+}
+
+function hintedRepartidorId(req) {
+    return canonicalRepartidorCode(rawRepartidorId(req));
+}
+
+function uniqueActorCodes(values) {
+    return [...new Set((values || [])
+        .map(canonicalRepartidorCode)
+        .filter(Boolean))];
+}
+
+function normalizeVendorCode(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.replace(/^0+/, '') || raw;
+}
+
+function actorVendorCodes(user) {
+    const own = String(user?.code || user?.id || '').trim();
+    const tokenCodes = [
+        ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
+        ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
+        own,
+    ];
+    return uniqueActorCodes(tokenCodes);
+}
+
+function vendorCodesIntersect(left, right) {
+    const allowed = new Set(right.map(normalizeVendorCode).filter(Boolean));
+    return left.some((code) => allowed.has(normalizeVendorCode(code)));
+}
+
+function authorizeResolvedOwner(req, res, rows, { requireRepartoOwnerHint = false } = {}) {
+    const drivers = uniqueActorCodes((rows || []).map((row) => row.OWNER_ID));
+    const vendors = uniqueActorCodes((rows || []).map((row) => row.VENDOR_ID));
+    if (drivers.length === 0 && vendors.length === 0) {
         sendRouteError(res, 404, 'DOCUMENT_NOT_FOUND');
         return false;
     }
-    if (owners.length > 1) {
-        sendRouteError(res, 409, 'DOCUMENT_OWNER_AMBIGUOUS');
-        return false;
-    }
-    const role = String(req.user?.role || '').trim().toUpperCase();
-    if (PRIVILEGED_REPARTIDOR_ROLES.has(role)) {
-        req.documentOwnerId = owners[0];
+    const role = normalizedRole(req.user);
+    const hinted = hintedRepartidorId(req);
+    const repartoActor = role === 'REPARTIDOR' || isRepartoPrivileged(req.user);
+    if (requireRepartoOwnerHint && repartoActor) {
+        const authorized = authorizedRepartidorIds(req, res, hinted);
+        if (!authorized || authorized.length !== 1) return false;
+        const matchingDriver = drivers.find((driver) =>
+            normalizeVendorCode(driver) === normalizeVendorCode(authorized[0]));
+        if (!matchingDriver) {
+            sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
+            return false;
+        }
+        req.documentOwnerId = matchingDriver;
         return true;
     }
-    const ownId = String(req.user?.code || req.user?.id || '').trim();
-    if (role !== 'REPARTIDOR' || !/^[A-Za-z0-9]{1,2}$/.test(ownId) || ownId !== owners[0]) {
-        sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
-        return false;
+    if (role === 'COMERCIAL' && vendorCodesIntersect(actorVendorCodes(req.user), vendors)) {
+        req.documentOwnerId = vendors[0];
+        return true;
     }
-    req.documentOwnerId = owners[0];
-    return true;
+    sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
+    return false;
 }
 
-function documentOwnershipGuard(keyParser, ownerResolver, sourceSelector) {
+function documentOwnershipGuard(keyParser, ownerResolver, sourceSelector, options) {
     return async (req, res, next) => {
         const key = keyParser(sourceSelector(req));
         if (!key) return sendRouteError(res, 422, 'DOCUMENT_KEY_INVALID');
+        if (options?.requireRepartoOwnerHint && !prevalidateStrictDocumentOwner(req, res)) return;
         try {
             const rows = await ownerResolver(key);
-            if (!authorizeResolvedOwner(req, res, rows)) return;
+            if (!authorizeResolvedOwner(req, res, rows, options)) return;
             req.documentOwnershipKey = key;
             return next();
         } catch (_error) {
@@ -206,9 +281,30 @@ function documentOwnershipGuard(keyParser, ownerResolver, sourceSelector) {
     };
 }
 
-const albaranQueryOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.query);
-const albaranParamOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.params);
-const invoiceParamOwnership = documentOwnershipGuard(parseInvoiceOwnershipKey, resolveInvoiceOwners, (req) => req.params);
+function prevalidateStrictDocumentOwner(req, res) {
+    const role = normalizedRole(req.user);
+    const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
+    const raw = rawRepartidorId(req);
+    const hint = hintedRepartidorId(req);
+    if ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode !== 'REPARTIDOR') {
+        sendRouteError(res, 403, 'DOCUMENT_REPARTO_MODE_REQUIRED');
+        return false;
+    }
+    if (role === 'REPARTIDOR' || role === 'JEFE_VENTAS' || role === 'ADMIN') {
+        if (!hint || raw.includes(',') || /^ALL$/i.test(raw)) {
+            sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
+            return false;
+        }
+        const authorized = authorizedRepartidorIds(req, res, hint);
+        return Boolean(authorized && authorized.length === 1);
+    }
+    return true;
+}
+
+const strictRepartoDocumentOwner = { requireRepartoOwnerHint: true };
+const albaranQueryOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.query, strictRepartoDocumentOwner);
+const albaranParamOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.params, strictRepartoDocumentOwner);
+const invoiceParamOwnership = documentOwnershipGuard(parseInvoiceOwnershipKey, resolveInvoiceOwners, (req) => req.params, strictRepartoDocumentOwner);
 const documentBodyOwnership = documentOwnershipGuard(
     (body) => String(body.type || 'albaran').toLowerCase() === 'factura'
         ? parseInvoiceOwnershipKey(body)
@@ -218,15 +314,32 @@ const documentBodyOwnership = documentOwnershipGuard(
     async (key) => Object.prototype.hasOwnProperty.call(key, 'terminal')
         ? resolveAlbaranOwners(key)
         : resolveInvoiceOwners(key),
-    (req) => req.body || {}
+    (req) => req.body || {},
+    strictRepartoDocumentOwner
 );
+
+function validateDocumentEmailRequest(req, res, next) {
+    const destinatario = String(req.body?.destinatario || '').trim();
+    const asunto = String(req.body?.asunto || '').trim();
+    const cuerpo = String(req.body?.cuerpo || '').trim();
+    if (destinatario.length > 180 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
+        return sendRouteError(res, 422, 'EMAIL_INVALID');
+    }
+    if (asunto.length > 200 || cuerpo.length > 5000) {
+        return sendRouteError(res, 422, 'EMAIL_CONTENT_INVALID');
+    }
+    if (!prevalidateStrictDocumentOwner(req, res)) return;
+    req.documentEmail = { destinatario, asunto, cuerpo };
+    return next();
+}
 
 async function deliveryOwnership(req, res, next) {
     const entregaId = String(req.params.entregaId || '').trim();
     if (!/^\d{1,18}$/.test(entregaId)) return sendRouteError(res, 422, 'DELIVERY_ID_INVALID');
+    if (!prevalidateStrictDocumentOwner(req, res)) return;
     try {
         const rows = await resolveDeliveryOwners(entregaId);
-        if (!authorizeResolvedOwner(req, res, rows)) return;
+        if (!authorizeResolvedOwner(req, res, rows, strictRepartoDocumentOwner)) return;
         return next();
     } catch (_error) {
         logger.error('[REPARTIDOR] Delivery ownership lookup failed');
@@ -240,9 +353,10 @@ async function legacySignatureOwnership(req, res, next) {
         ? parseAlbaranOwnershipKey({ year: parts[0], series: parts[1], terminal: parts[2], number: parts[3] })
         : null;
     if (!key) return sendRouteError(res, 422, 'DOCUMENT_KEY_INVALID');
+    if (!prevalidateStrictDocumentOwner(req, res)) return;
     try {
         const rows = await resolveAlbaranOwners(key);
-        if (!authorizeResolvedOwner(req, res, rows)) return;
+        if (!authorizeResolvedOwner(req, res, rows, strictRepartoDocumentOwner)) return;
         req.documentOwnershipKey = key;
         return next();
     } catch (_error) {
@@ -272,7 +386,7 @@ router.get('/entregas/:entregaId/firma', verifyToken, deliveryOwnership);
 router.get('/history/legacy-signature/:id', verifyToken, legacySignatureOwnership);
 router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, albaranParamOwnership);
 router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, invoiceParamOwnership);
-router.post('/document/send-email', verifyToken, documentBodyOwnership);
+router.post('/document/send-email', verifyToken, validateDocumentEmailRequest, documentBodyOwnership);
 router.post('/document/share/whatsapp', verifyToken, documentBodyOwnership);
 
 // Commission configuration (30% threshold for repartidores)
@@ -311,13 +425,29 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
             rows = await repartidorDb.getCollectionsSummary(selectedMonth, selectedYear, repartidorParams);
         } catch (_queryError) {
             logger.warn('[REPARTIDOR] Query error in collections/summary');
-            return sendRouteError(res, 503, 'REPARTIDOR_DATA_UNAVAILABLE');
+            return sendRouteError(res, 503, 'REPARTIDOR_COLLECTIONS_UNAVAILABLE');
         }
         if (rows.some((row) =>
             Number(row.CVC_DOCUMENTOS || 0) !== Number(row.NUM_DOCUMENTOS || 0) ||
             Number(row.CVC_AMBIGUOUS_DOCUMENTS || 0) > 0
-        )) {
+        ) && !repartidorDb.isIsolatedTestTableSet()) {
             return sendRouteError(res, 503, 'REPARTIDOR_COLLECTION_DATA_INCOMPLETE');
+        }
+
+        const cvcIncomplete = rows.some((row) =>
+            Number(row.CVC_DOCUMENTOS || 0) !== Number(row.NUM_DOCUMENTOS || 0) ||
+            Number(row.CVC_AMBIGUOUS_DOCUMENTS || 0) > 0
+        );
+        const availability = cvcIncomplete || rows.batchStatus === 'PARTIAL' ? 'PARTIAL' : 'AVAILABLE';
+        let overlay = { total: 0, byDay: [] };
+        try {
+            overlay = await repartidorDb.getAppCollectedOverlay({
+                month: selectedMonth,
+                year: selectedYear,
+                repartidorIds: repartidorParams,
+            });
+        } catch (_overlayError) {
+            logger.warn('[REPARTIDOR] App cobros overlay unavailable');
         }
 
         // Calculate commissions for each client
@@ -355,7 +485,7 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
                 collectable,
                 collected,
                 pending,
-                collectionAvailability: 'AVAILABLE',
+                collectionAvailability: availability,
                 percentage: parseFloat(percentage.toFixed(2)),
                 thresholdMet,
                 thresholdProgress: Math.min(percentage / REPARTIDOR_CONFIG.threshold, 1),
@@ -365,6 +495,24 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
                 numDocuments: row.NUM_DOCUMENTOS
             };
         });
+
+        if (overlay.total > 0) {
+            clients.push({
+                clientId: '_APP',
+                clientName: 'Cobros registrados en la app',
+                collectable: 0,
+                collected: parseFloat(Number(overlay.total).toFixed(2)),
+                pending: 0,
+                collectionAvailability: availability,
+                percentage: 0,
+                thresholdMet: false,
+                thresholdProgress: 0,
+                commission: 0,
+                tier: 0,
+                paymentType: 'App',
+                numDocuments: 0,
+            });
+        }
 
         // Calculate totals
         const totalCollectable = clients.reduce((sum, c) => sum + c.collectable, 0);
@@ -384,7 +532,7 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
                 thresholdMet: overallPercentage >= REPARTIDOR_CONFIG.threshold,
                 clientCount: clients.length
             },
-            collectionAvailability: 'AVAILABLE',
+            collectionAvailability: availability,
             clients
         });
 
@@ -420,27 +568,60 @@ router.get('/collections/daily/:repartidorId', verifyToken, async (req, res) => 
             rows = await repartidorDb.getCollectionsDaily(selectedYear, selectedMonth, repartidorIdList);
         } catch (_queryError) {
             logger.warn('[REPARTIDOR] Query error in collections/daily');
-            return sendRouteError(res, 503, 'REPARTIDOR_DATA_UNAVAILABLE');
+            return sendRouteError(res, 503, 'REPARTIDOR_COLLECTIONS_UNAVAILABLE');
         }
         if (rows.some((row) =>
             Number(row.CVC_DOCUMENTOS || 0) !== Number(row.NUM_DOCUMENTOS || 0) ||
             Number(row.CVC_AMBIGUOUS_DOCUMENTS || 0) > 0
-        )) {
+        ) && !repartidorDb.isIsolatedTestTableSet()) {
             return sendRouteError(res, 503, 'REPARTIDOR_COLLECTION_DATA_INCOMPLETE');
         }
 
-        const daily = rows.map(row => ({
-            day: row.DIA,
-            date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
-            collectable: parseFloat(row.TOTAL_COBRABLE) || 0,
-            collected: parseFloat(row.TOTAL_COBRADO) || 0,
-            pending: parseFloat(row.TOTAL_PENDIENTE) || 0,
-            collectionAvailability: 'AVAILABLE'
-        }));
+        const cvcIncomplete = rows.some((row) =>
+            Number(row.CVC_DOCUMENTOS || 0) !== Number(row.NUM_DOCUMENTOS || 0) ||
+            Number(row.CVC_AMBIGUOUS_DOCUMENTS || 0) > 0
+        );
+        const availability = cvcIncomplete || rows.batchStatus === 'PARTIAL' ? 'PARTIAL' : 'AVAILABLE';
+        let overlay = { total: 0, byDay: [] };
+        try {
+            overlay = await repartidorDb.getAppCollectedOverlay({
+                month: selectedMonth,
+                year: selectedYear,
+                repartidorIds: repartidorIdList,
+            });
+        } catch (_overlayError) {
+            logger.warn('[REPARTIDOR] App cobros overlay unavailable');
+        }
+        const overlayByDay = new Map(overlay.byDay.map((row) => [Number(row.day), Number(row.collected) || 0]));
+
+        const daily = rows.map(row => {
+            const appCollected = overlayByDay.get(Number(row.DIA)) || 0;
+            overlayByDay.delete(Number(row.DIA));
+            return {
+                day: row.DIA,
+                date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
+                collectable: parseFloat(row.TOTAL_COBRABLE) || 0,
+                collected: (parseFloat(row.TOTAL_COBRADO) || 0) + appCollected,
+                pending: parseFloat(row.TOTAL_PENDIENTE) || 0,
+                collectionAvailability: availability,
+            };
+        });
+        for (const [day, collected] of overlayByDay.entries()) {
+            if (!day || collected <= 0) continue;
+            daily.push({
+                day,
+                date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+                collectable: 0,
+                collected,
+                pending: 0,
+                collectionAvailability: availability,
+            });
+        }
+        daily.sort((left, right) => Number(left.day) - Number(right.day));
 
         res.json({
             success: true,
-            collectionAvailability: 'AVAILABLE',
+            collectionAvailability: availability,
             daily
         });
 
@@ -522,7 +703,6 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 return 'no_delivered';
             }
             const appStatus = (row.DELIVERY_STATUS || '').trim().toLowerCase();
-            const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase();
 
             if (appStatus === 'delivered' || appStatus === 'entregado') {
                 return 'delivered';
@@ -535,24 +715,28 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             // Any explicit canonical status wins over legacy flags. Unknown
             // values stay pending instead of being upgraded to delivered.
             if (appStatus) return 'pending';
-            if (legacyStatus === 'F' || legacyStatus === 'R') return 'delivered';
-            // CONFORMADOSN is a completion flag, not merely a dispatch flag;
-            // it remains delivered when the document date is today.
+            // SITUACIONALBARAN F/R is ERP paper/route state, not app delivery.
+            // CONFORMADOSN remains a paper fallback only when the write-set
+            // overlay (TEST in isolated_test, production tables otherwise)
+            // has not already spoken.
             if ((row.CONFORMADOSN || '').trim().toUpperCase() === 'S') return 'delivered';
             return 'pending';
         }
 
         // --- Helper: build document from row ---
         function buildDocument(row, overrides = {}) {
+            // A grouped invoice keeps header values from row, while a
+            // constituent delivery may own the authoritative signature.
+            const referenceRow = overrides.referenceRow || row;
             const rawAmount = Number.isFinite(Number(row.IMPORTETOTAL)) ? Number(row.IMPORTETOTAL) : 0;
             const importe = overrides.amount !== undefined ? overrides.amount : rawAmount;
             const status = computeRowStatus(row);
-            const hasFirmaPath = !!row.FIRMA_PATH;
+            const hasFirmaPath = !!referenceRow.FIRMA_PATH;
             const numFactura = parseInt(row.NUMEROFACTURA) || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const ejercicioFactura = parseInt(row.EJERCICIOFACTURA) || 0;
             const isFactura = numFactura > 0;
-            const legacyNombre = (row.LEGACY_FIRMA_NOMBRE || '').trim();
+            const legacyNombre = (referenceRow.LEGACY_FIRMA_NOMBRE || '').trim();
             const hasLegacySig = legacyNombre.length > 0;
             const subempresa = String(row.SUBEMPRESAALBARAN || '').trim();
             const serie = (row.SERIEALBARAN || 'A').trim();
@@ -560,17 +744,17 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 (Number(row.CVC_PRESENT || 0) === 1 ? 'AVAILABLE' : 'UNAVAILABLE');
 
             const document = {
-                id: `${subempresa}-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+                id: `${subempresa}-${referenceRow.EJERCICIOALBARAN}-${serie}-${referenceRow.TERMINALALBARAN}-${referenceRow.NUMEROALBARAN}`,
                 subempresa,
                 type: overrides.type || (isFactura ? 'factura' : 'albaran'),
                 number: overrides.number !== undefined ? overrides.number : (isFactura ? numFactura : row.NUMEROALBARAN),
-                albaranNumber: row.NUMEROALBARAN,
+                albaranNumber: referenceRow.NUMEROALBARAN,
                 facturaNumber: numFactura || null,
                 serieFactura: serieFactura || null,
                 ejercicioFactura: ejercicioFactura || null,
-                serie: serie,
-                ejercicio: row.EJERCICIOALBARAN,
-                terminal: row.TERMINALALBARAN,
+                serie: (referenceRow.SERIEALBARAN || 'A').trim(),
+                ejercicio: referenceRow.EJERCICIOALBARAN,
+                terminal: referenceRow.TERMINALALBARAN,
                 date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
                 time: (row.HORALLEGADA && row.HORALLEGADA > 0)
                     ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
@@ -578,18 +762,20 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 amount: importe,
                 pendingAvailability,
                 status: overrides.status || status,
-                hasSignature: hasFirmaPath || hasLegacySig || !!row.CANONICAL_FIRMA_EVIDENCE_ID,
-                confirmationId: row.CANONICAL_CONFIRMATION_ID == null
+                hasSignature: hasFirmaPath || hasLegacySig || !!referenceRow.CANONICAL_FIRMA_EVIDENCE_ID,
+                confirmationId: overrides.confirmationId !== undefined
+                    ? overrides.confirmationId
+                    : referenceRow.CANONICAL_CONFIRMATION_ID == null
                     ? null
-                    : String(row.CANONICAL_CONFIRMATION_ID),
-                signaturePath: row.FIRMA_PATH || null,
-                deliveryDate: row.DELIVERY_UPDATED_AT || null,
-                deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
-                deliveryObs: row.OBSERVACIONES || null,
+                    : String(referenceRow.CANONICAL_CONFIRMATION_ID),
+                signaturePath: referenceRow.FIRMA_PATH || null,
+                deliveryDate: referenceRow.DELIVERY_UPDATED_AT || null,
+                deliveryRepartidor: referenceRow.DELIVERY_REPARTIDOR || null,
+                deliveryObs: referenceRow.OBSERVACIONES || null,
                 legacySignatureName: legacyNombre || null,
                 hasLegacySignature: hasLegacySig,
-                legacyDate: (row.LEGACY_ANO > 0)
-                    ? `${row.LEGACY_ANO}-${String(row.LEGACY_MES).padStart(2, '0')}-${String(row.LEGACY_DIA).padStart(2, '0')} ${String(row.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(row.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
+                legacyDate: (referenceRow.LEGACY_ANO > 0)
+                    ? `${referenceRow.LEGACY_ANO}-${String(referenceRow.LEGACY_MES).padStart(2, '0')}-${String(referenceRow.LEGACY_DIA).padStart(2, '0')} ${String(referenceRow.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(referenceRow.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
                     : null,
                 // When grouped by factura, include constituent albaranes
                 ...(overrides.albaranes ? { albaranes: overrides.albaranes } : {})
@@ -655,6 +841,12 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
 
             // Use the most recent row for display metadata (date, status, etc.)
             const primaryRow = fRows[0]; // Already sorted by date DESC
+            const canonicalConfirmationRow = fRows.find((row) => row.CANONICAL_CONFIRMATION_ID != null);
+            const referenceRow = fRows.find((row) => !!row.CANONICAL_FIRMA_EVIDENCE_ID)
+                || fRows.find((row) => !!row.FIRMA_PATH)
+                || fRows.find((row) => String(row.LEGACY_FIRMA_NOMBRE || '').trim())
+                || canonicalConfirmationRow
+                || primaryRow;
 
             const statuses = fRows.map(r => computeRowStatus(r));
             let bestStatus = 'pending';
@@ -688,6 +880,10 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 status: bestStatus,
                 pendingAvailability: pendingAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
                 pending: pendingAmount,
+                referenceRow,
+                confirmationId: canonicalConfirmationRow?.CANONICAL_CONFIRMATION_ID == null
+                    ? undefined
+                    : String(canonicalConfirmationRow.CANONICAL_CONFIRMATION_ID),
                 albaranes: albaranes.length > 1 ? albaranes : undefined
             }));
 
@@ -779,11 +975,14 @@ router.get('/history/objectives/:repartidorId', verifyToken, async (req, res) =>
 router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
-        const { year, clientId } = req.query;
+        const { year, clientId, limit, offset } = req.query;
 
         const yearResult = parseBoundedInt(year, { min: 2000, max: 2100, name: 'YEAR', fallback: new Date().getFullYear() });
         if (yearResult.error) return sendRouteError(res, 422, yearResult.error);
         const selectedYear = yearResult.value;
+        const paginationInput = parsePagination({ limit, offset }, 100, 1000000);
+        const paginationError = paginationInput.limit.error || paginationInput.offset.error;
+        if (paginationError) return sendRouteError(res, 422, paginationError);
         const repartidorIdList = authorizedRepartidorIds(req, res, repartidorId);
         if (!repartidorIdList) return;
 
@@ -791,9 +990,25 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
 
         logger.info(`[REPARTIDOR] Objectives detail for ${repartidorId}, year ${selectedYear}${clientId ? `, client ${clientId}` : ''}`);
 
-        const clientRows = await repartidorDb.getObjectivesDetailClients(repartidorIdList, selectedYear, clientId);
+        const pageLimit = paginationInput.limit.value;
+        const pageOffset = paginationInput.offset.value;
+        const clientPage = await repartidorDb.getObjectivesDetailClients(
+            repartidorIdList,
+            selectedYear,
+            clientId,
+            { limit: pageLimit, offset: pageOffset }
+        );
+        const clientRows = Array.isArray(clientPage.rows) ? clientPage.rows : [];
+        const total = Number(clientPage.total || 0);
         if (clientRows.length === 0) {
-            return res.json({ success: true, clients: [], year: selectedYear });
+            const completeScope = total === 0 && pageOffset === 0;
+            return res.json({
+                success: true, clients: [], year: selectedYear,
+                pageTotal: { sales: 0, cost: 0, units: 0, margin: 0 },
+                grandTotal: completeScope ? { sales: 0, cost: 0, units: 0, margin: 0 } : null,
+                scopeTotalAvailability: completeScope ? 'COMPLETE' : 'PAGED',
+                pagination: { limit: pageLimit, offset: pageOffset, total, hasMore: false, nextOffset: null }
+            });
         }
 
         const clientNames = {};
@@ -827,6 +1042,18 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
 
         // 4. Build hierarchy: Client → FI1 → FI2 → FI3 → FI4 → Products
         const clientMap = new Map();
+
+        clientRows.forEach(row => {
+            const code = String(row.CLIENT_CODE || '').trim();
+            if (!code) return;
+            clientMap.set(code, {
+                code,
+                name: clientNames[code] || `CLIENTE ${code}`,
+                totalSales: 0, totalCost: 0, totalUnits: 0,
+                productCount: new Set(),
+                families: new Map()
+            });
+        });
 
         rows.forEach(row => {
             const cCode = (row.CLIENT_CODE || '').trim();
@@ -932,7 +1159,14 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
         });
 
         // 5. Convert Maps to arrays for JSON, sorted by sales desc
-        const mapToArray = (map) => Array.from(map.values()).sort((a, b) => (b.totalSales || 0) - (a.totalSales || 0));
+        const compareHierarchyNodes = (a, b) => {
+            const salesDelta = (Number(b.totalSales) || 0) - (Number(a.totalSales) || 0);
+            if (salesDelta !== 0) return salesDelta;
+            const codeDelta = String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' });
+            if (codeDelta !== 0) return codeDelta;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'es', { numeric: true, sensitivity: 'base' });
+        };
+        const mapToArray = (map) => Array.from(map.values()).sort(compareHierarchyNodes);
 
         const clients = mapToArray(clientMap).map(client => ({
             code: client.code,
@@ -954,24 +1188,34 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
                         children: mapToArray(fi3.children).map(fi4 => ({
                             code: fi4.code, name: fi4.name,
                             totalSales: fi4.totalSales, totalCost: fi4.totalCost, totalUnits: fi4.totalUnits,
-                            products: Array.from(fi4.products.values()).sort((a, b) => b.totalSales - a.totalSales)
+                            products: Array.from(fi4.products.values()).sort(compareHierarchyNodes)
                         }))
                     }))
                 }))
             }))
         }));
 
-        // Grand totals
+        // Totals for this deterministic client page. Never label a partial
+        // fleet page as a global total.
         let grandSales = 0, grandCost = 0, grandUnits = 0;
         clients.forEach(c => { grandSales += c.totalSales; grandCost += c.totalCost; grandUnits += c.totalUnits; });
+        const pageTotal = { sales: grandSales, cost: grandCost, units: grandUnits, margin: grandSales > 0 ? ((grandSales - grandCost) / grandSales * 100) : 0 };
+        const hasMore = pageOffset + clientRows.length < total;
+        const completeScope = pageOffset === 0 && !hasMore;
 
         logger.info(`[REPARTIDOR] Objectives detail: ${clients.length} clients, ${rows.length} data rows`);
 
         res.json({
             success: true,
             year: selectedYear,
-            grandTotal: { sales: grandSales, cost: grandCost, units: grandUnits, margin: grandSales > 0 ? ((grandSales - grandCost) / grandSales * 100) : 0 },
-            clients
+            pageTotal,
+            grandTotal: completeScope ? pageTotal : null,
+            scopeTotalAvailability: completeScope ? 'COMPLETE' : 'PAGED',
+            clients,
+            pagination: {
+                limit: pageLimit, offset: pageOffset, total, hasMore,
+                nextOffset: hasMore ? pageOffset + clientRows.length : null
+            }
         });
 
     } catch (_error) {
@@ -1078,12 +1322,10 @@ router.get('/history/signature', verifyToken, async (req, res) => {
                 receptorNombre = canonical.receptorNombre || receptorNombre;
                 receptorApellidos = canonical.receptorApellidos || receptorApellidos;
                 receptorDni = canonical.receptorDni || receptorDni;
-                if (!firmante) {
-                    const fullName = [canonical.receptorNombre, canonical.receptorApellidos]
-                        .filter(Boolean).join(' ').trim();
-                    if (fullName) firmante = fullName;
-                }
-                if (!firmaBase64 && canonical.base64) {
+                const fullName = [canonical.receptorNombre, canonical.receptorApellidos]
+                    .filter(Boolean).join(' ').trim();
+                if (fullName) firmante = fullName;
+                if (canonical.base64) {
                     firmaBase64 = canonical.base64;
                     signatureSource = 'CANONICAL_CONFIRMATION';
                 } else if (!firmaBase64 && canonical.hasSignature) {
@@ -1416,7 +1658,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                 receptorNombre = canonical.receptorNombre || '';
                 receptorApellidos = canonical.receptorApellidos || '';
                 receptorDni = canonical.receptorDni || '';
-                if (!signatureBase64 && canonical.base64) {
+                if (canonical.base64) {
                     signatureBase64 = canonical.base64;
                     signatureSource = 'CANONICAL_CONFIRMATION';
                 }
@@ -1959,7 +2201,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
                 receptorNombre = canonical.receptorNombre || '';
                 receptorApellidos = canonical.receptorApellidos || '';
                 receptorDni = canonical.receptorDni || '';
-                if (!signatureBase64 && canonical.base64) {
+                if (canonical.base64) {
                     signatureBase64 = canonical.base64;
                     signatureSource = 'CANONICAL_CONFIRMATION';
                 }
@@ -2038,15 +2280,18 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
         });
         logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);        logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
 
-        // Deduplicate by client ID (a client may appear with different repartidors)
+        // A fleet client card is owner-specific. The same ERP client assigned
+        // to two drivers must remain two isolated drill-down targets.
         const seen = new Map();
         rows.forEach(r => {
             const id = (r.ID || '').trim();
-            if (!id) return;
-            const existing = seen.get(id);
+            const owner = canonicalRepartidorCode(r.OWNER_ID);
+            if (!id || !owner) return;
+            const cardKey = `${owner}:${id}`;
+            const existing = seen.get(cardKey);
             const lv = r.LAST_VISIT || 0;
             if (!existing || lv > existing.LAST_VISIT) {
-                seen.set(id, r);
+                seen.set(cardKey, r);
             }
         });
 
@@ -2072,7 +2317,7 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
                 totalDocuments: parseInt(r.TOTAL_DOCS) || 0,
                 totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
                 lastVisit: lastVisitStr,
-                repCode: null,
+                repCode: canonicalRepartidorCode(r.OWNER_ID),
                 repName: null
             };
         });
@@ -2125,8 +2370,110 @@ router.get('/history/legacy-signature/:id', verifyToken, async (req, res) => {
 // POST /document/send-email
 // Server-side email sending with PDF attachment for repartidor documents
 // =============================================================================
-router.post('/document/send-email', verifyToken, (_req, res) => {
-    return sendRouteError(res, 503, 'EMAIL_DELIVERY_LEDGER_REQUIRED');
+router.post('/document/send-email', verifyToken, async (req, res) => {
+    try {
+        const { destinatario, asunto, cuerpo } = req.documentEmail || {};
+        const key = req.documentOwnershipKey;
+        if (!key) {
+            return sendRouteError(res, 422, 'DOCUMENT_KEY_INVALID');
+        }
+        const isAlbaran = Object.prototype.hasOwnProperty.call(key, 'terminal');
+        let headers;
+        let lines = [];
+        if (isAlbaran) {
+            headers = await repartidorDb.getAlbaranPdfHeader(key.number, key.series, key.year, key.terminal);
+            if (headers && headers.length) {
+                lines = await repartidorDb.getAlbaranLines(key.year, key.series, key.terminal, key.number);
+            }
+        } else {
+            headers = await repartidorDb.getInvoiceHeaderByFactura(key.number, key.series, key.year);
+        }
+        if (!headers || headers.length === 0) {
+            return sendRouteError(res, 404, 'DOCUMENT_NOT_FOUND');
+        }
+        const header = headers[0];
+        const pdfBuffer = await generateInvoicePDF({
+            header,
+            lines: lines || [],
+            documentType: isAlbaran ? 'albaran' : 'factura',
+        });
+        const label = isAlbaran ? 'Albarán' : 'Factura';
+        const filename = `${isAlbaran ? 'Albaran' : 'Factura'}_${key.series}-${key.number}.pdf`
+            .replace(/[^a-zA-Z0-9._-]/g, '_');
+        const htmlBody = isAlbaran
+            ? generateDeliveryEmailHtml({
+                numero: key.number,
+                serie: key.series,
+                fecha: '',
+                total: header.IMPORTETOTAL || header.TOTALFACTURA || '',
+                clienteNombre: header.NOMBRECLIENTEFACTURA || '',
+                customBody: cuerpo,
+            })
+            : generateInvoiceEmailHtml({
+                serie: key.series,
+                numero: key.number,
+                fecha: '',
+                total: header.IMPORTETOTAL || header.TOTALFACTURA || '',
+                clienteNombre: header.NOMBRECLIENTEFACTURA || '',
+                customBody: cuerpo,
+            });
+        const delivery = resolveRepartoEmailDelivery({
+            recipients: [destinatario],
+            mode: 'manual',
+        });
+        const effectiveRecipient = delivery.effectiveRecipients[0];
+        if (!effectiveRecipient) {
+            throw new RepartoEmailDeliveryPolicyError(
+                'El destinatario efectivo no es valido',
+                'REPARTO_EMAIL_RECIPIENT_REQUIRED',
+            );
+        }
+        const logicalKey = `document:${isAlbaran ? 'albaran' : 'factura'}:${key.year}:${key.series}:${key.terminal || ''}:${key.number}`;
+        const expectedMessageId = buildRepartoMessageId({
+            kind: 'document',
+            identity: logicalKey,
+            recipient: effectiveRecipient,
+        });
+        const result = await sendEmailWithPdf({
+            to: effectiveRecipient,
+            subject: asunto || `${label} ${key.series}-${key.number} - Granja Mari Pepa`,
+            htmlBody,
+            pdfBuffer,
+            messageId: expectedMessageId,
+            pdfFilename: filename,
+        });
+        const messageId = String(result?.messageId || '').trim();
+        if (!messageId) {
+            return sendRouteError(res, 503, 'DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED');
+        }
+        try {
+            await repartidorDb.recordDocumentEmailLedger({
+                operatorId: req.user?.id || req.user?.code || '',
+                ownerId: req.documentOwnerId || '',
+                payloadPreview: `logicalKey=${logicalKey};messageId=${messageId}`,
+            });
+        } catch (_ledgerError) {
+            logger.warn('[REPARTIDOR] Document email ledger write failed after send');
+            return sendRouteError(res, 503, 'EMAIL_DELIVERY_LEDGER_REQUIRED');
+        }
+        return res.json({
+            success: true,
+            message: 'Email enviado correctamente',
+            messageId,
+            ledgerWritten: true,
+            deliveryPolicy: delivery.policy,
+        });
+    } catch (error) {
+        if (error instanceof RepartoEmailDeliveryPolicyError) {
+            return res.status(error.statusCode).json({
+                success: false,
+                code: error.code,
+                error: error.message,
+            });
+        }
+        logger.error('[REPARTIDOR] Document email send failed');
+        return sendRouteError(res, 503, 'EMAIL_DELIVERY_FAILED');
+    }
 });
 
 // =============================================================================

@@ -94,16 +94,16 @@ describe('canonical reparto confirmation bootstrap', () => {
     };
     const denied = resolveRepartoRuntime(base);
     expect(denied.valid).toBe(false);
-    expect(createCanonicalConfirmationBootstrap({ runtime: denied, db: { initDb: jest.fn(), getPool: jest.fn() } }).enabled).toBe(false);
+    expect(createCanonicalConfirmationBootstrap({ runtime: denied, db: { acquireConfiguredConnection: jest.fn() } }).enabled).toBe(false);
 
     const enabled = resolveRepartoRuntime({ ...base, REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'true' });
     expect(enabled).toMatchObject({ valid: true, confirmationCapabilityApproved: true, productionConfirmationApproved: true });
-    const result = createCanonicalConfirmationBootstrap({ runtime: enabled, db: { initDb: jest.fn(), getPool: jest.fn() } });
+    const result = createCanonicalConfirmationBootstrap({ runtime: enabled, db: { acquireConfiguredConnection: jest.fn() } });
     expect(result).toMatchObject({ enabled: true, diagnostic: { tableSet: 'production', productionConfirmationApproved: true } });
   });
 
   test('injects repository and static catalog only after every capability condition', async () => {
-    const db = { initDb: jest.fn(), getPool: jest.fn() };
+    const db = { acquireConfiguredConnection: jest.fn() };
     const result = createCanonicalConfirmationBootstrap({ runtime: runtime(), db });
 
     expect(result.enabled).toBe(true);
@@ -112,27 +112,24 @@ describe('canonical reparto confirmation bootstrap', () => {
       delivery: { status: 'ENTREGADO', lineas: [] },
       cobro: { formaPago: 'EFECTIVO' },
     })).resolves.toBeDefined();
-    expect(db.initDb).not.toHaveBeenCalled();
+    expect(db.acquireConfiguredConnection).not.toHaveBeenCalled();
     expect(STATIC_REPARTO_CATALOG.statuses).toContain('PARCIAL');
   });
 
   test('acquires one lazy connection from the initialized pool', async () => {
-    const connection = { execute: jest.fn(), close: jest.fn() };
-    const pool = { connect: jest.fn().mockResolvedValue(connection) };
-    const factory = createDb2ConnectionFactory({
-      initDb: jest.fn().mockResolvedValue(pool),
-      getPool: jest.fn(),
-    });
+    const connection = { query: jest.fn(), close: jest.fn() };
+    const acquireConfiguredConnection = jest.fn().mockResolvedValue(connection);
+    const factory = createDb2ConnectionFactory({ acquireConfiguredConnection });
 
     await expect(factory()).resolves.toBe(connection);
-    expect(pool.connect).toHaveBeenCalledTimes(1);
+    expect(acquireConfiguredConnection).toHaveBeenCalledTimes(1);
   });
 
   test('does not silently fall back when the initialized pool has no connect', async () => {
-    const factory = createDb2ConnectionFactory({
-      initDb: jest.fn().mockResolvedValue(null),
-      getPool: jest.fn().mockReturnValue({}),
+    const error = Object.assign(new Error('DB2 pooled connection is unavailable'), {
+      code: 'REPARTO_DB2_POOL_UNAVAILABLE', statusCode: 503,
     });
+    const factory = createDb2ConnectionFactory({ acquireConfiguredConnection: jest.fn().mockRejectedValue(error) });
     await expect(factory()).rejects.toMatchObject({ code: 'REPARTO_DB2_POOL_UNAVAILABLE' });
   });
 });

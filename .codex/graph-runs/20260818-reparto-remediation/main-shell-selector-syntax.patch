@@ -1,0 +1,16 @@
+diff --git a/lib/features/dashboard/presentation/pages/main_shell.dart b/lib/features/dashboard/presentation/pages/main_shell.dart
+--- a/lib/features/dashboard/presentation/pages/main_shell.dart
++++ b/lib/features/dashboard/presentation/pages/main_shell.dart
+@@ -1258,0 +1259,5 @@
++      if (!canUseRepartidorSelector) {
++        _selectedRepartidor = null;
++        _repartidoresOptions = [];
++        _repartidoresError = null;
++      }
+@@ -1267,6 +1272,0 @@
+-      if (!canUseRepartidorSelector) {
+-        _selectedRepartidor = null;
+-        _repartidoresOptions = [];
+-        _repartidoresError = null;
+-      }
+-

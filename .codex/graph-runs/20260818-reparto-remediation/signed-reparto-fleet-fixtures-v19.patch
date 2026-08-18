@@ -1,0 +1,91 @@
+diff --git a/backend/__tests__/reparto-confirmation-actor-privilege.test.js b/backend/__tests__/reparto-confirmation-actor-privilege.test.js
+--- a/backend/__tests__/reparto-confirmation-actor-privilege.test.js
++++ b/backend/__tests__/reparto-confirmation-actor-privilege.test.js
+@@ -50 +50 @@
+-        vendorCodes: ['95'],
++        repartidorCodes: ['95'],
+@@ -62 +62 @@
+-      user: { id: 'A1', code: '17', role: 'ADMIN' },
++      user: { id: 'A1', code: '17', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['95'] },
+diff --git a/backend/__tests__/entregas-bola-security.test.js b/backend/__tests__/entregas-bola-security.test.js
+--- a/backend/__tests__/entregas-bola-security.test.js
++++ b/backend/__tests__/entregas-bola-security.test.js
+@@ -84,0 +85 @@
++    mockUser.repartidorCodes = ['08', '09'];
+@@ -102 +103 @@
+-    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['09'] };
++    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08', '09'] };
+diff --git a/backend/__tests__/entregas-route-gap-coverage.test.js b/backend/__tests__/entregas-route-gap-coverage.test.js
+--- a/backend/__tests__/entregas-route-gap-coverage.test.js
++++ b/backend/__tests__/entregas-route-gap-coverage.test.js
+@@ -48,2 +48,8 @@
+-function authorized(method, path) {
+-  return request(app())[method](path).set('Authorization', 'Bearer route-gap-test');
++function authorized(method, requestPath) {
++  const isAlbaranDetail = requestPath.startsWith('/albaran/');
++  const hasOwner = /[?&]repartidorId=/.test(requestPath);
++  const separator = requestPath.includes('?') ? '&' : '?';
++  const scopedPath = isAlbaranDetail && !hasOwner
++    ? `${requestPath}${separator}repartidorId=94`
++    : requestPath;
++  return request(app())[method](scopedPath).set('Authorization', 'Bearer route-gap-test');
+ }
+diff --git a/backend/__tests__/repartidor-legacy-read-security.test.js b/backend/__tests__/repartidor-legacy-read-security.test.js
+--- a/backend/__tests__/repartidor-legacy-read-security.test.js
++++ b/backend/__tests__/repartidor-legacy-read-security.test.js
+@@ -50 +50,4 @@
+-    req.user = { ...mockUser };
++    const selfFleet = mockUser.role === 'REPARTIDOR'
++      ? { repartidorCodes: mockUser.repartidorCodes || [mockUser.code] }
++      : {};
++    req.user = { ...mockUser, ...selfFleet };
+@@ -83,6 +86,17 @@
+-function authenticatedGet(path) {
+-  return request(makeApp()).get(path).set('Authorization', 'Bearer test-token');
++function authenticatedGet(requestPath) {
++  const strictDocumentPath = /\/repartidor\/(?:history\/signature|history\/legacy-signature\/|entregas\/[^/]+\/firma|document\/(?:albaran|invoice)\/)/.test(requestPath);
++  const hasOwner = /[?&]repartidorId=/.test(requestPath);
++  const separator = requestPath.includes('?') ? '&' : '?';
++  const scopedPath = mockUser?.role === 'REPARTIDOR' && strictDocumentPath && !hasOwner
++    ? `${requestPath}${separator}repartidorId=${encodeURIComponent(mockUser.code)}`
++    : requestPath;
++  return request(makeApp()).get(scopedPath).set('Authorization', 'Bearer test-token');
+ }
+ 
+ function authenticatedPost(path, body) {
++  const strictDocumentPath = path === '/repartidor/document/send-email'
++    || path === '/repartidor/document/share/whatsapp';
++  const scopedBody = mockUser?.role === 'REPARTIDOR' && strictDocumentPath && body?.repartidorId === undefined
++    ? { ...body, repartidorId: mockUser.code }
++    : body;
+   return request(makeApp())
+@@ -91 +105 @@
+-    .send(body);
++    .send(scopedBody);
+@@ -128 +145 @@
+-      mockUser = { id: '90', code: '90', role, ...(role === 'JEFE_VENTAS' ? { activeMode: 'REPARTIDOR' } : {}) };
++      mockUser = { id: '90', code: '90', role, activeMode: 'REPARTIDOR', repartidorCodes: ['05', '06'] };
+@@ -348 +365 @@
+-      mockUser = { id: '90', code: '90', role, ...(role === 'JEFE_VENTAS' ? { activeMode: 'REPARTIDOR' } : {}) };
++      mockUser = { id: '90', code: '90', role, activeMode: 'REPARTIDOR', repartidorCodes: ['06'] };
+@@ -350 +367 @@
+-      const suffix = role === 'JEFE_VENTAS' ? '&repartidorId=06' : '';
++      const suffix = '&repartidorId=06';
+@@ -435 +452 @@
+-    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['05'] };
+@@ -518,5 +535,6 @@
+       id: '90',
+       code: '90',
+       role: 'JEFE_VENTAS',
+       activeMode: 'REPARTIDOR',
++      repartidorCodes: ['05', '06'],
+     };
+@@ -550,3 +568,4 @@
+     mockUser = {
+       id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
++      repartidorCodes: ['05', '06'],
+     };
+@@ -713 +732 @@
+-    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['05', '06'] };

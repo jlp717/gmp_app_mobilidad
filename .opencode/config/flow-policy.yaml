@@ -1,0 +1,106 @@
+version: 1
+enabled: true
+purpose: >
+  Fuente canonica de politica de flujo V6. Playbooks, roster de 12,
+  manager-as-tools, contexto progresivo. El tool flow-policy-check.ts ENFORCE esta politica.
+source:
+  canonical: ".opencode/config/flow-policy.yaml"
+  enforcer: ".opencode/tools/flow-policy-check.ts"
+  learned_rules: ".opencode/rules/learned.yaml"
+  agent_graph: ".opencode/config/agent-graph.yaml"
+  audit_ledger: ".opencode/audit/LEDGER.yaml"
+
+context_loader:
+  always: true
+  agent: Context-Manager
+  protocol: progressive
+  required_files:
+    - ".opencode/memory/FIELD-GUIDE.md"
+    - "vault/09-index/index.md"
+  optional_max_notes: 3
+  do_not_dump:
+    - ".opencode/AGENTS.md"
+    - ".opencode/audit/AUDIT_STATE.yaml"
+    - ".opencode/audit/LEDGER.yaml"
+    - ".opencode/audit/ACI.yaml"
+
+orchestrator:
+  entrypoint: chief-engineer-assistant
+  legacy_hidden: GMP-Orchestrator
+  playbooks: ".opencode/config/playbooks.yaml"
+
+maker_critic_verifier:
+  sequence: [maker, critic, verifier]
+  maker_never_self_reviews: true
+  critic_agents:
+    - Check-Reviewer
+  verifier: Technical-Verifier
+  required_on_tiers: [T2, T3]
+  required_playbooks: [build, sweep, secure]
+  required_gate: critic-before-verify
+  order: "required_agents must list Check-Reviewer before Technical-Verifier"
+  rule: "BUILD/SWEEP/SECURE: critic con contexto limpio (solo diff). TINY/EXPLORE/PROD no exigen critic."
+
+learning_capture:
+  agent: memory-formation
+  after: verify_PASS
+  learned_yaml_write: "solo tras pregunta unica a Javier y respuesta si"
+
+seo_a11y:
+  kind: owned_by_existing_node
+  node: Visual-Design-Specialist
+  agent_prompt: ".opencode/agents/Visual-Design-Specialist.md"
+  rubric: ".opencode/config/quality-rubric.yaml#accessibility"
+  stack: "Flutter Semantics / ExcludeSemantics / tooltip / focus. No axe/HTML. No nodo fantasma."
+  no_ghost_route: true
+
+deploy:
+  whitelist:
+    - "git pull origin test"
+    - "pm2 restart gmp-api"
+  forbidden_without_explicit_javier:
+    - "pm2 set"
+    - "pm2 save"
+    - "pm2 start"
+    - "pm2 reload"
+    - "edit .env"
+    - "write .env"
+  source: ".opencode/rules/learned.yaml#deploy"
+  enforcer_agents: [sre-engineer, DevOps-CICD-Specialist]
+
+graph_integrity:
+  orphan_edges: forbidden
+  every_edge_target_in: [nodes, layer2_hidden.agents, on_demand.agents]
+
+verification_loop:
+  config: ".opencode/config/verification-loop.yaml"
+  loop_gate: ".opencode/config/loop-gate.yaml"
+  max_repair_iterations: 3
+  ledger: ".opencode/audit/LEDGER.yaml"
+  note: "PASS/WARN/BLOCK de auditoria van al LEDGER, no solo a handoffs."
+
+route_validation:
+  delegated_to_tool: true
+  tool: flow-policy-check
+  note: >
+    Checks de agentes/MCP/skills/gates por senal (DB2, Flutter, prod, perf)
+    viven en el tool. Este YAML no los reescribe. El tool DEBE cargar
+    este archivo y fallar si falta.
+
+required_config:
+  - ".opencode/config/autonomous-flow.yaml"
+  - ".opencode/config/handoff-contract.yaml"
+  - ".opencode/config/task-classification.yaml"
+  - ".opencode/config/orchestrator-decision-tree.yaml"
+  - ".opencode/config/playbooks.yaml"
+  - ".opencode/config/code-quality-contract.yaml"
+  - ".opencode/config/capability-catalog.yaml"
+  - ".opencode/config/guardrails.yaml"
+  - ".opencode/config/delegation-contract.yaml"
+  - ".opencode/config/session.yaml"
+  - ".opencode/config/task-playbooks.yaml"
+  - ".opencode/config/agency-capability-map.yaml"
+  - ".opencode/config/product-delivery-contract.yaml"
+  - ".opencode/memory/FIELD-GUIDE.md"
+  - ".opencode/config/flow-policy.yaml"
+  - ".opencode/rules/learned.yaml"

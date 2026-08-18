@@ -1,0 +1,7 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1190,0 +1191,1 @@
++    if (sequenceBlocks.length) throw new Error(sequenceBlocks.join('; '));
+@@ -1194,1 +1195,0 @@
+-    if (sequenceBlocks.length) throw new Error(sequenceBlocks.join('; '));

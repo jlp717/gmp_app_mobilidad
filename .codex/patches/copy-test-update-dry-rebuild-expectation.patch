@@ -1,0 +1,10 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -295,7 +295,7 @@ describe('TEST-only schema reconciliation', () => {
+       countNullsFn,
+     });
+     expect(countNullsFn).toHaveBeenCalledWith(pair.dst, 'TIPODOCUMENTO');
+-    expect(report[0].operations[0].kind).toBe('CLEAR_TEST_ROWS');
++    expect(report[0].operations[0].kind).toBe('DROP_TEST_TABLE');
+   });

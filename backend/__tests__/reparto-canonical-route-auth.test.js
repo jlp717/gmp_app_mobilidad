@@ -3,7 +3,7 @@
 const express = require('express');
 const request = require('supertest');
 
-let mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+let mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 const SIGNATURE_EVIDENCE_ID = `ev_${'a'.repeat(64)}`;
 jest.mock('../middleware/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 jest.mock('../middleware/auth', () => ({
@@ -41,7 +41,7 @@ describe('canonical reparto confirmation authorization', () => {
     });
   });
   afterEach(() => {
-    mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     routes.resetCanonicalConfirmationRuntime();
   });
 
@@ -63,6 +63,7 @@ describe('canonical reparto confirmation authorization', () => {
       code: '98',
       role: 'JEFE_VENTAS',
       activeMode: 'REPARTIDOR',
+      repartidorCodes: ['05'],
       isJefeVentas: true,
     };
     const response = await request(app()).post('/finanzas/rutero/confirm-delivery-cobro')

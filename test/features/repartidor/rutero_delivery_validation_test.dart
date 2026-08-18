@@ -102,6 +102,25 @@ void main() {
     expect(result.messageFor('importe'), contains('no puede superar'));
   });
 
+  test('prepaid zero total can confirm without product lines', () {
+    final result = validateRuteroDeliveryForm(
+      _base(hasItems: false, importeTotal: 0),
+    );
+    expect(result.messageFor('items'), isNull);
+  });
+
+  test('each blocking field maps to its tab scroll pane', () {
+    expect(ruteroScrollPaneForField('items'), RuteroScrollPane.products);
+    expect(ruteroScrollPaneForField('productsStatus'), RuteroScrollPane.products);
+    expect(ruteroScrollPaneForField('pago'), RuteroScrollPane.payment);
+    expect(ruteroScrollPaneForField('importe'), RuteroScrollPane.payment);
+    expect(ruteroScrollPaneForField('nombre'), RuteroScrollPane.finalize);
+    expect(ruteroScrollPaneForField('apellidos'), RuteroScrollPane.finalize);
+    expect(ruteroScrollPaneForField('dni'), RuteroScrollPane.finalize);
+    expect(ruteroScrollPaneForField('observaciones'), RuteroScrollPane.finalize);
+    expect(ruteroScrollPaneForField('firma'), RuteroScrollPane.finalize);
+  });
+
   test('printer timeout message is honest and not zebra-only', () {
     const result = PrinterJobResult.fail(PrinterFailureCode.timeout);
     expect(result.ok, isFalse);

@@ -142,9 +142,75 @@ function isUniqueConstraintError(error) {
   });
 }
 
+function coerceBlob(blob) {
+  if (blob == null) return null;
+  if (Buffer.isBuffer(blob)) return blob.length ? blob : null;
+  if (blob instanceof Uint8Array) return blob.length ? Buffer.from(blob) : null;
+  return null;
+}
+
+function decodeHexBlob(hex) {
+  const normalized = String(hex || '').trim();
+  if (!normalized || normalized.length % 2 !== 0 || /[^0-9A-Fa-f]/.test(normalized)) {
+    throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
+  }
+  return Buffer.from(normalized, 'hex');
+}
+
+const BLOB_HEX_CHUNK_BYTES = 16000;
+const MAX_EVIDENCE_BLOB_BYTES = 4 * 1024 * 1024;
+
+function hexChunkPlan(size) {
+  const chunks = [];
+  for (let offset = 1, ordinal = 1; offset <= size; ordinal += 1) {
+    const length = Math.min(BLOB_HEX_CHUNK_BYTES, size - offset + 1);
+    chunks.push(Object.freeze({ ordinal, offset, length }));
+    offset += length;
+  }
+  return chunks;
+}
+
+async function readBlobViaHex(connection, table, evidenceId, expectedBytes, signal) {
+  const size = Number(expectedBytes);
+  if (!Number.isInteger(size) || size < 1 || size > MAX_EVIDENCE_BLOB_BYTES) {
+    throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
+  }
+  const plan = hexChunkPlan(size);
+  const values = plan.map(() => '(?, ?, ?)').join(', ');
+  const params = plan.flatMap(({ ordinal, offset, length }) => [ordinal, offset, length]);
+  params.push(evidenceId);
+  // ODBC cannot reliably materialize DB2 BLOB columns directly. Keep each
+  // HEX fragment below the driver character limit, but fetch all fragments
+  // in one ordered, set-based query rather than one round trip per chunk.
+  const hexRows = await rows(connection,
+    `WITH CHUNKS (ORDINAL, BYTE_OFFSET, BYTE_LENGTH) AS (VALUES ${values}) `
+      + `SELECT C.ORDINAL, HEX(SUBSTR(E.CONTENT_BLOB, C.BYTE_OFFSET, C.BYTE_LENGTH)) AS CONTENT_HEX `
+      + `FROM ${table} E JOIN CHUNKS C ON 1 = 1 WHERE E.EVIDENCE_ID = ? ORDER BY C.ORDINAL`,
+    params, signal);
+  if (hexRows.length !== plan.length) {
+    throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
+  }
+  const parts = hexRows.map((row, index) => {
+    const expected = plan[index];
+    if (Number(value(row, 'ORDINAL')) !== expected.ordinal) {
+      throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
+    }
+    const chunk = decodeHexBlob(value(row, 'CONTENT_HEX'));
+    if (chunk.length !== expected.length) {
+      throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
+    }
+    return chunk;
+  });
+  const content = Buffer.concat(parts);
+  if (content.length !== size) {
+    throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
+  }
+  return content;
+}
+
 function normalizeBlob(blob) {
-  if (Buffer.isBuffer(blob)) return blob;
-  if (blob instanceof Uint8Array) return Buffer.from(blob);
+  const coerced = coerceBlob(blob);
+  if (coerced) return coerced;
   throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
 }
 
@@ -278,6 +344,26 @@ function createRepartoEvidenceDb2Repository({
       await execute(connection,
         `UPDATE ${table} SET STATUS = 'ENLAZADA', LINKED_AT = CURRENT TIMESTAMP, EXPIRES_AT = NULL WHERE STATUS = 'PENDIENTE' AND EVIDENCE_ID IN (${placeholders})`,
         ids);
+      const linkedRows = await rows(connection,
+        `SELECT EVIDENCE_ID, STATUS, LINKED_AT, EXPIRES_AT FROM ${table} WHERE EVIDENCE_ID IN (${placeholders})`,
+        ids);
+      const linkedById = new Map(linkedRows.map((row) => [
+        String(value(row, 'EVIDENCE_ID')).trim(), row,
+      ]));
+      const invalid = linkedById.size !== ids.length || ids.some((id) => {
+        const row = linkedById.get(id);
+        const linkedAt = row ? new Date(value(row, 'LINKED_AT')) : null;
+        return !row
+          || String(value(row, 'STATUS')).trim().toUpperCase() !== 'ENLAZADA'
+          || !linkedAt
+          || !Number.isFinite(linkedAt.getTime())
+          || value(row, 'EXPIRES_AT') != null;
+      });
+      if (invalid) {
+        throw new RepartoEvidenceRepositoryError('No se pudo verificar el enlace de la evidencia', {
+          code: 'EVIDENCE_LINK_FAILED', statusCode: 503,
+        });
+      }
     }
 
     return Object.freeze({ assertOwnership, markLinked });
@@ -413,7 +499,7 @@ function createRepartoEvidenceDb2Repository({
   async function getLinked(evidenceId, { signal } = {}) {
     return withConnection(async (connection) => {
       const row = first(await rows(connection,
-        `SELECT EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, CONTENT_BLOB, STATUS FROM ${table} WHERE EVIDENCE_ID = ?`,
+        `SELECT EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, STATUS FROM ${table} WHERE EVIDENCE_ID = ?`,
         [evidenceId], signal));
       throwIfAborted(signal);
       if (!row || String(value(row, 'STATUS')).trim().toUpperCase() !== 'ENLAZADA') {
@@ -421,6 +507,8 @@ function createRepartoEvidenceDb2Repository({
           code: 'EVIDENCE_NOT_FOUND', statusCode: 404,
         });
       }
+      const expectedBytes = Number(value(row, 'CONTENT_BYTES'));
+      const content = await readBlobViaHex(connection, table, evidenceId, expectedBytes, signal);
       return Object.freeze({
         evidenceId: String(value(row, 'EVIDENCE_ID')).trim(),
         documentId: String(value(row, 'DOCUMENT_ID')).trim(),
@@ -428,8 +516,8 @@ function createRepartoEvidenceDb2Repository({
         kind: String(value(row, 'EVIDENCE_KIND')).trim(),
         mimeType: String(value(row, 'MIME_TYPE')).trim().toLowerCase(),
         contentSha256: String(value(row, 'CONTENT_SHA256')).trim().toLowerCase(),
-        contentBytes: Number(value(row, 'CONTENT_BYTES')),
-        content: normalizeBlob(value(row, 'CONTENT_BLOB')),
+        contentBytes: expectedBytes,
+        content: normalizeBlob(content),
       });
     }, { signal });
   }
@@ -446,6 +534,7 @@ module.exports = {
   QUALIFIED_EVIDENCE_TABLE,
   QUALIFIED_CONFIRMATION_EVIDENCE_TABLE,
   REQUIRED_EVIDENCE_COLUMNS,
+  MAX_EVIDENCE_BLOB_BYTES,
   RepartoEvidenceRepositoryError,
   createRepartoEvidenceDb2Repository,
 };

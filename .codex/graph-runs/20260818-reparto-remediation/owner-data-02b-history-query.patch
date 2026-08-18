@@ -1,0 +1,8 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -548,3 +548,3 @@ class RepartidorDataService {
+       final queryParams = <String, String>{
+-        'repartidorId': repartidorId,
++        'repartidorId': owner,
+         'limit': limit.toString(),

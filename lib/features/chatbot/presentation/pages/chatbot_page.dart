@@ -16,10 +16,12 @@ class ChatbotPage extends ConsumerStatefulWidget {
   const ChatbotPage({
     required this.vendedorCodes,
     super.key,
+    this.repartidorId,
   });
 
   final List<String> vendedorCodes;
 
+  final String? repartidorId;
   @override
   ConsumerState<ChatbotPage> createState() => _ChatbotPageState();
 }
@@ -52,22 +54,24 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     _pulseAnimation = Tween<double>(begin: 0.8, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _syncVendedorCodesContext();
+    _syncChatbotContext();
   }
 
   @override
   void didUpdateWidget(covariant ChatbotPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.vendedorCodes.join(',') != widget.vendedorCodes.join(',')) {
-      _syncVendedorCodesContext();
+    if (oldWidget.vendedorCodes.join(',') != widget.vendedorCodes.join(',') ||
+        oldWidget.repartidorId != widget.repartidorId) {
+      _syncChatbotContext();
     }
   }
 
-  void _syncVendedorCodesContext() {
+  void _syncChatbotContext() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(chatbotProvider.notifier).setVendedorCodes(widget.vendedorCodes);
     });
+    ref.read(chatbotProvider.notifier).setRepartidorScope(widget.repartidorId);
   }
 
   void _restoreSessionFor(String? userCode) {

@@ -7,6 +7,10 @@ const {
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
 const {
+  resolveRepartoEmailDelivery,
+  buildRepartoMessageId,
+} = require('./reparto-email-delivery-policy');
+const {
   buildLiquidacionPdfBuffer,
   formatGmpLiquidacionDisplay,
   cashToDeposit,
@@ -167,23 +171,8 @@ async function getCobrosSchemaInfo() {
   return info.cobrosHasCollectionDate;
 }
 
-async function ensureIsolatedTestFinanceSeed({
-  info, ids, dateYmd, repartidorId, date,
-} = {}) {
-  if (typeof financeRepo.seedIsolatedTestFinanceFromProduction !== 'function') {
-    return { skipped: true, reason: 'unavailable' };
-  }
-  try {
-    const schema = info || await getFinanceSchemaInfo();
-    const vendorIds = ids || codeList(repartidorId);
-    const compact = dateYmd || compactDate(date);
-    return await financeRepo.seedIsolatedTestFinanceFromProduction({
-      info: schema, ids: vendorIds, dateYmd: compact,
-    });
-  } catch (error) {
-    logger.warn(`[FINANCE_SEED] ${sanitizeErrorMessage(error)}`);
-    return { skipped: true, reason: 'error' };
-  }
+async function ensureIsolatedTestFinanceSeed() {
+  return Object.freeze({ skipped: true, reason: 'explicit_copy_script_required' });
 }
 
 function codeList(raw) {
@@ -852,7 +841,6 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   }
 
   const dateYmd = compactDate(date);
-  await ensureIsolatedTestFinanceSeed({ info, ids, dateYmd });
 
   const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows] =
     await Promise.all([
@@ -1346,11 +1334,13 @@ async function getCommissionTiers() {
 function calculateCommission({ deliveredAmount, collectedAmount, tiers }) {
   const delivered = roundMoney(deliveredAmount);
   const collected = roundMoney(collectedAmount);
-  const orderedTiers = [...(tiers || [])].sort((a, b) => {
-    const byThreshold = toNumber(a.thresholdPct) - toNumber(b.thresholdPct);
-    if (byThreshold !== 0) return byThreshold;
-    return toNumber(a.sortOrder) - toNumber(b.sortOrder);
-  });
+  const orderedTiers = [...(tiers || [])]
+    .filter((tier) => toNumber(tier.thresholdPct) >= 30)
+    .sort((a, b) => {
+      const byThreshold = toNumber(a.thresholdPct) - toNumber(b.thresholdPct);
+      if (byThreshold !== 0) return byThreshold;
+      return toNumber(a.sortOrder) - toNumber(b.sortOrder);
+    });
   let appliedTier = null;
 
   // Business rule: apply only the highest reached threshold, and calculate
@@ -1436,6 +1426,13 @@ async function getCommissionSummary({ repartidorId, from, to }) {
 }
 
 async function saveCommissionTiers({ tiers, updatedBy }) {
+  if (!Array.isArray(tiers) || tiers.some((tier) => toNumber(tier.thresholdPct) < 30)) {
+    const error = new Error('El primer tramo de comision debe ser como minimo del 30%');
+    error.code = 'COMMISSION_THRESHOLD_MINIMUM_REQUIRED';
+    error.statusCode = 422;
+    throw error;
+  }
+
   await withTransaction(async (conn) => {
     await financeRepo.deactivateCommissionTiers(conn, updatedBy);
     await financeRepo.insertCommissionTier(conn, { tiers, updatedBy });
@@ -1497,7 +1494,14 @@ async function sendLiquidacionEmails({
     if (normalizeText(hardcoded)) recipients.add(String(hardcoded).trim().toLowerCase());
   }
 
-  if (recipients.size === 0) {
+  const delivery = resolveRepartoEmailDelivery({
+    recipients: [...recipients],
+    env: process.env,
+    mode: 'automatic',
+  });
+  const effectiveRecipients = delivery.effectiveRecipients;
+
+  if (effectiveRecipients.length === 0) {
     throw new LiquidacionEmailRecipientRequiredError();
   }
 
@@ -1568,10 +1572,15 @@ async function sendLiquidacionEmails({
   });
 
   const results = [];
-  for (const to of recipients) {
+  for (const to of effectiveRecipients) {
     try {
       const result = await sendEmailWithPdf({
         to,
+        messageId: buildRepartoMessageId({
+          kind: 'liquidacion',
+          identity: `${liquidacion.id || ''}|${displayNumber}|${liquidacion.date || ''}`,
+          recipient: to,
+        }),
         subject,
         htmlBody: `
           <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;">

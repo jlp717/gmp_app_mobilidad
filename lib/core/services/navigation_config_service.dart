@@ -30,6 +30,9 @@ class NavigationConfigService {
         );
       }
       items.addAll(_repartidorItems);
+      if (!showCommissions) {
+        items.removeWhere((item) => item.label == 'Comisiones');
+      }
       return items;
     }
 

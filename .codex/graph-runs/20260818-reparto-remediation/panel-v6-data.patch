@@ -1,0 +1,132 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -92,2 +92,3 @@
+-    required this.clients,
+-  });
++    required this.clients,
++    this.collectionAvailability = 'COMPLETE',
++  });
+@@ -112,2 +113,5 @@
+-      clients: clientsList,
+-    );
++      clients: clientsList,
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++    );
+@@ -124,2 +128,5 @@
+-  final List<ClientCollectionData> clients;
+-}
++  final List<ClientCollectionData> clients;
++  final String collectionAvailability;
++
++  bool get isPartial => collectionAvailability == 'PARTIAL';
++}
+@@ -179,4 +186,6 @@
+-    required this.collected,
+-  });
+-
+-  factory DailyCollection.fromJson(Map<String, dynamic> json) {
++    required this.collected,
++    this.pending = 0,
++    this.collectionAvailability = 'COMPLETE',
++  });
++
++  factory DailyCollection.fromJson(Map<String, dynamic> json) {
+@@ -187,2 +196,6 @@
+-      collected: ((json['collected'] ?? 0) as num).toDouble(),
+-    );
++      collected: ((json['collected'] ?? 0) as num).toDouble(),
++      pending: ((json['pending'] ?? 0) as num).toDouble(),
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++    );
+@@ -193,4 +206,30 @@
+-  final double collected;
+-}
+-
+-/// Cliente del historial
++  final double collected;
++  final double pending;
++  final String collectionAvailability;
++}
++
++class DailyCollectionsResult {
++  DailyCollectionsResult({
++    required this.collectionAvailability,
++    required List<DailyCollection> daily,
++  }) : daily = List.unmodifiable(daily);
++
++  factory DailyCollectionsResult.fromJson(Map<String, dynamic> json) {
++    return DailyCollectionsResult(
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++      daily: (json['daily'] as List? ?? const <dynamic>[])
++          .whereType<Map>()
++          .map((item) => DailyCollection.fromJson(Map<String, dynamic>.from(item)))
++          .toList(),
++    );
++  }
++
++  final String collectionAvailability;
++  final List<DailyCollection> daily;
++
++  bool get isPartial => collectionAvailability == 'PARTIAL';
++}
++
++/// Cliente del historial
+@@ -437,25 +476,25 @@
+-  static Future<List<DailyCollection>> getDailyCollections({
+-    required String repartidorId,
+-    int? year,
+-    int? month,
+-  }) async {
+-    try {
+-      final queryParams = <String, String>{};
+-      if (year != null) queryParams['year'] = year.toString();
+-      if (month != null) queryParams['month'] = month.toString();
+-
+-      final cacheKey =
+-          'repartidor_daily_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+-
+-      final response = await ApiClient.get(
+-        '/repartidor/collections/daily/$repartidorId',
+-        queryParameters: queryParams,
+-        cacheKey: cacheKey,
+-        cacheTTL: const Duration(minutes: 10), // 10 minutes
+-      );
+-
+-      final dailyList = (response['daily'] as List? ?? [])
+-          .map((d) => DailyCollection.fromJson(d as Map<String, dynamic>))
+-          .toList();
+-
+-      return dailyList;
++  static Future<DailyCollectionsResult> getDailyCollections({
++    required String repartidorId,
++    int? year,
++    int? month,
++  }) async {
++    try {
++      final queryParams = <String, String>{};
++      if (year != null) queryParams['year'] = year.toString();
++      if (month != null) queryParams['month'] = month.toString();
++
++      final cacheKey =
++          'repartidor_daily_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
++
++      final response = await ApiClient.get(
++        '/repartidor/collections/daily/$repartidorId',
++        queryParameters: queryParams,
++        cacheKey: cacheKey,
++        cacheTTL: const Duration(minutes: 10), // 10 minutes
++      );
++
++      final dailyList = (response['daily'] as List? ?? [])
++          .map((d) => DailyCollection.fromJson(d as Map<String, dynamic>))
++          .toList();
++
++      return dailyList;
+

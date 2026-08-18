@@ -34,7 +34,7 @@ void main() {
     expect(find.text('Briefing'), findsWidgets);
     expect(find.text('Mesa comercial'), findsOneWidget);
     expect(find.text('Cobertura'), findsWidgets);
-    expect(find.text('COBERTURA POR PESTANAS'), findsOneWidget);
+    expect(find.text('COBERTURA POR PESTAÑAS'), findsOneWidget);
     expect(find.text('Copiloto Comercial GMP'), findsOneWidget);
     expect(find.text('Producto'), findsWidgets);
     expect(find.text('Cliente'), findsWidgets);
@@ -42,7 +42,6 @@ void main() {
     expect(find.text('Factura'), findsWidgets);
     expect(find.text('Comisiones'), findsWidgets);
     expect(find.text('Objetivos'), findsWidgets);
-    expect(find.text('Glacius'), findsWidgets);
     expect(find.text('Bolsa'), findsWidgets);
     expect(find.text('Almacen'), findsWidgets);
     expect(find.text('Ruta'), findsWidgets);

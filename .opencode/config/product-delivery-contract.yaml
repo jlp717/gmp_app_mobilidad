@@ -1,0 +1,74 @@
+version: 1
+purpose: >
+  Definicion de "entregable a cliente". Sustituye la impresion de que la app
+  queda bien. Si un item no es medible, no cuenta. Anti-vibecode.
+enforcer: ".opencode/tools/flow-policy-check.ts"
+applies_to_task_types: [factory, frontend_web, ship_pr]
+agency_map: ".opencode/config/agency-capability-map.yaml"
+
+anti_vibe:
+  block_if:
+    - "TODO/FIXME en camino critico"
+    - "any/dynamic sin justificacion"
+    - "console.log/print en produccion"
+    - "datos mock en rutas de produccion"
+    - "lorem ipsum o copy placeholder"
+    - "test skipped/xit en el flujo que se entrega"
+    - "secreto literal o .env commiteado"
+    - "SQL concatenado"
+    - "N+1"
+    - "pantalla sin loading/empty/error"
+    - "color hex fuera del sistema de tokens"
+    - "error silencioso / catch vacio"
+    - "ruta publica sin title/meta si es web indexable"
+
+client_ready:
+  product:
+    gate: living-spec-exists
+    pass: "existe spec EARS + fuera de alcance + reglas de negocio en docs/spec/<app>/ o .opencode/state/plans/"
+  architecture:
+    gate: layered-architecture
+    pass: "frontend no habla a DB; backend route/service/repo; contratos tipados"
+  frontend:
+    gate: system-tests-and-a11y
+    pass: "flujo critico navegable; 0 axe serio/critico en web; Semantics en Flutter"
+  a11y:
+    gate: a11y-baseline
+    pass: "WCAG 2.2 AA en web o Semantics Flutter; reduced-motion"
+  backend:
+    gate: api-contract-coverage
+    pass: "auth en borde; input validado; errores tipados; credentials_ref"
+  seo:
+    gate: seo-baseline
+    pass: "title unico, meta description, un h1, OG, canonical; sitemap o razon de no-index; 0 enlaces rotos en nav"
+  performance:
+    gate: web-vitals-or-flutter-perf
+    pass: "web: LCP<2.5s INP<200ms CLS<0.1; Flutter: 0 N+1 y 0 trabajo pesado en build()"
+  observability:
+    gate: observability-baseline
+    pass: "health; logs estructurados; 0 console.log; errores no tragados"
+  analytics:
+    gate: analytics-baseline
+    pass: "eventos del flujo critico o no-tracking explicito en spec"
+  legal:
+    gate: legal-privacy-baseline
+    pass: "privacy/cookies si web publica UE, o noindex+razon"
+  copy:
+    gate: copy-no-placeholder
+    pass: "0 lorem; microcopy de vacio/error real"
+  security:
+    gate: zero-plaintext-secrets
+    pass: "0 secretos en repo; AppSec PASS en diff"
+  quality:
+    gate: product-delivery-contract
+    pass: "code-quality-contract PASS + elite-quality-gate 0 BLOCK"
+  ship:
+    gate: pr-evidence
+    pass: "PR abierto con evidencia de gates; CI verde o fallo citado. Merge a main y prod = adelante de Javier"
+
+loop:
+  tool: goal-loop-manager
+  completion: "product-delivery-contract PASS"
+  max_iterations: 12
+  on_fail_tick: "maker recibe el finding concreto; no una impresion"
+  never: "saltar a prod, commitear secretos, declarar hecho sin PASS"

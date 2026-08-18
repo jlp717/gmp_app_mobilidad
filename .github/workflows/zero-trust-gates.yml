@@ -1,0 +1,169 @@
+name: Zero-Trust Delivery Gates
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: zero-trust-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+  NODE_VERSION: '20'
+  COVERAGE_THRESHOLD: 80
+
+jobs:
+  spec-gate:
+    name: "Gate 1: Spec Compliance"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR Description
+        run: |
+          if [ -z "${{ github.event.pull_request.body }}" ]; then
+            echo "::warning::PR description is empty - spec compliance cannot be fully verified"
+          fi
+
+      - name: Scope Validation
+        run: |
+          echo "Checking scope..."
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+          echo "Changed files: $CHANGED_FILES"
+          if [ "$CHANGED_FILES" -gt 20 ]; then
+            echo "::warning::Large change set ($CHANGED_FILES files) - consider splitting"
+          fi
+
+  static-gate:
+    name: "Gate 2: Static Analysis"
+    runs-on: ubuntu-latest
+    needs: spec-gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Flutter Analyze
+        run: dart analyze --fatal-infos lib/ test/
+
+      - name: ESLint
+        run: cd backend && npx eslint --quiet routes/ services/ middleware/
+
+      - name: Type Check
+        run: cd backend && npx tsc --noEmit
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: NPM Audit
+        run: cd backend && npm audit --audit-level=high || true
+
+  behavior-gate:
+    name: "Gate 3: Behavioral Verification"
+    runs-on: ubuntu-latest
+    needs: static-gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Flutter Tests
+        run: flutter test --coverage --no-pub
+
+      - name: Backend Tests
+        run: cd backend && npx jest --coverage --bail
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/
+            backend/coverage/
+
+  runtime-gate:
+    name: "Gate 4: Runtime Verification"
+    runs-on: ubuntu-latest
+    needs: behavior-gate
+    if: github.base_ref == 'main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build Web
+        run: flutter build web --release
+
+      - name: Check Build Artifacts
+        run: |
+          ls -la build/app/outputs/flutter-apk/ || echo "APK not found"
+          ls -la build/web/ || echo "Web build not found"
+
+  cross-domain:
+    name: "Cross-Domain Validation"
+    runs-on: ubuntu-latest
+    needs: spec-gate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Module Impact Analysis
+        run: |
+          echo "Analyzing cross-module impact..."
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "$CHANGED" | grep -q "lib/features/" && echo "Frontend modules affected"
+          echo "$CHANGED" | grep -q "backend/" && echo "Backend modules affected"
+          echo "$CHANGED" | grep -q "test/" && echo "Tests affected"
+
+  quality-report:
+    name: "Quality Report"
+    runs-on: ubuntu-latest
+    needs: [runtime-gate, cross-domain]
+    if: always()
+    steps:
+      - name: Generate Report
+        run: |
+          echo "## 🛡️ Zero-Trust Delivery Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Spec Compliance | ${{ needs.spec-gate.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Analysis | ${{ needs.static-gate.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Behavioral Verification | ${{ needs.behavior-gate.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime Verification | ${{ needs.runtime-gate.result == 'success' && '✅' || '⏭️ skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cross-Domain | ${{ needs.cross-domain.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail on Block
+        if: |
+          needs.spec-gate.result != 'success' ||
+          needs.static-gate.result != 'success' ||
+          needs.behavior-gate.result != 'success' ||
+          (needs.runtime-gate.result != 'success' && needs.runtime-gate.result != 'skipped') ||
+          needs.cross-domain.result != 'success'
+        run: |
+          echo "::error::Zero-trust gates failed"
+          exit 1

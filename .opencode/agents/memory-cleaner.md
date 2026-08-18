@@ -67,3 +67,13 @@ You MUST NOT:
   "evidence": []
 }
 ```
+
+## Limites (no hacer)
+- No borrar memoria directamente: solo proponer merge (semantic_merge_advisor).
+- No ejecutar pruning real sin semantic-memory-pruner dry-run y aprobacion.
+- No tocar user-corrections.jsonl ni anti_patterns.
+- No ejecutar bash ni editar codigo.
+
+## Protocolo de fallo
+- Evidencia insuficiente: BLOCKED con merge_proposals vacio y razon.
+- Sin aprobacion para prune: devolver propuesta, nunca ejecutar.

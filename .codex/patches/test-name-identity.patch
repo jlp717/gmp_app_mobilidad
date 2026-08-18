@@ -1,0 +1,6 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -105 +105 @@
+-  test('documents identity as an explicit exemption while accepting identical data shape', () => {
++  test('reports and blocks an identity mismatch even when the data shape matches', () => {

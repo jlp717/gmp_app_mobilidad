@@ -1,0 +1,104 @@
+diff --git a/lib/features/dashboard/presentation/pages/main_shell.dart b/lib/features/dashboard/presentation/pages/main_shell.dart
+--- a/lib/features/dashboard/presentation/pages/main_shell.dart
++++ b/lib/features/dashboard/presentation/pages/main_shell.dart
+@@ -138,0 +139,10 @@
++  bool _isEffectiveRepartidorJefe(UserModel user, Object? activeMode) {
++    final mode = activeMode?.toString().trim().toUpperCase();
++    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
++    final hasJefeAuthorization =
++        user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
++    return mode == 'REPARTIDOR' &&
++        hasJefeAuthorization &&
++        normalizedCode != '80';
++  }
++
+@@ -267,1 +277,1 @@
+-      if (user.isJefeVentas) {
++      if (_isEffectiveRepartidorJefe(user, authState?.activeMode)) {
+@@ -297,0 +308,24 @@
++    final authState = ref.read(authProvider).value;
++    final user = authState?.user;
++    if (user == null ||
++        !_isEffectiveRepartidorJefe(user, authState?.activeMode)) {
++      if (!mounted) return;
++      setState(() {
++        _isLoadingRepartidores = false;
++        _repartidoresOptions = [];
++        _repartidoresError = null;
++        _selectedRepartidor = null;
++      });
++      return;
++    }
++    final mode = authState!.activeMode.toString().trim().toUpperCase();
++    final cacheKey =
++        'auth:repartidores:${user.code.trim()}:claims${user.claimsVersion}:$mode';
++
+@@ -305,1 +340,1 @@
+-        cacheKey: 'auth:repartidores',
++        cacheKey: cacheKey,
+@@ -1218,3 +1253,7 @@
+-    if (expectedMode == 'REPARTIDOR' &&
+-        (expectedRole == 'JEFE_VENTAS' || expectedRole == 'ADMIN')) {
++    final committedUser = authState?.user;
++    final canUseRepartidorSelector = committedUser != null &&
++        _isEffectiveRepartidorJefe(committedUser, authState?.activeMode);
++    if (canUseRepartidorSelector) {
+       _fetchRepartidores();
+     }
+@@ -1227,0 +1267,5 @@
++      if (!canUseRepartidorSelector) {
++        _selectedRepartidor = null;
++        _repartidoresOptions = [];
++        _repartidoresError = null;
++      }
++
+diff --git a/test/core/navigation_config_test.dart b/test/core/navigation_config_test.dart
+--- a/test/core/navigation_config_test.dart
++++ b/test/core/navigation_config_test.dart
+@@ -32,0 +33,41 @@
++    test('keeps exact repartidor order and hides commissions when disabled', () {
++      final items = NavigationConfigService.getNavItems(
++        isAlmacen: false,
++        isRepartidor: true,
++        isJefeVentas: false,
++        showCommissions: false,
++      );
++
++      expect(
++        items.map((item) => item.label),
++        equals([
++          'Clientes',
++          'Rutero',
++          'Liquidación',
++          'Vencimientos',
++          'Evolución',
++          'Histórico',
++          'Asistente',
++        ]),
++      );
++    });
++
++    test('puts Panel first and retains commissions for reparto jefe', () {
++      final items = NavigationConfigService.getNavItems(
++        isAlmacen: false,
++        isRepartidor: true,
++        isJefeVentas: true,
++        showCommissions: true,
++      );
++
++      expect(
++        items.map((item) => item.label),
++        equals([
++          'Panel',
++          'Clientes',
++          'Rutero',
++          'Liquidación',
++          'Vencimientos',
++          'Evolución',
++          'Comisiones',
++          'Histórico',
++          'Asistente',
++        ]),
++      );
++    });
++

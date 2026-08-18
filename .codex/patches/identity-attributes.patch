@@ -1,0 +1,20 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -142 +142,4 @@
+-            IDENTITY
++            IDENTITY,
++            IDENTITY_GENERATION,
++            IDENTITY_START,
++            IDENTITY_INCREMENT
+@@ -156,0 +160,3 @@
++    identityGeneration: String(r.IDENTITY_GENERATION ?? r.identity_generation ?? '').trim().toUpperCase(),
++    identityStart: String(r.IDENTITY_START ?? r.identity_start ?? ''),
++    identityIncrement: String(r.IDENTITY_INCREMENT ?? r.identity_increment ?? ''),
+@@ -181 +188,6 @@
+-    if (dstByName.has(name) && src.identity !== dstByName.get(name).identity) exemptIdentityDeltas.push(name);
++    const dst = dstByName.get(name);
++    const sourceIdentity = src.identity ? `${src.identityGeneration}|${src.identityStart}|${src.identityIncrement}` : 'NO';
++    const destinationIdentity = dst?.identity
++      ? `${dst.identityGeneration}|${dst.identityStart}|${dst.identityIncrement}` : 'NO';
++    if (dst && sourceIdentity !== destinationIdentity) exemptIdentityDeltas.push(name);

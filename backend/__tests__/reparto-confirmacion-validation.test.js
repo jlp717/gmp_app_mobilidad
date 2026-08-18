@@ -5,7 +5,7 @@ const request = require('supertest');
 
 const mockConfirm = jest.fn();
 const mockValidateCatalog = jest.fn();
-let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 const EVIDENCE_SIGNATURE_ID = `ev_${'a'.repeat(64)}`;
 const EVIDENCE_PHOTO_ID = `ev_${'b'.repeat(64)}`;
 
@@ -112,7 +112,7 @@ async function post(deliveryPayload, { cobro, key = 'delivery-2026-S-10-404-vali
 describe('structured reparto confirmation validation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     mockValidateCatalog.mockResolvedValue(undefined);
     mockConfirm.mockResolvedValue({ created: true, idempotent: false });
     routes.setCanonicalConfirmationRuntime({
@@ -168,7 +168,7 @@ describe('structured reparto confirmation validation', () => {
   });
 
   test.each([
-    ['empty line list', delivery({ lineas: [] })],
+    ['empty line list on PARCIAL', delivery({ status: 'PARCIAL', lineas: [] })],
     ['negative quantities', delivery({
       lineas: [line({ cantidadEntregada: -1, cantidadPendiente: 5 })],
     })],
@@ -279,6 +279,15 @@ describe('structured reparto confirmation validation', () => {
       code: 'INVALID_DELIVERY_PAYLOAD',
     });
     expect(mockConfirm).not.toHaveBeenCalled();
+  });
+
+  test('accepts prepaid ENTREGADO with an empty line list', async () => {
+    const res = await post(delivery({ lineas: [] }));
+
+    expect(res.status).toBe(201);
+    expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      delivery: expect.objectContaining({ status: 'ENTREGADO', lineas: [] }),
+    }));
   });
 
   test('permits payment only on a deliverable partial state', async () => {

@@ -1,0 +1,76 @@
+diff --git a/backend/routes/repartidor-finanzas.js b/backend/routes/repartidor-finanzas.js
+--- a/backend/routes/repartidor-finanzas.js
++++ b/backend/routes/repartidor-finanzas.js
+@@
+ function hasFinanceListRole(user) {
+   const role = String(user?.role || '').trim().toUpperCase();
+   const activeMode = String(user?.activeMode || '').trim().toUpperCase();
+   return role === 'ADMIN' || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
+ }
++
++function financeFleetCodes(user) {
++  return [
++    ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
++    ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
++    ...(Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : []),
++    ...(Array.isArray(user?.repartidores) ? user.repartidores : []),
++  ].map(normalizeCode).filter(Boolean);
++}
+@@
+-function canAccessRepartidor(req, repartidorId) {
++function canAccessRepartidor(req, repartidorId, { allowMultiple = false } = {}) {
+   const user = req.user || {};
+   const role = String(user.role || '').trim().toUpperCase();
+-  if (hasFinanceListRole(user)) return true;
+-  if (role !== 'REPARTIDOR') return false;
++  const selected = String(repartidorId || '').split(',').map(normalizeCode).filter(Boolean);
++  if (!selected.length || selected.some((code) => /^ALL$/i.test(code))) return false;
++  if (!allowMultiple && selected.length !== 1) return false;
++  if (role === 'ADMIN') return true;
++  if (role === 'JEFE_VENTAS') {
++    if (!hasFinanceListRole(user)) return false;
++    const visible = financeFleetCodes(user);
++    return visible.length > 0
++      && selected.every((target) => visible.some((allowed) => codesMatch(allowed, target)));
++  }
++  if (role !== 'REPARTIDOR' || selected.length !== 1) return false;
+   const userCode = normalizeCode(user.code || user.id || user.user);
+-  const targetCode = normalizeCode(repartidorId);
+-  const userNumericCode = normalizeNumericCode(userCode);
+-  const targetNumericCode = normalizeNumericCode(targetCode);
+-  return userCode === targetCode ||
+-    (userNumericCode !== null &&
+-      targetNumericCode !== null &&
+-      userNumericCode === targetNumericCode);
++  return codesMatch(userCode, selected[0]);
+ }
+ 
+-function requireRepartidorAccess(resolveRepartidorId) {
++function requireRepartidorAccess(resolveRepartidorId, options) {
+   return (req, res, next) => {
+     const repartidorId = resolveRepartidorId(req);
+-    if (canAccessRepartidor(req, repartidorId)) return next();
++    if (canAccessRepartidor(req, repartidorId, options)) return next();
+@@
+-router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
+@@
+-router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
+@@
+-router.get('/vencimientos/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/vencimientos/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
+@@
+-router.get('/liquidaciones/:repartidorId/desglose', verifyToken,
+-  requireFinanceRepartidorSelector,
++router.get('/liquidaciones/:repartidorId/desglose', verifyToken,
++  requireSingleFinanceRepartidorSelector,
+@@
+-router.get('/commissions/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/commissions/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
+@@
+-router.get('/cuentas/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/cuentas/:repartidorId', verifyToken, requireSingleFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+@@
+-router.get('/evolution/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/evolution/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {

@@ -1,0 +1,84 @@
+diff --git a/backend/repositories/repartidor-liquidacion-db2-repository.js b/backend/repositories/repartidor-liquidacion-db2-repository.js
+--- a/backend/repositories/repartidor-liquidacion-db2-repository.js
++++ b/backend/repositories/repartidor-liquidacion-db2-repository.js
+@@ -6,1 +5,0 @@
+-  TABLE_MAPPINGS,
+@@ -799,4 +797,0 @@
+-        const overlayFinance = runtime?.tableSet === 'isolated_test'
+-          && TABLE_MAPPINGS.production.finance.cobros !== finance.cobros
+-          ? TABLE_MAPPINGS.production.finance
+-          : null;
+@@ -803,1 +797,1 @@
+-        let balanceRow = first(await rows(connection,
++        const balanceRow = first(await rows(connection,
+@@ -806,5 +800,0 @@
+-        if (!balanceRow && overlayFinance) {
+-          balanceRow = first(await rows(connection,
+-            `SELECT SALDO_PENDIENTE FROM ${overlayFinance.balances} WHERE CODIGO_REPARTIDOR = ?`,
+-            [repartidorId]));
+-        }
+@@ -830,28 +819,0 @@
+-        const productionPaymentRows = overlayFinance
+-          ? await rows(connection,
+-            `SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, `
+-              + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
+-              + `FROM ${overlayFinance.cobros} `
+-              + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+-              + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID",
+-            [repartidorId, day, month, year])
+-          : [];
+-        const paymentKey = (row) => {
+-          const tipo = String(rowValue(row, 'TIPODOCUMENTO') || '').trim();
+-          const numero = String(rowValue(row, 'NUMERODOCUMENTO') || '').trim();
+-          const cliente = String(rowValue(row, 'CODIGOCLIENTEALBARAN') || '').trim();
+-          if (tipo && numero && cliente) return `${tipo}|${numero}|${cliente}`;
+-          return `id:${rowValue(row, 'ID')}`;
+-        };
+-        const mergedPaymentRows = [];
+-        const seenPaymentKeys = new Set();
+-        for (const row of [...(productionPaymentRows || []), ...(paymentRows || [])]) {
+-          const key = paymentKey(row);
+-          if (seenPaymentKeys.has(key)) {
+-            const index = mergedPaymentRows.findIndex((item) => paymentKey(item) === key);
+-            if (index >= 0) mergedPaymentRows[index] = row;
+-            continue;
+-          }
+-          seenPaymentKeys.add(key);
+-          mergedPaymentRows.push(row);
+-        }
+@@ -886,1 +847,1 @@
+-        const payments = mergedPaymentRows.map((row) => ({
++        const payments = paymentRows.map((row) => ({
+@@ -983,29 +944,3 @@
+-        const overlayFinance = runtime?.tableSet === 'isolated_test'
+-          && TABLE_MAPPINGS.production.finance.cobros !== finance.cobros
+-          ? TABLE_MAPPINGS.production.finance
+-          : null;
+-        if (!overlayFinance || affected == null) {
+-          throw new LiquidacionRepositoryUnavailableError(
+-            'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
+-          );
+-        }
+-        const inserted = await execute(connection,
+-          `INSERT INTO ${finance.cobros} (`
+-            + 'CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, '
+-            + 'LIQUIDADO_SN, LIQUIDACION_TOKEN, NUMEROLIQUIDACION) '
+-            + `SELECT CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, `
+-            + '?, ?, ? '
+-            + `FROM ${overlayFinance.cobros} SRC `
+-            + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+-            + `AND SRC.ID IN (${placeholders(cobroIds.length)}) `
+-            + `AND NOT EXISTS (`
+-            + `SELECT 1 FROM ${finance.cobros} DST WHERE DST.ID = SRC.ID)`,
+-          ['S', marker, numeroLiquidacion, repartidorId, day, month, year, ...cobroIds]);
+-        const copied = affectedRows(inserted) || 0;
+-        if ((affected || 0) + copied !== cobroIds.length) {
+-          throw new LiquidacionRepositoryUnavailableError(
+-            'No se pudieron marcar exactamente los cobros derivados', {
+-              expected: cobroIds.length, affected, copied,
+-            },
+-          );
+-        }
++        throw new LiquidacionRepositoryUnavailableError(
++          'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
++        );

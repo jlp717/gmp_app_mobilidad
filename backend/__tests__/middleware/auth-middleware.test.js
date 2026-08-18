@@ -101,7 +101,7 @@ describe('Auth Middleware - verifyToken', () => {
         expect(req.user).toBeDefined();
         expect(req.user.code).toBe('001');
         expect(req.user.role).toBe('COMERCIAL');
-        expect(req.user.claimsVersion).toBe(3);
+        expect(req.user.claimsVersion).toBe(4);
     });
 
     test('should reject a stale v2 token and require login without calling next', async () => {
@@ -483,7 +483,7 @@ describe('Auth Middleware - requireJefeVentas', () => {
 
     test('should pass when user is Jefe Ventas', () => {
         const req = createMockReq({
-            user: { id: 'V001', code: '001', isJefeVentas: true }
+            user: { id: 'V001', code: '001', role: 'JEFE_VENTAS', isJefeVentas: true }
         });
 
         requireJefeVentas(req, res, next);
@@ -627,6 +627,19 @@ describe('Token Payload Preservation', () => {
         const decoded = verifyAccessToken(token);
 
         expect(decoded.name).toBe('Juan Perez');
+    });
+
+    test('signed inconsistent REPARTIDOR boolean is projected without jefe privilege', async () => {
+        const token = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Driver',
+            role: 'REPARTIDOR', isJefeVentas: true, isRepartidor: true,
+        }, 'inconsistent-repartidor');
+        const req = createMockReq({ headers: { authorization: 'Bearer ' + token } });
+        const res = createMockRes();
+        const next = jest.fn();
+        await verifyToken(req, res, next);
+        expect(next).toHaveBeenCalled();
+        expect(req.user).toMatchObject({ role: 'REPARTIDOR', isJefeVentas: false });
     });
 
     test('should preserve isJefeVentas flag', async () => {

@@ -1,0 +1,114 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+  NODE_VERSION: '20'
+
+jobs:
+  style-gate:
+    name: "Gate 1: Style & Correctness"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Dart Format Check
+        run: dart format --output=none --set-exit-if-changed lib/ test/
+
+      - name: Dart Analyze
+        run: dart analyze --fatal-infos lib/ test/
+
+      - name: ESLint
+        run: |
+          cd backend && npx eslint --quiet routes/ services/ middleware/
+
+      - name: Type Check Backend
+        run: |
+          cd backend && npx tsc --noEmit
+
+  security-gate:
+    name: "Gate 2: Security Scan"
+    runs-on: ubuntu-latest
+    needs: style-gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: NPM Audit
+        run: |
+          cd backend && npm audit --audit-level=high
+
+      - name: Flutter Pub Outdated
+        run: flutter pub outdated || true
+
+  test-gate:
+    name: "Gate 3: Tests"
+    runs-on: ubuntu-latest
+    needs: style-gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Flutter Tests
+        run: flutter test --coverage --no-pub
+
+      - name: Backend Tests
+        run: |
+          cd backend && npx jest --coverage --bail
+
+      - name: Check Coverage
+        run: |
+          echo "Coverage check placeholder - implement with coverage-diff or similar"
+
+  quality-report:
+    name: "Quality Report"
+    runs-on: ubuntu-latest
+    needs: [style-gate, security-gate, test-gate]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggregate Results
+        run: |
+          echo "## Quality Gates Report" >> $GITHUB_STEP_SUMMARY
+          echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Style & Correctness | ${{ needs.style-gate.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-gate.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test-gate.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Set Final Status
+        if: needs.style-gate.result != 'success' || needs.security-gate.result != 'success' || needs.test-gate.result != 'success'
+        run: |
+          echo "Quality gates failed!"
+          exit 1

@@ -1,4 +1,5 @@
 semantic_memory_pruner:
+  enabled: true
   version: 1
   purpose: "Mantenimiento de memoria a largo plazo. Evita degradacion por sobrecarga de contexto historico."
 

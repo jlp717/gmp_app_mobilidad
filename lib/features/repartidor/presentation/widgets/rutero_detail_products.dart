@@ -66,12 +66,14 @@ String? validateRuteroLoadedDeliveryLines({
   required List<EntregaItem> items,
   required bool isLoading,
   String? loadError,
+  bool allowEmpty = false,
 }) {
   if (isLoading) {
     return 'Espera a que terminen de cargar las líneas de entrega.';
   }
   if (loadError != null) return loadError;
   if (items.isEmpty) {
+    if (allowEmpty) return null;
     return 'La entrega no contiene líneas confirmables. Recarga el reparto.';
   }
   return validateRuteroLineIdentities(items);
@@ -93,6 +95,7 @@ class RuteroDetailProducts extends StatelessWidget {
     required this.onContinueToPayment,
     required this.onOpenFicha,
     required this.onShowFullscreenImage,
+    this.scrollController,
     super.key,
   });
 
@@ -111,6 +114,7 @@ class RuteroDetailProducts extends StatelessWidget {
   final VoidCallback onContinueToPayment;
   final void Function(EntregaItem linea) onOpenFicha;
   final void Function(String imageUrl, String name) onShowFullscreenImage;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -136,6 +140,7 @@ class RuteroDetailProducts extends StatelessWidget {
         _buildSummary(context),
         Expanded(
           child: ListView.builder(
+            controller: scrollController,
             padding: const EdgeInsets.all(16),
             itemCount: items.length,
             itemBuilder: (context, index) {

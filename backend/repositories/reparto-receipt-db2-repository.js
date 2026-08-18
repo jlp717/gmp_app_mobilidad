@@ -17,7 +17,7 @@ const REQUIRED = Object.freeze({
     'STATUS', 'OCCURRED_AT', 'CONFIRMED_AT', 'RECEPTOR_NOMBRE', 'RECEPTOR_APELLIDOS',
     'RECEPTOR_DNI', 'FIRMA_EVIDENCE_ID', 'INCIDENCIA_CODIGO',
     'INCIDENCIA_DESCRIPCION', 'INCIDENCIA_OBSERVACIONES', 'OBSERVACIONES',
-    'LATITUD', 'LONGITUD',
+    'LATITUD', 'LONGITUD', 'RESULT_JSON',
   ]),
   lines: Object.freeze([
     'CONFIRMACION_ID', 'LINEA_ID', 'CODIGO_ARTICULO', 'DESCRIPCION',
@@ -231,7 +231,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
       }
       await assertCapabilities(connection, { signal });
       const lookupColumn = lookup.confirmationId ? 'ID' : 'IDEMPOTENCY_KEY';
-      const lookupValue = lookup.confirmationId || lookup.idempotencyKey;
+      const lookupValue = lookup.confirmationId ? Number(lookup.confirmationId) : lookup.idempotencyKey;
       const confirmations = await query(connection,
         `SELECT ID, REPARTIDOR_ID FROM ${tables.confirmation.confirmations} WHERE ${lookupColumn} = ? FETCH FIRST 2 ROWS ONLY`,
         [lookupValue], signal);
@@ -249,8 +249,8 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
           code: 'REPARTO_RECEIPT_OWNERSHIP_REQUIRED', statusCode: 403,
         });
       }
-      const confirmationId = value(confirmationIdentity, 'ID');
-      if (!hasValue(confirmationId)) {
+      const confirmationId = Number(value(confirmationIdentity, 'ID'));
+      if (!Number.isSafeInteger(confirmationId) || confirmationId <= 0) {
         throw new RepartoReceiptUnavailableError('La confirmacion no contiene un identificador');
       }
       const confirmationRows = await query(connection,
@@ -271,9 +271,9 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
       const financialValues = FINANCIAL_DOCUMENT_COLUMNS.map((name) => value(confirmation, name));
       const presentFinancialValues = financialValues.filter(hasValue).length;
       let payments = [];
-      if (presentFinancialValues !== 0 && presentFinancialValues !== financialValues.length) {
-        throw new RepartoReceiptUnavailableError('La identidad financiera de la confirmacion esta incompleta');
-      }
+      // Unpaid deliveries persist albaran keys (serie/terminal/numero) without a
+      // complete cobro identity (tipo/origen/xde/dex). That is not a cobro row:
+      // skip the ledger lookup instead of failing the delivery receipt.
       if (presentFinancialValues === financialValues.length) {
         const paymentKey = [
           value(confirmation, 'IDEMPOTENCY_KEY'), value(confirmation, 'CLIENTE_CODIGO'),

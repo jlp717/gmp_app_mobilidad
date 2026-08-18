@@ -3,7 +3,6 @@
 const {
   validateConfirmationTableMapping,
   validateFinanceTableMapping,
-  TABLE_MAPPINGS,
 } = require('../config/reparto-runtime');
 
 const MARKER_MAX_LENGTH = 30;
@@ -758,19 +757,32 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         return structuredEntry(first(await rows(connection,
           `${structuredSelect(config)} WHERE ID = ? FETCH FIRST 1 ROW ONLY WITH RS`, [id])), input.type);
       },
-      async listStructuredEntries({ repartidorId, date }) {
+      async listStructuredEntries({ repartidorId, repartidorIds, date }) {
+        const owners = [...new Set((Array.isArray(repartidorIds)
+          ? repartidorIds : String(repartidorId || '').split(','))
+          .map((item) => String(item || '').trim()).filter(Boolean))];
+        if (!owners.length || owners.length > 100 || owners.some((item) => !/^\d{1,20}$/.test(item))) {
+          throw new LiquidacionRepositoryUnavailableError('Selector de repartidores invalido');
+        }
         const { year, month, day } = dateParts(date);
-        const params = [repartidorId, day, month, year];
+        const ownerPlaceholders = placeholders(owners.length);
+        const params = [...owners, day, month, year];
         const list = async (type) => {
           const config = entryType(type);
           return (await rows(connection,
-            `${structuredSelect(config)} WHERE CODIGO_REPARTIDOR = ? AND DIA = ? AND MES = ? AND ANO = ? `
-              + 'ORDER BY ID WITH RS', params)).map((row) => structuredEntry(row, type));
+            `${structuredSelect(config)} WHERE TRIM(CODIGO_REPARTIDOR) IN (${ownerPlaceholders}) `
+              + 'AND DIA = ? AND MES = ? AND ANO = ? ORDER BY CODIGO_REPARTIDOR, ID WITH RS',
+            params)).map((row) => structuredEntry(row, type));
         };
         const expenses = await list('EXPENSE');
         const adjustments = await list('ADJUSTMENT');
         const bankDeposits = await list('BANK_DEPOSIT');
-        const closed = await dayClosed({ repartidorId, date });
+        const closedRows = await rows(connection,
+          `SELECT COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) AS CLOSED_COUNT FROM ${finance.liquidationOps} `
+            + `WHERE TRIM(CODIGOVENDEDOR) IN (${ownerPlaceholders}) AND DIALIQUIDACION = ? `
+            + "AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? AND STATUS = 'CLOSED' WITH RS",
+          params);
+        const closed = Number(rowValue(first(closedRows), 'CLOSED_COUNT')) === owners.length;
         return Object.freeze({ closed, expenses, adjustments, bankDeposits });
       },
       async lockDay({ repartidorId, date }) {
@@ -783,18 +795,9 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
       },
       async deriveDaySnapshot({ repartidorId, date }) {
         const { year, month, day } = dateParts(date);
-        const overlayFinance = runtime?.tableSet === 'isolated_test'
-          && TABLE_MAPPINGS.production.finance.cobros !== finance.cobros
-          ? TABLE_MAPPINGS.production.finance
-          : null;
-        let balanceRow = first(await rows(connection,
+        const balanceRow = first(await rows(connection,
           `SELECT SALDO_PENDIENTE FROM ${finance.balances} WHERE CODIGO_REPARTIDOR = ? FOR UPDATE WITH RS`,
           [repartidorId]));
-        if (!balanceRow && overlayFinance) {
-          balanceRow = first(await rows(connection,
-            `SELECT SALDO_PENDIENTE FROM ${overlayFinance.balances} WHERE CODIGO_REPARTIDOR = ?`,
-            [repartidorId]));
-        }
         if (!balanceRow) {
           throw new LiquidacionRepositoryUnavailableError('No existe el saldo inicial autoritativo del repartidor');
         }
@@ -814,34 +817,6 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
             + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
             + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID FOR UPDATE WITH RS",
           [repartidorId, day, month, year]);
-        const productionPaymentRows = overlayFinance
-          ? await rows(connection,
-            `SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, `
-              + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
-              + `FROM ${overlayFinance.cobros} `
-              + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
-              + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID",
-            [repartidorId, day, month, year])
-          : [];
-        const paymentKey = (row) => {
-          const tipo = String(rowValue(row, 'TIPODOCUMENTO') || '').trim();
-          const numero = String(rowValue(row, 'NUMERODOCUMENTO') || '').trim();
-          const cliente = String(rowValue(row, 'CODIGOCLIENTEALBARAN') || '').trim();
-          if (tipo && numero && cliente) return `${tipo}|${numero}|${cliente}`;
-          return `id:${rowValue(row, 'ID')}`;
-        };
-        const mergedPaymentRows = [];
-        const seenPaymentKeys = new Set();
-        for (const row of [...(productionPaymentRows || []), ...(paymentRows || [])]) {
-          const key = paymentKey(row);
-          if (seenPaymentKeys.has(key)) {
-            const index = mergedPaymentRows.findIndex((item) => paymentKey(item) === key);
-            if (index >= 0) mergedPaymentRows[index] = row;
-            continue;
-          }
-          seenPaymentKeys.add(key);
-          mergedPaymentRows.push(row);
-        }
         const expenseRows = await rows(connection,
           `SELECT ID, IMPORTE, CATEGORIA FROM ${finance.expenses} WHERE CODIGO_REPARTIDOR = ? `
             + "AND DIA = ? AND MES = ? AND ANO = ? AND STATUS = 'PENDING' ORDER BY ID FOR UPDATE WITH RS",
@@ -870,7 +845,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
             pendingAmount: money(rowValue(row, 'IMPORTE_PENDIENTE')),
           };
         });
-        const payments = mergedPaymentRows.map((row) => ({
+        const payments = paymentRows.map((row) => ({
           id: rowValue(row, 'ID'), amount: money(rowValue(row, 'IMPORTEVENCIMIENTO')),
           paymentMethod: String(rowValue(row, 'CODIGOFORMAPAGO') || '').trim(),
           collectedAt: timestamp(rowValue(row, 'CREATED_AT')),
@@ -967,35 +942,9 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           ['S', marker, numeroLiquidacion, repartidorId, day, month, year, 'N', 'S', ...cobroIds]);
         const affected = affectedRows(result);
         if (affected === cobroIds.length) return;
-        const overlayFinance = runtime?.tableSet === 'isolated_test'
-          && TABLE_MAPPINGS.production.finance.cobros !== finance.cobros
-          ? TABLE_MAPPINGS.production.finance
-          : null;
-        if (!overlayFinance || affected == null) {
-          throw new LiquidacionRepositoryUnavailableError(
-            'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
-          );
-        }
-        const inserted = await execute(connection,
-          `INSERT INTO ${finance.cobros} (`
-            + 'CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, '
-            + 'LIQUIDADO_SN, LIQUIDACION_TOKEN, NUMEROLIQUIDACION) '
-            + `SELECT CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, `
-            + '?, ?, ? '
-            + `FROM ${overlayFinance.cobros} SRC `
-            + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
-            + `AND SRC.ID IN (${placeholders(cobroIds.length)}) `
-            + `AND NOT EXISTS (`
-            + `SELECT 1 FROM ${finance.cobros} DST WHERE DST.ID = SRC.ID)`,
-          ['S', marker, numeroLiquidacion, repartidorId, day, month, year, ...cobroIds]);
-        const copied = affectedRows(inserted) || 0;
-        if ((affected || 0) + copied !== cobroIds.length) {
-          throw new LiquidacionRepositoryUnavailableError(
-            'No se pudieron marcar exactamente los cobros derivados', {
-              expected: cobroIds.length, affected, copied,
-            },
-          );
-        }
+        throw new LiquidacionRepositoryUnavailableError(
+          'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
+        );
       },
       markExpensesLiquidated(input) { return markExact({ ...input, table: finance.expenses }); },
       markAdjustmentsLiquidated(input) { return markExact({ ...input, table: finance.adjustments }); },
@@ -1073,8 +1022,35 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
     }
   }
 
+  async function verifyCatalogReadOnly({ requiresOutbox = true } = {}) {
+    const connection = await connectionFactory();
+    let primaryError = null;
+    try {
+      assertConnection(connection);
+      await assertCatalog(connection, requiresOutbox);
+      return Object.freeze({ catalogVerified: true, requiresOutbox });
+    } catch (error) {
+      primaryError = error;
+      throw error;
+    } finally {
+      try {
+        await connection?.close?.();
+      } catch (closeError) {
+        logger.warn?.('liquidacion catalog connection close failed', {
+          code: closeError?.code || null,
+        });
+        if (!primaryError) {
+          throw new LiquidacionRepositoryUnavailableError(
+            'No se pudo cerrar la conexion de verificacion del catalogo',
+            { code: closeError?.code || null },
+          );
+        }
+      }
+    }
+  }
+
   return Object.freeze({
-    assertCapabilities, withTransaction,
+    assertCapabilities, verifyCatalogReadOnly, withTransaction,
     get catalogVerified() { return catalogVerified; },
   });
 }

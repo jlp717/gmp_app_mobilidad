@@ -5,6 +5,7 @@ const {
   QUALIFIED_EVIDENCE_TABLE,
   QUALIFIED_CONFIRMATION_EVIDENCE_TABLE,
   REQUIRED_EVIDENCE_COLUMNS,
+  MAX_EVIDENCE_BLOB_BYTES,
   createRepartoEvidenceDb2Repository,
 } = require('../repositories/reparto-evidence-db2-repository');
 
@@ -29,7 +30,7 @@ function record(overrides = {}) {
 }
 
 function fakeConnection({
-  existing, ownershipRows, linkedRow, expiredRows, insertError, commitError, transactionMethods = true,
+  existing, ownershipRows, linkedRow, linkedVerificationRows, hexRow, expiredRows, insertError, commitError, transactionMethods = true,
   columns = REQUIRED_EVIDENCE_COLUMNS,
 } = {}) {
   const calls = [];
@@ -48,7 +49,27 @@ function fakeConnection({
         return expiredRows || [];
       }
       if (sql.includes('WHERE EVIDENCE_ID = ? FOR UPDATE')) return existing ? [existing] : [];
+      if (sql.startsWith('SELECT EVIDENCE_ID, STATUS, LINKED_AT, EXPIRES_AT')) {
+        return linkedVerificationRows || [];
+      }
       if (sql.includes('WHERE EVIDENCE_ID IN (')) return ownershipRows || [];
+      if (sql.includes('HEX(SUBSTR(E.CONTENT_BLOB')) {
+        const valuesParams = params.slice(0, -1);
+        const plan = [];
+        for (let index = 0; index < valuesParams.length; index += 3) {
+          plan.push({ ordinal: valuesParams[index], offset: valuesParams[index + 1], length: valuesParams[index + 2] });
+        }
+        if (hexRow) return plan.map(({ ordinal }) => ({ ORDINAL: ordinal, ...hexRow }));
+        return Buffer.isBuffer(linkedRow?.CONTENT_BLOB)
+          ? plan.map(({ ordinal, offset, length }) => ({
+            ORDINAL: ordinal,
+            CONTENT_HEX: linkedRow.CONTENT_BLOB.subarray(offset - 1, offset - 1 + length).toString('hex'),
+          }))
+          : [];
+      }
+      if (sql.startsWith('SELECT EVIDENCE_ID, DOCUMENT_ID') && sql.includes('WHERE EVIDENCE_ID = ?')) {
+        return linkedRow ? [linkedRow] : [];
+      }
       if (sql.includes('CONTENT_BLOB') && sql.includes('WHERE EVIDENCE_ID = ?')) return linkedRow ? [linkedRow] : [];
       if (/^(INSERT|UPDATE) /.test(sql)) {
         if (transactionActive) stagedWrites += 1;
@@ -187,12 +208,29 @@ describe('DB2 reparto evidence repository', () => {
 
   test('marks evidence linked while clearing its pending expiration', async () => {
     const item = record();
-    const fake = fakeConnection();
+    const fake = fakeConnection({ linkedVerificationRows: [{
+      EVIDENCE_ID: item.evidenceId,
+      STATUS: 'ENLAZADA',
+      LINKED_AT: NOW,
+      EXPIRES_AT: null,
+    }] });
     await repository(fake).repo.forConnection(fake.connection).markLinked([item.evidenceId, item.evidenceId]);
     const update = fake.calls.find((call) => call.sql.startsWith('UPDATE'));
     expect(update.sql).toContain("STATUS = 'ENLAZADA'");
     expect(update.sql).toContain('EXPIRES_AT = NULL');
     expect(update.params).toEqual([item.evidenceId]);
+  });
+
+  test('fails closed when the linked evidence postcondition is not persisted', async () => {
+    const item = record();
+    const fake = fakeConnection({ linkedVerificationRows: [{
+      EVIDENCE_ID: item.evidenceId,
+      STATUS: 'PENDIENTE',
+      LINKED_AT: null,
+      EXPIRES_AT: FUTURE_EXPIRY,
+    }] });
+    await expect(repository(fake).repo.forConnection(fake.connection).markLinked([item.evidenceId]))
+      .rejects.toMatchObject({ code: 'EVIDENCE_LINK_FAILED', statusCode: 503 });
   });
 
   test('checks all ownership rows in one parameterized query and rejects foreign evidence', async () => {
@@ -234,7 +272,7 @@ describe('DB2 reparto evidence repository', () => {
     expect(fake.calls.filter((call) => call.sql.includes('EVIDENCE_ID IN'))).toHaveLength(1);
   });
 
-  test('retrieves only linked BLOB content', async () => {
+  test('retrieves linked content without projecting the BLOB directly', async () => {
     const item = record();
     const fake = fakeConnection({ linkedRow: {
       EVIDENCE_ID: item.evidenceId,
@@ -252,7 +290,76 @@ describe('DB2 reparto evidence repository', () => {
       evidenceId: item.evidenceId,
       content: item.content,
     });
+    const directBlobSelect = fake.calls.find((call) =>
+      call.sql.startsWith('SELECT EVIDENCE_ID, DOCUMENT_ID') && call.sql.includes('CONTENT_BLOB'));
+    expect(directBlobSelect).toBeUndefined();
+    expect(fake.calls.some((call) => call.sql.includes('HEX(SUBSTR(E.CONTENT_BLOB'))).toBe(true);
     expect(fake.isClosed()).toBe(true);
+  });
+
+  test('retrieves linked evidence via HEX when ODBC returns a null BLOB', async () => {
+    const item = record();
+    const fake = fakeConnection({
+      linkedRow: {
+        EVIDENCE_ID: item.evidenceId,
+        DOCUMENT_ID: item.documentId,
+        REPARTIDOR_ID: item.repartidorId,
+        EVIDENCE_KIND: item.kind,
+        MIME_TYPE: item.mimeType,
+        CONTENT_SHA256: item.contentSha256,
+        CONTENT_BYTES: item.contentBytes,
+        CONTENT_BLOB: null,
+        STATUS: 'ENLAZADA',
+      },
+      hexRow: { CONTENT_HEX: item.content.toString('hex') },
+    });
+
+    await expect(repository(fake).repo.getLinked(item.evidenceId)).resolves.toMatchObject({
+      evidenceId: item.evidenceId,
+      content: item.content,
+    });
+    expect(fake.calls.some((call) => call.sql.includes('HEX(SUBSTR(E.CONTENT_BLOB'))).toBe(true);
+  });
+
+  test('reads a maximum-size signature in one ordered set-based BLOB query', async () => {
+    const signature = Buffer.alloc(1024 * 1024, 0);
+    for (let index = 0; index < signature.length; index += 4096) signature[index] = index / 4096;
+    const item = record({ content: signature, contentBytes: signature.length });
+    const fake = fakeConnection({ linkedRow: {
+      EVIDENCE_ID: item.evidenceId,
+      DOCUMENT_ID: item.documentId,
+      REPARTIDOR_ID: item.repartidorId,
+      EVIDENCE_KIND: item.kind,
+      MIME_TYPE: item.mimeType,
+      CONTENT_SHA256: item.contentSha256,
+      CONTENT_BYTES: item.contentBytes,
+      CONTENT_BLOB: signature,
+      STATUS: 'ENLAZADA',
+    } });
+
+    await expect(repository(fake).repo.getLinked(item.evidenceId)).resolves.toMatchObject({ content: signature });
+    const blobReads = fake.calls.filter((call) => call.sql.includes('HEX(SUBSTR(E.CONTENT_BLOB'));
+    expect(blobReads).toHaveLength(1);
+    expect(blobReads[0].sql).toContain('WITH CHUNKS (ORDINAL, BYTE_OFFSET, BYTE_LENGTH) AS (VALUES');
+    expect(blobReads[0].sql).toContain('ORDER BY C.ORDINAL');
+    expect(blobReads[0].params).toHaveLength((Math.ceil(signature.length / 16000) * 3) + 1);
+  });
+
+  test('rejects incomplete or malformed set-based BLOB fragments', async () => {
+    const item = record({ content: Buffer.alloc(16001, 7), contentBytes: 16001 });
+    const fake = fakeConnection({
+      linkedRow: {
+        EVIDENCE_ID: item.evidenceId, DOCUMENT_ID: item.documentId, REPARTIDOR_ID: item.repartidorId,
+        EVIDENCE_KIND: item.kind, MIME_TYPE: item.mimeType, CONTENT_SHA256: item.contentSha256,
+        CONTENT_BYTES: item.contentBytes, CONTENT_BLOB: item.content, STATUS: 'ENLAZADA',
+      },
+      hexRow: { CONTENT_HEX: item.content.subarray(0, 16000).toString('hex') },
+    });
+
+    await expect(repository(fake).repo.getLinked(item.evidenceId)).rejects.toMatchObject({
+      code: 'REPARTO_EVIDENCE_STORE_UNAVAILABLE',
+    });
+    expect(MAX_EVIDENCE_BLOB_BYTES).toBe(4 * 1024 * 1024);
   });
 
   test('cancels and closes a hung linked-evidence query without continuing or leaking a rejection', async () => {
@@ -285,7 +392,7 @@ describe('DB2 reparto evidence repository', () => {
       await expect(pending).rejects.toMatchObject({ code: 'EVIDENCE_TIMEOUT', statusCode: 504 });
       expect(cancel).toHaveBeenCalledTimes(1);
       expect(closed).toBe(true);
-      expect(calls.filter(({ sql }) => sql.includes('CONTENT_BLOB'))).toHaveLength(1);
+      expect(calls.filter(({ sql }) => sql.includes('CONTENT_BLOB'))).toHaveLength(0);
 
       releaseQuery([{
         EVIDENCE_ID: item.evidenceId, REPARTIDOR_ID: item.repartidorId,
@@ -295,7 +402,7 @@ describe('DB2 reparto evidence repository', () => {
       }]);
       await new Promise((resolve) => setImmediate(resolve));
       expect(unhandled).toEqual([]);
-      expect(calls.filter(({ sql }) => sql.includes('CONTENT_BLOB'))).toHaveLength(1);
+      expect(calls.filter(({ sql }) => sql.includes('CONTENT_BLOB'))).toHaveLength(0);
     } finally {
       process.removeListener('unhandledRejection', onUnhandled);
     }

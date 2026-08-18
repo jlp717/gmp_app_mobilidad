@@ -85,6 +85,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   String? _pendingClientId;
   String? _pendingClientName;
+  String? _pendingClientRepartidorId;
 
   @override
   void initState() {
@@ -136,6 +137,16 @@ class _MainShellState extends ConsumerState<MainShell> {
   bool get _isAlmacenEffective {
     if (_forceAlmacenMode) return true;
     return isWarehouseUiMode(ref.read(authProvider).value);
+  }
+
+  bool _isEffectiveRepartidorJefe(UserModel user, Object? activeMode) {
+    final mode = activeMode?.toString().trim().toUpperCase();
+    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
+    final hasJefeAuthorization =
+        user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
+    return mode == 'REPARTIDOR' &&
+        hasJefeAuthorization &&
+        normalizedCode != '80';
   }
 
   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
@@ -265,7 +276,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
     if (user != null) {
-      if (user.isJefeVentas) {
+      if (_isEffectiveRepartidorJefe(user, authState?.activeMode)) {
         // Fetch repartidores
         _fetchRepartidores();
       } else {
@@ -295,6 +306,23 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Future<void> _fetchRepartidores() async {
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
+    if (user == null ||
+        !_isEffectiveRepartidorJefe(user, authState?.activeMode)) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingRepartidores = false;
+        _repartidoresOptions = [];
+        _repartidoresError = null;
+        _selectedRepartidor = null;
+      });
+      return;
+    }
+    final mode = authState!.activeMode.toString().trim().toUpperCase();
+    final cacheKey =
+        'auth:repartidores:${user.code.trim()}:claims${user.claimsVersion}:$mode';
+
     setState(() {
       _isLoadingRepartidores = true;
       _repartidoresError = null;
@@ -302,7 +330,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     try {
       final res = await ApiClient.getList(
         '/auth/repartidores',
-        cacheKey: 'auth:repartidores',
+        cacheKey: cacheKey,
         cacheTTL: CacheService.longTTL,
       );
       if (!mounted) return;
@@ -1215,8 +1243,10 @@ class _MainShellState extends ConsumerState<MainShell> {
       return;
     }
 
-    if (expectedMode == 'REPARTIDOR' &&
-        (expectedRole == 'JEFE_VENTAS' || expectedRole == 'ADMIN')) {
+    final committedUser = authState?.user;
+    final canUseRepartidorSelector = committedUser != null &&
+        _isEffectiveRepartidorJefe(committedUser, authState?.activeMode);
+    if (canUseRepartidorSelector) {
       _fetchRepartidores();
     }
 
@@ -1227,6 +1257,11 @@ class _MainShellState extends ConsumerState<MainShell> {
       _forceRepartidorMode = false;
       _currentIndex = 0;
       _isSwitchingMode = false;
+      if (!canUseRepartidorSelector) {
+        _selectedRepartidor = null;
+        _repartidoresOptions = [];
+        _repartidoresError = null;
+      }
     });
   }
 
@@ -1751,6 +1786,15 @@ class _MainShellState extends ConsumerState<MainShell> {
               setState(() {
                 _pendingClientId = clientId;
                 _pendingClientName = clientName;
+                _pendingClientRepartidorId = null;
+                _currentIndex = histIdx ?? idx;
+              });
+            },
+            onNavigateToHistoryWithOwner: (clientId, clientName, repartidorId) {
+              setState(() {
+                _pendingClientId = clientId;
+                _pendingClientName = clientName;
+                _pendingClientRepartidorId = repartidorId;
                 _currentIndex = histIdx ?? idx;
               });
             },
@@ -1789,11 +1833,15 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
             initialClientId: _pendingClientId,
             initialClientName: _pendingClientName,
+            initialRepartidorId: _pendingClientRepartidorId,
             canEmailDocuments: true,
           );
         }
         if (label == 'Asistente') {
-          return ChatbotPage(vendedorCodes: vendedorCodes);
+          return ChatbotPage(
+            vendedorCodes: vendedorCodes,
+            repartidorId: effectiveRepartidorId,
+          );
         }
         return const Center(child: Text('Página no encontrada'));
       }
@@ -1803,7 +1851,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         children: List.generate(navItems.length, (idx) {
           return KeyedSubtree(
             key: ValueKey(
-              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}',
+              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}_${_pendingClientRepartidorId ?? ""}',
             ),
             child: pageForIndex(idx),
           );

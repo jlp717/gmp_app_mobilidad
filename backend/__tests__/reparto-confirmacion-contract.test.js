@@ -7,7 +7,7 @@ const mockConfirmRuteroDelivery = jest.fn();
 const mockValidateCatalog = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockExportEntregaToSystem = jest.fn();
-let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 const SIGNATURE_EVIDENCE_ID = `ev_${'a'.repeat(64)}`;
 
 jest.mock('../config/db', () => ({
@@ -132,7 +132,7 @@ function paymentPayload(overrides = {}) {
 describe('canonical reparto confirmation contract', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     mockQueryWithParams.mockResolvedValue([]);
     mockValidateCatalog.mockResolvedValue(undefined);
     mockConfirmRuteroDelivery.mockResolvedValue({
@@ -231,6 +231,21 @@ describe('canonical reparto confirmation contract', () => {
     expect(mockConfirmRuteroDelivery).not.toHaveBeenCalled();
   });
 
+  test('fails closed with 403 when a repartidor token lacks signed reparto claims', async () => {
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+
+    const res = await request(makeApp())
+      .post('/api/repartidor-finanzas/rutero/confirm-delivery-cobro')
+      .set('Idempotency-Key', 'delivery-2026-S-10-404-missing-fleet')
+      .send({ delivery: deliveryPayload(), cobro: paymentPayload() });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'DELIVERY_OWNERSHIP_REQUIRED',
+    });
+    expect(mockConfirmRuteroDelivery).not.toHaveBeenCalled();
+  });
   test('blocks an authenticated repartidor from confirming for another repartidor', async () => {
     mockConfirmRuteroDelivery.mockRejectedValueOnce(Object.assign(
       new Error('La entrega no pertenece al repartidor autenticado'),
@@ -300,7 +315,7 @@ describe('canonical reparto confirmation contract', () => {
 describe('legacy reparto mutation routes cannot bypass the canonical contract', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     mockQueryWithParams.mockResolvedValue([]);
   });
 

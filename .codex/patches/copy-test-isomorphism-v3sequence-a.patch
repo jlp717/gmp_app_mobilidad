@@ -1,0 +1,24 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -469,6 +469,16 @@ async function tableExists(schemaTable) {
+   return rows.length > 0;
+ }
++
++async function sequenceExists(schemaSequence) {
++  const [schema, sequence] = schemaSequence.split('.');
++  const rows = await queryWithParams(
++    `SELECT 1 AS OK FROM QSYS2.SYSSEQUENCES
++      WHERE SEQUENCE_SCHEMA = ? AND SEQUENCE_NAME = ?`,
++    [schema, sequence],
++  );
++  return rows.length > 0;
++}
+ 
+ async function countOf(schemaTable, whereSql = '', params = []) {
+@@ -557,6 +567,7 @@ function collectMappingPairs() {
+         src: prod[group][key],
+         dst: test[group][key],
+         erpSeeded: ERP_SEEDED_KEYS.has(key),
++        objectType: key === 'liquidationSequence' ? 'SEQUENCE' : 'TABLE',
+       });

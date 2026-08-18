@@ -1,0 +1,26 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -92,2 +92,3 @@
+-    required this.clients,
+-  });
++    required this.clients,
++    this.collectionAvailability = 'COMPLETE',
++  });
+@@ -112,2 +113,5 @@
+-      clients: clientsList,
+-    );
++      clients: clientsList,
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++    );
+@@ -124,2 +128,5 @@
+-  final List<ClientCollectionData> clients;
+-}
++  final List<ClientCollectionData> clients;
++  final String collectionAvailability;
++
++  bool get isPartial => collectionAvailability == 'PARTIAL';
++}
+

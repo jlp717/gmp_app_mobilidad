@@ -1,6 +1,6 @@
 {
     "$schema":  "https://opencode.ai/config.json",
-    "model":  "openai/gpt-5.5",
+    "model":  "openai/gpt-5.6-sol",
     "small_model":  "opencode-go/deepseek-v4-flash",
     "default_agent":  "chief-engineer-assistant",
     "username":  "Javier",
@@ -8,15 +8,15 @@
     "autoupdate":  "notify",
     "snapshot":  false,
     "instructions":  [
+                         ".opencode/memory/FIELD-GUIDE.md",
+                         ".opencode/config/playbooks.yaml",
                          ".opencode/config/chief-protocol.yaml",
-                         ".opencode/config/mobile-productivity.yaml",
-                         ".opencode/AGENTS.md",
-                         "AGENTS.md",
-                         "CLAUDE.md"
+                         ".opencode/AGENTS.md"
                      ],
     "skills":  {
                    "paths":  [
-                                 ".opencode/skills"
+                                 ".opencode/skills",
+                                 ".opencode/skills-ecc"
                              ]
                },
     "server":  {
@@ -123,7 +123,6 @@
     "plugin":  [
                    "./.opencode/plugins/model-fallback-forward.ts",
                    "./.opencode/plugins/flow-observability.ts",
-                   "./.opencode/plugins/execution-visibility.ts",
                    "./.opencode/plugins/env-protection.ts",
                    "./.opencode/plugins/context-compaction.ts",
                    "./.opencode/plugins/session-resilience.ts",
@@ -137,7 +136,10 @@
                    "./.opencode/plugins/same-error-detector.ts",
                    "./.opencode/plugins/production-safety-guard.ts",
                    "./.opencode/plugins/user-correction-capture.ts",
-                   "file:///C:/Users/Javier/.config/opencode/ponytail/.opencode/plugins/ponytail.mjs"
+                   "file:///C:/Users/Javier/.config/opencode/ponytail/.opencode/plugins/ponytail.mjs",
+                   "./.opencode/ecc-plugins/ecc-hooks.ts",
+                   "./.opencode/ecc-plugins/ecc-tools.ts",
+                   "./.opencode/plugins/context-bootstrap.ts"
                ],
     "tools":  {
                   "voice-synthesis":  true,
@@ -155,6 +157,7 @@
                   "metrics-push":  true,
                   "production-approval-gate":  true,
                   "elite-quality-gate":  true,
+                  "code-quality-contract":  true,
                   "decision-router":  true,
                   "state-manager":  true,
                   "project-context":  true,
@@ -195,12 +198,12 @@
                     "quality":  {
                                     "description":  "Ejecuta el gate de calidad senior sobre cambios actuales.",
                                     "agent":  "chief-engineer-assistant",
-                                    "template":  "Ejecuta elite-quality-gate y corrige o delega cualquier bloqueo. Argumentos: $ARGUMENTS"
+                                    "template":  "Ejecuta elite-quality-gate y code-quality-contract. Sin PASS no cierres. Argumentos: $ARGUMENTS"
                                 },
                     "route":  {
                                   "description":  "Calcula tier, agentes, MCPs, gates y evidencias antes de ejecutar una peticion.",
                                   "agent":  "chief-engineer-assistant",
-                                  "template":  "Ejecuta prompt-optimizer y decision-router sobre esta peticion. No implementes todavia; devuelve ruta, riesgos, gates y evidencias: $ARGUMENTS"
+                                  "template":  "Ejecuta decision-router. Devuelve playbook, roster, gates y evidencias. No implementes: $ARGUMENTS"
                               },
                     "flow-check":  {
                                        "description":  "Valida la ruta V4 contra politicas de agentes, MCPs, skills, gates y evidencias.",
@@ -431,11 +434,96 @@
                                        "description":  "Estado de jobs automaticos (radar, watchlist, modelos, digest).",
                                        "agent":  "chief-engineer-assistant",
                                        "template":  "Ejecuta scheduled-automation-runner operation=status. Si ARGUMENTS contiene force, usa operation=force job_id=... Argumentos: $ARGUMENTS"
+                                   },
+                    "ecc-skill-create":  {
+                                             "description":  "Genera una skill desde historial git o patron detectado (adaptado de ECC).",
+                                             "agent":  "chief-engineer-assistant",
+                                             "template":  "Usa la skill skill-creator o analiza el historial git para generar una skill reutilizable. Argumentos: "
+                                         },
+                    "ecc-checkpoint":  {
+                                           "description":  "Guarda estado de progreso y verificacion de la sesion (adaptado de ECC).",
+                                           "agent":  "chief-engineer-assistant",
+                                           "template":  "Ejecuta state-manager snapshot para el task activo y memory-save session con el progreso. Argumentos: "
+                                       },
+                    "ecc-learn":  {
+                                      "description":  "Extrae patrones y aprendizajes de la sesion (adaptado de ECC).",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Analiza la sesion y guarda lecciones con memory-save kind=lesson. Argumentos: "
+                                  },
+                    "ecc-projects":  {
+                                         "description":  "Lista proyectos conocidos y estado de memoria del equipo (adaptado de ECC).",
+                                         "agent":  "team-curator",
+                                         "template":  "Ejecuta project-context y resume proyectos/estado. Argumentos: "
+                                     },
+                    "ecc-evolve":  {
+                                       "description":  "Agrupa correcciones/patrones repetidos en skills o memoria (adaptado de ECC).",
+                                       "agent":  "team-curator",
+                                       "template":  "Ejecuta retro-auto o agrupa patrones repetidos con memory-save pattern. Argumentos: "
+                                   },
+                    "ecc-harness-audit":  {
+                                              "description":  "Audita el harness del equipo (plugins, hooks, skills, fallback) con enfoque ECC.",
+                                              "agent":  "ecc-harness-optimizer",
+                                              "template":  "Analiza config del harness, plugins, hooks y fallback. Propone mejoras con plan. Argumentos: "
+                                          },
+                    "ecc-instinct-status":  {
+                                                "description":  "Estado de memoria e instincts del equipo (adaptado de ECC).",
+                                                "agent":  "team-curator",
+                                                "template":  "Resume memoria activa, correcciones y patrones. Argumentos: "
+                                            },
+                    "greenfield":  {
+                                       "description":  "Orquesta la construccion de una app desde cero por fases (greenfield-pipeline).",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Usa la skill greenfield-pipeline y lanza la fase 0 (producto) con plan aprobado. App: $ARGUMENTS"
+                                   },
+                    "spec":  {
+                                 "description":  "Abre o actualiza la living-spec del proyecto activo.",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Usa la skill living-spec y lee/actualiza docs/spec/\u003capp\u003e.md. Proyecto: $ARGUMENTS"
+                             },
+                    "api-spec":  {
+                                     "description":  "Define o valida contratos OpenAPI (api-spec-first).",
+                                     "agent":  "API-Contract-Specialist",
+                                     "template":  "Usa la skill api-spec-first y genera/valida docs/spec/\u003capp\u003e/openapi.yaml. Alcance: $ARGUMENTS"
+                                 },
+                    "benchmark":  {
+                                      "description":  "Ejecuta benchmark semanal del equipo (honors-grade-audit) con nota y acciones.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta honors-grade-audit y resume nota, paquete de evidencia y acciones hasta 100. Argumentos: $ARGUMENTS"
+                                  },
+                    "harness-evolve":  {
+                                           "description":  "Ejecuta el loop de auto-evolucion del harness con evidencia y rollback si regresion.",
+                                           "agent":  "ecc-harness-optimizer",
+                                           "template":  "Usa harness-evolution: lee evidencia, propone cambios de config con backup, verifica mejora, rollback si regresion. Argumentos: $ARGUMENTS"
+                                       },
+                    "port-team":  {
+                                      "description":  "Porta el harness completo del equipo a un repo/carpeta nueva (bootstrap-team).",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Usa la skill team-portable y ejecuta: node scripts/opencode/bootstrap-team.mjs \u003cdestino\u003e. Destino: $ARGUMENTS"
+                                  },
+                    "design-doc":  {
+                                       "description":  "Genera o actualiza la documentacion de diseno de una feature (design.md, funcionalidades.md, contenido.md).",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Usa la skill product-design-docs y genera/actualiza docs/design/\u003cfeature\u003e/ para la feature. Feature: $ARGUMENTS"
+                                   },
+                    "critica":  {
+                                    "description":  "Analisis frio e independiente de un modelo de negocio, demo o decision (business-critic). No te dice lo que quieres oir.",
+                                    "agent":  "business-critic",
+                                    "template":  "Evalua objetivamente con evidencia y veredicto VIABLE/RIESGOSO/NO-VIABLE. Asunto: $ARGUMENTS"
+                                },
+                    "ventas":  {
+                                   "description":  "Apoyo comercial: research de nicho, demos, propuestas SOW, outreach y CRM. El cierre de contratos es de Javier; el equipo prepara el material.",
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Usa la skill sales-pipeline y actualiza docs/crm/. Accion: $ARGUMENTS"
+                               },
+                    "audit-team":  {
+                                       "description":  "Ejecuta todas las auditorias del equipo de una vez (roster, modelos, workflow, calidad, readiness).",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta: agent-roster-audit, model-assignment-audit, workflow-state-audit, elite-quality-gate, readiness-smoke y resume hallazgos. $ARGUMENTS"
                                    }
                 },
     "mcp":  {
                 "context7-local":  {
-                                       "enabled":  true,
+                                       "enabled":  false,
                                        "type":  "local",
                                        "command":  [
                                                    "C:/nvm4w/nodejs/context7-mcp.cmd"

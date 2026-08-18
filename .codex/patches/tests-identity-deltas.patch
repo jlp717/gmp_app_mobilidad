@@ -1,0 +1,9 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -115 +115 @@
+-      exemptIdentityDeltas: ['ID'],
++      identityDeltas: ['ID'],
+@@ -131 +131 @@
+-    expect(result.exemptIdentityDeltas).toEqual([]);
++    expect(result.identityDeltas).toEqual([]);

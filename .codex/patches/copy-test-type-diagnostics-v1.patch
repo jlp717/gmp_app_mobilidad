@@ -1,0 +1,8 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -351,1 +351,3 @@
+-        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: destructive/unknown type delta`);
++        throw new Error(
++          `SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: destructive/unknown type delta source=${metadataSignature(source)} destination=${metadataSignature(destination)}`,
++        );

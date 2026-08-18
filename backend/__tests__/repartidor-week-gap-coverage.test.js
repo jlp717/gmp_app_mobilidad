@@ -36,7 +36,7 @@ jest.mock('../services/emailPdfService', () => ({
 }));
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '05', code: '05', role: 'REPARTIDOR' };
+    req.user = { id: '05', code: '05', role: 'REPARTIDOR', repartidorCodes: ['05'] };
     next();
   },
 }));
@@ -91,6 +91,10 @@ describe('GET /rutero/week/:repartidorId delivery truth', () => {
     expect(sql).toContain('COUNT(*) as TOTAL_ALBARANES');
     expect(sql).toContain('SUM(ENTREGADO) as ENTREGADOS');
     expect(sql).not.toMatch(/OPP\.DIAREPARTO\)\s*<\s*\?/);
+    expect(sql).not.toMatch(/SITUACIONALBARAN\s+IN\s*\(\s*'F'\s*,\s*'R'\s*\)/);
+    expect(sql).not.toMatch(/TRIM\(CPC\.CONFORMADOSN\) = 'S' THEN 1/);
+    expect(sql).toContain('TEST_REPARTO_CONFIRMACIONES');
+    expect(sql).toContain("WHEN UPPER(TRIM(COALESCE(TC0.STATUS, ''))) IN ('ENTREGADO', 'NO_ENTREGADO', 'RECHAZADO') THEN 1");
     expect(params).toEqual([20260803, 20260809, '05']);
   });
 
@@ -106,9 +110,12 @@ describe('GET /rutero/week/:repartidorId delivery truth', () => {
 
     expect(res.status).toBe(200);
     const [sql] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toContain('LEFT JOIN JAVIER.DELIVERY_STATUS DS');
-    expect(sql).toContain("WHEN DS.STATUS = 'ENTREGADO' THEN 1");
+    expect(sql).toContain('TEST_REPARTO_CONFIRMACIONES');
+    expect(sql).toContain("WHEN UPPER(TRIM(COALESCE(TC0.STATUS, ''))) IN ('ENTREGADO', 'NO_ENTREGADO', 'RECHAZADO') THEN 1");
     expect(sql).toContain('MAX(CASE');
+    expect(sql).not.toMatch(/SITUACIONALBARAN\s+IN/);
+    expect(sql).not.toMatch(/TRIM\(CPC\.CONFORMADOSN\) = 'S' THEN 1/);
+    expect(sql).not.toContain("WHEN DS.STATUS = 'ENTREGADO' THEN 1");
   });
 
   test('returns a typed sanitized 503 when the weekly DB2 aggregate fails', async () => {

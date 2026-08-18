@@ -23,7 +23,7 @@ const mockConnQuery = jest.fn();
 const mockConnClose = jest.fn();
 const mockSentryCaptureException = jest.fn();
 const mockDeleteCachePattern = jest.fn();
-let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 
 jest.mock('@sentry/node', () => ({ captureException: mockSentryCaptureException }));
 
@@ -156,7 +156,7 @@ describe('Repartidor finanzas routes', () => {
     mockConnClose.mockReset();
     mockSentryCaptureException.mockReset();
     mockDeleteCachePattern.mockReset();
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     finanzasRoutes.resetCanonicalConfirmationRuntime();
     app = makeApp();
   });
@@ -232,9 +232,13 @@ describe('Repartidor finanzas routes', () => {
     expect(sqlText).not.toContain('LIQUIDADO_SN');
     expect(sqlText).toContain('COALESCE(NUMEROLIQUIDACION, 0) = 0');
     expect(sqlText).toContain('CODIGO_REPARTIDOR');
+    expect(sqlText).toContain('INNER JOIN DSEDAC.CPC CPC');
+    expect(sqlText).toContain('LEFT JOIN DSEDAC.CVC CVC');
+    expect(sqlText).not.toMatch(/JAVIER\.(?!TEST_)(?:REPARTIDOR_|REPARTO_)/);
+    expect(sqlText).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|MERGE)\s+(?:INTO|FROM)?\s*/i);
     // First call is schema detection, second is the totals query
     const totalsCall = mockQueryWithParams.mock.calls.find(c => c[1] && c[1][0] === '94');
-    expect(totalsCall[1]).toEqual(['94', 20260423, '94', 20260423]);
+    expect(totalsCall[1]).toEqual(['94', 20260423]);
   });
 
   test('GET /daily-summary includes signed adjustments in totalAIngresar', async () => {
@@ -376,7 +380,7 @@ describe('Repartidor finanzas routes', () => {
   });
 
   test('GET /daily-summary aggregates multiple repartidores for jefe view', async () => {
-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true, repartidorCodes: ['94', '95'] };
     mockQueryWithParams
       .mockResolvedValueOnce(alignedSchemaRows)
       .mockResolvedValueOnce([{
@@ -408,13 +412,13 @@ describe('Repartidor finanzas routes', () => {
       /SUM\(CASE WHEN UPPER\(TRIM\(CODIGOFORMAPAGO\)\)/i.test(sql)
     );
     expect(totalsCall[0]).toContain('TRIM(CODIGOVENDEDOR) IN (?, ?)');
-    expect(totalsCall[0]).toContain('JAVIER.REPARTIDOR_COBROS');
     expect(totalsCall[0]).toContain('JAVIER.TEST_REPARTIDOR_COBROS');
-    expect(totalsCall[1]).toEqual(['94', '95', 20260423, '94', '95', 20260423]);
+    expect(totalsCall[0]).not.toMatch(/JAVIER\.(?!TEST_)REPARTIDOR_COBROS/);
+    expect(totalsCall[1]).toEqual(['94', '95', 20260423]);
   });
 
   test('GET /daily-summary blocks repartidor access to another repartidor', async () => {
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     const res = await request(app)
       .get('/finanzas/daily-summary/95')
       .query({ date: '2026-04-23' });
@@ -430,7 +434,7 @@ describe('Repartidor finanzas routes', () => {
   });
 
   test('GET /evolution uses app cobros schema and delivered products from ERP LAC', async () => {
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     mockQueryWithParams
       .mockResolvedValueOnce(alignedSchemaRows)
       .mockResolvedValueOnce([{
@@ -753,7 +757,7 @@ describe('Repartidor finanzas routes', () => {
     ['/finanzas/evolution/ALL', 'GET'],
     ['/finanzas/commissions/summary/ALL?from=2026-04-01&to=2026-04-30', 'GET'],
   ])('%s rejects ALL instead of returning partial data', async (url) => {
-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true };
     const res = await request(app).get(url);
     expect(res.status).toBe(422);
     expect(res.body.code).toBe('UNSUPPORTED_REPARTIDOR_SELECTOR');
@@ -791,14 +795,14 @@ describe('Repartidor finanzas routes', () => {
     expect(res.body).toMatchObject({ success: false, code: 'INTERNAL_SERVER_ERROR' });
   });
   test('GET /commissions/summary uses ERP collected amount and accepts jefe multi-repartidor view', async () => {
-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true, repartidorCodes: ['94', '95'] };
     mockQueryWithParams
       .mockResolvedValueOnce(alignedSchemaRows)
       .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '1000' }])
-      .mockResolvedValueOnce([{ TOTAL_COBRADO: '275' }])
+      .mockResolvedValueOnce([{ TOTAL_COBRADO: '375' }])
       .mockResolvedValueOnce([{
         ID: 1,
-        THRESHOLD_PCT: '20',
+        THRESHOLD_PCT: '30',
         COMMISSION_PCT: '1',
         SORT_ORDER: 1,
       }]);
@@ -809,13 +813,13 @@ describe('Repartidor finanzas routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.deliveredAmount).toBe(1000);
-    expect(res.body.collectedAmount).toBe(275);
-    expect(res.body.collectedPct).toBe(27.5);
+    expect(res.body.collectedAmount).toBe(375);
+    expect(res.body.collectedPct).toBe(37.5);
     expect(res.body.commission).toBe(0.75);
     expect(res.body.reached).toEqual([{
-      thresholdPct: 20,
+      thresholdPct: 30,
       commissionPct: 1,
-      thresholdAmount: 200,
+      thresholdAmount: 300,
       excess: 75,
       commission: 0.75,
     }]);
@@ -829,7 +833,6 @@ describe('Repartidor finanzas routes', () => {
 
   test('calculateCommission applies only the highest reached repartidor tier', () => {
     const tiers = [
-      { thresholdPct: 20, commissionPct: 0.5, sortOrder: 1 },
       { thresholdPct: 30, commissionPct: 0.7, sortOrder: 2 },
       { thresholdPct: 50, commissionPct: 0.8, sortOrder: 3 },
       { thresholdPct: 70, commissionPct: 1, sortOrder: 4 },
@@ -841,14 +844,8 @@ describe('Repartidor finanzas routes', () => {
       tiers,
     })).toMatchObject({
       collectedPct: 21,
-      commission: 5,
-      reached: [{
-        thresholdPct: 20,
-        commissionPct: 0.5,
-        thresholdAmount: 20000,
-        excess: 1000,
-        commission: 5,
-      }],
+      commission: 0,
+      reached: [],
     });
 
     expect(financeService.calculateCommission({
@@ -1411,6 +1408,7 @@ describe('Repartidor finanzas routes', () => {
   });
 
   test('DELETE /test-cleanup/:idempotencyToken is blocked unless explicitly enabled for tests', async () => {
+    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
     const res = await request(app).delete('/finanzas/test-cleanup/liq-20260424-05');
 
     expect(res.status).toBe(403);
@@ -1423,7 +1421,7 @@ describe('Repartidor finanzas routes', () => {
 
   test('DELETE /test-cleanup remains fail-closed when the retired flag is enabled', async () => {
     process.env.REPARTIDOR_FINANCE_ENABLE_TEST_CLEANUP = 'true';
-    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN' };
+    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
 
     const res = await request(app).delete('/finanzas/test-cleanup/cleanup-must-never-run');
 
@@ -1521,7 +1519,7 @@ describe('Repartidor finanzas routes', () => {
   });
 
   test('allows an explicit multi-repartidor daily selector for JEFE_VENTAS', async () => {
-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS' };
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94', '95'] };
     const serviceSpy = jest.spyOn(financeService, 'getDailySummary').mockResolvedValue({
       repartidorId: '94,95',
       date: '2026-04-23',

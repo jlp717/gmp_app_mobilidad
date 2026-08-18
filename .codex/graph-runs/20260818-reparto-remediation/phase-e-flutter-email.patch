@@ -1,0 +1,305 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -30,8 +30,34 @@
+ class LocalDocumentShare {
+ }
++
++/// Canonical acknowledgement for a receipt email. A transport-level 200 is
++/// insufficient: delivery is only complete after the sender and audit ledger
++/// both acknowledge it.
++class RepartoReceiptEmailResult {
++  const RepartoReceiptEmailResult({
++    required this.success,
++    required this.messageId,
++    required this.ledgerWritten,
++  });
++
++  factory RepartoReceiptEmailResult.fromResponse(Map<String, dynamic> json) {
++    return RepartoReceiptEmailResult(
++      success: json['success'] == true,
++      messageId: json['messageId']?.toString().trim() ?? '',
++      ledgerWritten: json['ledgerWritten'] == true,
++    );
++  }
++
++  final bool success;
++  final String messageId;
++  final bool ledgerWritten;
++
++  bool get delivered => success && messageId.isNotEmpty && ledgerWritten;
++}
++
++bool isValidRepartoReceiptEmailAddress(String value) {
++  final email = value.trim();
++  return RegExp(r'^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$').hasMatch(email);
++}
+@@ -884,21 +910,47 @@
+-  static Future<void> emailDeliveryNote({
++  static Future<RepartoReceiptEmailResult> emailDeliveryNote({
+     required String confirmationId,
+     required String destinatario,
++    required String repartidorId,
+   }) async {
++    final normalizedEmail = destinatario.trim();
++    final normalizedOwner = repartidorId.trim();
++    if (!isValidRepartoReceiptEmailAddress(normalizedEmail)) {
++      throw const RepartidorDataException(
++        'El email no es vÃƒÆ’Ã‚Â¡lido.',
++        statusCode: 422,
++        code: 'EMAIL_INVALID',
++      );
++    }
++    if (normalizedOwner.isEmpty ||
++        normalizedOwner.toUpperCase() == 'ALL' ||
++        normalizedOwner.contains(',')) {
++      throw const RepartidorDataException(
++        'Selecciona un repartidor concreto para enviar la nota.',
++        statusCode: 422,
++        code: 'REPARTIDOR_CONCRETE_REQUIRED',
++      );
++    }
+     try {
+       final response = await ApiClient.post(
+         '/repartidor-finanzas/rutero/confirmations/$confirmationId/receipt/email',
+-        {'destinatario': destinatario},
++        {
++          'destinatario': normalizedEmail,
++          'repartidorId': normalizedOwner,
++        },
+       );
+-      if (response['success'] == true) return;
++      final result = RepartoReceiptEmailResult.fromResponse(response);
++      if (result.delivered) return result;
+       throw const RepartidorDataException(
+         'No se pudo enviar la nota de entrega',
++        code: 'EMAIL_DELIVERY_LEDGER_REQUIRED',
+       );
+     } on RepartidorDataException {
+       rethrow;
+diff --git a/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart b/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart
+--- a/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart
++++ b/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart
+@@ -8,12 +8,13 @@
+     required this.onDownloadReceiptPdf,
+     required this.onSharePdfLocally,
++    required this.onEmailReceipt,
+     required this.buildPrinterConfigSection,
+@@ -20,8 +21,9 @@
+   final VoidCallback onDownloadReceiptPdf;
+   final VoidCallback onSharePdfLocally;
++  final VoidCallback onEmailReceipt;
+@@ -214,14 +216,12 @@
+-        const _ShareButton(
++        _ShareButton(
+           icon: Icons.email_outlined,
+-          label: 'Email no disponible',
++          label: 'Enviar por email',
+           color: AppTheme.accentIndigo,
+-          enabled: false,
+-          onTap: null,
++          onTap: onEmailReceipt,
+         ),
+diff --git a/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart b/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
+--- a/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
++++ b/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
+@@ -622,11 +622,12 @@
+       onPreviewReceiptPdf: _previewReceiptPdf,
+       onDownloadReceiptPdf: _downloadReceiptPdf,
+       onSharePdfLocally: _sharePdfLocally,
++      onEmailReceipt: _emailReceipt,
+       buildPrinterConfigSection: _buildPrinterConfigSection,
+@@ -2557,12 +2558,12 @@
+             _buildShareButton(
+               icon: Icons.email,
+-              label: 'Email no disponible',
++              label: 'Enviar por email',
+               color: AppTheme.accentIndigo,
+               onTap: () async {
+                 Navigator.pop(ctx);
+-                await _showEmailUnavailable();
++                await _emailReceipt();
+               },
+@@ -2678,10 +2679,10 @@
+             onEmailTap: () {
+               Navigator.pop(context);
+-              _showEmailUnavailable();
++              _emailReceipt();
+             },
+@@ -2823,11 +2824,86 @@
+-  Future<void> _showEmailUnavailable() async {
+-    if (!mounted) return;
+-    ScaffoldMessenger.of(context).showSnackBar(
+-      const SnackBar(
+-        content: Text(
+-          'Email no disponible hasta habilitar destinatarios canÃƒÆ’Ã‚Â³nicos.',
+-        ),
+-        backgroundColor: AppTheme.warning,
+-      ),
+-    );
+-  }
++  Future<void> _emailReceipt() async {
++    if (!mounted) return;
++    final controller = TextEditingController(text: widget.albaran.emailCliente);
++    final email = await showDialog<String>(
++      context: context,
++      builder: (dialogContext) => AlertDialog(
++        backgroundColor: AppTheme.raisedSurface,
++        title: const Text(
++          'Enviar nota por email',
++          style: TextStyle(color: AppTheme.textPrimary),
++        ),
++        content: TextField(
++          controller: controller,
++          autofocus: true,
++          keyboardType: TextInputType.emailAddress,
++          decoration: const InputDecoration(
++            labelText: 'Destinatario',
++            hintText: 'cliente@empresa.com',
++          ),
++        ),
++        actions: [
++          TextButton(
++            onPressed: () => Navigator.pop(dialogContext),
++            child: const Text('Cancelar'),
++          ),
++          ElevatedButton(
++            onPressed: () =>
++                Navigator.pop(dialogContext, controller.text.trim()),
++            child: const Text('Enviar'),
++          ),
++        ],
++      ),
++    );
++    controller.dispose();
++    if (!mounted || email == null) return;
++
++    final normalizedEmail = email.trim();
++    if (!isValidRepartoReceiptEmailAddress(normalizedEmail)) {
++      ScaffoldMessenger.of(context).showSnackBar(
++        const SnackBar(
++          content: Text('Email invÃƒÆ’Ã‚Â¡lido'),
++          backgroundColor: AppTheme.error,
++        ),
++      );
++      return;
++    }
++
++    final owner = widget.albaran.codigoRepartidor.trim();
++    if (owner.isEmpty || owner.toUpperCase() == 'ALL' || owner.contains(',')) {
++      ScaffoldMessenger.of(context).showSnackBar(
++        const SnackBar(
++          content: Text('Selecciona un repartidor concreto para enviar la nota.'),
++          backgroundColor: AppTheme.warning,
++        ),
++      );
++      return;
++    }
++
++    final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
++    try {
++      final confirmationId =
++          await _confirmationJournal.receiptConfirmationId(widget.albaran.id);
++      await RepartidorDataService.emailDeliveryNote(
++        confirmationId: confirmationId,
++        destinatario: normalizedEmail,
++        repartidorId: owner,
++      );
++      if (!mounted) return;
++      ScaffoldMessenger.of(context).showSnackBar(
++        SnackBar(
++          content: Text('Nota de entrega enviada a $normalizedEmail'),
++          backgroundColor: AppTheme.success,
++        ),
++      );
++    } on RepartoReceiptUnavailableException catch (error) {
++      if (mounted) {
++        _showConfirmationError(
++          repartoConfirmationErrorPresentation(
++            error: error,
++            acknowledged: _isAcknowledgedTombstone,
++          ),
++        );
++      }
++    } catch (error) {
++      if (mounted) {
++        ScaffoldMessenger.of(context).showSnackBar(
++          SnackBar(
++            content: Text(repartidorSafeOperationMessage(
++              error: error,
++              operation: 'receiptEmail',
++            )),
++            backgroundColor: AppTheme.error,
++          ),
++        );
++      }
++    } finally {
++      modal.close();
++    }
++  }
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -2554,6 +2563,15 @@
+     final email = await _askEmailAddress();
+     if (email == null || email.isEmpty || !mounted) return;
++    if (!isValidRepartoReceiptEmailAddress(email)) {
++      ScaffoldMessenger.of(context).showSnackBar(
++        const SnackBar(
++          content: Text('Email invÃƒÆ’Ã‚Â¡lido'),
++          backgroundColor: AppTheme.error,
++        ),
++      );
++      return;
++    }
+     final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
+@@ -2558,6 +2576,7 @@
+         confirmationId: confirmationId,
+         destinatario: email,
++        repartidorId: widget.repartidorId,
+       );
+diff --git a/test/features/repartidor/data/reparto_receipt_email_contract_test.dart b/test/features/repartidor/data/reparto_receipt_email_contract_test.dart
+new file mode 100644
+--- /dev/null
++++ b/test/features/repartidor/data/reparto_receipt_email_contract_test.dart
+@@ -0,0 +1,42 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
++
++void main() {
++  group('RepartoReceiptEmailResult', () {
++    test('only acknowledges sender and ledger-backed delivery', () {
++      expect(
++        RepartoReceiptEmailResult.fromResponse(const {
++          'success': true,
++          'messageId': 'smtp-123',
++          'ledgerWritten': true,
++        }).delivered,
++        isTrue,
++      );
++
++      expect(
++        RepartoReceiptEmailResult.fromResponse(const {
++          'success': true,
++          'messageId': '',
++          'ledgerWritten': true,
++        }).delivered,
++        isFalse,
++      );
++      expect(
++        RepartoReceiptEmailResult.fromResponse(const {
++          'success': true,
++          'messageId': 'smtp-123',
++          'ledgerWritten': false,
++        }).delivered,
++        isFalse,
++      );
++    });
++
++    test('trims valid addresses and rejects malformed input before transport', () {
++      expect(isValidRepartoReceiptEmailAddress(' cliente@gmp.es '), isTrue);
++      expect(isValidRepartoReceiptEmailAddress('cliente@gmp'), isFalse);
++      expect(isValidRepartoReceiptEmailAddress('cliente @gmp.es'), isFalse);
++    });
++  });
++}

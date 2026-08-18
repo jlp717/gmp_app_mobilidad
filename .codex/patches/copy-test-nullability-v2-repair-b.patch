@@ -1,0 +1,143 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -334,25 +334,27 @@
+-    if (source.isNullable !== destination.isNullable) {
+-      if (source.isNullable === 'NO' && destination.isNullable === 'YES') {
+-        const nullCount = Number(destinationNullCounts[delta.name]);
+-        if (!Number.isInteger(nullCount) || nullCount < 0) {
+-          throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: NULL count unavailable`);
+-        }
+-        if (nullCount > 0 && !allowTestRowClear) {
+-          throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: ${nullCount} NULL rows require --allow-test-row-clear`);
+-      } else {
+-        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: unknown nullability delta`);
+-      }
+-        }
+-        if (nullCount > 0 && !testRowsCleared) {
+-          plan.push({ kind: 'CLEAR_TEST_ROWS', rowCount: destinationRowCount, sql: `DELETE FROM ${pair.dst}` });
+-          testRowsCleared = true;
+-        }
+-        plan.push({ kind: 'SET_NOT_NULL', column: delta.name, nullCount,
+-          sql: `ALTER TABLE ${pair.dst} ALTER COLUMN ${delta.name} SET NOT NULL` });
+-      } else if (source.isNullable === 'YES' && destination.isNullable === 'NO') {
+-        plan.push({
+-        kind: 'DROP_NOT_NULL',
+-        column: delta.name,
+-        sql: `ALTER TABLE ${pair.dst} ALTER COLUMN ${delta.name} DROP NOT NULL`,
+-      });
+-    }
++    if (source.isNullable === 'NO' && destination.isNullable === 'YES') {
++      const nullCount = Number(destinationNullCounts[delta.name]);
++      if (!Number.isInteger(nullCount) || nullCount < 0) {
++        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: NULL count unavailable`);
++      }
++      if (nullCount > 0 && !allowTestRowClear) {
++        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: ${nullCount} NULL rows require --allow-test-row-clear`);
++      }
++      if (nullCount > 0 && !testRowsCleared) {
++        plan.push({
++          kind: 'CLEAR_TEST_ROWS',
++          rowCount: destinationRowCount,
++          sql: `DELETE FROM ${pair.dst}`,
++        });
++        testRowsCleared = true;
++      }
++      plan.push({
++        kind: 'SET_NOT_NULL',
++        column: delta.name,
++        nullCount,
++        sql: `ALTER TABLE ${pair.dst} ALTER COLUMN ${delta.name} SET NOT NULL`,
++      });
++    } else if (source.isNullable === 'YES' && destination.isNullable === 'NO') {
++      plan.push({
++        kind: 'DROP_NOT_NULL',
++        column: delta.name,
++        sql: `ALTER TABLE ${pair.dst} ALTER COLUMN ${delta.name} DROP NOT NULL`,
++      });
++    } else if (source.isNullable !== destination.isNullable) {
++      throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: unknown nullability delta`);
++    }
+@@ -363,40 +365,44 @@
+-async function reconcileMappingPairs(pairs, {
+-  tableExistsFn = tableExists,
+-  columnsOfFn = columnsOf,
+-  countOfFn = countOf,
+-  executeFn = run,
+-  apply = APPLY,
+-} = {}) {
+-  const report = [];
+-  for (const pair of pairs) {
+-    const sourceExists = await tableExistsFn(pair.src);
+-    const destinationExists = await tableExistsFn(pair.dst);
+-    const sourceColumns = sourceExists ? await columnsOfFn(pair.src) : [];
+-    const destinationColumns = destinationExists ? await columnsOfFn(pair.dst) : [];
+-  countNullsFn = countNulls,
+-    const destinationRowCount = destinationExists ? await countOfFn(pair.dst) : 0;
+-    const plan = buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
+-      sourceExists,
+-  allowTestRowClear = !apply || ALLOW_TEST_ROW_CLEAR,
+-      destinationExists,
+-      destinationRowCount,
+-    });
+-    assertRuntimeWriteCoverage(pair, sourceColumns, plan);
+-    for (const operation of plan) {
+-      console.log(apply ? 'SCHEMA APPLY' : '[DRY] SCHEMA', operation.sql);
+-      if (apply) await executeFn(operation.sql);
+-    }
+-    report.push({ pair, operations: plan });
+-  }
+-    const destinationNullCounts = {};
+-    if (destinationExists) {
+-      const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
+-      for (const source of sourceColumns) {
+-        const destination = destinationByName.get(source.name);
+-        if (destination && source.isNullable === 'NO' && destination.isNullable === 'YES') {
+-          destinationNullCounts[source.name] = await countNullsFn(pair.dst, source.name);
+-        }
+-      }
+-    }
+-  return report;
+-}
++async function reconcileMappingPairs(pairs, {
++  tableExistsFn = tableExists,
++  columnsOfFn = columnsOf,
++  countOfFn = countOf,
++  countNullsFn = countNulls,
++  executeFn = run,
++  apply = APPLY,
++  allowTestRowClear = !apply || ALLOW_TEST_ROW_CLEAR,
++} = {}) {
++  const report = [];
++  for (const pair of pairs) {
++    const sourceExists = await tableExistsFn(pair.src);
++    const destinationExists = await tableExistsFn(pair.dst);
++    const sourceColumns = sourceExists ? await columnsOfFn(pair.src) : [];
++    const destinationColumns = destinationExists ? await columnsOfFn(pair.dst) : [];
++    const destinationRowCount = destinationExists ? await countOfFn(pair.dst) : 0;
++    const destinationNullCounts = {};
++    if (destinationExists) {
++      const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
++      for (const source of sourceColumns) {
++        const destination = destinationByName.get(source.name);
++        if (destination && source.isNullable === 'NO' && destination.isNullable === 'YES') {
++          destinationNullCounts[source.name] = await countNullsFn(pair.dst, source.name);
++        }
++      }
++    }
++    const plan = buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
++      sourceExists,
++      destinationExists,
++      destinationRowCount,
++      destinationNullCounts,
++      allowTestRowClear,
++    });
++    assertRuntimeWriteCoverage(pair, sourceColumns, plan);
++    for (const operation of plan) {
++      console.log(apply ? 'SCHEMA APPLY' : '[DRY] SCHEMA', operation.sql);
++      if (apply) await executeFn(operation.sql);
++    }
++    report.push({ pair, operations: plan });
++  }
++  return report;
++}

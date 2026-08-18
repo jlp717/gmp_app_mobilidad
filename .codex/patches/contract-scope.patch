@@ -1,0 +1,27 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -350,0 +351,6 @@
++const OPERATIONAL_CONTRACT_KEYS = new Set([
++  'finance.cobros',
++  'finance.liquidationEmails',
++  'notifications.deliveryStatus',
++]);
++
+@@ -589 +595,2 @@
+-    const sourceContracts = sourceExists ? await operationalContractsOfFn(pair.src) : [];
++    const auditOperationalContracts = OPERATIONAL_CONTRACT_KEYS.has(`${pair.group}.${pair.key}`);
++    const sourceContracts = sourceExists && auditOperationalContracts ? await operationalContractsOfFn(pair.src) : [];
+@@ -590,0 +598 @@
++    const destinationContractsEnabled = auditOperationalContracts;
+@@ -591 +600 @@
+-      ? await operationalContractsOfFn(pair.dst) : [];
++      && destinationContractsEnabled ? await operationalContractsOfFn(pair.dst) : [];
+@@ -676,2 +685,5 @@
+-    const sourceContracts = await operationalContractsOfFn(pair.src);
+-    const destinationContracts = await operationalContractsOfFn(pair.dst);
++    const auditOperationalContracts = OPERATIONAL_CONTRACT_KEYS.has(`${pair.group}.${pair.key}`);
++    const sourceContracts = auditOperationalContracts
++      ? await operationalContractsOfFn(pair.src) : [];
++    const destinationContracts = auditOperationalContracts
++      ? await operationalContractsOfFn(pair.dst) : [];

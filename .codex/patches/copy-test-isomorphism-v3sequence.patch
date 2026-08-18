@@ -1,0 +1,62 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -469,6 +469,16 @@ async function tableExists(schemaTable) {
+   return rows.length > 0;
+ }
++
++async function sequenceExists(schemaSequence) {
++  const [schema, sequence] = schemaSequence.split('.');
++  const rows = await queryWithParams(
++    `SELECT 1 AS OK FROM QSYS2.SYSSEQUENCES
++      WHERE SEQUENCE_SCHEMA = ? AND SEQUENCE_NAME = ?`,
++    [schema, sequence],
++  );
++  return rows.length > 0;
++}
+ 
+ async function countOf(schemaTable, whereSql = '', params = []) {
+@@ -557,6 +567,7 @@ function collectMappingPairs() {
+         src: prod[group][key],
+         dst: test[group][key],
+         erpSeeded: ERP_SEEDED_KEYS.has(key),
++        objectType: key === 'liquidationSequence' ? 'SEQUENCE' : 'TABLE',
+       });
+@@ -1126,10 +1137,21 @@ async function main() {
+     // ERP-seeded paths below are deliberately non-isomorphic transformations.
+     // Only TABLE_MAPPINGS production -> TEST application pairs are preflighted.
+     const pairs = collectMappingPairs();
++    const sequencePairs = pairs.filter((pair) => pair.objectType === 'SEQUENCE');
++    for (const pair of sequencePairs) {
++      const sourceExists = await sequenceExists(pair.src);
++      const destinationExists = await sequenceExists(pair.dst);
++      if (!sourceExists || !destinationExists) {
++        throw new Error(`SEQUENCE PREFLIGHT BLOCK ${pair.src} -> ${pair.dst}: sourceExists=${sourceExists} destinationExists=${destinationExists}; refusing orphan TEST sequence and false PASS`);
++      }
++      console.log(`PREFLIGHT OK sequence ${pair.src} -> ${pair.dst}`);
++    }
++    const tablePairs = pairs.filter((pair) => pair.objectType === 'TABLE');
+     if (RECONCILE_TEST_SCHEMA) {
+-      await backupMappedDestinations(pairs, runId);
+-      const schemaReport = await reconcileMappingPairs(pairs);
++      await backupMappedDestinations(tablePairs, runId);
++      await backupTestTable(TEST_FIRMAS, runId);
++      const schemaReport = await reconcileMappingPairs(tablePairs);
+@@ -1138,10 +1160,11 @@ async function main() {
+-      await preflightMappingPairs(pairs);
++      await preflightMappingPairs(tablePairs);
+@@ -1143,8 +1166,9 @@ async function main() {
+     } else {
+-      await preflightMappingPairs(pairs);
+-      await backupMappedDestinations(pairs, runId);
++      await preflightMappingPairs(tablePairs);
++      await backupMappedDestinations(tablePairs, runId);
++      await backupTestTable(TEST_FIRMAS, runId);
+@@ -1158,6 +1182,10 @@ async function main() {
+     // 2) Isomorphic TABLE_MAPPINGS pairs (skip ERP-seeded keys)
+     for (const p of pairs) {
++      if (p.objectType === 'SEQUENCE') {
++        console.log(`PREFLIGHT ONLY sequence ${p.src} -> ${p.dst}; no row copy`);
++        continue;
++      }
+       if (p.erpSeeded) {

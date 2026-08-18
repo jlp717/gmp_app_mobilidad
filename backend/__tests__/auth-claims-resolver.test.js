@@ -28,13 +28,17 @@ function harness({ user = profile() } = {}) {
     getVendorVisibilityScope: jest.fn(async (code, { role }) => (
       role === 'JEFE_VENTAS' ? [code, '051', 'UNK'] : [code]
     )),
+    listRepartidorFleet: jest.fn(async () => [
+      { code: String(user?.code || '050').trim().toUpperCase(), name: 'Repartidor' },
+      { code: '051', name: 'Otro' },
+    ]),
   };
   return { repository, resolver: createAuthClaimsResolver({ authRepository: repository }) };
 }
 
 describe('authoritative auth claims resolver', () => {
-  test('targets claims version 3', () => {
-    expect(AUTH_CLAIMS_VERSION).toBe(3);
+  test('targets claims version 4', () => {
+    expect(AUTH_CLAIMS_VERSION).toBe(4);
   });
 
   test('uses ERP preventista flag as the authoritative COMERCIAL base', async () => {
@@ -56,6 +60,7 @@ describe('authoritative auth claims resolver', () => {
       matricula: null,
       vendorCodes: ['050'],
       vendedorCodes: ['050'],
+      repartidorCodes: [],
       tipoVendedor: 'R',
       showCommissions: false,
       claimsVersion: AUTH_CLAIMS_VERSION,
@@ -65,6 +70,7 @@ describe('authoritative auth claims resolver', () => {
     expect(Object.isFrozen(claims)).toBe(true);
     expect(Object.isFrozen(claims.availableRoles)).toBe(true);
     expect(Object.isFrozen(claims.vendorCodes)).toBe(true);
+    expect(Object.isFrozen(claims.repartidorCodes)).toBe(true);
   });
 
   test('defaults pure ERP repartidores to REPARTIDOR', async () => {

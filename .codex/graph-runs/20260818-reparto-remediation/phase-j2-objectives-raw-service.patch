@@ -1,0 +1,31 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -619,14 +619,22 @@ class RepartidorDataService {
+     required String repartidorId,
+     int? year,
+     String? clientId,
++    int limit = 100,
++    int offset = 0,
+   }) async {
++    if (limit < 1 || limit > 100 || offset < 0) {
++      throw const RepartidorDataException(
++        'Paginacion de objetivos invalida',
++        statusCode: 422,
++      );
++    }
+     try {
+-      final queryParams = <String, String>{};
++      final queryParams = <String, String>{
++        'limit': limit.toString(),
++        'offset': offset.toString(),
++      };
+       if (year != null) queryParams['year'] = year.toString();
+       if (clientId != null) queryParams['clientId'] = clientId;
+ 
+       final cacheKey =
+-          'repartidor_objectives_detail_${repartidorId}_${year ?? 'current'}_${clientId ?? 'all'}';
++          'repartidor_objectives_detail_${repartidorId}_${year ?? 'current'}_${clientId ?? 'all'}_${limit}_$offset';
+ 
+       final response = await ApiClient.get(
+         '/repartidor/history/objectives-detail/$repartidorId',

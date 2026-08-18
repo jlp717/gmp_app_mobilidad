@@ -1,0 +1,38 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -529,0 +530,1 @@
++  test('blocks a stale backup with the same row count but a different content hash', async () => {
++    const backup = backupTableName(destination, 'COPY_20260818_A');
++    await expect(backupTestTable(destination, 'COPY_20260818_A', {
++      tableExistsFn: jest.fn().mockResolvedValue(true),
++      countOfFn: jest.fn().mockResolvedValue(3),
++      columnsOfFn: jest.fn().mockResolvedValue([column()]),
++      contentHashOfFn: jest.fn(async (table) => (table === backup ? 'stale' : 'current')),
++      executeFn: jest.fn(),
++      apply: true,
++    })).rejects.toThrow('content hash mismatch');
++  });
++
++  test('resumes from a run-scoped backup after DROP or empty CREATE', async () => {
++    const backup = backupTableName(destination, 'COPY_20260818_A');
++    const afterDrop = await backupTestTable(destination, 'COPY_20260818_A', {
++      tableExistsFn: jest.fn(async (table) => table === backup),
++      countOfFn: jest.fn().mockResolvedValue(3),
++      apply: true,
++    });
++    expect(afterDrop).toEqual(expect.objectContaining({
++      resumed: true, destinationMissing: true, backupCount: 3,
++    }));
++
++    let countCalls = 0;
++    const afterCreate = await backupTestTable(destination, 'COPY_20260818_A', {
++      tableExistsFn: jest.fn().mockResolvedValue(true),
++      countOfFn: jest.fn(async () => (++countCalls === 1 ? 0 : 3)),
++      apply: true,
++    });
++    expect(afterCreate).toEqual(expect.objectContaining({
++      resumed: true, destinationRecreatedEmpty: true, backupCount: 3,
++    }));
++  });
++

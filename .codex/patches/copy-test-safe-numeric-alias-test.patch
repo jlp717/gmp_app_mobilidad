@@ -1,0 +1,28 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -9,0 +10,1 @@
++  safeTypeWidening,
+@@ -108,0 +110,24 @@
++  test('accepts NUMERIC and DECIMAL aliases only without precision or scale narrowing', () => {
++    const numeric4 = column({
++      dataType: 'NUMERIC', length: '4', numericPrecision: '4', numericScale: '0',
++    });
++    const decimal4 = column({
++      dataType: 'DECIMAL', length: '4', numericPrecision: '4', numericScale: '0',
++    });
++    expect(safeTypeWidening(numeric4, decimal4)).toBe(true);
++    expect(safeTypeWidening(
++      column({ dataType: 'NUMERIC', numericPrecision: '8', numericScale: '2' }),
++      column({ dataType: 'DECIMAL', numericPrecision: '6', numericScale: '2' }),
++    )).toBe(true);
++    expect(safeTypeWidening(
++      column({ dataType: 'NUMERIC', numericPrecision: '4', numericScale: '0' }),
++      column({ dataType: 'DECIMAL', numericPrecision: '6', numericScale: '0' }),
++    )).toBe(false);
++    expect(safeTypeWidening(
++      column({ dataType: 'NUMERIC', numericPrecision: '8', numericScale: '3' }),
++      column({ dataType: 'DECIMAL', numericPrecision: '8', numericScale: '2' }),
++    )).toBe(false);
++  });
++

@@ -1,0 +1,35 @@
+diff --git a/backend/__tests__/repartidor-liquidacion-db2-repository.test.js b/backend/__tests__/repartidor-liquidacion-db2-repository.test.js
+--- a/backend/__tests__/repartidor-liquidacion-db2-repository.test.js
++++ b/backend/__tests__/repartidor-liquidacion-db2-repository.test.js
+@@ -102,7 +102,7 @@ function connection({
+   malformedIdentity = false, malformedIndexOrdering = false, extraColumn = false,
+   extraConstraint = null, extraIndex = null, missingConstraintSignature = null,
++  updateCount = 1,
+ } = {}) {
+@@ -187,7 +187,7 @@ function connection({
+-    if (/^UPDATE /i.test(sql.trim())) return { count: 1 };
++    if (/^UPDATE /i.test(sql.trim())) return { count: updateCount };
+@@ -375,9 +375,27 @@ describe('repartidor-liquidacion-db2-repository', () => {
+     expect(sql).toContain('NEXT VALUE FOR JAVIER.TEST_REPARTIDOR_LIQUIDACION_SEQ');
+     expect(sql).toContain('CODIGOVENDEDOR = ? AND DIACOBRO = ?');
+     expect(sql).not.toMatch(/LOCK TABLE|MAX\s*\(|DSEDAC/i);
++    expect(sql).not.toMatch(/JAVIER\.(?!TEST_)(?:REPARTIDOR_|REPARTO_)/);
+     expect(conn.query.mock.calls.filter(([statement]) => statement.includes('ID IN (?)'))).toHaveLength(4);
+   });
++
++  test('fails exact cobro update without copying production rows into TEST', async () => {
++    const conn = connection({ updateCount: 0 });
++    const repository = createRepartidorLiquidacionDb2Repository({
++      runtime: runtime(), connectionFactory: async () => conn,
++    });
++    await expect(repository.withTransaction((tx) => tx.markCobrosLiquidated({
++      repartidorId: '94', date: '2026-08-09', cobroIds: [21],
++      marker: 'LQD_123', numeroLiquidacion: 88,
++    }))).rejects.toMatchObject({ code: 'LIQUIDACION_CAPABILITY_UNAVAILABLE' });
++    const sql = conn.query.mock.calls.map(([statement]) => statement).join('\n');
++    expect(sql).not.toMatch(/INSERT INTO JAVIER\.TEST_REPARTIDOR_COBROS/i);
++    expect(sql).not.toMatch(/JAVIER\.(?!TEST_)(?:REPARTIDOR_|REPARTO_)/);
++    expect(conn.rollback).toHaveBeenCalledTimes(1);
++  });
+ 
+   test('outbox catalog is conditional', async () => {

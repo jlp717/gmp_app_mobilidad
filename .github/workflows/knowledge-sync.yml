@@ -1,0 +1,55 @@
+name: Knowledge Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.opencode/memory/**'
+      - '.opencode/TEAM_TRACE.jsonl'
+      - '.opencode/state/handoffs/**'
+      - 'vault/**'
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync Knowledge Systems
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Semantica
+        run: |
+          pip install semantica==0.6.0 || echo "Semantica install skipped"
+
+      - name: Run Auto-Ingest
+        run: |
+          node .opencode/hooks/auto-ingest.mjs --once || echo "Auto-ingest skipped"
+
+      - name: Run Vault Lint
+        run: |
+          echo "Vault lint check - implement with wiki-lint skill"
+
+      - name: Commit Changes
+        run: |
+          git config user.name "OpenCode Bot"
+          git config user.email "bot@opencode.local"
+          git add -A
+          git diff --staged --quiet || git commit -m "knowledge sync: $(date -I)"
+          git push || echo "Nothing to push"

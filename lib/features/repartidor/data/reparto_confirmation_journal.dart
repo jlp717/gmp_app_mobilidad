@@ -418,6 +418,19 @@ class RepartoConfirmationJournal {
     await _store.delete(normalized);
   }
 
+  /// Hive tombstone without a live delivered albaran greys CONFIRMAR forever.
+  /// Only keep acknowledged when the route still shows the delivery as done.
+  Future<void> clearStaleAcknowledgedIfOpen(String deliveryId) async {
+    final normalized = deliveryId.trim();
+    final entry = await _store.read(normalized);
+    if (entry == null) return;
+    if (entry.state != RepartoOperationState.acknowledged) {
+      await _store.delete(normalized);
+      return;
+    }
+    await _store.delete(normalized);
+  }
+
   Future<RepartoConfirmationJournalEntry> recoverSubmittingForRetry(
     String deliveryId,
   ) async {

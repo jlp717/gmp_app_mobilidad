@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs'); const path=require('node:path');
+const h=require('./certify-reparto-profile-v8');
+assert.deepEqual(h.data({data:{x:1}}),{x:1}); assert.deepEqual(h.data({data:[1]}),[1]); assert.deepEqual(h.data({data:{}}),{});
+assert.deepEqual(h.codeList(['8','08','10']),['08','10']);
+const actor=h.identity({data:{token:'x'.repeat(16),user:{role:'JEFE_VENTAS',activeMode:'REPARTIDOR',code:'98',repartidorCodes:['08','10']}}});
+assert.equal(actor.code,'98'); assert.equal(h.selectorAllowed(actor,'08,10'),true); assert.equal(h.selectorAllowed(actor,'09'),false);
+assert.equal(h.rowsFor('rutero.pending',{albaranes:[{id:1}]}).length,1); assert.equal(h.rowsFor('clientes',{data:{clients:[{id:1}]}}).length,1); assert.equal(h.rowsFor('auth.repartidores',{repartidores:[{codigo:'08'}]}).length,1);
+assert.deepEqual(h.docIdentity({id:'doc',codigoCliente:'c',codigoRepartidor:'8',numeroAlbaran:2,ejercicio:2026,serie:'A',terminal:1}),{id:'doc',client:'c',owner:'08',number:2,year:2026,serie:'A',terminal:1,confirmationId:undefined,deliveryId:undefined});
+assert.deepEqual(h.clientIdentity({id:'c',repCode:'8'}),{id:'c',repCode:'08'}); assert.equal(h.dueIdentity({keys:{docId:'d'}}),'d');
+assert.deepEqual(h.deliveryMetrics({data:{totalEntregas:2,entregados:1,pendientes:1,parciales:0,noEntregados:0,importeTotal:9}}),{total:2,delivered:1,pending:1,partial:0,undelivered:0,amount:9});
+assert.equal(h.collectionsMetrics({data:{collectionAvailability:'PARTIAL',days:[{importeCobrado:4,importePendiente:3,importeCobrable:7}]}}).availability,'PARTIAL');
+assert.equal(h.validShape('albaran',{albaran:{id:'d',items:[]}},'application/json'),true); assert.equal(h.validShape('signature.history',{},'image/png'),true); assert.equal(h.validShape('receipt.get',{pdfBase64:Buffer.from('%PDFfixture').toString('base64')},'application/json',4),true);
+assert.match(h.route('08','rutero.pending'),/date=\d{4}-\d{2}-\d{2}/); assert.match(h.route('08','panel.collections'),/year=\d{4}&month=\d+/);
+assert.equal(h.FLEET_SKIP.has('order'),true); assert.equal(h.FLEET_SKIP.has('liquidacion.breakdown'),false); assert.equal(h.FLEET_SKIP.has('cuentas'),false);
+const source=fs.readFileSync(path.join(__dirname,'certify-reparto-profile-v8.js'),'utf8');
+assert.match(source,/redirect:'error'/); assert.match(source,/repartidor-finanzas\/rutero\/confirmations/); assert.match(source,/%PDF/); assert.doesNotMatch(source,/confirm-delivery|send-email|share\/whatsapp|method,'PUT'|method,'DELETE'/);
+process.stdout.write('certify-reparto-profile-v8 static checks: PASS\n');

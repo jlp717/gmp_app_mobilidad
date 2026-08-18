@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Daily 18:00 Europe/Madrid variance digest + liquidacion outbox drain.
+ * Daily 07:00 Europe/Madrid variance digest of the previous day + liquidacion outbox drain.
  */
 
 const schedule = require('node-schedule');
@@ -12,7 +12,7 @@ const {
 } = require('./repartidor-liquidacion-outbox-service');
 
 const TZ = process.env.REPARTO_NOTIFICATION_TZ || 'Europe/Madrid';
-const DEFAULT_CRON = '0 18 * * *';
+const DEFAULT_CRON = '0 7 * * *';
 
 let digestJob = null;
 let outboxJob = null;
@@ -23,7 +23,7 @@ function buildRule(cronExpr) {
   const parts = String(cronExpr || DEFAULT_CRON).trim().split(/\s+/);
   rule.minute = parseInt(parts[0], 10) || 0;
   rule.hour = parseInt(parts[1], 10);
-  if (Number.isNaN(rule.hour)) rule.hour = 18;
+  if (Number.isNaN(rule.hour)) rule.hour = 7;
   if (parts[4] && parts[4] !== '*') {
     if (parts[4].includes('-')) {
       const [start, end] = parts[4].split('-').map(Number);

@@ -1,0 +1,441 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -91,2 +91,3 @@
+     required this.clientCount,
+     required this.clients,
++    required this.collectionAvailability,
+@@ -111,2 +112,5 @@
+       clientCount: (summary['clientCount'] as int?) ?? 0,
+       clients: clientsList,
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
+@@ -123,2 +127,5 @@
+   final int clientCount;
+   final List<ClientCollectionData> clients;
++  final String collectionAvailability;
++
++  bool get isPartial => collectionAvailability == 'PARTIAL';
+@@ -133,1 +140,3 @@
+     required this.collected,
++    required this.pending,
++    required this.collectionAvailability,
+@@ -150,1 +159,5 @@
+       collected: ((json['collected'] ?? 0) as num).toDouble(),
++      pending: ((json['pending'] ?? 0) as num).toDouble(),
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
+@@ -163,1 +176,3 @@
+   final double collected;
++  final double pending;
++  final String collectionAvailability;
+@@ -179,1 +194,3 @@
+     required this.collected,
++    required this.pending,
++    required this.collectionAvailability,
+@@ -187,1 +204,5 @@
+       collected: ((json['collected'] ?? 0) as num).toDouble(),
++      pending: ((json['pending'] ?? 0) as num).toDouble(),
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
+@@ -193,2 +214,27 @@
+   final double collected;
++  final double pending;
++  final String collectionAvailability;
+ }
++
++class DailyCollectionsResult {
++  DailyCollectionsResult({
++    required this.collectionAvailability,
++    required List<DailyCollection> daily,
++  }) : daily = List.unmodifiable(daily);
++
++  factory DailyCollectionsResult.fromJson(Map<String, dynamic> json) {
++    return DailyCollectionsResult(
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++      daily: (json['daily'] as List? ?? const <dynamic>[])
++          .whereType<Map>()
++          .map((item) => DailyCollection.fromJson(Map<String, dynamic>.from(item)))
++          .toList(),
++    );
++  }
++
++  final String collectionAvailability;
++  final List<DailyCollection> daily;
++  bool get isPartial => collectionAvailability == 'PARTIAL';
++}
+@@ -437,1 +483,1 @@
+-  static Future<List<DailyCollection>> getDailyCollections({
++  static Future<DailyCollectionsResult> getDailyCollections({
+@@ -457,5 +503,1 @@
+-      final dailyList = (response['daily'] as List? ?? [])
+-          .map((d) => DailyCollection.fromJson(d as Map<String, dynamic>))
+-          .toList();
+-
+-      return dailyList;
++      return DailyCollectionsResult.fromJson(response);
+diff --git a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart
+--- a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart
++++ b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart
+@@ -302,3 +302,4 @@
+     required this.thresholdMet,
+     required this.clientCount,
++    required this.collectionAvailability,
+     List<ClientCollectionSnapshot> clients = const [],
+@@ -384,2 +385,7 @@
+       thresholdMet: _boolValue(summary['thresholdMet']),
+       clientCount: _intValue(summary['clientCount']),
++      collectionAvailability: _stringValue(
++        json,
++        const ['collectionAvailability'],
++        fallback: 'COMPLETE',
++      ).toUpperCase(),
+@@ -404,2 +410,3 @@
+       thresholdMet: false,
+       clientCount: 0,
++      collectionAvailability: 'COMPLETE',
+@@ -416,2 +423,5 @@
+   final int clientCount;
++  final String collectionAvailability;
+   final List<ClientCollectionSnapshot> clients;
++
++  bool get isPartial => collectionAvailability == 'PARTIAL';
+@@ -427,3 +437,4 @@
+           'thresholdMet': thresholdMet,
+           'clientCount': clientCount,
+         },
++        'collectionAvailability': collectionAvailability,
+@@ -439,1 +450,3 @@
+     required this.collected,
++    required this.pending,
++    required this.collectionAvailability,
+@@ -447,1 +460,7 @@
+       collected: _doubleValue(json['collected']),
++      pending: _doubleValue(json['pending']),
++      collectionAvailability: _stringValue(
++        json,
++        const ['collectionAvailability'],
++        fallback: 'COMPLETE',
++      ).toUpperCase(),
+@@ -454,1 +473,3 @@
+   final double collected;
++  final double pending;
++  final String collectionAvailability;
+@@ -460,3 +481,30 @@
+         'collected': collected,
++        'pending': pending,
++        'collectionAvailability': collectionAvailability,
+       };
+ }
++
++class RepartidorDailyCollections {
++  RepartidorDailyCollections({
++    required this.collectionAvailability,
++    List<DailyCollectionSnapshot> daily = const [],
++  }) : daily = List.unmodifiable(daily);
++
++  factory RepartidorDailyCollections.fromJson(JsonMap json) {
++    return RepartidorDailyCollections(
++      collectionAvailability: _stringValue(
++        json,
++        const ['collectionAvailability'],
++        fallback: 'COMPLETE',
++      ).toUpperCase(),
++      daily: _jsonMapList(json['daily'])
++          .map(DailyCollectionSnapshot.fromJson)
++          .toList(),
++    );
++  }
++
++  final String collectionAvailability;
++  final List<DailyCollectionSnapshot> daily;
++  bool get isPartial => collectionAvailability == 'PARTIAL';
++  bool get isEmpty => daily.isEmpty;
++}
+diff --git a/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart b/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart
+--- a/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart
++++ b/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart
+@@ -915,1 +915,1 @@
+-  Future<List<DailyCollectionSnapshot>> getDailyCollections({
++  Future<RepartidorDailyCollections> getDailyCollections({
+@@ -934,1 +934,1 @@
+-    return _mapList(response['daily'], DailyCollectionSnapshot.fromJson);
++    return RepartidorDailyCollections.fromJson(response);
+diff --git a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart
+--- a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart
++++ b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart
+@@ -76,2 +76,3 @@
+     this.collectionSummary,
+     List<DailyCollectionSnapshot> dailyCollections = const [],
++    this.dailyCollectionsAvailability = 'COMPLETE',
+@@ -101,1 +102,5 @@
+   final List<DailyCollectionSnapshot> dailyCollections;
++  final String dailyCollectionsAvailability;
++  bool get collectionsArePartial =>
++      collectionSummary?.isPartial == true ||
++      dailyCollectionsAvailability == 'PARTIAL';
+@@ -132,2 +137,3 @@
+     Object? collectionSummary = _sentinel,
+     List<DailyCollectionSnapshot>? dailyCollections,
++    String? dailyCollectionsAvailability,
+@@ -155,1 +161,3 @@
+       dailyCollections: dailyCollections ?? this.dailyCollections,
++      dailyCollectionsAvailability:
++          dailyCollectionsAvailability ?? this.dailyCollectionsAvailability,
+@@ -234,3 +242,4 @@
+     var collectionsIncomplete = false;
+     late final RepartidorCollectionSummary collectionSummary;
+     var dailyCollections = const <DailyCollectionSnapshot>[];
++    var dailyCollectionsAvailability = 'COMPLETE';
+@@ -255,2 +264,2 @@
+-      dailyCollections = await _service.getDailyCollections(
++      final dailyResponse = await _service.getDailyCollections(
+         repartidorId: filters.repartidorId,
+@@ -260,1 +269,4 @@
+       );
++      dailyCollections = dailyResponse.daily;
++      dailyCollectionsAvailability = dailyResponse.collectionAvailability;
++      collectionsIncomplete = collectionsIncomplete || dailyResponse.isPartial;
+@@ -262,2 +274,3 @@
+       collectionsIncomplete = true;
+       dailyCollections = const [];
++      dailyCollectionsAvailability = 'UNAVAILABLE';
+@@ -275,1 +288,2 @@
+         dailyCollections: dailyCollections,
++        dailyCollectionsAvailability: dailyCollectionsAvailability,
+@@ -286,1 +300,2 @@
+         dailyCollections: dailyCollections,
++        dailyCollectionsAvailability: dailyCollectionsAvailability,
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_panel_page.dart b/lib/features/repartidor/presentation/pages/repartidor_panel_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_panel_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_panel_page.dart
+@@ -25,6 +25,13 @@
+ typedef RepartidorMonthlySummaryLoader = Future<RepartidorMonthlySummary>
+     Function({
+   required String repartidorId,
+   required int year,
+   required int month,
+ });
++
++typedef RepartidorDailyCollectionsLoader = Future<RepartidorDailyCollections>
++    Function({
++  required String repartidorId,
++  required int year,
++  required int month,
++});
+@@ -36,2 +43,3 @@
+     this.deliverySummaryLoader,
+     this.monthlySummaryLoader,
++    this.dailyCollectionsLoader,
+@@ -42,1 +50,2 @@
+   final RepartidorMonthlySummaryLoader? monthlySummaryLoader;
++  final RepartidorDailyCollectionsLoader? dailyCollectionsLoader;
+@@ -64,1 +73,3 @@
+   RepartidorMonthlySummary? _monthlyFinance;
++  RepartidorDailyCollections? _dailyCollections;
++  bool _collectionsAvailable = false;
+@@ -100,1 +111,1 @@
+   Future<RepartidorMonthlySummary> _loadMonthlySummary() {
+@@ -114,1 +125,17 @@
+   }
++
++  Future<RepartidorDailyCollections> _loadDailyCollections() {
++    final loader = widget.dailyCollectionsLoader;
++    if (loader != null) {
++      return loader(
++        repartidorId: widget.repartidorId,
++        year: _selectedYear,
++        month: _selectedMonth,
++      );
++    }
++    return RepartidorFinanzasService().getDailyCollections(
++      repartidorId: widget.repartidorId,
++      year: _selectedYear,
++      month: _selectedMonth,
++    );
++  }
+@@ -125,5 +152,9 @@
+     final financeFuture = _capture<RepartidorMonthlySummary>(
+       _loadMonthlySummary(),
+     );
++    final collectionsFuture = _capture<RepartidorDailyCollections>(
++      _loadDailyCollections(),
++    );
+     final deliveryResult = await deliveryFuture;
+     final financeResult = await financeFuture;
++    final collectionsResult = await collectionsFuture;
+@@ -139,3 +170,6 @@
+     final finance = financeResult.value;
++    final collections = collectionsResult.value;
+     final allFailed =
+-        deliveryResult.error != null && financeResult.error != null;
++        deliveryResult.error != null &&
++        financeResult.error != null &&
++        collectionsResult.error != null;
+@@ -148,1 +182,3 @@
+       _monthlyFinance = finance;
++      _dailyCollections = collections;
++      _collectionsAvailable = collectionsResult.error == null;
+@@ -150,4 +186,11 @@
+       _isPartial = !allFailed &&
+-          (deliveryResult.error != null || financeResult.error != null);
++          (deliveryResult.error != null ||
++              financeResult.error != null ||
++              collectionsResult.error != null ||
++              collections?.isPartial == true);
+       _isEmpty =
+-          !allFailed && !_isPartial && !hasDeliveryData && finance!.isEmpty;
++          !allFailed &&
++          !_isPartial &&
++          !hasDeliveryData &&
++          finance!.isEmpty &&
++          (collections?.isEmpty ?? true);
+@@ -192,1 +235,3 @@
+                               _buildFinancialCard(),
++                              const SizedBox(height: 16),
++                              _buildCollectionsCard(),
+@@ -383,1 +428,6 @@
+-    final missingLabel = _deliveryAvailable ? 'datos financieros' : 'entregas';
++    final collectionsPartial = _dailyCollections?.isPartial == true;
++    final missingLabel = collectionsPartial
++        ? 'los cobros ERP completos'
++        : _deliveryAvailable
++            ? 'datos financieros'
++            : 'entregas';
+@@ -399,1 +449,3 @@
+-          'No se pudieron cargar $missingLabel. El resto de datos sÃƒÂ­ estÃƒÂ¡ disponible.',
++          collectionsPartial
++              ? 'CVC no cubre todos los documentos del periodo. Los cobros mostrados no son un total definitivo.'
++              : 'No se pudieron cargar $missingLabel. El resto de datos sÃƒÂ­ estÃƒÂ¡ disponible.',
+@@ -539,1 +591,1 @@
+   Widget _buildFinancialCard() {
+@@ -590,2 +642,120 @@
+   }
++
++  Widget _buildCollectionsCard() {
++    if (!_collectionsAvailable) {
++      return const _PanelInformationCard(
++        title: 'Cobros diarios no disponibles',
++        message: 'No se pudo cargar el detalle de cobros del periodo.',
++      );
++    }
++    final collections = _dailyCollections!;
++    if (collections.isEmpty) {
++      return const _PanelInformationCard(
++        title: 'Sin cobros diarios',
++        message: 'No hay cobros registrados para este periodo.',
++      );
++    }
++    final totalCollected = collections.daily.fold<double>(
++      0,
++      (total, item) => total + item.collected,
++    );
++    final totalPending = collections.daily.fold<double>(
++      0,
++      (total, item) => total + item.pending,
++    );
++    return Container(
++      padding: const EdgeInsets.all(16),
++      decoration: BoxDecoration(
++        color: AppTheme.raisedSurface,
++        borderRadius: BorderRadius.circular(14),
++      ),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          const Text('Cobros diarios', style: TextStyle(fontWeight: FontWeight.bold)),
++          if (collections.isPartial) ...[
++            const SizedBox(height: 8),
++            const Text('PARCIAL Ã¢â‚¬â€ no usar como cierre definitivo', style: TextStyle(color: AppTheme.warning)),
++          ],
++          const SizedBox(height: 12),
++          Row(children: [
++            _miniStat('Cobrado', CurrencyFormatter.format(totalCollected)),
++            _miniStat('Pendiente', CurrencyFormatter.format(totalPending)),
++          ]),
++        ],
++      ),
++    );
++  }
+ }
++
++class _PanelInformationCard extends StatelessWidget {
++  const _PanelInformationCard({required this.title, required this.message});
++  final String title;
++  final String message;
++  @override
++  Widget build(BuildContext context) => Container(
++        padding: const EdgeInsets.all(16),
++        decoration: BoxDecoration(
++          color: AppTheme.raisedSurface,
++          borderRadius: BorderRadius.circular(14),
++        ),
++        child: ListTile(
++          contentPadding: EdgeInsets.zero,
++          leading: const Icon(Icons.info_outline, color: AppTheme.textSecondary),
++          title: Text(title),
++          subtitle: Text(message),
++        ),
++      );
++diff --git a/test/features/repartidor/repartidor_panel_collections_truth_test.dart b/test/features/repartidor/repartidor_panel_collections_truth_test.dart
++new file mode 100644
++--- /dev/null
+++++ b/test/features/repartidor/repartidor_panel_collections_truth_test.dart
++@@
++import 'package:flutter/material.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_panel_page.dart';
++import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
++
++void main() {
++  RepartidorMonthlySummary finance() => RepartidorMonthlySummary(
++        repartidorId: '08',
++        period: RepartidorFinancialPeriod(year: 2026, month: 8),
++        totalCobrado: 10,
++        totalLiquidado: 0,
++        saldoPendiente: 0,
++        cobrosCount: 1,
++        liquidacionesCount: 0,
++      );
++
++  test('daily collections preserves PARTIAL and pending', () {
++    final response = RepartidorDailyCollections.fromJson({
++      'collectionAvailability': 'PARTIAL',
++      'daily': [
++        {'day': 1, 'date': '2026-08-01', 'collectable': 20, 'collected': 10, 'pending': 10, 'collectionAvailability': 'PARTIAL'},
++      ],
++    });
++    expect(response.isPartial, isTrue);
++    expect(response.daily.single.pending, 10);
++  });
++
++  testWidgets('panel makes PARTIAL collections visible and non-definitive', (tester) async {
++    await tester.pumpWidget(MaterialApp(
++      home: RepartidorPanelPage(
++        repartidorId: '08,09',
++        deliverySummaryLoader: ({required repartidorId, required year, required month}) async => {'summary': {}, 'daily': []},
++        monthlySummaryLoader: ({required repartidorId, required year, required month}) async => finance(),
++        dailyCollectionsLoader: ({required repartidorId, required year, required month}) async => RepartidorDailyCollections.fromJson({
++          'collectionAvailability': 'PARTIAL',
++          'daily': [
++            {'day': 1, 'date': '2026-08-01', 'collectable': 20, 'collected': 10, 'pending': 10, 'collectionAvailability': 'PARTIAL'},
++          ],
++        }),
++      ),
++    ));
++    await tester.pumpAndSettle();
++    expect(find.text('Datos parciales'), findsOneWidget);
+++    expect(find.text('Cobros diarios'), findsOneWidget);
++    expect(find.text('PARCIAL Ã¢â‚¬â€ no usar como cierre definitivo'), findsOneWidget);
++  });
++}
+
+
+
+
+

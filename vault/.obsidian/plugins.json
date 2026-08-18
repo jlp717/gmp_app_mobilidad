@@ -1,0 +1,36 @@
+{
+  "plugins": [
+    {
+      "name": "obsidian-git",
+      "enabled": true,
+      "config": {
+        "autoPullInterval": 10,
+        "autoPush": true,
+        "commitMessage": "vault backup: {{date}}"
+      }
+    },
+    {
+      "name": "obsidian-bases",
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "name": "templater-obsidian",
+      "enabled": true,
+      "config": {
+        "templates_folder": "08-templates",
+        "auto_jump_to_cursor": true
+      }
+    },
+    {
+      "name": "dataview",
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "name": "obsidian-cli",
+      "enabled": true,
+      "config": {}
+    }
+  ]
+}

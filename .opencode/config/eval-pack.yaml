@@ -1,0 +1,64 @@
+version: 1
+purpose: >
+  Eval pequeno desde el dia uno (Anthropic: ~20 queries bastan).
+  Runner: bun .opencode/tools/decision-router.ts
+  Criterio: playbook + roster + gates. No LLM-as-judge hasta que el router sea verde.
+source: ".opencode/tools/decision-router.ts#runSelfTest"
+pass_rule: "status PASS y failed=0"
+
+cases:
+  - id: simple_read_only
+    expect_playbook: explore
+  - id: db2_business_flow
+    expect_playbook: explore
+  - id: performance_cache
+    expect_playbook: build
+  - id: flutter_ui_change
+    expect_playbook: build
+  - id: production_discovery
+    expect_playbook: explore
+  - id: irreversible_db2_mutation
+    expect_playbook: prod
+  - id: javier_only_db2_mutation
+    expect_gates: [javier-test-schema-only, no-DSEDAC-DDL-DML]
+  - id: user_correction_capture
+    expect_playbook: tiny
+  - id: typo_tiny
+    expect_playbook: tiny
+  - id: secure_vuln_fix
+    expect_playbook: secure
+  - id: prod_whitelist_deploy
+    expect_playbook: prod
+  - id: web_research_parallel
+    expect_playbook: explore
+    expect_agents: [Web-Researcher, Technical-Verifier]
+  - id: operational_audit_mentions_corrections
+    reject_tools: [correction-capture]
+
+  - id: frontend_web_landing
+    expect_playbook: build
+    expect_task_type: frontend_web
+  - id: financial_commissions_stay_sol
+    expect_playbook: build
+    expect_task_type: financial
+  - id: factory_client_app
+    expect_playbook: build
+    expect_task_type: factory
+  - id: bug_loop_until_green
+    expect_playbook: build
+    expect_task_type: bug_loop
+  - id: ship_pr_not_prod
+    expect_playbook: build
+    expect_task_type: ship_pr
+
+scale_effort:
+  tiny: { agents: 1, note: "3-10 tool calls" }
+  explore: { agents: "1-3", writers: 0 }
+  build: { agents: "3-5", writers: 1 }
+  sweep: { agents: "5-8", isolation: worktrees }
+  secure: { agents: "4-6", appsec_does_not_write: true }
+  prod: { agents: "1-3", autonomy: 0 }
+
+not_adopted:
+  - "A2A: todo vive en un orquestador. No hay frontera de runtime que lo justifique."
+  - "10+ subagentes en paralelo para codigo: Anthropic Research midio 15x tokens; en coding hay menos paralelismo real."

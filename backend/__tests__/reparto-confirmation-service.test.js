@@ -245,6 +245,28 @@ describe('transactional reparto confirmation service', () => {
     expect(snapshot.events).toEqual(['confirmation', 'lines', 'evidence', 'idempotency']);
   });
 
+  test('confirms a prepaid zero-importe delivery with no planned lines', async () => {
+    const repository = createFakeRepository({
+      planned: plannedDelivery({
+        importeTotal: 0,
+        importePendiente: 0,
+        lineas: [],
+        financialDocumentState: 'MISSING',
+        financialDocument: null,
+      }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+
+    const result = await service.confirm(command({ delivery: { lineas: [] } }));
+    expect(result).toMatchObject({ created: true, deliveryStatus: 'ENTREGADO' });
+    expect(result).not.toHaveProperty('receiptProof');
+    expect(repository.snapshot().idempotency.get(command().idempotencyKey).result.receiptProof).toEqual({
+      plannedImporteTotal: 0, plannedLineCount: 0, actualLineCount: 0,
+      prepaidZeroWithoutLines: true,
+    });
+    expect(repository.snapshot().lines.get('1')).toEqual([]);
+  });
+
 
   test('uses only basic planned identity with null XDE/DEX when an unpaid delivery has no financial document', async () => {
     const source = plannedDelivery();

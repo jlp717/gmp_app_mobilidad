@@ -23,6 +23,37 @@ const CANONICAL_CONFIRMATION_STATUSES = Object.freeze([
   'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO',
 ]);
 
+const LEGACY_ROUTE_READ_TABLES = Object.freeze({
+  isolated_test: Object.freeze({
+    deliveries: 'JAVIER.TEST_REPARTIDOR_ENTREGAS',
+    signatures: 'JAVIER.TEST_REPARTIDOR_FIRMAS',
+  }),
+  production: Object.freeze({
+    deliveries: 'JAVIER.REPARTIDOR_ENTREGAS',
+    signatures: 'JAVIER.REPARTIDOR_FIRMAS',
+  }),
+});
+
+function resolveRouteTableSet() {
+  try {
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.valid && Object.hasOwn(LEGACY_ROUTE_READ_TABLES, runtime.tableSet)) return runtime.tableSet;
+  } catch (_error) { /* fail closed below */ }
+  const explicit = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase();
+  return explicit === 'isolated_test' ? explicit : null;
+}
+
+function resolveLegacyRouteReadTable(kind) {
+  return LEGACY_ROUTE_READ_TABLES[resolveRouteTableSet()]?.[kind] || null;
+}
+
+function resolveDeliveryStatusReadTable() {
+  const tableSet = resolveRouteTableSet();
+  const expected = TABLE_MAPPINGS[tableSet]?.notifications?.deliveryStatus;
+  if (!expected) return null;
+  return getDeliveryStatusTable() === expected ? expected : null;
+}
+
 function resolveConfirmationTables() {
   try {
     const runtime = resolveRepartoRuntime(process.env);
@@ -38,33 +69,48 @@ function resolveConfirmationTables() {
   }
   return {
     confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
+    lines: 'JAVIER.TEST_REPARTO_LINEAS',
     evidences: 'JAVIER.TEST_REPARTO_EVIDENCIAS',
   };
 }
 
-/// History reads ERP (DSEDAC) documents and overlays confirmations.
-/// Isolated_test writes go to TEST_*; still overlay those onto production docs,
-/// and also read production confirmation tables for older signatures.
+/// History reads ERP documents and overlays the single selected app table-set.
 function resolveConfirmationReadTables() {
   const primary = resolveConfirmationTables();
-  const list = [];
-  const seen = new Set();
-  const push = (table) => {
-    if (!table?.confirmations || seen.has(table.confirmations)) return;
-    seen.add(table.confirmations);
-    list.push(table);
-  };
-  try {
-    const runtime = resolveRepartoRuntime(process.env);
-    if (runtime?.tableSet === 'isolated_test') {
-      push(TABLE_MAPPINGS.production.confirmation);
-      push(TABLE_MAPPINGS.isolated_test.confirmation);
-    }
-  } catch (_error) {
-    // Keep the primary mapping only.
-  }
-  push(primary);
-  return list;
+  return primary ? [primary] : [];
+}
+
+function confirmationStatusOverlayTables() {
+  const primary = resolveConfirmationTables();
+  return primary ? [primary] : [];
+}
+
+function confirmationDocumentIdExpr(alias = 'CPC') {
+  return `TRIM(VARCHAR(${alias}.EJERCICIOALBARAN)) || '-' || TRIM(${alias}.SERIEALBARAN) || '-' || TRIM(VARCHAR(${alias}.TERMINALALBARAN)) || '-' || TRIM(VARCHAR(${alias}.NUMEROALBARAN)) || '-' || TRIM(${alias}.CODIGOCLIENTEALBARAN)`;
+}
+
+function confirmationOverlayJoins(tablesList = confirmationStatusOverlayTables()) {
+  return (tablesList || []).map((tables, index) => {
+    const overlayAlias = `TC${index}`;
+    return `LEFT JOIN ${tables.confirmations} ${overlayAlias} ON TRIM(${overlayAlias}.DOCUMENT_ID) = ${confirmationDocumentIdExpr('CPC')} AND TRIM(${overlayAlias}.REPARTIDOR_ID) = TRIM(OPP.CODIGOREPARTIDOR)`;
+  }).join('\n');
+}
+
+function confirmationOverlayDeliveredSql(tablesList = confirmationStatusOverlayTables()) {
+  return (tablesList || []).map((_, index) =>
+    `WHEN UPPER(TRIM(COALESCE(TC${index}.STATUS, ''))) IN ('ENTREGADO', 'NO_ENTREGADO', 'RECHAZADO') THEN 1`).join('\n                        ');
+}
+
+function confirmationOverlayStatusCases() {
+  return confirmationStatusOverlayTables().map((_, index) => {
+    const overlayAlias = `TC${index}`;
+    return `WHEN MAX(CASE WHEN UPPER(TRIM(COALESCE(${overlayAlias}.STATUS, ''))) IN
+                        ('NO_ENTREGADO', 'RECHAZADO') THEN 1 ELSE 0 END) = 1 THEN 'NO_ENTREGADO'
+                    WHEN MAX(CASE WHEN UPPER(TRIM(COALESCE(${overlayAlias}.STATUS, ''))) = 'PARCIAL'
+                        THEN 1 ELSE 0 END) = 1 THEN 'PARCIAL'
+                    WHEN MAX(CASE WHEN UPPER(TRIM(COALESCE(${overlayAlias}.STATUS, ''))) = 'ENTREGADO'
+                        THEN 1 ELSE 0 END) = 1 THEN 'ENTREGADO'`;
+  }).join('\n                    ');
 }
 
 function jsonSafeScalar(value) {
@@ -106,7 +152,7 @@ function blobToBase64(raw) {
 
 async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode } = {}) {
   if (!Array.isArray(rows) || !rows.length) return rows;
-  const tablesList = resolveConfirmationReadTables();
+  const tablesList = confirmationStatusOverlayTables();
   if (!tablesList.length) return rows;
   const documentIds = [...new Set(rows.map((row) => canonicalDocumentId(row, clientCode)).filter(Boolean))];
   const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
@@ -201,14 +247,17 @@ async function getCanonicalConfirmationSignature({
     let base64 = null;
     if (evidenceId && evidencesTable) {
       const blobs = await runQueryWithParams(
-        `SELECT CONTENT_BLOB
+        `SELECT HEX(CONTENT_BLOB) AS CONTENT_HEX
            FROM ${evidencesTable}
           WHERE EVIDENCE_ID = ?
           FETCH FIRST 1 ROW ONLY`,
         [evidenceId],
         false,
       );
-      base64 = blobToBase64(blobs?.[0]?.CONTENT_BLOB || blobs?.[0]?.content_blob);
+      const hex = String(blobs?.[0]?.CONTENT_HEX || blobs?.[0]?.content_hex || '').trim();
+      if (hex && hex.length % 2 === 0 && /^[0-9A-Fa-f]+$/.test(hex)) {
+        base64 = Buffer.from(hex, 'hex').toString('base64');
+      }
     }
     return {
       confirmationId: match.ID ?? match.id ?? null,
@@ -263,17 +312,25 @@ const INVOICE_HEADER_COLS = `
 
 async function resolveAlbaranOwners(key) {
   return runQueryWithParams(`
-        SELECT DISTINCT TRIM(OPP.CODIGOREPARTIDOR) AS OWNER_ID
-        FROM DSEDAC.CPC CPC
-        INNER JOIN DSEDAC.OPP OPP
+        SELECT DISTINCT
+            TRIM(OPP.CODIGOREPARTIDOR) AS OWNER_ID,
+            TRIM(CAC.CODIGOVENDEDOR) AS VENDOR_ID
+        FROM DSEDAC.CAC CAC
+        LEFT JOIN DSEDAC.CPC CPC
+            ON CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+            AND TRIM(CPC.SERIEALBARAN) = TRIM(CAC.SERIEALBARAN)
+            AND CPC.TERMINALALBARAN = CAC.TERMINALALBARAN
+            AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
+        LEFT JOIN DSEDAC.OPP OPP
             ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
             AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
-        WHERE CPC.EJERCICIOALBARAN = ?
-          AND TRIM(CPC.SERIEALBARAN) = ?
-          AND CPC.TERMINALALBARAN = ?
-          AND CPC.NUMEROALBARAN = ?
-        FETCH FIRST 2 ROWS ONLY
+        WHERE CAC.EJERCICIOALBARAN = ?
+          AND TRIM(CAC.SERIEALBARAN) = ?
+          AND CAC.TERMINALALBARAN = ?
+          AND CAC.NUMEROALBARAN = ?
+          AND CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
+        FETCH FIRST 8 ROWS ONLY
     `, [key.year, key.series, key.terminal, key.number], false);
 }
 
@@ -298,15 +355,17 @@ async function resolveInvoiceOwners(key) {
 }
 
 async function resolveDeliveryOwners(entregaId) {
+  const table = resolveLegacyRouteReadTable('deliveries');
+  if (!table) return [];
   return runQueryWithParams(`
         SELECT DISTINCT TRIM(CODIGOREPARTIDOR) AS OWNER_ID
-        FROM JAVIER.REPARTIDOR_ENTREGAS
+        FROM ${table}
         WHERE ID = ?
         FETCH FIRST 2 ROWS ONLY
     `, [entregaId], false);
 }
 
-async function getCollectionsSummary(selectedMonth, selectedYear, repartidorParams) {
+async function getCollectionsSummaryBatch(selectedMonth, selectedYear, repartidorParams) {
   const repartidorKey = repartidorParams.join(',');
   const cacheKey = `repartidor:collections:summary:${repartidorKey}:${selectedYear}:${selectedMonth}`;
   const sql = `
@@ -413,7 +472,7 @@ async function getCollectionsSummary(selectedMonth, selectedYear, repartidorPara
   return (await runCached(sql, cacheKey, TTL.MEDIUM, [selectedMonth, selectedYear, ...repartidorParams])) || [];
 }
 
-async function getCollectionsDaily(selectedYear, selectedMonth, repartidorIdList) {
+async function getCollectionsDailyBatch(selectedYear, selectedMonth, repartidorIdList) {
   const repartidorKey = repartidorIdList.join(',');
   const cacheKey = `repartidor:collections:daily:${repartidorKey}:${selectedYear}:${selectedMonth}`;
   const sql = `
@@ -514,6 +573,44 @@ async function getCollectionsDaily(selectedYear, selectedMonth, repartidorIdList
   return (await runCached(sql, cacheKey, TTL.MEDIUM, [selectedYear, selectedMonth, ...repartidorIdList])) || [];
 }
 
+const COLLECTION_DRIVER_BATCH_SIZE = 20;
+
+function mergeCollectionRows(groups, keyFields) {
+  const numeric = ['TOTAL_COBRABLE', 'TOTAL_COBRADO', 'TOTAL_PENDIENTE', 'NUM_DOCUMENTOS', 'CVC_DOCUMENTOS', 'CVC_AMBIGUOUS_DOCUMENTS'];
+  const merged = new Map();
+  for (const row of groups.flat()) {
+    const key = keyFields.map((field) => String(row[field] ?? '')).join('\u0001');
+    const existing = merged.get(key);
+    if (!existing) merged.set(key, { ...row });
+    else for (const field of numeric) existing[field] = Number(existing[field] || 0) + Number(row[field] || 0);
+  }
+  return [...merged.values()].sort((left, right) => keyFields.map((field) => String(left[field] ?? '').localeCompare(String(right[field] ?? ''))).find(Boolean) || 0);
+}
+
+async function loadCollectionsInBatches(repartidorIds, load, keyFields) {
+  const ids = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  const batches = [];
+  for (let index = 0; index < ids.length; index += COLLECTION_DRIVER_BATCH_SIZE) batches.push(ids.slice(index, index + COLLECTION_DRIVER_BATCH_SIZE));
+  const settled = await Promise.allSettled(batches.map((batch) => load(batch)));
+  const successful = settled.filter((result) => result.status === 'fulfilled').map((result) => result.value || []);
+  if (!successful.length) {
+    const error = new Error('REPARTIDOR_COLLECTIONS_UNAVAILABLE');
+    error.code = 'REPARTIDOR_COLLECTIONS_UNAVAILABLE';
+    throw error;
+  }
+  const rows = mergeCollectionRows(successful, keyFields);
+  Object.defineProperty(rows, 'batchStatus', { value: successful.length === settled.length ? 'AVAILABLE' : 'PARTIAL' });
+  return rows;
+}
+
+async function getCollectionsSummary(selectedMonth, selectedYear, repartidorIds) {
+  return loadCollectionsInBatches(repartidorIds, (batch) => getCollectionsSummaryBatch(selectedMonth, selectedYear, batch), ['CLIENTE', 'NOMBRE_CLIENTE', 'FORMA_PAGO']);
+}
+
+async function getCollectionsDaily(selectedYear, selectedMonth, repartidorIds) {
+  return loadCollectionsInBatches(repartidorIds, (batch) => getCollectionsDailyBatch(selectedYear, selectedMonth, batch), ['DIA']);
+}
+
 
 async function getClientDocuments({
   repartidorIds,
@@ -563,6 +660,7 @@ async function getClientDocuments({
                     CPC.ANODOCUMENTO AS ANO, CPC.MESDOCUMENTO AS MES,
                     CPC.DIADOCUMENTO AS DIA,
                     TRIM(CPC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
+                    TRIM(OPP.CODIGOREPARTIDOR) AS DELIVERY_REPARTIDOR,
                     CPC.IMPORTETOTAL,
                     CAC_J.IMPORTETOTAL AS IMPORTETOTAL_FACTURA,
                     CPC.CONFORMADOSN, CPC.SITUACIONALBARAN,
@@ -771,7 +869,24 @@ async function getObjectives(cleanRepartidorIds, normalizedClientId) {
   );
 }
 
-async function getObjectivesDetailClients(repartidorIdList, selectedYear, clientId) {
+async function getObjectivesDetailClients(
+  repartidorIdList,
+  selectedYear,
+  clientId,
+  { limit = 100, offset = 0 } = {},
+) {
+  const pageLimit = Number(limit);
+  const pageOffset = Number(offset);
+  if (!Number.isSafeInteger(pageLimit) || pageLimit < 1 || pageLimit > 100) {
+    const error = new Error('Objectives detail page limit must be between 1 and 100');
+    error.code = 'OBJECTIVES_DETAIL_LIMIT_INVALID';
+    throw error;
+  }
+  if (!Number.isSafeInteger(pageOffset) || pageOffset < 0) {
+    const error = new Error('Objectives detail page offset must be a non-negative integer');
+    error.code = 'OBJECTIVES_DETAIL_OFFSET_INVALID';
+    throw error;
+  }
   let clientFilter = '';
   const clientFilterParams = [];
   if (clientId) {
@@ -780,38 +895,67 @@ async function getObjectivesDetailClients(repartidorIdList, selectedYear, client
   }
   const repartidorKey = repartidorIdList.join(',');
   const clientsSql = `
-            SELECT DISTINCT TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENT_CODE,
-                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as CLIENT_NAME
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC
-                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
-                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
-              AND OPP.ANOREPARTO = ?
-              ${clientFilter}
-            FETCH FIRST 1000 ROWS ONLY
+            WITH CLIENT_SCOPE AS (
+                SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENT_CODE,
+                    MAX(TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, ''))) AS CLIENT_NAME
+                FROM DSEDAC.OPP OPP
+                INNER JOIN DSEDAC.CPC CPC
+                    ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                    AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
+                    AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+                LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                  AND OPP.ANOREPARTO = ?
+                  AND NULLIF(TRIM(CPC.CODIGOCLIENTEALBARAN), '') IS NOT NULL
+                  ${clientFilter}
+                GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)
+            ), NUMBERED AS (
+                SELECT CLIENT_SCOPE.*,
+                    ROW_NUMBER() OVER (ORDER BY CLIENT_CODE, CLIENT_NAME) AS LOGICAL_POSITION
+                FROM CLIENT_SCOPE
+            ), PAGE_ROWS AS (
+                SELECT CLIENT_CODE, CLIENT_NAME, LOGICAL_POSITION
+                FROM NUMBERED
+                WHERE LOGICAL_POSITION > ? AND LOGICAL_POSITION <= ?
+            ), SCOPE_TOTAL AS (
+                SELECT COUNT(*) AS TOTAL_COUNT
+                FROM CLIENT_SCOPE
+            )
+            SELECT PAGE_ROWS.CLIENT_CODE, PAGE_ROWS.CLIENT_NAME,
+                PAGE_ROWS.LOGICAL_POSITION, SCOPE_TOTAL.TOTAL_COUNT
+            FROM SCOPE_TOTAL
+            LEFT JOIN PAGE_ROWS ON 1 = 1
+            ORDER BY PAGE_ROWS.LOGICAL_POSITION
         `;
-  const clientSqlParams = [...repartidorIdList, selectedYear, ...clientFilterParams];
-  return runCached(
+  const clientSqlParams = [
+    ...repartidorIdList,
+    selectedYear,
+    ...clientFilterParams,
+    pageOffset,
+    pageOffset + pageLimit,
+  ];
+  const result = await runCached(
     clientsSql,
-    `repartidor:objDetail:${repartidorKey}:${selectedYear}:${clientId || 'all'}`,
+    `repartidor:objDetail:${repartidorKey}:${selectedYear}:${clientId || 'all'}:${pageOffset}:${pageLimit}`,
     TTL.REALTIME,
     clientSqlParams,
   );
+  const resultRows = Array.isArray(result) ? result : [];
+  return {
+    total: Number(resultRows[0]?.TOTAL_COUNT || 0),
+    rows: resultRows.filter((row) => String(row?.CLIENT_CODE || '').trim()),
+  };
 }
 
 async function getObjectivesDetailLaclae(allCodes, selectedYear) {
-  const CHUNK_SIZE = 500;
-  const laclaeParams = [];
-  const chunks = [];
-  for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
-    const chunk = allCodes.slice(i, i + CHUNK_SIZE);
-    chunks.push(`L.LCCDCL IN (${chunk.map(() => '?').join(',')})`);
-    laclaeParams.push(...chunk);
+  const uniqueCodes = [...new Set((allCodes || []).map((code) => String(code || '').trim()).filter(Boolean))];
+  if (uniqueCodes.length === 0) return [];
+  if (uniqueCodes.length > 100) {
+    const error = new Error('Objectives detail client page exceeds 100');
+    error.code = 'OBJECTIVES_DETAIL_PAGE_TOO_LARGE';
+    throw error;
   }
-  const clientInFilter = `(${chunks.join(' OR ')})`;
+  const clientInFilter = `L.LCCDCL IN (${uniqueCodes.map(() => '?').join(',')})`;
   const LACLAE_SALES_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT')`;
   const dataSql = `
             SELECT
@@ -834,9 +978,8 @@ async function getObjectivesDetailLaclae(allCodes, selectedYear) {
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL, L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.UNIDADMEDIDA, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04
-            ORDER BY SALES DESC
         `;
-  return runQueryWithParams(dataSql, [...laclaeParams, selectedYear], false);
+  return runQueryWithParams(dataSql, [...uniqueCodes, selectedYear], false);
 }
 
 async function getFiFilterCatalog() {
@@ -851,16 +994,13 @@ async function getFiFilterCatalog() {
 
 
 function appFirmasTable() {
-  try {
-    const runtime = resolveRepartoRuntime(process.env);
-    if (runtime?.tableSet === 'isolated_test') return 'JAVIER.TEST_REPARTIDOR_FIRMAS';
-  } catch (_) { /* fall through */ }
-  return 'JAVIER.REPARTIDOR_FIRMAS';
+  return resolveLegacyRouteReadTable('signatures');
 }
 
 async function getDeliveryStatusFirmaPath(albId) {
   if (!isDeliveryStatusAvailable() || isDeliveryStatusNewSchema()) return [];
-  const table = getDeliveryStatusTable();
+  const table = resolveDeliveryStatusReadTable();
+  if (!table) return [];
   return runQueryWithParams(
     `SELECT FIRMA_PATH FROM ${table} WHERE ID = ?`,
     [albId],
@@ -870,6 +1010,7 @@ async function getDeliveryStatusFirmaPath(albId) {
 
 async function getRepartidorFirmasByAlbaran(numero, ejercicio, serie, terminal) {
   const table = appFirmasTable();
+  if (!table) return [];
   return runQueryWithParams(`
             SELECT FIRMABASE64, TRIM(FIRMANOMBRE) AS FIRMANOMBRE, TRIM(FIRMADNI) AS FIRMADNI,
                    DIA, MES, ANO, HORA
@@ -944,9 +1085,11 @@ async function getDebugCacSignatures() {
 }
 
 async function getEntregaFirma(entregaId) {
+  const table = appFirmasTable();
+  if (!table) return [];
   return runQueryWithParams(`
             SELECT FIRMABASE64, FIRMANOMBRE, DIA, MES, ANO, HORA
-            FROM JAVIER.REPARTIDOR_FIRMAS 
+            FROM ${table}
             WHERE ENTREGA_ID = ?
             FETCH FIRST 1 ROW ONLY
         `, [entregaId], false);
@@ -965,6 +1108,7 @@ async function getLegacySignatureBase64(year, series, terminal, number) {
 
 async function getRepartidorFirmaBase64ByAlbaran(numero, year, serie, terminal) {
   const table = appFirmasTable();
+  if (!table) return [];
   return runQueryWithParams(`
                     SELECT FIRMABASE64 FROM ${table}
                     WHERE EJERCICIOALBARAN = ?
@@ -988,12 +1132,14 @@ async function getCacFirmaBase64(year, serie, terminal, number) {
 
 async function getDeliverySummary(selectedYear, selectedMonth, dayFilterParams, repartidorIdList) {
   const dayFilter = dayFilterParams.length ? `AND OPP.DIAREPARTO <= ?` : '';
-const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+  const canonicalOnly = isIsolatedTestTableSet();
+  const deliveryStatusTable = resolveDeliveryStatusReadTable();
+  const dsAvail = Boolean(deliveryStatusTable) && isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
         // The legacy ID does not encode subempresa or client, so it cannot be
         // joined safely for a cross-client aggregate. Use canonical status
         // only when every delivery identity component is available.
         const dsJoinSub = dsAvail ? `
-            LEFT JOIN JAVIER.DELIVERY_STATUS DS
+            LEFT JOIN ${deliveryStatusTable} DS
                 ON DS.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
                 AND DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
                 AND TRIM(DS.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
@@ -1001,6 +1147,8 @@ const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
                 AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN
                 AND TRIM(DS.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
         ` : '';
+        const confirmationJoins = confirmationOverlayJoins();
+        const confirmationStatusCases = confirmationOverlayStatusCases();
         const canonicalStatusCases = dsAvail ? `
                     WHEN MAX(CASE WHEN UPPER(TRIM(COALESCE(DS.STATUS, ''))) IN
                         ('NO_ENTREGADO', 'NO_REALIZADA', 'NO_REALIZADO', 'RECHAZADO', 'RECHAZADA', 'ABSENT')
@@ -1032,8 +1180,9 @@ const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
                     CAST(MAX(CPC.IMPORTETOTAL) AS DECIMAL(15,2)) as IMPORTE,
                     CASE
                         ${canonicalStatusCases}
-                        WHEN MAX(CASE WHEN TRIM(COALESCE(CPC.CONFORMADOSN, '')) = 'S' THEN 1 ELSE 0 END) = 1
-                            THEN 'ENTREGADO'
+                        ${confirmationStatusCases}
+                        ${canonicalOnly ? '' : "WHEN MAX(CASE WHEN TRIM(COALESCE(CPC.CONFORMADOSN, '')) = 'S' THEN 1 ELSE 0 END) = 1"}
+                        ${canonicalOnly ? '' : "    THEN 'ENTREGADO'"}
                         ELSE 'PENDIENTE'
                     END AS FINAL_STATUS
                 FROM DSEDAC.OPP OPP
@@ -1042,6 +1191,7 @@ const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
                     AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 ${dsJoinSub}
+                ${confirmationJoins}
                 WHERE OPP.ANOREPARTO = ?
                   AND OPP.MESREPARTO = ?
                   ${dayFilter}
@@ -1062,8 +1212,9 @@ const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
 }
 
 async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
-  const dsWeekAvail = isDeliveryStatusAvailable();
-  const dsWeekJoin = getDeliveryStatusJoin('CPC', 'DS');
+  const weekTables = [resolveConfirmationTables()].filter(Boolean);
+  const confirmationJoins = confirmationOverlayJoins(weekTables);
+  const confirmationDelivered = confirmationOverlayDeliveredSql(weekTables);
   const sql = `
             WITH DOCUMENTOS_SEMANA AS (
                 SELECT
@@ -1076,9 +1227,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
                     CPC.TERMINALALBARAN,
                     CPC.NUMEROALBARAN,
                     MAX(CASE
-                        WHEN TRIM(CPC.CONFORMADOSN) = 'S'
-                          OR CPC.SITUACIONALBARAN IN ('F', 'R') THEN 1
-                        ${dsWeekAvail ? "WHEN DS.STATUS = 'ENTREGADO' THEN 1" : ''}
+                        ${confirmationDelivered}
                         ELSE 0
                     END) as ENTREGADO
                 FROM DSEDAC.OPP OPP
@@ -1086,7 +1235,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
                     ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                     AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
-                ${dsWeekAvail ? dsWeekJoin : ''}
+                ${confirmationJoins}
                 WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
                     BETWEEN ? AND ?
                   AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
@@ -1161,7 +1310,10 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
   return overlaid.map((row) => {
     const canonical = String(row.CANONICAL_STATUS || '').trim().toUpperCase();
     const safe = jsonSafeRow(row);
-    if (!canonical) return safe;
+    if (!canonical) {
+      // isolated_test must never promote ERP F/R/CONFORMADOSN to delivered.
+      return isIsolatedTestTableSet() ? { ...safe, ESTADO_ENTREGA: 'PENDIENTE' } : safe;
+    }
     return { ...safe, ESTADO_ENTREGA: canonical };
   });
 }
@@ -1171,6 +1323,7 @@ async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {
 `
             SELECT
                 TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
+                    TRIM(UNIQ.CODIGOREPARTIDOR) as OWNER_ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
                 COUNT(*) as TOTAL_DOCS,
@@ -1179,6 +1332,7 @@ async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {
             FROM (
                 SELECT DISTINCT
                     CPC.CODIGOCLIENTEALBARAN,
+                    OPP.CODIGOREPARTIDOR,
                     CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     CPC.IMPORTETOTAL,
                     CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
@@ -1195,7 +1349,7 @@ async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(UNIQ.CODIGOCLIENTEALBARAN)
             WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
               @CLIENT_SEARCH@
-            GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+            GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(UNIQ.CODIGOREPARTIDOR), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
             ORDER BY LAST_VISIT DESC, ID ASC
             FETCH FIRST ? ROWS ONLY
             `,
@@ -1340,6 +1494,91 @@ async function getInvoiceHeaderByAlbaranNoTerminal(parsedNumber, serie, parsedYe
             `, [parsedNumber, serie, serie, parsedYear], false);
 }
 
+function resolveFinanceWriteTables() {
+  try {
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.valid && runtime.tables?.finance) return runtime.tables.finance;
+  } catch (_error) {
+    // Jest and incomplete env fall through to explicit table-set mapping.
+  }
+  const set = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase();
+  if (set === 'isolated_test' || set === 'production') {
+    return TABLE_MAPPINGS[set].finance;
+  }
+  return null;
+}
+
+function isIsolatedTestTableSet() {
+  try {
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.tableSet) return runtime.tableSet === 'isolated_test';
+  } catch (_error) {
+    // Incomplete runtime still honors the explicit table-set flag.
+  }
+  return String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
+}
+
+function allowedFinanceCobrosTable(tableName) {
+  return tableName === TABLE_MAPPINGS.isolated_test.finance.cobros
+    || tableName === TABLE_MAPPINGS.production.finance.cobros;
+}
+
+function allowedFinanceAuditTable(tableName) {
+  return tableName === TABLE_MAPPINGS.isolated_test.finance.audit
+    || tableName === TABLE_MAPPINGS.production.finance.audit;
+}
+
+async function getAppCollectedOverlay({ month, year, repartidorIds } = {}) {
+  const finance = resolveFinanceWriteTables();
+  const cobrosTable = finance?.cobros;
+  const ids = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!allowedFinanceCobrosTable(cobrosTable) || !ids.length) {
+    return { total: 0, byDay: [] };
+  }
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = await runQueryWithParams(
+      `SELECT DIACOBRO AS DIA, SUM(IMPORTEVENCIMIENTO) AS APP_COBRADO
+         FROM ${cobrosTable}
+        WHERE MESCOBRO = ?
+          AND ANOCOBRO = ?
+          AND TRIM(CODIGOVENDEDOR) IN (${placeholders})
+        GROUP BY DIACOBRO`,
+      [month, year, ...ids],
+      false,
+    );
+    const byDay = (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        day: Number(row.DIA ?? row.dia) || 0,
+        collected: Number(row.APP_COBRADO ?? row.app_cobrado) || 0,
+      }))
+      .filter((row) => row.collected !== 0);
+    const total = byDay.reduce((sum, row) => sum + row.collected, 0);
+    return { total, byDay };
+  } catch (_error) {
+    return { total: 0, byDay: [] };
+  }
+}
+
+async function recordDocumentEmailLedger({ operatorId, ownerId, payloadPreview } = {}) {
+  const finance = resolveFinanceWriteTables();
+  const auditTable = finance?.audit;
+  if (!allowedFinanceAuditTable(auditTable)) {
+    const error = new Error('EMAIL_LEDGER_UNAVAILABLE');
+    error.code = 'EMAIL_DELIVERY_LEDGER_REQUIRED';
+    throw error;
+  }
+  await queryWithParams(
+    `INSERT INTO ${auditTable} (EVENT_TYPE, OPERADOR, CODIGO_REPARTIDOR, PAYLOAD_PREVIEW) VALUES (?, ?, ?, ?)`,
+    [
+      'DOCUMENT_EMAIL',
+      String(operatorId || '').slice(0, 40),
+      String(ownerId || '').slice(0, 10),
+      String(payloadPreview || '').slice(0, 500),
+    ],
+  );
+}
+
 module.exports = {
   resolveAlbaranOwners,
   resolveInvoiceOwners,
@@ -1348,6 +1587,11 @@ module.exports = {
   getCollectionsDaily,
   getClientDocuments,
   overlayCanonicalConfirmations,
+  resolveConfirmationTables,
+  confirmationStatusOverlayTables,
+  isIsolatedTestTableSet,
+  getAppCollectedOverlay,
+  recordDocumentEmailLedger,
   getCanonicalConfirmationSignature,
   getObjectives,
   getObjectivesDetailClients,

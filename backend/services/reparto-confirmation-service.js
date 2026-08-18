@@ -150,11 +150,20 @@ function assertPlannedDelivery(planned, command) {
     normalizeText(line.lineaId),
     line,
   ]));
-  if (plannedLines.size === 0 || plannedLines.size !== command.delivery.lineas.length) {
+  if (plannedLines.size !== command.delivery.lineas.length) {
     throw new RepartoPersistenceError('Las lineas no coinciden con el documento planificado', {
       code: 'PLANNED_LINES_MISMATCH',
       statusCode: 422,
     });
+  }
+  if (plannedLines.size === 0) {
+    if (Number(planned.importeTotal) !== 0) {
+      throw new RepartoPersistenceError('Las lineas no coinciden con el documento planificado', {
+        code: 'PLANNED_LINES_MISMATCH',
+        statusCode: 422,
+      });
+    }
+    return [];
   }
 
   const actualLines = command.delivery.lineas.map((actual) => {
@@ -269,6 +278,23 @@ function assertPayment(planned, command, actualLines, document) {
   };
 }
 
+
+function buildReceiptProof(planned, actualLines, payment, status) {
+  const plannedImporteTotal = Number(planned.importeTotal);
+  const plannedLineCount = Array.isArray(planned.lineas) ? planned.lineas.length : null;
+  const actualLineCount = actualLines.length;
+  return Object.freeze({
+    plannedImporteTotal: Number.isFinite(plannedImporteTotal) && plannedImporteTotal >= 0
+      ? roundMoney(plannedImporteTotal) : null,
+    plannedLineCount,
+    actualLineCount,
+    prepaidZeroWithoutLines: status === 'ENTREGADO'
+      && plannedImporteTotal === 0
+      && plannedLineCount === 0
+      && actualLineCount === 0
+      && payment == null,
+  });
+}
 function buildPersistedConfirmation({ command, planned, actualLines, documentSnapshot, confirmedAt, fingerprint }) {
   return {
     idempotencyKey: command.idempotencyKey,
@@ -373,11 +399,17 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
         cobroId: cobroResult == null ? null : String(cobroResult.id),
         confirmedAt,
       };
+      // Persist the server-validated zero-prepaid proof for receipt rendering;
+      // keep the public confirmation response unchanged.
+      const persistedResult = {
+        ...result,
+        receiptProof: buildReceiptProof(planned, actualLines, payment, confirmation.status),
+      };
       await tx.insertIdempotencyRecord({
         idempotencyKey: command.idempotencyKey,
         fingerprint,
         documentId: planned.documentId,
-        result,
+        result: persistedResult,
       });
       return result;
     });

@@ -87,6 +87,15 @@ describe('chatbot client RBAC policy contract', () => {
     });
   });
 
+  test('does not elevate a missing role from an isolated isJefeVentas boolean', () => {
+    const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
+    const result = authorizeChatbotClientScope(
+      { userCode: '80', isJefeVentas: true },
+      { clientCode: 'C-AJENO', vendorCode: '03' }
+    );
+    expect(result).toMatchObject({ allowed: false, code: 'FORBIDDEN_CLIENT_SCOPE' });
+  });
+
   test('rejects direct clientCode when client owner has not been resolved', () => {
     const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
 

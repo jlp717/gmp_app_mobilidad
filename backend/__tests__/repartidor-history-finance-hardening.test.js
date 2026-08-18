@@ -22,7 +22,7 @@ jest.mock('../middleware/logger', () => ({
 }));
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '05', code: '05', role: 'REPARTIDOR' };
+    req.user = { id: '05', code: '05', role: 'REPARTIDOR', repartidorCodes: ['05'] };
     next();
   },
 }));
@@ -32,6 +32,9 @@ jest.mock('../utils/delivery-status-check', () => ({
   getDeliveryStatusJoin: (_cpc, alias) => mockDeliveryStatusAvailable
     ? `LEFT JOIN JAVIER.DELIVERY_STATUS ${alias} ON ${alias}.NUMEROALBARAN = CPC.NUMEROALBARAN`
     : '',
+  getDeliveryStatusTable: () => process.env.REPARTO_TABLE_SET === 'isolated_test'
+    ? 'JAVIER.TEST_DELIVERY_STATUS'
+    : 'JAVIER.DELIVERY_STATUS',
   getDeliveryStatusColumns: (alias) => mockDeliveryStatusAvailable
     ? `${alias}.STATUS AS DELIVERY_STATUS, ${alias}.UPDATED_AT AS DELIVERY_UPDATED_AT,
        CAST(NULL AS VARCHAR(255)) AS FIRMA_PATH, CAST(NULL AS VARCHAR(512)) AS OBSERVACIONES,
@@ -168,7 +171,7 @@ describe('repartidor history document hardening', () => {
       hasSignature: true,
     });
     const sqls = mockQueryWithParams.mock.calls.map(([sql]) => String(sql));
-    expect(sqls.some((sql) => sql.includes('JAVIER.REPARTO_CONFIRMACIONES') && !sql.includes('TEST_'))).toBe(true);
+    expect(sqls.some((sql) => sql.includes('JAVIER.REPARTO_CONFIRMACIONES') && !sql.includes('TEST_'))).toBe(false);
     expect(sqls.some((sql) => sql.includes('JAVIER.TEST_REPARTO_CONFIRMACIONES'))).toBe(true);
   });
 
@@ -256,6 +259,30 @@ describe('repartidor history document hardening', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.documents[0].status).toBe(expected);
+  });
+
+  test('uses a signed constituent as the grouped factura signature reference', async () => {
+    mockQueryWithParams.mockResolvedValue([
+      historyRow({
+        NUMEROALBARAN: 41, NUMEROFACTURA: 900, SERIEFACTURA: 'F', EJERCICIOFACTURA: 2026,
+        CANONICAL_CONFIRMATION_ID: null, CANONICAL_FIRMA_EVIDENCE_ID: null,
+      }),
+      historyRow({
+        NUMEROALBARAN: 42, NUMEROFACTURA: 900, SERIEFACTURA: 'F', EJERCICIOFACTURA: 2026,
+        TERMINALALBARAN: 1, CANONICAL_CONFIRMATION_ID: BigInt(77),
+        CANONICAL_FIRMA_EVIDENCE_ID: 'sig-42',
+      }),
+    ]);
+
+    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.documents).toHaveLength(1);
+    expect(response.body.documents[0]).toMatchObject({
+      type: 'factura', number: 900, albaranNumber: 42,
+      serie: 'A', terminal: 1, ejercicio: 2026,
+      hasSignature: true, confirmationId: '77',
+    });
   });
 
   test('marks a grouped factura delivered only when every constituent is delivered', async () => {
@@ -390,12 +417,46 @@ describe('legacy collection reads use complete CVC evidence', () => {
     ['/collections/summary/05', { year: 2026, month: 8 }],
     ['/collections/daily/05', { year: 2026, month: 8 }],
   ])('fails closed when any selected document lacks CVC evidence: %s', async (path, query) => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'production';
     mockQueryWithParams.mockResolvedValue([{ TOTAL_COBRABLE: 100, TOTAL_COBRADO: 0, NUM_DOCUMENTOS: 1, CVC_DOCUMENTOS: 0 }]);
+    try {
+      const response = await get(path).query(query);
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('REPARTIDOR_COLLECTION_DATA_INCOMPLETE');
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
 
-    const response = await get(path).query(query);
-
-    expect(response.status).toBe(503);
-    expect(response.body.code).toBe('REPARTIDOR_COLLECTION_DATA_INCOMPLETE');
+  test.each([
+    ['/collections/summary/05', { year: 2026, month: 8 }],
+    ['/collections/daily/05', { year: 2026, month: 8 }],
+  ])('isolated_test returns PARTIAL collections when CVC evidence is incomplete: %s', async (path, query) => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    mockQueryWithParams
+      .mockResolvedValueOnce([{
+        CLIENTE: 'C1', NOMBRE_CLIENTE: 'Cliente', FORMA_PAGO: 'CTR',
+        TOTAL_COBRABLE: 100, TOTAL_COBRADO: 0, TOTAL_PENDIENTE: 100,
+        NUM_DOCUMENTOS: 1, CVC_DOCUMENTOS: 0, DIA: 3,
+      }])
+      .mockResolvedValueOnce([{ DIA: 3, APP_COBRADO: 25 }]);
+    try {
+      const response = await get(path).query(query);
+      expect(response.status).toBe(200);
+      expect(response.body.collectionAvailability).toBe('PARTIAL');
+      if (path.includes('summary')) {
+        expect(response.body.summary.totalCollected).toBe(25);
+        expect(response.body.clients.some((client) => client.clientId === '_APP')).toBe(true);
+      } else {
+        expect(response.body.daily.some((day) => Number(day.collected) === 25)).toBe(true);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
   });
 
   test('deduplicates full CVC installment keys and maps real collected/pending totals', async () => {
@@ -422,15 +483,20 @@ describe('legacy collection reads use complete CVC evidence', () => {
     ['/collections/summary/05', { year: 2026, month: 8 }],
     ['/collections/daily/05', { year: 2026, month: 8 }],
   ])('fails closed when duplicate CVC rows disagree on money: %s', async (path, query) => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'production';
     mockQueryWithParams.mockResolvedValue([{
       TOTAL_COBRABLE: 100, TOTAL_COBRADO: 35, TOTAL_PENDIENTE: 65,
       NUM_DOCUMENTOS: 1, CVC_DOCUMENTOS: 1, CVC_AMBIGUOUS_DOCUMENTS: 1,
     }]);
-
-    const response = await get(path).query(query);
-
-    expect(response.status).toBe(503);
-    expect(response.body.code).toBe('REPARTIDOR_COLLECTION_DATA_INCOMPLETE');
+    try {
+      const response = await get(path).query(query);
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('REPARTIDOR_COLLECTION_DATA_INCOMPLETE');
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
   });
 
   test('daily collection query returns real values without multiplying CPC documents', async () => {

@@ -1,0 +1,31 @@
+version: 1
+purpose: >
+  Recursos nombrados. El agente llama al MCP. El proxy/harness resuelve
+  credentials_ref. Cero passwords en este archivo.
+connections:
+  db2:
+    description: "DB2 for i. DSN GMP. Schemas JAVIER y DSEDAC. Preferir VISTA_DEUDA_BASE. CPC duplicados: ROW_NUMBER(). Objetivos: R1_T8CDVD no LCCDVD. QSYS2 antes de inventar columnas."
+    tool: ibm-db2-mcp
+    credentials_ref: "${DB2_CONN}"
+    writes: "R4 + adelante. DSEDAC off-limits salvo aprobacion explicita."
+  gmp_api:
+    description: "Backend Node/Express. PM2 proceso gmp-api. Liveness /api/health. Readiness /api/ready con User-Agent GMP-SRE-HealthCheck/1.0."
+    tool: gmp-deploy-ssh
+    host_ref: "${GMP_API_HOST}"
+    credentials_ref: "${GMP_SSH}"
+    deploy_whitelist:
+      - "git pull origin test"
+      - "pm2 restart gmp-api"
+    forbidden_without_javier:
+      - "pm2 set|save|start|reload"
+      - "edit .env"
+  granja:
+    description: "Web Granja. Ruta canonica /var/www/mari-pepa. Misma familia DB2. Sin PostgreSQL/Supabase."
+    host_ref: "${GRANJA_HOST}"
+    credentials_ref: "${GRANJA_SSH}"
+  images:
+    description: "Servidor de imagenes de movilidad."
+    host_ref: "${GMP_IMAGE_HOST}"
+  opencode_web:
+    description: "OpenCode Web Basic Auth. Usuario opencode."
+    credentials_ref: "${OPENCODE_SERVER_PASSWORD}"

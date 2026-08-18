@@ -1,0 +1,395 @@
+protocol_version: 1
+last_loaded: "2026-08-13"
+purpose: >
+  Ledger de auditoria (findings de harness/grafo). No es handoff-ledger
+  (.opencode/state/handoffs/) ni auditoria de producto.
+scope: harness_only
+product_audit: not_started
+
+findings:
+  - id: AUD-H-001
+    severity: high
+    status: resolved
+    node: context_loader
+    hallazgo: ".opencode/rules/learned.yaml no existia. Las reglas permanentes de Javier no tenian canon cargable."
+    evidencia: "Glob 0 matches; Test-Path .opencode/rules = MISSING (2026-08-13)"
+    cierre: "Creado .opencode/rules/learned.yaml en esta sesion."
+
+  - id: AUD-H-002
+    severity: high
+    status: resolved
+    node: context_loader
+    hallazgo: ".opencode/audit/ no existia (AUDIT_STATE, LEDGER, ACI)."
+    evidencia: "Test-Path .opencode/audit = MISSING (2026-08-13)"
+    cierre: "Creado .opencode/audit/{AUDIT_STATE,LEDGER,ACI}.yaml."
+
+  - id: AUD-H-003
+    severity: medium
+    status: resolved
+    node: context_loader
+    hallazgo: >
+      .gitignore tenia .opencode/* y no exceptuaba rules/ ni audit/.
+      El harness nuevo habria quedado local-only.
+    evidencia: ".gitignore lineas OpenCode (bloque governance-critical)"
+    cierre: "Excepciones !.opencode/rules/** y !.opencode/audit/** anadidas."
+
+  - id: AUD-H-004
+    severity: high
+    status: parcial
+    node: context_loader
+    hallazgo: >
+      Context-Manager no carga learned.yaml y no es nodo de
+      agent-graph.yaml. El Context Loader del grafo requerido no esta cableado.
+    evidencia: ".opencode/agents/Context-Manager.md (carga project-state, corrections, rules.json); agent-graph.yaml nodes sin Context-Manager"
+    cierre: >
+      2026-08-13 iteracion critic: Context-Manager es nodo y el protocolo
+      YAML carga learned.yaml+audit ANTES de optimize/route. Prompt Chief
+      reordenado. edit:deny se queda; memory-formation escribe learned.yaml.
+      NO hay tool loader magico. Parcial hasta que git vea AGENTS.md y
+      Context-Manager.md (CRIT-004/007).
+    evidencias_cierre:
+      - ".opencode/config/agent-graph.yaml#Context-Manager"
+      - ".opencode/config/chief-protocol.yaml#context_loader"
+      - ".opencode/agents/chief-engineer-assistant.md pipeline 0 Context Loader"
+      - ".opencode/agents/Context-Manager.md"
+
+  - id: AUD-H-005
+    archivo: ".opencode/config/agent-graph.yaml"
+    linea: "2"
+    severidad: bloqueante
+    categoria: infra
+    hallazgo: >
+      6 YAML de orquestacion no parsean con yaml.safe_load
+      (agent-graph, harness-engineering, hill-climbing-loop, loop-gate, qr, quality-rubric).
+      El grafo y los gates pueden estar rotos para cualquier loader estricto.
+    fix_propuesto: "Corregir indentacion/escapes; verificar contra el loader real de OpenCode antes de asumir falso positivo."
+    estado: verificado
+    cierre: >
+      2026-08-13: indent `enabled: true` y backslash de loop-gate corregidos.
+      python yaml.safe_load de .opencode/config (56 unicos) = 56 OK / 0 FAIL.
+      OpenCode no usa loader custom de tags en este repo (tools no importan js-yaml).
+    evidencias_cierre:
+      - "python yaml.safe_load 56/56 OK 2026-08-13"
+
+  - id: AUD-H-006
+    archivo: ".opencode/config/agent-graph.yaml"
+    linea: "nodes"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "Roster 45 prompts / 43 agentes MD vs 15 nodos en el grafo. Edges apuntan a agentes fuera de nodes."
+    fix_propuesto: "Decidir topologia: promover nodos faltantes vs marcar Layer 2 hidden. Arquitectura — confirmar con Javi."
+    estado: verificado
+    cierre: >
+      2026-08-13 Adelante A+B+C: 23 nodes (agentes), 6 layer2_hidden, 14 on_demand.
+      23+6+14=43 MD. Cero edges huerfanos. CRIT-001: quality-a11y-route eliminado.
+    evidencias_cierre:
+      - "python conteo nodes/layer2/on_demand/orphan"
+
+  - id: AUD-H-007
+    archivo: ".opencode/tools/"
+    linea: null
+    severidad: alto
+    categoria: infra
+    hallazgo: "elite-quality-gate, readiness-smoke, agent-roster-audit, model-assignment-audit, workflow-state-audit referenciados y sin runner local."
+    fix_propuesto: "Restaurar runners o dejar de exigirlos en AGENTS.md. No inventar PASS."
+    estado: verificado
+    cierre: >
+      Acotado CRIT-007/012: runners .ts existen en .opencode/tools/.
+      readiness-smoke.mjs existe y queda un-ignored. No es PASS de ejecucion.
+      gitignore no destapa todo .opencode/.
+    evidencias_cierre:
+      - ".opencode/tools/elite-quality-gate.ts"
+      - ".opencode/tools/readiness-smoke.ts"
+      - ".opencode/tools/agent-roster-audit.ts"
+      - ".opencode/tools/model-assignment-audit.ts"
+      - ".opencode/tools/workflow-state-audit.ts"
+      - ".opencode/scripts/readiness-smoke.mjs"
+
+  - id: CRIT-001
+    archivo: ".opencode/config/agent-graph.yaml"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "quality-a11y-route era nodo fantasma (spawn false, axe/HTML, cero ejecutor)."
+    estado: verificado
+    cierre: "Nodo y edges eliminados. A11y = Visual-Design-Specialist + quality-rubric CAT-008 Flutter Semantics."
+
+  - id: CRIT-002
+    archivo: ".opencode/config/chief-protocol.yaml"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "Critic no estaba entre execute y verify."
+    estado: verificado
+    cierre: "Step critic insertado. verification-loop.yaml tiene fase critic antes de checker."
+
+  - id: CRIT-003
+    archivo: ".opencode/tools/flow-policy-check.ts"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "Critic T2/T3 solo por substring en required_agents."
+    estado: verificado
+    cierre: "Carga critic_agents de flow-policy.yaml. Exige presencia y orden (critic antes de Technical-Verifier) + gate critic-before-verify."
+
+  - id: CRIT-004
+    archivo: ".opencode/agents/chief-engineer-assistant.md"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "Prompt Chief tenia Context-Manager despues de optimize/route."
+    estado: verificado
+    cierre: "Pipeline 0 = Context Loader antes de optimize/route. No hay tool loader magico."
+
+  - id: CRIT-005
+    archivo: ".opencode/audit/ACI.yaml"
+    severidad: medio
+    categoria: orquestacion
+    hallazgo: "ACI decia que Context-Manager escribe learned.yaml."
+    estado: verificado
+    cierre: "side_effects: solo lectura edit:deny. memory-formation escribe learned.yaml."
+
+  - id: CRIT-006
+    archivo: ".gitignore"
+    severidad: alto
+    categoria: infra
+    hallazgo: "Prompts de nodos y AGENTS.md ignorados."
+    estado: verificado
+    cierre: >
+      Un-ignore anadido. git add -n lista los 5 prompts + AGENTS.md.
+      git check-ignore -v muestra el patron ! (ultimo match = no ignored).
+      Evidencia: git add -n add '.opencode/AGENTS.md' y Context-Manager.md.
+
+  - id: CRIT-007
+    archivo: ".gitignore"
+    severidad: alto
+    categoria: infra
+    hallazgo: "readiness-smoke.mjs ignorado."
+    estado: verificado
+    cierre: "git add -n add '.opencode/scripts/readiness-smoke.mjs'. No ignored."
+
+  - id: CRIT-008
+    archivo: ".gitignore"
+    severidad: medio
+    categoria: infra
+    hallazgo: "No un-ignorear todo .opencode/."
+    estado: verificado
+    cierre: "Diff minimo: solo AGENTS.md, 5 prompts de nodos, readiness-smoke.mjs. backups/state/traces siguen ignored."
+
+  - id: CRIT-009
+    archivo: ".opencode/config/verification-loop.yaml"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "checker=Verifier+truth-teller, cero Check-Reviewer."
+    estado: verificado
+    cierre: "Fase critic: Check-Reviewer + business-critic + truth-teller. checker: Technical-Verifier."
+
+  - id: CRIT-011
+    archivo: ".opencode/audit/LEDGER.yaml"
+    severidad: medio
+    categoria: orquestacion
+    hallazgo: "AUD-H-004 overclaim verificado."
+    estado: verificado
+    cierre: "AUD-H-004 bajado a parcial."
+
+  - id: CRIT-012
+    archivo: ".opencode/audit/LEDGER.yaml"
+    severidad: medio
+    categoria: infra
+    hallazgo: "AUD-H-007 overclaim de runners."
+    estado: verificado
+    cierre: "Acotado: .ts existen; .mjs un-ignored / untracked (??), no en index; no PASS de corrida."
+
+  - id: CRIT-014
+    archivo: ".opencode/config/quality-rubric.yaml"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "A11y rubric invocaba quality-a11y-route y axe."
+    estado: verificado
+    cierre: "CAT-008 Flutter Semantics, owner Visual-Design-Specialist."
+
+  - id: CRIT-015
+    archivo: ".opencode/config/elite-quality-gate.yaml"
+    severidad: alto
+    categoria: orquestacion
+    hallazgo: "accessibility YAML con axe_core; el .ts no lo ejecuta."
+    estado: verificado
+    cierre: "Declarado elite_quality_gate_ts: false. Owner Visual-Design. No teatro axe."
+
+  - id: CRIT-018
+    archivo: ".opencode/agents/memory-formation.md"
+    severidad: bajo
+    categoria: orquestacion
+    hallazgo: "Bloque Feedback/Deteccion duplicado."
+    estado: verificado
+    cierre: "Duplicado borrado."
+
+  - id: CRIT-019
+    archivo: ".opencode/audit/AUDIT_STATE.yaml"
+    severidad: bajo
+    categoria: infra
+    hallazgo: "Runners presentados como si el gate hubiera pasado."
+    estado: verificado
+    cierre: "Frase honesta: existen en disco; no ejecutados; no es PASS."
+
+  - id: CRIT-020
+    archivo: ".opencode/config/agent-graph.yaml"
+    severidad: medio
+    categoria: orquestacion
+    hallazgo: "Faltaban edges critic desde DB2/SRE/Perf/Visual/QA/product-ux."
+    estado: verificado
+    cierre: "Edges anadidos. Exenciones explicitas en critic_exemptions (loader/optimizer/critic/verifier/chief)."
+
+  - id: NIT-021
+    archivo: ".opencode/config/agent-graph.yaml"
+    severidad: bajo
+    categoria: orquestacion
+    hallazgo: "appsec-engineer -> Check-Reviewer era type: delegation."
+    estado: verificado
+    cierre: "type: critic."
+
+  - id: NIT-022
+    archivo: ".opencode/agents/Visual-Design-Specialist.md"
+    severidad: bajo
+    categoria: orquestacion
+    hallazgo: "Checklist sin viñeta Flutter Semantics."
+    estado: verificado
+    cierre: "Una viñeta Semantics/ExcludeSemantics añadida. Prompt no reescrito."
+
+  - id: NIT-023
+    archivo: ".opencode/audit/LEDGER.yaml"
+    severidad: bajo
+    categoria: orquestacion
+    hallazgo: "AUD-H-006 tenia cierre duplicado (24 nodes + 23 nodes)."
+    estado: verificado
+    cierre: "Queda un solo cierre con 23 nodes."
+
+  - id: NIT-024
+    archivo: ".opencode/audit/LEDGER.yaml"
+    severidad: bajo
+    categoria: infra
+    hallazgo: "CRIT-012 decia tracked."
+    estado: verificado
+    cierre: "Texto: un-ignored / untracked (??), no en index."
+
+  - id: NIT-025
+    archivo: ".opencode/audit/AUDIT_STATE.yaml"
+    severidad: bajo
+    categoria: infra
+    hallazgo: "Fase 2 falta stale: sin runner local."
+    estado: verificado
+    cierre: "Alineado: runners existen en disco, no ejecutados, no PASS. GuardVibe MCP ausente."
+
+  - id: AUD-B-001
+    archivo: "backend/__tests__/"
+    linea: null
+    severidad: bloqueante
+    categoria: testing
+    hallazgo: "Jest 14 fail / 1592 pass. Suites: liquidacion, politec-auth-redis, mounts, planner 503->200, auth timeout, finanzas sendEmails."
+    fix_propuesto: "Lote E. Liquidacion/auth/finanzas requieren confirmacion (dinero + seguridad)."
+    estado: pendiente_critic
+    cierre_maker: >
+      2026-08-13 Maker E: 12 suites del lote (las 8 citadas + planner-day + http-gap)
+      = 252 pass, exit 0. NO autoaprobado. Critic auth/finanzas obligatorio.
+    evidencias_cierre:
+      - "npx jest --runInBand --forceExit --testPathPattern politec|reparto-route-mounts|reparto-isolated-ddl-runner|planner-rutero|auth.test|repartidor-finanzas|repartidor-liquidacion-db2|repartidor-liquidacion-service|repartidor-finanzas-http-gap -> Test Suites: 12 passed, Tests: 252 passed, exit 0"
+
+  - id: AUD-B-002
+    archivo: "test/"
+    linea: null
+    severidad: bloqueante
+    categoria: testing
+    hallazgo: "Flutter 10 fail / 489 pass. 2 no compilan (firma API), 3 AppColors obsoletos, chatbot/cobros/nav/albaran."
+    fix_propuesto: "Lote D. Compile-drift y AppColors son mecanicos; cobros/finanzas confirmar."
+    estado: verificado
+    cierre: >
+      2026-08-13 Lote D MAKER: tests alineados a API/producto actual. Cero
+      cambios de producto. flutter test de los 7 archivos = exit 0, 50 pass.
+      Compile: vencimientos batch+cursor/limit; evolution typed loader.
+      AppColors forest/moss/darkInk. Chatbot COBERTURA POR PESTAÑAS.
+      Cobros completarEntrega 410 retirado. Nav comercial 11 / jefe 13
+      (Liquidación). Albaran fecha requerida + cantidadPedida.
+    evidencias_cierre:
+      - "flutter test 7 archivos 2026-08-13 exit 0 / 50 pass"
+      - "test/widget/repartidor_finanzas_ui_test.dart"
+      - "test/widgets/repartidor_evolution_page_test.dart"
+      - "test/theme/app_colors_test.dart"
+      - "test/features/chatbot/chatbot_page_test.dart"
+      - "test/features/cobros/cobros_business_logic_test.dart"
+      - "test/integration/navigation_full_test.dart"
+      - "test/models/albaran_entrega_test.dart"
+
+  - id: AUD-B-003
+    archivo: "scripts/politec-quality-gate.ps1"
+    linea: null
+    severidad: bloqueante
+    categoria: compliance
+    hallazgo: "Politec 6 FAIL (logs/docs en raiz; auth Redis cluster-safe refresh) + 22 WARN god files."
+    fix_propuesto: "Hygiene de raiz mecanica. Contrato Redis/auth confirmar (seguridad)."
+    estado: pendiente_critic
+    cierre_maker: >
+      2026-08-13 Maker F: 6 FAIL -> 0 FAIL. Gate PASS. Quedan WARN god files.
+      Auth: gate alineado al store canonico Redis; middleware no reescrito.
+      NO autoaprobado.
+    evidencias_cierre:
+      - "powershell -File scripts/politec-quality-gate.ps1 -> PASS, 0 FAIL, 21 WARN large files"
+
+  - id: AUD-B-004
+    archivo: "backend/"
+    linea: null
+    severidad: medio
+    categoria: tooling
+    hallazgo: "npm run lint no ejecutable: ESLint sin fichero de config."
+    fix_propuesto: "Restaurar .eslintrc heredado o alinear script. Mecanico."
+    estado: pendiente_critic
+    cierre_maker: >
+      2026-08-13 Maker G: backend/.eslintrc.cjs restaurado (eslint:recommended +
+      @typescript-eslint/recommended v6, mismo stack que package.json).
+      npm run lint ya no muere "couldn't find configuration". Exit 1 por 257
+      errores preexistentes en src/**/*.ts. NO limpio. NO autoaprobado.
+    evidencias_cierre:
+      - "npm run lint -> carga .eslintrc.cjs; 257 problems (no-explicit-any / unused / no-var-requires); no ESLintMissingConfig"
+
+  - id: NIT-B-001
+    archivo: "backend/routes/planner.js"
+    severidad: bajo
+    categoria: logging
+    hallazgo: "Maker E quito logger.error del catch PEDIDOS_CAB (catch _error)."
+    estado: pendiente_critic
+    cierre_maker: >
+      2026-08-13 nits post-APPROVE_WITH_NITS: restaurado logger.error original.
+      503 al cliente se mantiene. NO autoaprobado.
+    evidencias_cierre:
+      - "npx jest planner-rutero-gap-coverage + liquidacion-db2-repository + liquidacion-service -> 3 passed / 94 tests, exit 0"
+
+  - id: NIT-B-002
+    archivo: "backend/repositories/repartidor-liquidacion-db2-repository.js"
+    severidad: bajo
+    categoria: testing
+    hallazgo: "scalarId del repo caia a String({}) = [object Object]; el servicio ya rechazaba."
+    estado: pendiente_critic
+    cierre_maker: >
+      2026-08-13 nits: copiado return '' tras value.low, igual que el servicio.
+      NO autoaprobado. Pin SHA256 del catalogo re-pineado en NIT-B-003.
+    evidencias_cierre:
+      - "npx jest planner-rutero-gap-coverage + liquidacion-db2-repository + liquidacion-service -> 3 passed / 94 tests, exit 0"
+
+  - id: NIT-B-003
+    archivo: "backend/scripts/reparto-isolated-ddl-manifest.js"
+    linea: "18"
+    severidad: medio
+    categoria: testing
+    hallazgo: "repositoryCatalog.sha256 quedo stale tras scalarId return '' en el repo."
+    estado: pendiente_critic
+    cierre_maker: >
+      2026-08-13 MUST-FIX REJECT: re-pineado SOLO repositoryCatalog.sha256.
+      Viejo F02E4347... -> nuevo 4BA59864... (sha256 utf8 hex uppercase del working copy).
+      migrations['034'].sha256 SQL intacto (11EB5954...). Planner log crudo no tocado (lock archivo).
+      NO autoaprobado.
+    evidencias_cierre:
+      - "npx jest --runInBand --forceExit --testPathPattern reparto-isolated-ddl-runner.test -> 1 passed / 49 tests, exit 0"
+
+  - id: AUD-I-001
+    archivo: "backend/services/pedidos.service.js"
+    linea: "1-6858"
+    severidad: alto
+    categoria: mantenibilidad
+    hallazgo: "184 god files >=500; 26 >=1800; 3 >=3500. pedidos.service.js 6858L es el blast radius maximo."
+    fix_propuesto: "Split plan obligatorio antes de editar fuerte. No en el primer lote."
+    estado: pendiente

@@ -1,0 +1,10 @@
+diff --git a/test/features/repartidor/presentation/repartidor_client_history_owner_navigation_test.dart b/test/features/repartidor/presentation/repartidor_client_history_owner_navigation_test.dart
+--- a/test/features/repartidor/presentation/repartidor_client_history_owner_navigation_test.dart
++++ b/test/features/repartidor/presentation/repartidor_client_history_owner_navigation_test.dart
+@@ -70,7 +70,7 @@ void main() {
+             required offset,
+             required forceRefresh,
+           }) async =>
+-              (clients: const [], hasMore: false),
++              (clients: const <HistoryClient>[], hasMore: false),
+           documentsLoader: ({

@@ -1,0 +1,26 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -4,0 +5,2 @@
++  normalizeCatalogYesNo,
++  normalizeCatalogBoolean,
+@@ -28,0 +31,19 @@
++describe('DB2 catalog normalization', () => {
++  test.each([
++    ['Y', 'YES'], ['YES', 'YES'], [1, 'YES'], [true, 'YES'],
++    ['N', 'NO'], ['NO', 'NO'], [0, 'NO'], [false, 'NO'],
++  ])('normalizes %p to %s', (input, expected) => {
++    expect(normalizeCatalogYesNo(input, 'IS_NULLABLE')).toBe(expected);
++  });
++
++  test('normalizes catalog booleans through the same strict contract', () => {
++    expect(normalizeCatalogBoolean('Y', 'HAS_DEFAULT')).toBe(true);
++    expect(normalizeCatalogBoolean('NO', 'IDENTITY')).toBe(false);
++  });
++
++  test.each([null, undefined, '', 'MAYBE', 2])('fails closed for unsupported value %p', (input) => {
++    expect(() => normalizeCatalogYesNo(input, 'IS_NULLABLE'))
++      .toThrow('Unsupported DB2 catalog IS_NULLABLE');
++  });
++});
++

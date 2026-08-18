@@ -4,7 +4,10 @@
  * In-memory cache avoids re-parsing the same document.
  */
 
-const logger = require('../../middleware/logger');
+const {
+    CHATBOT_LOG_EVENTS,
+    emitChatbotLog,
+} = require('./chatbot_log');
 const facturasService = require('../../services/facturas.service');
 const pdfService = require('../../services/pdf.service');
 const { getCachedPdf, cachePdf } = require('../../services/emailPdfService');
@@ -46,8 +49,8 @@ async function extractTextFromBuffer(buffer) {
             method: 'pdf-parse',
         };
     } catch (error) {
-        logger.warn(`[CHATBOT-PDF] pdf-parse failed: ${error.message}`);
-        return { text: '', charCount: 0, method: 'failed', error: error.message };
+        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.pdfExtractionFailed);
+        return { text: '', charCount: 0, method: 'failed', errorCode: 'PDF_EXTRACTION_FAILED' };
     }
 }
 

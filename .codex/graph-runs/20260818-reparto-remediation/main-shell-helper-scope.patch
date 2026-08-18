@@ -1,0 +1,29 @@
+diff --git a/lib/features/dashboard/presentation/pages/main_shell.dart b/lib/features/dashboard/presentation/pages/main_shell.dart
+--- a/lib/features/dashboard/presentation/pages/main_shell.dart
++++ b/lib/features/dashboard/presentation/pages/main_shell.dart
+@@ -136,16 +136,17 @@ class _MainShellState extends ConsumerState<MainShell> {
+   bool get _isAlmacenEffective {
+     if (_forceAlmacenMode) return true;
+     return isWarehouseUiMode(ref.read(authProvider).value);
+-    bool _isEffectiveRepartidorJefe(UserModel user, Object? activeMode) {
+-      final mode = activeMode?.toString().trim().toUpperCase();
+-      final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
+-      final hasJefeAuthorization =
+-          user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
+-      return mode == 'REPARTIDOR' &&
+-          hasJefeAuthorization &&
+-          normalizedCode != '80';
+-    }
++  }
++
++  bool _isEffectiveRepartidorJefe(UserModel user, Object? activeMode) {
++    final mode = activeMode?.toString().trim().toUpperCase();
++    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
++    final hasJefeAuthorization =
++        user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
++    return mode == 'REPARTIDOR' &&
++        hasJefeAuthorization &&
++        normalizedCode != '80';
+   }
+ 
+   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {

@@ -4,6 +4,21 @@
  */
 'use strict';
 
+Object.assign(process.env, {
+    NODE_ENV: 'test',
+    REPARTO_ENVIRONMENT: 'test',
+    REPARTO_TABLE_SET: 'isolated_test',
+    REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    REPARTO_WRITES_ENABLED: 'true',
+    REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'true',
+    REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+    REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+    ODBC_DSN: 'GMP',
+    REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+    REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+    REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+});
+
 jest.mock('../config/db', () => ({
     queryWithParams: jest.fn(),
     getPool: jest.fn()
@@ -42,6 +57,35 @@ describe('AuditLog Service', () => {
         });
     });
 
+    describe('resolveAuditBinding', () => {
+        test('maps isolated_test to TEST audit and production to production audit', () => {
+            expect(auditLog.resolveAuditBinding()).toMatchObject({
+                table: 'JAVIER.TEST_REPARTIDOR_COBROS_AUDIT',
+                tableSet: 'isolated_test',
+            });
+            expect(auditLog.resolveAuditBinding({
+                ...process.env,
+                NODE_ENV: 'production',
+                REPARTO_ENVIRONMENT: 'production',
+                REPARTO_TABLE_SET: 'production',
+                REPARTO_WRITES_ENABLED: 'true',
+                REPARTO_PRODUCTION_WRITES_APPROVED: 'true',
+                REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'true',
+                REPARTIDOR_FINANCE_ERP_SCHEMA: 'DSEDAC',
+            })).toMatchObject({
+                table: 'JAVIER.REPARTIDOR_COBROS_AUDIT',
+                tableSet: 'production',
+            });
+        });
+
+        test('fails closed when runtime is invalid', () => {
+            expect(auditLog.resolveAuditBinding({
+                ...process.env,
+                REPARTO_TABLE_SET: 'unknown',
+            })).toBeNull();
+        });
+    });
+
     describe('logPaymentEvent', () => {
         test('should skip when audit table does not exist', async () => {
             mockQuery.mockRejectedValueOnce({ message: 'not found', odbcErrors: [{ state: '42S02' }] });
@@ -74,7 +118,7 @@ describe('AuditLog Service', () => {
             });
 
             expect(mockQuery).toHaveBeenCalledWith(
-                expect.stringContaining('INSERT INTO'),
+                expect.stringContaining('INSERT INTO JAVIER.TEST_REPARTIDOR_COBROS_AUDIT'),
                 expect.arrayContaining(['LIQUIDACION', 'user1', 'rep1']),
                 expect.anything(),
                 expect.anything()

@@ -5,9 +5,8 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
-const { sanitizeCodeListForParams } = require('../utils/common');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
-const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { resolveConfirmationTables } = require('../repositories/repartidor-route-db2-repository');
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
 const { applySavedOrder } = require('../services/repartidor-rutero-orden-service');
 
@@ -40,27 +39,70 @@ function codesMatch(left, right) {
     return leftNumeric !== null && rightNumeric !== null && leftNumeric === rightNumeric;
 }
 
-function isPrivilegedUser(req) {
-    const user = req.user || {};
-    return user.isJefeVentas === true || user.role === 'JEFE_VENTAS' || user.role === 'ADMIN';
+function canonicalRepartidorCode(value) {
+    const raw = normalizeCode(value).toUpperCase();
+    if (!/^[A-Z0-9]{1,2}$/.test(raw) || raw === 'ALL') return null;
+    return /^\d{1,2}$/.test(raw) ? raw.padStart(2, '0') : raw;
+}
+
+function parseRepartidorSelector(value, { single = false } = {}) {
+    const raw = normalizeCode(value);
+    if (!raw || raw.length > 500 || /^ALL$/i.test(raw)) return null;
+    const parts = raw.split(',');
+    if (single && parts.length !== 1) return null;
+    const codes = parts.map(canonicalRepartidorCode);
+    if (codes.some((code) => !code) || codes.length > 100) return null;
+    return [...new Set(codes)];
+}
+
+function actorRepartidorCodes(user) {
+    return [...new Set((Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
+        .map(canonicalRepartidorCode).filter(Boolean))];
 }
 
 function canAccessRepartidor(req, repartidorId) {
-    if (isPrivilegedUser(req)) return true;
-    if (req.user?.role !== 'REPARTIDOR') return false;
-    const userCode = normalizeCode(req.user.code || req.user.id || req.user.user);
-    const targetCode = normalizeCode(repartidorId);
-    const userNumeric = normalizeNumericCode(userCode);
-    const targetNumeric = normalizeNumericCode(targetCode);
-    return userCode === targetCode ||
-        (userNumeric !== null && targetNumeric !== null && userNumeric === targetNumeric);
+    const user = req.user || {};
+    const role = normalizeCode(user.role).toUpperCase();
+    const activeMode = normalizeCode(user.activeMode).toUpperCase();
+    const repartoActor = role === 'REPARTIDOR'
+        || ((role === 'JEFE_VENTAS' || role === 'ADMIN') && activeMode === 'REPARTIDOR');
+    if (!repartoActor) return false;
+    const target = canonicalRepartidorCode(repartidorId);
+    const allowed = actorRepartidorCodes(user);
+    if (!target || allowed.length === 0 || !allowed.some((code) => codesMatch(code, target))) return false;
+    if (role !== 'REPARTIDOR') return true;
+    const own = canonicalRepartidorCode(user.code || user.id || user.user);
+    return allowed.length === 1 && codesMatch(own, target) && codesMatch(allowed[0], target);
 }
 
 function ensureRepartidorAccess(req, res, repartidorId) {
     if (canAccessRepartidor(req, repartidorId)) return true;
     logger.warn(`[ENTREGAS] Forbidden ${req.user?.code || 'unknown'} -> repartidor ${repartidorId}`);
-    res.status(403).json({ success: false, error: 'No tienes permisos para operar sobre este repartidor' });
+    res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para operar sobre este repartidor' });
     return false;
+}
+
+function requireConcreteAlbaranOwner(req, res) {
+    const role = normalizeCode(req.user?.role).toUpperCase();
+    const activeMode = normalizeCode(req.user?.activeMode).toUpperCase();
+    if (role !== 'REPARTIDOR' && role !== 'JEFE_VENTAS' && role !== 'ADMIN') {
+        res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para consultar entregas' });
+        return { allowed: false, hintedOwner: null };
+    }
+    if ((role === 'JEFE_VENTAS' || role === 'ADMIN') && activeMode !== 'REPARTIDOR') {
+        res.status(403).json({ success: false, code: 'REPARTO_MODE_REQUIRED', error: 'Activa el Perfil Reparto para consultar entregas' });
+        return { allowed: false, hintedOwner: null };
+    }
+    const selected = parseRepartidorSelector(req.query?.repartidorId, { single: true });
+    if (!selected) {
+        res.status(422).json({ success: false, code: 'REPARTIDOR_ID_REQUIRED', error: 'Selecciona un unico repartidor concreto' });
+        return { allowed: false, hintedOwner: null };
+    }
+    if (!canAccessRepartidor(req, selected[0])) {
+        res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para consultar este repartidor' });
+        return { allowed: false, hintedOwner: null };
+    }
+    return { allowed: true, hintedOwner: selected[0] };
 }
 
 function parseDeliveryItemId(itemId) {
@@ -104,16 +146,24 @@ async function getDeliveryOwner(itemId, clientCode) {
  * @returns {boolean} true if format is valid
  */
 class RepartoHttpError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
+function todayIsoDate() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 function isoDocumentDate(row, fallbackIso) {
     const year = Number(row?.ANODOCUMENTO);
     const month = Number(row?.MESDOCUMENTO);
     const day = Number(row?.DIADOCUMENTO);
-    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-        return fallbackIso;
+    const fallback = fallbackIso || todayIsoDate();
+    if (!Number.isInteger(year) || year < 1990
+        || !Number.isInteger(month) || month < 1 || month > 12
+        || !Number.isInteger(day) || day < 1 || day > 31) {
+        return fallback;
     }
     const parsed = new Date(Date.UTC(year, month - 1, day));
     if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() + 1 !== month || parsed.getUTCDate() !== day) {
-        return fallbackIso;
+        return fallback;
     }
     return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
@@ -257,9 +307,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         logger.info(`[ENTREGAS] Getting pending deliveries for repartidor ${repartidorId} (${dia}/${mes}/${ano})`);
 
         // Handle multiple IDs (comma separated) case
-        const idList = sanitizeCodeListForParams(repartidorId);
+        const idList = parseRepartidorSelector(repartidorId);
         if (!idList || idList.length === 0) {
-            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+            return res.status(422).json({ success: false, code: 'REPARTIDOR_ID_INVALID', error: 'Selector de repartidor invalido' });
         }
         const unauthorized = idList.find(id => !canAccessRepartidor(req, id));
         if (unauthorized) {
@@ -809,17 +859,7 @@ router.get('/payment-conditions', verifyToken, async (req, res) => {
 // GET /albaran/:numero/:ejercicio
 // ===================================
 function confirmationTables() {
-    try {
-        const runtime = resolveRepartoRuntime(process.env);
-        const confirmation = runtime?.tables?.confirmation;
-        if (confirmation?.confirmations && confirmation?.lines) {
-            return confirmation;
-        }
-    } catch (_error) {
-        // Invalid/partial runtime: keep legacy isolated projection names so
-        // detail reads still soft-fail cleanly instead of hard-crashing.
-    }
-    return {
+    return resolveConfirmationTables() || {
         confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
         lines: 'JAVIER.TEST_REPARTO_LINEAS',
     };
@@ -945,6 +985,8 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
         const { numero, ejercicio } = req.params;
         const serie = req.query.serie;
         const terminal = req.query.terminal;
+        const ownerSelection = requireConcreteAlbaranOwner(req, res);
+        if (!ownerSelection.allowed) return;
         // Accept canonical `cliente` and legacy `codigoCliente` alias.
         const cliente = await resolveClienteForDetail({
             numero,
@@ -1019,6 +1061,9 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
 
         const header = { ...headers[0] };
         if (!ensureRepartidorAccess(req, res, header.CODIGO_REPARTIDOR)) return;
+        if (ownerSelection.hintedOwner && !codesMatch(ownerSelection.hintedOwner, header.CODIGO_REPARTIDOR)) {
+            return res.status(403).json({ success: false, code: 'DELIVERY_OWNERSHIP_REQUIRED', error: 'El albaran no pertenece al repartidor seleccionado' });
+        }
 
         // 3. Get Items from LAC (Simplified for ODBC compatibility - NO ALIASES)
         // Parameterized query to prevent SQL injection
@@ -1084,7 +1129,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             numeroFactura: header.NUMEROFACTURA || 0,
             serieFactura: (header.SERIEFACTURA || '').trim(),
             documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARAN',
-            fecha: isoDocumentDate(header, null),
+            fecha: isoDocumentDate(header, todayIsoDate()),
             importe: parseFloat(header.IMPORTE) || 0,
             importeBruto: parseFloat(header.IMPORTE_BRUTO) || 0,
             netoSum: netoSum,
@@ -1094,14 +1139,18 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             formaPago: (header.FORMA_PAGO || '').trim(),
             items: items.map(i => {
                 const confirmedLine = canonical.linesById.get(String(i.SECUENCIA));
-                const cantidadPedida = parseFloat(i.CANTIDADUNIDADES) || 0;
+                const unidades = parseFloat(i.CANTIDADUNIDADES) || 0;
+                const envases = parseFloat(i.CANTIDADENVASES) || 0;
+                const cantidadPedida = unidades > 0 ? unidades : envases;
                 const cantidadEntregada = confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_ENTREGADA) : null;
+                const secuencia = String(i.SECUENCIA ?? '').trim();
+                const codigoArticulo = String(i.CODIGOARTICULO ?? '').trim() || secuencia;
                 return {
-                    itemId: String(i.SECUENCIA),
-                    codigoArticulo: String(i.CODIGOARTICULO ?? '').trim(),
+                    itemId: secuencia,
+                    codigoArticulo,
                     descripcion: i.DESCRIPCION,
                     cantidadPedida,
-                    bultos: parseFloat(i.CANTIDADENVASES) || 0,
+                    bultos: envases,
                     cantidadCajas: 0,
                     totalLinea: parseFloat(i.IMPORTEVENTA) || 0,
                     unidad: i.UNIDADMEDIDA,
@@ -1112,17 +1161,19 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
                     confirmationState: canonical.availability === 'UNAVAILABLE' ? 'UNAVAILABLE' : (confirmedLine ? 'CONFIRMED' : 'NOT_CONFIRMED'),
                     estado: confirmedLine ? (cantidadEntregada >= cantidadPedida ? 'ENTREGADO' : 'PARCIAL') : 'PENDIENTE'
                 };
-            }),
+            }).filter((line) => line.cantidadPedida > 0 || line.bultos > 0),
             confirmationAvailability: canonical.availability,
             confirmedAt: canonical.confirmation?.CONFIRMED_AT || null,
             estado: canonicalStatus || 'PENDIENTE'
         };
 
-        // Discrepancy detection: compare header total vs sum of line amounts
+        // LAC remains a raw diagnostic: it is not the financial source of truth.
         const lineSum = albaran.items.reduce((sum, item) => sum + item.totalLinea, 0);
         const lineSumRounded = Math.round(lineSum * 100) / 100;
         albaran.lineSum = lineSumRounded;
-        albaran.discrepancy = Math.abs(albaran.importe - lineSumRounded) > 0.01;
+        const cpcGross = Number(albaran.importe) || 0;
+        const calculatedGross = Math.round((Number(albaran.netoSum || 0) + Number(albaran.ivaSum || 0)) * 100) / 100;
+        albaran.discrepancy = Math.abs(cpcGross - calculatedGross) > 0.01;
 
         res.json({ success: true, albaran });
     } catch (error) {

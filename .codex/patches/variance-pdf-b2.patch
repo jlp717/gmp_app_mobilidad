@@ -1,0 +1,14 @@
+diff --git a/backend/services/reparto-variance-pdf-service.js b/backend/services/reparto-variance-pdf-service.js
+--- a/backend/services/reparto-variance-pdf-service.js
++++ b/backend/services/reparto-variance-pdf-service.js
+@@ -143,7 +143,11 @@ function buildVariancePdfBuffer(payload = {}) {
+       }
+     }
+ 
+-    y += 18;
++    y += 8;
++    doc.roundedRect(36, y, contentWidth, 30, 6).fillAndStroke('#eef6ff', LINE);
++    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8)
++      .text(`Totales  Pedida ${formatQty(totals.pedida)} · Entregada ${formatQty(totals.entregada)} · Rechazada ${formatQty(totals.rechazada)} · Pendiente ${formatQty(totals.pendiente)} · Diferencia ${formatQty(totals.diff)}`, 48, y + 10, { width: contentWidth - 24 });
++    y += 46;
+     doc.fillColor(MUTED).font('Helvetica').fontSize(8)

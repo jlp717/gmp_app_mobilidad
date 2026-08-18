@@ -121,6 +121,25 @@ String _requiredDate(Map<String, dynamic> json) {
   throw const EntregasPayloadException('fecha');
 }
 
+String _documentDate(Map<String, dynamic> json) {
+  try {
+    return _requiredDate(json);
+  } catch (_) {
+    final now = DateTime.now();
+    return '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+  }
+}
+
+String _lineArticleCode(Map<String, dynamic> json) {
+  try {
+    return _requiredText(json, 'codigoArticulo');
+  } catch (_) {
+    return _requiredText(json, 'itemId');
+  }
+}
+
 List<IvaBreakdownItem> _parseIvaBreakdown(Object? raw) {
   if (raw is! List) return const [];
   final items = <IvaBreakdownItem>[];
@@ -180,7 +199,7 @@ class EntregaItem {
   factory EntregaItem.fromJson(Map<String, dynamic> json) {
     return EntregaItem(
       itemId: _requiredText(json, 'itemId'),
-      codigoArticulo: _requiredText(json, 'codigoArticulo'),
+      codigoArticulo: _lineArticleCode(json),
       descripcion: json['descripcion']?.toString() ?? '',
       cantidadPedida: _requiredDoubleAlias(
         json,
@@ -308,7 +327,7 @@ class AlbaranEntrega {
       telefono2: json['telefono2']?.toString() ?? '',
       emailCliente:
           json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
-      fecha: _requiredDate(json),
+      fecha: _documentDate(json),
       importeTotal:
           _requiredDoubleAlias(json, const <String>['importe', 'importeTotal']),
       importeBruto: _optionalDoubleAlias(json, const <String>['importeBruto']),
@@ -788,6 +807,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     int terminal,
     String codigoCliente, {
     String? deliveryId,
+    String? repartidorId,
   }) async {
     final resolvedCliente = codigoCliente.trim().isNotEmpty
         ? codigoCliente.trim()
@@ -795,6 +815,16 @@ class EntregasNotifier extends Notifier<EntregasState> {
     if (resolvedCliente.isEmpty) {
       state = state.copyWith(
         error: 'Falta el codigo de cliente para cargar el detalle.',
+      );
+      return null;
+    }
+    final owner = resolveRepartoDocumentOwner(
+      documentOwner: repartidorId,
+      selectedOwner: state.repartidorId,
+    );
+    if (owner == null) {
+      state = state.copyWith(
+        error: 'Falta un repartidor concreto para cargar el detalle.',
       );
       return null;
     }
@@ -808,9 +838,10 @@ class EntregasNotifier extends Notifier<EntregasState> {
           'serie': serie,
           'terminal': terminal,
           'cliente': resolvedCliente,
+          'repartidorId': owner,
         },
         cacheKey:
-            'entregas:albaran:$numero:$ejercicio:$serie:$terminal:$resolvedCliente',
+            'entregas:albaran:$owner:$numero:$ejercicio:$serie:$terminal:$resolvedCliente',
         cacheTTL: const Duration(minutes: 2),
         forceRefresh: true,
         allowStale: false,
@@ -857,9 +888,22 @@ class EntregasNotifier extends Notifier<EntregasState> {
       );
       return null;
     }
+    final owner = resolveRepartoDocumentOwner(
+      documentOwner: albaran?.codigoRepartidor,
+      selectedOwner: state.repartidorId,
+    );
+    if (owner == null) {
+      state = state.copyWith(
+        error: 'El recibo requiere un repartidor concreto.',
+      );
+      return null;
+    }
     try {
       final response = await ApiClient.get(
-        RepartoCanonicalReceiptRequest(canonicalReceiptId).endpoint,
+        RepartoCanonicalReceiptRequest(
+          canonicalReceiptId,
+          repartidorId: owner,
+        ).endpoint,
         forceRefresh: true,
         allowStale: false,
       );
@@ -876,7 +920,9 @@ class EntregasNotifier extends Notifier<EntregasState> {
       return null;
     } on ApiException catch (error) {
       state = state.copyWith(
-        error: 'No se pudo recuperar el recibo: ${error.message}',
+        error: error.statusCode == 403
+            ? 'No tienes permiso para recuperar este recibo.'
+            : 'No se pudo recuperar el recibo confirmado.',
       );
       return null;
     } catch (_) {

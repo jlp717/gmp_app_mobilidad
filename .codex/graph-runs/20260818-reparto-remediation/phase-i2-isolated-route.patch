@@ -1,0 +1,298 @@
+diff --git a/backend/repositories/repartidor-route-db2-repository.js b/backend/repositories/repartidor-route-db2-repository.js
+--- a/backend/repositories/repartidor-route-db2-repository.js
++++ b/backend/repositories/repartidor-route-db2-repository.js
+@@ -24,0 +25,36 @@
++
++const LEGACY_ROUTE_READ_TABLES = Object.freeze({
++  isolated_test: Object.freeze({
++    deliveries: 'JAVIER.TEST_REPARTIDOR_ENTREGAS',
++    signatures: 'JAVIER.TEST_REPARTIDOR_FIRMAS',
++  }),
++  production: Object.freeze({
++    deliveries: 'JAVIER.REPARTIDOR_ENTREGAS',
++    signatures: 'JAVIER.REPARTIDOR_FIRMAS',
++  }),
++});
++
++function resolveRouteTableSet() {
++  try {
++    const runtime = resolveRepartoRuntime(process.env);
++    if (runtime?.valid && Object.hasOwn(LEGACY_ROUTE_READ_TABLES, runtime.tableSet)) {
++      return runtime.tableSet;
++    }
++  } catch (_error) {
++    // Fall through to the isolated-only test fallback.
++  }
++  const explicit = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase();
++  return explicit === 'isolated_test' ? explicit : null;
++}
++
++function resolveLegacyRouteReadTable(kind) {
++  return LEGACY_ROUTE_READ_TABLES[resolveRouteTableSet()]?.[kind] || null;
++}
++
++function resolveDeliveryStatusReadTable() {
++  const tableSet = resolveRouteTableSet();
++  const expected = TABLE_MAPPINGS[tableSet]?.notifications?.deliveryStatus;
++  if (!expected) return null;
++  const resolved = typeof getDeliveryStatusTable === 'function'
++    ? getDeliveryStatusTable()
++    : expected;
++  return resolved === expected ? resolved : null;
++}
+@@ -46,23 +82,6 @@
+-/// History reads ERP (DSEDAC) documents and overlays confirmations.
+-/// Isolated_test writes go to TEST_*; still overlay those onto production docs,
+-/// and also read production confirmation tables for older signatures.
++/// History reads ERP (DSEDAC) documents and overlays confirmations from the
++/// single app table-set selected for this runtime.
+ function resolveConfirmationReadTables() {
+   const primary = resolveConfirmationTables();
+-  const list = [];
+-  const seen = new Set();
+-  const push = (table) => {
+-    if (!table?.confirmations || seen.has(table.confirmations)) return;
+-    seen.add(table.confirmations);
+-    list.push(table);
+-  };
+-  try {
+-    const runtime = resolveRepartoRuntime(process.env);
+-    if (runtime?.tableSet === 'isolated_test') {
+-      push(TABLE_MAPPINGS.production.confirmation);
+-      push(TABLE_MAPPINGS.isolated_test.confirmation);
+-    }
+-  } catch (_error) {
+-    // Keep the primary mapping only.
+-  }
+-  push(primary);
+-  return list;
++  return primary ? [primary] : [];
+ }
+@@ -345,8 +364,10 @@
+ async function resolveDeliveryOwners(entregaId) {
++  const table = resolveLegacyRouteReadTable('deliveries');
++  if (!table) return [];
+   return runQueryWithParams(`
+         SELECT DISTINCT TRIM(CODIGOREPARTIDOR) AS OWNER_ID
+-        FROM JAVIER.REPARTIDOR_ENTREGAS
++        FROM ${table}
+         WHERE ID = ?
+         FETCH FIRST 2 ROWS ONLY
+     `, [entregaId], false);
+ }
+@@ -955,7 +976,3 @@
+ function appFirmasTable() {
+-  try {
+-    const runtime = resolveRepartoRuntime(process.env);
+-    if (runtime?.tableSet === 'isolated_test') return 'JAVIER.TEST_REPARTIDOR_FIRMAS';
+-  } catch (_) { /* fall through */ }
+-  return 'JAVIER.REPARTIDOR_FIRMAS';
++  return resolveLegacyRouteReadTable('signatures');
+ }
+@@ -963,9 +980,10 @@
+ async function getDeliveryStatusFirmaPath(albId) {
+   if (!isDeliveryStatusAvailable() || isDeliveryStatusNewSchema()) return [];
+-  const table = getDeliveryStatusTable();
++  const table = resolveDeliveryStatusReadTable();
++  if (!table) return [];
+   return runQueryWithParams(
+     `SELECT FIRMA_PATH FROM ${table} WHERE ID = ?`,
+     [albId],
+     false,
+   );
+ }
+@@ -974,0 +993 @@
++  if (!table) return [];
+@@ -1048,8 +1068,10 @@
+ async function getEntregaFirma(entregaId) {
++  const table = appFirmasTable();
++  if (!table) return [];
+   return runQueryWithParams(`
+             SELECT FIRMABASE64, FIRMANOMBRE, DIA, MES, ANO, HORA
+-            FROM JAVIER.REPARTIDOR_FIRMAS 
++            FROM ${table}
+             WHERE ENTREGA_ID = ?
+             FETCH FIRST 1 ROW ONLY
+         `, [entregaId], false);
+ }
+@@ -1069,0 +1092 @@
++  if (!table) return [];
+@@ -1094 +1118,3 @@
+-const dsAvail = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
++  const deliveryStatusTable = resolveDeliveryStatusReadTable();
++  const dsAvail = Boolean(deliveryStatusTable)
++    && isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+@@ -1099 +1125 @@
+-            LEFT JOIN JAVIER.DELIVERY_STATUS DS
++            LEFT JOIN ${deliveryStatusTable} DS
+diff --git a/backend/__tests__/repartidor-route-db2-repository-isolation.test.js b/backend/__tests__/repartidor-route-db2-repository-isolation.test.js
+new file mode 100644
+--- /dev/null
++++ b/backend/__tests__/repartidor-route-db2-repository-isolation.test.js
+@@ -0,0 +1,181 @@
++'use strict';
++
++const mockQueryWithParams = jest.fn();
++let mockDeliveryStatusTable = 'JAVIER.TEST_DELIVERY_STATUS';
++
++jest.mock('../config/db', () => ({
++  query: jest.fn(),
++  queryWithParams: (...args) => mockQueryWithParams(...args),
++}));
++jest.mock('../services/query-optimizer', () => ({
++  cachedQuery: (queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params),
++}));
++jest.mock('../services/redis-cache', () => ({
++  TTL: { REALTIME: 0, SHORT: 60, MEDIUM: 300, LONG: 3600 },
++}));
++jest.mock('../middleware/logger', () => ({
++  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
++}));
++jest.mock('../utils/delivery-status-check', () => ({
++  isDeliveryStatusAvailable: () => true,
++  isDeliveryStatusNewSchema: () => true,
++  getDeliveryStatusJoin: jest.fn(() => ''),
++  getDeliveryStatusColumns: jest.fn(() => ''),
++  getDeliveryStatusTable: () => mockDeliveryStatusTable,
++}));
++
++const repository = require('../repositories/repartidor-route-db2-repository');
++
++const ENV_KEYS = [
++  'NODE_ENV',
++  'REPARTO_ENVIRONMENT',
++  'REPARTO_TABLE_SET',
++  'REPARTO_CONFIRMATION_TABLE_SET',
++  'REPARTO_EVIDENCE_PENDING_TTL_HOURS',
++  'REPARTO_WRITES_ENABLED',
++  'REPARTO_PRODUCTION_WRITES_APPROVED',
++  'REPARTO_PRODUCTION_ERP_WRITES_APPROVED',
++  'REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED',
++  'REPARTO_PRODUCTION_CONFIRMATION_APPROVED',
++  'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED',
++  'ODBC_DSN',
++  'REPARTIDOR_FINANCE_READ_SCHEMA',
++  'REPARTIDOR_FINANCE_APP_SCHEMA',
++  'REPARTIDOR_FINANCE_ERP_SCHEMA',
++];
++const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
++
++function setRuntime({ environment, tableSet, erpSchema }) {
++  delete process.env.REPARTO_CONFIRMATION_TABLE_SET;
++  Object.assign(process.env, {
++    NODE_ENV: environment,
++    REPARTO_ENVIRONMENT: environment,
++    REPARTO_TABLE_SET: tableSet,
++    REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
++    REPARTO_WRITES_ENABLED: 'false',
++    REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
++    REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
++    REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
++    REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
++    REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
++    ODBC_DSN: 'GMP',
++    REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
++    REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
++    REPARTIDOR_FINANCE_ERP_SCHEMA: erpSchema,
++  });
++}
++
++async function exerciseRouteReads() {
++  await repository.getCanonicalConfirmationSignature({
++    year: 2026, serie: 'A', terminal: 0, number: 7, ownerIds: ['05'],
++  });
++  await repository.resolveDeliveryOwners('delivery-7');
++  await repository.getEntregaFirma('delivery-7');
++  await repository.getRepartidorFirmasByAlbaran(7, 2026, 'A', 0);
++  await repository.getRepartidorFirmaBase64ByAlbaran(7, 2026, 'A', 0);
++  await repository.getDeliverySummary(2026, 8, [], ['05']);
++}
++
++describe('repartidor route repository table-set isolation', () => {
++  beforeEach(() => {
++    jest.clearAllMocks();
++    mockDeliveryStatusTable = 'JAVIER.TEST_DELIVERY_STATUS';
++    mockQueryWithParams.mockImplementation(async (sql) => {
++      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
++        return [{
++          ID: 17,
++          STATUS: 'ENTREGADO',
++          FIRMA_EVIDENCE_ID: 'signature-17',
++          REPARTIDOR_ID: '05',
++        }];
++      }
++      if (String(sql).includes('TEST_REPARTO_EVIDENCIAS')) {
++        return [{ CONTENT_HEX: '736967' }];
++      }
++      return [];
++    });
++  });
++
++  afterEach(() => {
++    for (const key of ENV_KEYS) {
++      if (originalEnv[key] === undefined) delete process.env[key];
++      else process.env[key] = originalEnv[key];
++    }
++  });
++
++  test('isolated_test emits only TEST app reads while retaining DSEDAC documents', async () => {
++    setRuntime({ environment: 'test', tableSet: 'isolated_test', erpSchema: 'JAVIER' });
++
++    await exerciseRouteReads();
++
++    const sql = mockQueryWithParams.mock.calls.map(([statement]) => String(statement)).join('\n');
++    expect(sql).toContain('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES');
++    expect(sql).toContain('FROM JAVIER.TEST_REPARTO_EVIDENCIAS');
++    expect(sql).toContain('FROM JAVIER.TEST_REPARTIDOR_ENTREGAS');
++    expect(sql).toContain('FROM JAVIER.TEST_REPARTIDOR_FIRMAS');
++    expect(sql).toContain('LEFT JOIN JAVIER.TEST_DELIVERY_STATUS DS');
++    expect(sql).toContain('FROM DSEDAC.OPP OPP');
++    for (const forbidden of [
++      'JAVIER.REPARTO_CONFIRMACIONES',
++      'JAVIER.REPARTO_EVIDENCIAS',
++      'JAVIER.REPARTIDOR_ENTREGAS',
++      'JAVIER.REPARTIDOR_FIRMAS',
++      'JAVIER.DELIVERY_STATUS',
++    ]) {
++      expect(sql).not.toContain(forbidden);
++    }
++  });
++
++  test('rejects a stale production delivery-status mapping in isolated_test', async () => {
++    setRuntime({ environment: 'test', tableSet: 'isolated_test', erpSchema: 'JAVIER' });
++    mockDeliveryStatusTable = 'JAVIER.DELIVERY_STATUS';
++
++    await repository.getDeliverySummary(2026, 8, [], ['05']);
++
++    const sql = String(mockQueryWithParams.mock.calls[0][0]);
++    expect(sql).not.toContain('JAVIER.DELIVERY_STATUS');
++    expect(sql).toContain('JAVIER.TEST_REPARTO_CONFIRMACIONES');
++  });
++
++  test('legacy owner and signature reads fail closed without an allowed table-set', async () => {
++    delete process.env.REPARTO_TABLE_SET;
++    delete process.env.REPARTO_ENVIRONMENT;
++    process.env.NODE_ENV = 'test';
++
++    await expect(repository.resolveDeliveryOwners('delivery-7')).resolves.toEqual([]);
++    await expect(repository.getEntregaFirma('delivery-7')).resolves.toEqual([]);
++    await expect(repository.getRepartidorFirmasByAlbaran(7, 2026, 'A', 0)).resolves.toEqual([]);
++    await expect(repository.getRepartidorFirmaBase64ByAlbaran(7, 2026, 'A', 0)).resolves.toEqual([]);
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++  });
++
++  test('production runtime retains production app mappings', async () => {
++    setRuntime({ environment: 'production', tableSet: 'production', erpSchema: 'DSEDAC' });
++    mockDeliveryStatusTable = 'JAVIER.DELIVERY_STATUS';
++    mockQueryWithParams.mockResolvedValue([]);
++
++    await exerciseRouteReads();
++
++    const sql = mockQueryWithParams.mock.calls.map(([statement]) => String(statement)).join('\n');
++    expect(sql).toContain('FROM JAVIER.REPARTO_CONFIRMACIONES');
++    expect(sql).toContain('FROM JAVIER.REPARTIDOR_ENTREGAS');
++    expect(sql).toContain('FROM JAVIER.REPARTIDOR_FIRMAS');
++    expect(sql).toContain('LEFT JOIN JAVIER.DELIVERY_STATUS DS');
++    expect(sql).not.toContain('JAVIER.TEST_');
++  });
++});

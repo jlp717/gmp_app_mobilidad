@@ -3,7 +3,7 @@
 const express = require('express');
 const request = require('supertest');
 
-let mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR' };
+let mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockCachedQuery = jest.fn();
@@ -47,8 +47,14 @@ function app() {
   return instance;
 }
 
-function authorized(method, path) {
-  return request(app())[method](path).set('Authorization', 'Bearer route-gap-test');
+function authorized(method, requestPath) {
+  const isAlbaranDetail = requestPath.startsWith('/albaran/');
+  const hasOwner = /[?&]repartidorId=/.test(requestPath);
+  const separator = requestPath.includes('?') ? '&' : '?';
+  const scopedPath = isAlbaranDetail && !hasOwner
+    ? `${requestPath}${separator}repartidorId=94`
+    : requestPath;
+  return request(app())[method](scopedPath).set('Authorization', 'Bearer route-gap-test');
 }
 
 function paymentCatalog() {
@@ -80,7 +86,7 @@ function detailHeader(overrides = {}) {
 describe('entregas route coverage gaps', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR' };
+    mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     mockCachedQuery.mockResolvedValue(paymentCatalog());
   });
 
@@ -114,7 +120,7 @@ describe('entregas route coverage gaps', () => {
     const invalidId = await authorized('get', '/pendientes/not-an-id?date=2026-08-03');
     const invalidPagination = await authorized('get', '/pendientes/94?date=2026-08-03&limit=zero');
 
-    expect(invalidId.status).toBe(400);
+    expect(invalidId.status).toBe(422);
     expect(invalidPagination.status).toBe(400);
     expect(invalidPagination.body.code).toBe('INVALID_PAGINATION');
     expect(mockCachedQuery).not.toHaveBeenCalled();

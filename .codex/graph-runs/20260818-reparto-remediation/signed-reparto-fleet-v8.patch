@@ -1,0 +1,1378 @@
+diff --git a/backend/src/modules/auth/domain/auth-repository.js b/backend/src/modules/auth/domain/auth-repository.js
+--- a/backend/src/modules/auth/domain/auth-repository.js	
++++ b/backend/src/modules/auth/domain/auth-repository.js	
+@@ -11,8 +11,12 @@
+   async findByCode(code) {
+     throw new Error('Method not implemented: findByCode');
+   }
+ 
++  async listRepartidorFleet() {
++    throw new Error('Method not implemented: listRepartidorFleet');
++  }
++
+   async updatePassword(userId, newPasswordHash) {
+     throw new Error('Method not implemented: updatePassword');
+   }
+ 
+diff --git a/backend/src/modules/auth/infrastructure/db2-auth-repository.js b/backend/src/modules/auth/infrastructure/db2-auth-repository.js
+--- a/backend/src/modules/auth/infrastructure/db2-auth-repository.js	
++++ b/backend/src/modules/auth/infrastructure/db2-auth-repository.js	
+@@ -4,8 +4,9 @@
+ const { AuthRepository } = require('../domain/auth-repository');
+ const { User } = require('../domain/user');
+ const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
+ const { getVendorVisibilityScope } = require('../../../../utils/common');
++const { createRepartidorFleetDirectory } = require('./repartidor-fleet-directory');
+ 
+ const ERP_MOBILITY_PROFILE_SELECT = `
+         COALESCE((
+           SELECT MAX(NULLIF(TRIM(X.PERMITEPREVENTASN), ''))
+@@ -50,11 +51,13 @@
+           ELSE 'COMERCIAL'
+         END AS ROL`;
+ 
+ class Db2AuthRepository extends AuthRepository {
+-  constructor(dbPool) {
++  constructor(dbPool, { repartidorFleetDirectory } = {}) {
+     super();
+     this._db = dbPool || new Db2ConnectionPool();
++    this._repartidorFleetDirectory = repartidorFleetDirectory
++      || createRepartidorFleetDirectory({ execute: (sql) => this._db.execute(sql) });
+   }
+ 
+   async findByCode(code) {
+     const requested = String(code || '').trim();
+@@ -231,8 +234,12 @@
+       matricula: String(rows[0].MATRICULA || rows[0].matricula || '').trim() || null,
+     };
+   }
+ 
++  async listRepartidorFleet() {
++    return this._repartidorFleetDirectory.list();
++  }
++
+   async getVendorVisibilityScope(code, { role } = {}) {
+     const normalizedCode = String(code || '').trim().toUpperCase();
+     if (!normalizedCode || normalizedCode.length > 50 || !/^[A-Z0-9]+$/.test(normalizedCode)) {
+       return [];
+diff --git a/backend/src/modules/auth/index.js b/backend/src/modules/auth/index.js
+--- a/backend/src/modules/auth/index.js	
++++ b/backend/src/modules/auth/index.js	
+@@ -5,12 +5,18 @@
+ const { User } = require('./domain/user');
+ const { AuthRepository } = require('./domain/auth-repository');
+ const { Db2AuthRepository } = require('./infrastructure/db2-auth-repository');
+ const { LoginUseCase, AuthError } = require('./application/login-usecase');
++const {
++  canonicalRepartidorCode,
++  createRepartidorFleetDirectory,
++} = require('./infrastructure/repartidor-fleet-directory');
+ 
+ module.exports = {
+   User,
+   AuthRepository,
+   Db2AuthRepository,
+   LoginUseCase,
+-  AuthError
++  AuthError,
++  canonicalRepartidorCode,
++  createRepartidorFleetDirectory,
+ };
+diff --git a/backend/src/modules/auth/application/auth-claims-resolver.js b/backend/src/modules/auth/application/auth-claims-resolver.js
+--- a/backend/src/modules/auth/application/auth-claims-resolver.js	
++++ b/backend/src/modules/auth/application/auth-claims-resolver.js	
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+-const AUTH_CLAIMS_VERSION = 3;
++const AUTH_CLAIMS_VERSION = 4;
+ const COMERCIAL = 'COMERCIAL';
+ const ADMIN = 'ADMIN';
+ const JEFE_VENTAS = 'JEFE_VENTAS';
+ const REPARTIDOR = 'REPARTIDOR';
+@@ -27,8 +27,16 @@
+       .filter(Boolean),
+   )]);
+ }
+ 
++function codesMatch(left, right) {
++  const leftCode = normalizeCode(left);
++  const rightCode = normalizeCode(right);
++  if (leftCode === rightCode) return true;
++  if (!/^\d+$/.test(leftCode) || !/^\d+$/.test(rightCode)) return false;
++  return (leftCode.replace(/^0+/, '') || '0') === (rightCode.replace(/^0+/, '') || '0');
++}
++
+ function subjectInvalid() {
+   return new AuthClaimsError('Sujeto de autenticacion invalido', 'AUTH_SUBJECT_INVALID', 401);
+ }
+ 
+@@ -123,8 +131,31 @@
+         throw profileUnavailable();
+       }
+       if (vendorCodes.length === 0) throw profileUnavailable();
+ 
++      let repartidorCodes = freezeList([]);
++      const repartoProfile = activeMode === REPARTIDOR
++        && [REPARTIDOR, JEFE_VENTAS, ADMIN].includes(role);
++      if (repartoProfile) {
++        if (typeof authRepository.listRepartidorFleet !== 'function') throw profileUnavailable();
++        let fleet;
++        try {
++          fleet = await authRepository.listRepartidorFleet();
++        } catch (_error) {
++          throw profileUnavailable();
++        }
++        const fleetCodes = freezeList((Array.isArray(fleet) ? fleet : [])
++          .map((entry) => entry?.code ?? entry?.CODE));
++        if (fleetCodes.length === 0) throw profileUnavailable();
++        if (role === REPARTIDOR) {
++          const verifiedSelf = fleetCodes.find((entry) => codesMatch(entry, canonicalCode));
++          if (!verifiedSelf) throw profileUnavailable();
++          repartidorCodes = freezeList([verifiedSelf]);
++        } else {
++          repartidorCodes = fleetCodes;
++        }
++      }
++
+       const projectedDriver = role === REPARTIDOR;
+       const claims = {
+         id: `V${canonicalCode}`,
+         user: canonicalCode,
+@@ -140,8 +171,9 @@
+           ? String(profile.matricula || '').trim() || null
+           : null,
+         vendorCodes,
+         vendedorCodes: freezeList(vendorCodes),
++        repartidorCodes,
+         tipoVendedor: String(profile.tipoVendedor || '-').trim() || '-',
+         showCommissions: profile.showCommissions !== false,
+         claimsVersion: AUTH_CLAIMS_VERSION,
+       };
+diff --git a/backend/src/modules/auth/application/auth-claims-login-handler.js b/backend/src/modules/auth/application/auth-claims-login-handler.js
+--- a/backend/src/modules/auth/application/auth-claims-login-handler.js	
++++ b/backend/src/modules/auth/application/auth-claims-login-handler.js	
+@@ -24,8 +24,9 @@
+     codigoConductor: claims.codigoConductor,
+     matricula: claims.matricula,
+     vendorCodes: [...claims.vendorCodes],
+     vendedorCodes: [...claims.vendedorCodes],
++    repartidorCodes: Array.isArray(claims.repartidorCodes) ? [...claims.repartidorCodes] : [],
+     tipoVendedor: claims.tipoVendedor,
+     TIPOVENDEDOR: claims.tipoVendedor,
+     showCommissions: claims.showCommissions,
+     claimsVersion: claims.claimsVersion,
+@@ -197,8 +198,9 @@
+         codigoConductor: resolvedClaims.codigoConductor,
+         matricula: resolvedClaims.matricula,
+         vendorCodes: [...resolvedClaims.vendorCodes],
+         vendedorCodes: [...resolvedClaims.vendedorCodes],
++        repartidorCodes: Array.isArray(resolvedClaims.repartidorCodes) ? [...resolvedClaims.repartidorCodes] : [],
+         tipoVendedor: resolvedClaims.tipoVendedor,
+         showCommissions: resolvedClaims.showCommissions,
+         claimsVersion: resolvedClaims.claimsVersion,
+         latestVersion: '3.3.1',
+diff --git a/backend/middleware/auth.js b/backend/middleware/auth.js
+--- a/backend/middleware/auth.js	
++++ b/backend/middleware/auth.js	
+@@ -351,8 +351,9 @@
+     const role = String(payload.role || 'COMERCIAL').trim().toUpperCase();
+     const isRepartidor = role === 'REPARTIDOR' && payload.isRepartidor === true;
+     const vendorCodes = Array.isArray(payload.vendorCodes) ? [...payload.vendorCodes] : [];
+     const vendedorCodes = Array.isArray(payload.vendedorCodes) ? [...payload.vendedorCodes] : [];
++    const repartidorCodes = Array.isArray(payload.repartidorCodes) ? [...payload.repartidorCodes] : [];
+     return {
+         id: payload.id,
+         code: payload.user,
+         name: payload.name,
+@@ -367,8 +368,9 @@
+         codigoConductor: isRepartidor ? payload.codigoConductor || null : null,
+         matricula: isRepartidor ? payload.matricula || null : null,
+         vendorCodes,
+         vendedorCodes,
++        repartidorCodes,
+         tipoVendedor: String(payload.tipoVendedor || '-'),
+         showCommissions: payload.showCommissions !== false,
+         claimsVersion: payload.claimsVersion,
+     };
+@@ -387,8 +389,9 @@
+         codigoConductor: user.codigoConductor,
+         matricula: user.matricula,
+         vendorCodes: user.vendorCodes,
+         vendedorCodes: user.vendedorCodes,
++        repartidorCodes: user.repartidorCodes,
+         tipoVendedor: user.tipoVendedor,
+         showCommissions: user.showCommissions,
+         claimsVersion: user.claimsVersion,
+     };
+diff --git a/backend/routes/auth.js b/backend/routes/auth.js
+--- a/backend/routes/auth.js	
++++ b/backend/routes/auth.js	
+@@ -4,10 +4,8 @@
+  */
+ 
+ const express = require('express');
+ const router = express.Router();
+-const { query } = require('../config/db');
+-const logger = require('../middleware/logger');
+ const { 
+     verifyToken, 
+     handleRefreshToken,
+     handleLogout
+@@ -58,87 +56,54 @@
+ // =============================================================================
+ // REPARTIDORES LIST
+ // =============================================================================
+ 
+-let _repartidoresCache = null;
+-let _repartidoresCacheTime = 0;
+-const REPARTIDORES_CACHE_TTL = 5 * 60 * 1000;
++function repartoCodesMatch(left, right) {
++    const a = String(left || '').trim().toUpperCase();
++    const b = String(right || '').trim().toUpperCase();
++    if (a === b) return true;
++    if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return false;
++    return (a.replace(/^0+/, '') || '0') === (b.replace(/^0+/, '') || '0');
++}
+ 
+ function repartidoresAccess(user = {}) {
+     const role = String(user.role || '').trim().toUpperCase();
+     const activeMode = String(user.activeMode || '').trim().toUpperCase();
+     if (role === 'REPARTIDOR') return 'SELF';
+-    if (role === 'ADMIN' || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR')) return 'FLEET';
++    if ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR') return 'FLEET';
+     return 'DENIED';
+ }
+ 
+ router.get('/repartidores', verifyToken, async (req, res) => {
+     try {
+         const access = repartidoresAccess(req.user);
++        const signedCodes = [...new Set((Array.isArray(req.user?.repartidorCodes)
++            ? req.user.repartidorCodes : [])
++            .map((code) => String(code || '').trim().toUpperCase())
++            .filter(Boolean))];
+         if (access === 'SELF') {
+-            const code = (req.user.code || req.user.id || '').toString().trim();
+-            return res.json(code ? [{ code, name: req.user.name || code }] : []);
++            const own = String(req.user?.code || '').trim().toUpperCase();
++            if (signedCodes.length !== 1 || !repartoCodesMatch(signedCodes[0], own)) {
++                return res.status(403).json({ error: 'Acceso restringido', code: 'REPARTIDOR_SCOPE_REQUIRED' });
++            }
++            return res.json([{ code: signedCodes[0], name: req.user.name || signedCodes[0] }]);
+         }
+         if (access !== 'FLEET') {
+             return res.status(403).json({ error: 'Acceso restringido', code: 'INSUFFICIENT_ROLE' });
+         }
++        if (signedCodes.length === 0) {
++            return res.status(403).json({ error: 'Acceso restringido', code: 'REPARTIDOR_SCOPE_REQUIRED' });
++        }
+ 
+-        const now = Date.now();
+-        if (_repartidoresCache && (now - _repartidoresCacheTime) < REPARTIDORES_CACHE_TTL) {
+-            return res.json(_repartidoresCache);
++        const directory = await authRepository.listRepartidorFleet();
++        const selected = signedCodes.map((signedCode) =>
++            directory.find((entry) => repartoCodesMatch(entry?.code, signedCode)));
++        if (selected.some((entry) => !entry)) {
++            return res.status(503).json({ error: 'Perfil de autorizacion no disponible', code: 'AUTH_PROFILE_UNAVAILABLE' });
+         }
+-
+-        const currentYear = new Date().getFullYear();
+-        let results = [];
+-
+-        // Source 1: VEH
+-        try {
+-            const vehRows = await query(`
+-                SELECT DISTINCT TRIM(V.CODIGOCONDUCTOR) as CODE, TRIM(D.NOMBREVENDEDOR) as NAME
+-                FROM DSEDAC.VEH V
+-                JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(V.CODIGOCONDUCTOR)
+-                WHERE TRIM(V.CODIGOCONDUCTOR) <> '98' AND TRIM(V.CODIGOCONDUCTOR) <> ''
+-            `, false);
+-            if (vehRows) results.push(...vehRows.map(r => ({ code: r.CODE?.trim(), name: r.NAME?.trim() })));
+-        } catch (e) { logger.warn(`Error querying VEH: ${e.message}`); }
+-
+-        // Source 2: OPP
+-        try {
+-            const repRows = await query(`
+-                SELECT TRIM(OPP.CODIGOREPARTIDOR) as CODE,
+-                       COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NAME
+-                FROM DSEDAC.OPP OPP
+-                LEFT JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
+-                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL AND OPP.ANOREPARTO = ${currentYear}
+-                  AND NOT EXISTS (SELECT 1 FROM DSEDAC.VDDX X WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR) AND TRIM(X.JEFEVENTASSN) = 'S')
+-                GROUP BY TRIM(OPP.CODIGOREPARTIDOR), COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR))
+-                HAVING COUNT(*) >= 100
+-            `, false);
+-            if (repRows) results.push(...repRows.map(r => ({ code: r.CODE?.trim(), name: r.NAME?.trim() })));
+-        } catch (e) { logger.warn(`Error querying OPP: ${e.message}`); }
+-
+-        // Deduplicate
+-        const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZJ', 'ZK', 'ZL', 'ZM', 'ZN', 'ZO', 'ZP', 'ZQ', 'ZR', 'ZS', 'ZT', 'ZU', 'ZV', 'ZW', 'ZX', 'ZY', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z8', 'Z9', 'XX', 'TT', 'TEST'];
+-        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A', '97', '98']);
+-        
+-        const uniqueMap = new Map();
+-        results.forEach(r => {
+-            if (!r.code) return;
+-            const code = r.code.trim().toUpperCase();
+-            if (EXCLUDED_CODES.has(code)) return;
+-            if (EXCLUDED_PREFIXES.some(p => code.startsWith(p))) return;
+-            if (r.name?.trim().toUpperCase().startsWith('ZZ')) return;
+-            uniqueMap.set(r.code, r);
+-        });
+-        
+-        _repartidoresCache = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+-        _repartidoresCacheTime = now;
+-        
+-        res.json(_repartidoresCache);
+-        
+-    } catch (error) {
+-        logger.error(`Error fetching repartidores: ${error.message}`);
+-        res.status(500).json({ error: 'Error de base de datos', code: 'DB_ERROR' });
++        return res.json(selected);
++    } catch (_error) {
++        return res.status(503).json({ error: 'Perfil de autorizacion no disponible', code: 'AUTH_PROFILE_UNAVAILABLE' });
+     }
+ });
+ 
+ router.repartidoresAccess = repartidoresAccess;
+diff --git a/backend/routes/repartidor.js b/backend/routes/repartidor.js
+--- a/backend/routes/repartidor.js	
++++ b/backend/routes/repartidor.js	
+@@ -11,9 +11,9 @@
+ const fs = require('fs');
+ const fsPromises = require('fs').promises;
+ const path = require('path');
+ const logger = require('../middleware/logger');
+-const { sanitizeCodeListForParams, sanitizeForSQL, getVendorVisibilityScope } = require('../utils/common');
++const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
+ const repartidorDb = require('../repositories/repartidor-route-db2-repository');
+ const { generateInvoicePDF } = require('../app/services/pdfService');
+ const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
+ const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+@@ -50,11 +50,10 @@
+ }
+ 
+ function isRepartoPrivileged(user) {
+     const role = normalizedRole(user);
+-    return role === 'ADMIN'
+-        || (role === 'JEFE_VENTAS'
+-            && String(user?.activeMode || '').trim().toUpperCase() === 'REPARTIDOR');
++    const activeMode = String(user?.activeMode || '').trim().toUpperCase();
++    return (role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR';
+ }
+ 
+ function canonicalRepartidorCode(value) {
+     const raw = String(value || '').trim().toUpperCase();
+@@ -136,9 +135,15 @@
+         sendRouteError(res, 401, 'AUTH_REQUIRED');
+         return null;
+     }
+     const role = normalizedRole(user);
+-    if (isRepartoPrivileged(user)) return ids;
++    const allowed = uniqueActorCodes(user.repartidorCodes);
++    if (isRepartoPrivileged(user)) {
++        if (allowed.length > 0 && ids.every((id) => allowed.some((code) =>
++            normalizeVendorCode(code) === normalizeVendorCode(id)))) return ids;
++        sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
++        return null;
++    }
+     if (role === 'JEFE_VENTAS') {
+         sendRouteError(res, 403, 'REPARTIDOR_MODE_REQUIRED');
+         return null;
+     }
+@@ -146,9 +151,11 @@
+         sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
+         return null;
+     }
+     const ownId = canonicalRepartidorCode(user.code || user.id || '');
+-    if (ids.length !== 1 || !ownId || ids[0] !== ownId) {
++    if (ids.length !== 1 || !ownId || allowed.length !== 1
++        || normalizeVendorCode(ids[0]) !== normalizeVendorCode(allowed[0])
++        || normalizeVendorCode(ownId) !== normalizeVendorCode(allowed[0])) {
+         sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
+         return null;
+     }
+     return ids;
+@@ -213,10 +220,9 @@
+         ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
+         ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
+         own,
+     ];
+-    const scoped = own ? getVendorVisibilityScope(own) : [];
+-    return uniqueActorCodes([...tokenCodes, ...scoped]);
++    return uniqueActorCodes(tokenCodes);
+ }
+ 
+ function vendorCodesIntersect(left, right) {
+     const allowed = new Set(right.map(normalizeVendorCode).filter(Boolean));
+@@ -230,54 +236,26 @@
+         sendRouteError(res, 404, 'DOCUMENT_NOT_FOUND');
+         return false;
+     }
+     const role = normalizedRole(req.user);
+-    const ownId = canonicalRepartidorCode(req.user?.code || req.user?.id || '');
+     const hinted = hintedRepartidorId(req);
+-    const ownIdValid = Boolean(ownId);
+-    const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
+-    if (requireRepartoOwnerHint
+-        && role === 'JEFE_VENTAS'
+-        && activeMode === 'REPARTIDOR') {
+-        if (!hinted) {
+-            sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
+-            return false;
+-        }
++    const repartoActor = role === 'REPARTIDOR' || isRepartoPrivileged(req.user);
++    if (requireRepartoOwnerHint && repartoActor) {
++        const authorized = authorizedRepartidorIds(req, res, hinted);
++        if (!authorized || authorized.length !== 1) return false;
+         const matchingDriver = drivers.find((driver) =>
+-            normalizeVendorCode(driver) === normalizeVendorCode(hinted));
++            normalizeVendorCode(driver) === normalizeVendorCode(authorized[0]));
+         if (!matchingDriver) {
+             sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
+             return false;
+         }
+         req.documentOwnerId = matchingDriver;
+         return true;
+     }
+-    const ownDriver = drivers.find((driver) => normalizeVendorCode(driver) === normalizeVendorCode(ownId));
+-    if (ownIdValid && ownDriver && (role === 'REPARTIDOR' || isRepartoPrivileged(req.user))) {
+-        req.documentOwnerId = ownDriver;
+-        return true;
+-    }
+     if (role === 'COMERCIAL' && vendorCodesIntersect(actorVendorCodes(req.user), vendors)) {
+-        req.documentOwnerId = ownIdValid ? ownId : vendors[0];
++        req.documentOwnerId = vendors[0];
+         return true;
+     }
+-    if (isRepartoPrivileged(req.user)) {
+-        const hintedDriver = drivers.find((driver) => normalizeVendorCode(driver) === normalizeVendorCode(hinted));
+-        if (hintedDriver) {
+-            req.documentOwnerId = hintedDriver;
+-            return true;
+-        }
+-        if (drivers.length === 1) {
+-            req.documentOwnerId = drivers[0];
+-            return true;
+-        }
+-        if (drivers.length === 0 && vendors.length > 0) {
+-            req.documentOwnerId = vendors[0];
+-            return true;
+-        }
+-        sendRouteError(res, 409, 'DOCUMENT_OWNER_AMBIGUOUS');
+-        return false;
+-    }
+     sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
+     return false;
+ }
+ 
+@@ -302,30 +280,19 @@
+     const role = normalizedRole(req.user);
+     const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
+     const raw = rawRepartidorId(req);
+     const hint = hintedRepartidorId(req);
+-    if (role === 'ADMIN') return true;
+-    if (role === 'JEFE_VENTAS') {
+-        if (activeMode !== 'REPARTIDOR') {
+-            sendRouteError(res, 403, 'DOCUMENT_REPARTO_MODE_REQUIRED');
+-            return false;
+-        }
+-        if (!hint || raw.includes(',') || /^ALL$/i.test(raw)) {
+-            sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
+-            return false;
+-        }
+-        return true;
++    if ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode !== 'REPARTIDOR') {
++        sendRouteError(res, 403, 'DOCUMENT_REPARTO_MODE_REQUIRED');
++        return false;
+     }
+-    if (role === 'REPARTIDOR' && raw) {
+-        const own = canonicalRepartidorCode(req.user?.code || req.user?.id || '');
++    if (role === 'REPARTIDOR' || role === 'JEFE_VENTAS' || role === 'ADMIN') {
+         if (!hint || raw.includes(',') || /^ALL$/i.test(raw)) {
+             sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
+             return false;
+         }
+-        if (hint !== own) {
+-            sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
+-            return false;
+-        }
++        const authorized = authorizedRepartidorIds(req, res, hint);
++        return Boolean(authorized && authorized.length === 1);
+     }
+     return true;
+ }
+ 
+@@ -355,23 +322,9 @@
+     }
+     if (asunto.length > 200 || cuerpo.length > 5000) {
+         return sendRouteError(res, 422, 'EMAIL_CONTENT_INVALID');
+     }
+-    const role = String(req.user?.role || '').trim().toUpperCase();
+-    const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
+-    const rawOwner = rawRepartidorId(req);
+-    const owner = hintedRepartidorId(req);
+-    const actor = String(req.user?.code || req.user?.id || '').trim();
+-    if (role === 'REPARTIDOR' && rawOwner
+-        && (!owner || normalizeVendorCode(owner) !== normalizeVendorCode(actor))) {
+-        return sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
+-    }
+-    if (role === 'JEFE_VENTAS') {
+-        if (activeMode !== 'REPARTIDOR') {
+-            return sendRouteError(res, 403, 'DOCUMENT_REPARTO_MODE_REQUIRED');
+-        }
+-        if (!owner) return sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
+-    }
++    if (!prevalidateStrictDocumentOwner(req, res)) return;
+     req.documentEmail = { destinatario, asunto, cuerpo };
+     return next();
+ }
+ 
+diff --git a/backend/routes/entregas.js b/backend/routes/entregas.js
+--- a/backend/routes/entregas.js	
++++ b/backend/routes/entregas.js	
+@@ -54,26 +54,28 @@
+     if (codes.some((code) => !code) || codes.length > 100) return null;
+     return [...new Set(codes)];
+ }
+ 
+-function isPrivilegedUser(req) {
++function actorRepartidorCodes(user) {
++    return [...new Set((Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
++        .map(canonicalRepartidorCode).filter(Boolean))];
++}
++
++function canAccessRepartidor(req, repartidorId) {
+     const user = req.user || {};
+     const role = normalizeCode(user.role).toUpperCase();
+     const activeMode = normalizeCode(user.activeMode).toUpperCase();
+-    return role === 'ADMIN' || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
++    const repartoActor = role === 'REPARTIDOR'
++        || ((role === 'JEFE_VENTAS' || role === 'ADMIN') && activeMode === 'REPARTIDOR');
++    if (!repartoActor) return false;
++    const target = canonicalRepartidorCode(repartidorId);
++    const allowed = actorRepartidorCodes(user);
++    if (!target || allowed.length === 0 || !allowed.some((code) => codesMatch(code, target))) return false;
++    if (role !== 'REPARTIDOR') return true;
++    const own = canonicalRepartidorCode(user.code || user.id || user.user);
++    return allowed.length === 1 && codesMatch(own, target) && codesMatch(allowed[0], target);
+ }
+ 
+-function canAccessRepartidor(req, repartidorId) {
+-    if (isPrivilegedUser(req)) return true;
+-    if (req.user?.role !== 'REPARTIDOR') return false;
+-    const userCode = normalizeCode(req.user.code || req.user.id || req.user.user);
+-    const targetCode = normalizeCode(repartidorId);
+-    const userNumeric = normalizeNumericCode(userCode);
+-    const targetNumeric = normalizeNumericCode(targetCode);
+-    return userCode === targetCode ||
+-        (userNumeric !== null && targetNumeric !== null && userNumeric === targetNumeric);
+-}
+-
+ function ensureRepartidorAccess(req, res, repartidorId) {
+     if (canAccessRepartidor(req, repartidorId)) return true;
+     logger.warn(`[ENTREGAS] Forbidden ${req.user?.code || 'unknown'} -> repartidor ${repartidorId}`);
+     res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para operar sobre este repartidor' });
+@@ -82,32 +84,19 @@
+ 
+ function requireConcreteAlbaranOwner(req, res) {
+     const role = normalizeCode(req.user?.role).toUpperCase();
+     const activeMode = normalizeCode(req.user?.activeMode).toUpperCase();
+-    const rawHint = req.query?.repartidorId;
+-    if (role === 'ADMIN') return { allowed: true, hintedOwner: null };
+-    if (role === 'JEFE_VENTAS') {
+-        if (activeMode !== 'REPARTIDOR') {
+-            res.status(403).json({ success: false, code: 'REPARTO_MODE_REQUIRED', error: 'Activa el Perfil Reparto para consultar entregas' });
+-            return { allowed: false, hintedOwner: null };
+-        }
+-        const selected = parseRepartidorSelector(rawHint, { single: true });
+-        if (!selected) {
+-            res.status(422).json({ success: false, code: 'REPARTIDOR_ID_REQUIRED', error: 'Selecciona un unico repartidor concreto' });
+-            return { allowed: false, hintedOwner: null };
+-        }
+-        return { allowed: true, hintedOwner: selected[0] };
+-    }
+-    if (role !== 'REPARTIDOR') {
++    if (role !== 'REPARTIDOR' && role !== 'JEFE_VENTAS' && role !== 'ADMIN') {
+         res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para consultar entregas' });
+         return { allowed: false, hintedOwner: null };
+     }
+-    if (rawHint === undefined || rawHint === null || String(rawHint).trim() === '') {
+-        return { allowed: true, hintedOwner: null };
++    if ((role === 'JEFE_VENTAS' || role === 'ADMIN') && activeMode !== 'REPARTIDOR') {
++        res.status(403).json({ success: false, code: 'REPARTO_MODE_REQUIRED', error: 'Activa el Perfil Reparto para consultar entregas' });
++        return { allowed: false, hintedOwner: null };
+     }
+-    const selected = parseRepartidorSelector(rawHint, { single: true });
++    const selected = parseRepartidorSelector(req.query?.repartidorId, { single: true });
+     if (!selected) {
+-        res.status(422).json({ success: false, code: 'REPARTIDOR_ID_INVALID', error: 'Selecciona un unico repartidor concreto' });
++        res.status(422).json({ success: false, code: 'REPARTIDOR_ID_REQUIRED', error: 'Selecciona un unico repartidor concreto' });
+         return { allowed: false, hintedOwner: null };
+     }
+     if (!canAccessRepartidor(req, selected[0])) {
+         res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para consultar este repartidor' });
+diff --git a/backend/routes/repartidor-finanzas.js b/backend/routes/repartidor-finanzas.js
+--- a/backend/routes/repartidor-finanzas.js	
++++ b/backend/routes/repartidor-finanzas.js	
+@@ -114,10 +114,9 @@
+   const role = String(user.role || '').trim().toUpperCase();
+   const activeMode = String(user.activeMode || '').trim().toUpperCase();
+   // JEFE in Perfil Reparto (activeMode=REPARTIDOR) may supervise confirmations.
+   const allowed = role === 'REPARTIDOR'
+-    || role === 'ADMIN'
+-    || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
++    || ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR');
+   if (!allowed) {
+     return res.status(403).json({
+       success: false,
+       code: 'REPARTO_CONFIRMATION_ROLE_REQUIRED',
+@@ -142,43 +141,33 @@
+   const role = String(req.user?.role || '').trim().toUpperCase();
+   const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
+   const authenticated = actorCode(req.user);
+   const target = String(requested || '').trim();
+-  const supervisor = role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR';
+-  if (role === 'JEFE_VENTAS' && !supervisor) {
+-    throw new EvidenceError('EVIDENCE_REPARTO_MODE_REQUIRED', 'Activa el Perfil Reparto', 403);
+-  }
+   if (target && (target.toUpperCase() === 'ALL'
+       || target.includes(',') || !/^[A-Za-z0-9_-]{1,20}$/.test(target))) {
+-    throw new EvidenceError(
+-      'EVIDENCE_REPARTIDOR_REQUIRED',
+-      'Debe seleccionarse un unico repartidor concreto',
+-      422,
+-    );
++    throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'Debe seleccionarse un unico repartidor concreto', 422);
+   }
+-  if (role === 'ADMIN' || supervisor) {
+-    if (!target) {
+-      throw new EvidenceError(
+-        'EVIDENCE_REPARTIDOR_REQUIRED',
+-        'Debe seleccionarse un unico repartidor concreto',
+-        422,
+-      );
++  const visible = financeFleetCodes(req.user);
++  if (role === 'REPARTIDOR') {
++    if (visible.length !== 1 || !codesMatch(visible[0], authenticated)) {
++      throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
+     }
+-    if (role === 'ADMIN') return target;
+-    const visible = [
+-      ...(Array.isArray(req.user?.vendorCodes) ? req.user.vendorCodes : []),
+-      ...(Array.isArray(req.user?.vendedorCodes) ? req.user.vendedorCodes : []),
+-    ].map((code) => String(code || '').trim()).filter(Boolean);
+-    const selected = visible.find((code) => codesMatch(code, target));
+-    if (!selected) {
++    if (target && !codesMatch(visible[0], target)) {
+       throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
+     }
+-    return selected;
++    return visible[0];
+   }
+-  if (target && !codesMatch(authenticated, target)) {
++  if ((role !== 'JEFE_VENTAS' && role !== 'ADMIN') || activeMode !== 'REPARTIDOR') {
++    throw new EvidenceError('EVIDENCE_REPARTO_MODE_REQUIRED', 'Activa el Perfil Reparto', 403);
++  }
++  if (!target) {
++    throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'Debe seleccionarse un unico repartidor concreto', 422);
++  }
++  const selected = visible.find((code) => codesMatch(code, target));
++  if (!selected) {
+     throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
+   }
+-  return authenticated;
++  return selected;
+ }
+ 
+ function artifactActor(req, requested) {
+   return { role: req.user?.role, repartidorId: evidenceRepartidorId(req, requested) };
+@@ -448,16 +437,14 @@
+ 
+ function hasFinanceListRole(user) {
+   const role = String(user?.role || '').trim().toUpperCase();
+   const activeMode = String(user?.activeMode || '').trim().toUpperCase();
+-  return role === 'ADMIN' || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
++  return (role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR';
+ }
+ 
+ function financeFleetCodes(user) {
+-  return [
+-    ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
+-    ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
+-  ].filter((code) => typeof code === 'string' || typeof code === 'number')
++  return (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
++    .filter((code) => typeof code === 'string' || typeof code === 'number')
+     .map(normalizeCode).filter(Boolean);
+ }
+ 
+ function requireFinanceRepartidorSelector(req, res, next) {
+@@ -586,18 +573,19 @@
+   const role = String(user.role || '').trim().toUpperCase();
+   const selected = String(repartidorId || '').split(',').map(normalizeCode).filter(Boolean);
+   if (!selected.length || selected.some((code) => /^ALL$/i.test(code))) return false;
+   if (!allowMultiple && selected.length !== 1) return false;
+-  if (role === 'ADMIN') return true;
+-  if (role === 'JEFE_VENTAS') {
++  if (role === 'ADMIN' || role === 'JEFE_VENTAS') {
+     if (!hasFinanceListRole(user)) return false;
+     const visible = financeFleetCodes(user);
+     return visible.length > 0
+       && selected.every((target) => visible.some((allowed) => codesMatch(allowed, target)));
+   }
+   if (role !== 'REPARTIDOR' || selected.length !== 1) return false;
+   const userCode = normalizeCode(user.code || user.id || user.user);
+-  return codesMatch(userCode, selected[0]);
++  const visible = financeFleetCodes(user);
++  return visible.length === 1 && codesMatch(userCode, selected[0])
++    && codesMatch(visible[0], selected[0]);
+ }
+ 
+ function requireRepartidorAccess(resolveRepartidorId, options) {
+   return (req, res, next) => {
+diff --git a/backend/services/reparto-confirmation-contract.js b/backend/services/reparto-confirmation-contract.js
+--- a/backend/services/reparto-confirmation-contract.js	
++++ b/backend/services/reparto-confirmation-contract.js	
+@@ -276,12 +276,10 @@
+   return Boolean(canonicalRepartidorCode(value));
+ }
+ 
+ function actorFleetCodes(user) {
+-  return [
+-    ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
+-    ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
+-  ].filter((code) => typeof code === 'string' || typeof code === 'number')
++  return (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
++    .filter((code) => typeof code === 'string' || typeof code === 'number')
+     .map(canonicalRepartidorCode).filter(Boolean);
+ }
+ 
+ function ownershipError() {
+@@ -313,27 +311,21 @@
+   }
+ 
+   let repartidorId;
+   let privileged = false;
++  const fleet = actorFleetCodes(current);
+   if (role === 'REPARTIDOR') {
+     const requested = explicit || ownRepartidorId;
+-    if (!codesMatch(ownRepartidorId, requested)) throw ownershipError();
+-    repartidorId = ownRepartidorId;
+-  } else if (role === 'ADMIN') {
++    if (fleet.length !== 1 || !codesMatch(ownRepartidorId, requested)
++      || !codesMatch(fleet[0], requested)) throw ownershipError();
++    repartidorId = fleet[0];
++  } else if ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR') {
+     if (!explicit) {
+       throw new RepartoContractError('Debe seleccionarse un repartidor concreto', {
+         code: 'DELIVERY_REPARTIDOR_REQUIRED', statusCode: 422,
+       });
+     }
+-    repartidorId = explicit;
+-    privileged = true;
+-  } else if (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR') {
+-    if (!explicit) {
+-      throw new RepartoContractError('Debe seleccionarse un repartidor concreto', {
+-        code: 'DELIVERY_REPARTIDOR_REQUIRED', statusCode: 422,
+-      });
+-    }
+-    const selected = actorFleetCodes(current).find((code) => codesMatch(code, explicit));
++    const selected = fleet.find((code) => codesMatch(code, explicit));
+     if (!selected) throw ownershipError();
+     repartidorId = selected;
+     privileged = true;
+   } else {
+diff --git a/backend/src/chatbot/chatbot_authorization.js b/backend/src/chatbot/chatbot_authorization.js
+--- a/backend/src/chatbot/chatbot_authorization.js	
++++ b/backend/src/chatbot/chatbot_authorization.js	
+@@ -47,9 +47,9 @@
+ function authorizeChatbotRepartoScope(userContext = {}, requestedScope) {
+   const role = normalizeCode(userContext.role || userContext.rol);
+   const activeMode = normalizeCode(userContext.activeMode);
+   const repartoProfile = role === "REPARTIDOR"
+-    || (role === "JEFE_VENTAS" && activeMode === "REPARTIDOR");
++    || (["JEFE_VENTAS", "ADMIN"].includes(role) && activeMode === "REPARTIDOR");
+   if (requestedScope === null || requestedScope === undefined || requestedScope === "") {
+     return repartoProfile
+       ? { allowed: false, code: "REPARTO_SCOPE_REQUIRED", driverCodes: [] }
+       : { allowed: true, code: "NO_REPARTO_SCOPE", driverCodes: [] };
+@@ -61,21 +61,25 @@
+   if (role === "REPARTIDOR") {
+     const ownCode = normalizeCode(
+       userContext.codigoConductor || userContext.code || userContext.userCode,
+     );
++    const signedCodes = Array.isArray(userContext.repartidorCodes)
++      ? userContext.repartidorCodes.map(normalizeCode).filter(Boolean) : [];
+     const allowed = requested.codes.length === 1
+       && ownCode
+-      && codesMatch(requested.codes[0], ownCode);
++      && signedCodes.length === 1
++      && codesMatch(requested.codes[0], ownCode)
++      && codesMatch(requested.codes[0], signedCodes[0]);
+     return allowed
+       ? { allowed: true, code: "REPARTO_SCOPE_SELF", driverCodes: [ownCode] }
+       : { allowed: false, code: "REPARTO_SCOPE_FORBIDDEN", driverCodes: [] };
+   }
+-  if (role !== "JEFE_VENTAS" || activeMode !== "REPARTIDOR") {
++  if (!["JEFE_VENTAS", "ADMIN"].includes(role) || activeMode !== "REPARTIDOR") {
+     return { allowed: false, code: "REPARTO_SCOPE_FORBIDDEN", driverCodes: [] };
+   }
+-  const visibleValues = Array.isArray(userContext.vendorCodes)
+-    ? userContext.vendorCodes
+-    : (Array.isArray(userContext.vendedorCodes) ? userContext.vendedorCodes : []);
++  const visibleValues = Array.isArray(userContext.repartidorCodes)
++    ? userContext.repartidorCodes
++    : [];
+   const visibleCodes = [...new Set(visibleValues.map(normalizeCode).filter(Boolean))]
+     .filter((code) => code !== "ALL");
+   if (visibleCodes.length === 0) {
+     return { allowed: false, code: "REPARTO_SCOPE_UNVERIFIED", driverCodes: [] };
+@@ -101,9 +105,10 @@
+   "ALMACEN",
+ ]);
+ function isSupervisor(userContext = {}) {
+   const role = normalizeCode(userContext.role);
+-  if (role === "JEFE_VENTAS" && normalizeCode(userContext.activeMode) === "REPARTIDOR") return false;
++  if (["JEFE_VENTAS", "ADMIN"].includes(role)
++    && normalizeCode(userContext.activeMode) === "REPARTIDOR") return false;
+   if (SUPERVISOR_ROLES.has(role)) return true;
+   if (EXPLICIT_NON_SUPERVISOR_ROLES.has(role)) return false;
+   return false;
+ }
+diff --git a/backend/src/chatbot/llm-orchestrator.js b/backend/src/chatbot/llm-orchestrator.js
+--- a/backend/src/chatbot/llm-orchestrator.js	
++++ b/backend/src/chatbot/llm-orchestrator.js	
+@@ -31,9 +31,13 @@
+ }
+ 
+ function buildChatbotContext(user = {}, conversationHistory = []) {
+   const base = createChatbotUserContext(user);
+-  const tokenScope = normalizeVendorScope(user.vendorCodes || user.vendedorCodes);
++  const repartoProfile = base.role === 'REPARTIDOR'
++    || (['JEFE_VENTAS', 'ADMIN'].includes(base.role) && base.activeMode === 'REPARTIDOR');
++  const tokenScope = normalizeVendorScope(repartoProfile
++    ? user.repartidorCodes
++    : (user.vendorCodes || user.vendedorCodes));
+   const contextForScope = {
+     ...base,
+     vendorScope: tokenScope,
+   };
+@@ -87,9 +91,9 @@
+   }
+   context.repartidorScope = repartoAuthorization.driverCodes;
+   const role = normalizeCode(context.role);
+   const repartoProfile = role === 'REPARTIDOR'
+-    || (role === 'JEFE_VENTAS' && normalizeCode(context.activeMode) === 'REPARTIDOR');
++    || (['JEFE_VENTAS', 'ADMIN'].includes(role) && normalizeCode(context.activeMode) === 'REPARTIDOR');
+   if (repartoProfile) context.vendorScope = [...repartoAuthorization.driverCodes];
+ 
+   const moderation = moderateInput(text);
+   if (!moderation.allowed) {
+diff --git a/backend/src/chatbot/chatbot_handler.js b/backend/src/chatbot/chatbot_handler.js
+--- a/backend/src/chatbot/chatbot_handler.js	
++++ b/backend/src/chatbot/chatbot_handler.js	
+@@ -590,9 +590,9 @@
+     const repartidorScope = Array.isArray(context.repartidorScope) && context.repartidorScope.length
+         ? context.repartidorScope
+         : (userCode ? [userCode] : []);
+     const repartoProfile = context.role === 'REPARTIDOR'
+-        || (context.role === 'JEFE_VENTAS' && context.activeMode === 'REPARTIDOR');
++        || (['JEFE_VENTAS', 'ADMIN'].includes(context.role) && context.activeMode === 'REPARTIDOR');
+     if (repartoProfile && (!context.repartidorScope?.length
+         || vendorScope.some((code) => !repartidorScope.includes(code)))) {
+         throw new Error('CHATBOT_REPARTO_SCOPE_INVARIANT');
+     }
+diff --git a/backend/__tests__/auth-claims-resolver.test.js b/backend/__tests__/auth-claims-resolver.test.js
+--- a/backend/__tests__/auth-claims-resolver.test.js	
++++ b/backend/__tests__/auth-claims-resolver.test.js	
+@@ -27,15 +27,19 @@
+     findByCode: jest.fn().mockResolvedValue(user),
+     getVendorVisibilityScope: jest.fn(async (code, { role }) => (
+       role === 'JEFE_VENTAS' ? [code, '051', 'UNK'] : [code]
+     )),
++    listRepartidorFleet: jest.fn(async () => [
++      { code: String(user?.code || '050').trim().toUpperCase(), name: 'Repartidor' },
++      { code: '051', name: 'Otro' },
++    ]),
+   };
+   return { repository, resolver: createAuthClaimsResolver({ authRepository: repository }) };
+ }
+ 
+ describe('authoritative auth claims resolver', () => {
+-  test('targets claims version 3', () => {
+-    expect(AUTH_CLAIMS_VERSION).toBe(3);
++  test('targets claims version 4', () => {
++    expect(AUTH_CLAIMS_VERSION).toBe(4);
+   });
+ 
+   test('uses ERP preventista flag as the authoritative COMERCIAL base', async () => {
+     const { repository, resolver } = harness();
+@@ -55,8 +59,9 @@
+       codigoConductor: null,
+       matricula: null,
+       vendorCodes: ['050'],
+       vendedorCodes: ['050'],
++      repartidorCodes: [],
+       tipoVendedor: 'R',
+       showCommissions: false,
+       claimsVersion: AUTH_CLAIMS_VERSION,
+     });
+@@ -64,8 +69,9 @@
+     expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('050', { role: 'COMERCIAL' });
+     expect(Object.isFrozen(claims)).toBe(true);
+     expect(Object.isFrozen(claims.availableRoles)).toBe(true);
+     expect(Object.isFrozen(claims.vendorCodes)).toBe(true);
++    expect(Object.isFrozen(claims.repartidorCodes)).toBe(true);
+   });
+ 
+   test('defaults pure ERP repartidores to REPARTIDOR', async () => {
+     const { resolver } = harness({
+diff --git a/backend/__tests__/auth-claims-login-handler.test.js b/backend/__tests__/auth-claims-login-handler.test.js
+--- a/backend/__tests__/auth-claims-login-handler.test.js	
++++ b/backend/__tests__/auth-claims-login-handler.test.js	
+@@ -23,8 +23,9 @@
+     availableModes: Object.freeze(['COMERCIAL', 'REPARTIDOR']),
+     isJefeVentas: false, isRepartidor: true,
+     codigoConductor: '050', matricula: '1234ABC',
+     vendorCodes: Object.freeze(['050']), vendedorCodes: Object.freeze(['050']),
++    repartidorCodes: Object.freeze(['050']),
+     tipoVendedor: 'R', showCommissions: false,
+     claimsVersion: AUTH_CLAIMS_VERSION,
+     ...overrides,
+   });
+@@ -90,9 +91,9 @@
+         role: 'REPARTIDOR', availableRoles: ['COMERCIAL', 'REPARTIDOR'],
+         activeMode: 'REPARTIDOR', availableModes: ['COMERCIAL', 'REPARTIDOR'],
+         isJefeVentas: false, isRepartidor: true,
+         codigoConductor: '050', matricula: '1234ABC',
+-        vendorCodes: ['050'], vendedorCodes: ['050'],
++        vendorCodes: ['050'], vendedorCodes: ['050'], repartidorCodes: ['050'],
+         tipoVendedor: 'R', TIPOVENDEDOR: 'R',
+         showCommissions: false, claimsVersion: AUTH_CLAIMS_VERSION,
+       },
+       role: 'REPARTIDOR',
+@@ -104,8 +105,9 @@
+       codigoConductor: '050',
+       matricula: '1234ABC',
+       vendorCodes: ['050'],
+       vendedorCodes: ['050'],
++      repartidorCodes: ['050'],
+       tipoVendedor: 'R',
+       showCommissions: false,
+       claimsVersion: AUTH_CLAIMS_VERSION,
+       latestVersion: '3.3.1',
+diff --git a/backend/__tests__/auth.test.js b/backend/__tests__/auth.test.js
+--- a/backend/__tests__/auth.test.js	
++++ b/backend/__tests__/auth.test.js	
+@@ -9,8 +9,9 @@
+ const mockAuthRepository = {
+     findByCode: jest.fn(),
+     findRepartidorAssociation: jest.fn(),
+     getVendorVisibilityScope: jest.fn(),
++    listRepartidorFleet: jest.fn(),
+     logLoginAttempt: jest.fn(),
+ };
+ 
+ jest.mock('../config/db', () => ({
+@@ -511,9 +512,10 @@
+         test('derives authority from role and reparto mode, never a boolean flag', () => {
+             expect(authRoutes.repartidoresAccess({ role: 'REPARTIDOR', isJefeVentas: true })).toBe('SELF');
+             expect(authRoutes.repartidoresAccess({ role: 'JEFE_VENTAS', isJefeVentas: true })).toBe('DENIED');
+             expect(authRoutes.repartidoresAccess({ role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' })).toBe('FLEET');
+-            expect(authRoutes.repartidoresAccess({ role: 'ADMIN' })).toBe('FLEET');
++            expect(authRoutes.repartidoresAccess({ role: 'ADMIN' })).toBe('DENIED');
++            expect(authRoutes.repartidoresAccess({ role: 'ADMIN', activeMode: 'REPARTIDOR' })).toBe('FLEET');
+         });
+     });
+ 
+     describe('Active Sessions Management', () => {
+diff --git a/backend/__tests__/middleware/auth-middleware.test.js b/backend/__tests__/middleware/auth-middleware.test.js
+--- a/backend/__tests__/middleware/auth-middleware.test.js	
++++ b/backend/__tests__/middleware/auth-middleware.test.js	
+@@ -100,9 +100,9 @@
+         expect(next).toHaveBeenCalled();
+         expect(req.user).toBeDefined();
+         expect(req.user.code).toBe('001');
+         expect(req.user.role).toBe('COMERCIAL');
+-        expect(req.user.claimsVersion).toBe(3);
++        expect(req.user.claimsVersion).toBe(4);
+     });
+ 
+     test('should reject a stale v2 token and require login without calling next', async () => {
+         const token = await canonicalAccessToken({
+diff --git a/backend/__tests__/reparto-finance-fleet-authorization.test.js b/backend/__tests__/reparto-finance-fleet-authorization.test.js
+--- a/backend/__tests__/reparto-finance-fleet-authorization.test.js	
++++ b/backend/__tests__/reparto-finance-fleet-authorization.test.js	
+@@ -2,9 +2,9 @@
+ 
+ const express = require('express');
+ const request = require('supertest');
+ 
+-let mockUser = { id: 'V08', code: '08', role: 'REPARTIDOR' };
++let mockUser = { id: 'V08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'] };
+ 
+ jest.mock('../middleware/logger', () => ({
+   info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+ }));
+@@ -59,9 +59,9 @@
+ 
+ describe('finance fleet authorization', () => {
+   beforeEach(() => {
+     jest.clearAllMocks();
+-    mockUser = { id: 'V08', code: '08', role: 'REPARTIDOR' };
++    mockUser = { id: 'V08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'] };
+     financeService.getSummary.mockResolvedValue({ repartidorId: '8', summary: {} });
+     financeService.reverseCobro.mockResolvedValue({ reversed: true });
+     routes.resetCanonicalConfirmationRuntime();
+   });
+@@ -81,9 +81,9 @@
+ 
+   test('JEFE reparto can read only codes in authenticated fleet claims', async () => {
+     mockUser = {
+       id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+-      vendorCodes: ['08'], vendedorCodes: ['09'],
++      repartidorCodes: ['08'], vendedorCodes: ['09'],
+     };
+ 
+     let response = await request(app()).get('/finanzas/summary/8,09?year=2026&month=8');
+     expect(response.status).toBe(200);
+@@ -102,9 +102,9 @@
+     expect(financeService.getSummary).not.toHaveBeenCalled();
+   });
+ 
+   test('ADMIN has explicit concrete finance access while ALL remains unsupported', async () => {
+-    mockUser = { id: 'A1', code: '1', role: 'ADMIN' };
++    mockUser = { id: 'A1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['77'] };
+     let response = await request(app()).get('/finanzas/summary/77?year=2026&month=8');
+     expect(response.status).toBe(200);
+ 
+     financeService.getSummary.mockClear();
+@@ -115,9 +115,9 @@
+ 
+   test('finance mutation rejects foreign or absent JEFE scope before service', async () => {
+     const body = { idempotencyToken: 'fleet-reverse-0001', repartidorId: '08', reason: 'Duplicado' };
+     mockUser = {
+-      id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['08'],
++      id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08'],
+     };
+     let response = await request(app()).post('/finanzas/cobros/reverse').send(body);
+     expect(response.status).toBe(200);
+     expect(financeService.reverseCobro).toHaveBeenCalledTimes(1);
+@@ -138,17 +138,17 @@
+ describe('confirmation fleet authorization', () => {
+   test('JEFE reparto selects only a visible owner and canonicalizes 8 to 08', () => {
+     const command = confirmationRequest({
+       id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+-      vendorCodes: ['08'],
++      repartidorCodes: ['08'],
+     }, '8');
+     expect(command.actor).toMatchObject({ role: 'JEFE_VENTAS', repartidorId: '08' });
+     expect(command.delivery.repartidorId).toBe('08');
+   });
+   test('canonicalizes a numeric fleet claim independently from request spelling', () => {
+     const command = confirmationRequest({
+       id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+-      vendorCodes: ['8'],
++      repartidorCodes: ['8'],
+     }, '08');
+     expect(command.actor.repartidorId).toBe('08');
+     expect(command.delivery.repartidorId).toBe('08');
+   });
+@@ -156,24 +156,24 @@
+ 
+   test.each([
+     [{ id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' }, '08'],
+     [{
+-      id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['08'],
++      id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08'],
+     }, '09'],
+-    [{ id: 'V08', code: '08', role: 'REPARTIDOR' }, '09'],
++    [{ id: 'V08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'] }, '09'],
+   ])('rejects missing scope or foreign confirmation ownership', (user, target) => {
+     expect(() => confirmationRequest(user, target)).toThrow(expect.objectContaining({
+       code: 'DELIVERY_OWNERSHIP_REQUIRED', statusCode: 403,
+     }));
+   });
+ 
+   test.each(['ALL', '08,09'])('rejects non-concrete confirmation selector %s', (target) => {
+-    expect(() => confirmationRequest({ id: 'A1', code: '1', role: 'ADMIN' }, target))
++    expect(() => confirmationRequest({ id: 'A1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['77'] }, target))
+       .toThrow(expect.objectContaining({ statusCode: 422 }));
+   });
+ 
+   test('ADMIN can confirm for an explicit concrete owner', () => {
+-    expect(confirmationRequest({ id: 'A1', code: '1', role: 'ADMIN' }, '77').actor)
++    expect(confirmationRequest({ id: 'A1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['77'] }, '77').actor)
+       .toMatchObject({ role: 'ADMIN', repartidorId: '77', privileged: true });
+   });
+ 
+   test('HTTP confirmation rejects foreign JEFE owner before catalog and persistence', async () => {
+@@ -182,9 +182,9 @@
+     routes.setCanonicalConfirmationRuntime({
+       catalogService: { validateConfirmation }, confirmationService: { confirm },
+     });
+     mockUser = {
+-      id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['08'],
++      id: 'V98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08'],
+     };
+ 
+     let response = await request(app()).post('/finanzas/rutero/confirm-delivery-cobro')
+       .set('Idempotency-Key', 'fleet-route-denied-1').send(confirmationPayload('09'));
+diff --git a/backend/__tests__/chatbot_reparto_scope.test.js b/backend/__tests__/chatbot_reparto_scope.test.js
+--- a/backend/__tests__/chatbot_reparto_scope.test.js
++++ b/backend/__tests__/chatbot_reparto_scope.test.js
+@@ -1,244 +1,244 @@
+ 'use strict';
+ 
+ jest.mock('../config/db', () => ({
+   getPool: jest.fn(),
+ }));
+ jest.mock('../src/chatbot/chatbot_handler', () => ({
+   handleChatMessage: jest.fn(async () => 'ok'),
+ }));
+ jest.mock('../middleware/logger', () => ({
+   debug: jest.fn(),
+   info: jest.fn(),
+   warn: jest.fn(),
+   error: jest.fn(),
+ }));
+ 
+ const logger = require('../middleware/logger');
+ const { getPool } = require('../config/db');
+ const { handleChatMessage } = require('../src/chatbot/chatbot_handler');
+ const {
+   authorizeChatbotRepartoScope,
+   resolveChatbotClientOwner,
+ } = require('../src/chatbot/chatbot_authorization');
+ const { processMessage } = require('../src/chatbot/llm-orchestrator');
+ const { repartidorTools } = require('../src/chatbot/chatbot_tools');
+ 
+ describe('chatbot reparto scope authorization', () => {
+   test('REPARTIDOR can only select its own canonical driver code', () => {
+     expect(authorizeChatbotRepartoScope({
+       code: '03',
+       role: 'REPARTIDOR',
+       activeMode: 'REPARTIDOR',
+       codigoConductor: '03',
+-      vendorCodes: ['03'],
++      repartidorCodes: ['03'],
+     }, '3')).toEqual({
+       allowed: true,
+       code: 'REPARTO_SCOPE_SELF',
+       driverCodes: ['03'],
+     });
+     expect(authorizeChatbotRepartoScope({
+       code: '03',
+       role: 'REPARTIDOR',
+       activeMode: 'REPARTIDOR',
+       codigoConductor: '03',
+-      vendorCodes: ['03'],
++      repartidorCodes: ['03'],
+     }, '04')).toMatchObject({ allowed: false, code: 'REPARTO_SCOPE_FORBIDDEN' });
+   });
+ 
+   test('BOLA and literal ALL are rejected as exact invalid or foreign codes', () => {
+     const jefe = {
+       code: '01',
+       role: 'JEFE_VENTAS',
+       activeMode: 'REPARTIDOR',
+-      vendorCodes: ['03', '04'],
++      repartidorCodes: ['03', '04'],
+     };
+     expect(authorizeChatbotRepartoScope(jefe, 'BOLA')).toMatchObject({
+       allowed: false,
+       code: 'REPARTO_SCOPE_FORBIDDEN',
+     });
+     expect(authorizeChatbotRepartoScope(jefe, 'ALL')).toMatchObject({
+       allowed: false,
+       code: 'REPARTO_SCOPE_INVALID',
+     });
+   });
+ 
+   test('JEFE_VENTAS in reparto mode can select one or an authorized fleet CSV', () => {
+     const jefe = {
+       code: '01',
+       role: 'JEFE_VENTAS',
+       activeMode: 'REPARTIDOR',
+-      vendorCodes: ['03', '04', '05'],
++      repartidorCodes: ['03', '04', '05'],
+     };
+     expect(authorizeChatbotRepartoScope(jefe, '04')).toEqual({
+       allowed: true,
+       code: 'REPARTO_SCOPE_SELECTED',
+       driverCodes: ['04'],
+     });
+     expect(authorizeChatbotRepartoScope(jefe, '03,05')).toEqual({
+       allowed: true,
+       code: 'REPARTO_SCOPE_FLEET',
+       driverCodes: ['03', '05'],
+     });
+     expect(authorizeChatbotRepartoScope(jefe, '03,99')).toMatchObject({
+       allowed: false,
+       code: 'REPARTO_SCOPE_FORBIDDEN',
+     });
+   });
+ 
+   test('reparto profiles require an explicit selector', () => {
+     expect(authorizeChatbotRepartoScope({ code: '08', role: 'REPARTIDOR' }, null))
+       .toMatchObject({ allowed: false, code: 'REPARTO_SCOPE_REQUIRED' });
+     expect(authorizeChatbotRepartoScope({ code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' }, null))
+       .toMatchObject({ allowed: false, code: 'REPARTO_SCOPE_REQUIRED' });
+   });
+ 
+   test('canonicalizes selected codes to the visible code', () => {
+     expect(authorizeChatbotRepartoScope({
+-      code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['08'],
++      code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08'],
+     }, '8')).toMatchObject({ allowed: true, driverCodes: ['08'] });
+   });
+ 
+   test('scope request requires the actual JEFE reparto mode', () => {
+     expect(authorizeChatbotRepartoScope({
+       code: '01',
+       role: 'JEFE_VENTAS',
+       activeMode: 'COMERCIAL',
+-      vendorCodes: ['03'],
++      repartidorCodes: ['03'],
+     }, '03')).toMatchObject({ allowed: false, code: 'REPARTO_SCOPE_FORBIDDEN' });
+   });
+ });
+ 
+ describe('chatbot reparto scope propagation', () => {
+   beforeEach(() => {
+     jest.clearAllMocks();
+   });
+ 
+   test('validated fleet restricts both reparto and vendor scope', async () => {
+     const conn = { close: jest.fn(async () => {}) };
+     getPool.mockReturnValue({ connect: jest.fn(async () => conn) });
+ 
+     const result = await processMessage({
+       message: 'entregas de hoy',
+       repartidorId: '03,05',
+       user: {
+         code: '01',
+         role: 'JEFE_VENTAS',
+         activeMode: 'REPARTIDOR',
+         isJefeVentas: true,
+-        vendorCodes: ['03', '04', '05'],
++        repartidorCodes: ['03', '04', '05'],
+       },
+     });
+ 
+     expect(result).toMatchObject({ success: true, response: 'ok' });
+     const context = handleChatMessage.mock.calls[0][4];
+     expect(context.vendorScope).toEqual(['03', '05']);
+     expect(context.repartidorScope).toEqual(['03', '05']);
+     expect(context.isJefeVentas).toBe(false);
+     expect(conn.close).toHaveBeenCalled();
+   });
+ 
+   test.each([
+     [{ code: '08', role: 'REPARTIDOR' }],
+-    [{ code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['08'] }],
++    [{ code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08'] }],
+   ])('missing reparto selector is denied before a connection opens', async (user) => {
+     const result = await processMessage({ message: 'entregas de hoy', user });
+     expect(result).toMatchObject({ success: false, statusCode: 422, error: 'REPARTO_SCOPE_REQUIRED' });
+     expect(getPool).not.toHaveBeenCalled();
+     expect(handleChatMessage).not.toHaveBeenCalled();
+   });
+ 
+   test('foreign BOLA scope is denied before a connection is opened', async () => {
+     const result = await processMessage({
+       message: 'entregas de hoy',
+       repartidorId: 'BOLA',
+       user: {
+         code: '01',
+         role: 'JEFE_VENTAS',
+         activeMode: 'REPARTIDOR',
+         isJefeVentas: true,
+-        vendorCodes: ['03', '04'],
++        repartidorCodes: ['03', '04'],
+       },
+     });
+ 
+     expect(result).toMatchObject({
+       success: false,
+       statusCode: 403,
+       error: 'REPARTO_SCOPE_FORBIDDEN',
+     });
+     expect(getPool).not.toHaveBeenCalled();
+     expect(handleChatMessage).not.toHaveBeenCalled();
+   });
+ });
+ 
+ describe('chatbot reparto SQL contract', () => {
+   test('fleet collections use bound placeholders and aggregate returned rows', async () => {
+     const conn = {
+       query: jest.fn(async () => [{
+         CLIENTE: 'C1',
+         NOMBRE_CLIENTE: 'Cliente',
+         TOTAL_COBRABLE: 100,
+         TOTAL_COBRADO: 50,
+         NUM_DOCUMENTOS: 2,
+       }]),
+     };
+ 
+     const result = await repartidorTools.getRepartidorCollections(
+       conn, ['03', '05'], 8, 2026,
+     );
+ 
+     const [sql, params] = conn.query.mock.calls[0];
+     expect(sql).toMatch(/TRIM\(OPP\.CODIGOREPARTIDOR\) IN \(\?,\?\)/);
+     expect(sql).not.toMatch(/IN \(\s*\)/);
+     expect(params).toEqual([8, 2026, '03', '05']);
+     expect(result.summary).toMatchObject({
+       totalCollectable: 100,
+       totalCollected: 50,
+       overallPercentage: 50,
+     });
+   });
+ 
+   test('empty reparto scope fails before SQL construction', async () => {
+     const conn = { query: jest.fn() };
+     await expect(repartidorTools.getRepartidorDeliveries(
+       conn, [], 2026, 8, 18,
+     )).rejects.toThrow('REPARTO_SCOPE_REQUIRED');
+     expect(conn.query).not.toHaveBeenCalled();
+   });
+ });
+ 
+ describe('chatbot diagnostics are redacted', () => {
+   beforeEach(() => {
+     jest.clearAllMocks();
+   });
+ 
+   test('ownership lookup logs only an allowlisted event', async () => {
+     const diagnostic = 'SQL0204 DSEDAC.CLI C:\\private\\query.sql params=[BOLA]';
+     const conn = { query: jest.fn(async () => { throw new Error(diagnostic); }) };
+ 
+     const result = await resolveChatbotClientOwner(conn, 'C1');
+ 
+     expect(result).toMatchObject({ verified: false });
+     const logged = JSON.stringify(logger.mock?.calls || {
+       warn: logger.warn.mock.calls,
+       error: logger.error.mock.calls,
+     });
+     expect(logged).not.toContain(diagnostic);
+     expect(logger.warn).toHaveBeenCalledWith(
+       'CHATBOT_AUTHORIZATION_LOOKUP_FAILED',
+     );
+   });
+ 
+   test('tool query failures expose neither DB error nor SQL text', async () => {
+     const diagnostic = 'SQLSTATE 42704 DSEDAC.OPP C:\\private\\driver.sql params=03';
+     const conn = { query: jest.fn(async () => { throw new Error(diagnostic); }) };
+ 
+     const result = await repartidorTools.getRepartidorDeliveries(
+       conn, ['03'], 2026, 8, 18,
+     );
+ 
+     expect(result.totalDeliveries).toBe(0);
+     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(diagnostic);
+     expect(logger.error).toHaveBeenCalledWith('CHATBOT_DATABASE_QUERY_FAILED');
+   });
+ });
+ 
+

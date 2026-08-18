@@ -1,0 +1,13 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -218,7 +218,0 @@
+-function missingSourceIdentities(sourceColumns, destinationColumns) {
+-  const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
+-  return sourceColumns
+-    .filter((source) => source.identity && !destinationByName.get(source.name)?.identity)
+-    .map((source) => source.name);
+-}
+-
+@@ -1672 +1665,0 @@
+-  missingSourceIdentities,

@@ -1,0 +1,12 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -679,4 +679,5 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+-      onSelected: (clientId) {
+-        final client = _clients.firstWhere((c) => c.id == clientId);
+-        _loadClientDocuments(clientId, client.name);
++      onSelected: (selectionKey) {
++        final client = _clients.firstWhere((c) => c.selectionKey == selectionKey);
++        _loadClientDocuments(client.id, client.name,
++            repartidorId: client.repartidorId);
+       },

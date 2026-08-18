@@ -1,0 +1,59 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -186,4 +186,6 @@
+-    required this.collected,
+-  });
+-
+-  factory DailyCollection.fromJson(Map<String, dynamic> json) {
++    required this.collected,
++    this.pending = 0,
++    this.collectionAvailability = 'COMPLETE',
++  });
++
++  factory DailyCollection.fromJson(Map<String, dynamic> json) {
+@@ -194,2 +196,6 @@
+-      collected: ((json['collected'] ?? 0) as num).toDouble(),
+-    );
++      collected: ((json['collected'] ?? 0) as num).toDouble(),
++      pending: ((json['pending'] ?? 0) as num).toDouble(),
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++    );
+@@ -200,4 +206,30 @@
+-  final double collected;
+-}
+-
+-/// Cliente del historial
++  final double collected;
++  final double pending;
++  final String collectionAvailability;
++}
++
++class DailyCollectionsResult {
++  DailyCollectionsResult({
++    required this.collectionAvailability,
++    required List<DailyCollection> daily,
++  }) : daily = List.unmodifiable(daily);
++
++  factory DailyCollectionsResult.fromJson(Map<String, dynamic> json) {
++    return DailyCollectionsResult(
++      collectionAvailability:
++          (json['collectionAvailability'] as String?)?.toUpperCase() ??
++              'COMPLETE',
++      daily: (json['daily'] as List? ?? const <dynamic>[])
++          .whereType<Map>()
++          .map((item) => DailyCollection.fromJson(Map<String, dynamic>.from(item)))
++          .toList(),
++    );
++  }
++
++  final String collectionAvailability;
++  final List<DailyCollection> daily;
++
++  bool get isPartial => collectionAvailability == 'PARTIAL';
++}
++
++/// Cliente del historial
+

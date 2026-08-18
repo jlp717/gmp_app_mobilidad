@@ -474,6 +474,30 @@ async function initDb() {
     return pool._odbcPool;
 }
 
+/**
+ * Acquires a raw pooled connection with the same CCSID/library preparation
+ * used by query() and queryWithParams(). Canonical repositories must use this
+ * helper so string binds behave identically on every fresh IBM i job.
+ */
+async function acquireConfiguredConnection() {
+    const initializedPool = await initDb();
+    const activePool = initializedPool || getPool();
+    if (!activePool || typeof activePool.connect !== 'function') {
+        const error = new Error('DB2 pooled connection is unavailable');
+        error.code = 'REPARTO_DB2_POOL_UNAVAILABLE';
+        error.statusCode = 503;
+        throw error;
+    }
+    const connection = await activePool.connect();
+    try {
+        await ensureUtf8(connection);
+        return connection;
+    } catch (error) {
+        try { await connection.close(); } catch (_) { /* best-effort release */ }
+        throw error;
+    }
+}
+
 let poolRecreateDelay = 1000;
 
 async function recreatePool() {
@@ -893,6 +917,7 @@ module.exports = {
     runWithDbRequestContext,
     initDb,
     query,
+    acquireConfiguredConnection,
     queryWithParams,
     getPool,
     closePool

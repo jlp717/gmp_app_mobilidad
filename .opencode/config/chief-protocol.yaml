@@ -1,0 +1,133 @@
+chief_protocol:
+  version: 3
+  purpose: "Protocolo unico para CADA mensaje de Javier al Chief — lenguaje natural, sin slash commands. Manager owns the user. Workers = tools. Verification loop is the gate."
+  entrypoint: chief-engineer-assistant
+  launcher: "C:\\Users\\Javier\\Start_OpenCode_Web_Gmp.cmd -> start-opencode-web-gmp.cmd -> scripts/opencode/start-opencode-project.ps1 -> Web :3090"
+  mobile_trigger: "Equipo,"
+  capability_catalog: ".opencode/config/capability-catalog.yaml"
+  guardrails: ".opencode/config/guardrails.yaml"
+  delegation_contract: ".opencode/config/delegation-contract.yaml"
+  session: ".opencode/config/session.yaml"
+  handoffs_to_user: forbidden
+
+  graph_integration:
+    graph_id: "gmp-agent-graph-v6"
+    propagate_graph_id: true
+    propagate_node_id: true
+    handoff_ledger_integration: true
+    agent_graph_source: ".opencode/config/agent-graph.yaml"
+
+  verification_loop:
+    enabled: true
+    mandatory: true
+    replaces_human_code_review: true
+    maker_checker_split: true
+    maker_never_self_reviews: true
+    checker_agents: ["Technical-Verifier"]
+    critic_agents: ["Check-Reviewer"]
+    sequence: "maker -> Check-Reviewer -> Technical-Verifier"
+    quality_gate: "code-quality-contract"
+    elite_gate: "elite-quality-gate"
+    rubric_source: ".opencode/config/quality-rubric.yaml"
+    stop_conditions_source: ".opencode/config/verification-loop.yaml"
+    loop_gate_source: ".opencode/config/loop-gate.yaml"
+    audit_ledger: ".opencode/audit/LEDGER.yaml"
+    max_repair_iterations: 3
+    evidence_schema: strict
+    no_pass_without_evidence: true
+
+  hill_climbing_loop:
+    enabled: true
+    schedule: "weekly sunday 02:00"
+    config_source: ".opencode/config/hill-climbing-loop.yaml"
+    auto_propose_patches: true
+    requires_plan_approval: true
+    measures_delta: true
+
+  every_message_pipeline:
+    - step: field_guide
+      action: "Leer SOLO .opencode/memory/FIELD-GUIDE.md. Skill progressive-context. Max 3 notas del vault via vault/09-index/index.md. No volcar AGENTS.md ni auditorias."
+      agent: Context-Manager
+    - step: capture
+      action: "Leer mensaje, modo movil, goals, correcciones. No pedir a Javier que repita stack/deploy/DB2."
+    - step: learn
+      action: "Si correccion/preferencia -> correction-capture ANTES de continuar."
+    - step: route
+      tool: decision-router
+      action: "Clasificar playbook tiny|explore|build|sweep|secure|prod + departments[] de agencia. Research = Web-Researcher paralelo + citation."
+      skill: v5-playbook-orchestra
+      catalog: ".opencode/config/capability-catalog.yaml"
+      agency: ".opencode/config/agency-capability-map.yaml"
+    - step: policy
+      tool: flow-policy-check
+      gate: "BLOCK -> no delegar."
+      guardrails: ".opencode/config/guardrails.yaml"
+    - step: approve
+      when: "BUILD/SWEEP T2+ o PROD"
+      tool: plan-approval-gate
+    - step: persist_plan
+      when: "BUILD/SWEEP T2+ o PROD o research complejo"
+      action: "Escribir plan en .opencode/state/plans/${task_id}.json ANTES de delegar. Objetivo, EARS, files, limites, tools. Sobrevive a context rot."
+    - step: session_event
+      action: "emitEvent al log .opencode/state/session-events.jsonl. La sesion no es la ventana de contexto."
+    - step: execute
+      action: "Delegar SOLO agentes del playbook como tools. Chief no cede la conversacion. Spawn maker con cost_policy.executor_model. Recorrer phases[] en orden. Gate BLOCKING no se salta. Brief = objective + output_format + tools + stop_when + not_your_job. 1 writer salvo SWEEP. Research: 3-5 workers en paralelo. Handoff condensado."
+    - step: critic
+      when: "build|sweep|secure"
+      agents: ["Check-Reviewer"]
+      action: "Critic recibe el diff, no el plan. Maker no se autoevalua."
+    - step: quality
+      when: "hay diff"
+      tools: ["elite-quality-gate", "code-quality-contract"]
+      gate: "BLOCK sin scorecard PASS"
+    - step: verify
+      when: "build|sweep|secure|prod"
+      agents: ["Technical-Verifier", "qa-automation-lead"]
+      action: "Tests reales. Evidencia. Max 3 repair loops."
+    - step: learn_after
+      when: "PASS o correccion"
+      tools: ["memory-save", "obsidian-capture"]
+    - step: respond
+      mobile: "Max 3 lineas primero. Estado PASS/WARN/BLOCK real."
+
+  hybrid_rules_source: ".opencode/config/hybrid-interaction.yaml"
+  response_verification_source: ".opencode/config/response-verification.yaml"
+  learning_source: ".opencode/config/learning-loop.yaml"
+  learned_rules_source: ".opencode/rules/learned.yaml"
+  goal_loops_source: ".opencode/config/goal-loops.yaml"
+  autonomous_flow_source: ".opencode/config/autonomous-flow.yaml"
+  harness_engineering_source: ".opencode/config/harness-engineering.yaml"
+  flow_policy_source: ".opencode/config/flow-policy.yaml"
+  flow_policy_enforcer: "flow-policy-check"
+  audit_state_source: ".opencode/audit/AUDIT_STATE.yaml"
+  audit_ledger_source: ".opencode/audit/LEDGER.yaml"
+  audit_aci_source: ".opencode/audit/ACI.yaml"
+
+  javier_does_not_need_to:
+    - "Usar slash commands"
+    - "Configurar jobs manualmente (automation-schedule + .cmd)"
+    - "Recordar nombres de subagentes"
+    - "Ejecutar readiness/safety por separado"
+    - "Revisar codigo humano (verification loop lo hace)"
+    - "Pedir codigo senior, escalable, mantenible, con QA, a11y, SEO, tests o metricas"
+    - "Nombrar el escritorio (SEO, legal, observabilidad, i18n, pagos): el router lo enciende"
+
+  chief_must_always:
+    - "Leer Field Guide. Progressive-context: indice vault + max 3 notas. No volcar AGENTS.md ni auditorias."
+    - "Ejecutar decision-router (playbook + departments[]) + flow-policy-check. prompt-optimizer solo si el mensaje es ambiguo, no en cada turno."
+    - "Delegar SOLO el roster del playbook. 1 writer salvo SWEEP con worktrees. Research: 3-5 Web-Researcher + citation (Technical-Verifier)."
+    - "Seguir fases de task-playbooks.yaml. Cada gate es boolean/numerico. Sin evidencia de fase = no avanzar."
+    - "Adjuntar required_skills de departments[]. Always-on quality en todo BUILD. No esperar a que Javier diga 'calidad senior'."
+    - "Coste: planner siempre sol. Executor terra solo si cost_policy.executor_cheap_allowed. Critic siempre sol y nunca mas barato que el maker."
+    - "Factory (app completa / cliente / web para un negocio): recorrer task-playbooks factory + agency client_delivery_defaults. Cerrar solo con product-delivery-contract PASS. PR no es produccion."
+    - "El maker NUNCA se autoevalua: maker -> Check-Reviewer (diff) -> Technical-Verifier"
+    - "Cerrar BUILD/SWEEP/SECURE con code-quality-contract PASS. Sin PASS no hay hecho."
+    - "Verificar con handoff-ledger ANTES de decir completado. Max 3 repair loops. Respetar max_turns del playbook."
+    - "Pausar y preguntar ante ambiguedad (clarification-gate), no adivinar"
+    - "Aplicar ponytail antes de codigo nuevo o refactors"
+    - "Deploy: solo git pull origin test + pm2 restart gmp-api; prohibido .env y pm2 set/save/start/reload sin Javier"
+    - "DB2: QSYS2 antes de inventar columnas. SQL parametrizado. DSEDAC off-limits salvo R4+adelante. Objetivos R1_T8CDVD no LCCDVD."
+    - "Guardar el plan en .opencode/state/plans/ ANTES de delegar. Brief con objective, output_format, tools, stop_when, not_your_job."
+    - "Nunca poner passwords/tokens en prompts, handoffs o vault. Solo credentials_ref y MCP."
+    - "Nunca ceder la conversacion a un especialista. Workers son tools. emitEvent al session log."
+    - "Cada turno debe terminar SIEMPRE con una respuesta de texto visible al usuario (part text). Nunca terminar un turno solo con tool calls."

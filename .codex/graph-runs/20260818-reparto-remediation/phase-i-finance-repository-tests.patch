@@ -1,0 +1,69 @@
+diff --git a/backend/__tests__/reparto-finance-seed.test.js b/backend/__tests__/reparto-finance-seed.test.js
+--- a/backend/__tests__/reparto-finance-seed.test.js
++++ b/backend/__tests__/reparto-finance-seed.test.js
+@@ -20,12 +20,13 @@
+   skipIsolatedTestFinanceSeed,
+   assertIsolatedTestWriteTable,
+   FinanceRepoSchemaError,
++  resolveFinanceBindings,
+ } = require('../repositories/reparto-finance-db2-repository');
+ 
+-describe('isolated_test finance seed', () => {
+-  test('skips durable copy while Jest is running', async () => {
++describe('isolated_test finance single-source contract', () => {
++  test('disables runtime copy independently of Jest', async () => {
+@@ -34,7 +35,7 @@
+       dateYmd: 20260817,
+     });
+     expect(result.skipped).toBe(true);
+-    expect(result.reason).toBe('test');
++    expect(result.reason).toBe('explicit_copy_script_required');
+     expect(queryWithParams).not.toHaveBeenCalled();
+     expect(skipIsolatedTestFinanceSeed()).toBe(true);
+@@ -44,7 +45,7 @@
+       .toThrow(FinanceRepoSchemaError);
+   });
+ 
+-  test('copies production into JAVIER.TEST_* only when forced', async () => {
++  test('refuses runtime copy even when legacy caller passes force', async () => {
+@@ -59,11 +60,9 @@
+       dateYmd: 20260817,
+       force: true,
+     });
+-    expect(result.skipped).toBe(false);
+-    const sql = queryWithParams.mock.calls.map(([text]) => text).join('\n');
+-    expect(sql).toMatch(/FROM DSEDAC\.LQD LQD/);
+-    expect(sql).toMatch(/INSERT INTO JAVIER\.TEST_REPARTIDOR_COBROS/);
+-    expect(sql).not.toMatch(/INSERT INTO JAVIER\.REPARTIDOR_COBROS/);
+-    expect(sql).not.toMatch(/INSERT INTO DSEDAC\./);
++    expect(result).toEqual({ skipped: true, reason: 'explicit_copy_script_required' });
++    expect(queryWithParams).not.toHaveBeenCalled();
+   });
+@@ -78,7 +77,29 @@
+     expect(sums).toEqual({ gastos: 12, ingresoBanco: 3, ajustes: -1 });
+     const sql = queryWithParams.mock.calls.map(([text]) => text).join('\n');
+-    expect(sql).toContain('SYSIBM.SYSDUMMY1');
+-    expect(sql).not.toContain('STRUCTURED_OVERLAY');
++    expect(sql).toContain('JAVIER.TEST_REPARTIDOR_LIQUIDACION_GASTOS');
++    expect(sql).toContain('JAVIER.TEST_REPARTIDOR_LIQUIDACION_INGRESOS');
++    expect(sql).toContain('JAVIER.TEST_REPARTIDOR_LIQUIDACION_AJUSTES');
++    expect(sql).not.toMatch(/JAVIER\.(?!TEST_)(?:REPARTIDOR_|REPARTO_)/);
++  });
++
++  test('production runtime keeps production app mapping', () => {
++    const bindings = resolveFinanceBindings({
++      NODE_ENV: 'production',
++      REPARTO_ENVIRONMENT: 'production',
++      REPARTO_TABLE_SET: 'production',
++      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
++      REPARTO_WRITES_ENABLED: 'false',
++      ODBC_DSN: 'GMP',
++      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
++      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
++      REPARTIDOR_FINANCE_ERP_SCHEMA: 'DSEDAC',
++    });
++    expect(bindings.tables.cobros).toBe('JAVIER.REPARTIDOR_COBROS');
++    expect(bindings.tables.balances).toBe('JAVIER.REPARTIDOR_FINANCIAL_BALANCES');
++    expect(bindings.tables.liquidationOps).toBe('JAVIER.REPARTIDOR_LIQUIDACION_OPS');
+   });
+ });

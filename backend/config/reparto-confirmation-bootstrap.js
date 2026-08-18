@@ -66,18 +66,9 @@ function unavailableCobrosPort() {
 }
 
 /** A request acquires exactly one pooled DB2 connection, lazily. */
-function createDb2ConnectionFactory({ initDb, getPool }) {
-  if (typeof initDb !== 'function' || typeof getPool !== 'function') throw new TypeError('initDb and getPool are required');
-  return async function connectionFactory() {
-    const initializedPool = await initDb();
-    const pool = initializedPool || getPool();
-    if (!pool || typeof pool.connect !== 'function') {
-      const error = new Error('DB2 pooled connection is unavailable');
-      error.code = 'REPARTO_DB2_POOL_UNAVAILABLE';
-      throw error;
-    }
-    return pool.connect();
-  };
+function createDb2ConnectionFactory({ acquireConfiguredConnection }) {
+  if (typeof acquireConfiguredConnection !== 'function') throw new TypeError('acquireConfiguredConnection is required');
+  return async function connectionFactory() { return acquireConfiguredConnection(); };
 }
 
 function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } = {}) {
@@ -96,7 +87,7 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
   if (!capabilitySatisfied) {
     return Object.freeze({ enabled: false, diagnostic, runtime: disabledRuntime() });
   }
-  if (!db || typeof db.initDb !== 'function' || typeof db.getPool !== 'function') {
+  if (!db || typeof db.acquireConfiguredConnection !== 'function') {
     logger.warn?.('[REPARTO_CONFIRMATION_RUNTIME] DB2 bootstrap dependency unavailable');
     return Object.freeze({
       enabled: false,

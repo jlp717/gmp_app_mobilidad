@@ -10,6 +10,7 @@ const mockAuthRepository = {
     findByCode: jest.fn(),
     findRepartidorAssociation: jest.fn(),
     getVendorVisibilityScope: jest.fn(),
+    listRepartidorFleet: jest.fn(),
     logLoginAttempt: jest.fn(),
 };
 
@@ -504,6 +505,16 @@ describe('Auth Flow Tests', () => {
                 code: 'AUTH_RELOGIN_REQUIRED',
             }));
             expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Repartidores fleet authorization', () => {
+        test('derives authority from role and reparto mode, never a boolean flag', () => {
+            expect(authRoutes.repartidoresAccess({ role: 'REPARTIDOR', isJefeVentas: true })).toBe('SELF');
+            expect(authRoutes.repartidoresAccess({ role: 'JEFE_VENTAS', isJefeVentas: true })).toBe('DENIED');
+            expect(authRoutes.repartidoresAccess({ role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' })).toBe('FLEET');
+            expect(authRoutes.repartidoresAccess({ role: 'ADMIN' })).toBe('DENIED');
+            expect(authRoutes.repartidoresAccess({ role: 'ADMIN', activeMode: 'REPARTIDOR' })).toBe('FLEET');
         });
     });
 

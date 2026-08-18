@@ -23,6 +23,47 @@ function text(value) {
   return String(value || '').trim() || '—';
 }
 
+function roundedQty(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
+}
+
+function requiredText(value, field) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) throw new TypeError(`El PDF de diferencias requiere ${field}`);
+  return normalized;
+}
+
+function requiredQty(value, field) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new TypeError(`Cantidad de diferencia inválida: ${field}`);
+  }
+  return roundedQty(amount);
+}
+
+function buildVariancePdfModel(payload = {}) {
+  const documentId = requiredText(payload.documentId, 'documento');
+  const confirmedAt = requiredText(payload.confirmedAt || payload.fecha, 'fecha/hora de confirmación');
+  const repartidorId = requiredText(payload.repartidorId, 'repartidor');
+  const clienteCodigo = String(payload.clienteCodigo ?? '').trim();
+  const clienteNombre = String(payload.clienteNombre ?? '').trim();
+  if (!clienteCodigo && !clienteNombre) throw new TypeError('El PDF de diferencias requiere cliente');
+  if (!Array.isArray(payload.lineas)) throw new TypeError('El PDF de diferencias requiere líneas');
+  const lineas = payload.lineas.map((line, index) => {
+    if (!line || typeof line !== 'object') throw new TypeError(`Línea de diferencia inválida: ${index + 1}`);
+    const cantidadPedida = requiredQty(line.cantidadPedida, `línea ${index + 1} pedida`);
+    const cantidadEntregada = requiredQty(line.cantidadEntregada, `línea ${index + 1} entregada`);
+    const cantidadRechazada = requiredQty(line.cantidadRechazada, `línea ${index + 1} rechazada`);
+    const cantidadPendiente = requiredQty(line.cantidadPendiente, `línea ${index + 1} pendiente`);
+    const diff = roundedQty(Number(line.diff));
+    const calculatedDiff = roundedQty(cantidadEntregada - cantidadPedida);
+    if (!Number.isFinite(diff) || Math.abs(diff - calculatedDiff) > 0.0001) throw new TypeError(`Diferencia de línea incoherente: ${index + 1}`);
+    return { codigoArticulo: text(line.codigoArticulo), descripcion: text(line.descripcion || line.lineaId), cantidadPedida, cantidadEntregada, cantidadRechazada, cantidadPendiente, diff, motivoDiferencia: text(line.motivoDiferencia) };
+  });
+  const totals = lineas.reduce((acc, line) => ({ pedida: roundedQty(acc.pedida + line.cantidadPedida), entregada: roundedQty(acc.entregada + line.cantidadEntregada), rechazada: roundedQty(acc.rechazada + line.cantidadRechazada), pendiente: roundedQty(acc.pendiente + line.cantidadPendiente), diff: roundedQty(acc.diff + line.diff) }), { pedida: 0, entregada: 0, rechazada: 0, pendiente: 0, diff: 0 });
+  return { ...payload, documentId, confirmedAt, fecha: String(payload.fecha || confirmedAt).trim(), repartidorId, clienteCodigo, clienteNombre, lineas, totals };
+}
+
 function buildVariancePdfBuffer(payload = {}) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 36, size: 'A4' });
@@ -31,11 +72,20 @@ function buildVariancePdfBuffer(payload = {}) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
+    let model;
+    try {
+      model = buildVariancePdfModel(payload);
+    } catch (error) {
+      doc.destroy();
+      reject(error);
+      return;
+    }
     const pageWidth = doc.page.width;
     const contentWidth = pageWidth - 72;
-    const lineas = Array.isArray(payload.lineas) ? payload.lineas : [];
+    const lineas = model.lineas;
     const shortage = lineas.filter((line) => toQty(line.diff) < 0).length;
     const surplus = lineas.filter((line) => toQty(line.diff) > 0).length;
+    const totals = model.totals;
 
     doc.rect(0, 0, pageWidth, 88).fill(NAVY);
     doc.rect(0, 84, pageWidth, 6).fill(GREEN);
@@ -44,24 +94,27 @@ function buildVariancePdfBuffer(payload = {}) {
     doc.font('Helvetica').fontSize(11).fillColor('#d7ecff')
       .text('Granja Mari Pepa — Control de reparto', 36, 48, { width: contentWidth });
     doc.fontSize(9).fillColor('#9ec5ea')
-      .text(text(payload.fecha), 36, 66, { width: contentWidth });
+      .text(text(model.confirmedAt), 36, 66, { width: contentWidth });
 
     let y = 110;
     const meta = [
-      ['Documento', `${text(payload.documentoTipo || 'ALBARAN')} ${text(payload.documentId)}`],
-      ['Cliente', `${text(payload.clienteCodigo)} — ${text(payload.clienteNombre)}`],
-      ['Repartidor', `${text(payload.repartidorNombre)} (${text(payload.repartidorId)})`],
-      ['Comercial', `${text(payload.comercialNombre)} (${text(payload.comercialCode)})`],
-      ['Estado', text(payload.deliveryStatus)],
+      ['Documento', `${text(model.documentoTipo || 'ALBARAN')} ${text(model.documentId)}`],
+      ['Cliente', `${text(model.clienteCodigo)} — ${text(model.clienteNombre)}`],
+      ['Repartidor', `${text(model.repartidorNombre)} (${text(model.repartidorId)})`],
+      ['Comercial', `${text(model.comercialNombre)} (${text(model.comercialCode)})`],
+      ['Estado', text(model.deliveryStatus)],
     ];
-    doc.roundedRect(36, y, contentWidth, 92, 8).fillAndStroke('#eef6ff', LINE);
+    doc.roundedRect(36, y, contentWidth, 108, 8).fillAndStroke('#eef6ff', LINE);
     meta.forEach((row, index) => {
       const rowY = y + 10 + index * 15;
       doc.fillColor(MUTED).font('Helvetica').fontSize(8).text(row[0], 48, rowY, { width: 90 });
       doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(9)
         .text(row[1], 140, rowY, { width: contentWidth - 120 });
     });
-    y += 108;
+    doc.fillColor(MUTED).font('Helvetica').fontSize(8).text('Observaciones', 48, y + 85, { width: 90 });
+    doc.fillColor(NAVY).font('Helvetica').fontSize(9)
+      .text(text(model.observaciones), 140, y + 85, { width: contentWidth - 120, ellipsis: true });
+    y += 124;
 
     doc.roundedRect(36, y, contentWidth, 36, 8).fillAndStroke('#fff1f2', '#fecdd3');
     doc.fillColor(RED).font('Helvetica-Bold').fontSize(10)
@@ -76,12 +129,14 @@ function buildVariancePdfBuffer(payload = {}) {
     y += 52;
 
     const columns = [
-      { key: 'codigoArticulo', label: 'Artículo', width: 70 },
-      { key: 'descripcion', label: 'Descripción', width: 160 },
-      { key: 'cantidadPedida', label: 'Pedida', width: 55, align: 'right' },
-      { key: 'cantidadEntregada', label: 'Entregada', width: 62, align: 'right' },
-      { key: 'diff', label: 'Diff', width: 50, align: 'right' },
-      { key: 'motivoDiferencia', label: 'Motivo', width: 126 },
+      { key: 'codigoArticulo', label: 'Artículo', width: 60 },
+      { key: 'descripcion', label: 'Descripción', width: 115 },
+      { key: 'cantidadPedida', label: 'Pedida', width: 45, align: 'right' },
+      { key: 'cantidadEntregada', label: 'Entregada', width: 55, align: 'right' },
+      { key: 'cantidadRechazada', label: 'Rech.', width: 40, align: 'right' },
+      { key: 'cantidadPendiente', label: 'Pend.', width: 40, align: 'right' },
+      { key: 'diff', label: 'Diff', width: 40, align: 'right' },
+      { key: 'motivoDiferencia', label: 'Motivo', width: 128 },
     ];
     doc.rect(36, y, contentWidth, 22).fill(NAVY);
     let x = 42;
@@ -109,6 +164,8 @@ function buildVariancePdfBuffer(payload = {}) {
           descripcion: text(line.descripcion || line.lineaId),
           cantidadPedida: formatQty(line.cantidadPedida),
           cantidadEntregada: formatQty(line.cantidadEntregada),
+          cantidadRechazada: formatQty(line.cantidadRechazada),
+          cantidadPendiente: formatQty(line.cantidadPendiente),
           diff: formatQty(diff),
           motivoDiferencia: text(line.motivoDiferencia),
         };
@@ -129,7 +186,11 @@ function buildVariancePdfBuffer(payload = {}) {
       });
     }
 
-    y += 18;
+    y += 8;
+    doc.roundedRect(36, y, contentWidth, 30, 6).fillAndStroke('#eef6ff', LINE);
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8)
+      .text(`Totales  Pedida ${formatQty(totals.pedida)} · Entregada ${formatQty(totals.entregada)} · Rechazada ${formatQty(totals.rechazada)} · Pendiente ${formatQty(totals.pendiente)} · Diferencia ${formatQty(totals.diff)}`, 48, y + 10, { width: contentWidth - 24 });
+    y += 46;
     doc.fillColor(MUTED).font('Helvetica').fontSize(8)
       .text(
         'Documento automático de control. Revisar albarán, cantidades y motivo antes de regularizar.',
@@ -143,5 +204,6 @@ function buildVariancePdfBuffer(payload = {}) {
 }
 
 module.exports = {
+  buildVariancePdfModel,
   buildVariancePdfBuffer,
 };

@@ -36,6 +36,47 @@ class LocalDocumentShare {
   final bool sent;
 }
 
+class RepartoReceiptEmailResult {
+  const RepartoReceiptEmailResult(
+      {required this.success,
+      required this.messageId,
+      required this.ledgerWritten});
+  factory RepartoReceiptEmailResult.fromResponse(Map<String, dynamic> json) =>
+      RepartoReceiptEmailResult(
+        success: json['success'] == true,
+        messageId: json['messageId']?.toString().trim() ?? '',
+        ledgerWritten: json['ledgerWritten'] == true,
+      );
+  final bool success;
+  final String messageId;
+  final bool ledgerWritten;
+  bool get delivered => success && messageId.isNotEmpty && ledgerWritten;
+}
+
+bool isValidRepartoReceiptEmailAddress(String value) =>
+    RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim());
+
+String requireConcreteRepartoOwner(String? value) {
+  if (value == null || !isValidRepartoOwnerId(value)) {
+    throw const RepartidorDataException(
+      'Selecciona un repartidor concreto.',
+      statusCode: 422,
+      code: 'REPARTIDOR_OWNER_REQUIRED',
+    );
+  }
+  return value.trim();
+}
+
+@visibleForTesting
+String repartoSignatureCacheKey({
+  required String repartidorId,
+  required int ejercicio,
+  required String serie,
+  required int terminal,
+  required int numero,
+}) =>
+    'repartidor_signature_${repartidorId}_${ejercicio}_${serie}_${terminal}_$numero';
+
 /// Resultado del resumen de cobros
 class CollectionsSummary {
   CollectionsSummary({
@@ -49,6 +90,7 @@ class CollectionsSummary {
     required this.thresholdMet,
     required this.clientCount,
     required this.clients,
+    this.collectionAvailability = 'COMPLETE',
   });
 
   factory CollectionsSummary.fromJson(Map<String, dynamic> json) {
@@ -69,6 +111,9 @@ class CollectionsSummary {
       thresholdMet: (summary['thresholdMet'] as bool?) ?? false,
       clientCount: (summary['clientCount'] as int?) ?? 0,
       clients: clientsList,
+      collectionAvailability:
+          (json['collectionAvailability'] as String?)?.toUpperCase() ??
+              'COMPLETE',
     );
   }
   final String repartidorId;
@@ -81,6 +126,9 @@ class CollectionsSummary {
   final bool thresholdMet;
   final int clientCount;
   final List<ClientCollectionData> clients;
+  final String collectionAvailability;
+
+  bool get isPartial => collectionAvailability == 'PARTIAL';
 }
 
 /// Datos de cobranza por cliente
@@ -497,6 +545,7 @@ class RepartidorDataService {
     int limit = 100,
     int offset = 0,
   }) async {
+    final owner = requireConcreteRepartoOwner(repartidorId);
     if (repartidorId.trim().isEmpty) {
       throw const RepartidorDataException('Falta el repartidor del historial');
     }
@@ -505,7 +554,7 @@ class RepartidorDataService {
     }
     try {
       final queryParams = <String, String>{
-        'repartidorId': repartidorId,
+        'repartidorId': owner,
         'limit': limit.toString(),
         'offset': offset.toString(),
       };
@@ -514,7 +563,7 @@ class RepartidorDataService {
       if (year != null) queryParams['year'] = year.toString();
 
       final cacheKey =
-          'repartidor_docs_${clientId}_${repartidorId}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
+          'repartidor_docs_${clientId}_${owner}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
 
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
@@ -577,14 +626,25 @@ class RepartidorDataService {
     required String repartidorId,
     int? year,
     String? clientId,
+    int limit = 100,
+    int offset = 0,
   }) async {
+    if (limit < 1 || limit > 100 || offset < 0) {
+      throw const RepartidorDataException(
+        'Paginacion de objetivos invalida',
+        statusCode: 422,
+      );
+    }
     try {
-      final queryParams = <String, String>{};
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
       if (year != null) queryParams['year'] = year.toString();
       if (clientId != null) queryParams['clientId'] = clientId;
 
       final cacheKey =
-          'repartidor_objectives_detail_${repartidorId}_${year ?? 'current'}_${clientId ?? 'all'}';
+          'repartidor_objectives_detail_${repartidorId}_${year ?? 'current'}_${clientId ?? 'all'}_${limit}_$offset';
 
       final response = await ApiClient.get(
         '/repartidor/history/objectives-detail/$repartidorId',
@@ -617,12 +677,25 @@ class RepartidorDataService {
     String? albaranSerie,
     int? albaranTerminal,
     int? albaranYear,
+    String? repartidorId,
   }) async {
+    requireConcreteRepartoOwner(repartidorId);
+    final rawOwner = repartidorId;
+    if (rawOwner != null && !isValidRepartoOwnerId(rawOwner)) {
+      throw const RepartidorDataException(
+        'Selecciona un repartidor concreto para el documento.',
+        statusCode: 422,
+      );
+    }
     try {
+      final ownerHint = rawOwner?.trim() ?? '';
       final String endpoint;
       if (type == 'albaran') {
+        final qs = ownerHint.isEmpty
+            ? ''
+            : '?repartidorId=${Uri.encodeComponent(ownerHint)}';
         endpoint =
-            '/repartidor/document/albaran/$year/$serie/$terminal/$number/pdf';
+            '/repartidor/document/albaran/$year/$serie/$terminal/$number/pdf$qs';
       } else {
         // For facturas: use factura-specific fields if available
         final fNum = facturaNumber ?? number;
@@ -637,6 +710,7 @@ class RepartidorDataService {
           queryParams['albaranTerminal'] = albaranTerminal.toString();
         if (albaranYear != null)
           queryParams['albaranYear'] = albaranYear.toString();
+        if (ownerHint.isNotEmpty) queryParams['repartidorId'] = ownerHint;
         final qs = queryParams.isNotEmpty
             ? '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}'
             : '';
@@ -683,10 +757,15 @@ class RepartidorDataService {
   /// PDF de la nota de entrega canónica (líneas y firma persistidas).
   static Future<List<int>> downloadDeliveryNotePdf({
     required String confirmationId,
+    required String repartidorId,
   }) async {
+    final owner = requireConcreteRepartoOwner(repartidorId);
     try {
       final response = await ApiClient.get(
-        RepartoCanonicalReceiptRequest(confirmationId).endpoint,
+        RepartoCanonicalReceiptRequest(
+          confirmationId,
+          repartidorId: owner,
+        ).endpoint,
         forceRefresh: true,
         allowStale: false,
         receiveTimeout: const Duration(seconds: 20),
@@ -712,7 +791,9 @@ class RepartidorDataService {
     required String serie,
     required int terminal,
     required int numero,
+    required String repartidorId,
   }) async {
+    final owner = requireConcreteRepartoOwner(repartidorId);
     try {
       final response = await ApiClient.get(
         '/repartidor/history/signature',
@@ -721,9 +802,15 @@ class RepartidorDataService {
           'serie': serie,
           'terminal': terminal.toString(),
           'numero': numero.toString(),
+          'repartidorId': owner,
         },
-        cacheKey:
-            'repartidor_signature_${ejercicio}_${serie}_${terminal}_$numero',
+        cacheKey: repartoSignatureCacheKey(
+          repartidorId: owner,
+          ejercicio: ejercicio,
+          serie: serie,
+          terminal: terminal,
+          numero: numero,
+        ),
         cacheTTL: const Duration(hours: 6),
       );
 
@@ -774,6 +861,7 @@ class RepartidorDataService {
     required int number,
     required String type, // 'factura' o 'albaran'
     required String destinatario,
+    required String repartidorId,
     bool canEmailDocuments = false,
     int terminal = 0,
     String? asunto,
@@ -788,6 +876,16 @@ class RepartidorDataService {
     int? albaranTerminal,
     int? albaranYear,
   }) async {
+    final email = destinatario.trim();
+    final owner = repartidorId.trim();
+    if (email.length > 180 ||
+        !isValidRepartoReceiptEmailAddress(email) ||
+        !isValidRepartoOwnerId(owner)) {
+      throw const RepartidorDataException(
+        'Email o repartidor no válido.',
+        statusCode: 422,
+      );
+    }
     if (canEmailDocuments != true) {
       throw const RepartidorDataException(
         'El envío por email no está habilitado.',
@@ -801,7 +899,8 @@ class RepartidorDataService {
         'serie': serie,
         'numero': number,
         'type': type,
-        'destinatario': destinatario,
+        'destinatario': email,
+        'repartidorId': owner,
         'terminal': terminal,
         'asunto': asunto,
         'cuerpo': cuerpo,
@@ -814,12 +913,24 @@ class RepartidorDataService {
         'albaranYear': albaranYear,
       });
 
-      if (response['success'] == true) {
-        return response;
+      final messageId = response['messageId']?.toString().trim() ?? '';
+      if (response['success'] != true || messageId.isEmpty) {
+        throw const RepartidorDataException(
+          'El proveedor no confirmó el envío.',
+          statusCode: 503,
+          code: 'DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED',
+        );
       }
-      throw const RepartidorDataException(
-        'El envío por email no está disponible',
-      );
+      if (response['ledgerWritten'] != true) {
+        throw const RepartidorDataException(
+          'El envío no quedó registrado.',
+          statusCode: 503,
+          code: 'EMAIL_DELIVERY_LEDGER_REQUIRED',
+        );
+      }
+      return response;
+    } on RepartidorDataException {
+      rethrow;
     } on ApiException catch (error) {
       // The backend must own delivery tracking. Never turn a 503 capability
       // response into a successful-looking email send or retry it blindly.
@@ -875,25 +986,33 @@ class RepartidorDataService {
     }
   }
 
-  static Future<void> emailDeliveryNote({
+  static Future<RepartoReceiptEmailResult> emailDeliveryNote({
     required String confirmationId,
     required String destinatario,
+    required String repartidorId,
   }) async {
+    final email = destinatario.trim();
+    final owner = repartidorId.trim();
+    if (email.length > 180 ||
+        !isValidRepartoReceiptEmailAddress(email) ||
+        !isValidRepartoOwnerId(owner)) {
+      throw const RepartidorDataException('Invalid email or delivery owner.',
+          statusCode: 422);
+    }
     try {
       final response = await ApiClient.post(
         '/repartidor-finanzas/rutero/confirmations/$confirmationId/receipt/email',
-        {'destinatario': destinatario},
+        {'destinatario': email, 'repartidorId': owner},
       );
-      if (response['success'] == true) return;
+      final result = RepartoReceiptEmailResult.fromResponse(response);
+      if (result.delivered) return result;
       throw const RepartidorDataException(
-        'No se pudo enviar la nota de entrega',
-      );
+          'Receipt email was not fully acknowledged.',
+          code: 'EMAIL_DELIVERY_LEDGER_REQUIRED');
     } on RepartidorDataException {
       rethrow;
     } catch (_) {
-      throw const RepartidorDataException(
-        'No se pudo enviar la nota de entrega',
-      );
+      throw const RepartidorDataException('Receipt email delivery failed.');
     }
   }
 
@@ -905,6 +1024,7 @@ class RepartidorDataService {
     required int number,
     required String type,
     required String telefono,
+    required String repartidorId,
     String? clienteNombre,
     int terminal = 0,
     // Factura specific
@@ -917,6 +1037,13 @@ class RepartidorDataService {
     int? albaranTerminal,
     int? albaranYear,
   }) async {
+    final owner = repartidorId.trim();
+    if (!isValidRepartoOwnerId(owner)) {
+      throw const RepartidorDataException(
+        'Selecciona un repartidor concreto para compartir.',
+        statusCode: 422,
+      );
+    }
     try {
       final response =
           await ApiClient.post('/repartidor/document/share/whatsapp', {
@@ -926,6 +1053,7 @@ class RepartidorDataService {
         'type': type,
         'telefono': telefono,
         'terminal': terminal,
+        'repartidorId': owner,
         'clienteNombre': clienteNombre,
         'facturaNumber': facturaNumber,
         'serieFactura': serieFactura,

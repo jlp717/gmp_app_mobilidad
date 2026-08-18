@@ -1,0 +1,39 @@
+diff --git a/backend/repositories/repartidor-liquidacion-db2-repository.js b/backend/repositories/repartidor-liquidacion-db2-repository.js
+--- a/backend/repositories/repartidor-liquidacion-db2-repository.js
++++ b/backend/repositories/repartidor-liquidacion-db2-repository.js
+@@ -1054,6 +1054,33 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory,
+     }
+   }
+ 
++  async function verifyCatalogReadOnly({ requiresOutbox = true } = {}) {
++    const connection = await connectionFactory();
++    let primaryError = null;
++    try {
++      assertConnection(connection);
++      await assertCatalog(connection, requiresOutbox);
++      return Object.freeze({ catalogVerified: true, requiresOutbox });
++    } catch (error) {
++      primaryError = error;
++      throw error;
++    } finally {
++      try {
++        await connection?.close?.();
++      } catch (closeError) {
++        logger.warn?.('liquidacion catalog connection close failed', {
++          code: closeError?.code || null,
++        });
++        if (!primaryError) {
++          throw new LiquidacionRepositoryUnavailableError(
++            'No se pudo cerrar la conexion de verificacion del catalogo',
++            { code: closeError?.code || null },
++          );
++        }
++      }
++    }
++  }
++
+   return Object.freeze({
+-    assertCapabilities, withTransaction,
++    assertCapabilities, verifyCatalogReadOnly, withTransaction,
+     get catalogVerified() { return catalogVerified; },
+   });

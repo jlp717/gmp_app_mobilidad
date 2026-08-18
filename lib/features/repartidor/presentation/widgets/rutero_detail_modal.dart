@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +20,7 @@ import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
@@ -48,6 +51,18 @@ enum RepartoConfirmationErrorDisposition {
   alreadyConfirmed,
   manualReview,
   retryable,
+}
+
+@visibleForTesting
+Future<void> runRuteroPostConfirmationEffects({
+  required bool shouldPrint,
+  required Future<void> Function() printTicket,
+  required Future<void> Function() shareReceipt,
+}) async {
+  if (shouldPrint) {
+    unawaited(Future<void>.sync(printTicket).catchError((Object _) {}));
+  }
+  await shareReceipt();
 }
 
 RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
@@ -169,6 +184,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final FocusNode _apellidosFocusNode = FocusNode();
   final FocusNode _dniFocusNode = FocusNode();
   final FocusNode _observacionesFocusNode = FocusNode();
+  final FocusNode _importeFocusNode = FocusNode();
   final _nombreFieldKey = GlobalKey();
   final _apellidosFieldKey = GlobalKey();
   final _dniFieldKey = GlobalKey();
@@ -177,6 +193,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final _importeFieldKey = GlobalKey();
   final _productsErrorKey = GlobalKey();
   final _paymentErrorKey = GlobalKey();
+  final _productsScrollController = ScrollController();
+  final _paymentScrollController = ScrollController();
   final _finalizeScrollController = ScrollController();
 
   final SignatureController _signatureController = SignatureController(
@@ -271,21 +289,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _restorePendingEvidence() async {
     try {
-      var entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
-      if (entry.state == RepartoOperationState.acknowledged) {
-        if (mounted) {
-          setState(() {
-            _isAcknowledgedTombstone = true;
-            _isRestoringJournal = false;
-          });
-        }
-        return;
+      if (!_isCompleted) {
+        await _confirmationJournal
+            .clearStaleAcknowledgedIfOpen(widget.albaran.id);
       }
-      if (entry.state == RepartoOperationState.manualReview) {
-        try {
-          await _confirmationJournal.resetIfNotAcknowledged(widget.albaran.id);
+      var entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
+      debugPrint(
+        '[RUTERO] journal state=${entry.state.name} '
+        'completed=$_isCompleted printer=$_tieneImpresora '
+        'id=${widget.albaran.id}',
+      );
+      if (entry.state == RepartoOperationState.acknowledged) {
+        if (!_isCompleted) {
+          await _confirmationJournal
+              .clearStaleAcknowledgedIfOpen(widget.albaran.id);
           entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
-        } on RepartoAlreadyAcknowledgedException {
+        }
+        if (entry.state == RepartoOperationState.acknowledged && _isCompleted) {
           if (mounted) {
             setState(() {
               _isAcknowledgedTombstone = true;
@@ -295,10 +315,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           return;
         }
       }
+      if (entry.state == RepartoOperationState.manualReview) {
+        try {
+          await _confirmationJournal.resetIfNotAcknowledged(widget.albaran.id);
+          entry = await _confirmationJournal.loadOrCreate(widget.albaran.id);
+        } on RepartoAlreadyAcknowledgedException {
+          if (_isCompleted && mounted) {
+            setState(() {
+              _isAcknowledgedTombstone = true;
+              _isRestoringJournal = false;
+            });
+            return;
+          }
+          debugPrint('[RUTERO] stale acknowledged during reset, unlocking');
+        }
+      }
       final signatureId = entry.evidences['signature']?.evidenceId;
       if (mounted) {
         setState(() {
           _isJournalBlocked = false;
+          _isAcknowledgedTombstone = false;
           _hasPersistedSignature = signatureId != null &&
               RepartoEvidenceUploadService.isValidEvidenceId(signatureId);
           _isRestoringJournal = false;
@@ -424,6 +460,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           widget.albaran.terminal,
           widget.albaran.codigoCliente,
           deliveryId: widget.albaran.id,
+          repartidorId: widget.albaran.codigoRepartidor,
         );
         if (albaranDetalle == null) {
           if (mounted) {
@@ -438,11 +475,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       }
 
       final filtered = items.where((item) {
-        final code = item.codigoArticulo.trim();
         final desc = item.descripcion.trim();
-        if (code.isEmpty) return false;
         if (desc.toLowerCase().startsWith('pedido:')) return false;
-        if (RegExp(r'^0+$').hasMatch(code)) return false;
+        if (item.cantidadPedida <= 0 && item.bultos <= 0) return false;
         return true;
       }).toList();
 
@@ -490,6 +525,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _apellidosFocusNode.dispose();
     _dniFocusNode.dispose();
     _observacionesFocusNode.dispose();
+    _importeFocusNode.dispose();
+    _productsScrollController.dispose();
+    _paymentScrollController.dispose();
     _finalizeScrollController.dispose();
     _signatureController.dispose();
     super.dispose();
@@ -601,7 +639,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       onPreviewReceiptPdf: _previewReceiptPdf,
       onDownloadReceiptPdf: _downloadReceiptPdf,
       onSharePdfLocally: _sharePdfLocally,
+      onShareReceiptViaWhatsApp: _shareReceiptViaWhatsApp,
       buildPrinterConfigSection: _buildPrinterConfigSection,
+      onEmailReceipt: _emailReceipt,
       tieneImpresora: _tieneImpresora,
       items: _items,
       onShowZebraPrintPreview: _showZebraPrintPreview,
@@ -674,6 +714,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             onOpenFicha: _openFichaTecnica,
             onShowFullscreenImage: _showFullscreenImage,
+            scrollController: _productsScrollController,
           ),
         ),
         SafeArea(
@@ -730,6 +771,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       errorBannerKey: _paymentErrorKey,
       highlightPayment:
           _spotlightField == 'pago' || _spotlightField == 'importe',
+      scrollController: _paymentScrollController,
+      importeFocusNode: _importeFocusNode,
       onPaymentMethodChanged: (method) {
         setState(() => _selectedPaymentMethod = method);
       },
@@ -1333,12 +1376,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Widget _buildSubmitButton() {
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
+    if (_isAcknowledgedTombstone && !_isCompleted) {
+      debugPrint('[RUTERO] ignoring stale tombstone, confirm stays enabled');
+    }
     return ElevatedButton(
-      onPressed:
-          _isSubmitting || _isAcknowledgedTombstone ? null : _submitDelivery,
+      onPressed: _isSubmitting ? null : _submitDelivery,
       style: ElevatedButton.styleFrom(
         backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
         foregroundColor: Colors.white,
+        disabledBackgroundColor:
+            noEntrega ? AppTheme.warning : AppTheme.success,
+        disabledForegroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -1353,35 +1401,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 color: Colors.white,
               ),
             )
-          : _isAcknowledgedTombstone
-              ? const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.verified, size: 24),
-                    SizedBox(width: 12),
-                    Text(
-                      'ENTREGA YA CONFIRMADA',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      noEntrega ? Icons.cancel_outlined : Icons.check_circle,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      noEntrega ? 'REGISTRAR NO ENTREGA' : 'CONFIRMAR ENTREGA',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  noEntrega ? Icons.cancel_outlined : Icons.check_circle,
+                  size: 24,
                 ),
+                const SizedBox(width: 12),
+                Text(
+                  noEntrega ? 'REGISTRAR NO ENTREGA' : 'CONFIRMAR ENTREGA',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -1671,6 +1707,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ? null
           : _repartidorIdsParaInvalidar().first,
       lineas: _buildCanonicalLines(),
+      allowEmptyLineas:
+          widget.albaran.importeTotal.abs() < 0.005 && _items.isEmpty,
       receiver: _deliveryStatus == RepartoDeliveryStatus.noEntregado
           ? null
           : RepartoReceiver(
@@ -1872,9 +1910,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await Future<void>.delayed(const Duration(milliseconds: 40));
     }
     if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
     _ensureFieldVisible(issue.field);
     _requestFieldFocus(issue.field);
-    await Future<void>.delayed(const Duration(milliseconds: 360));
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (!mounted) return;
+    _ensureFieldVisible(issue.field);
+    await Future<void>.delayed(const Duration(milliseconds: 220));
     if (!mounted) return;
     _ensureFieldVisible(issue.field);
   }
@@ -1893,23 +1935,76 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       case 'observaciones':
         _observacionesFocusNode.requestFocus();
         return;
+      case 'importe':
+        _importeFocusNode.requestFocus();
+        return;
+    }
+  }
+
+  ScrollController _scrollControllerForField(String field) {
+    switch (ruteroScrollPaneForField(field)) {
+      case RuteroScrollPane.products:
+        return _productsScrollController;
+      case RuteroScrollPane.payment:
+        return _paymentScrollController;
+      case RuteroScrollPane.finalize:
+        return _finalizeScrollController;
     }
   }
 
   void _ensureFieldVisible(String field) {
+    final paneController = _scrollControllerForField(field);
+    if (ruteroScrollPaneForField(field) == RuteroScrollPane.products &&
+        paneController.hasClients) {
+      paneController.animateTo(
+        paneController.position.minScrollExtent,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
     final key = _keyForField(field);
     final ctx = key?.currentContext;
     if (ctx == null) return;
+    final renderObject = ctx.findRenderObject();
+    if (renderObject == null) return;
+    final nearest = Scrollable.maybeOf(ctx);
+    if (nearest != null) {
+      nearest.position.ensureVisible(
+        renderObject,
+        alignment: 0.12,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+    if (paneController.hasClients) {
+      final viewport = RenderAbstractViewport.maybeOf(renderObject);
+      if (viewport != null) {
+        final reveal = viewport.getOffsetToReveal(renderObject, 0.08);
+        final position = paneController.position;
+        final target = reveal.offset.clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        );
+        paneController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      }
+    }
     Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 320),
       curve: Curves.easeOutCubic,
       alignment: 0.08,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
     );
   }
 
   bool _validateFields() {
-    if (_isAcknowledgedTombstone) {
+    if (_isAcknowledgedTombstone && _isCompleted) {
       _showError('Esta entrega ya fue confirmada.');
       return false;
     }
@@ -1918,6 +2013,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       items: _items,
       isLoading: _isLoadingItems,
       loadError: _itemsError,
+      allowEmpty: widget.albaran.importeTotal.abs() < 0.005,
     );
     final anyQtyModified = _items.any((item) => _quantityDiffers(
           _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
@@ -2213,10 +2309,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       try {
         if (!_lastConfirmWasQueued &&
             _deliveryStatus != RepartoDeliveryStatus.noEntregado) {
-          if (_tieneImpresora) {
-            await _showZebraPrintPreview();
-          }
-          await _showShareReceiptDialog();
+          await runRuteroPostConfirmationEffects(
+            shouldPrint: _tieneImpresora,
+            printTicket: _tryPrintTicketAfterConfirm,
+            shareReceipt: _showShareReceiptDialog,
+          );
         }
       } catch (_) {
         if (mounted) {
@@ -2364,6 +2461,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  Future<void> _tryPrintTicketAfterConfirm() async {
+    try {
+      await _showZebraPrintPreview().timeout(const Duration(seconds: 12));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Entrega guardada. El ticket Bluetooth no se pudo enviar; imprímelo luego.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+    }
+  }
+
   Future<void> _showZebraPrintPreview() async {
     if (!mounted) return;
     await showRuteroPrintPreviewDialog(
@@ -2455,6 +2568,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(height: 12),
             _buildShareButton(
+              icon: Icons.chat,
+              label: 'WhatsApp (selector local)',
+              color: const Color(0xFF25D366),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _shareReceiptViaWhatsApp();
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildShareButton(
               icon: Icons.share,
               label: 'Compartir PDF (acción local)',
               color: AppTheme.success,
@@ -2466,11 +2589,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 12),
             _buildShareButton(
               icon: Icons.email,
-              label: 'Email no disponible',
+              label: 'Enviar por email',
               color: AppTheme.accentIndigo,
               onTap: () async {
                 Navigator.pop(ctx);
-                await _showEmailUnavailable();
+                await _emailReceipt();
               },
             ),
           ],
@@ -2529,6 +2652,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         number: alb.numeroAlbaran,
         type: 'albaran',
         terminal: alb.terminal,
+        repartidorId: alb.codigoRepartidor,
       );
       modal.close();
       if (!mounted) return;
@@ -2587,11 +2711,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             fileName: fileName,
             onEmailTap: () {
               Navigator.pop(context);
-              _showEmailUnavailable();
+              _emailReceipt();
             },
             onWhatsAppTap: () {
               Navigator.pop(context);
-              _sharePdfLocally();
+              unawaited(_shareReceiptViaWhatsApp());
             },
           ),
         ),
@@ -2674,6 +2798,80 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
+  Future<void> _shareReceiptViaWhatsApp() async {
+    final owner = widget.albaran.codigoRepartidor.trim();
+    if (!isValidRepartoOwnerId(owner)) {
+      _showError('Selecciona un repartidor concreto para compartir.');
+      return;
+    }
+    final form = await WhatsAppFormModal.show(
+      context,
+      defaultMessage:
+          'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}. '
+          'El envío se realiza desde el selector del dispositivo.',
+    );
+    if (!mounted || form == null) return;
+
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando PDF para compartir localmente...',
+    );
+    try {
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
+      if (pdfData == null) throw const RepartoReceiptUnavailableException();
+      _cachedPdfBase64 = pdfData;
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File(
+        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$timestamp.pdf',
+      );
+      await file.writeAsBytes(base64Decode(pdfData));
+
+      final localShare = await RepartidorDataService.shareWhatsApp(
+        year: widget.albaran.ejercicio,
+        serie: widget.albaran.serie,
+        number: widget.albaran.numeroAlbaran,
+        type: 'albaran',
+        telefono: form.phone,
+        repartidorId: owner,
+        clienteNombre: widget.albaran.nombreCliente,
+        terminal: widget.albaran.terminal,
+        albaranNumber: widget.albaran.numeroAlbaran,
+        albaranSerie: widget.albaran.serie,
+        albaranTerminal: widget.albaran.terminal,
+        albaranYear: widget.albaran.ejercicio,
+      );
+      if (!localShare.localShare || localShare.sent) {
+        throw const RepartidorDataException(
+          'El servidor no autorizó el uso compartido local.',
+        );
+      }
+      modal.close();
+      if (!mounted) return;
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox == null
+          ? null
+          : Rect.fromCenter(
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
+              width: 1,
+              height: 1,
+            );
+      await Share.shareXFiles(
+        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
+        text: form.message,
+        sharePositionOrigin: origin,
+      );
+    } catch (_) {
+      modal.close();
+      if (mounted) {
+        _showError('No se pudo preparar el PDF para compartir localmente.');
+      }
+    }
+  }
+
   Future<void> _sharePdfLocally() async {
     final modal = AsyncOperationModal.show(
       context,
@@ -2739,12 +2937,75 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  Future<void> _emailReceipt() async {
+    if (!mounted) return;
+    final controller = TextEditingController(text: widget.albaran.emailCliente);
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Enviar recibo por email'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || email == null) return;
+    final owner = widget.albaran.codigoRepartidor.trim();
+    if (!isValidRepartoReceiptEmailAddress(email) ||
+        !isValidRepartoOwnerId(owner)) {
+      _showError('Selecciona un email y un repartidor válidos.');
+      return;
+    }
+    final modal = AsyncOperationModal.show(context, text: 'Enviando recibo...');
+    try {
+      final confirmationId =
+          await _confirmationJournal.receiptConfirmationId(widget.albaran.id);
+      await RepartidorDataService.emailDeliveryNote(
+        confirmationId: confirmationId,
+        destinatario: email,
+        repartidorId: owner,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Receipt sent to ${email.trim()}')),
+        );
+      }
+    } on RepartoReceiptUnavailableException catch (error) {
+      if (mounted)
+        _showConfirmationError(repartoConfirmationErrorPresentation(
+          error: error,
+          acknowledged: _isAcknowledgedTombstone,
+        ));
+    } catch (error) {
+      if (mounted)
+        _showError(repartidorSafeOperationMessage(
+          error: error,
+          operation: 'receiptEmail',
+        ));
+    } finally {
+      modal.close();
+    }
+  }
+
   Future<String?> _generateReceiptPdf() async {
     try {
       final confirmationId =
           await _confirmationJournal.receiptConfirmationId(widget.albaran.id);
       final response = await ApiClient.get(
-        RepartoCanonicalReceiptRequest(confirmationId).endpoint,
+        RepartoCanonicalReceiptRequest(
+          confirmationId,
+          repartidorId: widget.albaran.codigoRepartidor,
+        ).endpoint,
         forceRefresh: true,
         allowStale: false,
         receiveTimeout: const Duration(seconds: 20),

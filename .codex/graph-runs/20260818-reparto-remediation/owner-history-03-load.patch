@@ -1,0 +1,62 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -299,14 +299,32 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+-  Future<void> _loadClientDocuments(String clientId, String clientName) async {
++  Future<void> _loadClientDocuments(
++    String clientId,
++    String clientName, {
++    String? repartidorId,
++  }) async {
++    final owner = resolveRepartoDocumentOwner(
++      documentOwner: repartidorId ?? _selectedClientRepartidorId,
++      selectedOwner: widget.repartidorId,
++    );
+     final requestGeneration = ++_documentsRequestGeneration;
+     final selectedYear = _selectedYear;
+     final dateFrom = _dateFrom;
+     final dateTo = _dateTo;
+     setState(() {
+       _isLoading = true;
+       _documentsError = null;
+       _selectedClientId = clientId;
+       _selectedClientName = clientName;
++      _selectedClientRepartidorId = owner;
+     });
++    if (owner == null) {
++      setState(() {
++        _isLoading = false;
++        _documents = const [];
++        _documentsError = 'Selecciona una ficha con un repartidor concreto.';
++      });
++      return;
++    }
+ 
+     try {
+@@ -320,15 +338,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       final docs = loader != null
+           ? await loader(
+               clientId: clientId,
+-              repartidorId: widget.repartidorId,
++              repartidorId: owner,
+               dateFrom: dateFromStr,
+               dateTo: dateToStr,
+               year: selectedYear,
+             )
+           : await RepartidorDataService.getClientDocuments(
+               clientId: clientId,
+-              repartidorId: widget.repartidorId,
++              repartidorId: owner,
+               dateFrom: dateFromStr,
+               dateTo: dateToStr,
+               year: selectedYear,
+@@ -379,6 +397,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+           hasLegacySignature: d.hasLegacySignature,
+           legacyDate: d.legacyDate,
+           confirmationId: d.confirmationId,
+-          repartidorId: d.deliveryRepartidor,
++          repartidorId: resolveRepartoDocumentOwner(
++            documentOwner: d.deliveryRepartidor,
++            selectedOwner: owner,
++          ),
+         );

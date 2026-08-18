@@ -1,0 +1,109 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -203,0 +204,102 @@
++function createLikeSql(pair) {
++  return `CREATE TABLE ${pair.dst} LIKE ${pair.src} INCLUDING IDENTITY INCLUDING DEFAULTS`;
++}
++
++function missingSourceIdentities(sourceColumns, destinationColumns) {
++  const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
++  return sourceColumns
++    .filter((source) => source.identity && !destinationByName.get(source.name)?.identity)
++    .map((source) => source.name);
++}
++
++function normalizeKeyContracts(rows) {
++  const grouped = new Map();
++  for (const row of rows || []) {
++    const kind = String(row.KIND ?? row.kind ?? '').trim().toUpperCase();
++    const objectName = String(row.OBJECT_NAME ?? row.object_name ?? '').trim().toUpperCase();
++    const column = String(row.COLUMN_NAME ?? row.column_name ?? '').trim().toUpperCase();
++    const ordering = String(row.ORDERING ?? row.ordering ?? 'A').trim().toUpperCase();
++    if (!['PRIMARY_KEY', 'UNIQUE'].includes(kind)
++      || !/^[A-Z][A-Z0-9_]*$/.test(objectName)
++      || !/^[A-Z][A-Z0-9_]*$/.test(column)
++      || !['A', 'D'].includes(ordering)) {
++      throw new Error('Unsupported DB2 key contract metadata');
++    }
++    const key = `${kind}:${objectName}`;
++    if (!grouped.has(key)) grouped.set(key, { kind, objectName, columns: [] });
++    grouped.get(key).columns.push({
++      name: column,
++      ordering,
++      ordinal: Number(row.ORDINAL_POSITION ?? row.ordinal_position),
++    });
++  }
++  return [...grouped.values()].map((contract) => ({
++    kind: contract.kind,
++    columns: contract.columns
++      .sort((a, b) => a.ordinal - b.ordinal)
++      .map(({ name, ordering }) => ({ name, ordering })),
++  }));
++}
++
++async function keyContractsOf(schemaTable) {
++  const [schema, table] = schemaTable.split('.');
++  const constraintRows = await queryWithParams(
++    `SELECT CASE WHEN C.CONSTRAINT_TYPE = 'PRIMARY KEY' THEN 'PRIMARY_KEY' ELSE 'UNIQUE' END AS KIND,
++            TRIM(C.CONSTRAINT_NAME) AS OBJECT_NAME,
++            TRIM(K.COLUMN_NAME) AS COLUMN_NAME,
++            K.ORDINAL_POSITION,
++            'A' AS ORDERING
++       FROM QSYS2.SYSCST C
++       JOIN QSYS2.SYSKEYCST K
++         ON K.CONSTRAINT_SCHEMA = C.CONSTRAINT_SCHEMA
++        AND K.CONSTRAINT_NAME = C.CONSTRAINT_NAME
++      WHERE C.TABLE_SCHEMA = ? AND C.TABLE_NAME = ?
++        AND C.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE')
++      ORDER BY C.CONSTRAINT_NAME, K.ORDINAL_POSITION`,
++    [schema, table],
++  );
++  const indexRows = await queryWithParams(
++    `SELECT 'UNIQUE' AS KIND,
++            TRIM(I.INDEX_NAME) AS OBJECT_NAME,
++            TRIM(K.COLUMN_NAME) AS COLUMN_NAME,
++            K.ORDINAL_POSITION,
++            K.ORDERING
++       FROM QSYS2.SYSINDEXES I
++       JOIN QSYS2.SYSKEYS K
++         ON K.INDEX_SCHEMA = I.INDEX_SCHEMA
++        AND K.INDEX_NAME = I.INDEX_NAME
++      WHERE I.TABLE_SCHEMA = ? AND I.TABLE_NAME = ?
++        AND I.IS_UNIQUE = 'U'
++      ORDER BY I.INDEX_NAME, K.ORDINAL_POSITION`,
++    [schema, table],
++  );
++  const contracts = normalizeKeyContracts([...(constraintRows || []), ...(indexRows || [])]);
++  const seen = new Set();
++  return contracts.filter((contract) => {
++    const signature = keyContractSignature(contract);
++    if (seen.has(signature)) return false;
++    seen.add(signature);
++    return true;
++  });
++}
++
++function keyContractSignature(contract) {
++  return `${contract.kind}:${contract.columns
++    .map(({ name, ordering }) => `${name}:${ordering}`).join(',')}`;
++}
++
++function testObjectName(destination, kind, signature) {
++  const table = destination.split('.')[1];
++  const hash = crypto.createHash('sha256').update(signature).digest('hex').slice(0, 10).toUpperCase();
++  return `${kind === 'PRIMARY_KEY' ? 'PKT' : 'UXT'}_${table.slice(0, 100)}_${hash}`;
++}
++
++function buildKeyContractPlan(pair, sourceContracts, destinationContracts) {
++  const existing = new Set(destinationContracts.map(keyContractSignature));
++  return sourceContracts.filter((contract) => !existing.has(keyContractSignature(contract))).map((contract) => {
++    const signature = keyContractSignature(contract);
++    const columns = contract.columns.map(({ name, ordering }) => `${name}${ordering === 'D' ? ' DESC' : ''}`).join(', ');
++    const objectName = testObjectName(pair.dst, contract.kind, signature);
++    return contract.kind === 'PRIMARY_KEY'
++      ? { kind: 'ADD_PRIMARY_KEY', signature, sql: `ALTER TABLE ${pair.dst} ADD CONSTRAINT ${objectName} PRIMARY KEY (${columns})` }
++      : { kind: 'ADD_UNIQUE_INDEX', signature, sql: `CREATE UNIQUE INDEX JAVIER.${objectName} ON ${pair.dst} (${columns})` };
++  });
++}
++

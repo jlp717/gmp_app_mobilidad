@@ -10,7 +10,8 @@ const {
   validate,
 } = require('../services/delivery-evidence-service');
 
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==', 'base64');
 
 function repository() {
   return {
@@ -37,6 +38,12 @@ describe('delivery evidence service', () => {
     const oversizedSignature = Buffer.concat([PNG, Buffer.alloc(SIGNATURE_MAX_BYTES)]);
     expect(() => decodeSignature(`data:image/png;base64,${oversizedSignature.toString('base64')}`))
       .toThrow(expect.objectContaining({ code: 'EVIDENCE_TOO_LARGE', statusCode: 413 }));
+  });
+
+  test('rejects a PNG signature with corrupt compressed data before persistence', () => {
+    const corrupt = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLQ9wAAAABJRU5ErkJggg==';
+    expect(() => decodeSignature(`data:image/png;base64,${corrupt}`))
+      .toThrow(expect.objectContaining({ code: 'INVALID_SIGNATURE_IMAGE', statusCode: 415 }));
   });
 
   test('stages bytes, SHA-256 and a deterministic opaque DB2 BLOB reference', async () => {

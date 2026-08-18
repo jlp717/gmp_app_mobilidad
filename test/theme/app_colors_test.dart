@@ -6,11 +6,11 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 void main() {
   group('AppColors Tests', () {
     test('primary color matches operational brand green', () {
-      expect(AppColors.primary, equals(const Color(0xFF0E5F4A)));
+      expect(AppColors.primary, equals(const Color(0xFF00A878)));
     });
 
     test('secondary color matches operational moss green', () {
-      expect(AppColors.secondary, equals(const Color(0xFF2F855A)));
+      expect(AppColors.secondary, equals(const Color(0xFF36C486)));
     });
 
     test('has all required colors', () {
@@ -25,7 +25,7 @@ void main() {
     });
 
     test('text colors are defined', () {
-      expect(AppColors.textPrimary, equals(const Color(0xFFF2F5F1)));
+      expect(AppColors.textPrimary, equals(const Color(0xFFF4F9FB)));
       expect(AppColors.textSecondary, isNotNull);
     });
 

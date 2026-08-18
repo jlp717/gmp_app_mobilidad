@@ -1,0 +1,82 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -719,0 +720,8 @@
++    final owner = repartidorId?.trim() ?? '';
++    if (!isValidRepartoOwnerId(owner)) {
++      throw const RepartidorDataException(
++        'A concrete delivery owner is required for the receipt.',
++        statusCode: 422,
++      );
++    }
++
+@@ -751,0 +761 @@
++    String? repartidorId,
+@@ -753,0 +764,7 @@
++      final owner = repartidorId?.trim() ?? '';
++      if (owner.isNotEmpty && !isValidRepartoOwnerId(owner)) {
++        throw const RepartidorDataException(
++          'A concrete delivery owner is required for the signature.',
++          statusCode: 422,
++        );
++      }
++
+@@ -761,0 +780 @@
++          if (owner.isNotEmpty) 'repartidorId': owner,
+diff --git a/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart b/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
+--- a/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
++++ b/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
+@@ -2620,0 +2621,6 @@
++      if (!isValidRepartoOwnerId(alb.codigoRepartidor)) {
++        throw const RepartidorDataException(
++          'Select one concrete delivery owner before opening the document.',
++          statusCode: 422,
++        );
++      }
++
+@@ -2836,0 +2843,7 @@
++      final owner = widget.albaran.codigoRepartidor.trim();
++      if (!isValidRepartoOwnerId(owner)) {
++        throw const RepartoReceiptUnavailableException();
++      }
++
+@@ -2840,0 +2855 @@
++          repartidorId: owner,
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -87,0 +88 @@
++  String? repartidorId,
+@@ -2657,0 +2658 @@
++        repartidorId: widget.repartidorId,
+@@ -3153,0 +3155 @@
++    this.repartidorId,
+@@ -3162,0 +3165 @@
++  final String? repartidorId;
+@@ -3201,0 +3202 @@
++        repartidorId: widget.repartidorId,
+diff --git a/lib/features/entregas/providers/entregas_provider.dart b/lib/features/entregas/providers/entregas_provider.dart
+--- a/lib/features/entregas/providers/entregas_provider.dart
++++ b/lib/features/entregas/providers/entregas_provider.dart
+@@ -399,0 +400,5 @@
++  String? get concreteDocumentOwner {
++    final owner = codigoRepartidor.trim();
++    return isValidRepartoOwnerId(owner) ? owner : null;
++  }
++
+diff --git a/test/features/repartidor/data/reparto_owner_contract_test.dart b/test/features/repartidor/data/reparto_owner_contract_test.dart
+new file mode 100644
+--- /dev/null
++++ b/test/features/repartidor/data/reparto_owner_contract_test.dart
+@@ -0,0 +1,12 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
++
++void main() {
++  test('only a single concrete owner is accepted', () {
++    expect(isValidRepartoOwnerId('R01'), isTrue);
++    expect(isValidRepartoOwnerId('ALL'), isFalse);
++    expect(isValidRepartoOwnerId('R01,R02'), isFalse);
++    expect(isValidRepartoOwnerId(''), isFalse);
++  });
++}

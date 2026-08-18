@@ -30,6 +30,52 @@ void main() {
       expect(items.any((i) => i.label == 'Rutero'), true);
       expect(items.any((i) => i.label == 'Histórico'), true);
     });
+    test('keeps exact repartidor order and hides commissions when disabled', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: true,
+        isJefeVentas: false,
+        showCommissions: false,
+      );
+
+      expect(
+        items.map((item) => item.label),
+        equals([
+          'Clientes',
+          'Rutero',
+          'Liquidación',
+          'Vencimientos',
+          'Evolución',
+          'Histórico',
+          'Asistente',
+        ]),
+      );
+    });
+
+    test('puts Panel first and retains commissions for reparto jefe', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: true,
+        isJefeVentas: true,
+        showCommissions: true,
+      );
+
+      expect(
+        items.map((item) => item.label),
+        equals([
+          'Panel',
+          'Clientes',
+          'Rutero',
+          'Liquidación',
+          'Vencimientos',
+          'Evolución',
+          'Comisiones',
+          'Histórico',
+          'Asistente',
+        ]),
+      );
+    });
+
 
     test('adds panel for jefe in repartidor mode', () {
       final items = NavigationConfigService.getNavItems(

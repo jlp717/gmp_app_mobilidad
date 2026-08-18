@@ -124,7 +124,7 @@ const deliverySchema = z.object({
   occurredAt: z.string().datetime({ offset: true }),
   repartidorId: z.string().trim().min(1).max(20).optional(),
   receiver: receiverSchema.optional(),
-  lineas: z.array(lineSchema).min(1).max(250),
+  lineas: z.array(lineSchema).min(0).max(250),
   firma: evidenceIdSchema.optional(),
   evidencias: z.array(evidenceIdSchema).max(20).optional().default([]),
   observaciones: z.string().trim().max(1000).optional(),
@@ -155,6 +155,16 @@ const deliverySchema = z.object({
         message: 'Una no entrega no puede declarar receptor ni firma',
       });
     }
+  }
+
+  if (delivery.lineas.length === 0
+    && delivery.status !== 'ENTREGADO'
+    && delivery.status !== 'NO_ENTREGADO') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['lineas'],
+      message: 'Solo ENTREGADO (prepago 0 €) o NO_ENTREGADO admiten documento sin lineas',
+    });
   }
 
   const delivered = delivery.lineas.reduce((sum, item) => sum + item.cantidadEntregada, 0);
@@ -256,10 +266,33 @@ function parseConfirmationBody(raw) {
   return parsed.data;
 }
 
+function canonicalRepartidorCode(value) {
+  const code = normalizeCode(value).toUpperCase();
+  if (!/^[A-Z0-9]{1,2}$/.test(code) || code === 'ALL') return '';
+  return /^\d{1,2}$/.test(code) ? code.padStart(2, '0') : code;
+}
+
+function isConcreteRepartidorCode(value) {
+  return Boolean(canonicalRepartidorCode(value));
+}
+
+function actorFleetCodes(user) {
+  return (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
+    .filter((code) => typeof code === 'string' || typeof code === 'number')
+    .map(canonicalRepartidorCode).filter(Boolean);
+}
+
+function ownershipError() {
+  return new RepartoContractError('La entrega no pertenece a la flota autenticada', {
+    code: 'DELIVERY_OWNERSHIP_REQUIRED',
+    statusCode: 403,
+  });
+}
+
 function buildActor(user, body) {
   const current = user || {};
   const userId = normalizeCode(current.id || current.user || current.code);
-  const ownRepartidorId = normalizeCode(current.code || current.id || current.user);
+  const ownRepartidorId = canonicalRepartidorCode(current.code || current.id || current.user);
   if (!userId || !ownRepartidorId) {
     throw new RepartoContractError('Contexto autenticado incompleto', {
       code: 'AUTHENTICATED_ACTOR_REQUIRED',
@@ -267,27 +300,39 @@ function buildActor(user, body) {
     });
   }
 
-  const requested = normalizeCode(
-    body.delivery.repartidorId || ownRepartidorId,
-  );
   const role = normalizeCode(current.role).toUpperCase();
   const activeMode = normalizeCode(current.activeMode).toUpperCase();
-  // ADMIN or JEFE supervising Perfil Reparto may confirm for the selected driver.
-  const privileged = role === 'ADMIN'
-    || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
-  if (!privileged && !codesMatch(ownRepartidorId, requested)) {
-    throw new RepartoContractError('La entrega no pertenece al repartidor autenticado', {
-      code: 'DELIVERY_OWNERSHIP_REQUIRED',
-      statusCode: 403,
+  const explicitInput = normalizeCode(body.delivery.repartidorId);
+  const explicit = canonicalRepartidorCode(explicitInput);
+  if (explicitInput && !explicit) {
+    throw new RepartoContractError('Debe seleccionarse un repartidor concreto', {
+      code: 'DELIVERY_REPARTIDOR_REQUIRED', statusCode: 422,
     });
   }
 
-  return Object.freeze({
-    userId,
-    repartidorId: privileged ? requested : ownRepartidorId,
-    role,
-    privileged,
-  });
+  let repartidorId;
+  let privileged = false;
+  const fleet = actorFleetCodes(current);
+  if (role === 'REPARTIDOR') {
+    const requested = explicit || ownRepartidorId;
+    if (fleet.length !== 1 || !codesMatch(ownRepartidorId, requested)
+      || !codesMatch(fleet[0], requested)) throw ownershipError();
+    repartidorId = fleet[0];
+  } else if ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR') {
+    if (!explicit) {
+      throw new RepartoContractError('Debe seleccionarse un repartidor concreto', {
+        code: 'DELIVERY_REPARTIDOR_REQUIRED', statusCode: 422,
+      });
+    }
+    const selected = fleet.find((code) => codesMatch(code, explicit));
+    if (!selected) throw ownershipError();
+    repartidorId = selected;
+    privileged = true;
+  } else {
+    throw ownershipError();
+  }
+
+  return Object.freeze({ userId, repartidorId, role, privileged });
 }
 
 function buildConfirmationCommand({ user, headers, body }) {

@@ -8,7 +8,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/liquidacion_pdf_builder.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -44,6 +44,16 @@ class _RepartidorLiquidacionDiariaPageState
   bool _submittingEntry = false;
   final Map<String, String> _entryTokens = <String, String>{};
   RepartidorLiquidacionResult? _closedResult;
+  final _ingresoBancoController = TextEditingController();
+  final _entregadoController = TextEditingController();
+  bool _seededClassicFields = false;
+
+  @override
+  void dispose() {
+    _ingresoBancoController.dispose();
+    _entregadoController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -67,6 +77,7 @@ class _RepartidorLiquidacionDiariaPageState
             );
       _closedResult = null;
       _entryTokens.clear();
+      _seededClassicFields = false;
     }
   }
 
@@ -94,11 +105,11 @@ class _RepartidorLiquidacionDiariaPageState
         : ref.watch(repartidorLiquidacionLedgerProvider(ledgerArgs));
 
     return Scaffold(
-      backgroundColor: AppColors.inkSurface,
+      backgroundColor: const Color(0xFFE6E6E6),
       body: asyncSummary.when(
         data: (summary) => _buildForm(summary, asyncLedger, ledgerArgs),
         loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.info),
+          child: CircularProgressIndicator(color: Color(0xFF43A047)),
         ),
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
@@ -120,166 +131,181 @@ class _RepartidorLiquidacionDiariaPageState
     LiquidacionLedgerArgs ledgerArgs,
   ) {
     final isAggregate = widget.repartidorId.contains(',');
-    final canWriteEntries = asyncLedger?.hasValue == true &&
-        asyncLedger?.valueOrNull?.status == 'OPEN' &&
-        _closedResult == null;
+    final closed = _closedResult != null;
+    if (!_seededClassicFields) {
+      _ingresoBancoController.text = _classicMoney(summary.ingresoBanco);
+      _entregadoController.text = _classicMoney(summary.entregado);
+      _seededClassicFields = true;
+    }
     return Column(
       children: [
-        _ModernHeader(
-          title: 'Liquidacion Diaria',
-          subtitle: LiquidacionPdfBuilder.gmpNumber(
-            widget.repartidorId,
-            _sessionDate,
-          ),
-          date: _sessionDate,
-          onGeneratePdf: () => _generatePdf(summary, asyncLedger?.valueOrNull),
-          onSharePdf: () => _sharePdf(summary, asyncLedger?.valueOrNull),
-        ),
-        // Resumen acumulado del mes: cobrado / liquidado / pendiente.
-        // Da contexto al repartidor antes de cerrar el dia.
-        if (!isAggregate && widget.showMonthlySummary)
-          RepartidorMonthlySummaryBar(repartidorId: widget.repartidorId),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SectionTitle(
-                  icon: Icons.payments,
-                  label: 'COBROS DEL DIA',
-                ),
-                _PaymentMethodCard(
-                  icon: Icons.money,
-                  label: 'Efectivo',
-                  value: summary.totalEfectivo,
-                  color: AppColors.success,
-                ),
-                const SizedBox(height: 8),
-                _PaymentMethodCard(
-                  icon: Icons.receipt_long,
-                  label: 'Cheques',
-                  value: summary.totalCheques,
-                  color: AppColors.accentIndigo,
-                ),
-                const SizedBox(height: 8),
-                _PaymentMethodCard(
-                  icon: Icons.credit_card,
-                  label: 'Tarjeta',
-                  value: summary.totalTarjeta,
-                  color: AppColors.info,
-                ),
-                const SizedBox(height: 8),
-                _PaymentMethodCard(
-                  icon: Icons.calendar_today,
-                  label: 'Postdatados',
-                  value: summary.totalPostdatados,
-                  color: AppColors.warning,
-                ),
-                const SizedBox(height: 20),
-                const _SectionTitle(
-                  icon: Icons.account_balance_wallet,
-                  label: 'BALANCE',
-                ),
-                _BalanceCard(
-                  label: 'Entregado ERP (día)',
-                  value: summary.entregado,
-                  icon: Icons.local_shipping,
-                ),
-                const SizedBox(height: 8),
-                _BalanceCard(
-                  label: 'Deuda pendiente ERP',
-                  value: summary.deudaPendiente,
-                  icon: Icons.money_off,
-                ),
-                const SizedBox(height: 8),
-                _BalanceCard(
-                  label: 'Saldo actual',
-                  value: summary.saldoActual,
-                  icon: Icons.wallet,
-                ),
-                const SizedBox(height: 8),
-                _BalanceCard(
-                  label: 'Total a ingresar',
-                  value: summary.totalAIngresar,
-                  icon: Icons.upload_file,
-                  highlight: true,
-                ),
-                const SizedBox(height: 24),
-                if (asyncLedger != null) ...[
-                  const _SectionTitle(
-                    icon: Icons.receipt_long,
-                    label: 'DESGLOSE DE LIQUIDACION',
+        Material(
+          color: const Color(0xFF43A047),
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 48,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      child: const Text(
+                        'Volver',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
-                  _LiquidacionLedgerPanel(
-                    ledger: asyncLedger,
-                    onRetry: () => ref.invalidate(
-                      repartidorLiquidacionLedgerProvider(ledgerArgs),
+                  const Text(
+                    'Liquidación Diaria',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
-                if (!isAggregate && canWriteEntries) ...[
-                  const SizedBox(height: 12),
-                  _LiquidacionEntryActions(
-                    isSubmitting: _submittingEntry,
-                    canCreateAdjustments: widget.canCreateAdjustments,
-                    onExpense: () => _showEntryDialog(_EntryKind.expense),
-                    onBankDeposit: () =>
-                        _showEntryDialog(_EntryKind.bankDeposit),
-                    onAdjustment: () => _showEntryDialog(_EntryKind.adjustment),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                if (_closedResult != null) ...[
-                  const SizedBox(height: 24),
-                  _LiquidacionClosedState(result: _closedResult!),
-                ],
-                if (summary.cobros.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  const _SectionTitle(
-                    icon: Icons.receipt,
-                    label: 'COBROS DETALLE',
-                  ),
-                  _CobrosPreview(
-                    cobros: summary.cobros,
-                    canReverseCobros: summary.canReverseCobros,
-                    repartidorId: widget.repartidorId,
-                    onReversed: () {
-                      final args = (
-                        repartidorId: widget.repartidorId,
-                        date: _sessionDate,
-                        forceRefresh: true,
-                      );
-                      ref.invalidate(
-                        repartidorDailySummaryProvider(args),
-                      );
-                    },
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
-        if (!isAggregate)
-          _ModernSaveBar(
-            isSaving: _saving,
-            isClosed: _closedResult != null,
-            onPressed: () => _save(summary, asyncLedger?.valueOrNull),
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _ClassicReadRow(
+                label: 'Total efectivo',
+                value: summary.totalEfectivo,
+                striped: false,
+              ),
+              _ClassicReadRow(
+                label: 'Total cheques',
+                value: summary.totalCheques,
+                striped: true,
+              ),
+              _ClassicReadRow(
+                label: 'Total postdatados',
+                value: summary.totalPostdatados,
+                striped: false,
+              ),
+              _ClassicReadRow(
+                label: 'Saldo actual',
+                value: summary.saldoActual,
+                striped: true,
+              ),
+              _ClassicReadRow(
+                label: 'Total a ingresar',
+                value: summary.totalAIngresar,
+                striped: false,
+                valueColor: const Color(0xFFC62828),
+              ),
+              _ClassicInputRow(
+                label: 'Ingreso en banco',
+                controller: _ingresoBancoController,
+                striped: true,
+                enabled: !closed && !isAggregate,
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Divider(color: Colors.black, thickness: 3, height: 8),
+              ),
+              _ClassicReadRow(
+                label: 'Total efectivo',
+                value: summary.totalEfectivo,
+                striped: false,
+              ),
+              _ClassicInputRow(
+                label: 'Entregado',
+                controller: _entregadoController,
+                striped: true,
+                enabled: !closed && !isAggregate,
+              ),
+              if (closed)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: _LiquidacionClosedState(result: _closedResult!),
+                ),
+              const SizedBox(height: 24),
+              if (!isAggregate)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Material(
+                      color: closed
+                          ? const Color(0xFF9E9E9E)
+                          : const Color(0xFF43A047),
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        onTap: _saving || closed
+                            ? null
+                            : () => _save(summary, asyncLedger?.valueOrNull),
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 92,
+                          height: 92,
+                          child: _saving
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.check,
+                                      color: Colors.white,
+                                      size: 36,
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Grabar',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
 
+  double _parseEuro(String raw) {
+    final normalized =
+        raw.trim().replaceAll('€', '').replaceAll(' ', '').replaceAll(',', '.');
+    return double.tryParse(normalized) ?? 0;
+  }
+
+  String _classicMoney(double value) => value.toStringAsFixed(2);
+
   Future<void> _generatePdf(
-    RepartidorDailySummary summary,
-    RepartidorLiquidacionLedger? ledger,
+    RepartidorLiquidacionResult liquidacion,
   ) async {
     try {
-      await LiquidacionPdfBuilder.preview(
-        repartidorId: widget.repartidorId,
-        date: _sessionDate,
-        summary: summary,
-        ledger: ledger,
+      await CanonicalLiquidacionPdfBuilder.preview(
+        liquidacion: liquidacion,
       );
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
@@ -295,15 +321,11 @@ class _RepartidorLiquidacionDiariaPageState
   }
 
   Future<void> _sharePdf(
-    RepartidorDailySummary summary,
-    RepartidorLiquidacionLedger? ledger,
+    RepartidorLiquidacionResult liquidacion,
   ) async {
     try {
-      await LiquidacionPdfBuilder.shareViaSystem(
-        repartidorId: widget.repartidorId,
-        date: _sessionDate,
-        summary: summary,
-        ledger: ledger,
+      await CanonicalLiquidacionPdfBuilder.share(
+        liquidacion: liquidacion,
       );
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
@@ -342,6 +364,27 @@ class _RepartidorLiquidacionDiariaPageState
     );
 
     try {
+      final ingreso = _parseEuro(_ingresoBancoController.text);
+      if (ingreso > 0.009) {
+        final token = _entryTokens.putIfAbsent(
+          'BANK_DEPOSIT',
+          () => createLiquidacionEntryIdempotencyToken(
+            widget.repartidorId,
+            _sessionDate,
+            'BANK_DEPOSIT',
+            amount: ingreso,
+            detail: 'INGRESO BANCO',
+          ),
+        );
+        await ref.read(repartidorLiquidacionActionsProvider).createBankDeposit(
+              repartidorId: widget.repartidorId,
+              date: _sessionDate,
+              amount: ingreso,
+              reference: 'INGRESO BANCO',
+              idempotencyToken: token,
+            );
+      }
+
       final result = await ref.read(repartidorLiquidacionActionsProvider).close(
             repartidorId: widget.repartidorId,
             date: _sessionDate,
@@ -356,7 +399,7 @@ class _RepartidorLiquidacionDiariaPageState
             ? 'Liquidacion ya cerrada anteriormente'
             : 'Liquidacion cerrada. Abriendo PDF...',
       );
-      await _generatePdf(summary, ledger);
+      await _generatePdf(result);
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
@@ -1558,4 +1601,123 @@ class _ErrorState extends StatelessWidget {
 String _money(double value, {bool symbol = true}) {
   final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
   return symbol ? '$fixed EUR' : fixed;
+}
+
+class _ClassicReadRow extends StatelessWidget {
+  const _ClassicReadRow({
+    required this.label,
+    required this.value,
+    required this.striped,
+    this.valueColor = const Color(0xFF1565C0),
+  });
+
+  final String label;
+  final double value;
+  final bool striped;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: striped ? const Color(0xFFD8D8D8) : const Color(0xFFE6E6E6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              '${value.toStringAsFixed(2)} €',
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassicInputRow extends StatelessWidget {
+  const _ClassicInputRow({
+    required this.label,
+    required this.controller,
+    required this.striped,
+    required this.enabled,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final bool striped;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: striped ? const Color(0xFFD8D8D8) : const Color(0xFFE6E6E6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 160,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                enabled: enabled,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  suffixText: '€',
+                  suffixStyle: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(2),
+                    borderSide: const BorderSide(color: Color(0xFFBDBDBD)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(2),
+                    borderSide: const BorderSide(color: Color(0xFFBDBDBD)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

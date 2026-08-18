@@ -66,7 +66,7 @@ describe('DB2 planned delivery read port', () => {
     expect(db.calls[0].sql).not.toContain('DSEDAC.CVC');
     expect(db.calls[0].params).toEqual([2026, 'A', 2, 42, 'REP-1', 'CLI-01']);
     expect(db.calls[1].sql).toContain('TRIM(LAC.SUBEMPRESAALBARAN) = ?');
-    expect(db.calls[1].sql).toContain('LAC.CANTIDADUNIDADES > 0');
+    expect(db.calls[1].sql).toContain('(LAC.CANTIDADUNIDADES > 0 OR LAC.CANTIDADENVASES > 0)');
     expect(db.calls[1].sql).toContain('ORDER BY LAC.SECUENCIA, TRIM(LAC.CODIGOARTICULO)');
     expect(db.calls[1].params).toEqual(['GMP', 2026, 'A', 2, 42, 'CLI-01']);
     expect(db.calls[2].sql).toContain('FROM DSEDAC.CVC CVC');
@@ -111,5 +111,55 @@ describe('DB2 planned delivery read port', () => {
 
   test('rejects schemas other than DSEDAC before querying', () => {
     expect(() => createRepartoPlannedDeliveryDb2Port({ schema: 'JAVIER' })).toThrow(RepartoPlannedDeliveryError);
+  });
+
+  test('accepts prepaid zero-importe lines and envase quantities', async () => {
+    const port = createRepartoPlannedDeliveryDb2Port();
+    const planned = await port.forConnection(connection({
+      headers: [header({ IMPORTETOTAL: '0' })],
+      lines: [line({
+        CANTIDADUNIDADES: '0',
+        CANTIDADENVASES: '4',
+        PRECIOVENTA: '0',
+        IMPORTEVENTA: '0',
+        CODIGOARTICULO: '',
+      })],
+      financials: [],
+    })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
+    expect(planned.lineas).toEqual([expect.objectContaining({
+      lineaId: '1',
+      codigoArticulo: '1',
+      cantidadPedida: 4,
+      cantidadEnvases: 4,
+      importeLinea: 0,
+      precioUnitario: 0,
+    })]);
+  });
+
+  test('accepts prepaid zero-importe documents with no ERP lines and zero CVC pending', async () => {
+    const port = createRepartoPlannedDeliveryDb2Port();
+    const planned = await port.forConnection(connection({
+      headers: [header({ IMPORTETOTAL: '0' })],
+      lines: [],
+      financials: [financial({ IMPORTEPENDIENTE: '0' })],
+    })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
+    expect(planned).toMatchObject({
+      importeTotal: 0,
+      importePendiente: 0,
+      financialDocumentState: 'MISSING',
+      financialDocument: null,
+      lineas: [],
+    });
+  });
+
+  test('still rejects empty ERP lines when the planned importe is not zero', async () => {
+    const port = createRepartoPlannedDeliveryDb2Port();
+    await expect(port.forConnection(connection({
+      headers: [header({ IMPORTETOTAL: '13.50' })],
+      lines: [],
+    })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1')).rejects.toMatchObject({
+      code: 'DELIVERY_SOURCE_INCONSISTENT',
+      statusCode: 409,
+    });
   });
 });

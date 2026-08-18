@@ -1,0 +1,18 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1151,2 +1151,3 @@
+-      await backupMappedDestinations(pairs, runId);
+-      const schemaReport = await reconcileMappingPairs(pairs);
++      await backupMappedDestinations(tablePairs, runId);
++      await backupTestTable(TEST_FIRMAS, runId);
++      const schemaReport = await reconcileMappingPairs(tablePairs);
+@@ -1159,1 +1160,1 @@
+-      await preflightMappingPairs(pairs);
++      await preflightMappingPairs(tablePairs);
+@@ -1165,2 +1166,3 @@
+-      await preflightMappingPairs(pairs);
+-      await backupMappedDestinations(pairs, runId);
++      await preflightMappingPairs(tablePairs);
++      await backupMappedDestinations(tablePairs, runId);
++      await backupTestTable(TEST_FIRMAS, runId);

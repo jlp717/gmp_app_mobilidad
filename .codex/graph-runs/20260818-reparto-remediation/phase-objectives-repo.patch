@@ -1,0 +1,83 @@
+diff --git a/backend/repositories/repartidor-route-db2-repository.js b/backend/repositories/repartidor-route-db2-repository.js
+--- a/backend/repositories/repartidor-route-db2-repository.js
++++ b/backend/repositories/repartidor-route-db2-repository.js
+@@ -875,6 +875,18 @@
+   clientId,
+   { limit = 100, offset = 0 } = {},
+ ) {
++  const pageLimit = Number(limit);
++  const pageOffset = Number(offset);
++  if (!Number.isSafeInteger(pageLimit) || pageLimit < 1 || pageLimit > 100) {
++    const error = new Error('Objectives detail page limit must be between 1 and 100');
++    error.code = 'OBJECTIVES_DETAIL_LIMIT_INVALID';
++    throw error;
++  }
++  if (!Number.isSafeInteger(pageOffset) || pageOffset < 0) {
++    const error = new Error('Objectives detail page offset must be a non-negative integer');
++    error.code = 'OBJECTIVES_DETAIL_OFFSET_INVALID';
++    throw error;
++  }
+   let clientFilter = '';
+@@ -884,8 +896,8 @@
+   const repartidorKey = repartidorIdList.join(',');
+   const clientsSql = `
+             WITH CLIENT_SCOPE AS (
+-                SELECT DISTINCT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENT_CODE,
+-                    TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) AS CLIENT_NAME
++                SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENT_CODE,
++                    MAX(TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, ''))) AS CLIENT_NAME
+                 FROM DSEDAC.OPP OPP
+@@ -895,30 +907,40 @@
+                 WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                   AND OPP.ANOREPARTO = ?
+                   ${clientFilter}
+-            ), NUMBERED_CLIENTS AS (
+-                SELECT CLIENT_SCOPE.*,
+-                    COUNT(*) OVER() AS TOTAL_COUNT,
+-                    ROW_NUMBER() OVER (ORDER BY CLIENT_CODE) AS LOGICAL_POSITION
++                GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)
++            ), NUMBERED AS (
++                SELECT CLIENT_SCOPE.*,
++                    ROW_NUMBER() OVER (ORDER BY CLIENT_CODE, CLIENT_NAME) AS LOGICAL_POSITION
+                 FROM CLIENT_SCOPE
++            ), PAGE_ROWS AS (
++                SELECT CLIENT_CODE, CLIENT_NAME, LOGICAL_POSITION
++                FROM NUMBERED
++                WHERE LOGICAL_POSITION > ? AND LOGICAL_POSITION <= ?
++            ), SCOPE_TOTAL AS (
++                SELECT COUNT(*) AS TOTAL_COUNT
++                FROM CLIENT_SCOPE
+             )
+-            SELECT CLIENT_CODE, CLIENT_NAME, TOTAL_COUNT
+-            FROM NUMBERED_CLIENTS
+-            WHERE LOGICAL_POSITION > ? AND LOGICAL_POSITION <= ?
+-            ORDER BY LOGICAL_POSITION
++            SELECT PAGE_ROWS.CLIENT_CODE, PAGE_ROWS.CLIENT_NAME,
++                PAGE_ROWS.LOGICAL_POSITION, SCOPE_TOTAL.TOTAL_COUNT
++            FROM SCOPE_TOTAL
++            LEFT JOIN PAGE_ROWS ON 1 = 1
++            ORDER BY PAGE_ROWS.LOGICAL_POSITION
+         `;
+@@ -909,14 +931,19 @@
+     ...repartidorIdList,
+     selectedYear,
+     ...clientFilterParams,
+-    offset,
+-    offset + limit,
++    pageOffset,
++    pageOffset + pageLimit,
+   ];
+-  return runCached(
++  const result = await runCached(
+     clientsSql,
+-    `repartidor:objDetail:${repartidorKey}:${selectedYear}:${clientId || 'all'}:${offset}:${limit}`,
++    `repartidor:objDetail:${repartidorKey}:${selectedYear}:${clientId || 'all'}:${pageOffset}:${pageLimit}`,
+     TTL.REALTIME,
+     clientSqlParams,
+   );
++  const resultRows = Array.isArray(result) ? result : [];
++  return {
++    total: Number(resultRows[0]?.TOTAL_COUNT || 0),
++    rows: resultRows.filter((row) => String(row?.CLIENT_CODE || '').trim()),
++  };
+ }

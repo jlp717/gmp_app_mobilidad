@@ -1,0 +1,234 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -18,6 +18,7 @@ import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
+ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
+ import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
++import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+ import 'package:intl/intl.dart';
+@@ -378,6 +379,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+           hasLegacySignature: d.hasLegacySignature,
+           legacyDate: d.legacyDate,
+           confirmationId: d.confirmationId,
++          repartidorId: d.deliveryRepartidor,
+         );
+       }).toList();
+       setState(() {
+@@ -2222,6 +2224,28 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   // ACTIONS
+   // ===========================================================================
+ 
++  String? _documentOwner(_DocumentItem doc) => resolveRepartoDocumentOwner(
++        documentOwner: doc.repartidorId,
++        selectedOwner: widget.repartidorId,
++      );
++
++  void _showDocumentOwnerRequired() {
++    if (!mounted) return;
++    ScaffoldMessenger.of(context).showSnackBar(
++      const SnackBar(
++        content: Text(
++          'Selecciona un repartidor concreto para este documento.',
++        ),
++        backgroundColor: AppTheme.warning,
++      ),
++    );
++  }
++
+   Future<void> _previewDeliveryNote(_DocumentItem doc) async {
+     final confirmationId = doc.confirmationId?.trim() ?? '';
+     if (confirmationId.isEmpty) {
+@@ -2245,6 +2269,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       );
+       return;
+     }
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     final modal = AsyncOperationModal.show(
+       context,
+       text: 'Cargando nota de entrega...',
+@@ -2252,6 +2281,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+     try {
+       final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+         confirmationId: confirmationId,
++        repartidorId: owner,
+       );
+       modal.close();
+       if (!mounted) return;
+@@ -2288,6 +2318,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   }
+ 
+   Future<void> _previewDocument(_DocumentItem doc) async {
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     final modal = AsyncOperationModal.show(
+       context,
+       text: 'Cargando previsualización...',
+@@ -2316,7 +2351,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+         albaranSerie: doc.serie,
+         albaranTerminal: doc.terminal,
+         albaranYear: doc.ejercicio,
+-        repartidorId: widget.repartidorId,
++        repartidorId: owner,
+       );
+       modal.close();
+ 
+@@ -2363,6 +2398,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   }
+ 
+   Future<void> _downloadDocument(_DocumentItem doc) async {
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     if (_isDownloadingDocument) return;
+     _isDownloadingDocument = true;
+     final modal = AsyncOperationModal.show(
+@@ -2392,7 +2432,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+         albaranSerie: doc.serie,
+         albaranTerminal: doc.terminal,
+         albaranYear: doc.ejercicio,
+-        repartidorId: widget.repartidorId,
++        repartidorId: owner,
+       );
+       modal.close();
+ 
+@@ -2487,6 +2527,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   Future<void> _emailCommercialDocument(_DocumentItem doc) async {
+     if (!mounted) return;
+     if (!widget.canEmailDocuments) return;
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     final email = await _askEmailAddress();
+     if (email == null || email.isEmpty || !mounted) return;
+     if (!email.contains('@')) {
+@@ -2503,7 +2548,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+     final isFactura = doc.type == _DocType.factura;
+     final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
+     try {
+-      await RepartidorDataService.sendCommercialDocumentEmail(
++      await RepartidorDataService.sendEmail(
++        year: isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : doc.ejercicio,
++        type: isFactura ? 'factura' : 'albaran',
+         serie: isFactura ? (doc.serieFactura ?? doc.serie) : doc.serie,
+-        numero: isFactura
++        number: isFactura
+             ? (doc.facturaNumber ?? doc.number)
+             : (doc.albaranNumber ?? doc.number),
+-        ejercicio:
+-            isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : doc.ejercicio,
+         terminal: doc.terminal,
+-        documentType: isFactura ? 'factura' : 'albaran',
+         destinatario: email,
+-        clienteNombre: _selectedClientName,
++        repartidorId: owner,
++        canEmailDocuments: widget.canEmailDocuments,
++        facturaNumber: doc.facturaNumber,
++        serieFactura: doc.serieFactura,
++        ejercicioFactura: doc.ejercicioFactura,
++        albaranNumber: doc.albaranNumber ?? doc.number,
++        albaranSerie: doc.serie,
++        albaranTerminal: doc.terminal,
++        albaranYear: doc.ejercicio,
+       );
+       if (!mounted) return;
+       ScaffoldMessenger.of(context).showSnackBar(
+@@ -2544,6 +2591,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       );
+       return;
+     }
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     final email = await _askEmailAddress();
+     if (email == null || email.isEmpty || !mounted) return;
+     final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
+@@ -2563,7 +2615,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+     try {
+       await RepartidorDataService.emailDeliveryNote(
+         confirmationId: confirmationId,
+-        repartidorId: widget.repartidorId,
++        repartidorId: owner,
+         destinatario: email,
+       );
+       if (!mounted) return;
+@@ -2660,6 +2712,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   }
+ 
+   Future<void> _shareLocalDocumentUnlocked(_DocumentItem doc) async {
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     final isFactura = doc.type == _DocType.factura;
+     final typeLabel = isFactura ? 'Factura' : 'Albarán';
+     final clientName = _selectedClientName ?? 'Cliente';
+@@ -2704,7 +2761,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+         albaranSerie: doc.serie,
+         albaranTerminal: doc.terminal,
+         albaranYear: doc.ejercicio,
+-        repartidorId: widget.repartidorId,
++        repartidorId: owner,
+       );
+ 
+       // Save PDF to temp file
+@@ -2720,6 +2777,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+         type: isFactura ? 'factura' : 'albaran',
+         telefono: result.phone,
++        repartidorId: owner,
+         clienteNombre: clientName,
+         facturaNumber: doc.facturaNumber,
+         serieFactura: doc.serieFactura,
+@@ -2781,6 +2839,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   }
+ 
+   Future<void> _shareSystemDocumentUnlocked(_DocumentItem doc) async {
++    final owner = _documentOwner(doc);
++    if (owner == null) {
++      _showDocumentOwnerRequired();
++      return;
++    }
+     final modal = AsyncOperationModal.show(
+       context,
+       text: 'Preparando documento...',
+@@ -2808,7 +2871,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+         albaranSerie: doc.serie,
+         albaranTerminal: doc.terminal,
+         albaranYear: doc.ejercicio,
+-        repartidorId: widget.repartidorId,
++        repartidorId: owner,
+       );
+       modal.close();
+ 
+@@ -3038,6 +3101,7 @@ class _DocumentItem {
+     this.hasLegacySignature = false,
+     this.legacyDate,
+     this.confirmationId,
++    this.repartidorId,
+   });
+   final String id;
+   final bool hasValidDate;
+@@ -3065,6 +3129,7 @@ class _DocumentItem {
+   final bool hasLegacySignature;
+   final String? legacyDate;
+   final String? confirmationId;
++  final String? repartidorId;
+ }
+ 
+ // =============================================================================

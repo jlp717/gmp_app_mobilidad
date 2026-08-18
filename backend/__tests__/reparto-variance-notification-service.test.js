@@ -116,6 +116,8 @@ describe('reparto-variance-notification-service', () => {
       NODE_ENV: 'test',
       REPARTO_ENVIRONMENT: 'test',
       REPARTO_TABLE_SET: 'isolated_test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test',
+      REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
       ODBC_DSN: 'GMP',
       REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
       REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
@@ -171,5 +173,137 @@ describe('reparto-variance-notification-service', () => {
     expect(result.skipped).toBe(false);
     expect(result.sent).toBe(1);
     expect(query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO'))).toBe(true);
+  });
+
+  test('notifyAfterConfirm does not send a duplicate for existing durable outbox item', async () => {
+    const query = jest.fn(async (sql) => {
+      if (String(sql).includes('SELECT ID, STATUS')) return [{ ID: 77, STATUS: 'SENT' }];
+      return [];
+    });
+    const sendEmail = jest.fn();
+    const result = await notifyAfterConfirm({
+      command: {
+        delivery: {
+          itemId: '2026-A-1-100-4300001',
+          status: 'PARCIAL',
+          lineas: [{ lineaId: '1', codigoArticulo: 'SKU1', cantidadPedida: 2, cantidadEntregada: 1 }],
+        },
+        actor: { repartidorId: '94' },
+      },
+      result: { created: true, confirmationId: '77', deliveryStatus: 'PARCIAL' },
+    }, {
+      query,
+      env: {
+        NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
+        REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test', REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+        ODBC_DSN: 'GMP', REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+        REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+        REPARTO_WRITES_ENABLED: 'false', REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+        REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false', REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
+        REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false', REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
+        REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+      },
+      sendEmail,
+      resolveRecipients: jest.fn(),
+      resolveComercial: jest.fn(),
+    });
+    expect(result).toEqual(expect.objectContaining({ skipped: true, reason: 'already_enqueued' }));
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  test('notifyAfterConfirm does not send when durable outbox enqueue fails', async () => {
+    const query = jest.fn(async () => { throw new Error('DB down'); });
+    const sendEmail = jest.fn();
+    const result = await notifyAfterConfirm({
+      command: {
+        delivery: {
+          itemId: '2026-A-1-100-4300001', status: 'RECHAZADO',
+          lineas: [{ lineaId: '1', codigoArticulo: 'SKU1', cantidadPedida: 2, cantidadEntregada: 0, cantidadRechazada: 2 }],
+        }, actor: { repartidorId: '94' },
+      },
+      result: { created: true, confirmationId: '78', deliveryStatus: 'RECHAZADO' },
+    }, {
+      query,
+      env: {
+        NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
+        REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test', REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+        ODBC_DSN: 'GMP', REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+        REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+        REPARTO_WRITES_ENABLED: 'false', REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+        REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false', REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
+        REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false', REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
+        REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+      },
+      sendEmail,
+      resolveRecipients: jest.fn(),
+      resolveComercial: jest.fn(),
+    });
+    expect(result).toEqual(expect.objectContaining({ skipped: true, reason: 'outbox_unavailable' }));
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  test('previousMadridIsoDate is the calendar day before Europe/Madrid today', () => {
+    const { previousMadridIsoDate } = require('../services/reparto-variance-notification-service');
+    expect(previousMadridIsoDate(new Date('2026-08-18T06:30:00+02:00'))).toBe('2026-08-17');
+    expect(previousMadridIsoDate(new Date('2026-08-18T00:15:00+02:00'))).toBe('2026-08-17');
+  });
+
+  test('sendDailyVarianceDigest uses previous Madrid day and emails roles plus involved driver/comercial', async () => {
+    const { sendDailyVarianceDigest } = require('../services/reparto-variance-notification-service');
+    const query = jest.fn(async (sql) => {
+      if (String(sql).includes('SELECT ID, CONFIRMATION_ID')) {
+        return [{
+          ID: 9,
+          DOCUMENT_ID: '2026-A-1-1-C1',
+          REPARTIDOR_ID: '08',
+          COMERCIAL_CODE: '33',
+          PAYLOAD_JSON: JSON.stringify({ lineas: [{ codigoArticulo: 'A', diff: -1 }] }),
+        }];
+      }
+      return [];
+    });
+    const sendEmail = jest.fn(async () => ({ success: true }));
+    const resolveRecipients = jest.fn(async ({ repartidorId, comercialCode }) => {
+      const emails = ['javier@example.test', 'carlos@example.test'];
+      if (repartidorId === '08') emails.push('driver@example.test');
+      if (comercialCode === '33') emails.push('comercial@example.test');
+      return { emails, details: [] };
+    });
+    const env = {
+      NODE_ENV: 'test',
+      REPARTO_ENVIRONMENT: 'test',
+      REPARTO_TABLE_SET: 'isolated_test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test',
+      REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+      ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+      REPARTO_WRITES_ENABLED: 'false',
+      REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+      REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
+      REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
+      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    };
+
+    const result = await sendDailyVarianceDigest({
+      query,
+      env,
+      sendEmail,
+      resolveRecipients,
+      digestDate: '2026-08-17',
+    });
+
+    expect(query.mock.calls[0][1]).toEqual(['2026-08-17', '2026-08-17']);
+    expect(result).toMatchObject({ sent: 4, items: 1, digestDate: '2026-08-17' });
+    const tos = sendEmail.mock.calls.map((call) => call[0].to).sort();
+    expect(tos).toEqual([
+      'carlos@example.test',
+      'comercial@example.test',
+      'driver@example.test',
+      'javier@example.test',
+    ]);
   });
 });

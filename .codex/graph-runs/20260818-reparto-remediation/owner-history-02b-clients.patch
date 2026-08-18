@@ -1,0 +1,18 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -252,6 +252,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+               address: c.address,
+               totalDocuments: c.totalDocuments,
+               totalAmount: c.totalAmount,
+               lastVisit: c.lastVisit,
++              repartidorId: c.repCode,
+             ),
+           )
+@@ -260,5 +261,5 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       final merged =
+           append ? <_ClientItem>[..._clients, ...mappedClients] : mappedClients;
+       final byId = <String, _ClientItem>{
+-        for (final client in merged) client.id: client,
++        for (final client in merged) client.selectionKey: client,
+       };

@@ -1,0 +1,7 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -557,2 +557,2 @@ class RepartidorDataService {
+       final cacheKey =
+-          'repartidor_docs_${clientId}_${repartidorId}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
++          'repartidor_docs_${clientId}_${owner}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';

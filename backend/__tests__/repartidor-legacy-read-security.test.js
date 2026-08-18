@@ -47,7 +47,10 @@ jest.mock('../middleware/auth', () => ({
     if (!req.headers.authorization || !mockUser) {
       return res.status(401).json({ success: false, code: 'MISSING_TOKEN' });
     }
-    req.user = { ...mockUser };
+    const selfFleet = mockUser.role === 'REPARTIDOR'
+      ? { repartidorCodes: mockUser.repartidorCodes || [mockUser.code] }
+      : {};
+    req.user = { ...mockUser, ...selfFleet };
     return next();
   },
 }));
@@ -64,7 +67,14 @@ jest.mock('../app/services/deliveryReceiptService', () => ({
 jest.mock('../services/facturas.service', () => ({}));
 jest.mock('../services/pdf.service', () => ({}));
 
+const previousTableSet = process.env.REPARTO_TABLE_SET;
+process.env.REPARTO_TABLE_SET = 'isolated_test';
 const routes = require('../routes/repartidor');
+
+afterAll(() => {
+  if (previousTableSet === undefined) delete process.env.REPARTO_TABLE_SET;
+  else process.env.REPARTO_TABLE_SET = previousTableSet;
+});
 
 function makeApp() {
   const app = express();
@@ -73,15 +83,26 @@ function makeApp() {
   return app;
 }
 
-function authenticatedGet(path) {
-  return request(makeApp()).get(path).set('Authorization', 'Bearer test-token');
+function authenticatedGet(requestPath) {
+  const strictDocumentPath = /\/repartidor\/(?:history\/signature|history\/legacy-signature\/|entregas\/[^/]+\/firma|document\/(?:albaran|invoice)\/)/.test(requestPath);
+  const hasOwner = /[?&]repartidorId=/.test(requestPath);
+  const separator = requestPath.includes('?') ? '&' : '?';
+  const scopedPath = mockUser?.role === 'REPARTIDOR' && strictDocumentPath && !hasOwner
+    ? `${requestPath}${separator}repartidorId=${encodeURIComponent(mockUser.code)}`
+    : requestPath;
+  return request(makeApp()).get(scopedPath).set('Authorization', 'Bearer test-token');
 }
 
 function authenticatedPost(path, body) {
+  const strictDocumentPath = path === '/repartidor/document/send-email'
+    || path === '/repartidor/document/share/whatsapp';
+  const scopedBody = mockUser?.role === 'REPARTIDOR' && strictDocumentPath && body?.repartidorId === undefined
+    ? { ...body, repartidorId: mockUser.code }
+    : body;
   return request(makeApp())
     .post(path)
     .set('Authorization', 'Bearer test-token')
-    .send(body);
+    .send(scopedBody);
 }
 
 describe('legacy repartidor read security contracts', () => {
@@ -97,8 +118,10 @@ describe('legacy repartidor read security contracts', () => {
       .query({ year: 2026, month: 8 });
 
     expect(response.status).toBe(200);
-    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
-    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    const collectionCalls = mockQueryWithParams.mock.calls
+      .filter(([sql]) => String(sql).includes('CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA'));
+    expect(collectionCalls).toHaveLength(1);
+    const [sql, params] = collectionCalls[0];
     expect(params).toEqual([8, 2026, '05']);
     expect(sql).toContain('CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA');
     expect(sql).toContain('CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION');
@@ -114,16 +137,36 @@ describe('legacy repartidor read security contracts', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
-  test('allows explicit ADMIN and JEFE_VENTAS roles to use multi-id scope', async () => {
+  test('allows ADMIN and JEFE_VENTAS in reparto mode to use multi-id scope', async () => {
     for (const role of ['ADMIN', 'JEFE_VENTAS']) {
-      mockUser = { id: '90', code: '90', role };
+      mockUser = { id: '90', code: '90', role, activeMode: 'REPARTIDOR', repartidorCodes: ['05', '06'] };
       const response = await authenticatedGet('/repartidor/collections/daily/05,06')
         .query({ year: 2026, month: 8 });
       expect(response.status).toBe(200);
     }
 
-    expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual([2026, 8, '05', '06']);
+    const collectionCalls = mockQueryWithParams.mock.calls
+      .filter(([sql]) => String(sql).includes('CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA'));
+    expect(collectionCalls).toHaveLength(2);
+    expect(collectionCalls[0][1]).toEqual([2026, 8, '05', '06']);
+  });
+
+  test('canonicalizes a one-digit own code before DB2', async () => {
+    const response = await authenticatedGet('/repartidor/collections/summary/5')
+      .query({ year: 2026, month: 8 });
+    expect(response.status).toBe(200);
+    const collectionCall = mockQueryWithParams.mock.calls
+      .find(([sql]) => String(sql).includes('CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA'));
+    expect(collectionCall[1]).toEqual([8, 2026, '05']);
+  });
+
+  test('JEFE outside Perfil Reparto is denied fleet access before DB2', async () => {
+    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', isJefeVentas: true };
+    const response = await authenticatedGet('/repartidor/collections/daily/05,06')
+      .query({ year: 2026, month: 8 });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('REPARTIDOR_MODE_REQUIRED');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
   test('does not elevate an inconsistent privilege flag', async () => {
@@ -197,7 +240,7 @@ describe('legacy repartidor read security contracts', () => {
     expect(response.status).toBe(503);
     expect(response.body).toEqual({
       success: false,
-      code: 'REPARTIDOR_DATA_UNAVAILABLE',
+      code: 'REPARTIDOR_COLLECTIONS_UNAVAILABLE',
       error: 'No se pudo completar la solicitud',
     });
     expect(JSON.stringify(response.body)).not.toContain('SQL30081N');
@@ -209,7 +252,7 @@ describe('legacy repartidor read security contracts', () => {
 
     const response = await authenticatedGet('/repartidor/collections/summary/05,123');
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.code).toBe('REPARTIDOR_ID_INVALID');
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
@@ -295,6 +338,18 @@ describe('document ownership and side-effect contracts', () => {
     expect(mockQueryWithParams.mock.calls[0][1]).toEqual(expectedParams);
   });
 
+  test.each([
+    '/repartidor/history/signature?ejercicio=2026&serie=A&terminal=0&numero=1',
+    '/repartidor/entregas/123/firma',
+    '/repartidor/history/legacy-signature/2026-A-0-1',
+  ])('JEFE reparto signatures require a concrete owner before DB2: %s', async (path) => {
+    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
+    const response = await authenticatedGet(path);
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
   test('allows the exact owner and explicit privileged roles', async () => {
     mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
     const own = await authenticatedGet(
@@ -304,28 +359,103 @@ describe('document ownership and side-effect contracts', () => {
 
     for (const role of ['ADMIN', 'JEFE_VENTAS']) {
       jest.clearAllMocks();
-      mockUser = { id: '90', code: '90', role };
+      mockUser = { id: '90', code: '90', role, activeMode: 'REPARTIDOR', repartidorCodes: ['06'] };
       mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '06' }]);
+      const suffix = '&repartidorId=06';
       const privileged = await authenticatedGet(
-        '/repartidor/history/signature?ejercicio=2026&serie=A&terminal=0&numero=1',
+        `/repartidor/history/signature?ejercicio=2026&serie=A&terminal=0&numero=1${suffix}`,
       );
       expect(privileged.status).toBe(200);
     }
   });
 
-  test.each([
-    [[], 404, 'DOCUMENT_NOT_FOUND'],
-    [[{ OWNER_ID: '05' }, { OWNER_ID: '06' }], 409, 'DOCUMENT_OWNER_AMBIGUOUS'],
-  ])('fails closed for missing or ambiguous ownership', async (owners, status, code) => {
-    mockQueryWithParams.mockResolvedValue(owners);
+  test('fails closed for missing ownership', async () => {
+    mockQueryWithParams.mockResolvedValue([]);
 
     const response = await authenticatedGet(
       '/repartidor/history/signature?ejercicio=2026&serie=A&terminal=0&numero=1',
     );
 
-    expect(response.status).toBe(status);
-    expect(response.body.code).toBe(code);
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('DOCUMENT_NOT_FOUND');
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+  });
+
+  test('owner among multiple OPP rows can read the document', async () => {
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }, { OWNER_ID: '06' }]);
+
+    const response = await authenticatedGet(
+      '/repartidor/history/signature?ejercicio=2026&serie=A&terminal=0&numero=1',
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  test('non-owner among multiple OPP rows is denied', async () => {
+    mockUser = { id: '07', code: '07', role: 'REPARTIDOR' };
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }, { OWNER_ID: '06' }]);
+
+    const response = await authenticatedGet(
+      '/repartidor/history/signature?ejercicio=2026&serie=A&terminal=0&numero=1',
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('DOCUMENT_ACCESS_DENIED');
+  });
+
+  test('allows COMERCIAL to preview an albaran sold by their vendor code', async () => {
+    mockUser = { id: '33', code: '33', role: 'COMERCIAL' };
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '06', VENDOR_ID: '33' }]);
+
+    const response = await authenticatedGet('/repartidor/document/albaran/2026/A/0/1/pdf');
+
+    expect(response.status).not.toBe(403);
+    expect(response.body.code).not.toBe('DOCUMENT_ACCESS_DENIED');
+  });
+
+  test('denies COMERCIAL when vendor does not match even if driver code collides', async () => {
+    mockUser = { id: '33', code: '33', role: 'COMERCIAL' };
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '33', VENDOR_ID: '06' }]);
+
+    const response = await authenticatedGet('/repartidor/document/albaran/2026/A/0/1/pdf');
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('DOCUMENT_ACCESS_DENIED');
+  });
+
+  test('denies REPARTIDOR when they are not the driver even if they match vendor', async () => {
+    mockUser = { id: '33', code: '33', role: 'REPARTIDOR' };
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '06', VENDOR_ID: '33' }]);
+
+    const response = await authenticatedGet('/repartidor/document/albaran/2026/A/0/1/pdf');
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('DOCUMENT_ACCESS_DENIED');
+  });
+
+  test('privileged role without hint fails closed on ambiguous owners', async () => {
+    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
+
+    const response = await authenticatedGet(
+      '/repartidor/document/invoice/2026/F/7/pdf',
+    );
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('privileged role with owner hint resolves ambiguous invoice ownership', async () => {
+    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['05'] };
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }, { OWNER_ID: '06' }]);
+
+    const response = await authenticatedGet(
+      '/repartidor/document/invoice/2026/F/7/pdf?repartidorId=05',
+    );
+
+    expect(response.status).not.toBe(409);
+    expect(response.status).not.toBe(403);
+    expect(response.body.code).not.toBe('DOCUMENT_OWNER_AMBIGUOUS');
   });
 
   test('hides signature debug by default without querying DB2', async () => {
@@ -350,18 +480,173 @@ describe('document ownership and side-effect contracts', () => {
     expect(admin.status).toBe(200);
     expect(mockQuery).toHaveBeenCalledTimes(1);
   });
-  test('email fails closed after ownership and never invokes a sender or PDF generator', async () => {
-    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
+  test('email sends the owned document PDF, writes the TEST ledger, and invokes the sender', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    const { generateInvoicePDF } = require('../app/services/pdfService');
+    generateInvoicePDF.mockResolvedValue(Buffer.from('%PDF-1.4'));
+    mockSendEmailWithPdf.mockResolvedValue({ messageId: 'mid-1' });
+    mockQueryWithParams
+      .mockResolvedValueOnce([{ OWNER_ID: '05' }])
+      .mockResolvedValueOnce([{
+        NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
 
+    try {
+      const response = await authenticatedPost('/repartidor/document/send-email', {
+        ...albaranBody,
+        destinatario: 'cliente@example.test',
+        repartidorId: '05',
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ success: true, messageId: 'mid-1', ledgerWritten: true });
+      expect(mockSendEmailWithPdf).toHaveBeenCalledTimes(1);
+      expect(mockSendEmailWithPdf.mock.calls[0][0]).toMatchObject({
+        to: 'cliente@example.test',
+        pdfFilename: expect.stringMatching(/Albaran_A-1\.pdf/i),
+      });
+      const ledgerCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+        /INSERT INTO JAVIER\.TEST_REPARTIDOR_COBROS_AUDIT/i.test(sql));
+      expect(ledgerCall).toBeDefined();
+      expect(ledgerCall[1][3]).not.toContain('@');
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
+
+  test('email validates recipient before DB2 and rejects JEFE selector BOLA', async () => {
+    const invalidEmail = await authenticatedPost('/repartidor/document/send-email', {
+      ...albaranBody,
+      destinatario: 'basura',
+      repartidorId: '05',
+    });
+    expect(invalidEmail.status).toBe(422);
+    expect(invalidEmail.body.code).toBe('EMAIL_INVALID');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+
+    mockUser = {
+      id: '90',
+      code: '90',
+      role: 'JEFE_VENTAS',
+      activeMode: 'REPARTIDOR',
+      repartidorCodes: ['05', '06'],
+    };
+    const missing = await authenticatedPost('/repartidor/document/send-email', {
+      ...albaranBody,
+      destinatario: 'jefe@example.test',
+    });
+    const all = await authenticatedPost('/repartidor/document/send-email', {
+      ...albaranBody,
+      destinatario: 'jefe@example.test',
+      repartidorId: 'ALL',
+    });
+    expect(missing.status).toBe(422);
+    expect(missing.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
+    expect(all.status).toBe(422);
+    expect(all.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
+    const foreign = await authenticatedPost('/repartidor/document/send-email', {
+      ...albaranBody,
+      destinatario: 'jefe@example.test',
+      repartidorId: '06',
+    });
+    expect(foreign.status).toBe(403);
+    expect(foreign.body.code).toBe('DOCUMENT_ACCESS_DENIED');
+    expect(mockSendEmailWithPdf).not.toHaveBeenCalled();
+  });
+
+  test('JEFE reparto PDF rejects foreign and ALL owner hints', async () => {
+    mockUser = {
+      id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+      repartidorCodes: ['05', '06'],
+    };
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
+    const foreign = await authenticatedGet(
+      '/repartidor/document/invoice/2026/F/7/pdf?repartidorId=06',
+    );
+    expect(foreign.status).toBe(403);
+    expect(foreign.body.code).toBe('DOCUMENT_ACCESS_DENIED');
+
+    jest.clearAllMocks();
+    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
+    const all = await authenticatedGet(
+      '/repartidor/document/invoice/2026/F/7/pdf?repartidorId=ALL',
+    );
+    expect(all.status).toBe(422);
+    expect(all.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
+  });
+
+  test('email requires JEFE reparto mode before DB2', async () => {
+    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS' };
+    const response = await authenticatedPost('/repartidor/document/send-email', {
+      ...albaranBody,
+      destinatario: 'jefe@example.test',
+      repartidorId: '05',
+    });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('DOCUMENT_REPARTO_MODE_REQUIRED');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('email fails closed when provider omits messageId', async () => {
+    const { generateInvoicePDF } = require('../app/services/pdfService');
+    generateInvoicePDF.mockResolvedValue(Buffer.from('%PDF-1.4'));
+    mockSendEmailWithPdf.mockResolvedValue({});
+    mockQueryWithParams
+      .mockResolvedValueOnce([{ OWNER_ID: '05' }])
+      .mockResolvedValueOnce([{
+        NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
+      }])
+      .mockResolvedValueOnce([]);
     const response = await authenticatedPost('/repartidor/document/send-email', {
       ...albaranBody,
       destinatario: 'cliente@example.test',
+      repartidorId: '05',
     });
-
     expect(response.status).toBe(503);
-    expect(response.body.code).toBe('EMAIL_DELIVERY_LEDGER_REQUIRED');
-    expect(mockSendEmailWithPdf).not.toHaveBeenCalled();
-    expect(mockGenerateDeliveryReceipt).not.toHaveBeenCalled();
+    expect(response.body.code).toBe('DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED');
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(3);
+  });
+
+  test('email fails closed when TEST ledger write fails', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    const { generateInvoicePDF } = require('../app/services/pdfService');
+    generateInvoicePDF.mockResolvedValue(Buffer.from('%PDF-1.4'));
+    mockSendEmailWithPdf.mockResolvedValue({ messageId: 'mid-ledger-fail' });
+    mockQueryWithParams
+      .mockResolvedValueOnce([{ OWNER_ID: '05' }])
+      .mockResolvedValueOnce([{
+        NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
+      }])
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('ledger unavailable'));
+    try {
+      const response = await authenticatedPost('/repartidor/document/send-email', {
+        ...albaranBody,
+        destinatario: 'cliente@example.test',
+        repartidorId: '05',
+      });
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('EMAIL_DELIVERY_LEDGER_REQUIRED');
+      expect(mockSendEmailWithPdf).toHaveBeenCalledTimes(1);
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
+
+  test('server routes document email through the finance write guard', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    expect(source).toMatch(
+      /req\.path === '\/document\/send-email'[\s\S]{0,120}repartoFinanceWriteGuard/,
+    );
   });
 
   test('WhatsApp rejects BOLA and returns only a local share intent to the owner', async () => {
@@ -438,6 +723,29 @@ describe('document ownership and side-effect contracts', () => {
     expect(JSON.stringify(response.body)).not.toContain('internal-db2');
   });
 });
+describe('fleet client cards preserve a concrete owner', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['05', '06'] };
+    mockCachedQuery.mockImplementation((queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params));
+  });
+
+  test('same ERP client assigned to two drivers remains two isolated cards', async () => {
+    mockQueryWithParams.mockResolvedValue([
+      { ID: 'C1', NAME: 'Cliente', ADDRESS: 'Ruta 1', TOTAL_DOCS: 2, TOTAL_AMOUNT: 20, LAST_VISIT: 20260818, OWNER_ID: '5' },
+      { ID: 'C1', NAME: 'Cliente', ADDRESS: 'Ruta 2', TOTAL_DOCS: 3, TOTAL_AMOUNT: 30, LAST_VISIT: 20260817, OWNER_ID: '06' },
+    ]);
+    const response = await authenticatedGet('/repartidor/history/clients/5,06');
+    expect(response.status).toBe(200);
+    expect(response.body.clients).toEqual([
+      expect.objectContaining({ id: 'C1', repCode: '05', totalDocuments: 2 }),
+      expect.objectContaining({ id: 'C1', repCode: '06', totalDocuments: 3 }),
+    ]);
+    const [sql] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/CODIGOREPARTIDOR[\s\S]*OWNER_ID/);
+  });
+});
+
 describe('client pagination beyond the first 100', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -456,6 +764,7 @@ describe('client pagination beyond the first 100', () => {
         TOTAL_DOCS: 1,
         TOTAL_AMOUNT: 10,
         LAST_VISIT: 20260803 - index,
+        OWNER_ID: '05',
       })),
     );
 

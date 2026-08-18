@@ -1,0 +1,91 @@
+{
+  "contract": "reduction/v1",
+  "run_id": "20260818-reparto-remediation-v3",
+  "decision": "implement",
+  "invariants": [
+    "REPARTO_ENVIRONMENT=staging and REPARTO_TABLE_SET=isolated_test for every runtime write test",
+    "No DML or DDL against DSEDAC and no write to JAVIER production table mappings",
+    "No deploy, commit, push, destructive cleanup, or copy script --apply",
+    "REPARTIDOR can only target its own code; JEFE_VENTAS in activeMode REPARTIDOR may target one concrete driver or aggregate ALL only where the endpoint is aggregate",
+    "Receipt, evidence, email, confirmation, liquidation and payment writes remain owner-scoped and idempotent",
+    "Flutter delivery UI changes stay in rutero_detail_modal.dart and coordinated widgets, never albaran_detail_page.dart"
+  ],
+  "ordered_fixes": [
+    {
+      "id": "B02_COLLECTIONS_ALL",
+      "priority": 0,
+      "change": "Batch large driver sets in the DB2 repository, merge daily numeric fields deterministically, and return HTTP 200 PARTIAL when at least one batch succeeds; typed 503 only when every batch fails.",
+      "tests": ["single driver unchanged", "large CSV aggregation", "partial batch success", "total batch failure"]
+    },
+    {
+      "id": "B03_LIQUIDACION_ALL",
+      "priority": 0,
+      "change": "Accept an authorized code list for daily summary, desglose and cuentas; aggregate the same TEST ledger/balance semantics so cuentas.saldoActual equals daily-summary.saldoActual for the same selector. Keep REPARTIDOR scalar and deny foreign/multi targets.",
+      "tests": ["JEFE one", "JEFE CSV/ALL", "REPARTIDOR own", "REPARTIDOR foreign/multi"]
+    },
+    {
+      "id": "B04_COMMISSION_MINIMUM",
+      "priority": 0,
+      "change": "Enforce a minimum eligible threshold of 30 percent in schema and calculation; reject or ignore active tiers below 30 and update fixtures to 30/50/70. Keep PUT JEFE/ADMIN only.",
+      "tests": ["29.99 percent yields zero", "30 percent first tier", "REPARTIDOR PUT 403"]
+    },
+    {
+      "id": "B05_HISTORY_CANONICAL_STATUS",
+      "priority": 0,
+      "change": "In isolated_test, report delivered only from canonical TEST confirmation/status overlay; do not infer delivery from ERP F/R or CONFORMADOSN. Preserve an explicit production compatibility path if required.",
+      "tests": ["ERP conformado without TEST overlay stays pending", "TEST overlay delivered wins"]
+    },
+    {
+      "id": "B09_B10_RECEIPT_EVIDENCE_EMAIL",
+      "priority": 0,
+      "change": "Require one concrete selected owner for evidence staging/retrieval and receipt/email; reject ALL, comma lists and invalid codes before DB2. Project JEFE active-mode actor to that selected owner without granting fleet-wide repository bypass. Make successful email require sender messageId plus DOCUMENT_EMAIL ledger in the runtime TEST audit table; ledger failure must not return success. Pass the effective owner from Flutter and enable the Rutero email actions with validation and no automatic retry.",
+      "tests": ["JEFE selected owner success", "JEFE foreign confirmation 403", "ALL/list rejected", "REPARTIDOR override denied", "messageId and ledger mandatory", "invalid email 422/no call"]
+    },
+    {
+      "id": "B11_CHATBOT_SCOPE_AND_LOGS",
+      "priority": 0,
+      "change": "Pass effective reparto selector through MainShell, ChatbotPage, provider and service; reset conversation when scope changes. Validate the requested scope server-side: REPARTIDOR own only, JEFE active-mode one or authorized aggregate. Remove raw prompt, SQL prefix, DB2 error.message and internal diagnostics from chatbot logs/responses in favor of stable codes and allowlisted context.",
+      "tests": ["body contains selected repartidorId", "scope change resets state", "BOLA 403", "JEFE one/aggregate", "no SQL/prompt/error-message leakage"]
+    },
+    {
+      "id": "ERP_DETAIL_DISCREPANCY",
+      "priority": 0,
+      "change": "Compute financial discrepancy by comparing CPC gross with netoSum plus ivaSum. Preserve raw LAC lineSum as compatibility/diagnostic data and never use it to block a valid delivery.",
+      "tests": ["gross equals net plus IVA while raw line sum differs", "true header mismatch", "units/envases do not alter raw line sum"]
+    },
+    {
+      "id": "B06_COPY_PREFLIGHT",
+      "priority": 1,
+      "change": "Before any CREATE, DELETE or INSERT, preflight every production-to-TEST application-table pair using QSYS2 metadata for name, type, length, precision, scale and nullability (identity may be explicitly exempt). Missing tables, missing columns, extra columns or type deltas must fail closed. Dry-run remains default and --apply remains untouched/unexecuted.",
+      "tests": ["exact isomorphism pass", "missing/extra/type delta block", "no mutation occurs before all pairs pass"]
+    },
+    {
+      "id": "B12_OBJECTIVES_ALL_RESILIENCE",
+      "priority": 1,
+      "change": "Preserve the current response shape while ensuring ALL objectives-detail uses bounded DB2 batches/pagination internally and deterministic ordering; no N+1 and no broad unbounded query.",
+      "tests": ["large authorized fleet returns 200", "stable page/count shape", "foreign scope denied"]
+    },
+    {
+      "id": "FLUTTER_RUNTIME_REGRESSION",
+      "priority": 1,
+      "change": "Add focused widget/service coverage for real MainShell nav/selector, modal validation tab-scroll-focus, green confirm button, zero-euro empty contract, nonblocking print and receipt email. Serialize Flutter test runners and use a unique test nonce when the incremental asset cache is contended.",
+      "tests": ["8 REPARTIDOR tabs", "9 JEFE tabs", "Comisiones visible in Reparto including code 80", "three modal tabs", "zero-euro empty submit", "print failure cannot roll back"]
+    }
+  ],
+  "leave_unchanged": [
+    "Production DSEDAC document truth and PDF reads",
+    "Existing positive planned-delivery verification in reparto-evidence-db2-repository",
+    "Existing repository receipt owner scope; fix actor projection instead of granting allowAnyOwner",
+    "Current MainShell effective selector for all non-Assistant Reparto pages",
+    "Existing green confirm and unawaited 12-second print behavior unless tests reveal a regression"
+  ],
+  "verification_required": [
+    "Targeted backend unit/contract/security tests",
+    "Serialized targeted Flutter tests and full applicable suite",
+    "Politec quality gate and loop gate",
+    "Independent QA, AppSec and adversarial verifier",
+    "Local patched HTTP runtime against DSN GMP in staging/isolated_test",
+    "Two real actors across every Reparto tab, JEFE one plus ALL, TEST writes and reload overlays",
+    "Remote runtime can only be called certified after a separately authorized deployment"
+  ]
+}

@@ -1,0 +1,78 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -312,15 +312,46 @@ function buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
+ 
+   const comparison = compareTableMetadata(sourceColumns, destinationColumns);
+   if (comparison.ok) return [];
+-  if (comparison.extra.length) {
++  const sourceByName = new Map(sourceColumns.map((column) => [column.name, column]));
++  const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
++  const rebuildReasons = [];
++  if (comparison.extra.length) rebuildReasons.push(`extra=[${comparison.extra.join(',')}]`);
++  for (const name of comparison.missing) {
++    const source = sourceByName.get(name);
++    if (source.isNullable === 'NO' && !source.hasDefault && destinationRowCount > 0) {
++      rebuildReasons.push(`required-add=${name}`);
++    }
++  }
++  for (const delta of comparison.deltas) {
++    const source = sourceByName.get(delta.name);
++    const destination = destinationByName.get(delta.name);
++    const sameTypeShape = source.dataType === destination.dataType
++      && source.length === destination.length
++      && source.numericPrecision === destination.numericPrecision
++      && source.numericScale === destination.numericScale;
++    if (!sameTypeShape && (source.dataType !== destination.dataType || !safeTypeWidening(source, destination))) {
++      rebuildReasons.push(`type=${delta.name}`);
++    }
++    if (source.isNullable === 'NO' && destination.isNullable === 'YES') {
++      const nullCount = Number(destinationNullCounts[delta.name]);
++      if (!Number.isInteger(nullCount) || nullCount < 0) {
++        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: NULL count unavailable`);
++      }
++      if (nullCount > 0) rebuildReasons.push(`null-data=${delta.name}:${nullCount}`);
++    }
++  }
++  if (rebuildReasons.length) {
+     if (!allowTestTableRebuild) {
+       throw new Error(
+         `SCHEMA RECONCILE BLOCK ${pair.src} -> ${pair.dst}: `
+-        + `TEST-only extra columns require backed rebuild [${comparison.extra.join(',')}]; `
++        + `TEST-only exact schema requires backed rebuild (${rebuildReasons.join('; ')}); `
+         + 'rerun apply with --allow-test-table-rebuild',
+       );
+     }
+@@ -334,8 +365,6 @@ function buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
+     ];
+   }
+ 
+-  const sourceByName = new Map(sourceColumns.map((column) => [column.name, column]));
+-  const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
+   const plan = [];
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -188,6 +188,23 @@ describe('TEST-only schema reconciliation', () => {
+     expect(plan.map(({ sql }) => sql).join(' ')).not.toContain('DSEDAC');
+   });
++
++  test('uses backed rebuild for exact type aliases or NULL-bearing constraints when authorized', () => {
++    const source = [column({
++      name: 'AMOUNT', dataType: 'NUMERIC', numericPrecision: '10', numericScale: '2', isNullable: 'NO',
++    })];
++    const destination = [column({
++      name: 'AMOUNT', dataType: 'DECIMAL', numericPrecision: '10', numericScale: '2', isNullable: 'YES',
++    })];
++    expect(buildReconciliationPlan(pair, source, destination, {
++      destinationRowCount: 3,
++      destinationNullCounts: { AMOUNT: 1 },
++      allowTestRowClear: true,
++      allowTestTableRebuild: true,
++    })).toEqual([
++      expect.objectContaining({ kind: 'DROP_TEST_TABLE' }),
++      expect.objectContaining({ kind: 'CREATE_LIKE' }),
++    ]);
++  });
+ 
+   test('does not emit DDL for an identity-only mismatch', () => {

@@ -225,9 +225,11 @@ class RepartidorFinanzasService {
     required String repartidorId,
     int? year,
     String? clientId,
+    required int limit,
+    required int offset,
   }) =>
       '${_prefix}_objectives_detail_${repartidorId}_${year ?? 'current'}_'
-      '${clientId ?? 'all'}';
+      '${clientId ?? 'all'}_${limit}_$offset';
 
   static String deliverySummaryCacheKey(
     String repartidorId,
@@ -1014,11 +1016,18 @@ class RepartidorFinanzasService {
     required String repartidorId,
     int? year,
     String? clientId,
+    int limit = 100,
+    int offset = 0,
     bool forceRefresh = false,
   }) async {
+    if (limit < 1 || limit > 100 || offset < 0) {
+      throw const FormatException('Paginacion de objetivos invalida');
+    }
     final queryParams = <String, dynamic>{
       if (year != null) 'year': year.toString(),
       if (clientId != null) 'clientId': clientId,
+      'limit': limit.toString(),
+      'offset': offset.toString(),
     };
 
     final response = await ApiClient.get(
@@ -1028,6 +1037,8 @@ class RepartidorFinanzasService {
         repartidorId: repartidorId,
         year: year,
         clientId: clientId,
+        limit: limit,
+        offset: offset,
       ),
       cacheTTL: CacheService.defaultTTL,
       forceRefresh: forceRefresh,
@@ -1096,10 +1107,15 @@ class RepartidorFinanzasService {
     String? albaranSerie,
     int? albaranTerminal,
     int? albaranYear,
+    String? repartidorId,
   }) {
+    final ownerHint = (repartidorId ?? '').trim();
     if (type == 'albaran') {
+      final qs = ownerHint.isEmpty
+          ? ''
+          : '?repartidorId=${Uri.encodeComponent(ownerHint)}';
       return ApiClient.getBytes(
-        '/repartidor/document/albaran/$year/$serie/$terminal/$number/pdf',
+        '/repartidor/document/albaran/$year/$serie/$terminal/$number/pdf$qs',
       );
     }
 
@@ -1112,6 +1128,7 @@ class RepartidorFinanzasService {
       if (albaranTerminal != null)
         'albaranTerminal': albaranTerminal.toString(),
       if (albaranYear != null) 'albaranYear': albaranYear.toString(),
+      if (ownerHint.isNotEmpty) 'repartidorId': ownerHint,
     };
     final queryString = queryParams.isEmpty
         ? ''
@@ -1251,12 +1268,9 @@ class RepartidorFinanzasService {
           clientId: clientId,
         ),
       ),
-      CacheService.invalidate(
-        objectivesDetailCacheKey(
-          repartidorId: repartidorId,
-          year: year,
-          clientId: clientId,
-        ),
+      CacheService.invalidateByPrefix(
+        '${_prefix}_objectives_detail_${repartidorId}_'
+        '${year ?? 'current'}_${clientId ?? 'all'}_',
       ),
     ]);
   }

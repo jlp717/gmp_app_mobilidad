@@ -1,0 +1,17 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -108,6 +108,9 @@ describe('TEST-only schema reconciliation', () => {
+   const pair = {
+     group: 'finance', key: 'cobros', objectType: 'TABLE',
++    src: 'JAVIER.REPARTIDOR_COBROS', dst: 'JAVIER.TEST_REPARTIDOR_COBROS',
++  };
++
+   test('accepts NUMERIC and DECIMAL aliases only without precision or scale narrowing', () => {
+@@ -128,8 +131,5 @@ describe('TEST-only schema reconciliation', () => {
+   });
+-
+-    src: 'JAVIER.REPARTIDOR_COBROS', dst: 'JAVIER.TEST_REPARTIDOR_COBROS',
+-  };
+ 
+   test('creates a missing TEST table from its JAVIER production peer', () => {

@@ -1,0 +1,27 @@
+diff --git a/backend/__tests__/reparto-evidence-db2-repository.test.js b/backend/__tests__/reparto-evidence-db2-repository.test.js
+--- a/backend/__tests__/reparto-evidence-db2-repository.test.js
++++ b/backend/__tests__/reparto-evidence-db2-repository.test.js
+@@ -365,6 +365,24 @@ describe('DB2 reparto evidence repository', () => {
+     expect(MAX_EVIDENCE_BLOB_BYTES).toBe(4 * 1024 * 1024);
+   });
+
++  test('rejects a declared BLOB above the strict repository limit before issuing a BLOB query', async () => {
++    const item = record({ contentBytes: MAX_EVIDENCE_BLOB_BYTES + 1 });
++    const fake = fakeConnection({ linkedRow: {
++      EVIDENCE_ID: item.evidenceId,
++      DOCUMENT_ID: item.documentId,
++      REPARTIDOR_ID: item.repartidorId,
++      EVIDENCE_KIND: item.kind,
++      MIME_TYPE: item.mimeType,
++      CONTENT_SHA256: item.contentSha256,
++      CONTENT_BYTES: item.contentBytes,
++      STATUS: 'ENLAZADA',
++    } });
++
++    await expect(repository(fake).repo.getLinked(item.evidenceId)).rejects.toMatchObject({
++      code: 'REPARTO_EVIDENCE_STORE_UNAVAILABLE',
++    });
++    expect(fake.calls.filter((call) => call.sql.includes('HEX(SUBSTR(E.CONTENT_BLOB'))).toHaveLength(0);
++  });
+ 
+   test('cancels and closes a hung linked-evidence query without continuing or leaking a rejection', async () => {

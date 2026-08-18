@@ -1,0 +1,240 @@
+diff --git a/backend/routes/repartidor.js b/backend/routes/repartidor.js
+--- a/backend/routes/repartidor.js
++++ b/backend/routes/repartidor.js
+@@ -720,7 +720,10 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
+ 
+         // --- Helper: build document from row ---
+         function buildDocument(row, overrides = {}) {
++            // A grouped invoice keeps header values from row, while a
++            // constituent delivery may own the authoritative signature.
++            const referenceRow = overrides.referenceRow || row;
+             const rawAmount = Number.isFinite(Number(row.IMPORTETOTAL)) ? Number(row.IMPORTETOTAL) : 0;
+             const importe = overrides.amount !== undefined ? overrides.amount : rawAmount;
+             const status = computeRowStatus(row);
+-            const hasFirmaPath = !!row.FIRMA_PATH;
++            const hasFirmaPath = !!referenceRow.FIRMA_PATH;
+             const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+             const serieFactura = (row.SERIEFACTURA || '').trim();
+             const ejercicioFactura = parseInt(row.EJERCICIOFACTURA) || 0;
+@@ -728,7 +731,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
+             const isFactura = numFactura > 0;
+-            const legacyNombre = (row.LEGACY_FIRMA_NOMBRE || '').trim();
++            const legacyNombre = (referenceRow.LEGACY_FIRMA_NOMBRE || '').trim();
+             const hasLegacySig = legacyNombre.length > 0;
+             const subempresa = String(row.SUBEMPRESAALBARAN || '').trim();
+             const serie = (row.SERIEALBARAN || 'A').trim();
+@@ -736,17 +739,17 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
+ 
+             const document = {
+-                id: `${subempresa}-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
++                id: `${subempresa}-${referenceRow.EJERCICIOALBARAN}-${serie}-${referenceRow.TERMINALALBARAN}-${referenceRow.NUMEROALBARAN}`,
+                 subempresa,
+                 type: overrides.type || (isFactura ? 'factura' : 'albaran'),
+                 number: overrides.number !== undefined ? overrides.number : (isFactura ? numFactura : row.NUMEROALBARAN),
+-                albaranNumber: row.NUMEROALBARAN,
++                albaranNumber: referenceRow.NUMEROALBARAN,
+                 facturaNumber: numFactura || null,
+                 serieFactura: serieFactura || null,
+                 ejercicioFactura: ejercicioFactura || null,
+-                serie: serie,
+-                ejercicio: row.EJERCICIOALBARAN,
+-                terminal: row.TERMINALALBARAN,
++                serie: (referenceRow.SERIEALBARAN || 'A').trim(),
++                ejercicio: referenceRow.EJERCICIOALBARAN,
++                terminal: referenceRow.TERMINALALBARAN,
+                 date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
+                 time: (row.HORALLEGADA && row.HORALLEGADA > 0)
+                     ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
+@@ -754,19 +757,21 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
+                 pendingAvailability,
+                 status: overrides.status || status,
+-                hasSignature: hasFirmaPath || hasLegacySig || !!row.CANONICAL_FIRMA_EVIDENCE_ID,
+-                confirmationId: row.CANONICAL_CONFIRMATION_ID == null
++                hasSignature: hasFirmaPath || hasLegacySig || !!referenceRow.CANONICAL_FIRMA_EVIDENCE_ID,
++                confirmationId: overrides.confirmationId !== undefined
++                    ? overrides.confirmationId
++                    : referenceRow.CANONICAL_CONFIRMATION_ID == null
+                     ? null
+-                    : String(row.CANONICAL_CONFIRMATION_ID),
+-                signaturePath: row.FIRMA_PATH || null,
+-                deliveryDate: row.DELIVERY_UPDATED_AT || null,
+-                deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
+-                deliveryObs: row.OBSERVACIONES || null,
++                    : String(referenceRow.CANONICAL_CONFIRMATION_ID),
++                signaturePath: referenceRow.FIRMA_PATH || null,
++                deliveryDate: referenceRow.DELIVERY_UPDATED_AT || null,
++                deliveryRepartidor: referenceRow.DELIVERY_REPARTIDOR || null,
++                deliveryObs: referenceRow.OBSERVACIONES || null,
+                 legacySignatureName: legacyNombre || null,
+                 hasLegacySignature: hasLegacySig,
+-                legacyDate: (row.LEGACY_ANO > 0)
+-                    ? `${row.LEGACY_ANO}-${String(row.LEGACY_MES).padStart(2, '0')}-${String(row.LEGACY_DIA).padStart(2, '0')} ${String(row.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(row.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
++                legacyDate: (referenceRow.LEGACY_ANO > 0)
++                    ? `${referenceRow.LEGACY_ANO}-${String(referenceRow.LEGACY_MES).padStart(2, '0')}-${String(referenceRow.LEGACY_DIA).padStart(2, '0')} ${String(referenceRow.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(referenceRow.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
+                     : null,
+@@ -836,6 +841,12 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
+             // Use the most recent row for display metadata (date, status, etc.)
+             const primaryRow = fRows[0]; // Already sorted by date DESC
++            const canonicalConfirmationRow = fRows.find((row) => row.CANONICAL_CONFIRMATION_ID != null);
++            const referenceRow = fRows.find((row) => !!row.CANONICAL_FIRMA_EVIDENCE_ID)
++                || fRows.find((row) => !!row.FIRMA_PATH)
++                || fRows.find((row) => String(row.LEGACY_FIRMA_NOMBRE || '').trim())
++                || canonicalConfirmationRow
++                || primaryRow;
+ 
+             const statuses = fRows.map(r => computeRowStatus(r));
+@@ -864,6 +875,10 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
+                 status: bestStatus,
+                 pendingAvailability: pendingAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
+                 pending: pendingAmount,
++                referenceRow,
++                confirmationId: canonicalConfirmationRow?.CANONICAL_CONFIRMATION_ID == null
++                    ? undefined
++                    : String(canonicalConfirmationRow.CANONICAL_CONFIRMATION_ID),
+                 albaranes: albaranes.length > 1 ? albaranes : undefined
+             }));
+@@ -1302,13 +1317,11 @@ router.get('/history/signature', verifyToken, async (req, res) => {
+                 receptorNombre = canonical.receptorNombre || receptorNombre;
+                 receptorApellidos = canonical.receptorApellidos || receptorApellidos;
+                 receptorDni = canonical.receptorDni || receptorDni;
+-                if (!firmante) {
+-                    const fullName = [canonical.receptorNombre, canonical.receptorApellidos]
+-                        .filter(Boolean).join(' ').trim();
+-                    if (fullName) firmante = fullName;
+-                }
+-                if (!firmaBase64 && canonical.base64) {
++                const fullName = [canonical.receptorNombre, canonical.receptorApellidos]
++                    .filter(Boolean).join(' ').trim();
++                if (fullName) firmante = fullName;
++                if (canonical.base64) {
+                     firmaBase64 = canonical.base64;
+                     signatureSource = 'CANONICAL_CONFIRMATION';
+                 } else if (!firmaBase64 && canonical.hasSignature) {
+@@ -1640,7 +1653,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken,
+                 receptorNombre = canonical.receptorNombre || '';
+                 receptorApellidos = canonical.receptorApellidos || '';
+                 receptorDni = canonical.receptorDni || '';
+-                if (!signatureBase64 && canonical.base64) {
++                if (canonical.base64) {
+                     signatureBase64 = canonical.base64;
+                     signatureSource = 'CANONICAL_CONFIRMATION';
+                 }
+@@ -2183,7 +2196,7 @@ router.get('/document/factura/:year/:serie/:number/pdf', verifyToken, async (re
+                 receptorNombre = canonical.receptorNombre || '';
+                 receptorApellidos = canonical.receptorApellidos || '';
+                 receptorDni = canonical.receptorDni || '';
+-                if (!signatureBase64 && canonical.base64) {
++                if (canonical.base64) {
+                     signatureBase64 = canonical.base64;
+                     signatureSource = 'CANONICAL_CONFIRMATION';
+                 }
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_clientes_page.dart b/lib/features/repartidor/presentation/pages/repartidor_clientes_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_clientes_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_clientes_page.dart
+@@ -29,6 +29,7 @@ class RepartidorClientesPage extends StatefulWidget {
+     super.key,
+     this.isJefeMode = false,
+     this.onNavigateToHistory,
++    this.onNavigateToHistoryWithOwner,
+     this.clientsLoader,
+     this.searchDebounce = const Duration(milliseconds: 350),
+   });
+@@ -36,6 +37,8 @@ class RepartidorClientesPage extends StatefulWidget {
+   final String repartidorId;
+   final bool isJefeMode;
+   final void Function(String clientId, String clientName)? onNavigateToHistory;
++  final void Function(String clientId, String clientName, String repartidorId)?
++      onNavigateToHistoryWithOwner;
+   final RepartidorClientsLoader? clientsLoader;
+   final Duration searchDebounce;
+@@ -592,8 +595,17 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
+   }
+ 
+   void _navigateToHistory(HistoryClient client) {
+-    if (widget.onNavigateToHistory != null) {
++    final clientOwner = client.repCode?.trim() ?? '';
++    if (clientOwner.isNotEmpty &&
++        widget.onNavigateToHistoryWithOwner != null) {
++      widget.onNavigateToHistoryWithOwner!(
++        client.id,
++        client.name,
++        clientOwner,
++      );
++    } else if (widget.onNavigateToHistory != null) {
+       // Use callback to navigate within MainShell (keeps sidebar)
+       widget.onNavigateToHistory!(client.id, client.name);
+     } else {
+@@ -604,6 +616,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
+             repartidorId: widget.repartidorId,
+             initialClientId: client.id,
+             initialClientName: client.name,
++            initialRepartidorId: clientOwner.isEmpty ? null : clientOwner,
+             canEmailDocuments: true,
+           ),
+         ),
+diff --git a/lib/features/dashboard/presentation/pages/main_shell.dart b/lib/features/dashboard/presentation/pages/main_shell.dart
+--- a/lib/features/dashboard/presentation/pages/main_shell.dart
++++ b/lib/features/dashboard/presentation/pages/main_shell.dart
+@@ -85,6 +85,7 @@ class _MainShellState extends ConsumerState<MainShell> {
+ 
+   String? _pendingClientId;
+   String? _pendingClientName;
++  String? _pendingClientRepartidorId;
+ 
+   @override
+@@ -1785,9 +1786,19 @@ class _MainShellState extends ConsumerState<MainShell> {
+               setState(() {
+                 _pendingClientId = clientId;
+                 _pendingClientName = clientName;
++                _pendingClientRepartidorId = null;
++                _currentIndex = histIdx ?? idx;
++              });
++            },
++            onNavigateToHistoryWithOwner: (clientId, clientName, repartidorId) {
++              setState(() {
++                _pendingClientId = clientId;
++                _pendingClientName = clientName;
++                _pendingClientRepartidorId = repartidorId;
+                 _currentIndex = histIdx ?? idx;
+               });
+             },
+@@ -1823,6 +1834,7 @@ class _MainShellState extends ConsumerState<MainShell> {
+             repartidorId: effectiveRepartidorId,
+             initialClientId: _pendingClientId,
+             initialClientName: _pendingClientName,
++            initialRepartidorId: _pendingClientRepartidorId,
+             canEmailDocuments: true,
+           );
+@@ -1840,7 +1852,7 @@ class _MainShellState extends ConsumerState<MainShell> {
+           return KeyedSubtree(
+             key: ValueKey(
+-              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}',
++              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}_${_pendingClientRepartidorId ?? ""}',
+             ),
+             child: pageForIndex(idx),
+           );
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -99,6 +99,7 @@ class RepartidorHistoricoPage extends StatefulWidget {
+     super.key,
+     this.initialClientId,
+     this.initialClientName,
++    this.initialRepartidorId,
+     this.clientsLoader,
+     this.clientsPageLoader,
+     this.documentsLoader,
+@@ -109,6 +110,7 @@ class RepartidorHistoricoPage extends StatefulWidget {
+   final String repartidorId;
+   final String? initialClientId;
+   final String? initialClientName;
++  final String? initialRepartidorId;
+   final RepartidorHistoryClientsLoader? clientsLoader;
+   final RepartidorHistoryClientsPageLoader? clientsPageLoader;
+@@ -161,6 +163,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       _selectedClientId = widget.initialClientId;
+       _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
+       _selectedClientRepartidorId = resolveRepartoDocumentOwner(
++        documentOwner: widget.initialRepartidorId,
+         selectedOwner: widget.repartidorId,
+       );

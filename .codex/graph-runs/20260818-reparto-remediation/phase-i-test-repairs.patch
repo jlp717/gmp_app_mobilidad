@@ -1,0 +1,18 @@
+diff --git a/backend/__tests__/repartidor-finanzas.test.js b/backend/__tests__/repartidor-finanzas.test.js
+--- a/backend/__tests__/repartidor-finanzas.test.js
++++ b/backend/__tests__/repartidor-finanzas.test.js
+@@ -235,1 +235,1 @@
+-    expect(sqlText).toContain('FROM DSEDAC.CPC CPC');
++    expect(sqlText).toContain('INNER JOIN DSEDAC.CPC CPC');
+@@ -383,1 +383,1 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true };
+@@ -760,1 +760,1 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true };
+@@ -798,1 +798,1 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true };
+@@ -1521,1 +1521,1 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS' };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };

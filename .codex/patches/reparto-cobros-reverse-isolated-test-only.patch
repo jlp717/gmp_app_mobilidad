@@ -1,0 +1,193 @@
+diff --git a/backend/repositories/reparto-cobros-db2-port.js b/backend/repositories/reparto-cobros-db2-port.js
+--- a/backend/repositories/reparto-cobros-db2-port.js
++++ b/backend/repositories/reparto-cobros-db2-port.js
+@@ -92,6 +92,11 @@ function assertRuntime(runtime) {
+       mappingErrors: validation.errors,
+     });
+   }
++  for (const table of [runtime.tables?.finance?.cobros, runtime.tables?.finance?.audit]) {
++    if (!/^JAVIER\.TEST_[A-Z0-9_]+$/.test(String(table || '').trim().toUpperCase())) {
++      throw new RepartoCobrosCapabilityError('La anulacion solo admite tablas TEST aisladas');
++    }
++  }
+ }
+@@ -101,6 +106,18 @@ function normalizeText(value) {
+   return value == null ? '' : String(value).trim();
+ }
+ 
++function sha256(value) {
++  return require('crypto').createHash('sha256').update(String(value), 'utf8').digest('hex');
++}
++
++function reversalPayload(token, reason) {
++  return `v=1;tokenSha256=${sha256(token)};reasonSha256=${sha256(reason)}`;
++}
++
++function affectedRows(result) {
++  return Number(result?.affectedRows ?? result?.count ?? result?.rowCount);
++}
++
+ function normalizeDocumentType(value) {
+@@ -205,6 +222,7 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger =
+   if (typeof now !== 'function') throw new TypeError('now must be a function');
+   const ledger = parseQualified(runtime.tables.finance.cobros);
+   const commercial = parseQualified(runtime.tables.finance.commercialCobros);
++  const audit = parseQualified(runtime.tables.finance.audit);
+   const approvedConnections = new WeakSet();
+@@ -267,7 +285,23 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger =
+     }
+     return Object.freeze({
+       async insertCobro(input) {
++        // First DB action in register/reverse: serialise TEST ledger mutation.
++        await execute(connection, `LOCK TABLE ${runtime.tables.finance.cobros} IN EXCLUSIVE MODE`);
+         const payment = normalizePayment(input, now());
++        const tombstones = await rows(connection,
++          `SELECT PAYLOAD_PREVIEW FROM ${runtime.tables.finance.audit}
++             WHERE EVENT_TYPE = 'PAYMENT_REVERSED'`, []);
++        const tokenPrefix = `v=1;tokenSha256=${sha256(payment.idempotencyToken)};`;
++        const matching = tombstones.filter((row) => String(rowValue(row, 'PAYLOAD_PREVIEW') || '')
++          .includes(tokenPrefix));
++        if (matching.length > 1) {
++          throw new RepartoCobrosCapabilityError('El tombstone de anulacion es ambiguo');
++        }
++        if (matching.length === 1) {
++          throw new RepartoPersistenceError('El token corresponde a un cobro anulado', {
++            code: 'REPARTO_COBRO_REVERSED', statusCode: 409,
++          });
++        }
+         const replayRows = await rows(connection,
+@@ -320,6 +354,75 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger =
+         logger.info?.('reparto cobro inserted', { tableSet: runtime.tableSet });
+         return Object.freeze({ id, created: true });
+       },
++
++      async reverseCobro(input) {
++        const token = normalizeText(input?.idempotencyToken);
++        const reason = normalizeText(input?.reason);
++        const repartidorId = normalizeText(input?.repartidorId);
++        if (!token || !reason || !repartidorId) {
++          throw new RepartoPersistenceError('La anulacion no contiene identidad completa', {
++            code: 'REPARTO_INVALID_REVERSAL', statusCode: 422,
++          });
++        }
++        // Lock precedes every audit and idempotency read in this mutation.
++        await execute(connection, `LOCK TABLE ${runtime.tables.finance.cobros} IN EXCLUSIVE MODE`);
++        const expectedPayload = reversalPayload(token, reason);
++        const tombstones = await rows(connection,
++          `SELECT PAYLOAD_PREVIEW FROM ${runtime.tables.finance.audit}
++             WHERE EVENT_TYPE = 'PAYMENT_REVERSED'`, []);
++        const tokenPrefix = `v=1;tokenSha256=${sha256(token)};`;
++        const matching = tombstones.filter((row) => String(rowValue(row, 'PAYLOAD_PREVIEW') || '')
++          .includes(tokenPrefix));
++        if (matching.length > 1) {
++          throw new RepartoCobrosCapabilityError('El tombstone de anulacion es ambiguo');
++        }
++        if (matching.length === 1) {
++          if (String(rowValue(matching[0], 'PAYLOAD_PREVIEW') || '') === expectedPayload) {
++            return Object.freeze({ reversed: true, replay: true });
++          }
++          throw new RepartoPersistenceError('El token de anulacion se reutilizo con otro motivo', {
++            code: 'REPARTO_COBRO_REVERSAL_CONFLICT', statusCode: 409,
++          });
++        }
++        const paymentRows = await rows(connection,
++          `SELECT ${LEDGER_COLUMNS.join(', ')} FROM ${runtime.tables.finance.cobros}
++             WHERE IDEMPOTENCY_TOKEN = ? FOR UPDATE WITH RS FETCH FIRST 2 ROWS ONLY`, [token]);
++        if (paymentRows.length > 1) {
++          throw new RepartoCobrosCapabilityError('El ledger contiene tokens de cobro ambiguos');
++        }
++        if (paymentRows.length === 0) {
++          throw new RepartoPersistenceError('No existe ningun cobro para anular', {
++            code: 'COBRO_NOT_FOUND', statusCode: 404,
++          });
++        }
++        const payment = paymentRows[0];
++        if (normalizeText(rowValue(payment, 'CODIGOVENDEDOR')) !== repartidorId) {
++          throw new RepartoPersistenceError('El cobro no pertenece al repartidor seleccionado', {
++            code: 'PAYMENT_AUTHZ_DENIED', statusCode: 403,
++          });
++        }
++        if (normalizeText(rowValue(payment, 'LIQUIDADO_SN')).toUpperCase() === 'S'
++            || Number(rowValue(payment, 'NUMEROLIQUIDACION') || 0) !== 0) {
++          throw new RepartoPersistenceError('No se puede anular un cobro liquidado', {
++            code: 'COBRO_ALREADY_LIQUIDADO', statusCode: 409,
++          });
++        }
++        await execute(connection,
++          `INSERT INTO ${runtime.tables.finance.audit} (
++             EVENT_TYPE, OPERADOR, CODIGO_REPARTIDOR, IDEMPOTENCY_TOKEN_PREVIEW,
++             DOCUMENTO_PREVIEW, PAYLOAD_PREVIEW, ERROR_CODE
++           ) VALUES ('PAYMENT_REVERSED', ?, ?, '', '', ?, '')`,
++          [normalizeText(input.operador) || repartidorId, repartidorId, expectedPayload]);
++        const deleted = await execute(connection,
++          `DELETE FROM ${runtime.tables.finance.cobros}
++             WHERE IDEMPOTENCY_TOKEN = ? AND TRIM(CODIGOVENDEDOR) = ?`, [token, repartidorId]);
++        if (affectedRows(deleted) !== 1) {
++          throw new RepartoCobrosCapabilityError('La anulacion no elimino exactamente un cobro TEST');
++        }
++        return Object.freeze({ reversed: true, replay: false, id: rowValue(payment, 'ID') });
++      },
+     });
+   }
+diff --git a/backend/services/repartidor-finance-service.js b/backend/services/repartidor-finance-service.js
+--- a/backend/services/repartidor-finance-service.js
++++ b/backend/services/repartidor-finance-service.js
+@@ -1758,11 +1758,28 @@ async function getTopProducts(repartidorId, { limit = 10 } = {}) {
+  * pueda mostrar al usuario lo que se ha revertido.
+  */
+-async function reverseCobro() {
+-  // The approved production ledger does not yet expose a verified soft-reversal
+-  // column set plus transactional audit contract. Refuse before any DB action.
+-  throw new FinanceSchemaUnavailableError(
+-    'La reversi?n de cobros no est? disponible hasta validar el contrato de anulaci?n y auditor?a',
+-  );
++async function reverseCobro({ idempotencyToken, reason, repartidorId, operador }) {
++  const runtime = assertFinanceRuntime();
++  if (runtime.tableSet !== 'isolated_test'
++      || !/^JAVIER\.TEST_[A-Z0-9_]+$/.test(String(runtime.tables.finance.cobros || '').toUpperCase())
++      || !/^JAVIER\.TEST_[A-Z0-9_]+$/.test(String(runtime.tables.finance.audit || '').toUpperCase())) {
++    throw new FinanceSchemaUnavailableError('La anulacion solo esta habilitada en TEST aislado');
++  }
++  // Runtime gate runs before connection/BEGIN. No production/non-TEST DML.
++  const cobrosPort = createRepartoCobrosDb2Port({ runtime });
++  return withTransaction(async (conn) => {
++    await cobrosPort.assertCapabilities(conn);
++    return cobrosPort.forConnection(conn).reverseCobro({
++      idempotencyToken,
++      reason,
++      repartidorId,
++      operador,
++    });
++  });
+ }
+diff --git a/backend/__tests__/reparto-cobros-reversal.test.js b/backend/__tests__/reparto-cobros-reversal.test.js
+new file mode 100644
+--- /dev/null
++++ b/backend/__tests__/reparto-cobros-reversal.test.js
+@@ -0,0 +1,46 @@
++'use strict';
++
++// Contract tests for patch application: run with DB2 connection double.
++// Required cases: production preflight has no BEGIN/DML; exclusive lock is
++// first query; audit+delete rollback on failure; duplicate tombstones fail
++// closed; same token/reason is 200 replay; other reason and later register
++// return 409; foreign owner and liquidated rows are rejected before audit.
++describe('TEST-only cobro reversal contract', () => {
++  test('requires isolated_test TEST table mapping before any transaction', () => {
++    const { createRepartoCobrosDb2Port } = require('../repositories/reparto-cobros-db2-port');
++    expect(() => createRepartoCobrosDb2Port({
++      runtime: { tableSet: 'production', writesEnabled: true, financeCapabilityApproved: true,
++        tables: { finance: { cobros: 'JAVIER.REPARTIDOR_COBROS', audit: 'JAVIER.REPARTIDOR_COBROS_AUDIT' } } },
++    })).toThrow(/autorizado|TEST/i);
++  });
++
++  test.todo('reverse locks ledger before tombstone/token reads and commits audit plus one exact delete');
++  test.todo('audit insertion failure rolls transaction back and leaves payment intact');
++  test.todo('delete affectedRows != 1 rolls transaction back and leaves tombstone absent');
++  test.todo('two matching tombstones fail closed without delete');
++  test.todo('identical token/reason replay returns success; distinct reason returns 409');
++  test.todo('register observes tombstone and returns 409 after reversal');
++  test.todo('foreign requested repartidor is 403 even for JEFE route caller');
++  test.todo('LIQUIDADO_SN S or NUMEROLIQUIDACION nonzero is 409 without audit');
++});
+

@@ -1,0 +1,36 @@
+diff --git a/backend/src/chatbot/chatbot_authorization.js b/backend/src/chatbot/chatbot_authorization.js
+--- a/backend/src/chatbot/chatbot_authorization.js
++++ b/backend/src/chatbot/chatbot_authorization.js
+@@ -17,2 +17,5 @@ function numericVariants(value) {
+   const padded = /^\d{1,2}$/.test(unpadded)
+     ? unpadded.padStart(2, "0")
++    : unpadded;
++  return [...new Set([raw, unpadded, padded])];
++}
+@@ -91,4 +94,0 @@ function authorizeChatbotRepartoScope(userContext = {}, requestedScope) {
+-    : unpadded;
+-  return [...new Set([raw, unpadded, padded])];
+-}
+ const SUPERVISOR_ROLES = new Set(["JEFE_VENTAS", "JEFE", "GERENTE", "ADMIN"]);
+diff --git a/lib/features/chatbot/providers/chatbot_provider.dart b/lib/features/chatbot/providers/chatbot_provider.dart
+--- a/lib/features/chatbot/providers/chatbot_provider.dart
++++ b/lib/features/chatbot/providers/chatbot_provider.dart
+@@ -115,1 +115,0 @@ class ChatbotState {
+-    Object? repartidorId = _sentinel,
+@@ -122,0 +122,1 @@ class ChatbotState {
++    Object? repartidorId = _sentinel,
+diff --git a/lib/features/chatbot/data/chatbot_service.dart b/lib/features/chatbot/data/chatbot_service.dart
+--- a/lib/features/chatbot/data/chatbot_service.dart
++++ b/lib/features/chatbot/data/chatbot_service.dart
+@@ -21,0 +22,1 @@ class ChatbotService {
++    String? repartidorId,
+@@ -26,1 +27,0 @@ class ChatbotService {
+-    String? repartidorId,
+@@ -32,1 +32,3 @@ class ChatbotService {
+-      };
++        if (repartidorId != null && repartidorId.trim().isNotEmpty)
++          'repartidorId': repartidorId.trim(),
++      };
+@@ -34,3 +36,0 @@ class ChatbotService {
+-        if (repartidorId != null && repartidorId.trim().isNotEmpty)
+-          'repartidorId': repartidorId.trim(),

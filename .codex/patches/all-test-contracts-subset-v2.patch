@@ -1,0 +1,116 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -412,11 +412,13 @@ const CURRENT_RUNTIME_READ_ONLY_KEYS = new Set([
+   'notifications.roleTargets',
+ ]);
+ 
+-const OPERATIONAL_CONTRACT_KEYS = new Set([
+-  'finance.cobros',
+-  'finance.liquidationEmails',
+-  'notifications.deliveryStatus',
+-]);
++/**
++ * TEST must retain every operational contract present on its production peer.
++ * Extra TEST-only contracts are deliberately permitted: they can make the
++ * isolated environment stricter without weakening production parity.
++ */
++function shouldAuditOperationalContracts(pair) {
++  return pair?.objectType === 'TABLE';
++}
+ 
+ function runtimeWriteCoverageGaps(pair, sourceColumns, operations) {
+@@ -682,7 +684,7 @@ async function reconcileMappingPairs(pairs, {
+     });
+     const destinationWillBeRebuilt = plan.some((operation) => operation.kind === 'DROP_TEST_TABLE');
+-    const auditOperationalContracts = OPERATIONAL_CONTRACT_KEYS.has(`${pair.group}.${pair.key}`);
++    const auditOperationalContracts = shouldAuditOperationalContracts(pair);
+     const sourceContracts = sourceExists && auditOperationalContracts ? await operationalContractsOfFn(pair.src) : [];
+     const destinationContracts = destinationExists && !destinationWillBeRebuilt && auditOperationalContracts
+       ? await operationalContractsOfFn(pair.dst) : [];
+@@ -1113,7 +1115,7 @@ async function preflightMappingPairs(pairs, {
+     const sourceColumns = await columnsOfFn(pair.src);
+     const destinationColumns = await columnsOfFn(pair.dst);
+     const comparison = compareTableMetadata(sourceColumns, destinationColumns);
+-    const auditOperationalContracts = OPERATIONAL_CONTRACT_KEYS.has(`${pair.group}.${pair.key}`);
++    const auditOperationalContracts = shouldAuditOperationalContracts(pair);
+     const sourceContracts = auditOperationalContracts
+       ? await operationalContractsOfFn(pair.src) : [];
+     const destinationContracts = auditOperationalContracts
+@@ -2128,6 +2130,7 @@ module.exports = {
+   normalizeOperationalContracts,
+   operationalContractSignature,
+   buildOperationalContractPlan,
++  shouldAuditOperationalContracts,
+   assertLqdCobrosSeedCoverage,
+   lqdCobrosSplitCte,
+   lqdCobrosInsertSql,
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -7,6 +7,7 @@ const {
+   normalizeOperationalContracts,
+   operationalContractSignature,
+   buildOperationalContractPlan,
++  shouldAuditOperationalContracts,
+   assertLqdCobrosSeedCoverage,
+   lqdCobrosSplitCte,
+   lqdCobrosInsertSql,
+@@ -419,6 +420,59 @@ describe('operational identity and key contracts', () => {
+     expect(operationalContractSignature(left)).toBe(operationalContractSignature(right));
+   });
++
++  test('audits every mapped TABLE, not only the former hand-picked subset', () => {
++    expect(shouldAuditOperationalContracts({
++      group: 'finance', key: 'audit', objectType: 'TABLE',
++      src: 'JAVIER.REPARTIDOR_COBROS_AUDIT', dst: 'JAVIER.TEST_REPARTIDOR_COBROS_AUDIT',
++    })).toBe(true);
++    expect(shouldAuditOperationalContracts({ objectType: 'SEQUENCE' })).toBe(false);
++    expect(shouldAuditOperationalContracts({})).toBe(false);
++  });
++
++  test('reconciliation adds missing production contracts for any mapped TEST table', async () => {
++    const auditPair = {
++      group: 'finance', key: 'audit', objectType: 'TABLE',
++      src: 'JAVIER.REPARTIDOR_COBROS_AUDIT', dst: 'JAVIER.TEST_REPARTIDOR_COBROS_AUDIT',
++    };
++    const sourceContracts = normalizeOperationalContracts([
++      { KIND: 'INDEX', OBJECT_NAME: 'IX_PROD_EVENT', COLUMN_NAME: 'EVENT_TYPE', ORDINAL_POSITION: 1, ORDERING: 'A' },
++      { KIND: 'INDEX', OBJECT_NAME: 'IX_PROD_REP', COLUMN_NAME: 'CODIGO_REPARTIDOR', ORDINAL_POSITION: 1, ORDERING: 'A' },
++    ]);
++    const executeFn = jest.fn();
++    const report = await reconcileMappingPairs([auditPair], {
++      tableExistsFn: jest.fn().mockResolvedValue(true),
++      columnsOfFn: jest.fn().mockResolvedValue([column()]),
++      countOfFn: jest.fn().mockResolvedValue(0),
++      countNullsFn: jest.fn().mockResolvedValue(0),
++      operationalContractsOfFn: jest.fn(async (table) => (table === auditPair.src ? sourceContracts : [])),
++      executeFn,
++      apply: false,
++    });
++    expect(report[0].operations).toHaveLength(2);
++    expect(report[0].operations.every(({ kind, sql }) => kind === 'ADD_INDEX'
++      && sql.includes(auditPair.dst) && !sql.includes('DSEDAC'))).toBe(true);
++    expect(executeFn).not.toHaveBeenCalled();
++  });
++
++  test('preflight accepts TEST-only stronger contracts while requiring the production subset', async () => {
++    const { preflightMappingPairs } = require('../scripts/copy-javier-prod-to-test');
++    const auditPair = {
++      group: 'finance', key: 'audit', objectType: 'TABLE',
++      src: 'JAVIER.REPARTIDOR_COBROS_AUDIT', dst: 'JAVIER.TEST_REPARTIDOR_COBROS_AUDIT',
++    };
++    const production = normalizeOperationalContracts([
++      { KIND: 'CHECK', OBJECT_NAME: 'CK_PROD', CHECK_CLAUSE: "EVENT_TYPE <> ''" },
++    ]);
++    const extraTestOnly = normalizeOperationalContracts([
++      { KIND: 'CHECK', OBJECT_NAME: 'CK_PROD', CHECK_CLAUSE: "EVENT_TYPE <> ''" },
++      { KIND: 'CHECK', OBJECT_NAME: 'CK_TEST', CHECK_CLAUSE: "OPERADOR <> ''" },
++    ]);
++    await expect(preflightMappingPairs([auditPair], {
++      tableExistsFn: jest.fn().mockResolvedValue(true),
++      columnsOfFn: jest.fn().mockResolvedValue([column()]),
++      operationalContractsOfFn: jest.fn(async (table) => (table === auditPair.src ? production : extraTestOnly)),
++    })).resolves.toBeUndefined();
++  });
+ });

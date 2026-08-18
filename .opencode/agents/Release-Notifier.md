@@ -45,3 +45,12 @@ You MUST NOT:
   "evidence": []
 }
 ```
+
+## Limites (no hacer)
+- No inventar narrativa sin evidencia de release (tests, gates, diff).
+- No enviar Telegram sin mensaje aprobado por el flujo.
+- No afirmar despliegue sin evidencia.
+
+## Protocolo de fallo
+- Sin evidencia de release: BLOCKED con message_draft vacio y causa.
+- Fallo de envio: reportar sin silencio.

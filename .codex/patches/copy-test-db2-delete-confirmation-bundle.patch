@@ -1,0 +1,156 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -702,10 +702,10 @@ function collectMappingPairs() {
+   return pairs;
+ }
+ 
+-async function truncateTest(table) {
++async function clearTestRows(table, { executeFn = run } = {}) {
+   assertJavierTest(table);
+-  console.log('TRUNCATE', table);
+-  await run(`DELETE FROM ${table}`);
++  console.log('DELETE', table);
++  await executeFn(`DELETE FROM ${table}`);
+ }
+@@ -756,6 +756,9 @@ async function copyIntersection(src, dst, {
+   await run(sql, params);
+   const destCount = APPLY ? await countOf(dst) : srcCount;
++  if (APPLY && destCount !== srcCount) {
++    throw new Error(`COPY COUNT MISMATCH ${src} -> ${dst}: source=${srcCount} destination=${destCount}`);
++  }
+   summaryRows.push({
+@@ -766,6 +769,36 @@ async function copyIntersection(src, dst, {
+   });
+ }
+ 
++function confirmationBundlePlan(pairs) {
++  const byKey = new Map(pairs.map((pair) => [pair.key, pair]));
++  const required = ['confirmations', 'lines', 'evidences', 'confirmationEvidences'];
++  const missing = required.filter((key) => !byKey.has(key));
++  if (missing.length) {
++    throw new Error(`CONFIRMATION BUNDLE BLOCK missing mappings [${missing.join(',')}]`);
++  }
++  return {
++    // Link table first; confirmations reference evidences through FIRMA_EVIDENCE_ID.
++    clear: [
++      byKey.get('confirmationEvidences'),
++      byKey.get('lines'),
++      byKey.get('confirmations'),
++      byKey.get('evidences'),
++    ],
++    // Evidence must exist before a confirmation can reference its signature.
++    copy: [
++      byKey.get('evidences'),
++      byKey.get('confirmations'),
++      byKey.get('lines'),
++      byKey.get('confirmationEvidences'),
++    ],
++  };
++}
++
++async function copyConfirmationBundle(pairs) {
++  const plan = confirmationBundlePlan(pairs);
++  for (const pair of plan.clear) await clearTestRows(pair.dst);
++  for (const pair of plan.copy) {
++    await copyIntersection(pair.src, pair.dst, { label: `ISO ${pair.group}.${pair.key}` });
++  }
++}
++
+ async function ensureTestDeliveryStatus() {
+@@ -800,7 +833,7 @@ async function seedLqdToLiquidacionOps() {
+-  await truncateTest(dst);
++  await clearTestRows(dst);
+@@ -921,7 +954,7 @@ async function seedLqdDerivedCobros() {
+-  await truncateTest(dst);
++  await clearTestRows(dst);
+@@ -969,7 +1002,7 @@ async function seedLqdDerivedIngresos() {
+-  await truncateTest(dst);
++  await clearTestRows(dst);
+@@ -1015,7 +1048,7 @@ async function seedLqdDerivedGastos() {
+-  await truncateTest(dst);
++  await clearTestRows(dst);
+@@ -1060,7 +1093,7 @@ async function seedLqdDerivedBalances() {
+-  await truncateTest(dst);
++  await clearTestRows(dst);
+@@ -1166,7 +1199,7 @@ async function seedCacfirmasToTest() {
+-  if (await tableExists(TEST_FIRMAS)) await truncateTest(TEST_FIRMAS);
++  if (await tableExists(TEST_FIRMAS)) await clearTestRows(TEST_FIRMAS);
+@@ -1232,7 +1265,7 @@ async function copyNotificationRoleTargets() {
+-  await truncateTest(dst);
++  await clearTestRows(dst);
+@@ -1262,7 +1295,7 @@ async function overlayDeliveryStatus() {
+-    await truncateTest(TEST_DELIVERY);
++    await clearTestRows(TEST_DELIVERY);
+@@ -1342,8 +1375,15 @@ async function main() {
+     if (LEGACY_BKP_DELIVERY_OVERLAY) await ensureTestDeliveryStatus();
+ 
+     // 2) Isomorphic TABLE_MAPPINGS pairs (skip ERP-seeded keys)
++    const confirmationPairs = pairs.filter((pair) => pair.group === 'confirmation' && pair.objectType === 'TABLE');
++    if (confirmationPairs.length) {
++      await runTableStep('ISO confirmation bundle', confirmationPairs[0].dst, async () => {
++        await copyConfirmationBundle(confirmationPairs);
++      });
++    }
++
+     for (const p of pairs) {
++      if (p.group === 'confirmation') continue;
+       if (p.objectType === 'SEQUENCE') {
+@@ -1366,7 +1406,7 @@ async function main() {
+ 
+       await runTableStep(`ISO ${p.group}.${p.key}`, p.dst, async () => {
+-        await truncateTest(p.dst);
++        await clearTestRows(p.dst);
+         await copyIntersection(p.src, p.dst, {
+@@ -1420,6 +1460,9 @@ module.exports = {
+   compareTableMetadata,
+   shouldSeedLegacyDeliveryOverlay,
++  clearTestRows,
++  confirmationBundlePlan,
++  copyConfirmationBundle,
+   normalizeCatalogYesNo,
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -4,6 +4,8 @@ const {
+   compareTableMetadata,
+   shouldSeedLegacyDeliveryOverlay,
++  clearTestRows,
++  confirmationBundlePlan,
+   normalizeCatalogYesNo,
+@@ -32,6 +34,40 @@ describe('canonical delivery-status seed mode', () => {
+   });
+ });
+ 
++describe('DB2 IBM i TEST row clearing', () => {
++  test('emits transactional DELETE and never TRUNCATE', async () => {
++    const executeFn = jest.fn().mockResolvedValue({ rowCount: 0 });
++    await clearTestRows('JAVIER.TEST_REPARTO_CONFIRMACIONES', { executeFn });
++    expect(executeFn).toHaveBeenCalledTimes(1);
++    const sql = executeFn.mock.calls[0][0];
++    expect(sql).toBe('DELETE FROM JAVIER.TEST_REPARTO_CONFIRMACIONES');
++    expect(sql).not.toMatch(/TRUNCATE/i);
++  });
++
++  test('orders confirmation deletes child-to-parent and copies parent dependencies first', () => {
++    const pairs = [
++      ['confirmations', 'CONFIRMACIONES'],
++      ['lines', 'LINEAS'],
++      ['evidences', 'EVIDENCIAS'],
++      ['confirmationEvidences', 'CONFIRM_EVIDENCIAS'],
++    ].map(([key, table]) => ({
++      group: 'confirmation', key,
++      src: `JAVIER.REPARTO_${table}`,
++      dst: `JAVIER.TEST_REPARTO_${table}`,
++    }));
++    const plan = confirmationBundlePlan(pairs);
++    expect(plan.clear.map(({ key }) => key)).toEqual([
++      'confirmationEvidences', 'lines', 'confirmations', 'evidences',
++    ]);
++    expect(plan.copy.map(({ key }) => key)).toEqual([
++      'evidences', 'confirmations', 'lines', 'confirmationEvidences',
++    ]);
++  });
++});
++
+ describe('DB2 catalog normalization', () => {

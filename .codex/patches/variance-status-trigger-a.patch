@@ -1,0 +1,15 @@
+diff --git a/backend/services/reparto-variance-notification-service.js b/backend/services/reparto-variance-notification-service.js
+--- a/backend/services/reparto-variance-notification-service.js
++++ b/backend/services/reparto-variance-notification-service.js
+@@ -321,7 +321,10 @@ async function notifyAfterConfirm({
+     return { skipped: true, reason: 'not_created' };
+   }
+ 
+   const lineas = detectVarianceLines(command.delivery.lineas);
+-  if (lineas.length === 0) {
++  const deliveryStatus = normalizeText(result.deliveryStatus || command.delivery.status).toUpperCase();
++  const isExceptionStatus = deliveryStatus === 'PARCIAL' || deliveryStatus === 'RECHAZADO';
++  // Exception states are operationally material even for a prepaid 0€ document.
++  if (lineas.length === 0 && !isExceptionStatus) {
+     return { skipped: true, reason: 'no_variance' };
+   }

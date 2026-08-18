@@ -1,0 +1,47 @@
+diff --git a/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart b/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart
+index addd744..72da6a3 100644
+--- a/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart
++++ b/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart
+@@ -14,7 +14,9 @@ class CanonicalLiquidacionPdfBuilder {
+ 
+   static final _money = NumberFormat.currency(
+     locale: 'es_ES',
+-    symbol: '€',
++    // The standard PDF font used by the receipt does not contain U+20AC.
++    // Keep the monetary output readable on every supported Android device.
++    symbol: 'EUR',
+     decimalDigits: 2,
+   );
+ 
+@@ -75,7 +77,7 @@ class CanonicalLiquidacionPdfBuilder {
+         footer: (context) => pw.Align(
+           alignment: pw.Alignment.centerRight,
+           child: pw.Text(
+-            'Liquidación cerrada · ${context.pageNumber}/${context.pagesCount}',
++            'Liquidación cerrada - ${context.pageNumber}/${context.pagesCount}',
+             style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+           ),
+         ),
+@@ -98,7 +100,7 @@ class CanonicalLiquidacionPdfBuilder {
+                 pw.Text('Operación ${liquidacion.id}',
+                     style: const pw.TextStyle(
+                         color: PdfColors.white, fontSize: 11)),
+-                pw.Text('Repartidor ${liquidacion.repartidorId} · $dateLabel',
++                pw.Text('Repartidor ${liquidacion.repartidorId} - $dateLabel',
+                     style: const pw.TextStyle(
+                         color: PdfColors.white, fontSize: 11)),
+               ],
+@@ -125,7 +127,7 @@ class CanonicalLiquidacionPdfBuilder {
+               borderRadius: pw.BorderRadius.circular(6),
+             ),
+             child: pw.Text(
+-              'Saldo de cierre = saldo inicial + cobros − gastos + ajustes − ingresos bancarios.\n'
++              'Saldo de cierre = saldo inicial + cobros - gastos + ajustes - ingresos bancarios.\n'
+               'El PDF se genera exclusivamente desde la instantánea persistida al cerrar.',
+               style: const pw.TextStyle(fontSize: 10),
+             ),
+@@ -154,3 +156,4 @@ class CanonicalLiquidacionPdfBuilder {
+     ], subject: 'Liquidación diaria ${liquidacion.repartidorId}');
+   }
+ }
++

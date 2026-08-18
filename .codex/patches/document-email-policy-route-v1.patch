@@ -1,0 +1,51 @@
+diff --git a/backend/routes/repartidor.js b/backend/routes/repartidor.js
+--- a/backend/routes/repartidor.js
++++ b/backend/routes/repartidor.js
+@@ -19,0 +20,5 @@
++const {
++    RepartoEmailDeliveryPolicyError,
++    resolveRepartoEmailDelivery,
++    buildRepartoMessageId,
++} = require('../services/reparto-email-delivery-policy');
+@@ -2415,2 +2420,19 @@
+-        const result = await sendEmailWithPdf({
+-            to: destinatario,
++        const delivery = resolveRepartoEmailDelivery({
++            recipients: [destinatario],
++            mode: 'manual',
++        });
++        const effectiveRecipient = delivery.effectiveRecipients[0];
++        if (!effectiveRecipient) {
++            throw new RepartoEmailDeliveryPolicyError(
++                'El destinatario efectivo no es valido',
++                'REPARTO_EMAIL_RECIPIENT_REQUIRED',
++            );
++        }
++        const logicalKey = `document:${isAlbaran ? 'albaran' : 'factura'}:${key.year}:${key.series}:${key.terminal || ''}:${key.number}`;
++        const expectedMessageId = buildRepartoMessageId({
++            kind: 'document',
++            identity: logicalKey,
++            recipient: effectiveRecipient,
++        });
++        const result = await sendEmailWithPdf({
++            to: effectiveRecipient,
+@@ -2420,0 +2442,1 @@
++            messageId: expectedMessageId,
+@@ -2430,1 +2453,1 @@
+-                payloadPreview: `${label} ${key.series}-${key.number}; provider acknowledged`,
++                payloadPreview: `logicalKey=${logicalKey};messageId=${messageId}`,
+@@ -2438,1 +2461,1 @@
+-            message: `Email enviado correctamente a ${destinatario}`,
++            message: 'Email enviado correctamente',
+@@ -2440,0 +2464,1 @@
++            deliveryPolicy: delivery.policy,
+@@ -2442,1 +2467,8 @@
+-    } catch (_error) {
++    } catch (error) {
++        if (error instanceof RepartoEmailDeliveryPolicyError) {
++            return res.status(error.statusCode).json({
++                success: false,
++                code: error.code,
++                error: error.message,
++            });
++        }

@@ -83,18 +83,22 @@ test('looks up by idempotency key and supports a wholly unpaid confirmation', as
   expect(fake.calls.some((call) => call.sql.includes('FROM JAVIER.TEST_REPARTIDOR_COBROS'))).toBe(false);
 });
 
-test('fails closed for a partial financial identity and for an aborted lookup', async () => {
+test('treats a partial financial identity as unpaid and skips cobros lookup', async () => {
   const partial = receiptConnection({
     ID: 7, IDEMPOTENCY_KEY: 'idem-receipt-7', CLIENTE_CODIGO: 'C1', REPARTIDOR_ID: 'R1',
-    DOCUMENTO_TIPO: 'CAC', DOCUMENTO_ORIGEN: null, DOCUMENTO_SUBEMPRESA: null,
-    DOCUMENTO_EJERCICIO: null, DOCUMENTO_SERIE: null, DOCUMENTO_TERMINAL: null,
-    DOCUMENTO_NUMERO: null, DOCUMENTO_XDE: null, DOCUMENTO_DEX: null,
+    DOCUMENTO_TIPO: null, DOCUMENTO_ORIGEN: null, DOCUMENTO_SUBEMPRESA: 'GMP',
+    DOCUMENTO_EJERCICIO: 2026, DOCUMENTO_SERIE: 'J', DOCUMENTO_TERMINAL: 93,
+    DOCUMENTO_NUMERO: 1867, DOCUMENTO_XDE: null, DOCUMENTO_DEX: null,
   });
   const repository = createRepartoReceiptDb2Repository({
     runtime: runtime(), connectionFactory: jest.fn().mockResolvedValue(partial.connection),
   });
   await expect(repository.getReceipt({ confirmationId: '7', allowAnyOwner: true }))
-    .rejects.toMatchObject({ code: 'REPARTO_RECEIPT_UNAVAILABLE', statusCode: 503 });
+    .resolves.toMatchObject({ payments: [] });
+  const idLookup = partial.calls.find((call) => call.sql.includes('WHERE ID = ?'));
+  expect(idLookup.params).toEqual([7]);
+  expect(typeof idLookup.params[0]).toBe('number');
+  expect(partial.calls.some((call) => call.sql.includes('FROM JAVIER.TEST_REPARTIDOR_COBROS'))).toBe(false);
   const controller = new AbortController();
   controller.abort();
   const factory = jest.fn();

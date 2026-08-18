@@ -1,0 +1,166 @@
+diff --git a/backend/__tests__/repartidor-legacy-read-security.test.js b/backend/__tests__/repartidor-legacy-read-security.test.js
+--- a/backend/__tests__/repartidor-legacy-read-security.test.js
++++ b/backend/__tests__/repartidor-legacy-read-security.test.js
+@@ -197,7 +197,7 @@ describe('legacy repartidor read security contracts', () => {
+     expect(response.status).toBe(503);
+     expect(response.body).toEqual({
+       success: false,
+-      code: 'REPARTIDOR_DATA_UNAVAILABLE',
++      code: 'REPARTIDOR_COLLECTIONS_UNAVAILABLE',
+       error: 'No se pudo completar la solicitud',
+     });
+     expect(JSON.stringify(response.body)).not.toContain('SQL30081N');
+@@ -442,6 +442,7 @@ describe('document ownership and side-effect contracts', () => {
+       const response = await authenticatedPost('/repartidor/document/send-email', {
+         ...albaranBody,
+         destinatario: 'cliente@example.test',
++        repartidorId: '05',
+       });
+ 
+       expect(response.status).toBe(200);
+@@ -453,10 +454,112 @@ describe('document ownership and side-effect contracts', () => {
+         to: 'cliente@example.test',
+         pdfFilename: expect.stringMatching(/Albaran_A-1\.pdf/i),
+       });
+-      expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.(TEST_)?REPARTIDOR_COBROS_AUDIT/i.test(sql))).toBe(true);
++      const ledgerCall = mockQueryWithParams.mock.calls.find(([sql]) =>
++        /INSERT INTO JAVIER\.TEST_REPARTIDOR_COBROS_AUDIT/i.test(sql));
++      expect(ledgerCall).toBeDefined();
++      expect(ledgerCall[1][3]).not.toContain('@');
+     } finally {
+       if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+       else process.env.REPARTO_TABLE_SET = previous;
+     }
+   });
++
++  test('email validates recipient before DB2 and rejects JEFE selector BOLA', async () => {
++    const invalidEmail = await authenticatedPost('/repartidor/document/send-email', {
++      ...albaranBody,
++      destinatario: 'basura',
++      repartidorId: '05',
++    });
++    expect(invalidEmail.status).toBe(422);
++    expect(invalidEmail.body.code).toBe('EMAIL_INVALID');
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++
++    mockUser = {
++      id: '90',
++      code: '90',
++      role: 'JEFE_VENTAS',
++      activeMode: 'REPARTIDOR',
++    };
++    const missing = await authenticatedPost('/repartidor/document/send-email', {
++      ...albaranBody,
++      destinatario: 'jefe@example.test',
++    });
++    const all = await authenticatedPost('/repartidor/document/send-email', {
++      ...albaranBody,
++      destinatario: 'jefe@example.test',
++      repartidorId: 'ALL',
++    });
++    expect(missing.status).toBe(422);
++    expect(missing.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
++    expect(all.status).toBe(422);
++    expect(all.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++
++    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
++    const foreign = await authenticatedPost('/repartidor/document/send-email', {
++      ...albaranBody,
++      destinatario: 'jefe@example.test',
++      repartidorId: '06',
++    });
++    expect(foreign.status).toBe(403);
++    expect(foreign.body.code).toBe('DOCUMENT_ACCESS_DENIED');
++    expect(mockSendEmailWithPdf).not.toHaveBeenCalled();
++  });
++
++  test('JEFE reparto PDF rejects foreign and ALL owner hints', async () => {
++    mockUser = {
++      id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
++    };
++    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
++    const foreign = await authenticatedGet(
++      '/repartidor/document/invoice/2026/F/7/pdf?repartidorId=06',
++    );
++    expect(foreign.status).toBe(403);
++    expect(foreign.body.code).toBe('DOCUMENT_ACCESS_DENIED');
++
++    jest.clearAllMocks();
++    mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '05' }]);
++    const all = await authenticatedGet(
++      '/repartidor/document/invoice/2026/F/7/pdf?repartidorId=ALL',
++    );
++    expect(all.status).toBe(422);
++    expect(all.body.code).toBe('DOCUMENT_OWNER_REQUIRED');
++  });
++
++  test('email requires JEFE reparto mode before DB2', async () => {
++    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS' };
++    const response = await authenticatedPost('/repartidor/document/send-email', {
++      ...albaranBody,
++      destinatario: 'jefe@example.test',
++      repartidorId: '05',
++    });
++    expect(response.status).toBe(403);
++    expect(response.body.code).toBe('DOCUMENT_REPARTO_MODE_REQUIRED');
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++  });
++
++  test('email fails closed when provider omits messageId', async () => {
++    const { generateInvoicePDF } = require('../app/services/pdfService');
++    generateInvoicePDF.mockResolvedValue(Buffer.from('%PDF-1.4'));
++    mockSendEmailWithPdf.mockResolvedValue({});
++    mockQueryWithParams
++      .mockResolvedValueOnce([{ OWNER_ID: '05' }])
++      .mockResolvedValueOnce([{
++        NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
++      }])
++      .mockResolvedValueOnce([]);
++    const response = await authenticatedPost('/repartidor/document/send-email', {
++      ...albaranBody,
++      destinatario: 'cliente@example.test',
++      repartidorId: '05',
++    });
++    expect(response.status).toBe(503);
++    expect(response.body.code).toBe('DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED');
++    expect(mockQueryWithParams).toHaveBeenCalledTimes(3);
++  });
++
++  test('email fails closed when TEST ledger write fails', async () => {
++    const previous = process.env.REPARTO_TABLE_SET;
++    process.env.REPARTO_TABLE_SET = 'isolated_test';
++    const { generateInvoicePDF } = require('../app/services/pdfService');
++    generateInvoicePDF.mockResolvedValue(Buffer.from('%PDF-1.4'));
++    mockSendEmailWithPdf.mockResolvedValue({ messageId: 'mid-ledger-fail' });
++    mockQueryWithParams
++      .mockResolvedValueOnce([{ OWNER_ID: '05' }])
++      .mockResolvedValueOnce([{
++        NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
++      }])
++      .mockResolvedValueOnce([])
++      .mockRejectedValueOnce(new Error('ledger unavailable'));
++    try {
++      const response = await authenticatedPost('/repartidor/document/send-email', {
++        ...albaranBody,
++        destinatario: 'cliente@example.test',
++        repartidorId: '05',
++      });
++      expect(response.status).toBe(503);
++      expect(response.body.code).toBe('EMAIL_DELIVERY_LEDGER_REQUIRED');
++      expect(mockSendEmailWithPdf).toHaveBeenCalledTimes(1);
++    } finally {
++      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
++      else process.env.REPARTO_TABLE_SET = previous;
++    }
++  });
++
++  test('server routes document email through the finance write guard', () => {
++    const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
++    expect(source).toMatch(
++      /req\.path === '\/document\/send-email'[\s\S]{0,120}repartoFinanceWriteGuard/,
++    );
++  });
+ 
+   test('WhatsApp rejects BOLA and returns only a local share intent to the owner', async () => {
+     mockQueryWithParams.mockResolvedValue([{ OWNER_ID: '06' }]);

@@ -1,0 +1,18 @@
+{
+  "alwaysUpdateLinks": true,
+  "useMarkdownLinks": false,
+  "newLinkFormat": "relative",
+  "attachmentFolderPath": "assets",
+  "promptDelete": false,
+  "showLineNumber": true,
+  "strictLineBreaks": false,
+  "readableLineLength": false,
+  "defaultViewMode": "preview",
+  "livePreview": true,
+  "showFrontmatter": true,
+  "autoPairBrackets": true,
+  "autoPairMarkdown": true,
+  "spellcheck": true,
+  "spellcheckLanguages": ["en-US", "es-ES"],
+  "vimMode": false
+}

@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { assertDecodablePng } = require('../utils/png-image-validator');
 
 // The global request guard rejects Content-Length above 5 MiB. Keep photos
 // at 4 MiB so multipart framing still fits below that request-wide ceiling.
@@ -84,7 +85,7 @@ function identity(documentId, repartidorId, kind, sha256) {
 
 function decodeSignature(dataUri) {
   const raw = String(dataUri || '');
-  const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(raw);
+  const match = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(raw);
   if (!match) {
     throw new EvidenceError('INVALID_SIGNATURE_DATA_URI', 'La firma debe ser una data URI válida', 400);
   }
@@ -102,6 +103,19 @@ function decodeSignature(dataUri) {
     buffer,
     maxBytes: SIGNATURE_MAX_BYTES,
   });
+  try {
+    if (mimeType === 'image/png') {
+      assertDecodablePng(buffer);
+    } else if (buffer.length < 4
+        || buffer[buffer.length - 2] !== 0xff
+        || buffer[buffer.length - 1] !== 0xd9) {
+      throw new Error('invalid JPEG');
+    }
+  } catch (_) {
+    throw new EvidenceError(
+      'INVALID_SIGNATURE_IMAGE', 'La firma contiene una imagen dañada o no compatible', 415,
+    );
+  }
   return Object.freeze({ mimeType, buffer });
 }
 

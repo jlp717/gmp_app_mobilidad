@@ -1,0 +1,12 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -503,7 +503,7 @@ describe('operational identity and key contracts', () => {
+     const executeFn = jest.fn();
+     const report = await reconcileMappingPairs([auditPair], {
+       tableExistsFn: jest.fn().mockResolvedValue(true),
+-      columnsOfFn: jest.fn().mockResolvedValue([column()]),
++      columnsOfFn: jest.fn().mockResolvedValue([column({ identity: true })]),
+       countOfFn: jest.fn().mockResolvedValue(0),
+       countNullsFn: jest.fn().mockResolvedValue(0),
+       operationalContractsOfFn: jest.fn(async (table) => (table === auditPair.src ? sourceContracts : [])),

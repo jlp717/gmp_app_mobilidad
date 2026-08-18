@@ -405,6 +405,18 @@ describe('repartidor-liquidacion-db2-repository', () => {
       })).resolves.toMatchObject({ type: 'EXPENSE', status: 'PENDING', category: 'PEAJE' });
       await expect(tx.listStructuredEntries({ repartidorId: '94', date: '2026-08-09' }))
         .resolves.toMatchObject({ expenses: [expect.objectContaining({ id: '31' })], closed: false });
+      await expect(tx.listStructuredEntries({
+        repartidorIds: ['94', '95'], date: '2026-08-09',
+      })).resolves.toMatchObject({ expenses: expect.any(Array), closed: false });
+      const aggregateCalls = conn.query.mock.calls.filter(([statement]) =>
+        statement.includes('TRIM(CODIGO_REPARTIDOR) IN (?, ?)'));
+      expect(aggregateCalls).toHaveLength(3);
+      for (const [, params] of aggregateCalls) {
+        expect(params).toEqual(['94', '95', 9, 8, 2026]);
+      }
+      expect(conn.query.mock.calls.filter(([statement]) =>
+        statement.includes('COUNT(DISTINCT TRIM(CODIGOVENDEDOR))')
+          && statement.includes('IN (?, ?)'))).toHaveLength(1);
     });
     const sql = conn.query.mock.calls.map(([statement]) => statement)
       .filter((statement) => statement.includes('TEST_REPARTIDOR_LIQUIDACION_GASTOS')).join('\n');
@@ -450,17 +462,40 @@ describe('repartidor-liquidacion-db2-repository', () => {
     return expect(bootstrap.service.closeDay()).rejects.toMatchObject({ code: 'LIQUIDACION_CAPABILITY_UNAVAILABLE', statusCode: 503 });
   });
 
-  test('bootstrap enables only after the catalog proves readers and writers', async () => {
+  test('bootstrap enables after read-only catalog preflight with zero transaction and DML', async () => {
     const conn = connection();
-    const pool = { connect: jest.fn(async () => conn) };
-    const db = { initDb: jest.fn(async () => pool), getPool: jest.fn(() => pool) };
+    const db = { acquireConfiguredConnection: jest.fn(async () => conn) };
     const bootstrap = createRepartidorLiquidacionBootstrap({
       runtime: runtime(), db,
     });
     expect(bootstrap.configured).toBe(true);
     expect(bootstrap.enabled).toBe(false);
-    await expect(bootstrap.repository.withTransaction(async () => 'verified')).resolves.toBe('verified');
+    await expect(bootstrap.verifyCatalogReadOnly()).resolves.toEqual({
+      catalogVerified: true, requiresOutbox: true,
+    });
     expect(bootstrap.enabled).toBe(true);
+    expect(bootstrap.diagnostic.catalogChecked).toBe(true);
     expect(bootstrap.diagnostic.catalogVerified).toBe(true);
+    expect(conn.beginTransaction).not.toHaveBeenCalled();
+    expect(conn.commit).not.toHaveBeenCalled();
+    expect(conn.rollback).not.toHaveBeenCalled();
+    const sql = conn.query.mock.calls.map(([statement]) => statement).join('\n');
+    expect(sql).toMatch(/QSYS2\.SYSTABLES/);
+    expect(sql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|MERGE)\b/i);
+  });
+
+  test('catalog preflight fails typed and leaves readiness disabled', async () => {
+    const conn = connection({ omitTableKey: 'balances' });
+    const bootstrap = createRepartidorLiquidacionBootstrap({
+      runtime: runtime(),
+      db: { acquireConfiguredConnection: jest.fn(async () => conn) },
+    });
+    await expect(bootstrap.verifyCatalogReadOnly()).rejects.toMatchObject({
+      code: 'LIQUIDACION_CAPABILITY_UNAVAILABLE', statusCode: 503,
+    });
+    expect(bootstrap.enabled).toBe(false);
+    expect(bootstrap.diagnostic.catalogChecked).toBe(true);
+    expect(bootstrap.diagnostic.errorCode).toBe('LIQUIDACION_CAPABILITY_UNAVAILABLE');
+    expect(conn.beginTransaction).not.toHaveBeenCalled();
   });
 });

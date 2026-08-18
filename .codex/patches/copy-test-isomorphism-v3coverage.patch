@@ -1,0 +1,71 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -175,6 +175,72 @@ function compareTableMetadata(srcCols, dstCols) {
+     exemptIdentityDeltas,
+   };
+ }
++
++const RUNTIME_INSERT_COLUMNS = Object.freeze({
++  'finance.cobros': Object.freeze([Object.freeze([
++    'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR',
++    'CODIGOVENDEDORCOBRO', 'TIPODOCUMENTO', 'ORIGENDOCUMENTO',
++    'SUBEMPRESADOCUMENTO', 'EJERCICIODOCUMENTO', 'SERIEDOCUMENTO',
++    'TERMINALDOCUMENTO', 'NUMERODOCUMENTO', 'XDEDOCUMENTO', 'DEXDOCUMENTO',
++    'IMPORTEVENCIMIENTO', 'IMPORTEPENDIENTE', 'CODIGOFORMAPAGO', 'DIACOBRO',
++    'MESCOBRO', 'ANOCOBRO', 'IDEMPOTENCY_TOKEN', 'PANTALLA_ORIGEN', 'OPERADOR',
++    'OBSERVACIONES', 'LIQUIDADO_SN', 'LIQUIDACION_TOKEN', 'NUMEROLIQUIDACION',
++  ])]),
++  'finance.audit': Object.freeze([Object.freeze([
++    'EVENT_TYPE', 'OPERADOR', 'CODIGO_REPARTIDOR', 'PAYLOAD_PREVIEW',
++  ])]),
++  'finance.balances': Object.freeze([Object.freeze([
++    'CODIGO_REPARTIDOR', 'SALDO_PENDIENTE',
++  ])]),
++  'notifications.deliveryStatus': Object.freeze([
++    Object.freeze(['STATUS', 'LATITUD', 'LONGITUD', 'OPERADOR', 'PANTALLA_ORIGEN', 'IDEMPOTENCY_TOKEN', 'UPDATED_AT']),
++    Object.freeze(['ID', 'CONFORMADOSN', 'OBSERVACIONES', 'FIRMA_PATH', 'LATITUD', 'LONGITUD', 'REPARTIDOR_ID', 'UPDATED_AT']),
++  ]),
++});
++
++const CURRENT_RUNTIME_READ_ONLY_KEYS = new Set([
++  'finance.liquidationEmails',
++  'finance.commercialCobros',
++  'notifications.roleTargets',
++]);
++
++function runtimeWriteCoverageGaps(pair, sourceColumns, operations) {
++  if (!operations.length || pair.objectType === 'SEQUENCE') return [];
++  const mappingKey = `${pair.group}.${pair.key}`;
++  if (CURRENT_RUNTIME_READ_ONLY_KEYS.has(mappingKey)) return [];
++  const signatures = RUNTIME_INSERT_COLUMNS[mappingKey];
++  const required = sourceColumns
++    .filter((column) => column.isNullable === 'NO' && !column.hasDefault && !column.identity)
++    .map((column) => column.name);
++  if (!required.length) return [];
++  if (!signatures) {
++    throw new Error(
++      `RUNTIME WRITE COVERAGE BLOCK ${pair.dst}: reconciliation changes a writable table `
++      + 'without an audited INSERT column manifest',
++    );
++  }
++  const gaps = [];
++  for (let index = 0; index < signatures.length; index++) {
++    const covered = new Set(signatures[index]);
++    const missing = required.filter((name) => !covered.has(name));
++    if (missing.length) gaps.push({ signature: index + 1, missing });
++  }
++  return gaps;
++}
++
++function assertRuntimeWriteCoverage(pair, sourceColumns, operations) {
++  const gaps = runtimeWriteCoverageGaps(pair, sourceColumns, operations);
++  if (gaps.length) {
++    throw new Error(
++      `RUNTIME WRITE COVERAGE BLOCK ${pair.dst}: `
++      + gaps.map((gap) => `insert#${gap.signature} missing=[${gap.missing.join(',')}]`).join('; '),
++    );
++  }
++}
+ 
+ function sqlTypeFor(column) {

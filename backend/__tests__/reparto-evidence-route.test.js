@@ -7,7 +7,7 @@ const {
   PHOTO_MAX_BYTES,
 } = require('../services/delivery-evidence-service');
 
-let mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+let mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 jest.mock('../middleware/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => { req.user = mockUser && { ...mockUser }; next(); },
@@ -37,7 +37,7 @@ function injectEvidence(evidenceService) {
 
 describe('canonical reparto evidence routes', () => {
   afterEach(() => {
-    mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     routes.resetCanonicalConfirmationRuntime();
   });
 
@@ -72,6 +72,54 @@ describe('canonical reparto evidence routes', () => {
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.body).toMatchObject({ success: false, code });
     expect(stageSignature).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['signature', undefined], ['signature', 'ALL'], ['signature', '94,95'],
+    ['photo', undefined], ['photo', 'ALL'], ['photo', '94,95'],
+  ])('JEFE evidence %s rejects non-concrete selector %s before storage', async (kind, repartidorId) => {
+    const stageSignature = jest.fn();
+    const stagePhoto = jest.fn();
+    injectEvidence({ stageSignature, stagePhoto, retrieve: jest.fn() });
+    mockUser = {
+      id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
+      repartidorCodes: ['94', '95'],
+    };
+    const base = { documentId: '2026-S-10-404-4300009479' };
+    const response = kind === 'signature'
+      ? await request(app()).post('/finanzas/rutero/evidence/signature').send({
+        ...base, ...(repartidorId ? { repartidorId } : {}),
+        signature: 'data:image/png;base64,' + PNG.toString('base64'),
+      })
+      : await request(app()).post('/finanzas/rutero/evidence/photo')
+        .field('documentId', base.documentId)
+        .field('repartidorId', repartidorId || '')
+        .attach('photo', PNG, { filename: 'proof.png', contentType: 'image/png' });
+    expect(response.status).toBe(422);
+    expect(stageSignature).not.toHaveBeenCalled();
+    expect(stagePhoto).not.toHaveBeenCalled();
+  });
+
+  test.each(['signature', 'photo'])('JEFE evidence %s rejects foreign and wrong mode before storage', async (kind) => {
+    const stageSignature = jest.fn();
+    const stagePhoto = jest.fn();
+    injectEvidence({ stageSignature, stagePhoto, retrieve: jest.fn() });
+    const send = async (repartidorId) => kind === 'signature'
+      ? request(app()).post('/finanzas/rutero/evidence/signature').send({
+        documentId: '2026-S-10-404-4300009479', repartidorId,
+        signature: 'data:image/png;base64,' + PNG.toString('base64'),
+      })
+      : request(app()).post('/finanzas/rutero/evidence/photo')
+        .field('documentId', '2026-S-10-404-4300009479')
+        .field('repartidorId', repartidorId)
+        .attach('photo', PNG, { filename: 'proof.png', contentType: 'image/png' });
+
+    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
+    expect((await send('95')).status).toBe(403);
+    mockUser = { ...mockUser, activeMode: 'COMERCIAL' };
+    expect((await send('94')).status).toBe(403);
+    expect(stageSignature).not.toHaveBeenCalled();
+    expect(stagePhoto).not.toHaveBeenCalled();
   });
 
   test('stages signature as an opaque ID and returns 201/200 for create/retry', async () => {

@@ -1,0 +1,10 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -116,1 +116,5 @@
+ function normalizeCatalogBoolean(value, label) {
++  const normalized = String(value ?? '').trim().toUpperCase();
++  if (label === 'HAS_DEFAULT' && normalized === 'I') {
++    return true;
++  }
+   return normalizeCatalogYesNo(value, label) === 'YES';

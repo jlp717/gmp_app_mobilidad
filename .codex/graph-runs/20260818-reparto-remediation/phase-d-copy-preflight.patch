@@ -1,0 +1,221 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+index 3ef1c5f7..00000000 100644
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -94,10 +94,97 @@ async function columnsOf(schemaTable) {
+   const rows = await queryWithParams(
+     \`SELECT TRIM(COLUMN_NAME) AS COLUMN_NAME,
+             TRIM(DATA_TYPE) AS DATA_TYPE,
++            LENGTH,
++            NUMERIC_PRECISION,
++            NUMERIC_SCALE,
++            IS_NULLABLE,
+             IDENTITY
+        FROM QSYS2.SYSCOLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+@@ -106,10 +193,80 @@ async function columnsOf(schemaTable) {
+   return (rows || []).map((r) => ({
+     name: String(r.COLUMN_NAME || r.column_name).trim().toUpperCase(),
+     dataType: String(r.DATA_TYPE || r.data_type || '').toUpperCase(),
++    length: String(r.LENGTH ?? r.length ?? ''),
++    numericPrecision: String(r.NUMERIC_PRECISION ?? r.numeric_precision ?? ''),
++    numericScale: String(r.NUMERIC_SCALE ?? r.numeric_scale ?? ''),
++    isNullable: String(r.IS_NULLABLE || r.is_nullable || '').trim().toUpperCase(),
+     identity: String(r.IDENTITY || r.identity || '').toUpperCase() === 'YES',
+   }));
+ }
+
++function metadataSignature(column) {
++  return [
++    column.dataType,
++    column.length,
++    column.numericPrecision,
++    column.numericScale,
++    column.isNullable,
++  ].join('|');
++}
++
++/**
++ * Compare a mapped application-table pair exactly before any TEST mutation.
++ * Identity is intentionally excluded: DB2 generated values are copied with
++ * OVERRIDING SYSTEM VALUE where applicable, while all data-shape attributes
++ * remain fail-closed.
++ */
++function compareTableMetadata(srcCols, dstCols) {
++  const srcByName = new Map(srcCols.map((column) => [column.name, column]));
++  const dstByName = new Map(dstCols.map((column) => [column.name, column]));
++  const missing = [...srcByName.keys()].filter((name) => !dstByName.has(name));
++  const extra = [...dstByName.keys()].filter((name) => !srcByName.has(name));
++  const deltas = [];
++
++  for (const [name, src] of srcByName) {
++    const dst = dstByName.get(name);
++    if (dst && metadataSignature(src) !== metadataSignature(dst)) {
++      deltas.push({
++        name,
++        source: metadataSignature(src),
++        destination: metadataSignature(dst),
++      });
++    }
++  }
++
++  return {
++    ok: missing.length === 0 && extra.length === 0 && deltas.length === 0,
++    missing,
++    extra,
++    deltas,
++  };
++}
++
++async function preflightMappingPairs(pairs, {
++  tableExistsFn = tableExists,
++  columnsOfFn = columnsOf,
++} = {}) {
++  for (const pair of pairs) {
++    const [sourceExists, destinationExists] = await Promise.all([
++      tableExistsFn(pair.src),
++      tableExistsFn(pair.dst),
++    ]);
++    if (!sourceExists || !destinationExists) {
++      throw new Error(
++        \`COPY PREFLIGHT BLOCK ${pair.src} -> ${pair.dst}: \`
++        + \`missing ${!sourceExists ? 'source' : ''}${!sourceExists && !destinationExists ? '+' : ''}\`
++        + \`${!destinationExists ? 'destination' : ''} table\`,
++      );
++    }
++
++    const comparison = compareTableMetadata(
++      await columnsOfFn(pair.src),
++      await columnsOfFn(pair.dst),
++    );
++    if (!comparison.ok) {
++      throw new Error(
++        \`COPY PREFLIGHT BLOCK ${pair.src} -> ${pair.dst}: \`
++        + \`missing=[${comparison.missing.join(',')}], extra=[${comparison.extra.join(',')}], \`
++        + \`deltas=[${comparison.deltas.map((delta) => delta.name).join(',')}]\`,
++      );
++    }
++    console.log(\`PREFLIGHT OK ${pair.src} -> ${pair.dst}\`);
++  }
++}
++
++async function runAfterCopyPreflight(pairs, mutate, dependencies) {
++  await preflightMappingPairs(pairs, dependencies);
++  return mutate();
++}
++
+ async function tableExists(schemaTable) {
+@@ -785,15 +942,16 @@ async function main() {
+   await initDb();
+   try {
++    // ERP-seeded paths below are deliberately non-isomorphic transformations.
++    // Only TABLE_MAPPINGS production -> TEST application pairs are preflighted.
++    const pairs = collectMappingPairs();
++    await runAfterCopyPreflight(pairs, async () => {
+     if (RESUME_FIRMAS) {
+       await seedCacfirmasToTest();
+       await overlayDeliveryStatus();
+       await printSummary();
+       console.log(APPLY ? 'DONE resume-firmas.' : 'DRY-RUN resume-firmas.');
+       return;
+     }
+-    const pairs = collectMappingPairs();
+ 
+     // Create TEST_DELIVERY_STATUS before wipe/copy so overlay seed can run.
+     await ensureTestDeliveryStatus();
+@@ -849,6 +1007,7 @@ async function main() {
+     console.log(APPLY
+       ? 'DONE. ERP documents (albaranes/ruteros) still read live from DSEDAC (not copied).'
+       : 'DRY-RUN complete. Re-run with --apply to execute.');
++    });
+   } finally {
+     await closePool();
+   }
+@@ -856,6 +1015,16 @@ async function main() {
+   }
+ }
+ 
+-main().catch((e) => {
+-  console.error('FATAL', e.message);
+-  process.exit(1);
+-});
++if (require.main === module) {
++  main().catch((e) => {
++    console.error('FATAL', e.message);
++    process.exit(1);
++  });
++}
++
++module.exports = {
++  compareTableMetadata,
++  preflightMappingPairs,
++  runAfterCopyPreflight,
++};
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+new file mode 100644
+index 00000000..fb02a531
+--- /dev/null
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -0,0 +1,107 @@
++'use strict';
++
++const {
++  compareTableMetadata,
++  runAfterCopyPreflight,
++} = require('../scripts/copy-javier-prod-to-test');
++
++function column(overrides = {}) {
++  return {
++    name: 'ID',
++    dataType: 'INTEGER',
++    length: '4',
++    numericPrecision: '10',
++    numericScale: '0',
++    isNullable: 'NO',
++    identity: false,
++    ...overrides,
++  };
++}
++
++describe('copy-javier-prod-to-test fail-closed metadata preflight', () => {
++  test('accepts exact application-table metadata while explicitly ignoring identity', () => {
++    expect(compareTableMetadata(
++      [column({ identity: false })],
++      [column({ identity: true })],
++    )).toEqual({ ok: true, missing: [], extra: [], deltas: [] });
++  });
++
++  test('blocks missing columns, extra columns, and every required shape delta', () => {
++    const source = [column({ name: 'SOURCE_ONLY' }), column({ name: 'SHARED' })];
++    const destination = [
++      column({ name: 'DESTINATION_ONLY' }),
++      column({ name: 'SHARED', dataType: 'VARCHAR', length: '50', isNullable: 'YES' }),
++    ];
++    const result = compareTableMetadata(source, destination);
++
++    expect(result.ok).toBe(false);
++    expect(result.missing).toEqual(['SOURCE_ONLY']);
++    expect(result.extra).toEqual(['DESTINATION_ONLY']);
++    expect(result.deltas).toEqual([expect.objectContaining({ name: 'SHARED' })]);
++  });
++
++  test('does not reach mutation until every mapped pair passes preflight', async () => {
++    const mutate = jest.fn();
++    const pairs = [
++      { src: 'JAVIER.PROD_A', dst: 'JAVIER.TEST_A' },
++      { src: 'JAVIER.PROD_B', dst: 'JAVIER.TEST_B' },
++    ];
++    const goodColumns = [column({ name: 'ID' })];
++    const dependencies = {
++      tableExistsFn: jest.fn().mockResolvedValue(true),
++      columnsOfFn: jest.fn(async (table) => (
++        table.endsWith('TEST_B') ? [column({ name: 'ID', length: '8' })] : goodColumns
++      )),
++    };
++
++    await expect(runAfterCopyPreflight(pairs, mutate, dependencies))
++      .rejects.toThrow('COPY PREFLIGHT BLOCK JAVIER.PROD_B -> JAVIER.TEST_B');
++
++    expect(mutate).not.toHaveBeenCalled();
++  });
++});

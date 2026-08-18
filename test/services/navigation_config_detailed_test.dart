@@ -26,7 +26,7 @@ void main() {
         isAlmacen: false,
         isRepartidor: true,
         isJefeVentas: false,
-        showCommissions: false,
+        showCommissions: true,
       );
 
       expect(items.length, 8);
@@ -46,7 +46,8 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 9);
+      expect(items.length, 8);
+      expect(items.any((i) => i.label == 'Comisiones'), false);
       expect(items[0].label, 'Panel');
     });
 

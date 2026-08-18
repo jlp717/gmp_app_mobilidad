@@ -1,0 +1,9 @@
+diff --git a/backend/repositories/repartidor-route-db2-repository.js b/backend/repositories/repartidor-route-db2-repository.js
+--- a/backend/repositories/repartidor-route-db2-repository.js
++++ b/backend/repositories/repartidor-route-db2-repository.js
+@@ -908,6 +908,7 @@
+                 WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                   AND OPP.ANOREPARTO = ?
++                  AND NULLIF(TRIM(CPC.CODIGOCLIENTEALBARAN), '') IS NOT NULL
+                   ${clientFilter}
+                 GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)

@@ -1,0 +1,8 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1,2 +1,4 @@
+ 'use strict';
+ 
++const crypto = require('crypto');
++

@@ -1,0 +1,38 @@
+diff --git a/backend/src/chatbot/llm-orchestrator.js b/backend/src/chatbot/llm-orchestrator.js
+--- a/backend/src/chatbot/llm-orchestrator.js
++++ b/backend/src/chatbot/llm-orchestrator.js
+@@ -79,0 +80,10 @@ async function processMessage({
++  const repartoAuthorization = authorizeChatbotRepartoScope(user, repartidorId);
++  if (!repartoAuthorization.allowed) {
++    return {
++      success: false,
++      statusCode: 403,
++      error: repartoAuthorization.code,
++    };
++  }
++  context.repartidorScope = repartoAuthorization.driverCodes;
++
+@@ -82,10 +91,0 @@ async function processMessage({
+-  const repartoAuthorization = authorizeChatbotRepartoScope(user, repartidorId);
+-  if (!repartoAuthorization.allowed) {
+-    return {
+-      success: false,
+-      statusCode: 403,
+-      error: repartoAuthorization.code,
+-    };
+-  }
+-  context.repartidorScope = repartoAuthorization.driverCodes;
+-
+diff --git a/backend/src/chatbot/chatbot_tools.js b/backend/src/chatbot/chatbot_tools.js
+--- a/backend/src/chatbot/chatbot_tools.js
++++ b/backend/src/chatbot/chatbot_tools.js
+@@ -2074,0 +2075,2 @@ const repartidorTools = {
++        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
++
+@@ -2077,1 +2079,0 @@ const repartidorTools = {
+-        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
+@@ -2174,0 +2176,2 @@ const repartidorTools = {
++        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
++
+@@ -2177,1 +2180,0 @@ const repartidorTools = {
+-        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');

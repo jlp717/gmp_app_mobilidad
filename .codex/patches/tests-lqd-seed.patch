@@ -1,0 +1,30 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -438,0 +439,1 @@
++describe('ERP LQD cobros seed contract', () => {
++  test('blocks before DELETE semantics when TEST ID lost identity', () => {
++    expect(() => assertLqdCobrosSeedCoverage([
++      column({ name: 'ID', identity: false, hasDefault: false }),
++    ])).toThrow('destination ID must be identity before DELETE');
++  });
++
++  test('blocks future mandatory columns not mapped by the seed', () => {
++    expect(() => assertLqdCobrosSeedCoverage([
++      column({ name: 'ID', identity: true, hasDefault: true }),
++      column({ name: 'UNMAPPED_REQUIRED', identity: false, hasDefault: false }),
++    ])).toThrow('mandatory columns missing=[UNMAPPED_REQUIRED]');
++  });
++
++  test('uses one atomic explicit INSERT with a unique runtime token and no manual ID', () => {
++    const sql = lqdCobrosInsertSql('JAVIER.TEST_REPARTIDOR_COBROS');
++    expect((sql.match(/INSERT INTO/gi) || [])).toHaveLength(1);
++    expect(sql).toContain('IDEMPOTENCY_TOKEN');
++    expect(sql).toContain('LIQUIDACION_TOKEN');
++    expect(sql).toContain("'EF' AS FORMA");
++    expect(sql).toContain("'PD'");
++    expect(sql).not.toMatch(/INSERT INTO JAVIER\.TEST_REPARTIDOR_COBROS \(ID,/);
++    expect(sql).not.toMatch(/TRUNCATE/i);
++  });
++});
++

@@ -1,0 +1,9 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -661,4 +661,5 @@ class RepartidorDataService {
+     int? albaranYear,
+     String? repartidorId,
+   }) async {
++    requireConcreteRepartoOwner(repartidorId);
+     final rawOwner = repartidorId;

@@ -1,0 +1,15 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1139,1 +1139,12 @@
+     const pairs = collectMappingPairs();
++    const sequencePairs = pairs.filter((pair) => pair.objectType === 'SEQUENCE');
++    for (const pair of sequencePairs) {
++      const sourceExists = await sequenceExists(pair.src);
++      const destinationExists = await sequenceExists(pair.dst);
++      if (!sourceExists || !destinationExists) {
++        throw new Error(`SEQUENCE PREFLIGHT BLOCK ${pair.src} -> ${pair.dst}: sourceExists=${sourceExists} destinationExists=${destinationExists}; refusing orphan TEST sequence and false PASS`);
++      }
++      console.log(`PREFLIGHT OK sequence ${pair.src} -> ${pair.dst}`);
++    }
++    const tablePairs = pairs.filter((pair) => pair.objectType === 'TABLE');

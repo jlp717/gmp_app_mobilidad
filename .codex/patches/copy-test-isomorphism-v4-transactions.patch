@@ -1,0 +1,25 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -486,12 +486,22 @@ async function countOf(schemaTable, whereSql = '', params = []) {
+   try {
+-    const rows = whereSql
+-      ? await queryWithParams(
+-        `SELECT COUNT(*) AS N FROM ${schemaTable} WHERE ${whereSql}`,
+-        params,
+-      )
+-      : await query(`SELECT COUNT(*) AS N FROM ${schemaTable}`);
++    const sql = whereSql
++      ? `SELECT COUNT(*) AS N FROM ${schemaTable} WHERE ${whereSql}`
++      : `SELECT COUNT(*) AS N FROM ${schemaTable}`;
++    let rows;
++    if (activeTransactionConnection) {
++      rows = params.length
++        ? await activeTransactionConnection.query(sql, params)
++        : await activeTransactionConnection.query(sql);
++    } else {
++      rows = params.length
++        ? await queryWithParams(sql, params)
++        : await query(sql);
++    }
+     return Number(rows?.[0]?.N ?? rows?.[0]?.n ?? 0);

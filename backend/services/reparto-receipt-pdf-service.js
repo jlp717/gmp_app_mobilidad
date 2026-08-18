@@ -2,6 +2,7 @@
 
 const PDFDocument = require('pdfkit');
 const { RepartoPersistenceError } = require('./reparto-confirmation-service');
+const { assertDecodablePng } = require('../utils/png-image-validator');
 
 function unavailable(code, message) {
   return new RepartoPersistenceError(message, { code, statusCode: 503 });
@@ -35,12 +36,49 @@ function paymentDate(payment) {
   return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
 }
 
+
+function decodeSignatureImage(signature) {
+  if (!signature?.contentBase64) return null;
+  const mimeType = String(signature.mimeType || '').toLowerCase();
+  if (!['image/png', 'image/jpeg'].includes(mimeType)
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature.contentBase64)
+      || signature.contentBase64.length > 5_600_000) {
+    throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no se puede representar');
+  }
+  const image = Buffer.from(signature.contentBase64, 'base64');
+  if (!image.length || image.toString('base64') !== signature.contentBase64) {
+    throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no se puede representar');
+  }
+  try {
+    if (mimeType === 'image/png') {
+      assertDecodablePng(image);
+    } else if (image.length < 4
+        || image[0] !== 0xff || image[1] !== 0xd8
+        || image[image.length - 2] !== 0xff || image[image.length - 1] !== 0xd9) {
+      throw new Error('invalid JPEG');
+    }
+  } catch (_) {
+    throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no se puede representar');
+  }
+  return image;
+}
+
+function isExplicitZeroPrepaid(receipt) {
+  return receipt?.prepaidZeroWithoutLines === true
+    && receipt?.status === 'ENTREGADO'
+    && receipt?.cobro == null
+    && receipt?.importeTotal === 0;
+}
 /**
  * Builds the complete, deterministic text model before touching PDFKit. This
  * makes the legally relevant presentation testable without parsing PDF xrefs.
  */
 function buildReceiptPresentation(receipt) {
-  if (!receipt || !Array.isArray(receipt.lineas) || receipt.lineas.length === 0) {
+  if (!receipt || !Array.isArray(receipt.lineas)) {
+    throw unavailable('REPARTO_RECEIPT_LINES_UNAVAILABLE', 'El recibo no contiene lineas confirmadas');
+  }
+  const zeroPrepaid = receipt.lineas.length === 0 && isExplicitZeroPrepaid(receipt);
+  if (receipt.lineas.length === 0 && !zeroPrepaid) {
     throw unavailable('REPARTO_RECEIPT_LINES_UNAVAILABLE', 'El recibo no contiene lineas confirmadas');
   }
   const lines = receipt.lineas.map((line) => {
@@ -57,7 +95,10 @@ function buildReceiptPresentation(receipt) {
       `observaciones ${printable(line.observaciones) || '-'}`,
     ].join('\n'));
   });
-  const amount = receipt.lineas.reduce((sum, line) => sum + (Number(line.cantidadEntregada) * Number(line.precioUnitario)), 0);
+  if (zeroPrepaid) lines.push('Sin lineas ERP (prepago 0 EUR)');
+  const amount = zeroPrepaid ? 0 : receipt.lineas.reduce(
+    (sum, line) => sum + (Number(line.cantidadEntregada) * Number(line.precioUnitario)), 0,
+  );
   if (!Number.isFinite(amount)) throw unavailable('REPARTO_RECEIPT_VALUATION_UNAVAILABLE', 'La valoracion del recibo no esta disponible');
   const header = Object.freeze([
     'COMPROBANTE DE REPARTO',
@@ -92,6 +133,7 @@ function createRepartoReceiptPdfService() {
     if (receipt.firmaEvidenceId && (!signature || !signature.contentBase64)) {
       throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no esta disponible');
     }
+    const signatureImage = decodeSignatureImage(signature);
     const document = new PDFDocument({ size: 'A4', margin: 42, compress: false });
     const chunks = [];
     const result = new Promise((resolve, reject) => {
@@ -112,16 +154,10 @@ function createRepartoReceiptPdfService() {
     document.font('Helvetica-Bold').text(presentation.footer[0]);
     document.font('Helvetica').moveDown(0.5);
     presentation.footer.slice(1).forEach((line) => document.text(line));
-    if (signature?.contentBase64) {
-      if (!['image/png', 'image/jpeg'].includes(String(signature.mimeType || '').toLowerCase())
-          || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature.contentBase64)
-          || signature.contentBase64.length > 5_600_000) {
-        throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no se puede representar');
-      }
-      const image = Buffer.from(signature.contentBase64, 'base64');
+    if (signatureImage) {
       try {
         document.moveDown(0.5).font('Helvetica-Bold').text('Firma registrada');
-        document.image(image, { fit: [240, 100] });
+        document.image(signatureImage, { fit: [240, 100] });
       } catch (_) {
         throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no se puede representar');
       }

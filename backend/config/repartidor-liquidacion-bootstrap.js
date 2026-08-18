@@ -19,9 +19,11 @@ function unavailableService({ code = 'LIQUIDACION_CAPABILITY_UNAVAILABLE', messa
 
 function createRepartidorLiquidacionBootstrap({ runtime, db, logger = console } = {}) {
   const configured = canEnableCanonicalLiquidacion(runtime);
-  if (!configured || !db || typeof db.initDb !== 'function' || typeof db.getPool !== 'function') {
+  if (!configured || !db || typeof db.acquireConfiguredConnection !== 'function') {
     if (configured) logger.warn?.('[REPARTIDOR_LIQUIDACION_RUNTIME] DB2 bootstrap dependency unavailable');
+    const service = unavailableService();
     return Object.freeze({
+      configured,
       enabled: false,
       diagnostic: Object.freeze({
         enabled: false, configured, catalogVerified: false,
@@ -29,15 +31,33 @@ function createRepartidorLiquidacionBootstrap({ runtime, db, logger = console } 
         financeCapabilityApproved: Boolean(runtime?.financeCapabilityApproved),
         writesEnabled: Boolean(runtime?.writesEnabled),
       }),
-      service: unavailableService(),
+      service,
+      verifyCatalogReadOnly: service.closeDay,
     });
   }
-  const connectionFactory = async () => { const initialized = await db.initDb(); const pool = initialized || db.getPool(); if (!pool?.connect) { const error = new Error('DB2 pooled connection is unavailable'); error.code = 'LIQUIDACION_CAPABILITY_UNAVAILABLE'; error.statusCode = 503; throw error; } return pool.connect(); };
+  const connectionFactory = async () => db.acquireConfiguredConnection();
   const repository = createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory });
+  let catalogChecked = false;
+  let catalogErrorCode = null;
+
+  async function verifyCatalogReadOnly() {
+    catalogChecked = true;
+    try {
+      const result = await repository.verifyCatalogReadOnly({ requiresOutbox: true });
+      catalogErrorCode = null;
+      return result;
+    } catch (error) {
+      catalogErrorCode = String(error?.code || 'LIQUIDACION_CAPABILITY_UNAVAILABLE');
+      throw error;
+    }
+  }
+
   const diagnostic = Object.freeze({
     configured: true,
     get enabled() { return repository.catalogVerified; },
     get catalogVerified() { return repository.catalogVerified; },
+    get catalogChecked() { return catalogChecked; },
+    get errorCode() { return catalogErrorCode; },
     environment: runtime.environment, tableSet: runtime.tableSet,
     financeCapabilityApproved: true, writesEnabled: true,
   });
@@ -46,6 +66,7 @@ function createRepartidorLiquidacionBootstrap({ runtime, db, logger = console } 
     get enabled() { return repository.catalogVerified; },
     diagnostic,
     service: createRepartidorLiquidacionService({ repository }), repository,
+    verifyCatalogReadOnly,
   });
 }
 

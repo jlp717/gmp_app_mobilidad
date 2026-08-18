@@ -1,0 +1,339 @@
+rubric_source: ".opencode/config/quality-rubric.yaml"
+
+checks:
+  n_plus_one:
+    enabled: true
+    mode: "ast_runtime"
+    description: "Detecta bucles con llamadas DB/API/disk/network sin batch/prefetch"
+    threshold: 0
+    block_on: "> 0"
+    evidence_required: true
+    tools: ["ast_analysis", "runtime_trace"]
+    files_pattern: ["**/*.dart", "**/*.js", "**/*.ts"]
+
+  hardcode_detection:
+    enabled: true
+    mode: "grep_ast"
+    description: "Literales config/secrets/URLs/ports/IPs en src (excluye constants files declarados)"
+    threshold: 0
+    block_on: "> 0"
+    evidence_required: true
+    tools: ["rg", "ast"]
+    exclude_patterns:
+      - "lib/core/constants/**"
+      - "backend/config/**"
+      - "*.constants.dart"
+      - "*.constants.js"
+    patterns:
+      - "password"
+      - "secret"
+      - "api_key"
+      - "192\\.168\\."
+      - "3335"
+      - "3197"
+      - "localhost"
+      - "http://"
+      - "jdbc:"
+
+  sql_safety:
+    enabled: true
+    mode: "ast_pattern"
+    description: "Solo queries parameterizadas, no string concat, no raw SQL en routes"
+    threshold: 0
+    block_on: "> 0"
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_forbidden:
+      - "\\+.*SELECT"
+      - "\\+.*INSERT"
+      - "\\+.*UPDATE"
+      - "\\+.*DELETE"
+      - "template.*SQL"
+      - "\\$\\{.*SELECT"
+      - "\\$\\{.*INSERT"
+      - "odbc\\.query\\([^)]*\\+"
+    patterns_required:
+      - "\\?"
+      - "\\$1"
+      - "\\$2"
+
+  async_loop_patterns:
+    enabled: true
+    mode: "ast"
+    description: "await en forEach/map/filter sin Promise.all/pool = BLOCK"
+    threshold: 0
+    block_on: "> 0"
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_forbidden:
+      - "forEach.*await"
+      - "\\.map\\(.*async"
+      - "\\.filter\\(.*async"
+      - "for.*of.*await"
+    patterns_allowed:
+      - "Promise\\.all"
+      - "Promise\\.allSettled"
+      - "pLimit"
+      - "pool\\."
+
+  complexity:
+    enabled: true
+    mode: "ast_metrics"
+    description: "Ciclomática > 10 fn, > 20 file = BLOCK; coupling > 5 = WARN"
+    thresholds:
+      function_cyclomatic: 10
+      file_cyclomatic: 20
+      coupling: 5
+    block_on: "function_cyclomatic > 10 OR file_cyclomatic > 20"
+    warn_on: "coupling > 5"
+    evidence_required: true
+    tools: ["ast_metrics"]
+
+  duplication:
+    enabled: true
+    mode: "ast_similarity"
+    description: "> 6 líneas idénticas en > 2 archivos = BLOCK"
+    threshold_lines: 6
+    threshold_files: 2
+    block_on: "duplication_detected"
+    evidence_required: true
+    tools: ["code-autopilot_rag", "ast_similarity"]
+    exclude_patterns:
+      - "test/**"
+      - "*.g.dart"
+      - "*.freezed.dart"
+
+  file_size:
+    enabled: true
+    mode: "line_count"
+    description: "> 1800 líneas = WARN (requiere split plan)"
+    threshold: 1800
+    warn_on: "> 1800"
+    block_on: false
+    evidence_required: true
+    tools: ["wc", "ast"]
+
+  pagination:
+    enabled: true
+    mode: "ast_pattern"
+    description: "Endpoints list sin paginación/orden = BLOCK"
+    threshold: 0
+    block_on: "missing_pagination_or_order"
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_required:
+      - "limit"
+      - "offset"
+      - "page"
+      - "order by"
+      - "ORDER BY"
+
+  batch_prefetch:
+    enabled: true
+    mode: "ast_pattern"
+    description: "DB2 list endpoints sin join/prefetch = WARN"
+    threshold: 0
+    warn_on: "missing_batch_prefetch"
+    block_on: false
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_required:
+      - "JOIN"
+      - "prefetch"
+      - "batch"
+
+  test_coverage:
+    enabled: true
+    mode: "coverage_report"
+    description: "< 80% critical paths = WARN; 0 tests en business logic nuevo = BLOCK"
+    threshold_critical: 80
+    block_on: "new_business_logic_zero_tests"
+    warn_on: "coverage_critical < 80"
+    evidence_required: true
+    tools: ["flutter_test_coverage", "jest_coverage"]
+    critical_paths:
+      - "lib/features/pedidos/**"
+      - "lib/features/cobros/**"
+      - "lib/features/reparto/**"
+      - "lib/features/commissions/**"
+      - "lib/features/auth/**"
+      - "backend/services/**"
+      - "backend/routes/**"
+
+  security_scan:
+    enabled: true
+    mode: "guardvibe_regex"
+    description: "guardvibe + regex secrets + SQLi patterns = BLOCK si hallazgos"
+    threshold: 0
+    block_on: "findings > 0"
+    evidence_required: true
+    tools: ["guardvibe_scan", "rg"]
+    patterns:
+      - "password\\s*="
+      - "secret\\s*="
+      - "api_key\\s*="
+      - "INSERT.*\\+"
+      - "SELECT.*\\+"
+
+  auth_boundaries:
+    enabled: true
+    mode: "ast_pattern"
+    description: "Route protegido sin auth check antes de DB = BLOCK"
+    threshold: 0
+    block_on: "missing_auth_check"
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_required_before_db:
+      - "authMiddleware"
+      - "requireAuth"
+      - "verifyToken"
+      - "checkPermission"
+
+  input_validation:
+    enabled: true
+    mode: "ast_pattern"
+    description: "Endpoint público sin schema validation = BLOCK"
+    threshold: 0
+    block_on: "missing_validation_schema"
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_required:
+      - "zod"
+      - "joi"
+      - "validate"
+      - "schema"
+      - "class-validator"
+
+  observability:
+    enabled: true
+    mode: "ast_pattern"
+    description: "Structured logging + correlation IDs + metrics + tracing = WARN si faltan"
+    threshold: 0
+    warn_on: "missing_observability"
+    block_on: false
+    evidence_required: true
+    tools: ["ast", "rg"]
+    patterns_required:
+      - "winston"
+      - "pino"
+      - "correlation"
+      - "traceId"
+      - "prometheus"
+      - "metrics"
+
+  accessibility:
+    enabled: true
+    mode: "flutter_semantics"
+    description: "Flutter Semantics/ExcludeSemantics/tooltip/focus. NO axe/HTML. elite-quality-gate.ts NO ejecuta este check; owner Visual-Design-Specialist."
+    executor: Visual-Design-Specialist
+    elite_quality_gate_ts: false
+    threshold: 0
+    warn_on: "missing_semantics_on_secondary"
+    block_on: false
+    evidence_required: true
+    tools: ["rg", "Visual-Design-Specialist"]
+    checks:
+      - "Semantics"
+      - "ExcludeSemantics"
+      - "tooltip"
+      - "FocusNode"
+      - "SemanticsProperties"
+
+execution_modes:
+  pre_commit:
+    enabled: true
+    checks:
+      - n_plus_one
+      - hardcode_detection
+      - sql_safety
+      - async_loop_patterns
+      - complexity
+    fail_on_warn: false
+    timeout_seconds: 30
+
+  pre_merge:
+    enabled: true
+    checks:
+      - n_plus_one
+      - hardcode_detection
+      - sql_safety
+      - async_loop_patterns
+      - complexity
+      - duplication
+      - file_size
+      - pagination
+      - batch_prefetch
+      - test_coverage
+      - security_scan
+      - auth_boundaries
+      - input_validation
+      - observability
+      - accessibility
+    fail_on_warn: false
+    timeout_seconds: 300
+    requires_staging_smoke: true
+
+  pre_production:
+    enabled: true
+    checks:
+      - n_plus_one
+      - hardcode_detection
+      - sql_safety
+      - async_loop_patterns
+      - complexity
+      - duplication
+      - file_size
+      - pagination
+      - batch_prefetch
+      - test_coverage
+      - security_scan
+      - auth_boundaries
+      - input_validation
+      - observability
+      - accessibility
+    fail_on_warn: true
+    timeout_seconds: 600
+    requires_load_test: true
+    requires_dast: true
+    requires_sre_health: true
+
+output_format:
+  schema_version: 1
+  fields:
+    - overall
+    - checks
+    - summary
+    - blockers
+    - warnings
+    - token_usage
+
+integration:
+  called_by:
+    - "verification-loop checker"
+    - "chief-protocol step verify"
+    - "handoff-contract rejection_rules performance_regression"
+  handoff_contract_rejection_rules:
+    - "performance_regression"
+    - "security_finding"
+    - "n_plus_one_detected"
+    - "unsafe_sql"
+    - "async_loop_blocking"
+
+tools:
+  ast_parsers:
+    - "typescript-eslint"
+    - "dart_analyzer"
+    - "serena_mcp"
+    - "lsp"
+  grep_tools:
+    - "rg"
+    - "grep"
+  quality_gate_tool: "elite-quality-gate"
+  load_test: "k6"
+  security_scanner: "guardvibe"
+  accessibility_audit: "Visual-Design-Specialist Flutter Semantics (not axe_core)"
+
+defaults:
+  files_source: "git diff --name-only"
+  fail_on_warn: false
+  similarity_threshold: 0.85

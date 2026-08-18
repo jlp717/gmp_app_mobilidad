@@ -1,0 +1,9 @@
+diff --git a/test/features/repartidor_finanzas/repartidor_objectives_detail_test.dart b/test/features/repartidor_finanzas/repartidor_objectives_detail_test.dart
+--- a/test/features/repartidor_finanzas/repartidor_objectives_detail_test.dart
++++ b/test/features/repartidor_finanzas/repartidor_objectives_detail_test.dart
+@@ -1,4 +1,4 @@
+-import 'package:flutter_test/flutter_test.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
++import 'package:test/test.dart';
+ 
+ Map<String, dynamic> _totals(double sales, double cost, double units) => {

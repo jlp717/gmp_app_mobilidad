@@ -1,0 +1,116 @@
+diff --git a/backend/services/repartidor-liquidacion-outbox-service.js b/backend/services/repartidor-liquidacion-outbox-service.js
+--- a/backend/services/repartidor-liquidacion-outbox-service.js
++++ b/backend/services/repartidor-liquidacion-outbox-service.js
+@@ -210,7 +210,7 @@ async function processLiquidacionOutboxIntent({
+       repartidorName: '',
+       cobros,
+     });
+-    const ok = Array.isArray(results) && results.some((r) => r.success);
++    const ok = Array.isArray(results) && results.length > 0 && results.every((r) => r.success);
+     if (outboxId != null) {
+       const tables = financeTables(env);
+       await markOutbox(outboxId, ok ? 'SENT' : 'FAILED', ok ? null : 'send failed', { query, tables });
+diff --git a/backend/services/reparto-variance-notification-service.js b/backend/services/reparto-variance-notification-service.js
+--- a/backend/services/reparto-variance-notification-service.js
++++ b/backend/services/reparto-variance-notification-service.js
+@@ -14,6 +14,11 @@ const {
+   resolveDeliveryVarianceRecipients,
+   normalizeVendorCode,
+ } = require('./staff-email-directory-service');
++const {
++  resolveRepartoEmailDelivery,
++  buildRepartoMessageId,
++  redactDeliverySummary,
++} = require('./reparto-email-delivery-policy');
+ 
+ function notificationTables(env = process.env) {
+@@ -260,7 +265,7 @@ async function markOutboxStatus(id, { status, error = null, query = queryWithPa
+ async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWithPdf } = {}) {
+   if (!recipients.length) {
+     logger.warn('[variance] no recipients — email skipped');
+@@ -291,6 +296,11 @@ async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWi
+       const result = await sendEmail({
+         to,
+         subject,
++        messageId: buildRepartoMessageId({
++          kind: 'variance',
++          identity: `${payload.confirmationId || ''}|${payload.documentId || ''}`,
++          recipient: to,
++        }),
+         htmlBody,
+         textBody,
+         ...(pdfBuffer ? {
+@@ -403,13 +413,20 @@ async function notifyAfterConfirm({
+   payload.repartidorNombre = repartidorDetail?.nombre || '';
+   payload.comercialNombre = comercialDetail?.nombre || '';
+ 
+-  const sendResult = await sendVarianceEmail(payload, emails, { sendEmail });
++  let delivery;
++  try {
++    delivery = resolveRepartoEmailDelivery({ recipients: emails, env, mode: 'automatic' });
++  } catch (error) {
++    logger.warn(`[variance] delivery policy rejected message: ${error.code || error.message}`);
++    delivery = { effectiveRecipients: [] };
++  }
++  const sendResult = await sendVarianceEmail(payload, delivery.effectiveRecipients, { sendEmail });
++  payload.delivery = redactDeliverySummary(sendResult.results);
+ 
+   if (outboxId != null) {
+     try {
+       const tables = notificationTables(env);
+-      const ok = sendResult.sent > 0;
++      const ok = payload.delivery.allSucceeded;
+       if (ok) {
+         await query(
+           `UPDATE ${tables.varianceOutbox}
+-              SET STATUS = 'SENT', SENT_AT = CURRENT TIMESTAMP, ERROR = NULL
++              SET STATUS = 'SENT', SENT_AT = CURRENT TIMESTAMP, ERROR = NULL, PAYLOAD_JSON = ?
+             WHERE CONFIRMATION_ID = ? AND STATUS = 'PENDING'`,
+-          [outboxId],
++          [JSON.stringify(payload), outboxId],
+         );
+       } else {
+         await query(
+           `UPDATE ${tables.varianceOutbox}
+-              SET STATUS = 'FAILED', ERROR = ?
++              SET STATUS = 'FAILED', ERROR = ?, PAYLOAD_JSON = ?
+             WHERE CONFIRMATION_ID = ? AND STATUS = 'PENDING'`,
+-          ['No recipients or all sends failed', outboxId],
++          ['No recipients or incomplete send', JSON.stringify(payload), outboxId],
+         );
+@@ -520,18 +537,33 @@ async function sendDailyVarianceDigest({
+   const textBody = items.map((item) => (
+     `${item.documentId} rep=${item.repartidorId} com=${item.comercialCode || ''} lines=${(item.payload.lineas || []).length}`
+   )).join('\n');
+ 
++  let delivery;
++  try {
++    delivery = resolveRepartoEmailDelivery({ recipients: [...emails], env, mode: 'automatic' });
++  } catch (error) {
++    logger.warn(`[variance] digest delivery policy rejected message: ${error.code || error.message}`);
++    delivery = { effectiveRecipients: [] };
++  }
++
+   let sent = 0;
+-  for (const to of emails) {
++  let failed = 0;
++  for (const to of delivery.effectiveRecipients) {
+     try {
+-      await sendEmail({ to, subject, htmlBody, textBody });
++      await sendEmail({
++        to,
++        subject,
++        htmlBody,
++        textBody,
++        messageId: buildRepartoMessageId({ kind: 'variance-digest', identity: `${digestDate}|${items.map((item) => item.id).join(',')}`, recipient: to }),
++      });
+       sent += 1;
+     } catch (error) {
++      failed += 1;
+       logger.error(`[variance] digest email failed to ${to}: ${error.message}`);
+     }
+   }
+ 
+   const ids = items.map((item) => item.id).filter((id) => id != null);
+-  if (ids.length) {
++  if (ids.length && delivery.effectiveRecipients.length > 0 && failed === 0 && sent === delivery.effectiveRecipients.length) {

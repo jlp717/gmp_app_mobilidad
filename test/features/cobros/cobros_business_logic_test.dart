@@ -260,51 +260,11 @@ void main() {
   });
 
   group('Cobros delivery completion mutation contract', () {
-    test('completarEntrega batches item updates behind one idempotent mutation',
+    test('completarEntrega refuses retired mutation and does not POST',
         () async {
       final mutationBodies = <dynamic>[];
       final interceptor = InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (options.method == 'GET' &&
-              options.path.endsWith('/entregas/pendientes/TDD_RED_57')) {
-            handler.resolve(
-              Response<Map<String, dynamic>>(
-                requestOptions: options,
-                data: {
-                  'success': true,
-                  'albaranes': [
-                    {
-                      'id': 'alb-1',
-                      'numeroAlbaran': 1001,
-                      'codigoCliente': '4300010363',
-                      'nombreCliente': 'Cliente test',
-                      'direccion': 'Calle test',
-                      'fecha': '2026-06-11',
-                      'importeTotal': 30,
-                      'estado': 'PENDIENTE',
-                      'items': [
-                        {
-                          'itemId': 'item-1',
-                          'codigoArticulo': 'ART1',
-                          'descripcion': 'Producto 1',
-                          'cantidadPedida': 1,
-                          'estado': 'PENDIENTE',
-                        },
-                        {
-                          'itemId': 'item-2',
-                          'codigoArticulo': 'ART2',
-                          'descripcion': 'Producto 2',
-                          'cantidadPedida': 2,
-                          'estado': 'PENDIENTE',
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ),
-            );
-            return;
-          }
           if (options.method == 'POST' && options.path == '/entregas/update') {
             mutationBodies.add(options.data);
             handler.resolve(
@@ -322,14 +282,11 @@ void main() {
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
 
       final provider = CobrosProvider(employeeCode: 'TDD_RED_57');
-      await provider.cargarAlbaranesPendientes();
-
       final ok = await provider.completarEntrega('alb-1');
 
-      expect(ok, isTrue);
-      expect(mutationBodies, hasLength(1));
-      expect(mutationBodies.single, containsPair('idempotencyKey', isNotEmpty));
-      expect(mutationBodies.single, contains('items'));
+      expect(ok, isFalse);
+      expect(mutationBodies, isEmpty);
+      expect(provider.error, contains('410'));
     });
   });
 

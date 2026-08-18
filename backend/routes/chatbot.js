@@ -3,6 +3,10 @@
 const express = require('express');
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../middleware/logger');
+const {
+  CHATBOT_LOG_EVENTS,
+  emitChatbotLog,
+} = require('../src/chatbot/chatbot_log');
 const { processMessage } = require('../src/chatbot/llm-orchestrator');
 
 const router = express.Router();
@@ -27,6 +31,7 @@ router.post('/message', verifyToken, async (req, res) => {
       message,
       user: req.user || {},
       clientCode: req.body?.clientCode,
+      repartidorId: req.body?.repartidorId,
       conversationHistory: Array.isArray(req.body?.conversationHistory)
         ? req.body.conversationHistory
         : [],
@@ -38,7 +43,7 @@ router.post('/message', verifyToken, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    logger.error(`[CHATBOT] message error: ${error.message}`);
+    emitChatbotLog('error', CHATBOT_LOG_EVENTS.messageFailed);
     res.status(500).json({ success: false, error: 'Chatbot error' });
   }
 });

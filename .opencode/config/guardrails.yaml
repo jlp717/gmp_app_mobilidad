@@ -1,0 +1,50 @@
+version: 1
+purpose: >
+  OpenAI Practical Guide: input/output/tool guardrails. El manager (Chief) posee
+  la conversacion. Los especialistas son tools, no se quedan con el usuario.
+pattern: manager_agents_as_tools
+handoffs_to_user: forbidden
+
+input:
+  - id: no_secrets_in_prompt
+    tripwire: "password, token, api_key, BEGIN PRIVATE KEY pegados en el mensaje"
+    action: BLOCK
+    say: "No pongas secretos en el chat. Usa credentials_ref / vault."
+  - id: prod_mutation_without_adelante
+    tripwire: "deploy/pm2/DB2 write sin playbook prod y sin adelante"
+    action: BLOCK
+    tool: production-approval-gate
+  - id: scope_escape
+    tripwire: "el pedido pide tocar DSEDAC o .env sin R4"
+    action: BLOCK
+
+output:
+  - id: no_credentials_echo
+    tripwire: "la respuesta incluye password o token literal"
+    action: BLOCK_AND_REDACT
+  - id: no_false_done
+    tripwire: "dice hecho sin code-quality-contract PASS cuando hubo diff"
+    action: BLOCK
+  - id: citations_on_research
+    tripwire: "playbook explore+research sin URL o file:line"
+    action: BLOCK
+
+tools:
+  # OpenAI: low / medium / high segun write, reversibilidad, impacto
+  - name: read_grep
+    risk: low
+  - name: ibm-db2-mcp
+    risk: medium
+    note: "readonly por defecto. Writes = high + adelante"
+  - name: gmp-deploy-ssh
+    risk: high
+    pause: true
+  - name: production-approval-gate
+    risk: high
+    pause: true
+  - name: maker_edit
+    risk: medium
+    deny_paths: [".env", ".opencode/CREDENCIALES.md"]
+
+max_turns_enforced_by: chief-engineer-assistant
+nvidia_note: "NeMo Agent Toolkit usa max_iterations en ReAct. Aqui max_turns por playbook (capability-catalog)."

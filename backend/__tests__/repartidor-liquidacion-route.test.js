@@ -11,7 +11,7 @@ Object.assign(process.env, {
   REPARTO_PRODUCTION_WRITES_APPROVED: 'false', JWT_ACCESS_SECRET: 'test-jwt-secret-for-testing-only',
 });
 
-let mockUser = { id: '94', code: '94', role: 'REPARTIDOR' };
+let mockUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 const mockFinance = { getDailySummary: jest.fn(), getSummary: jest.fn(), getSaldoActual: jest.fn() };
 
 jest.mock('../middleware/auth', () => ({
@@ -42,7 +42,7 @@ function body(overrides = {}) {
 describe('repartidor liquidation route boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUser = { id: '94', code: '94', role: 'REPARTIDOR' };
+    mockUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     routes.resetCanonicalLiquidacionService();
   });
   afterEach(() => routes.resetCanonicalLiquidacionService());
@@ -157,7 +157,7 @@ describe('repartidor liquidation route boundary', () => {
       reason: 'DIFERENCIA', idempotencyToken: 'adjustment-route-000001' };
     expect((await request(makeApp()).post('/finanzas/liquidaciones/ajustes').send(payload)).status).toBe(403);
     expect(createAdjustment).not.toHaveBeenCalled();
-    mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
     expect((await request(makeApp()).post('/finanzas/liquidaciones/ajustes').send(payload)).status).toBe(201);
   });
 
@@ -226,8 +226,8 @@ describe('repartidor liquidation route boundary', () => {
   );
 
   test('allows JEFE_VENTAS an explicit multi-selector on all list endpoints', async () => {
-    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
-    mockFinance.getDailySummary.mockResolvedValue({ repartidorId: '94,95', summary: {} });
+    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94', '95'] };
+    mockFinance.getDailySummary.mockResolvedValue({ repartidorId: '94,95', summary: { saldoActual: 4 } });
     mockFinance.getSummary.mockResolvedValue({ repartidorId: '94,95', summary: {} });
     mockFinance.getSaldoActual.mockResolvedValue(4);
     expect((await request(makeApp()).get('/finanzas/daily-summary/94,95').query({ date: '2026-08-09' })).status).toBe(200);

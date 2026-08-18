@@ -1,0 +1,28 @@
+diff --git a/lib/core/services/navigation_config_service.dart b/lib/core/services/navigation_config_service.dart
+--- a/lib/core/services/navigation_config_service.dart
++++ b/lib/core/services/navigation_config_service.dart
+@@ -32,0 +33,3 @@
++      if (!showCommissions) {
++        items.removeWhere((item) => item.label == 'Comisiones');
++      }
+diff --git a/test/integration/navigation_full_test.dart b/test/integration/navigation_full_test.dart
+--- a/test/integration/navigation_full_test.dart
++++ b/test/integration/navigation_full_test.dart
+@@ -25 +25,2 @@
+-      expect(repartidor.length, 8);
++      expect(repartidor.length, 7);
++      expect(repartidor.any((i) => i.label == 'Comisiones'), false);
+@@ -34 +35,2 @@
+-      expect(repartidorJefe.length, 9);
++      expect(repartidorJefe.length, 8);
++      expect(repartidorJefe.any((i) => i.label == 'Comisiones'), false);
+diff --git a/test/services/navigation_config_detailed_test.dart b/test/services/navigation_config_detailed_test.dart
+--- a/test/services/navigation_config_detailed_test.dart
++++ b/test/services/navigation_config_detailed_test.dart
+@@ -29 +29 @@
+-        showCommissions: false,
++        showCommissions: true,
+@@ -49 +49,2 @@
+-      expect(items.length, 9);
++      expect(items.length, 8);
++      expect(items.any((i) => i.label == 'Comisiones'), false);

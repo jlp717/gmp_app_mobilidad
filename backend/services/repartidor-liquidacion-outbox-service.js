@@ -210,7 +210,7 @@ async function processLiquidacionOutboxIntent({
       repartidorName: '',
       cobros,
     });
-    const ok = Array.isArray(results) && results.some((r) => r.success);
+    const ok = Array.isArray(results) && results.length > 0 && results.every((r) => r.success);
     if (outboxId != null) {
       const tables = financeTables(env);
       await markOutbox(outboxId, ok ? 'SENT' : 'FAILED', ok ? null : 'send failed', { query, tables });

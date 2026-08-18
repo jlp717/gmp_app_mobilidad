@@ -1,0 +1,102 @@
+diff --git a/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart b/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
+--- a/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
++++ b/lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart
+@@ -19,2 +19,3 @@
+ import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
++import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
+ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+@@ -2552,2 +2553,12 @@
+             const SizedBox(height: 12),
++            _buildShareButton(
++              icon: Icons.chat,
++              label: 'WhatsApp (selector local)',
++              color: const Color(0xFF25D366),
++              onTap: () async {
++                Navigator.pop(ctx);
++                await _shareReceiptViaWhatsApp();
++              },
++            ),
++            const SizedBox(height: 12),
+             _buildShareButton(
+@@ -2689,4 +2700,4 @@
+             onWhatsAppTap: () {
+               Navigator.pop(context);
+-              _sharePdfLocally();
++              _shareReceiptViaWhatsApp();
+             },
+@@ -2774,1 +2785,1 @@
++  Future<void> _shareReceiptViaWhatsApp() async {
++    final owner = widget.albaran.codigoRepartidor.trim();
++    if (!isValidRepartoOwnerId(owner)) {
++      _showError('Selecciona un repartidor concreto para compartir.');
++      return;
++    }
++    final form = await WhatsAppFormModal.show(
++      context,
++      defaultMessage:
++          'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}. '
++          'El envío se realiza desde el selector del dispositivo.',
++    );
++    if (!mounted || form == null) return;
++
++    final modal = AsyncOperationModal.show(
++      context,
++      text: 'Preparando PDF para compartir localmente...',
++    );
++    try {
++      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
++      if (pdfData == null) throw const RepartoReceiptUnavailableException();
++      _cachedPdfBase64 = pdfData;
++      final tempDir = await getTemporaryDirectory();
++      final timestamp = DateTime.now().millisecondsSinceEpoch;
++      final file = File(
++        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$timestamp.pdf',
++      );
++      await file.writeAsBytes(base64Decode(pdfData));
++
++      final localShare = await RepartidorDataService.shareWhatsApp(
++        year: widget.albaran.ejercicio,
++        serie: widget.albaran.serie,
++        number: widget.albaran.numeroAlbaran,
++        type: 'albaran',
++        telefono: form.phone,
++        repartidorId: owner,
++        clienteNombre: widget.albaran.nombreCliente,
++        terminal: widget.albaran.terminal,
++        albaranNumber: widget.albaran.numeroAlbaran,
++        albaranSerie: widget.albaran.serie,
++        albaranTerminal: widget.albaran.terminal,
++        albaranYear: widget.albaran.ejercicio,
++      );
++      if (!localShare.localShare || localShare.sent) {
++        throw const RepartidorDataException(
++          'El servidor no autorizó el uso compartido local.',
++        );
++      }
++      modal.close();
++      if (!mounted) return;
++      final renderBox = context.findRenderObject() as RenderBox?;
++      final origin = renderBox == null
++          ? null
++          : Rect.fromCenter(
++              center: Offset(
++                renderBox.size.width / 2,
++                renderBox.size.height / 2,
++              ),
++              width: 1,
++              height: 1,
++            );
++      await Share.shareXFiles(
++        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
++        text: form.message,
++        sharePositionOrigin: origin,
++      );
++    } catch (_) {
++      modal.close();
++      if (mounted) {
++        _showError('No se pudo preparar el PDF para compartir localmente.');
++      }
++    }
++  }
++
+   Future<void> _sharePdfLocally() async {

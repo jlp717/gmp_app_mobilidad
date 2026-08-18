@@ -286,6 +286,8 @@ class RuteroDetailFinalize extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.success,
         foregroundColor: Colors.white,
+        disabledBackgroundColor: AppTheme.success,
+        disabledForegroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),

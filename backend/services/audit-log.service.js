@@ -2,30 +2,49 @@
 
 const { queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const {
+  resolveRepartoRuntime,
+  validateFinanceTableMapping,
+} = require('../config/reparto-runtime');
 
-let _auditTableExists = null;
+const auditTableExistence = new Map();
 
-async function auditTableExists() {
-  if (_auditTableExists !== null) return _auditTableExists;
+function resolveAuditBinding(env = process.env) {
+  const runtime = resolveRepartoRuntime(env);
+  const mapping = validateFinanceTableMapping(runtime);
+  if (!runtime.valid || !runtime.writesEnabled || !runtime.financeCapabilityApproved || !mapping.valid) {
+    return null;
+  }
+  const table = runtime.tables?.finance?.audit;
+  if (!/^JAVIER\.(?:TEST_)?REPARTIDOR_COBROS_AUDIT$/.test(String(table || ''))) {
+    return null;
+  }
+  return Object.freeze({ table, tableSet: runtime.tableSet });
+}
+
+async function auditTableExists(table) {
+  if (auditTableExistence.has(table)) return auditTableExistence.get(table);
   try {
     await queryWithParams(
-      `SELECT 1 FROM JAVIER.REPARTIDOR_COBROS_AUDIT FETCH FIRST 1 ROW ONLY`,
+      `SELECT 1 FROM ${table} FETCH FIRST 1 ROW ONLY`,
       [],
       false,
       false,
     );
-    _auditTableExists = true;
+    auditTableExistence.set(table, true);
   } catch (error) {
     const msg = String(error.message || '').toLowerCase();
     const odbcStates = (error.odbcErrors || []).map((e) => e.state);
     if (msg.includes('not found') || odbcStates.includes('42S02') || msg.includes('-204')) {
-      _auditTableExists = false;
+      auditTableExistence.set(table, false);
     } else {
-      _auditTableExists = false;
-      logger.warn(`[AUDIT_LOG] Unexpected error checking audit table: ${error.message}`);
+      auditTableExistence.set(table, false);
+      logger.warn('[AUDIT_LOG] Unexpected error checking audit table', {
+        code: String(error?.code || error?.odbcErrors?.[0]?.state || 'UNKNOWN'),
+      });
     }
   }
-  return _auditTableExists;
+  return auditTableExistence.get(table);
 }
 
 function safePreview(value, maxLength = 80) {
@@ -49,9 +68,14 @@ async function logPaymentEvent({
   payload,
   errorCode,
 }) {
-  const exists = await auditTableExists();
+  const binding = resolveAuditBinding();
+  if (!binding) {
+    logger.warn('[AUDIT_LOG] Skipping audit log: reparto runtime is not authorized');
+    return;
+  }
+  const exists = await auditTableExists(binding.table);
   if (!exists) {
-    logger.warn(`[AUDIT_LOG] Skipping audit log: REPARTIDOR_COBROS_AUDIT does not exist. eventType=${eventType}`);
+    logger.warn(`[AUDIT_LOG] Skipping audit log: audit table does not exist. eventType=${eventType}`);
     return;
   }
 
@@ -64,7 +88,7 @@ async function logPaymentEvent({
 
   try {
     await queryWithParams(
-      `INSERT INTO JAVIER.REPARTIDOR_COBROS_AUDIT (
+      `INSERT INTO ${binding.table} (
         EVENT_TYPE, OPERADOR, CODIGO_REPARTIDOR,
         IDEMPOTENCY_TOKEN_PREVIEW, DOCUMENTO_PREVIEW,
         PAYLOAD_PREVIEW, ERROR_CODE
@@ -82,11 +106,14 @@ async function logPaymentEvent({
       false,
     );
   } catch (error) {
-    logger.warn(`[AUDIT_LOG] Failed to write audit entry: ${error.message}`);
+    logger.warn('[AUDIT_LOG] Failed to write audit entry', {
+      code: String(error?.code || error?.odbcErrors?.[0]?.state || 'UNKNOWN'),
+    });
   }
 }
 
 module.exports = {
   logPaymentEvent,
   hashTokenPreview,
+  resolveAuditBinding,
 };

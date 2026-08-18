@@ -1,0 +1,6 @@
+diff --git a/backend/__tests__/reparto-evidence-db2-repository.test.js b/backend/__tests__/reparto-evidence-db2-repository.test.js
+--- a/backend/__tests__/reparto-evidence-db2-repository.test.js
++++ b/backend/__tests__/reparto-evidence-db2-repository.test.js
+@@ -341,1 +341,1 @@
+-    const blobReads = fake.calls.filter((call) => call.sql.includes('HEX(SUBSTR(E.CONTENT_BLOB')));
++    const blobReads = fake.calls.filter((call) => call.sql.includes('HEX(SUBSTR(E.CONTENT_BLOB'));

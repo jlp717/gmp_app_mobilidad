@@ -1,0 +1,44 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -478,15 +478,19 @@
+-  test('backs up non-empty TEST data with explicit columns before copy', async () => {
+-    const executeFn = jest.fn();
+-    const backup = backupTableName(destination, 'COPY_20260818_A');
+-    const result = await backupTestTable(destination, 'COPY_20260818_A', {
+-      tableExistsFn: jest.fn(async (table) => table === destination),
+-      columnsOfFn: jest.fn().mockResolvedValue([column(), column({ name: 'IMPORTE' })]),
+-      countOfFn: jest.fn().mockResolvedValue(3),
+-      executeFn,
+-      apply: true,
+-    });
+-    expect(result.backup).toBe(backup);
+-    expect(executeFn).toHaveBeenCalledWith(expect.stringContaining(
+-      `SELECT ID, IMPORTE FROM ${destination}`,
+-    ));
+-  });
++  test('backs up non-empty TEST data and verifies count, schema, and content', async () => {
++    const backup = backupTableName(destination, 'COPY_20260818_A');
++    let created = false;
++    const executeFn = jest.fn(async () => { created = true; });
++    const columns = [column(), column({ name: 'IMPORTE' })];
++    const result = await backupTestTable(destination, 'COPY_20260818_A', {
++      tableExistsFn: jest.fn(async (table) => table === destination || (table === backup && created)),
++      columnsOfFn: jest.fn().mockResolvedValue(columns),
++      countOfFn: jest.fn().mockResolvedValue(3),
++      contentHashOfFn: jest.fn().mockResolvedValue('same-content-hash'),
++      executeFn,
++      apply: true,
++    });
++    expect(result.backup).toBe(backup);
++    expect(result.contentHash).toBe('same-content-hash');
++    expect(executeFn).toHaveBeenCalledWith(expect.stringContaining(
++      `SELECT ID, IMPORTE FROM ${destination}`,
++    ));
++  });
+@@ -499,2 +503,3 @@
+-      columnsOfFn: jest.fn(),
+-      executeFn: jest.fn(),
++      columnsOfFn: jest.fn().mockResolvedValue([column()]),
++      contentHashOfFn: jest.fn().mockResolvedValue('same-content-hash'),
++      executeFn: jest.fn(),

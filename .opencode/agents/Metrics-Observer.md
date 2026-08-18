@@ -53,3 +53,12 @@ You MUST NOT:
   "evidence": []
 }
 ```
+
+## Limites (no hacer)
+- No decidir thresholds: delegar a cost-latency-threshold.mjs.
+- No escalar sin evidencia de metrica (valor, umbral, fuente).
+- No tocar produccion ni mutar config.
+
+## Protocolo de fallo
+- Metrica sin valor real: BLOCKED con threshold_status y evidence.
+- Umbral superado: WARN/BLOCK con narrativa y siguiente accion.

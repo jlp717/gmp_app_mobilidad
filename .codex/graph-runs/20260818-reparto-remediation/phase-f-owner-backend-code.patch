@@ -1,0 +1,205 @@
+diff --git a/backend/server.js b/backend/server.js
+--- a/backend/server.js
++++ b/backend/server.js
+@@ -46,6 +46,9 @@ function repartoFinanzasWriteGuard(req, res, next) {
+ }
+ function repartoFamilyWriteGuard(req, res, next) {
++  if (req.path === '/document/send-email') {
++    return repartoFinanceWriteGuard(req, res, next);
++  }
+   // Day-scoped rutero order is app routing metadata, not confirmation ledger.
+   if (req.path.startsWith('/rutero/order')) {
+     return repartoWritesEnabledGuard(req, res, next);
+diff --git a/backend/routes/repartidor.js b/backend/routes/repartidor.js
+--- a/backend/routes/repartidor.js
++++ b/backend/routes/repartidor.js
+@@ -166,9 +166,13 @@ async function resolveDeliveryOwners(entregaId) {
+     return repartidorDb.resolveDeliveryOwners(entregaId);
+ }
+ 
++function rawRepartidorId(req) {
++    return String(req.query?.repartidorId || req.body?.repartidorId || '').trim();
++}
++
+ function hintedRepartidorId(req) {
+-    const raw = String(req.query?.repartidorId || req.body?.repartidorId || '').trim();
++    const raw = rawRepartidorId(req);
+     return /^[A-Za-z0-9]{1,2}$/.test(raw) ? raw : '';
+ }
+ 
+@@ -199,7 +203,7 @@ function vendorCodesIntersect(left, right) {
+     return left.some((code) => allowed.has(normalizeVendorCode(code)));
+ }
+ 
+-function authorizeResolvedOwner(req, res, rows) {
++function authorizeResolvedOwner(req, res, rows, { requireRepartoOwnerHint = false } = {}) {
+     const drivers = uniqueActorCodes((rows || []).map((row) => row.OWNER_ID));
+     const vendors = uniqueActorCodes((rows || []).map((row) => row.VENDOR_ID));
+     if (drivers.length === 0 && vendors.length === 0) {
+@@ -210,6 +214,22 @@ function authorizeResolvedOwner(req, res, rows) {
+     const ownId = String(req.user?.code || req.user?.id || '').trim();
+     const hinted = hintedRepartidorId(req);
+     const ownIdValid = /^[A-Za-z0-9]{1,2}$/.test(ownId);
++    const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
++    if (requireRepartoOwnerHint
++        && PRIVILEGED_REPARTIDOR_ROLES.has(role)
++        && activeMode === 'REPARTIDOR') {
++        if (!hinted) {
++            sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
++            return false;
++        }
++        const matchingDriver = drivers.find((driver) =>
++            normalizeVendorCode(driver) === normalizeVendorCode(hinted));
++        if (!matchingDriver) {
++            sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
++            return false;
++        }
++        req.documentOwnerId = matchingDriver;
++        return true;
++    }
+     if (ownIdValid && drivers.includes(ownId) && (role === 'REPARTIDOR' || PRIVILEGED_REPARTIDOR_ROLES.has(role))) {
+         req.documentOwnerId = ownId;
+         return true;
+@@ -238,13 +258,13 @@ function authorizeResolvedOwner(req, res, rows) {
+     return false;
+ }
+ 
+-function documentOwnershipGuard(keyParser, ownerResolver, sourceSelector) {
++function documentOwnershipGuard(keyParser, ownerResolver, sourceSelector, options) {
+     return async (req, res, next) => {
+         const key = keyParser(sourceSelector(req));
+         if (!key) return sendRouteError(res, 422, 'DOCUMENT_KEY_INVALID');
+         try {
+             const rows = await ownerResolver(key);
+-            if (!authorizeResolvedOwner(req, res, rows)) return;
++            if (!authorizeResolvedOwner(req, res, rows, options)) return;
+             req.documentOwnershipKey = key;
+             return next();
+         } catch (_error) {
+@@ -254,9 +274,11 @@ function documentOwnershipGuard(keyParser, ownerResolver, sourceSelector) {
+     };
+ }
+ 
++const strictRepartoDocumentOwner = { requireRepartoOwnerHint: true };
+ const albaranQueryOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.query);
+-const albaranParamOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.params);
+-const invoiceParamOwnership = documentOwnershipGuard(parseInvoiceOwnershipKey, resolveInvoiceOwners, (req) => req.params);
++const albaranParamOwnership = documentOwnershipGuard(parseAlbaranOwnershipKey, resolveAlbaranOwners, (req) => req.params, strictRepartoDocumentOwner);
++const invoiceParamOwnership = documentOwnershipGuard(parseInvoiceOwnershipKey, resolveInvoiceOwners, (req) => req.params, strictRepartoDocumentOwner);
+ const documentBodyOwnership = documentOwnershipGuard(
+     (body) => String(body.type || 'albaran').toLowerCase() === 'factura'
+         ? parseInvoiceOwnershipKey(body)
+@@ -266,9 +288,38 @@ const documentBodyOwnership = documentOwnershipGuard(
+     async (key) => Object.prototype.hasOwnProperty.call(key, 'terminal')
+         ? resolveAlbaranOwners(key)
+         : resolveInvoiceOwners(key),
+-    (req) => req.body || {}
++    (req) => req.body || {},
++    strictRepartoDocumentOwner
+ );
+ 
++function validateDocumentEmailRequest(req, res, next) {
++    const destinatario = String(req.body?.destinatario || '').trim();
++    const asunto = String(req.body?.asunto || '').trim();
++    const cuerpo = String(req.body?.cuerpo || '').trim();
++    if (destinatario.length > 180 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
++        return sendRouteError(res, 422, 'EMAIL_INVALID');
++    }
++    if (asunto.length > 200 || cuerpo.length > 5000) {
++        return sendRouteError(res, 422, 'EMAIL_CONTENT_INVALID');
++    }
++    const role = String(req.user?.role || '').trim().toUpperCase();
++    const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
++    const rawOwner = rawRepartidorId(req);
++    const owner = hintedRepartidorId(req);
++    const actor = String(req.user?.code || req.user?.id || '').trim();
++    if (role === 'REPARTIDOR' && rawOwner
++        && (!owner || normalizeVendorCode(owner) !== normalizeVendorCode(actor))) {
++        return sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
++    }
++    if (PRIVILEGED_REPARTIDOR_ROLES.has(role)) {
++        if (activeMode !== 'REPARTIDOR') {
++            return sendRouteError(res, 403, 'DOCUMENT_REPARTO_MODE_REQUIRED');
++        }
++        if (!owner) return sendRouteError(res, 422, 'DOCUMENT_OWNER_REQUIRED');
++    }
++    req.documentEmail = { destinatario, asunto, cuerpo };
++    return next();
++}
++
+ async function deliveryOwnership(req, res, next) {
+     const entregaId = String(req.params.entregaId || '').trim();
+     if (!/^\d{1,18}$/.test(entregaId)) return sendRouteError(res, 422, 'DELIVERY_ID_INVALID');
+@@ -320,7 +371,7 @@ router.get('/entregas/:entregaId/firma', verifyToken, deliveryOwnership);
+ router.get('/history/legacy-signature/:id', verifyToken, legacySignatureOwnership);
+ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, albaranParamOwnership);
+ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, invoiceParamOwnership);
+-router.post('/document/send-email', verifyToken, documentBodyOwnership);
++router.post('/document/send-email', verifyToken, validateDocumentEmailRequest, documentBodyOwnership);
+ router.post('/document/share/whatsapp', verifyToken, documentBodyOwnership);
+ 
+ // Commission configuration (30% threshold for repartidores)
+@@ -2241,11 +2292,7 @@ router.get('/history/legacy-signature/:id', verifyToken, async (req, res) => {
+ // Server-side email sending with PDF attachment for repartidor documents
+ // =============================================================================
+ router.post('/document/send-email', verifyToken, async (req, res) => {
+     try {
+-        const destinatario = String(req.body?.destinatario || '').trim();
+-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
+-            return sendRouteError(res, 422, 'EMAIL_INVALID');
+-        }
++        const { destinatario, asunto, cuerpo } = req.documentEmail || {};
+         const key = req.documentOwnershipKey;
+         if (!key) {
+             return sendRouteError(res, 422, 'DOCUMENT_KEY_INVALID');
+@@ -2280,7 +2327,7 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
+                 fecha: '',
+                 total: header.IMPORTETOTAL || header.TOTALFACTURA || '',
+                 clienteNombre: header.NOMBRECLIENTEFACTURA || '',
+-                customBody: req.body?.cuerpo,
++                customBody: cuerpo,
+             })
+             : generateInvoiceEmailHtml({
+                 serie: key.series,
+@@ -2288,31 +2335,36 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
+                 fecha: '',
+                 total: header.IMPORTETOTAL || header.TOTALFACTURA || '',
+                 clienteNombre: header.NOMBRECLIENTEFACTURA || '',
+-                customBody: req.body?.cuerpo,
++                customBody: cuerpo,
+             });
+         const result = await sendEmailWithPdf({
+             to: destinatario,
+-            subject: String(req.body?.asunto || `${label} ${key.series}-${key.number} - Granja Mari Pepa`),
++            subject: asunto || `${label} ${key.series}-${key.number} - Granja Mari Pepa`,
+             htmlBody,
+             pdfBuffer,
+             pdfFilename: filename,
+         });
+-        let ledgerWritten = false;
++        const messageId = String(result?.messageId || '').trim();
++        if (!messageId) {
++            return sendRouteError(res, 503, 'DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED');
++        }
+         try {
+             await repartidorDb.recordDocumentEmailLedger({
+                 operatorId: req.user?.id || req.user?.code || '',
+                 ownerId: req.documentOwnerId || '',
+-                payloadPreview: `${label} ${key.series}-${key.number} -> ${destinatario}`,
++                payloadPreview: `${label} ${key.series}-${key.number}; provider acknowledged`,
+             });
+-            ledgerWritten = true;
+         } catch (_ledgerError) {
+             logger.warn('[REPARTIDOR] Document email ledger write failed after send');
++            return sendRouteError(res, 503, 'EMAIL_DELIVERY_LEDGER_REQUIRED');
+         }
+         return res.json({
+             success: true,
+             message: `Email enviado correctamente a ${destinatario}`,
+-            messageId: result?.messageId || null,
+-            ledgerWritten,
++            messageId,
++            ledgerWritten: true,
+         });
+     } catch (_error) {
+         logger.error('[REPARTIDOR] Document email send failed');

@@ -1,0 +1,11 @@
+diff --git a/backend/__tests__/repartidor-finanzas.test.js b/backend/__tests__/repartidor-finanzas.test.js
+--- a/backend/__tests__/repartidor-finanzas.test.js
++++ b/backend/__tests__/repartidor-finanzas.test.js
+@@ -1407,6 +1407,7 @@ describe('Repartidor finanzas routes', () => {
+   });
+ 
+   test('DELETE /test-cleanup/:idempotencyToken is blocked unless explicitly enabled for tests', async () => {
++    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN' };
+     const res = await request(app).delete('/finanzas/test-cleanup/liq-20260424-05');
+ 
+     expect(res.status).toBe(403);

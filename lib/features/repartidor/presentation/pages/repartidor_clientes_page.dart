@@ -29,6 +29,7 @@ class RepartidorClientesPage extends StatefulWidget {
     super.key,
     this.isJefeMode = false,
     this.onNavigateToHistory,
+    this.onNavigateToHistoryWithOwner,
     this.clientsLoader,
     this.searchDebounce = const Duration(milliseconds: 350),
   });
@@ -36,6 +37,8 @@ class RepartidorClientesPage extends StatefulWidget {
   final String repartidorId;
   final bool isJefeMode;
   final void Function(String clientId, String clientName)? onNavigateToHistory;
+  final void Function(String clientId, String clientName, String repartidorId)?
+      onNavigateToHistoryWithOwner;
   final RepartidorClientsLoader? clientsLoader;
   final Duration searchDebounce;
 
@@ -592,7 +595,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   }
 
   void _navigateToHistory(HistoryClient client) {
-    if (widget.onNavigateToHistory != null) {
+    final clientOwner = client.repCode?.trim() ?? '';
+    if (clientOwner.isNotEmpty && widget.onNavigateToHistoryWithOwner != null) {
+      widget.onNavigateToHistoryWithOwner!(
+        client.id,
+        client.name,
+        clientOwner,
+      );
+    } else if (widget.onNavigateToHistory != null) {
       // Use callback to navigate within MainShell (keeps sidebar)
       widget.onNavigateToHistory!(client.id, client.name);
     } else {
@@ -604,6 +614,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
             repartidorId: widget.repartidorId,
             initialClientId: client.id,
             initialClientName: client.name,
+            initialRepartidorId: clientOwner.isEmpty ? null : clientOwner,
             canEmailDocuments: true,
           ),
         ),

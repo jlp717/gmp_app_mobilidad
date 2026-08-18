@@ -32,20 +32,48 @@ class RepartoConfirmationAcknowledgement {
   }
 }
 
+bool isValidRepartoOwnerId(String value) {
+  final owner = value.trim();
+  return owner.toUpperCase() != 'ALL' &&
+      !owner.contains(',') &&
+      RegExp(r'^[A-Za-z0-9]{1,2}$').hasMatch(owner);
+}
+
+String? resolveRepartoDocumentOwner({
+  String? documentOwner,
+  String? selectedOwner,
+}) {
+  for (final candidate in [documentOwner, selectedOwner]) {
+    if (candidate != null && isValidRepartoOwnerId(candidate)) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
 /// GET-only receipt resource. It deliberately accepts no body or editable
 /// delivery fields: the backend renders its persisted confirmation snapshot.
 class RepartoCanonicalReceiptRequest {
-  const RepartoCanonicalReceiptRequest(this.confirmationId)
-      : assert(confirmationId.length > 0);
+  const RepartoCanonicalReceiptRequest(
+    this.confirmationId, {
+    this.repartidorId,
+  }) : assert(confirmationId.length > 0);
 
   final String confirmationId;
+  final String? repartidorId;
 
   String get endpoint {
     if (!isValidRepartoServerId(confirmationId)) {
       throw const RepartoReceiptUnavailableException();
     }
-    return '/repartidor-finanzas/rutero/confirmations/'
+    final base = '/repartidor-finanzas/rutero/confirmations/'
         '${Uri.encodeComponent(confirmationId)}/receipt';
+    final rawOwner = repartidorId;
+    if (rawOwner == null) return base;
+    if (!isValidRepartoOwnerId(rawOwner)) {
+      throw const RepartoReceiptUnavailableException();
+    }
+    return '$base?repartidorId=${Uri.encodeComponent(rawOwner.trim())}';
   }
 }
 

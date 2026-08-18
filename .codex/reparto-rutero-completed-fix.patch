@@ -1,0 +1,71 @@
+diff --git a/lib/features/repartidor/data/reparto_confirmation_request.dart b/lib/features/repartidor/data/reparto_confirmation_request.dart
+--- a/lib/features/repartidor/data/reparto_confirmation_request.dart
++++ b/lib/features/repartidor/data/reparto_confirmation_request.dart
+@@
+     required this.occurredAt,
+     required this.lineas,
+     this.repartidorId,
++    this.importeTotalPlanificado,
+@@
+   final List<RepartoDeliveryLine> lineas;
+   final String? repartidorId;
++  final num? importeTotalPlanificado;
+@@
+-    if (lineas.isEmpty || lineas.length > 250)
+-      _invalid('Debe existir entre una y 250 lineas');
++    if (lineas.length > 250) _invalid('No se admiten mas de 250 lineas');
++    if (lineas.isEmpty && !_allowsEmptyPrepaidDelivery) {
++      _invalid('Solo una entrega ENTREGADO prepago de 0,00 € admite documento sin lineas');
++    }
+@@
+   void _validateStatus() {
+@@
+   }
++
++  bool get _allowsEmptyPrepaidDelivery {
++    final planned = importeTotalPlanificado;
++    return status == RepartoDeliveryStatus.entregado &&
++        planned != null &&
++        !planned.isNaN &&
++        !planned.isInfinite &&
++        planned == 0;
++  }
+@@
+       lineas: request.lineas,
++      repartidorId: request.repartidorId,
++      importeTotalPlanificado: request.importeTotalPlanificado,
+@@
+         lineas: request.lineas,
++        repartidorId: request.repartidorId,
++        importeTotalPlanificado: request.importeTotalPlanificado,
+@@
+       lineas: request.lineas,
++      repartidorId: request.repartidorId,
++      importeTotalPlanificado: request.importeTotalPlanificado,
+@@
+         lineas: request.lineas,
++        repartidorId: request.repartidorId,
++        importeTotalPlanificado: request.importeTotalPlanificado,
+diff --git a/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart b/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart
+--- a/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart
++++ b/lib/features/repartidor/presentation/widgets/rutero_detail_completed.dart
+@@
+     required this.onDownloadReceiptPdf,
+     required this.onSharePdfLocally,
++    required this.onShareReceiptViaWhatsApp,
+@@
+   final VoidCallback onSharePdfLocally;
++  final VoidCallback onShareReceiptViaWhatsApp;
+@@
+         _ShareButton(
+           icon: Icons.share,
+           label: 'Compartir PDF (acción local)',
+@@
+         ),
++        const SizedBox(height: 10),
++        _ShareButton(
++          icon: Icons.chat,
++          label: 'WhatsApp (selector local)',
++          color: const Color(0xFF25D366),
++          onTap: onShareReceiptViaWhatsApp,
++        ),

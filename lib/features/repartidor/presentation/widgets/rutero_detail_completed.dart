@@ -10,10 +10,12 @@ class RuteroDetailCompleted extends StatelessWidget {
     required this.onPreviewReceiptPdf,
     required this.onDownloadReceiptPdf,
     required this.onSharePdfLocally,
+    required this.onShareReceiptViaWhatsApp,
     required this.buildPrinterConfigSection,
     required this.tieneImpresora,
     required this.items,
     required this.onShowZebraPrintPreview,
+    this.onEmailReceipt,
     super.key,
   });
 
@@ -21,7 +23,9 @@ class RuteroDetailCompleted extends StatelessWidget {
   final VoidCallback onPreviewReceiptPdf;
   final VoidCallback onDownloadReceiptPdf;
   final VoidCallback onSharePdfLocally;
+  final VoidCallback onShareReceiptViaWhatsApp;
   final Widget Function() buildPrinterConfigSection;
+  final VoidCallback? onEmailReceipt;
   final bool tieneImpresora;
   final List<EntregaItem> items;
   final VoidCallback onShowZebraPrintPreview;
@@ -186,6 +190,7 @@ class RuteroDetailCompleted extends StatelessWidget {
   }
 
   Widget _buildShareSection() {
+    final emailAction = onEmailReceipt;
     return Column(
       children: [
         const Text(
@@ -218,13 +223,20 @@ class RuteroDetailCompleted extends StatelessWidget {
           onTap: onSharePdfLocally,
         ),
         const SizedBox(height: 10),
-        const _ShareButton(
-          icon: Icons.email_outlined,
-          label: 'Email no disponible',
-          color: AppTheme.accentIndigo,
-          enabled: false,
-          onTap: null,
+        _ShareButton(
+          icon: Icons.chat,
+          label: 'WhatsApp (selector local)',
+          color: const Color(0xFF25D366),
+          onTap: onShareReceiptViaWhatsApp,
         ),
+        const SizedBox(height: 10),
+        if (emailAction != null)
+          _ShareButton(
+            icon: Icons.email_outlined,
+            label: 'Enviar por email',
+            color: AppTheme.accentIndigo,
+            onTap: emailAction,
+          ),
       ],
     );
   }

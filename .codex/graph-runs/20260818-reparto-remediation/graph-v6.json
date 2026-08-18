@@ -1,0 +1,80 @@
+{
+  "version": "1",
+  "run_id": "20260818-reparto-owner-email-v6",
+  "goal": "Cerrar ownership de PDF/recibos/email del Histórico y exigir acuse de proveedor más ledger TEST sin DSEDAC DML/DDL.",
+  "settings": {
+    "max_concurrent": 3,
+    "max_rounds": 3,
+    "empty_rounds_to_stop": 2,
+    "default_mode": "pipeline"
+  },
+  "nodes": [
+    {
+      "id": "inspect-owner-contracts",
+      "kind": "agent",
+      "role": "graph_security",
+      "model_tier": "premium",
+      "input_schema": {"type": "object"},
+      "output_schema": {"type": "object"},
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "implement-owner-contracts",
+      "kind": "agent",
+      "role": "graph_implementer",
+      "model_tier": "premium",
+      "input_schema": {"type": "object"},
+      "output_schema": {"type": "object"},
+      "writes": [
+        "backend/server.js",
+        "backend/routes/repartidor.js",
+        "backend/repositories/repartidor-route-db2-repository.js",
+        "backend/__tests__",
+        "lib/features/repartidor/data/reparto_receipt_contract.dart",
+        "lib/features/repartidor/data/repartidor_data_service.dart",
+        "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart",
+        "lib/features/repartidor/presentation/pages/repartidor_historico_page.dart",
+        "lib/features/entregas/providers/entregas_provider.dart",
+        "test/features/repartidor"
+      ],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "qa-owner-contracts",
+      "kind": "agent",
+      "role": "graph_qa",
+      "model_tier": "premium",
+      "input_schema": {"type": "object"},
+      "output_schema": {"type": "object"},
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "security-owner-contracts",
+      "kind": "agent",
+      "role": "graph_security",
+      "model_tier": "premium",
+      "input_schema": {"type": "object"},
+      "output_schema": {"type": "object"},
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "verify-owner-contracts",
+      "kind": "agent",
+      "role": "graph_verifier",
+      "model_tier": "premium",
+      "input_schema": {"type": "object"},
+      "output_schema": {"type": "object"},
+      "writes": [],
+      "requires_all_inputs": true
+    }
+  ],
+  "edges": [
+    {"from": "inspect-owner-contracts", "to": "implement-owner-contracts", "data": "owner-findings"},
+    {"from": "implement-owner-contracts", "to": "qa-owner-contracts", "data": "patch"},
+    {"from": "implement-owner-contracts", "to": "security-owner-contracts", "data": "patch"},
+    {"from": "implement-owner-contracts", "to": "verify-owner-contracts", "data": "patch"}
+  ]
+}

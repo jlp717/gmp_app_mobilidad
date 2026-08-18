@@ -1,0 +1,17 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -319,7 +319,7 @@ function buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
+   for (const name of comparison.missing) {
+     const source = sourceByName.get(name);
+-    if (source.isNullable === 'NO' && !source.hasDefault && destinationRowCount > 0) {
++    if (allowTestTableRebuild && source.isNullable === 'NO' && !source.hasDefault && destinationRowCount > 0) {
+       rebuildReasons.push(`required-add=${name}`);
+     }
+@@ -336,7 +336,7 @@ function buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
+       if (!Number.isInteger(nullCount) || nullCount < 0) {
+         throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: NULL count unavailable`);
+       }
+-      if (nullCount > 0) rebuildReasons.push(`null-data=${delta.name}:${nullCount}`);
++      if (allowTestTableRebuild && nullCount > 0) rebuildReasons.push(`null-data=${delta.name}:${nullCount}`);
+     }

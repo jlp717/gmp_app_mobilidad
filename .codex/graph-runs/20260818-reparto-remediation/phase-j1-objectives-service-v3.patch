@@ -1,0 +1,62 @@
+diff --git a/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart b/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart
+--- a/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart
++++ b/lib/features/repartidor_finanzas/data/repartidor_finanzas_service.dart
+@@ -225,9 +225,11 @@ class RepartidorFinanzasService {
+     required String repartidorId,
+     int? year,
+     String? clientId,
++    required int limit,
++    required int offset,
+   }) =>
+       '${_prefix}_objectives_detail_${repartidorId}_${year ?? 'current'}_'
+-      '${clientId ?? 'all'}';
++      '${clientId ?? 'all'}_${limit}_$offset';
+ 
+   static String deliverySummaryCacheKey(
+     String repartidorId,
+@@ -1014,20 +1016,29 @@ class RepartidorFinanzasService {
+     required String repartidorId,
+     int? year,
+     String? clientId,
++    int limit = 100,
++    int offset = 0,
+     bool forceRefresh = false,
+   }) async {
++    if (limit < 1 || limit > 100 || offset < 0) {
++      throw const FormatException('Paginacion de objetivos invalida');
++    }
+     final queryParams = <String, dynamic>{
+       if (year != null) 'year': year.toString(),
+       if (clientId != null) 'clientId': clientId,
++      'limit': limit.toString(),
++      'offset': offset.toString(),
+     };
+ 
+     final response = await ApiClient.get(
+       '/repartidor/history/objectives-detail/$repartidorId',
+       queryParameters: queryParams,
+       cacheKey: objectivesDetailCacheKey(
+         repartidorId: repartidorId,
+         year: year,
+         clientId: clientId,
++        limit: limit,
++        offset: offset,
+       ),
+       cacheTTL: CacheService.defaultTTL,
+       forceRefresh: forceRefresh,
+@@ -1257,12 +1268,9 @@ class RepartidorFinanzasService {
+           clientId: clientId,
+         ),
+       ),
+-      CacheService.invalidate(
+-        objectivesDetailCacheKey(
+-          repartidorId: repartidorId,
+-          year: year,
+-          clientId: clientId,
+-        ),
++      CacheService.invalidateByPrefix(
++        '${_prefix}_objectives_detail_${repartidorId}_'
++        '${year ?? 'current'}_${clientId ?? 'all'}_',
+       ),
+     ]);
+   }

@@ -1,0 +1,32 @@
+diff --git a/backend/__tests__/repartidor-history-finance-hardening.test.js b/backend/__tests__/repartidor-history-finance-hardening.test.js
+--- a/backend/__tests__/repartidor-history-finance-hardening.test.js
++++ b/backend/__tests__/repartidor-history-finance-hardening.test.js
+@@ -259,6 +259,32 @@ describe('repartidor history document hardening', () => {
+     });
+   });
+ 
++  test('uses a signed constituent as the grouped factura signature reference', async () => {
++    mockQueryWithParams.mockResolvedValue([
++      historyRow({
++        NUMEROALBARAN: 41, NUMEROFACTURA: 900, SERIEFACTURA: 'F', EJERCICIOFACTURA: 2026,
++        CANONICAL_CONFIRMATION_ID: null, CANONICAL_FIRMA_EVIDENCE_ID: null,
++      }),
++      historyRow({
++        NUMEROALBARAN: 42, NUMEROFACTURA: 900, SERIEFACTURA: 'F', EJERCICIOFACTURA: 2026,
++        TERMINALALBARAN: 1, CANONICAL_CONFIRMATION_ID: BigInt(77),
++        CANONICAL_FIRMA_EVIDENCE_ID: 'sig-42',
++      }),
++    ]);
++
++    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
++
++    expect(response.status).toBe(200);
++    expect(response.body.documents).toHaveLength(1);
++    expect(response.body.documents[0]).toMatchObject({
++      type: 'factura', number: 900, albaranNumber: 42,
++      serie: 'A', terminal: 1, ejercicio: 2026,
++      hasSignature: true, confirmationId: '77',
++    });
++  });
++
+   test('marks a grouped factura delivered only when every constituent is delivered', async () => {

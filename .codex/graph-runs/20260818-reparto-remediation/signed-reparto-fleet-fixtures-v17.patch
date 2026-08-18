@@ -1,0 +1,144 @@
+diff --git a/backend/__tests__/repartidor-history-finance-hardening.test.js b/backend/__tests__/repartidor-history-finance-hardening.test.js
+--- a/backend/__tests__/repartidor-history-finance-hardening.test.js
++++ b/backend/__tests__/repartidor-history-finance-hardening.test.js
+@@ -25 +25 @@
+-    req.user = { id: '05', code: '05', role: 'REPARTIDOR' };
++    req.user = { id: '05', code: '05', role: 'REPARTIDOR', repartidorCodes: ['05'] };
+diff --git a/backend/__tests__/repartidor-finanzas-http-gap-coverage.test.js b/backend/__tests__/repartidor-finanzas-http-gap-coverage.test.js
+--- a/backend/__tests__/repartidor-finanzas-http-gap-coverage.test.js
++++ b/backend/__tests__/repartidor-finanzas-http-gap-coverage.test.js
+@@ -25 +25 @@
+-let mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++let mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -77 +77 @@
+-    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -145 +145 @@
+-    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', isJefeVentas: true };
++    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'], isJefeVentas: true };
+@@ -155 +155 @@
+-    mockAuthUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['95'] };
++    mockAuthUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['95'] };
+@@ -247 +247 @@
+-    mockAuthUser = { id: '1', code: '1', role: 'ADMIN' };
++    mockAuthUser = { id: '1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR' };
+@@ -255 +255 @@
+-    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', isJefeVentas: true };
++    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'], isJefeVentas: true };
+@@ -284 +284 @@
+-    mockAuthUser = { id: '1', code: '1', role: 'ADMIN' };
++    mockAuthUser = { id: '1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR' };
+diff --git a/backend/__tests__/reparto-finance-security-v3.test.js b/backend/__tests__/reparto-finance-security-v3.test.js
+--- a/backend/__tests__/reparto-finance-security-v3.test.js
++++ b/backend/__tests__/reparto-finance-security-v3.test.js
+@@ -16 +16 @@
+-let mockUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++let mockUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -87 +87 @@
+-  mockUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++  mockUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -103 +103 @@
+-  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['94', '95'] };
++  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94', '95'] };
+@@ -121 +121 @@
+-  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['94', '95'] };
++  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94', '95'] };
+@@ -131 +131 @@
+-  mockUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++  mockUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -176 +176 @@
+-  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['94'] };
++  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -200 +200 @@
+-  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['94'] };
++  mockUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
+diff --git a/backend/__tests__/repartidor-route-params.test.js b/backend/__tests__/repartidor-route-params.test.js
+--- a/backend/__tests__/repartidor-route-params.test.js
++++ b/backend/__tests__/repartidor-route-params.test.js
+@@ -50 +50 @@
+-    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['02', '05', '08'] };
+diff --git a/backend/__tests__/entregas-route-gap-coverage.test.js b/backend/__tests__/entregas-route-gap-coverage.test.js
+--- a/backend/__tests__/entregas-route-gap-coverage.test.js
++++ b/backend/__tests__/entregas-route-gap-coverage.test.js
+@@ -6 +6 @@
+-let mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++let mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -83 +83 @@
+-    mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR' };
++    mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+diff --git a/backend/__tests__/reparto-canonical-route-auth.test.js b/backend/__tests__/reparto-canonical-route-auth.test.js
+--- a/backend/__tests__/reparto-canonical-route-auth.test.js
++++ b/backend/__tests__/reparto-canonical-route-auth.test.js
+@@ -6 +6 @@
+-let mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
++let mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -44 +44 @@
+-    mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
++    mockUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -66 +66 @@
+-      vendorCodes: ['05'],
++      repartidorCodes: ['05'],
+diff --git a/backend/__tests__/repartidor-week-gap-coverage.test.js b/backend/__tests__/repartidor-week-gap-coverage.test.js
+--- a/backend/__tests__/repartidor-week-gap-coverage.test.js
++++ b/backend/__tests__/repartidor-week-gap-coverage.test.js
+@@ -39 +39 @@
+-    req.user = { id: '05', code: '05', role: 'REPARTIDOR' };
++    req.user = { id: '05', code: '05', role: 'REPARTIDOR', repartidorCodes: ['05'] };
+diff --git a/backend/__tests__/repartidor-finanzas.test.js b/backend/__tests__/repartidor-finanzas.test.js
+--- a/backend/__tests__/repartidor-finanzas.test.js
++++ b/backend/__tests__/repartidor-finanzas.test.js
+@@ -26 +26 @@
+-let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
++let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -159 +159 @@
+-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
++    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -383 +383 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true, vendorCodes: ['94', '95'] };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true, repartidorCodes: ['94', '95'] };
+@@ -421 +421 @@
+-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
++    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -437 +437 @@
+-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
++    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -798 +798 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true, vendorCodes: ['94', '95'] };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', isJefeVentas: true, repartidorCodes: ['94', '95'] };
+@@ -1411 +1411 @@
+-    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN' };
++    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -1424 +1424 @@
+-    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN' };
++    mockAuthUser = { id: 'A1', code: 'A1', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
+@@ -1522 +1522 @@
+-    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['94', '95'] };
++    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['94', '95'] };
+diff --git a/backend/__tests__/reparto-finance-fleet-authorization.test.js b/backend/__tests__/reparto-finance-fleet-authorization.test.js
+--- a/backend/__tests__/reparto-finance-fleet-authorization.test.js
++++ b/backend/__tests__/reparto-finance-fleet-authorization.test.js
+@@ -85 +85 @@
+-      repartidorCodes: ['08'], vendedorCodes: ['09'],
++      repartidorCodes: ['08', '09'], vendedorCodes: ['09'],
+diff --git a/backend/__tests__/entregas-bola-security.test.js b/backend/__tests__/entregas-bola-security.test.js
+--- a/backend/__tests__/entregas-bola-security.test.js
++++ b/backend/__tests__/entregas-bola-security.test.js
+@@ -9 +9 @@
+-let mockUser = { id: '08', code: '08', role: 'REPARTIDOR' };
++let mockUser = { id: '08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'] };
+@@ -50 +50 @@
+-    mockUser = { id: '08', code: '08', role: 'REPARTIDOR' };
++    mockUser = { id: '08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'] };
+@@ -79 +79 @@
+-    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS' };
++    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', repartidorCodes: [] };
+@@ -93 +93 @@
+-      mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++      mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['08'] };
+@@ -102 +102 @@
+-    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['09'] };
+@@ -124 +124 @@
+-    mockUser = { id: '08', code: '08', role: 'REPARTIDOR', isJefeVentas: true };
++    mockUser = { id: '08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'], isJefeVentas: true };

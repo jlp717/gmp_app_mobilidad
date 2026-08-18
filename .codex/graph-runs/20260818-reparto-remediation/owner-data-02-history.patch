@@ -1,0 +1,17 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -1,3 +1,4 @@
+     int offset = 0,
+   }) async {
++    final owner = requireConcreteRepartoOwner(repartidorId);
+     if (repartidorId.trim().isEmpty) {
+@@ -1,3 +1,3 @@
+       final queryParams = <String, String>{
+-        'repartidorId': repartidorId,
++        'repartidorId': owner,
+         'limit': limit.toString(),
+@@ -1,2 +1,2 @@
+       final cacheKey =
+-          'repartidor_docs_${clientId}_${repartidorId}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
++          'repartidor_docs_${clientId}_${owner}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';

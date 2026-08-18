@@ -1,0 +1,24 @@
+version: 1
+purpose: >
+  Anthropic Managed Agents (abr 2026): la sesion NO es la ventana de contexto.
+  Log append-only fuera del modelo. El harness hace getEvents(slice) y transforma.
+brain: chief-engineer-assistant
+hands: "MCP + sandbox. execute(name, input) -> string. Credenciales en vault, no en sandbox."
+session:
+  log: ".opencode/state/session-events.jsonl"
+  plans: ".opencode/state/plans/"
+  operations:
+    emitEvent: "Chief o tool escribe al final de cada paso de playbook"
+    getEvents: "Context-Manager pide slices (ultimos N, rewind antes de X)"
+    wake: "Si el harness cae, rehidratar desde el log. No reiniciar la tarea."
+preserve_forever:
+  - plan_activo
+  - correcciones_javier
+  - blockers
+  - scorecard_PASS_BLOCK
+transform_before_model:
+  - "limpiar tool_result antiguos (Anthropic cookbook: tool-result clearing)"
+  - "no compactar de forma irreversible sin dejar el evento en el log"
+cattle_not_pets: >
+  Un fallo de subagente es un tool error. Reintentar con contexto limpio.
+  No 'curar' al worker. Max 3 repair loops (evaluator-optimizer).

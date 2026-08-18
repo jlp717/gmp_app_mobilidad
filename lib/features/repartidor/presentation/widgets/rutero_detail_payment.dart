@@ -22,6 +22,8 @@ class RuteroDetailPayment extends StatelessWidget {
     this.importeFieldKey,
     this.errorBannerKey,
     this.highlightPayment = false,
+    this.scrollController,
+    this.importeFocusNode,
     super.key,
   });
 
@@ -38,13 +40,21 @@ class RuteroDetailPayment extends StatelessWidget {
   final Key? importeFieldKey;
   final Key? errorBannerKey;
   final bool highlightPayment;
+  final ScrollController? scrollController;
+  final FocusNode? importeFocusNode;
 
   bool get _isUrgent => albaran.esCTR;
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      controller: scrollController,
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -290,6 +300,7 @@ class RuteroDetailPayment extends StatelessWidget {
       active: highlightPayment && importeCobradoError != null,
       message: importeCobradoError,
       child: TextField(
+        focusNode: importeFocusNode,
         controller: importeCobradoController,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [

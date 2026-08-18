@@ -201,5 +201,40 @@ void main() {
       expect(item.precioUnitario, 0.0);
       expect(item.cantidadEntregada, isNull);
     });
+
+    test('keeps zero-price prepaid lines and missing fecha', () {
+      final json = {
+        'id': 'prepaid-1',
+        'numero': 8,
+        'ejercicio': 2026,
+        'importe': 0,
+        'codigoCliente': 'C0',
+        'nombreCliente': 'Prepago',
+        'items': [
+          {
+            'itemId': '1',
+            'codigoArticulo': '0000',
+            'descripcion': 'BARRA PAN',
+            'cantidadPedida': 12,
+            'precioUnitario': 0,
+            'bultos': 1,
+          },
+          {
+            'itemId': '2',
+            'codigoArticulo': '',
+            'descripcion': 'NAPOLITANA',
+            'cantidadPedida': 2,
+            'precioUnitario': 0,
+          },
+        ],
+      };
+
+      final albaran = AlbaranEntrega.fromJson(json);
+      expect(albaran.importeTotal, 0.0);
+      expect(albaran.fecha, isNotEmpty);
+      expect(albaran.items.length, 2);
+      expect(albaran.items[0].codigoArticulo, '0000');
+      expect(albaran.items[1].codigoArticulo, '2');
+    });
   });
 }

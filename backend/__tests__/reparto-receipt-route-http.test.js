@@ -4,7 +4,7 @@ const request = require('supertest');
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
 const { EvidenceError } = require('../services/delivery-evidence-service');
 const { networkOptimizer, responseCoalescing } = require('../middleware/network-optimizer');
-let mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR' };
+let mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] };
 jest.mock('../middleware/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 jest.mock('../services/emailPdfService', () => ({
   sendEmailWithPdf: jest.fn().mockResolvedValue({ messageId: 'm1' }),
@@ -18,8 +18,8 @@ const sig = `ev_${'a'.repeat(64)}`;
 function app() { const value = express(); value.use(express.json()); value.use('/finanzas', routes); return value; }
 function productionMountedApp() { const value = express(); value.use(networkOptimizer); value.use(responseCoalescing); value.use('/api/repartidor-finanzas', routes); return value; }
 function receipt() { return { confirmationId: '7', repartidorId: 'R1', firmaEvidenceId: sig, lineas: [{ cantidadPedida: 1, cantidadEntregada: 1, cantidadRechazada: 0, cantidadPendiente: 0, precioUnitario: 1 }], cliente: {}, receptor: {}, incidencia: {} }; }
-function inject(overrides = {}) { routes.setCanonicalConfirmationRuntime({ catalogService: { validateConfirmation: jest.fn() }, confirmationService: { confirm: jest.fn() }, receiptService: { getReceipt: overrides.getReceipt || jest.fn().mockResolvedValue(receipt()) }, evidenceService: { stageSignature: jest.fn(), stagePhoto: jest.fn(), retrieve: overrides.retrieve || jest.fn().mockResolvedValue({ kind: 'FIRMA', contentBase64: 'iVBORw0KGgo=' }) }, receiptPdfService: { render: overrides.render || jest.fn().mockResolvedValue({ pdf: Buffer.from('%PDF-1.4'), fileName: 'RECIBO_REPARTO_7.pdf' }) } }); }
-afterEach(() => { mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR' }; routes.resetCanonicalConfirmationRuntime(); routes.setCanonicalReceiptTimeoutMs(15000); });
+function inject(overrides = {}) { routes.setCanonicalConfirmationRuntime({ catalogService: { validateConfirmation: jest.fn() }, confirmationService: { confirm: jest.fn() }, receiptService: { getReceipt: overrides.getReceipt || jest.fn().mockResolvedValue(receipt()) }, evidenceService: { stageSignature: jest.fn(), stagePhoto: jest.fn(), retrieve: overrides.retrieve || jest.fn().mockResolvedValue({ kind: 'FIRMA', contentBase64: 'iVBORw0KGgo=' }) }, receiptPdfService: { render: overrides.render || jest.fn().mockResolvedValue({ pdf: Buffer.from('%PDF-1.4'), fileName: 'RECIBO_REPARTO_7.pdf' }) }, recordDocumentEmailLedger: overrides.recordDocumentEmailLedger || jest.fn().mockResolvedValue(undefined) }); }
+afterEach(() => { mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] }; routes.resetCanonicalConfirmationRuntime(); routes.setCanonicalReceiptTimeoutMs(15000); });
 test('GET returns snapshot PDF and private no-store', async () => { const retrieve = jest.fn().mockResolvedValue({ kind: 'FIRMA', contentBase64: 'iVBORw0KGgo=' }); inject({ retrieve }); const res = await request(app()).get('/finanzas/rutero/confirmations/7/receipt'); expect(res.status).toBe(200); expect(res.headers['cache-control']).toBe('private, no-store'); expect(res.body.pdfBase64).toBe(Buffer.from('%PDF-1.4').toString('base64')); expect(retrieve).toHaveBeenCalledWith(expect.objectContaining({ evidenceId: sig, actor: { role: 'REPARTIDOR', repartidorId: 'R1' }, signal: expect.any(AbortSignal) })); });
 test('GET supports exactly one canonical idempotency selector without returning the PII snapshot', async () => { const getReceipt = jest.fn().mockResolvedValue(receipt()); inject({ getReceipt }); const res = await request(app()).get('/finanzas/rutero/confirmations/receipt?idempotencyKey=receipt-key-7'); expect(res.status).toBe(200); expect(getReceipt).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'receipt-key-7', signal: expect.any(AbortSignal) })); expect(res.body.receipt).toBeUndefined(); });
 test('GET rejects an ambiguous or invalid canonical receipt selector', async () => { inject(); for (const path of ['/finanzas/rutero/confirmations/receipt', '/finanzas/rutero/confirmations/receipt?idempotencyKey=short', '/finanzas/rutero/confirmations/receipt?idempotencyKey=receipt-key-7&confirmationId=7']) { const res = await request(app()).get(path); expect(res.status).toBe(422); expect(res.body.code).toBe('REPARTO_RECEIPT_INVALID_LOOKUP'); } });
@@ -76,10 +76,10 @@ test('one global deadline aborts the shared signal while evidence retrieval is b
 test('production mount keeps every receipt outcome private no-store and outside shared response caches', async () => {
   const cases = [
     [null, {}, 401],
-    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR' }, { path: '/rutero/confirmations/7/receipt?other=value' }, 422],
-    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR' }, { error: new RepartoPersistenceError('No', { code: 'REPARTO_RECEIPT_OWNERSHIP_REQUIRED', statusCode: 403 }) }, 403],
-    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR' }, { error: new RepartoPersistenceError('No', { code: 'REPARTO_RECEIPT_NOT_FOUND', statusCode: 404 }) }, 404],
-    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR' }, { error: new RepartoPersistenceError('No', { code: 'REPARTO_RECEIPT_VALUATION_UNAVAILABLE', statusCode: 503 }) }, 503],
+    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] }, { path: '/rutero/confirmations/7/receipt?other=value' }, 422],
+    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] }, { error: new RepartoPersistenceError('No', { code: 'REPARTO_RECEIPT_OWNERSHIP_REQUIRED', statusCode: 403 }) }, 403],
+    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] }, { error: new RepartoPersistenceError('No', { code: 'REPARTO_RECEIPT_NOT_FOUND', statusCode: 404 }) }, 404],
+    [{ id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] }, { error: new RepartoPersistenceError('No', { code: 'REPARTO_RECEIPT_VALUATION_UNAVAILABLE', statusCode: 503 }) }, 503],
   ];
   for (const [actor, outcome, status] of cases) {
     mockUser = actor;
@@ -93,7 +93,7 @@ test('production mount keeps every receipt outcome private no-store and outside 
     expect(response.headers['x-coalesced']).toBeUndefined();
   }
 
-  mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR' };
+  mockUser = { id: 'R1', code: 'R1', role: 'REPARTIDOR', repartidorCodes: ['R1'] };
   routes.setCanonicalReceiptTimeoutMs(5);
   inject({ getReceipt: jest.fn(() => new Promise(() => {})) });
   const timeout = await request(productionMountedApp())

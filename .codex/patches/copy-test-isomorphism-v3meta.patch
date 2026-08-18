@@ -1,0 +1,18 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -113,8 +113,9 @@ async function columnsOf(schemaTable) {
+             LENGTH,
+             NUMERIC_PRECISION,
+             NUMERIC_SCALE,
+             IS_NULLABLE,
++            HAS_DEFAULT,
+             IDENTITY
+        FROM QSYS2.SYSCOLUMNS
+@@ -127,7 +128,8 @@ async function columnsOf(schemaTable) {
+     numericPrecision: String(r.NUMERIC_PRECISION ?? r.numeric_precision ?? ''),
+     numericScale: String(r.NUMERIC_SCALE ?? r.numeric_scale ?? ''),
+     isNullable: String(r.IS_NULLABLE || r.is_nullable || '').trim().toUpperCase(),
++    hasDefault: String(r.HAS_DEFAULT || r.has_default || '').trim().toUpperCase() === 'Y',
+     identity: String(r.IDENTITY || r.identity || '').toUpperCase() === 'YES',
+   }));

@@ -1,0 +1,12 @@
+diff --git a/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart b/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart
+--- a/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart
++++ b/lib/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart
+@@ -54,7 +54,8 @@ class CanonicalLiquidacionPdfBuilder {
+       .replaceAll('Ú', 'U')
+       .replaceAll('ñ', 'n')
+       .replaceAll('Ñ', 'N')
+-      .replaceAll('€', 'EUR');
++      .replaceAll('€', 'EUR')
++      .replaceAll(RegExp(r'[^\x20-\x7e]'), '?');
+ 
+   static String _formatPortableMoney(double value) =>

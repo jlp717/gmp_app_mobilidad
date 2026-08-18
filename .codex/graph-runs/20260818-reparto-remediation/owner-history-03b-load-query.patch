@@ -1,0 +1,20 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -320,15 +320,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       final docs = loader != null
+           ? await loader(
+               clientId: clientId,
+-              repartidorId: widget.repartidorId,
++              repartidorId: owner,
+               dateFrom: dateFromStr,
+               dateTo: dateToStr,
+               year: selectedYear,
+             )
+           : await RepartidorDataService.getClientDocuments(
+               clientId: clientId,
+-              repartidorId: widget.repartidorId,
++              repartidorId: owner,
+               dateFrom: dateFromStr,
+               dateTo: dateToStr,
+               year: selectedYear,

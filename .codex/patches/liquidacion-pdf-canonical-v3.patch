@@ -1,0 +1,28 @@
+diff --git a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart
+--- a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart
++++ b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart
+@@ -1,6 +1,8 @@
+     required this.deliveries,
+     required this.payments,
+     required this.expenses,
+     required this.adjustments,
++    required this.bankDeposits,
+     required this.pending,
++    required this.openingBalance,
+     required this.balance,
+@@ -1,5 +1,7 @@
+       payments: amount('payments'),
+       expenses: amount('expenses'),
+       adjustments: amount('adjustments'),
++      bankDeposits: amount('bankDeposits'),
+       pending: amount('pending'),
++      openingBalance: amount('openingBalance'),
+       balance: amount('balance'),
+@@ -1,5 +1,7 @@
+   final double payments;
+   final double expenses;
+   final double adjustments;
++  final double bankDeposits;
+   final double pending;
++  final double openingBalance;
+   final double balance;

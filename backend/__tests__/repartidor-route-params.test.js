@@ -47,7 +47,7 @@ jest.mock('../services/emailPdfService', () => ({
 
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['02', '05', '08'] };
     next();
   },
 }));
@@ -156,7 +156,7 @@ describe('Repartidor route parameter binding', () => {
       .get('/history/delivery-summary/%27bad%27')
       .query({ year: 2025, month: 4 });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 

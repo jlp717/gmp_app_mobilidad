@@ -2,7 +2,7 @@
 
 /**
  * Detect qty variance on reparto confirm, enqueue outbox, send HTML email,
- * and build the daily digest at 18:00 Europe/Madrid.
+ * and build the daily digest at 07:00 Europe/Madrid (previous day).
  */
 
 const { queryWithParams } = require('../config/db');
@@ -14,6 +14,11 @@ const {
   resolveDeliveryVarianceRecipients,
   normalizeVendorCode,
 } = require('./staff-email-directory-service');
+const {
+  resolveRepartoEmailDelivery,
+  buildRepartoMessageId,
+  redactDeliverySummary,
+} = require('./reparto-email-delivery-policy');
 
 function notificationTables(env = process.env) {
   const runtime = resolveRepartoRuntime(env);
@@ -288,6 +293,11 @@ async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWit
       const result = await sendEmail({
         to,
         subject,
+        messageId: buildRepartoMessageId({
+          kind: 'variance',
+          identity: `${payload.confirmationId || ''}|${payload.documentId || ''}`,
+          recipient: to,
+        }),
         htmlBody,
         textBody,
         ...(pdfBuffer ? {
@@ -323,7 +333,10 @@ async function notifyAfterConfirm({
   }
 
   const lineas = detectVarianceLines(command.delivery.lineas);
-  if (lineas.length === 0) {
+  const deliveryStatus = normalizeText(result.deliveryStatus || command.delivery.status).toUpperCase();
+  const isExceptionStatus = deliveryStatus === 'PARCIAL' || deliveryStatus === 'RECHAZADO';
+  // Exception states are operationally material even for a prepaid 0€ document.
+  if (lineas.length === 0 && !isExceptionStatus) {
     return { skipped: true, reason: 'no_variance' };
   }
 
@@ -351,11 +364,29 @@ async function notifyAfterConfirm({
     repartidorId,
     comercialCode,
     deliveryStatus: normalizeText(result.deliveryStatus || command.delivery.status),
+    confirmedAt: normalizeText(result.confirmedAt),
+    observaciones: normalizeText(command.delivery.observaciones),
     lineas,
   };
 
   let outboxId = null;
   try {
+    const tables = notificationTables(env);
+    const existing = await query(
+      `SELECT ID, STATUS
+         FROM ${tables.varianceOutbox}
+        WHERE CONFIRMATION_ID = ?
+        ORDER BY ID
+        FETCH FIRST 1 ROW ONLY`,
+      [Number(result.confirmationId)],
+    );
+    if (existing?.length) {
+      return {
+        skipped: true,
+        reason: 'already_enqueued',
+        confirmationId: String(result.confirmationId),
+      };
+    }
     await enqueueVarianceOutbox({
       confirmationId: result.confirmationId,
       documentId,
@@ -366,6 +397,14 @@ async function notifyAfterConfirm({
     outboxId = Number(result.confirmationId);
   } catch (error) {
     logger.error(`[variance] outbox enqueue failed: ${error.message}`);
+    // Never send before durable TEST/production app-state enqueue. Confirmation
+    // remains successful; a transient DB failure is observable and cannot create
+    // an untracked duplicate email.
+    return {
+      skipped: true,
+      reason: 'outbox_unavailable',
+      confirmationId: String(result.confirmationId),
+    };
   }
 
   const { emails, details } = await resolveRecipients({ repartidorId, comercialCode }, { query, env });
@@ -374,62 +413,70 @@ async function notifyAfterConfirm({
   payload.repartidorNombre = repartidorDetail?.nombre || '';
   payload.comercialNombre = comercialDetail?.nombre || '';
 
-  const sendResult = await sendVarianceEmail(payload, emails, { sendEmail });
+  let delivery;
+  try {
+    delivery = resolveRepartoEmailDelivery({ recipients: emails, env, mode: 'automatic' });
+  } catch (error) {
+    logger.warn(`[variance] delivery policy rejected message: ${error.code || error.message}`);
+    delivery = { effectiveRecipients: [] };
+  }
+  const sendResult = await sendVarianceEmail(payload, delivery.effectiveRecipients, { sendEmail });
+  payload.delivery = redactDeliverySummary(sendResult.results);
 
   if (outboxId != null) {
     try {
       const tables = notificationTables(env);
-      const ok = sendResult.sent > 0;
+      const ok = payload.delivery.allSucceeded;
       if (ok) {
         await query(
           `UPDATE ${tables.varianceOutbox}
-              SET STATUS = 'SENT', SENT_AT = CURRENT TIMESTAMP, ERROR = NULL
+              SET STATUS = 'SENT', SENT_AT = CURRENT TIMESTAMP, ERROR = NULL, PAYLOAD_JSON = ?
             WHERE CONFIRMATION_ID = ? AND STATUS = 'PENDING'`,
-          [outboxId],
+          [JSON.stringify(payload), outboxId],
         );
       } else {
         await query(
           `UPDATE ${tables.varianceOutbox}
-              SET STATUS = 'FAILED', ERROR = ?
+              SET STATUS = 'FAILED', ERROR = ?, PAYLOAD_JSON = ?
             WHERE CONFIRMATION_ID = ? AND STATUS = 'PENDING'`,
-          ['No recipients or all sends failed', outboxId],
+          ['No recipients or incomplete send', JSON.stringify(payload), outboxId],
         );
       }
     } catch (error) {
       logger.warn(`[variance] outbox status update failed: ${error.message}`);
-    }
-  } else if (sendResult.sent > 0) {
-    // Enqueue failed but email went out — try insert as SENT for digest tracking
-    try {
-      const tables = notificationTables(env);
-      await query(
-        `INSERT INTO ${tables.varianceOutbox}
-          (CONFIRMATION_ID, DOCUMENT_ID, REPARTIDOR_ID, COMERCIAL_CODE, PAYLOAD_JSON, STATUS, SENT_AT, DIGEST_INCLUDED)
-         VALUES (?, ?, ?, ?, ?, 'SENT', CURRENT TIMESTAMP, 'N')`,
-        [
-          Number(result.confirmationId),
-          documentId,
-          repartidorId,
-          comercialCode || null,
-          JSON.stringify(payload),
-        ],
-      );
-    } catch (error) {
-      logger.warn(`[variance] post-send outbox insert failed: ${error.message}`);
     }
   }
 
   return { skipped: false, lineCount: lineas.length, ...sendResult, outboxId };
 }
 
+function previousMadridIsoDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const get = (type) => parts.find((part) => part.type === type)?.value;
+  const year = Number(get('year'));
+  const month = Number(get('month'));
+  const day = Number(get('day'));
+  const previous = new Date(Date.UTC(year, month - 1, day) - 24 * 60 * 60 * 1000);
+  const y = previous.getUTCFullYear();
+  const m = String(previous.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(previous.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /**
- * Daily digest: PENDING + SENT-today not yet digested.
+ * Daily digest: previous Europe/Madrid day, plus any still-open PENDING from that diary.
  */
 async function sendDailyVarianceDigest({
   query = queryWithParams,
   env = process.env,
   sendEmail = sendHtmlEmail,
   resolveRecipients = resolveDeliveryVarianceRecipients,
+  digestDate = previousMadridIsoDate(),
 } = {}) {
   const tables = notificationTables(env);
   const sql = `
@@ -438,23 +485,23 @@ async function sendDailyVarianceDigest({
       FROM ${tables.varianceOutbox}
      WHERE DIGEST_INCLUDED = 'N'
        AND (
-         STATUS = 'PENDING'
-         OR (STATUS = 'SENT' AND DATE(CREATED_AT) = CURRENT DATE)
-         OR (STATUS = 'SENT' AND SENT_AT IS NOT NULL AND DATE(SENT_AT) = CURRENT DATE)
+         DATE(CREATED_AT) = ?
+         OR (SENT_AT IS NOT NULL AND DATE(SENT_AT) = ?)
        )
+       AND STATUS IN ('PENDING', 'SENT', 'FAILED')
      ORDER BY CREATED_AT
   `;
   let rows = [];
   try {
-    rows = await query(sql, []);
+    rows = await query(sql, [digestDate, digestDate]);
   } catch (error) {
     logger.error(`[variance] digest query failed: ${error.message}`);
     throw error;
   }
 
   if (!rows.length) {
-    logger.info('[variance] digest: nothing to send');
-    return { sent: 0, items: 0 };
+    logger.info(`[variance] digest: nothing to send for ${digestDate}`);
+    return { sent: 0, items: 0, digestDate };
   }
 
   const items = rows.map((row) => ({
@@ -466,14 +513,25 @@ async function sendDailyVarianceDigest({
     payload: safeJson(rowValue(row, 'PAYLOAD_JSON')),
   }));
 
-  const { emails } = await resolveRecipients({
+  const emails = new Set();
+  const roleRecipients = await resolveRecipients({
     repartidorId: null,
     comercialCode: null,
   }, { query, env });
+  for (const email of roleRecipients.emails || []) emails.add(String(email).toLowerCase());
 
-  // Digest goes to role recipients only (OFICINA/CARLOS/LACAL) — resolveRole path
-  // already included when comercial/repartidor null; ensure roles still resolved.
-  const subject = `Resumen diario diferencias entrega (${items.length})`;
+  const driverCodes = [...new Set(items.map((item) => normalizeVendorCode(item.repartidorId)).filter(Boolean))];
+  const comercialCodes = [...new Set(items.map((item) => normalizeVendorCode(item.comercialCode)).filter(Boolean))];
+  for (const code of driverCodes) {
+    const extra = await resolveRecipients({ repartidorId: code, comercialCode: null }, { query, env });
+    for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+  }
+  for (const code of comercialCodes) {
+    const extra = await resolveRecipients({ repartidorId: null, comercialCode: code }, { query, env });
+    for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+  }
+
+  const subject = `Resumen diario diferencias entrega ${digestDate} (${items.length})`;
   const htmlBody = buildDigestEmailHtml(items);
   const textBody = items.map((item) => (
     `${item.documentId} rep=${item.repartidorId} com=${item.comercialCode || ''} lines=${(item.payload.lineas || []).length}`
@@ -504,8 +562,8 @@ async function sendDailyVarianceDigest({
     }
   }
 
-  logger.info(`[variance] digest sent=${sent} items=${items.length}`);
-  return { sent, items: items.length };
+  logger.info(`[variance] digest sent=${sent} items=${items.length} date=${digestDate}`);
+  return { sent, items: items.length, digestDate };
 }
 
 function rowValue(row, key) {
@@ -522,6 +580,7 @@ module.exports = {
   detectVarianceLines,
   buildVarianceEmailHtml,
   buildDigestEmailHtml,
+  previousMadridIsoDate,
   resolveDocumentComercialCode,
   notifyAfterConfirm,
   sendDailyVarianceDigest,

@@ -1,0 +1,19 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@ -781,8 +781,16 @@ class RepartidorDataService {
+           'serie': serie,
+           'terminal': terminal.toString(),
+           'numero': numero.toString(),
++          'repartidorId': owner,
+         },
+-        cacheKey:
+-            'repartidor_signature_${ejercicio}_${serie}_${terminal}_$numero',
++        cacheKey: repartoSignatureCacheKey(
++          repartidorId: owner,
++          ejercicio: ejercicio,
++          serie: serie,
++          terminal: terminal,
++          numero: numero,
++        ),
+         cacheTTL: const Duration(hours: 6),

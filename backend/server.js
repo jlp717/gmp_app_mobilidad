@@ -49,6 +49,9 @@ function repartoFinanzasWriteGuard(req, res, next) {
   return (isConfirmationWrite ? repartoConfirmationWriteGuard : repartoFinanceWriteGuard)(req, res, next);
 }
 function repartoFamilyWriteGuard(req, res, next) {
+  if (req.path === '/document/send-email') {
+    return repartoFinanceWriteGuard(req, res, next);
+  }
   // Day-scoped rutero order is app routing metadata, not confirmation ledger.
   if (req.path.startsWith('/rutero/order')) {
     return repartoWritesEnabledGuard(req, res, next);
@@ -77,7 +80,13 @@ const { createCanonicalConfirmationBootstrap } = require('./config/reparto-confi
 const { createRepartidorLiquidacionBootstrap } = require('./config/repartidor-liquidacion-bootstrap');
 const logger = require('./middleware/logger');
 const { verifyToken, getSessionStoreReadiness } = require('./middleware/auth');
-const { initDb, query, getPoolMetrics, runWithDbRequestContext } = require('./config/db');
+const {
+  initDb,
+  query,
+  getPoolMetrics,
+  runWithDbRequestContext,
+  acquireConfiguredConnection,
+} = require('./config/db');
 const {
     globalLimiter,
     createSecurityHeaders,
@@ -120,7 +129,7 @@ if (!repartoRuntime.valid) {
 const canonicalRepartidorFinanzasRoutes = require('./routes/repartidor-finanzas');
 const canonicalConfirmationBootstrap = createCanonicalConfirmationBootstrap({
   runtime: repartoRuntime,
-  db: { initDb, getPool: require('./config/db').getPool },
+  db: { acquireConfiguredConnection },
   logger,
 });
 canonicalRepartidorFinanzasRoutes.setCanonicalConfirmationRuntime(
@@ -130,7 +139,7 @@ logger.info(`[REPARTO_CONFIRMATION_RUNTIME] ${JSON.stringify(canonicalConfirmati
 
 const canonicalLiquidacionBootstrap = createRepartidorLiquidacionBootstrap({
   runtime: repartoRuntime,
-  db: { initDb, getPool: require('./config/db').getPool },
+  db: { acquireConfiguredConnection },
   logger,
 });
 canonicalRepartidorFinanzasRoutes.setCanonicalLiquidacionService(
@@ -263,6 +272,11 @@ app.set('trust proxy', false);
 // PM2 production readiness is defined on 3335. An explicit PORT still wins for
 // local and test runtimes.
 const PORT = process.env.PORT || 3335;
+const allowedBindHosts = new Set(['0.0.0.0', '127.0.0.1', '::', '::1']);
+const BIND_HOST = String(process.env.GMP_BIND_HOST || '0.0.0.0').trim();
+if (!allowedBindHosts.has(BIND_HOST)) {
+  throw new Error('GMP_BIND_HOST must be an explicit local or wildcard address');
+}
 const HTTP_COMPRESSION_THRESHOLD = parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024;
 const HTTP_COMPRESSION_LEVEL = parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6;
 const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 30000;
@@ -658,9 +672,12 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
   const authPinHashes = dbHealth.status === 'connected'
     ? await checkAuthPinHashReadiness()
     : { status: 'skipped', reason: 'database_not_connected' };
+  const liquidacionRequired = canonicalLiquidacionBootstrap.diagnostic.configured === true;
+  const liquidacionWritable = !liquidacionRequired || canonicalLiquidacionBootstrap.enabled === true;
   const ready = dbHealth.status === 'connected'
     && authSessionStore.ready === true
-    && authPinHashes.status === 'ready';
+    && authPinHashes.status === 'ready'
+    && liquidacionWritable;
 
   res.status(ready ? 200 : 503).json({
     status: ready ? 'ready' : 'not_ready',
@@ -679,6 +696,16 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
     auth: {
       pinHashes: authPinHashes,
       sessions: authSessionStore,
+    },
+    reparto: {
+      runtime: repartoDiagnostic,
+      liquidacion: {
+        required: liquidacionRequired,
+        writable: liquidacionWritable,
+        catalogChecked: canonicalLiquidacionBootstrap.diagnostic.catalogChecked === true,
+        catalogVerified: canonicalLiquidacionBootstrap.diagnostic.catalogVerified === true,
+        errorCode: canonicalLiquidacionBootstrap.diagnostic.errorCode || null,
+      },
     },
     timestamp: new Date().toISOString(),
     responseTime: `${Date.now() - start}ms`,
@@ -803,6 +830,19 @@ async function startServer() {
 
   await initDb();
 
+  if (canonicalLiquidacionBootstrap.diagnostic.configured === true) {
+    try {
+      await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();
+      logger.info(
+        `[REPARTIDOR_LIQUIDACION_RUNTIME] catalog verified tableSet=${repartoRuntime.tableSet}`,
+      );
+    } catch (error) {
+      logger.warn('[REPARTIDOR_LIQUIDACION_RUNTIME] catalog verification failed', {
+        code: String(error?.code || 'LIQUIDACION_CAPABILITY_UNAVAILABLE'),
+      });
+    }
+  }
+
   // Detect DELIVERY_STATUS schema version (OLD vs NEW migration 024)
   try {
     await initSchemaCheck();
@@ -853,14 +893,14 @@ async function startServer() {
   }
 
   // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, BIND_HOST, () => {
     // Store server reference globally for graceful shutdown
     global.__httpServer = server;
     
     const dddStatus = USE_DDD_ROUTES ? 'DDD Routes ✅' : 'Legacy Routes';
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
-    logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
+    logger.info(`  Listening on ${BIND_HOST}:${PORT}`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
     logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
     logger.info(`  Route Mode: ${dddStatus}`);
@@ -878,7 +918,7 @@ async function startServer() {
         startRepartoNotificationScheduler,
       } = require('./services/reparto-notification-scheduler');
       startRepartoNotificationScheduler();
-      logger.info('Reparto notification scheduler started (digest 18:00 Europe/Madrid)');
+      logger.info('Reparto notification scheduler started (digest 07:00 Europe/Madrid, dia anterior)');
     } catch (schedErr) {
       logger.warn(`Reparto notification scheduler unavailable: ${schedErr.message}`);
     }

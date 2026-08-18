@@ -168,14 +168,14 @@ function linesQuery(schema) {
       AND LAC.TERMINALALBARAN = ?
       AND LAC.NUMEROALBARAN = ?
       AND TRIM(LAC.CODIGOCLIENTEALBARAN) = ?
-      AND LAC.CANTIDADUNIDADES > 0
-      AND TRIM(LAC.CODIGOARTICULO) <> ''
+      AND (LAC.CANTIDADUNIDADES > 0 OR LAC.CANTIDADENVASES > 0)
     ORDER BY LAC.SECUENCIA, TRIM(LAC.CODIGOARTICULO)
   `;
 }
 
-function mapLines(rows) {
+function mapLines(rows, { allowEmpty = false } = {}) {
   if (!rows.length) {
+    if (allowEmpty) return [];
     throw new RepartoPlannedDeliveryError('La entrega planificada no contiene lineas', {
       code: 'DELIVERY_SOURCE_INCONSISTENT', statusCode: 409,
     });
@@ -183,9 +183,12 @@ function mapLines(rows) {
   const seen = new Set();
   return rows.map((row) => {
     const sequence = number(row, 'SECUENCIA');
-    const codigoArticulo = text(row, 'CODIGOARTICULO');
-    const cantidadPedida = number(row, 'CANTIDADUNIDADES');
+    const cantidadUnidades = number(row, 'CANTIDADUNIDADES');
     const cantidadEnvases = number(row, 'CANTIDADENVASES');
+    const cantidadPedida = (cantidadUnidades != null && cantidadUnidades > 0)
+      ? cantidadUnidades
+      : cantidadEnvases;
+    const codigoArticulo = text(row, 'CODIGOARTICULO') || (Number.isInteger(sequence) ? String(sequence) : '');
     const importeLinea = number(row, 'IMPORTEVENTA');
     const precioVenta = number(row, 'PRECIOVENTA');
     if (!Number.isInteger(sequence) || sequence < 0 || !codigoArticulo || cantidadPedida == null
@@ -239,10 +242,13 @@ function mapFinancialDocument(rows) {
   if (!document.tipo || !document.origen || !document.subempresa || !document.serie
     || !Number.isInteger(document.ejercicio) || !Number.isInteger(document.terminal)
     || !Number.isInteger(document.numero) || !Number.isInteger(document.xde)
-    || !Number.isInteger(document.dex) || importePendiente == null || importePendiente <= 0) {
+    || !Number.isInteger(document.dex) || importePendiente == null) {
     throw new RepartoPlannedDeliveryError('El documento financiero no tiene identidad o saldo validos', {
       code: 'DELIVERY_SOURCE_INCONSISTENT', statusCode: 409,
     });
+  }
+  if (importePendiente <= 0) {
+    return Object.freeze({ state: 'MISSING', document: null, importePendiente: 0 });
   }
   return Object.freeze({
     state: 'AVAILABLE', document: Object.freeze(document), importePendiente,
@@ -305,7 +311,9 @@ function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
       text(header, 'SUBEMPRESA'), number(header, 'EJERCICIOALBARAN'), text(header, 'SERIEALBARAN'),
       number(header, 'TERMINALALBARAN'), number(header, 'NUMEROALBARAN'), text(header, 'CODIGOCLIENTE'),
     ];
-    const lineas = mapLines(await executeRows(connection, linesQuery(safeSchema), documentParams));
+    const rawLines = await executeRows(connection, linesQuery(safeSchema), documentParams);
+    const importeTotal = number(header, 'IMPORTETOTAL') || 0;
+    const lineas = mapLines(rawLines, { allowEmpty: importeTotal === 0 });
     const financial = mapFinancialDocument(await executeRows(
       connection,
       financialDocumentQuery(safeSchema),

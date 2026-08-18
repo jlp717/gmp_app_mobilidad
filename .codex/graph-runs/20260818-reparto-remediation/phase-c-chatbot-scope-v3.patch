@@ -1,0 +1,886 @@
+diff --git a/backend/routes/chatbot.js b/backend/routes/chatbot.js
+--- a/backend/routes/chatbot.js
++++ b/backend/routes/chatbot.js
+@@ -5,0 +6,4 @@
++const {
++  CHATBOT_LOG_EVENTS,
++  emitChatbotLog,
++} = require('../src/chatbot/chatbot_log');
+@@ -29,0 +34 @@
++      repartidorId: req.body?.repartidorId,
+@@ -41 +46 @@
+-    logger.error(`[CHATBOT] message error: ${error.message}`);
++    emitChatbotLog('error', CHATBOT_LOG_EVENTS.messageFailed);
+diff --git a/backend/src/chatbot/chatbot_log.js b/backend/src/chatbot/chatbot_log.js
+new file mode 100644
+--- /dev/null
++++ b/backend/src/chatbot/chatbot_log.js
+@@ -0,0 +1,66 @@
++'use strict';
++
++const logger = require('../../middleware/logger');
++
++const CHATBOT_LOG_EVENTS = Object.freeze({
++  authorizationLookupFailed: 'CHATBOT_AUTHORIZATION_LOOKUP_FAILED',
++  databaseQueryFailed: 'CHATBOT_DATABASE_QUERY_FAILED',
++  handlerFailed: 'CHATBOT_HANDLER_FAILED',
++  inputBlocked: 'CHATBOT_INPUT_BLOCKED',
++  interaction: 'CHATBOT_INTERACTION',
++  messageFailed: 'CHATBOT_MESSAGE_FAILED',
++  outputCredentialBlocked: 'CHATBOT_OUTPUT_CREDENTIAL_BLOCKED',
++  outputDatabaseDetailBlocked: 'CHATBOT_OUTPUT_DATABASE_DETAIL_BLOCKED',
++  outputPromptBlocked: 'CHATBOT_OUTPUT_PROMPT_BLOCKED',
++  outputSqlBlocked: 'CHATBOT_OUTPUT_SQL_BLOCKED',
++  outputVendorScopeBlocked: 'CHATBOT_OUTPUT_VENDOR_SCOPE_BLOCKED',
++  pdfExtractionFailed: 'CHATBOT_PDF_EXTRACTION_FAILED',
++  topicBlocked: 'CHATBOT_TOPIC_BLOCKED',
++});
++
++const ALLOWED_EVENTS = new Set(Object.values(CHATBOT_LOG_EVENTS));
++const ALLOWED_LEVELS = new Set(['debug', 'info', 'warn', 'error']);
++const ALLOWED_BOOLEAN_METADATA = new Set([
++  'llmUsed',
++  'moderationBlocked',
++]);
++const ALLOWED_NUMERIC_METADATA = new Set([
++  'messageLength',
++  'responseLength',
++  'toolCallCount',
++]);
++
++function allowlistedMetadata(metadata) {
++  const safe = {};
++  if (!metadata || typeof metadata !== 'object') return safe;
++  for (const [key, value] of Object.entries(metadata)) {
++    if (ALLOWED_BOOLEAN_METADATA.has(key) && typeof value === 'boolean') {
++      safe[key] = value;
++    }
++    if (ALLOWED_NUMERIC_METADATA.has(key)
++      && Number.isSafeInteger(value)
++      && value >= 0) {
++      safe[key] = value;
++    }
++  }
++  return safe;
++}
++
++function emitChatbotLog(level, event, metadata = null) {
++  const safeLevel = ALLOWED_LEVELS.has(level) ? level : 'warn';
++  const safeEvent = ALLOWED_EVENTS.has(event)
++    ? event
++    : CHATBOT_LOG_EVENTS.handlerFailed;
++  const safeMetadata = allowlistedMetadata(metadata);
++  if (Object.keys(safeMetadata).length === 0) {
++    logger[safeLevel](safeEvent);
++    return;
++  }
++  logger[safeLevel](safeEvent, safeMetadata);
++}
++
++module.exports = {
++  CHATBOT_LOG_EVENTS,
++  emitChatbotLog,
++};
+diff --git a/backend/src/chatbot/chatbot_authorization.js b/backend/src/chatbot/chatbot_authorization.js
+--- a/backend/src/chatbot/chatbot_authorization.js
++++ b/backend/src/chatbot/chatbot_authorization.js
+@@ -2 +2,4 @@
+-const logger = require("../../middleware/logger");
++const {
++  CHATBOT_LOG_EVENTS,
++  emitChatbotLog,
++} = require("./chatbot_log");
+@@ -16,0 +20,69 @@
++function codesMatch(left, right) {
++  const leftVariants = numericVariants(left);
++  const rightVariants = numericVariants(right);
++  return leftVariants.some((code) => rightVariants.includes(code));
++}
++function normalizeRequestedRepartidorCodes(value) {
++  if (value === null || value === undefined || value === "") {
++    return { valid: true, codes: [] };
++  }
++  if (typeof value !== "string" && typeof value !== "number") {
++    return { valid: false, codes: [] };
++  }
++  const raw = String(value).trim();
++  if (!raw || raw.length > 1000) return { valid: false, codes: [] };
++  const parts = raw.split(",").map(normalizeCode);
++  if (parts.some((code) => !/^[A-Z0-9]{1,10}$/.test(code))) {
++    return { valid: false, codes: [] };
++  }
++  const codes = [...new Set(parts)];
++  if (codes.length === 0 || codes.length > 100 || codes.includes("ALL")) {
++    return { valid: false, codes: [] };
++  }
++  return { valid: true, codes };
++}
++function authorizeChatbotRepartoScope(userContext = {}, requestedScope) {
++  if (requestedScope === null || requestedScope === undefined || requestedScope === "") {
++    return { allowed: true, code: "NO_REPARTO_SCOPE", driverCodes: [] };
++  }
++  const requested = normalizeRequestedRepartidorCodes(requestedScope);
++  if (!requested.valid) {
++    return { allowed: false, code: "REPARTO_SCOPE_INVALID", driverCodes: [] };
++  }
++  const role = normalizeCode(userContext.role || userContext.rol);
++  const activeMode = normalizeCode(userContext.activeMode);
++  if (role === "REPARTIDOR") {
++    const ownCode = normalizeCode(
++      userContext.codigoConductor || userContext.code || userContext.userCode,
++    );
++    const allowed = requested.codes.length === 1
++      && ownCode
++      && codesMatch(requested.codes[0], ownCode);
++    return allowed
++      ? { allowed: true, code: "REPARTO_SCOPE_SELF", driverCodes: [ownCode] }
++      : { allowed: false, code: "REPARTO_SCOPE_FORBIDDEN", driverCodes: [] };
++  }
++  if (role !== "JEFE_VENTAS" || activeMode !== "REPARTIDOR") {
++    return { allowed: false, code: "REPARTO_SCOPE_FORBIDDEN", driverCodes: [] };
++  }
++  const visibleValues = Array.isArray(userContext.vendorCodes)
++    ? userContext.vendorCodes
++    : (Array.isArray(userContext.vendedorCodes) ? userContext.vendedorCodes : []);
++  const visibleCodes = [...new Set(visibleValues.map(normalizeCode).filter(Boolean))]
++    .filter((code) => code !== "ALL");
++  if (visibleCodes.length === 0) {
++    return { allowed: false, code: "REPARTO_SCOPE_UNVERIFIED", driverCodes: [] };
++  }
++  const unauthorized = requested.codes.some((requestedCode) =>
++    !visibleCodes.some((visibleCode) => codesMatch(requestedCode, visibleCode))
++  );
++  if (unauthorized) {
++    return { allowed: false, code: "REPARTO_SCOPE_FORBIDDEN", driverCodes: [] };
++  }
++  return {
++    allowed: true,
++    code: requested.codes.length === 1
++      ? "REPARTO_SCOPE_SELECTED"
++      : "REPARTO_SCOPE_FLEET",
++    driverCodes: requested.codes,
++  };
++}
+@@ -120,3 +193 @@
+-    logger.warn(
+-      "[CHATBOT-AUTHZ] Client ownership lookup failed: " + error.message,
+-    );
++    emitChatbotLog("warn", CHATBOT_LOG_EVENTS.authorizationLookupFailed);
+@@ -153,0 +225 @@
++  authorizeChatbotRepartoScope,
+diff --git a/backend/src/chatbot/llm-orchestrator.js b/backend/src/chatbot/llm-orchestrator.js
+--- a/backend/src/chatbot/llm-orchestrator.js
++++ b/backend/src/chatbot/llm-orchestrator.js
+@@ -5,0 +6 @@
++  authorizeChatbotRepartoScope,
+@@ -62,0 +64 @@
++  repartidorId = null,
+@@ -79,0 +82,10 @@
++  const repartoAuthorization = authorizeChatbotRepartoScope(user, repartidorId);
++  if (!repartoAuthorization.allowed) {
++    return {
++      success: false,
++      statusCode: 403,
++      error: repartoAuthorization.code,
++    };
++  }
++  context.repartidorScope = repartoAuthorization.driverCodes;
++
+@@ -119 +131 @@
+-    return { success: false, error: 'Chatbot database connection unavailable' };
++    return { success: false, error: 'CHATBOT_UNAVAILABLE' };
+diff --git a/backend/src/chatbot/chatbot_handler.js b/backend/src/chatbot/chatbot_handler.js
+--- a/backend/src/chatbot/chatbot_handler.js
++++ b/backend/src/chatbot/chatbot_handler.js
+@@ -11,0 +12,4 @@
++const {
++    CHATBOT_LOG_EVENTS,
++    emitChatbotLog,
++} = require('./chatbot_log');
+@@ -556,0 +561,5 @@
++function chatbotFailure(response) {
++    emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
++    return response;
++}
++
+@@ -564 +574 @@
+-        logger.error(`[CHATBOT-FALLBACK] Query error: ${error.message}`);
++        emitChatbotLog('error', CHATBOT_LOG_EVENTS.databaseQueryFailed);
+@@ -579,0 +590,3 @@
++    const repartidorScope = Array.isArray(context.repartidorScope) && context.repartidorScope.length
++        ? context.repartidorScope
++        : (userCode ? [userCode] : []);
+@@ -859 +872 @@
+-            const result = await repartidorTools.getRepartidorCommissions(conn, userCode, codes.month, undefined);
++            const result = await repartidorTools.getRepartidorCommissions(conn, repartidorScope, codes.month, undefined);
+@@ -868 +881 @@
+-            logger.error('[CHATBOT] Repartidor commission error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -884 +897 @@
+-            return `Error obteniendo configuracion de comisiones: ${e.message}`;
++            return chatbotFailure('Error obteniendo configuracion de comisiones.');
+@@ -911 +924 @@
+-            return `Error obteniendo comisiones acumuladas: ${e.message}`;
++            return chatbotFailure('Error obteniendo comisiones acumuladas.');
+@@ -925 +938 @@
+-            return `Error obteniendo comisiones: ${e.message}`;
++            return chatbotFailure('Error obteniendo comisiones.');
+@@ -944 +957 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error obteniendo el detalle de comisiones.');
+@@ -962 +975 @@
+-            return `Error obteniendo objetivos por familia: ${e.message}`;
++            return chatbotFailure('Error obteniendo objetivos por familia.');
+@@ -988 +1001 @@
+-            return `Error obteniendo objetivos acumulados: ${e.message}`;
++            return chatbotFailure('Error obteniendo objetivos acumulados.');
+@@ -1003 +1016 @@
+-            return `Error obteniendo objetivos: ${e.message}`;
++            return chatbotFailure('Error obteniendo objetivos.');
+@@ -1018 +1031 @@
+-            return `Error calculando margen: ${e.message}`;
++            return chatbotFailure('Error calculando margen.');
+@@ -1040 +1053 @@
+-            return `Error calculando margen: ${e.message}`;
++            return chatbotFailure('Error calculando margen.');
+@@ -1064 +1077 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando deuda.');
+@@ -1086 +1099 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando el bloqueo del cliente.');
+@@ -1109 +1122 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando el riesgo del cliente.');
+@@ -1129 +1142 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando el credito del cliente.');
+@@ -1202 +1215 @@
+-            return `Error consultando ventas del producto al cliente: ${e.message}`;
++            return chatbotFailure('Error consultando ventas del producto al cliente.');
+@@ -1217 +1230 @@
+-            return `Error consultando precio vendido al cliente: ${e.message}`;
++            return chatbotFailure('Error consultando precio vendido al cliente.');
+@@ -1233 +1246 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando el precio del producto.');
+@@ -1251 +1264 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error calculando el precio minimo.');
+@@ -1269 +1282 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error simulando el descuento.');
+@@ -1293 +1306 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando abandono de productos.');
+@@ -1310 +1323 @@
+-            return `Error consultando comparativa anual: ${e.message}`;
++            return chatbotFailure('Error consultando comparativa anual.');
+@@ -1331 +1344 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando comparativa del cliente.');
+@@ -1356 +1369 @@
+-            return `Error consultando almacen: ${e.message}`;
++            return chatbotFailure('Error consultando almacen.');
+@@ -1373 +1386 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error consultando stock.');
+@@ -1391 +1404 @@
+-                return `Error: ${e.message}`;
++                return chatbotFailure('Error consultando albaranes.');
+@@ -1436 +1449 @@
+-                return `Error: ${e.message}`;
++                return chatbotFailure('Error consultando la factura.');
+@@ -1453 +1466 @@
+-                return `Error: ${e.message}`;
++                return chatbotFailure('Error consultando facturas del cliente.');
+@@ -1473 +1486 @@
+-                return `Error: ${e.message}`;
++                return chatbotFailure('Error consultando albaranes.');
+@@ -1503 +1516 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error buscando clientes.');
+@@ -1516 +1529 @@
+-            return `Error: ${e.message}`;
++            return chatbotFailure('Error buscando productos.');
+@@ -1553 +1566 @@
+-            logger.error('[CHATBOT] Top analytics error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1584 +1597 @@
+-            logger.error('[CHATBOT] Client evaluation error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1593 +1606 @@
+-                const result = await repartidorTools.getRepartidorCommissions(conn, userCode, codes.month, undefined);
++                const result = await repartidorTools.getRepartidorCommissions(conn, repartidorScope, codes.month, undefined);
+@@ -1604 +1617 @@
+-                const result = await repartidorTools.getRepartidorCollections(conn, userCode, codes.month, undefined);
++                const result = await repartidorTools.getRepartidorCollections(conn, repartidorScope, codes.month, undefined);
+@@ -1618 +1631 @@
+-                conn, userCode, extractRequestedYear(message), codes.month, undefined
++                conn, repartidorScope, extractRequestedYear(message), codes.month, undefined
+@@ -1627 +1640 @@
+-            logger.error('[CHATBOT] Repartidor error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1654 +1667 @@
+-            logger.error('[CHATBOT] Order details error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1673 +1686 @@
+-            logger.error('[CHATBOT] Client orders error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1690 +1703 @@
+-            logger.error('[CHATBOT] Daily orders error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1709 +1722 @@
+-            logger.error('[CHATBOT] Cobros error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1727 +1740 @@
+-            logger.error('[CHATBOT] Cobros summary error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1753 +1766 @@
+-            logger.error('[CHATBOT] Glacius summary error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1770 +1783 @@
+-            logger.error('[CHATBOT] Daily summary error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1805 +1818 @@
+-            logger.error('[CHATBOT] Bolsa error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1823 +1836 @@
+-            logger.error('[CHATBOT] Evolution error:', err.message);
++            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+@@ -1836 +1849 @@
+-            logger.warn('[CHATBOT] Loose product fallback skipped:', err.message);
++            emitChatbotLog('warn', CHATBOT_LOG_EVENTS.handlerFailed);
+diff --git a/backend/src/chatbot/chatbot_tools.js b/backend/src/chatbot/chatbot_tools.js
+--- a/backend/src/chatbot/chatbot_tools.js
++++ b/backend/src/chatbot/chatbot_tools.js
+@@ -25,0 +26,4 @@
++const {
++    CHATBOT_LOG_EVENTS,
++    emitChatbotLog,
++} = require('./chatbot_log');
+@@ -41 +45 @@
+-        logger.error(`[CHATBOT-DB] Query error: ${error.message} | SQL: ${sql.substring(0, 120)}`);
++        emitChatbotLog('error', CHATBOT_LOG_EVENTS.databaseQueryFailed);
+@@ -60,0 +65,25 @@
++function buildRequiredRepartidorFilter(driverCodes, columnName) {
++    if (!Array.isArray(driverCodes)) {
++        throw new TypeError('REPARTO_SCOPE_REQUIRED');
++    }
++    const safeCodes = [...new Set(driverCodes
++        .map((code) => String(code || '').trim().toUpperCase())
++        .filter((code) => /^[A-Z0-9]{1,10}$/.test(code) && code !== 'ALL'))];
++    if (safeCodes.length === 0 || safeCodes.length > 100) {
++        throw new TypeError('REPARTO_SCOPE_REQUIRED');
++    }
++    const column = `TRIM(${columnName})`;
++    if (safeCodes.length === 1) {
++        return {
++            sql: `AND ${column} = ?`,
++            params: safeCodes,
++        };
++    }
++    return {
++        sql: `AND ${column} IN (${safeCodes.map(() => '?').join(',')})`,
++        params: safeCodes,
++    };
++}
++
+@@ -2044 +2074 @@
+-    async getRepartidorCollections(conn, userCode, month, year) {
++    async getRepartidorCollections(conn, driverCodes, month, year) {
+@@ -2046,0 +2077 @@
++        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
+@@ -2071 +2102 @@
+-              AND TRIM(OPP.CODIGOREPARTIDOR) = ?
++              ${repartoFilter.sql}
+@@ -2075 +2106 @@
+-        `, [currentMonth, currentYear, userCode]);
++        `, [currentMonth, currentYear, ...repartoFilter.params]);
+@@ -2129,2 +2160,2 @@
+-    async getRepartidorCommissions(conn, userCode, month, year) {
+-        const collections = await this.getRepartidorCollections(conn, userCode, month, year);
++    async getRepartidorCommissions(conn, driverCodes, month, year) {
++        const collections = await this.getRepartidorCollections(conn, driverCodes, month, year);
+@@ -2142 +2173 @@
+-    async getRepartidorDeliveries(conn, userCode, year, month, day) {
++    async getRepartidorDeliveries(conn, driverCodes, year, month, day) {
+@@ -2145,0 +2177 @@
++        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
+@@ -2153 +2185 @@
+-              AND TRIM(OPP.CODIGOREPARTIDOR) = ?
++              ${repartoFilter.sql}
+@@ -2154 +2186 @@
+-        `, [currentYear, currentMonth, currentDay, userCode]);
++        `, [currentYear, currentMonth, currentDay, ...repartoFilter.params]);
+diff --git a/backend/src/chatbot/moderation.js b/backend/src/chatbot/moderation.js
+--- a/backend/src/chatbot/moderation.js
++++ b/backend/src/chatbot/moderation.js
+@@ -10 +10,4 @@
+-const logger = require('../../middleware/logger');
++const {
++    CHATBOT_LOG_EVENTS,
++    emitChatbotLog,
++} = require('./chatbot_log');
+@@ -104 +107 @@
+-            logger.warn(`[CHATBOT-MODERATION] Injection attempt detected: ${trimmed.substring(0, 100)}`);
++            emitChatbotLog('warn', CHATBOT_LOG_EVENTS.inputBlocked);
+@@ -125 +128 @@
+-            logger.info(`[CHATBOT-MODERATION] Blocked topic: ${topic.reason}`);
++            emitChatbotLog('info', CHATBOT_LOG_EVENTS.topicBlocked);
+@@ -156 +159 @@
+-        logger.warn(`[CHATBOT-MODERATION] SQL detected in output`);
++        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputSqlBlocked);
+@@ -161 +164 @@
+-        logger.warn(`[CHATBOT-MODERATION] Internal database detail detected in output`);
++        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputDatabaseDetailBlocked);
+@@ -167 +170 @@
+-        logger.warn(`[CHATBOT-MODERATION] Potential credential leak in output`);
++        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputCredentialBlocked);
+@@ -173 +176 @@
+-        logger.warn(`[CHATBOT-MODERATION] AI identity leak in output`);
++        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputPromptBlocked);
+@@ -184 +187 @@
+-                    logger.warn(`[CHATBOT-MODERATION] Potential vendor data leak: ${ref}`);
++                    emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputVendorScopeBlocked);
+@@ -202,10 +205,9 @@
+-    logger.info({
+-        event: 'chatbot_interaction',
+-        user: userCode,
++    emitChatbotLog('info', CHATBOT_LOG_EVENTS.interaction, {
+         messageLength: message.length,
+         responseLength: response?.length || 0,
+         llmUsed: metadata.llmUsed || false,
+-        toolCalls: metadata.toolCalls || [],
++        toolCallCount: Array.isArray(metadata.toolCalls) ? metadata.toolCalls.length : 0,
+         moderationBlocked: metadata.moderationBlocked || false,
+-        timestamp: new Date().toISOString()
+     });
+ }
+diff --git a/backend/src/chatbot/pdf_extractor.js b/backend/src/chatbot/pdf_extractor.js
+--- a/backend/src/chatbot/pdf_extractor.js
++++ b/backend/src/chatbot/pdf_extractor.js
+@@ -7 +7,4 @@
+-const logger = require('../../middleware/logger');
++const {
++    CHATBOT_LOG_EVENTS,
++    emitChatbotLog,
++} = require('./chatbot_log');
+@@ -49,2 +52,2 @@
+-        logger.warn(`[CHATBOT-PDF] pdf-parse failed: ${error.message}`);
+-        return { text: '', charCount: 0, method: 'failed', error: error.message };
++        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.pdfExtractionFailed);
++        return { text: '', charCount: 0, method: 'failed', errorCode: 'PDF_EXTRACTION_FAILED' };
+diff --git a/lib/features/dashboard/presentation/pages/main_shell.dart b/lib/features/dashboard/presentation/pages/main_shell.dart
+--- a/lib/features/dashboard/presentation/pages/main_shell.dart
++++ b/lib/features/dashboard/presentation/pages/main_shell.dart
+@@ -1796 +1796,4 @@
+-          return ChatbotPage(vendedorCodes: vendedorCodes);
++          return ChatbotPage(
++            vendedorCodes: vendedorCodes,
++            repartidorId: effectiveRepartidorId,
++          );
+diff --git a/lib/features/chatbot/presentation/pages/chatbot_page.dart b/lib/features/chatbot/presentation/pages/chatbot_page.dart
+--- a/lib/features/chatbot/presentation/pages/chatbot_page.dart
++++ b/lib/features/chatbot/presentation/pages/chatbot_page.dart
+@@ -18,0 +19 @@
++    this.repartidorId,
+@@ -22,0 +24 @@
++  final String? repartidorId;
+@@ -55 +58 @@
+-    _syncVendedorCodesContext();
++    _syncChatbotContext();
+@@ -61,2 +64,3 @@
+-    if (oldWidget.vendedorCodes.join(',') != widget.vendedorCodes.join(',')) {
+-      _syncVendedorCodesContext();
++    if (oldWidget.vendedorCodes.join(',') != widget.vendedorCodes.join(',') ||
++        oldWidget.repartidorId != widget.repartidorId) {
++      _syncChatbotContext();
+@@ -66 +70 @@
+-  void _syncVendedorCodesContext() {
++  void _syncChatbotContext() {
+@@ -69,0 +74,2 @@
++      ref.read(chatbotProvider.notifier).setRepartidorScope(
++            widget.repartidorId);
+diff --git a/lib/features/chatbot/providers/chatbot_provider.dart b/lib/features/chatbot/providers/chatbot_provider.dart
+--- a/lib/features/chatbot/providers/chatbot_provider.dart
++++ b/lib/features/chatbot/providers/chatbot_provider.dart
+@@ -69,0 +70 @@
++    this.repartidorId,
+@@ -88,0 +90,2 @@
++  final String? repartidorId;
++
+@@ -113,0 +117 @@
++    Object? repartidorId = _sentinel,
+@@ -128,0 +133,2 @@
++      repartidorId: repartidorId == _sentinel
++          ? this.repartidorId : repartidorId as String?,
+@@ -315,0 +322 @@
++        repartidorId: state.repartidorId,
+@@ -397,0 +405,20 @@
++  void setRepartidorScope(String? repartidorId) {
++    final trimmed = repartidorId?.trim();
++    final normalized = trimmed == null || trimmed.isEmpty ? null : trimmed;
++    if (state.repartidorId == normalized) return;
++    state = state.copyWith(
++      repartidorId: normalized,
++      messages: const [],
++      error: null,
++      currentClientCode: null,
++      pinnedMessageId: null,
++      activeSessionId: ChatbotPersistence.createSessionId(),
++      lastFailedUserMessage: null,
++    );
++    _welcomeBackShown = false;
++  }
++
+diff --git a/lib/features/chatbot/data/chatbot_service.dart b/lib/features/chatbot/data/chatbot_service.dart
+--- a/lib/features/chatbot/data/chatbot_service.dart
++++ b/lib/features/chatbot/data/chatbot_service.dart
+@@ -25,0 +26 @@
++    String? repartidorId,
+@@ -33,0 +35,2 @@
++        if (repartidorId != null && repartidorId.trim().isNotEmpty)
++          'repartidorId': repartidorId.trim(),
+@@ -48,2 +52,2 @@
+-      developer.log('Chatbot error: $e', name: 'chatbot');
+-      throw Exception('Error de conexion: $e');
++      developer.log('CHATBOT_REQUEST_FAILED', name: 'chatbot');
++      throw Exception('No se pudo conectar con el asistente.');
+@@ -56,2 +60,2 @@
+-      developer.log('Chatbot health check failed: $e', name: 'chatbot');
+-      return {'status': 'error', 'detail': e.toString()};
++      developer.log('CHATBOT_HEALTH_FAILED', name: 'chatbot');
++      return {'status': 'error', 'code': 'CHATBOT_HEALTH_FAILED'};
+diff --git a/backend/__tests__/chatbot_reparto_scope.test.js b/backend/__tests__/chatbot_reparto_scope.test.js
+new file mode 100644
+--- /dev/null
++++ b/backend/__tests__/chatbot_reparto_scope.test.js
+@@ -0,0 +1,209 @@
++'use strict';
++
++jest.mock('../config/db', () => ({
++  getPool: jest.fn(),
++}));
++jest.mock('../src/chatbot/chatbot_handler', () => ({
++  handleChatMessage: jest.fn(async () => 'ok'),
++}));
++jest.mock('../middleware/logger', () => ({
++  debug: jest.fn(),
++  info: jest.fn(),
++  warn: jest.fn(),
++  error: jest.fn(),
++}));
++
++const logger = require('../middleware/logger');
++const { getPool } = require('../config/db');
++const { handleChatMessage } = require('../src/chatbot/chatbot_handler');
++const {
++  authorizeChatbotRepartoScope,
++  resolveChatbotClientOwner,
++} = require('../src/chatbot/chatbot_authorization');
++const { processMessage } = require('../src/chatbot/llm-orchestrator');
++const { repartidorTools } = require('../src/chatbot/chatbot_tools');
++
++describe('chatbot reparto scope authorization', () => {
++  test('REPARTIDOR can only select its own canonical driver code', () => {
++    expect(authorizeChatbotRepartoScope({
++      code: '03',
++      role: 'REPARTIDOR',
++      activeMode: 'REPARTIDOR',
++      codigoConductor: '03',
++      vendorCodes: ['03'],
++    }, '3')).toEqual({
++      allowed: true,
++      code: 'REPARTO_SCOPE_SELF',
++      driverCodes: ['03'],
++    });
++    expect(authorizeChatbotRepartoScope({
++      code: '03',
++      role: 'REPARTIDOR',
++      activeMode: 'REPARTIDOR',
++      codigoConductor: '03',
++      vendorCodes: ['03'],
++    }, '04')).toMatchObject({ allowed: false, code: 'REPARTO_SCOPE_FORBIDDEN' });
++  });
++
++  test('BOLA and literal ALL are rejected as exact invalid or foreign codes', () => {
++    const jefe = {
++      code: '01',
++      role: 'JEFE_VENTAS',
++      activeMode: 'REPARTIDOR',
++      vendorCodes: ['03', '04'],
++    };
++    expect(authorizeChatbotRepartoScope(jefe, 'BOLA')).toMatchObject({
++      allowed: false,
++      code: 'REPARTO_SCOPE_FORBIDDEN',
++    });
++    expect(authorizeChatbotRepartoScope(jefe, 'ALL')).toMatchObject({
++      allowed: false,
++      code: 'REPARTO_SCOPE_INVALID',
++    });
++  });
++
++  test('JEFE_VENTAS in reparto mode can select one or an authorized fleet CSV', () => {
++    const jefe = {
++      code: '01',
++      role: 'JEFE_VENTAS',
++      activeMode: 'REPARTIDOR',
++      vendorCodes: ['03', '04', '05'],
++    };
++    expect(authorizeChatbotRepartoScope(jefe, '04')).toEqual({
++      allowed: true,
++      code: 'REPARTO_SCOPE_SELECTED',
++      driverCodes: ['04'],
++    });
++    expect(authorizeChatbotRepartoScope(jefe, '03,05')).toEqual({
++      allowed: true,
++      code: 'REPARTO_SCOPE_FLEET',
++      driverCodes: ['03', '05'],
++    });
++    expect(authorizeChatbotRepartoScope(jefe, '03,99')).toMatchObject({
++      allowed: false,
++      code: 'REPARTO_SCOPE_FORBIDDEN',
++    });
++  });
++
++  test('scope request requires the actual JEFE reparto mode', () => {
++    expect(authorizeChatbotRepartoScope({
++      code: '01',
++      role: 'JEFE_VENTAS',
++      activeMode: 'COMERCIAL',
++      vendorCodes: ['03'],
++    }, '03')).toMatchObject({ allowed: false, code: 'REPARTO_SCOPE_FORBIDDEN' });
++  });
++});
++
++describe('chatbot reparto scope propagation', () => {
++  beforeEach(() => {
++    jest.clearAllMocks();
++  });
++
++  test('validated fleet reaches the handler without changing commercial vendor scope', async () => {
++    const conn = { close: jest.fn(async () => {}) };
++    getPool.mockReturnValue({ connect: jest.fn(async () => conn) });
++
++    const result = await processMessage({
++      message: 'entregas de hoy',
++      repartidorId: '03,05',
++      user: {
++        code: '01',
++        role: 'JEFE_VENTAS',
++        activeMode: 'REPARTIDOR',
++        isJefeVentas: true,
++        vendorCodes: ['03', '04', '05'],
++      },
++    });
++
++    expect(result).toMatchObject({ success: true, response: 'ok' });
++    const context = handleChatMessage.mock.calls[0][4];
++    expect(context.vendorScope).toEqual(['ALL']);
++    expect(context.repartidorScope).toEqual(['03', '05']);
++    expect(conn.close).toHaveBeenCalled();
++  });
++
++  test('foreign BOLA scope is denied before a connection is opened', async () => {
++    const result = await processMessage({
++      message: 'entregas de hoy',
++      repartidorId: 'BOLA',
++      user: {
++        code: '01',
++        role: 'JEFE_VENTAS',
++        activeMode: 'REPARTIDOR',
++        isJefeVentas: true,
++        vendorCodes: ['03', '04'],
++      },
++    });
++
++    expect(result).toMatchObject({
++      success: false,
++      statusCode: 403,
++      error: 'REPARTO_SCOPE_FORBIDDEN',
++    });
++    expect(getPool).not.toHaveBeenCalled();
++    expect(handleChatMessage).not.toHaveBeenCalled();
++  });
++});
++
++describe('chatbot reparto SQL contract', () => {
++  test('fleet collections use bound placeholders and aggregate returned rows', async () => {
++    const conn = {
++      query: jest.fn(async () => [{
++        CLIENTE: 'C1',
++        NOMBRE_CLIENTE: 'Cliente',
++        TOTAL_COBRABLE: 100,
++        TOTAL_COBRADO: 50,
++        NUM_DOCUMENTOS: 2,
++      }]),
++    };
++
++    const result = await repartidorTools.getRepartidorCollections(
++      conn, ['03', '05'], 8, 2026,
++    );
++
++    const [sql, params] = conn.query.mock.calls[0];
++    expect(sql).toMatch(/TRIM\(OPP\.CODIGOREPARTIDOR\) IN \(\?,\?\)/);
++    expect(sql).not.toMatch(/IN \(\s*\)/);
++    expect(params).toEqual([8, 2026, '03', '05']);
++    expect(result.summary).toMatchObject({
++      totalCollectable: 100,
++      totalCollected: 50,
++      overallPercentage: 50,
++    });
++  });
++
++  test('empty reparto scope fails before SQL construction', async () => {
++    const conn = { query: jest.fn() };
++    await expect(repartidorTools.getRepartidorDeliveries(
++      conn, [], 2026, 8, 18,
++    )).rejects.toThrow('REPARTO_SCOPE_REQUIRED');
++    expect(conn.query).not.toHaveBeenCalled();
++  });
++});
++
++describe('chatbot diagnostics are redacted', () => {
++  beforeEach(() => {
++    jest.clearAllMocks();
++  });
++
++  test('ownership lookup logs only an allowlisted event', async () => {
++    const secret = 'SQL0204 DSEDAC.CLI C:\\private\\query.sql params=[BOLA]';
++    const conn = { query: jest.fn(async () => { throw new Error(secret); }) };
++
++    const result = await resolveChatbotClientOwner(conn, 'C1');
++
++    expect(result).toMatchObject({ verified: false });
++    const logged = JSON.stringify(logger.mock?.calls || {
++      warn: logger.warn.mock.calls,
++      error: logger.error.mock.calls,
++    });
++    expect(logged).not.toContain(secret);
++    expect(logger.warn).toHaveBeenCalledWith(
++      'CHATBOT_AUTHORIZATION_LOOKUP_FAILED',
++    );
++  });
++
++  test('tool query failures expose neither DB error nor SQL text', async () => {
++    const secret = 'SQLSTATE 42704 DSEDAC.OPP C:\\private\\driver.sql params=03';
++    const conn = { query: jest.fn(async () => { throw new Error(secret); }) };
++
++    const result = await repartidorTools.getRepartidorDeliveries(
++      conn, ['03'], 2026, 8, 18,
++    );
++
++    expect(result.totalDeliveries).toBe(0);
++    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(secret);
++    expect(logger.error).toHaveBeenCalledWith('CHATBOT_DATABASE_QUERY_FAILED');
++  });
++});
+diff --git a/test/features/chatbot/chatbot_scope_test.dart b/test/features/chatbot/chatbot_scope_test.dart
+new file mode 100644
+--- /dev/null
++++ b/test/features/chatbot/chatbot_scope_test.dart
+@@ -0,0 +1,105 @@
++import 'package:dio/dio.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:gmp_app_mobilidad/core/api/api_client.dart';
++import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_service.dart';
++import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_provider.dart';
++
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++
++  tearDown(ApiClient.resetForTesting);
++
++  test('ChatbotService sends the effective reparto CSV in the request body',
++      () async {
++    Map<String, dynamic>? capturedBody;
++    final interceptor = InterceptorsWrapper(
++      onRequest: (options, handler) {
++        if (options.method == 'POST' && options.path == '/chatbot/message') {
++          capturedBody = Map<String, dynamic>.from(options.data as Map);
++          handler.resolve(
++            Response<Map<String, dynamic>>(
++              requestOptions: options,
++              statusCode: 200,
++              data: const {'response': 'ok', 'metadata': <String, dynamic>{}},
++            ),
++          );
++          return;
++        }
++        handler.next(options);
++      },
++    );
++    ApiClient.dio.interceptors.add(interceptor);
++
++    final result = await ChatbotService().sendMessage(
++      message: 'entregas de hoy',
++      repartidorId: '03,05',
++      conversationHistory: const [
++        {'role': 'user', 'content': 'ruta'},
++      ],
++    );
++
++    expect(result.response, 'ok');
++    expect(capturedBody, containsPair('repartidorId', '03,05'));
++    expect(capturedBody, containsPair('message', 'entregas de hoy'));
++  });
++
++  test('ChatbotService omits reparto scope outside Reparto mode', () async {
++    Map<String, dynamic>? capturedBody;
++    final interceptor = InterceptorsWrapper(
++      onRequest: (options, handler) {
++        if (options.method == 'POST' && options.path == '/chatbot/message') {
++          capturedBody = Map<String, dynamic>.from(options.data as Map);
++          handler.resolve(
++            Response<Map<String, dynamic>>(
++              requestOptions: options,
++              statusCode: 200,
++              data: const {'response': 'ok'},
++            ),
++          );
++          return;
++        }
++        handler.next(options);
++      },
++    );
++    ApiClient.dio.interceptors.add(interceptor);
++
++    await ChatbotService().sendMessage(message: 'objetivo del mes');
++
++    expect(capturedBody, isNot(contains('repartidorId')));
++  });
++
++  test('provider clears the conversation and client context on scope change',
++      () {
++    final container = ProviderContainer();
++    addTearDown(container.dispose);
++    final notifier = container.read(chatbotProvider.notifier);
++
++    notifier.setClientContext('CLIENTE-1');
++    notifier.addSystemMessage('respuesta del alcance anterior');
++    notifier.setRepartidorScope('03');
++    notifier.addSystemMessage('respuesta de 03');
++
++    notifier.setRepartidorScope('05');
++
++    final state = container.read(chatbotProvider);
++    expect(state.repartidorId, '05');
++    expect(state.messages, isEmpty);
++    expect(state.currentClientCode, isNull);
++    expect(state.pinnedMessageId, isNull);
++  });
++
++  test('setting the same normalized scope preserves the conversation', () {
++    final container = ProviderContainer();
++    addTearDown(container.dispose);
++    final notifier = container.read(chatbotProvider.notifier);
++
++    notifier.setRepartidorScope('03');
++    notifier.addSystemMessage('misma conversacion');
++    notifier.setRepartidorScope('03');
++
++    expect(container.read(chatbotProvider).messages, hasLength(1));
++  });
++}

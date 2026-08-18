@@ -138,6 +138,15 @@ describe('reparto server startup wiring', () => {
     expect(source.indexOf(canonicalMount)).toBeLessThan(firstFamilyBranch);
     expect(source).toContain('createRepartidorLiquidacionBootstrap({');
     expect(source).toContain('setCanonicalLiquidacionService(');
+    expect(source).toContain('await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();');
+    expect(source).toContain('canonicalLiquidacionBootstrap.enabled === true');
+    expect(source).toContain('&& liquidacionWritable');
+    expect(source.indexOf('await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();'))
+      .toBeGreaterThan(source.indexOf('await initDb();'));
+    expect(source.indexOf('await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();'))
+      .toBeLessThan(source.indexOf('app.listen(PORT, BIND_HOST'));
+    expect(source).toContain("const BIND_HOST = String(process.env.GMP_BIND_HOST || '0.0.0.0')");
+    expect(source).toContain("new Set(['0.0.0.0', '127.0.0.1', '::', '::1'])");
     expect(source).not.toContain('Failed to load TS routes; falling back');
     expect(source).not.toContain('Failed to load DDD routes; falling back');
   });

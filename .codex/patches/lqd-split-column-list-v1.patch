@@ -1,0 +1,18 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1447 +1447,2 @@
+-    SPLIT AS (
++    SPLIT (CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION,
++           NUMEROLIQUIDACION, FORMA, IMPORTE) AS (
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -9,0 +10 @@
++  lqdCobrosSplitCte,
+@@ -524,0 +526,5 @@
++    const splitCte = lqdCobrosSplitCte();
++    expect(splitCte).toMatch(/SPLIT\s*\(CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION,\s*NUMEROLIQUIDACION, FORMA, IMPORTE\) AS \(/);
++    expect(`${splitCte} SELECT FORMA, IMPORTE FROM SPLIT`)
++      .toContain('SELECT FORMA, IMPORTE FROM SPLIT');
++    expect(splitCte).not.toContain('SPLIT AS (');

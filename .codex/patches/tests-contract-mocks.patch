@@ -1,0 +1,29 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -146,0 +147 @@
++      operationalContractsOfFn: jest.fn().mockResolvedValue([]),
+@@ -259,8 +260,11 @@
+-  test('does not emit DDL for an identity-only mismatch', () => {
+-    expect(buildReconciliationPlan(
+-      pair,
+-      [column({ identity: true })],
+-      [column({ identity: false })],
+-      { destinationRowCount: 1 },
+-    )).toEqual([]);
+-  });
++  test('rebuilds TEST with INCLUDING IDENTITY for an identity mismatch', () => {
++    expect(buildReconciliationPlan(
++      pair,
++      [column({ identity: true })],
++      [column({ identity: false })],
++      { destinationRowCount: 1, allowTestTableRebuild: true },
++    )).toEqual([
++      expect.objectContaining({ kind: 'DROP_TEST_TABLE' }),
++      expect.objectContaining({ kind: 'CREATE_LIKE', sql: expect.stringContaining('INCLUDING IDENTITY') }),
++    ]);
++  });
+@@ -340,0 +345 @@
++      operationalContractsOfFn: jest.fn().mockResolvedValue([]),
+@@ -354,0 +360 @@
++      operationalContractsOfFn: jest.fn().mockResolvedValue([]),

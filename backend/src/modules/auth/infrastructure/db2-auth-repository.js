@@ -5,6 +5,7 @@ const { AuthRepository } = require('../domain/auth-repository');
 const { User } = require('../domain/user');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { getVendorVisibilityScope } = require('../../../../utils/common');
+const { createRepartidorFleetDirectory } = require('./repartidor-fleet-directory');
 
 const ERP_MOBILITY_PROFILE_SELECT = `
         COALESCE((
@@ -51,9 +52,11 @@ const ERP_ROLE_SELECT = `
         END AS ROL`;
 
 class Db2AuthRepository extends AuthRepository {
-  constructor(dbPool) {
+  constructor(dbPool, { repartidorFleetDirectory } = {}) {
     super();
     this._db = dbPool || new Db2ConnectionPool();
+    this._repartidorFleetDirectory = repartidorFleetDirectory
+      || createRepartidorFleetDirectory({ execute: (sql) => this._db.execute(sql) });
   }
 
   async findByCode(code) {
@@ -230,6 +233,10 @@ class Db2AuthRepository extends AuthRepository {
       codigoConductor: normalizedCode,
       matricula: String(rows[0].MATRICULA || rows[0].matricula || '').trim() || null,
     };
+  }
+
+  async listRepartidorFleet() {
+    return this._repartidorFleetDirectory.list();
   }
 
   async getVendorVisibilityScope(code, { role } = {}) {

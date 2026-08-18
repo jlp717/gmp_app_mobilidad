@@ -1,6 +1,6 @@
 'use strict';
 
-const AUTH_CLAIMS_VERSION = 3;
+const AUTH_CLAIMS_VERSION = 4;
 const COMERCIAL = 'COMERCIAL';
 const ADMIN = 'ADMIN';
 const JEFE_VENTAS = 'JEFE_VENTAS';
@@ -26,6 +26,14 @@ function freezeList(values) {
       .map(normalizeCode)
       .filter(Boolean),
   )]);
+}
+
+function codesMatch(left, right) {
+  const leftCode = normalizeCode(left);
+  const rightCode = normalizeCode(right);
+  if (leftCode === rightCode) return true;
+  if (!/^\d+$/.test(leftCode) || !/^\d+$/.test(rightCode)) return false;
+  return (leftCode.replace(/^0+/, '') || '0') === (rightCode.replace(/^0+/, '') || '0');
 }
 
 function subjectInvalid() {
@@ -124,6 +132,29 @@ function createAuthClaimsResolver({ authRepository } = {}) {
       }
       if (vendorCodes.length === 0) throw profileUnavailable();
 
+      let repartidorCodes = freezeList([]);
+      const repartoProfile = activeMode === REPARTIDOR
+        && [REPARTIDOR, JEFE_VENTAS, ADMIN].includes(role);
+      if (repartoProfile) {
+        if (typeof authRepository.listRepartidorFleet !== 'function') throw profileUnavailable();
+        let fleet;
+        try {
+          fleet = await authRepository.listRepartidorFleet();
+        } catch (_error) {
+          throw profileUnavailable();
+        }
+        const fleetCodes = freezeList((Array.isArray(fleet) ? fleet : [])
+          .map((entry) => entry?.code ?? entry?.CODE));
+        if (fleetCodes.length === 0) throw profileUnavailable();
+        if (role === REPARTIDOR) {
+          const verifiedSelf = fleetCodes.find((entry) => codesMatch(entry, canonicalCode));
+          if (!verifiedSelf) throw profileUnavailable();
+          repartidorCodes = freezeList([verifiedSelf]);
+        } else {
+          repartidorCodes = fleetCodes;
+        }
+      }
+
       const projectedDriver = role === REPARTIDOR;
       const claims = {
         id: `V${canonicalCode}`,
@@ -141,6 +172,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
           : null,
         vendorCodes,
         vendedorCodes: freezeList(vendorCodes),
+        repartidorCodes,
         tipoVendedor: String(profile.tipoVendedor || '-').trim() || '-',
         showCommissions: profile.showCommissions !== false,
         claimsVersion: AUTH_CLAIMS_VERSION,

@@ -67,6 +67,7 @@ class ChatbotState {
     this.currentClientCode,
     this.vendedorCodes = const [],
     this.pinnedMessageId,
+    this.repartidorId,
     this.sessionUserCode,
     this.activeSessionId,
     this.lastFailedUserMessage,
@@ -85,6 +86,8 @@ class ChatbotState {
   final List<String> vendedorCodes;
 
   final int? pinnedMessageId;
+
+  final String? repartidorId;
 
   final String? sessionUserCode;
 
@@ -116,6 +119,7 @@ class ChatbotState {
     List<ChatbotSessionSummary>? sessions,
     bool? isLoading,
     Object? error = _sentinel,
+    Object? repartidorId = _sentinel,
     Object? currentClientCode = _sentinel,
     List<String>? vendedorCodes,
     Object? pinnedMessageId = _sentinel,
@@ -126,6 +130,9 @@ class ChatbotState {
     return ChatbotState(
       messages: messages ?? this.messages,
       sessions: sessions ?? this.sessions,
+      repartidorId: repartidorId == _sentinel
+          ? this.repartidorId
+          : repartidorId as String?,
       isLoading: isLoading ?? this.isLoading,
       error: error == _sentinel ? this.error : error as String?,
       currentClientCode: currentClientCode == _sentinel
@@ -313,6 +320,7 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
         message: text,
         conversationHistory: history,
         clientCode: state.currentClientCode,
+        repartidorId: state.repartidorId,
       );
 
       state = state.copyWith(
@@ -393,6 +401,22 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
 
   Future<void> clearChat() async {
     await startNewSession();
+  }
+
+  void setRepartidorScope(String? repartidorId) {
+    final trimmed = repartidorId?.trim();
+    final normalized = trimmed == null || trimmed.isEmpty ? null : trimmed;
+    if (state.repartidorId == normalized) return;
+    state = state.copyWith(
+      repartidorId: normalized,
+      messages: const [],
+      error: null,
+      currentClientCode: null,
+      pinnedMessageId: null,
+      activeSessionId: ChatbotPersistence.createSessionId(),
+      lastFailedUserMessage: null,
+    );
+    _welcomeBackShown = false;
   }
 
   Future<void> startNewSession() async {

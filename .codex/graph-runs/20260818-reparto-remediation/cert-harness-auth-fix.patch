@@ -1,0 +1,16 @@
+diff --git a/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js b/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js
+--- a/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js
++++ b/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js
+@@ -373,7 +373,8 @@ async function main() {
+-  await evidence(args.base, reparto, '/repartidores'); // expected role-restricted response, recorded as evidence
+-  await evidence(args.base, jefe, '/repartidores');
+-  const selector = await request(args.base, jefe, 'GET', '/repartidores');
++  const anonymous = { label: 'anonymous', username: 'ANON', role: 'NONE', activeMode: 'NONE' };
++  await evidence(args.base, reparto, '/auth/repartidores'); // expected role-restricted response, recorded as evidence
++  await evidence(args.base, jefe, '/auth/repartidores');
++  const selector = await request(args.base, jefe, 'GET', '/auth/repartidores');
+   const codes = extractRepartidorCodes(selector.body);
+   const allCsv = codes.join(',');
+   if (!codes.length) throw new Error('REPARTIDORES_UNAVAILABLE');
+-  await evidence(args.base, null, `/repartidor/rutero/week/${encodeURIComponent(repartoCode)}`);
++  await evidence(args.base, anonymous, `/repartidor/rutero/week/${encodeURIComponent(repartoCode)}`);

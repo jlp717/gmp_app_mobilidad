@@ -1,0 +1,55 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -586,5 +586,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+     setState(() {
+       _selectedClientId = null;
+       _selectedClientName = null;
++      _selectedClientRepartidorId = null;
+       _documents = [];
+       _clearFilters();
+@@ -628,5 +629,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+       ),
+       itemBuilder: (context) => _clients.take(20).map((client) {
+-        final isSelected = client.id == _selectedClientId;
++        final isSelected = client.id == _selectedClientId &&
++            client.repartidorId == _selectedClientRepartidorId;
+         return PopupMenuItem<String>(
+-          value: client.id,
++          value: client.selectionKey,
+         child: Row(
+@@ -679,4 +681,5 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+-      onSelected: (clientId) {
+-        final client = _clients.firstWhere((c) => c.id == clientId);
+-        _loadClientDocuments(clientId, client.name);
++      onSelected: (selectionKey) {
++        final client = _clients.firstWhere((c) => c.selectionKey == selectionKey);
++        _loadClientDocuments(client.id, client.name,
++            repartidorId: client.repartidorId);
+       },
+@@ -893,4 +896,5 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+   Widget _buildClientCard(_ClientItem client) {
+     return GestureDetector(
+-      onTap: () => _loadClientDocuments(client.id, client.name),
++      onTap: () => _loadClientDocuments(client.id, client.name,
++          repartidorId: client.repartidorId),
+       child: RepartidorExecutivePanel(
+@@ -3091,14 +3095,17 @@ class _ClientItem {
+   _ClientItem({
+     required this.id,
+     required this.name,
+     required this.address,
+     required this.totalDocuments,
+     this.totalAmount = 0,
+     this.lastVisit,
++    this.repartidorId,
+   });
++  String get selectionKey => '${repartidorId ?? ''}:$id';
+   final String id;
+   final String name;
+   final String address;
+   final int totalDocuments;
+   final double totalAmount;
+   final String? lastVisit;
++  final String? repartidorId;
+ }

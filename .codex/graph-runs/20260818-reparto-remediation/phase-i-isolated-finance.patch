@@ -1,0 +1,270 @@
+diff --git a/backend/repositories/reparto-finance-db2-repository.js b/backend/repositories/reparto-finance-db2-repository.js
+--- a/backend/repositories/reparto-finance-db2-repository.js
++++ b/backend/repositories/reparto-finance-db2-repository.js
+@@ -9,9 +9,8 @@
+ const { queryWithParams, getPool, initDb } = require('../config/db');
+ const logger = require('../middleware/logger');
+ const {
+   resolveRepartoRuntime,
+   validateFinanceTableMapping,
+-  TABLE_MAPPINGS,
+ } = require('../config/reparto-runtime');
+@@ -102,15 +101,11 @@ function cobrosDateOrderBy(info, alias = 'RC') {
+   return `${prefix}ANOVENCIMIENTO, ${prefix}MESVENCIMIENTO, ${prefix}DIAVENCIMIENTO`;
+ }
+ 
+-function financeReadOverlay(writeTables, runtime) {
+-  if (runtime?.tableSet !== 'isolated_test') {
+-    return { write: writeTables, sources: [writeTables], overlay: false, production: null };
+-  }
+-  const production = TABLE_MAPPINGS.production.finance;
+-  if (!production?.cobros || production.cobros === writeTables.cobros) {
+-    return { write: writeTables, sources: [writeTables], overlay: false, production: null };
+-  }
+-  return { write: writeTables, sources: [production, writeTables], overlay: true, production };
++function financeReadOverlay(writeTables) {
++  // App state is single-source in every table set. isolated_test resolves to
++  // TEST_* through reparto-runtime; production resolves to its production map.
++  return { write: writeTables, sources: [writeTables], overlay: false, production: null };
+ }
+@@ -625,6 +620,12 @@ function createRepartoFinanceDb2Repository(options = {}) {
+     },
+ 
+     async seedIsolatedTestFinanceFromProduction({ info, ids, dateYmd, force = false } = {}) {
++      // Population belongs exclusively to copy-javier-prod-to-test.js and an
++      // explicit operator --apply. Runtime reads, including GET handlers, must
++      // never copy production app state into TEST tables.
++      if (bindings.runtime?.tableSet === 'isolated_test') {
++        return Object.freeze({ skipped: true, reason: 'explicit_copy_script_required' });
++      }
+       const overlay = financeReadOverlay(tables, bindings.runtime);
+       if (!overlay.overlay || !overlay.production) {
+         return Object.freeze({ skipped: true, reason: 'no_overlay' });
+diff --git a/backend/services/repartidor-finance-service.js b/backend/services/repartidor-finance-service.js
+--- a/backend/services/repartidor-finance-service.js
++++ b/backend/services/repartidor-finance-service.js
+@@ -167,24 +167,9 @@ async function getCobrosSchemaInfo() {
+   return info.cobrosHasCollectionDate;
+ }
+ 
+-async function ensureIsolatedTestFinanceSeed({
+-  info, ids, dateYmd, repartidorId, date,
+-} = {}) {
+-  if (typeof financeRepo.seedIsolatedTestFinanceFromProduction !== 'function') {
+-    return { skipped: true, reason: 'unavailable' };
+-  }
+-  try {
+-    const schema = info || await getFinanceSchemaInfo();
+-    const vendorIds = ids || codeList(repartidorId);
+-    const compact = dateYmd || compactDate(date);
+-    return await financeRepo.seedIsolatedTestFinanceFromProduction({
+-      info: schema, ids: vendorIds, dateYmd: compact,
+-    });
+-  } catch (error) {
+-    logger.warn(`[FINANCE_SEED] ${sanitizeErrorMessage(error)}`);
+-    return { skipped: true, reason: 'error' };
+-  }
++async function ensureIsolatedTestFinanceSeed() {
++  return Object.freeze({ skipped: true, reason: 'explicit_copy_script_required' });
+ }
+@@ -852,7 +837,6 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
+   }
+ 
+   const dateYmd = compactDate(date);
+-  await ensureIsolatedTestFinanceSeed({ info, ids, dateYmd });
+ 
+   const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows] =
+     await Promise.all([
+diff --git a/backend/repositories/repartidor-liquidacion-db2-repository.js b/backend/repositories/repartidor-liquidacion-db2-repository.js
+--- a/backend/repositories/repartidor-liquidacion-db2-repository.js
++++ b/backend/repositories/repartidor-liquidacion-db2-repository.js
+@@ -1,10 +1,7 @@
+ 'use strict';
+ 
+ const {
+   validateConfirmationTableMapping,
+   validateFinanceTableMapping,
+-  TABLE_MAPPINGS,
+ } = require('../config/reparto-runtime');
+@@ -795,19 +792,11 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory,
+       },
+       async deriveDaySnapshot({ repartidorId, date }) {
+         const { year, month, day } = dateParts(date);
+-        const overlayFinance = runtime?.tableSet === 'isolated_test'
+-          && TABLE_MAPPINGS.production.finance.cobros !== finance.cobros
+-          ? TABLE_MAPPINGS.production.finance
+-          : null;
+-        let balanceRow = first(await rows(connection,
++        const balanceRow = first(await rows(connection,
+           `SELECT SALDO_PENDIENTE FROM ${finance.balances} WHERE CODIGO_REPARTIDOR = ? FOR UPDATE WITH RS`,
+           [repartidorId]));
+-        if (!balanceRow && overlayFinance) {
+-          balanceRow = first(await rows(connection,
+-            `SELECT SALDO_PENDIENTE FROM ${overlayFinance.balances} WHERE CODIGO_REPARTIDOR = ?`,
+-            [repartidorId]));
+-        }
+         if (!balanceRow) {
+           throw new LiquidacionRepositoryUnavailableError('No existe el saldo inicial autoritativo del repartidor');
+@@ -827,34 +816,6 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory,
+             + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID FOR UPDATE WITH RS",
+           [repartidorId, day, month, year]);
+-        const productionPaymentRows = overlayFinance
+-          ? await rows(connection,
+-            `SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, `
+-              + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
+-              + `FROM ${overlayFinance.cobros} `
+-              + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+-              + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID",
+-            [repartidorId, day, month, year])
+-          : [];
+-        const paymentKey = (row) => {
+-          const tipo = String(rowValue(row, 'TIPODOCUMENTO') || '').trim();
+-          const numero = String(rowValue(row, 'NUMERODOCUMENTO') || '').trim();
+-          const cliente = String(rowValue(row, 'CODIGOCLIENTEALBARAN') || '').trim();
+-          if (tipo && numero && cliente) return `${tipo}|${numero}|${cliente}`;
+-          return `id:${rowValue(row, 'ID')}`;
+-        };
+-        const mergedPaymentRows = [];
+-        const seenPaymentKeys = new Set();
+-        for (const row of [...(productionPaymentRows || []), ...(paymentRows || [])]) {
+-          const key = paymentKey(row);
+-          if (seenPaymentKeys.has(key)) {
+-            const index = mergedPaymentRows.findIndex((item) => paymentKey(item) === key);
+-            if (index >= 0) mergedPaymentRows[index] = row;
+-            continue;
+-          }
+-          seenPaymentKeys.add(key);
+-          mergedPaymentRows.push(row);
+-        }
+         const expenseRows = await rows(connection,
+@@ -884,7 +845,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory,
+             pendingAmount: money(rowValue(row, 'IMPORTE_PENDIENTE')),
+           };
+         });
+-        const payments = mergedPaymentRows.map((row) => ({
++        const payments = paymentRows.map((row) => ({
+@@ -980,35 +941,10 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory,
+           ['S', marker, numeroLiquidacion, repartidorId, day, month, year, 'N', 'S', ...cobroIds]);
+         const affected = affectedRows(result);
+         if (affected === cobroIds.length) return;
+-        const overlayFinance = runtime?.tableSet === 'isolated_test'
+-          && TABLE_MAPPINGS.production.finance.cobros !== finance.cobros
+-          ? TABLE_MAPPINGS.production.finance
+-          : null;
+-        if (!overlayFinance || affected == null) {
+-          throw new LiquidacionRepositoryUnavailableError(
+-            'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
+-          );
+-        }
+-        const inserted = await execute(connection,
+-          `INSERT INTO ${finance.cobros} (`
+-            + 'CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, '
+-            + 'LIQUIDADO_SN, LIQUIDACION_TOKEN, NUMEROLIQUIDACION) '
+-            + `SELECT CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, `
+-            + '?, ?, ? '
+-            + `FROM ${overlayFinance.cobros} SRC `
+-            + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+-            + `AND SRC.ID IN (${placeholders(cobroIds.length)}) `
+-            + `AND NOT EXISTS (`
+-            + `SELECT 1 FROM ${finance.cobros} DST WHERE DST.ID = SRC.ID)`,
+-          ['S', marker, numeroLiquidacion, repartidorId, day, month, year, ...cobroIds]);
+-        const copied = affectedRows(inserted) || 0;
+-        if ((affected || 0) + copied !== cobroIds.length) {
+-          throw new LiquidacionRepositoryUnavailableError(
+-            'No se pudieron marcar exactamente los cobros derivados', {
+-              expected: cobroIds.length, affected, copied,
+-            },
+-          );
+-        }
++        throw new LiquidacionRepositoryUnavailableError(
++          'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
++        );
+       },
+diff --git a/backend/services/audit-log.service.js b/backend/services/audit-log.service.js
+--- a/backend/services/audit-log.service.js
++++ b/backend/services/audit-log.service.js
+@@ -2,18 +2,40 @@
+ 
+ const { queryWithParams } = require('../config/db');
+ const logger = require('../middleware/logger');
++const {
++  resolveRepartoRuntime,
++  validateFinanceTableMapping,
++} = require('../config/reparto-runtime');
+ 
+-let _auditTableExists = null;
++const auditTableExistence = new Map();
+ 
+-async function auditTableExists() {
+-  if (_auditTableExists !== null) return _auditTableExists;
++function resolveAuditBinding(env = process.env) {
++  const runtime = resolveRepartoRuntime(env);
++  const mapping = validateFinanceTableMapping(runtime);
++  if (!runtime.valid || !runtime.writesEnabled || !runtime.financeCapabilityApproved || !mapping.valid) {
++    return null;
++  }
++  const table = runtime.tables?.finance?.audit;
++  if (!/^JAVIER\.(?:TEST_)?REPARTIDOR_COBROS_AUDIT$/.test(String(table || ''))) {
++    return null;
++  }
++  return Object.freeze({ table, tableSet: runtime.tableSet });
++}
++
++async function auditTableExists(table) {
++  if (auditTableExistence.has(table)) return auditTableExistence.get(table);
+   try {
+     await queryWithParams(
+-      `SELECT 1 FROM JAVIER.REPARTIDOR_COBROS_AUDIT FETCH FIRST 1 ROW ONLY`,
++      `SELECT 1 FROM ${table} FETCH FIRST 1 ROW ONLY`,
+       [],
+       false,
+       false,
+     );
+-    _auditTableExists = true;
++    auditTableExistence.set(table, true);
+   } catch (error) {
+     const msg = String(error.message || '').toLowerCase();
+     const odbcStates = (error.odbcErrors || []).map((e) => e.state);
+     if (msg.includes('not found') || odbcStates.includes('42S02') || msg.includes('-204')) {
+-      _auditTableExists = false;
++      auditTableExistence.set(table, false);
+     } else {
+-      _auditTableExists = false;
+-      logger.warn(`[AUDIT_LOG] Unexpected error checking audit table: ${error.message}`);
++      auditTableExistence.set(table, false);
++      logger.warn('[AUDIT_LOG] Unexpected error checking audit table', {
++        code: String(error?.code || error?.odbcErrors?.[0]?.state || 'UNKNOWN'),
++      });
+     }
+   }
+-  return _auditTableExists;
++  return auditTableExistence.get(table);
+ }
+@@ -42,9 +64,14 @@ async function logPaymentEvent({
+   payload,
+   errorCode,
+ }) {
+-  const exists = await auditTableExists();
++  const binding = resolveAuditBinding();
++  if (!binding) {
++    logger.warn('[AUDIT_LOG] Skipping audit log: reparto runtime is not authorized');
++    return;
++  }
++  const exists = await auditTableExists(binding.table);
+   if (!exists) {
+-    logger.warn(`[AUDIT_LOG] Skipping audit log: REPARTIDOR_COBROS_AUDIT does not exist. eventType=${eventType}`);
++    logger.warn(`[AUDIT_LOG] Skipping audit log: audit table does not exist. eventType=${eventType}`);
+     return;
+   }
+@@ -59,7 +86,7 @@ async function logPaymentEvent({
+ 
+   try {
+     await queryWithParams(
+-      `INSERT INTO JAVIER.REPARTIDOR_COBROS_AUDIT (
++      `INSERT INTO ${binding.table} (
+@@ -85,5 +112,6 @@ async function logPaymentEvent({
+ module.exports = {
+   logPaymentEvent,
+   hashTokenPreview,
++  resolveAuditBinding,
+ };

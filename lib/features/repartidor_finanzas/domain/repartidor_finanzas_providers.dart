@@ -79,11 +79,15 @@ class RepartidorFinanzasState {
     List<RepartidorHistoryDocument> selectedClientDocuments = const [],
     List<RepartidorMonthlyObjective> monthlyObjectives = const [],
     this.objectivesDetail,
+    this.objectivesClientId,
+    this.objectivesYear,
+    this.objectivesPageLimit = 100,
     this.deliverySummary,
     this.isLoadingOverview = false,
     this.isLoadingClients = false,
     this.isLoadingDocuments = false,
     this.isLoadingObjectives = false,
+    this.isLoadingNextObjectives = false,
     this.error,
     this.lastUpdated,
   })  : filters = filters ?? RepartidorFinanzasFilters.initial(),
@@ -99,11 +103,15 @@ class RepartidorFinanzasState {
   final List<RepartidorHistoryDocument> selectedClientDocuments;
   final List<RepartidorMonthlyObjective> monthlyObjectives;
   final RepartidorObjectivesDetail? objectivesDetail;
+  final String? objectivesClientId;
+  final int? objectivesYear;
+  final int objectivesPageLimit;
   final RepartidorDeliverySummary? deliverySummary;
   final bool isLoadingOverview;
   final bool isLoadingClients;
   final bool isLoadingDocuments;
   final bool isLoadingObjectives;
+  final bool isLoadingNextObjectives;
   final String? error;
   final DateTime? lastUpdated;
 
@@ -111,7 +119,11 @@ class RepartidorFinanzasState {
       isLoadingOverview ||
       isLoadingClients ||
       isLoadingDocuments ||
-      isLoadingObjectives;
+      isLoadingObjectives ||
+      isLoadingNextObjectives;
+
+  bool get hasMoreObjectives => objectivesDetail?.hasMore ?? false;
+  int? get objectivesNextOffset => objectivesDetail?.nextOffset;
 
   bool get hasOverview => collectionSummary != null;
 
@@ -123,11 +135,15 @@ class RepartidorFinanzasState {
     List<RepartidorHistoryDocument>? selectedClientDocuments,
     List<RepartidorMonthlyObjective>? monthlyObjectives,
     Object? objectivesDetail = _sentinel,
+    Object? objectivesClientId = _sentinel,
+    Object? objectivesYear = _sentinel,
+    int? objectivesPageLimit,
     Object? deliverySummary = _sentinel,
     bool? isLoadingOverview,
     bool? isLoadingClients,
     bool? isLoadingDocuments,
     bool? isLoadingObjectives,
+    bool? isLoadingNextObjectives,
     Object? error = _sentinel,
     Object? lastUpdated = _sentinel,
   }) {
@@ -144,6 +160,13 @@ class RepartidorFinanzasState {
       objectivesDetail: objectivesDetail == _sentinel
           ? this.objectivesDetail
           : objectivesDetail as RepartidorObjectivesDetail?,
+      objectivesClientId: objectivesClientId == _sentinel
+          ? this.objectivesClientId
+          : objectivesClientId as String?,
+      objectivesYear: objectivesYear == _sentinel
+          ? this.objectivesYear
+          : objectivesYear as int?,
+      objectivesPageLimit: objectivesPageLimit ?? this.objectivesPageLimit,
       deliverySummary: deliverySummary == _sentinel
           ? this.deliverySummary
           : deliverySummary as RepartidorDeliverySummary?,
@@ -151,6 +174,8 @@ class RepartidorFinanzasState {
       isLoadingClients: isLoadingClients ?? this.isLoadingClients,
       isLoadingDocuments: isLoadingDocuments ?? this.isLoadingDocuments,
       isLoadingObjectives: isLoadingObjectives ?? this.isLoadingObjectives,
+      isLoadingNextObjectives:
+          isLoadingNextObjectives ?? this.isLoadingNextObjectives,
       error: error == _sentinel ? this.error : error as String?,
       lastUpdated: lastUpdated == _sentinel
           ? this.lastUpdated
@@ -206,39 +231,61 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
 
     state = state.copyWith(isLoadingOverview: true, error: null);
 
-    try {
-      final results = await Future.wait<dynamic>([
-        _service.getCollectionSummary(
-          repartidorId: filters.repartidorId,
-          year: filters.year,
-          month: filters.month,
-          forceRefresh: forceRefresh,
-        ),
-        _service.getDailyCollections(
-          repartidorId: filters.repartidorId,
-          year: filters.year,
-          month: filters.month,
-          forceRefresh: forceRefresh,
-        ),
-        _service.getDeliverySummary(
-          repartidorId: filters.repartidorId,
-          year: filters.year,
-          month: filters.month,
-          forceRefresh: forceRefresh,
-        ),
-      ]);
+    var collectionsIncomplete = false;
+    late final RepartidorCollectionSummary collectionSummary;
+    var dailyCollections = const <DailyCollectionSnapshot>[];
 
+    try {
+      collectionSummary = await _service.getCollectionSummary(
+        repartidorId: filters.repartidorId,
+        year: filters.year,
+        month: filters.month,
+        forceRefresh: forceRefresh,
+      );
+    } catch (_) {
+      collectionsIncomplete = true;
+      collectionSummary = RepartidorCollectionSummary.empty(
+        repartidorId: filters.repartidorId,
+        year: filters.year,
+        month: filters.month,
+      );
+    }
+
+    try {
+      dailyCollections = await _service.getDailyCollections(
+        repartidorId: filters.repartidorId,
+        year: filters.year,
+        month: filters.month,
+        forceRefresh: forceRefresh,
+      );
+    } catch (_) {
+      collectionsIncomplete = true;
+      dailyCollections = const [];
+    }
+
+    try {
+      final deliverySummary = await _service.getDeliverySummary(
+        repartidorId: filters.repartidorId,
+        year: filters.year,
+        month: filters.month,
+        forceRefresh: forceRefresh,
+      );
       state = state.copyWith(
-        collectionSummary: results[0] as RepartidorCollectionSummary,
-        dailyCollections: results[1] as List<DailyCollectionSnapshot>,
-        deliverySummary: results[2] as RepartidorDeliverySummary,
+        collectionSummary: collectionSummary,
+        dailyCollections: dailyCollections,
+        deliverySummary: deliverySummary,
         isLoadingOverview: false,
         lastUpdated: DateTime.now(),
+        error: collectionsIncomplete
+            ? 'El detalle de cobros ERP no está completo. Entregas y liquidación sí están disponibles.'
+            : null,
       );
     } catch (_) {
       state = state.copyWith(
+        collectionSummary: collectionSummary,
+        dailyCollections: dailyCollections,
         isLoadingOverview: false,
-        error: 'No se pudo cargar el resumen financiero.',
+        error: 'No se pudo cargar el resumen de entregas.',
       );
     }
   }
@@ -321,6 +368,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
   Future<void> loadObjectives({
     String? clientId,
     int? year,
+    int limit = 100,
     bool forceRefresh = false,
   }) async {
     final filters = state.filters;
@@ -328,7 +376,15 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
 
     final selectedYear = year ?? filters.year;
 
-    state = state.copyWith(isLoadingObjectives: true, error: null);
+    state = state.copyWith(
+      objectivesDetail: null,
+      objectivesClientId: clientId,
+      objectivesYear: selectedYear,
+      objectivesPageLimit: limit,
+      isLoadingObjectives: true,
+      isLoadingNextObjectives: false,
+      error: null,
+    );
 
     try {
       final results = await Future.wait<dynamic>([
@@ -341,6 +397,8 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
           repartidorId: filters.repartidorId,
           year: selectedYear,
           clientId: clientId,
+          limit: limit,
+          offset: 0,
           forceRefresh: forceRefresh,
         ),
       ]);
@@ -356,6 +414,54 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         isLoadingObjectives: false,
         error: 'No se pudieron cargar los objetivos.',
       );
+    }
+  }
+
+  Future<void> loadNextObjectives({bool forceRefresh = false}) async {
+    final current = state.objectivesDetail;
+    if (current == null ||
+        !current.hasMore ||
+        current.nextOffset == null ||
+        state.isLoadingNextObjectives) {
+      return;
+    }
+
+    final repartidorId = state.filters.repartidorId;
+    final clientId = state.objectivesClientId;
+    final year = state.objectivesYear ?? current.year;
+    final limit = state.objectivesPageLimit;
+    final offset = current.nextOffset!;
+    state = state.copyWith(isLoadingNextObjectives: true, error: null);
+
+    try {
+      final nextPage = await _service.getObjectivesDetail(
+        repartidorId: repartidorId,
+        year: year,
+        clientId: clientId,
+        limit: limit,
+        offset: offset,
+        forceRefresh: forceRefresh,
+      );
+      final sameScope = state.filters.repartidorId == repartidorId &&
+          state.objectivesClientId == clientId &&
+          state.objectivesYear == year &&
+          state.objectivesPageLimit == limit;
+      if (!sameScope) return;
+      state = state.copyWith(
+        objectivesDetail: current.mergePage(nextPage),
+        isLoadingNextObjectives: false,
+        lastUpdated: DateTime.now(),
+      );
+    } catch (_) {
+      final sameScope = state.filters.repartidorId == repartidorId &&
+          state.objectivesClientId == clientId &&
+          state.objectivesYear == year;
+      if (sameScope) {
+        state = state.copyWith(
+          isLoadingNextObjectives: false,
+          error: 'No se pudo cargar la siguiente pagina de objetivos.',
+        );
+      }
     }
   }
 

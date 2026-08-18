@@ -2,6 +2,22 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_
 
 enum RuteroDeliveryTab { products, payment, finalize }
 
+/// Which nested scroll pane owns a validation field.
+enum RuteroScrollPane { products, payment, finalize }
+
+RuteroScrollPane ruteroScrollPaneForField(String field) {
+  switch (field) {
+    case 'items':
+    case 'productsStatus':
+      return RuteroScrollPane.products;
+    case 'pago':
+    case 'importe':
+      return RuteroScrollPane.payment;
+    default:
+      return RuteroScrollPane.finalize;
+  }
+}
+
 /// One blocking field error in the three-tab delivery sheet.
 class RuteroFieldIssue {
   const RuteroFieldIssue({
@@ -146,7 +162,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
     );
     return RuteroDeliveryValidationResult(issues);
   }
-  if (!input.hasItems) {
+  if (!input.hasItems && input.importeTotal.abs() >= 0.005) {
     issues.add(
       const RuteroFieldIssue(
         tab: RuteroDeliveryTab.products,

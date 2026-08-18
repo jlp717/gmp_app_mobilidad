@@ -97,6 +97,17 @@ describe('GET /api/facturas/:serie/:numero/:ejercicio/pdf', () => {
     expect(mockGetFacturaDetail).toHaveBeenCalledWith('J', 1183, 2026);
     expect(mockGetAlbaranDetailForPdf).toHaveBeenCalledWith('J', 1183, 2026, null);
   });
+
+  test('serves albaran PDF when commercial Facturas tab asks documentType=albaran', async () => {
+    const res = await request(makeApp())
+      .get('/api/facturas/J/1183/2026/pdf?preview=true&documentType=albaran&terminal=93');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toContain('Albaran_2026_J_93_1183.pdf');
+    expect(mockGetAlbaranDetailForPdf).toHaveBeenCalledWith('J', 1183, 2026, 93);
+    expect(mockGetFacturaDetail).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/facturas/send-email', () => {

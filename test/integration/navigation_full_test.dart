@@ -22,7 +22,8 @@ void main() {
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(repartidor.length, 8);
+      expect(repartidor.length, 7);
+      expect(repartidor.any((i) => i.label == 'Comisiones'), false);
 
       // Repartidor jefe
       final repartidorJefe = NavigationConfigService.getNavItems(
@@ -31,7 +32,8 @@ void main() {
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 9);
+      expect(repartidorJefe.length, 8);
+      expect(repartidorJefe.any((i) => i.label == 'Comisiones'), false);
 
       // Comercial
       final comercial = NavigationConfigService.getNavItems(
@@ -40,7 +42,7 @@ void main() {
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(comercial.length, 10);
+      expect(comercial.length, 11);
 
       // Jefe Ventas
       final jefe = NavigationConfigService.getNavItems(
@@ -49,7 +51,7 @@ void main() {
         isJefeVentas: true,
         showCommissions: true,
       );
-      expect(jefe.length, 12);
+      expect(jefe.length, 13);
     });
 
     test('NavItem icons are correctly assigned', () {
@@ -177,6 +179,7 @@ void main() {
       expect(labels, contains('Pedidos'));
       expect(labels, contains('Alertas'));
       expect(labels, contains('Cobros'));
+      expect(labels, contains('Liquidación'));
       expect(labels, contains('Bolsa'));
       expect(labels, contains('Evolución'));
       expect(labels, contains('Asistente'));

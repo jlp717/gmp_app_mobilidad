@@ -7,7 +7,10 @@
  * 3. Audit logging: tracks all moderation events for compliance
  */
 
-const logger = require('../../middleware/logger');
+const {
+    CHATBOT_LOG_EVENTS,
+    emitChatbotLog,
+} = require('./chatbot_log');
 
 // ── Input Moderation ─────────────────────────────────────────────────────────
 
@@ -101,7 +104,7 @@ function moderateInput(message) {
     // Check for injection attempts (highest priority)
     for (const pattern of INJECTION_PATTERNS) {
         if (pattern.test(trimmed)) {
-            logger.warn(`[CHATBOT-MODERATION] Injection attempt detected: ${trimmed.substring(0, 100)}`);
+            emitChatbotLog('warn', CHATBOT_LOG_EVENTS.inputBlocked);
             return {
                 allowed: false,
                 reason: 'injection',
@@ -122,7 +125,7 @@ function moderateInput(message) {
     // Check for blocked topics
     for (const topic of BLOCKED_TOPICS) {
         if (topic.pattern.test(trimmed)) {
-            logger.info(`[CHATBOT-MODERATION] Blocked topic: ${topic.reason}`);
+            emitChatbotLog('info', CHATBOT_LOG_EVENTS.topicBlocked);
             return {
                 allowed: false,
                 reason: topic.reason,
@@ -153,24 +156,24 @@ function validateOutput(response, context) {
 
     // CRITICAL: Check for SQL/code leakage in output
     if (/SELECT\s+.*\s+FROM\s+/i.test(response) || /DROP\s+TABLE/i.test(response) || /INSERT\s+INTO/i.test(response)) {
-        logger.warn(`[CHATBOT-MODERATION] SQL detected in output`);
+        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputSqlBlocked);
         return 'Se ha detectado contenido no permitido en la respuesta. Reformula tu consulta.';
     }
 
     if (/\b(SQLSTATE|SQL\d{4,5}[A-Z]?|ODBC|CLI Driver|DSEDAC\.|DSED\.|JAVIER\.)\b/i.test(response)) {
-        logger.warn(`[CHATBOT-MODERATION] Internal database detail detected in output`);
+        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputDatabaseDetailBlocked);
         return 'No se pudo completar la consulta de forma segura. Reformula la pregunta o intentalo de nuevo.';
     }
 
     // Check for credential/secret leakage
     if (/gsk_[a-zA-Z0-9]{20,}/i.test(response) || /jwt.*secret|token.*secret|password.*=/i.test(response)) {
-        logger.warn(`[CHATBOT-MODERATION] Potential credential leak in output`);
+        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputCredentialBlocked);
         return 'Error interno. Contacta con administracion.';
     }
 
     // Check for prompt/system info leakage
     if (/system\s*prompt|your\s*instructions|you\s*are\s*(an?\s+)?AI\s*assistant|as\s*an?\s+AI/i.test(response)) {
-        logger.warn(`[CHATBOT-MODERATION] AI identity leak in output`);
+        emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputPromptBlocked);
         return 'No tengo informacion para esa consulta.';
     }
 
@@ -181,7 +184,7 @@ function validateOutput(response, context) {
             for (const ref of vendorRefs) {
                 const code = ref.split(/\s+/).pop();
                 if (code && code !== userCode && code !== 'ALL') {
-                    logger.warn(`[CHATBOT-MODERATION] Potential vendor data leak: ${ref}`);
+                    emitChatbotLog('warn', CHATBOT_LOG_EVENTS.outputVendorScopeBlocked);
                     return 'No tengo acceso a esa informacion. Solo puedes consultar tus propios datos o los de tus clientes asignados.';
                 }
             }
@@ -199,15 +202,12 @@ function validateOutput(response, context) {
 // ── Audit Logging ────────────────────────────────────────────────────────────
 
 function logChatEvent(userCode, message, response, metadata = {}) {
-    logger.info({
-        event: 'chatbot_interaction',
-        user: userCode,
+    emitChatbotLog('info', CHATBOT_LOG_EVENTS.interaction, {
         messageLength: message.length,
         responseLength: response?.length || 0,
         llmUsed: metadata.llmUsed || false,
-        toolCalls: metadata.toolCalls || [],
+        toolCallCount: Array.isArray(metadata.toolCalls) ? metadata.toolCalls.length : 0,
         moderationBlocked: metadata.moderationBlocked || false,
-        timestamp: new Date().toISOString()
     });
 }
 

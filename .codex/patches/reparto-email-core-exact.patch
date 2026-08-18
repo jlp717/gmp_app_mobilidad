@@ -1,0 +1,96 @@
+diff --git a/backend/services/emailPdfService.js b/backend/services/emailPdfService.js
+index ca0124b..c08be43 100644
+--- a/backend/services/emailPdfService.js
++++ b/backend/services/emailPdfService.js
+@@ -182,7 +182,7 @@ function getCachedPdf(key) {
+  * @param {string} params.pdfFilename - Nombre del archivo PDF
+  * @returns {Promise<{success: boolean, messageId: string}>}
+  */
+-async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pdfFilename }) {
++async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pdfFilename, messageId }) {
+     // Validación de inputs
+     if (!to || typeof to !== 'string') {
+         throw new Error('Destinatario (to) es requerido');
+@@ -253,6 +253,12 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
+                     contentType: 'application/pdf'
+                 }]
+             };
++            if (messageId !== undefined) {
++                if (typeof messageId !== 'string' || /[\r\n]/.test(messageId) || !/^<[^<>\s]+@[^<>\s]+>$/.test(messageId)) {
++                    throw new Error('Message-ID inválido');
++                }
++                mailOptions.messageId = messageId;
++            }
+ 
+             // Log solo en intento 1, reintentos como debug
+             if (attempt === 0) {
+@@ -332,7 +338,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
+  * HTML email without PDF attachment (variance alerts / digests).
+  * Shares SMTP transporter + port fallback with sendEmailWithPdf.
+  */
+-async function sendHtmlEmail({ to, subject, htmlBody, textBody }) {
++async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
+     if (!to || typeof to !== 'string') {
+         throw new Error('Destinatario (to) es requerido');
+     }
+@@ -365,6 +371,12 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody }) {
+                 html: htmlBody || undefined,
+                 text: textBody || 'Aviso GMP',
+             };
++            if (messageId !== undefined) {
++                if (typeof messageId !== 'string' || /[\r\n]/.test(messageId) || !/^<[^<>\s]+@[^<>\s]+>$/.test(messageId)) {
++                    throw new Error('Message-ID inválido');
++                }
++                mailOptions.messageId = messageId;
++            }
+ 
+             if (attempt === 0) {
+                 logger.info(`Enviando email HTML a ${to}...`, { subject });
+diff --git a/backend/services/repartidor-finance-service.js b/backend/services/repartidor-finance-service.js
+index 2241691..c81917f 100644
+--- a/backend/services/repartidor-finance-service.js
++++ b/backend/services/repartidor-finance-service.js
+@@ -6,6 +6,10 @@ const {
+ } = require('../repositories/reparto-finance-db2-repository');
+ const logger = require('../middleware/logger');
+ const { sendEmailWithPdf } = require('./emailPdfService');
++const {
++  resolveRepartoEmailDelivery,
++  buildRepartoMessageId,
++} = require('./reparto-email-delivery-policy');
+ const {
+   buildLiquidacionPdfBuffer,
+   formatGmpLiquidacionDisplay,
+@@ -1490,7 +1494,14 @@ async function sendLiquidacionEmails({
+     if (normalizeText(hardcoded)) recipients.add(String(hardcoded).trim().toLowerCase());
+   }
+ 
+-  if (recipients.size === 0) {
++  const delivery = resolveRepartoEmailDelivery({
++    recipients: [...recipients],
++    env: process.env,
++    mode: 'automatic',
++  });
++  const effectiveRecipients = delivery.effectiveRecipients;
++
++  if (effectiveRecipients.length === 0) {
+     throw new LiquidacionEmailRecipientRequiredError();
+   }
+ 
+@@ -1561,10 +1572,15 @@ async function sendLiquidacionEmails({
+   });
+ 
+   const results = [];
+-  for (const to of recipients) {
++  for (const to of effectiveRecipients) {
+     try {
+       const result = await sendEmailWithPdf({
+         to,
++        messageId: buildRepartoMessageId({
++          kind: 'liquidacion',
++          identity: `${liquidacion.id || ''}|${displayNumber}|${liquidacion.date || ''}`,
++          recipient: to,
++        }),
+         subject,
+         htmlBody: `
+           <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;">

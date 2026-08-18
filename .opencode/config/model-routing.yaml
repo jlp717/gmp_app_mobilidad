@@ -3,6 +3,10 @@ model_routing:
 
   hard_rules:
     - "Todo agente debe declarar model en su frontmatter; no se permite heredar el modelo global."
+    - "Chief y Architect-Planner nunca bajan de openai/gpt-5.6-sol. Sin excepciones de tipo de tarea."
+    - "Executor (maker) puede usar openai/gpt-5.6-terra solo si decision-router.cost_policy.executor_cheap_allowed es true."
+    - "Check-Reviewer / critic nunca usa un modelo mas barato que el maker que produjo el diff. Critic barato = teatro, BLOCK."
+    - "SECURE, PROD (BD/secretos/deploy), db_migration y calculos financieros/comisiones/Proxenos: executor sol. El ahorro no compensa."
     - "El nivel de razonamiento operativo debe mantenerse en X-high/high para trabajo real."
     - "OpenCode Zen queda habilitado solo para seleccion manual de Javier, nunca como modelo automatico de agentes."
     - "Cursor ACP no debe usar modelos GPT; cursor-acp/cursor-grok-4.5-high queda aprobado solo para Web-Researcher/researcher de solo lectura con catalogo local y autenticacion verificados; nunca para trabajo critico."

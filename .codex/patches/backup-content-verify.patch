@@ -1,0 +1,111 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -656,29 +656,78 @@
+-async function backupTestTable(destination, runId, {
+-  tableExistsFn = tableExists,
+-  columnsOfFn = columnsOf,
+-  countOfFn = countOf,
+-  executeFn = run,
+-  apply = APPLY,
+-} = {}) {
+-  assertJavierTest(destination);
+-  if (!(await tableExistsFn(destination))) return { destination, skipped: 'missing' };
+-  const rowCount = await countOfFn(destination);
+-  if (rowCount < 0) throw new Error(`BACKUP BLOCK ${destination}: row count unavailable`);
+-  if (rowCount <= 0) return { destination, skipped: 'empty', rowCount };
+-  const backup = backupTableName(destination, runId);
+-  if (await tableExistsFn(backup)) {
+-    const backupCount = await countOfFn(backup);
+-    if (backupCount < 0) throw new Error(`BACKUP BLOCK ${backup}: row count unavailable`);
+-    if (backupCount !== rowCount) {
+-      throw new Error(`BACKUP BLOCK ${backup}: existing rows=${backupCount}, expected=${rowCount}`);
+-    }
+-    return { destination, backup, rowCount, resumed: true };
+-  }
+-  const columns = (await columnsOfFn(destination)).map((column) => column.name);
+-  if (!columns.length) throw new Error(`BACKUP BLOCK ${destination}: no columns`);
+-  const sql = `CREATE TABLE ${backup} AS (SELECT ${columns.join(', ')} FROM ${destination}) WITH DATA`;
+-  console.log(apply ? 'BACKUP' : '[DRY] BACKUP', destination, '->', backup, `rows=${rowCount}`);
+-  if (apply) await executeFn(sql);
+-  return { destination, backup, rowCount, resumed: false };
+-}
+-
++async function backupTestTable(destination, runId, {
++  tableExistsFn = tableExists,
++  columnsOfFn = columnsOf,
++  countOfFn = countOf,
++  contentHashOfFn = contentHashOf,
++  executeFn = run,
++  apply = APPLY,
++} = {}) {
++  assertJavierTest(destination);
++  const backup = backupTableName(destination, runId);
++  const [destinationExists, backupExists] = await Promise.all([
++    tableExistsFn(destination),
++    tableExistsFn(backup),
++  ]);
++  if (!destinationExists) {
++    if (!backupExists) return { destination, skipped: 'missing' };
++    const backupCount = await countOfFn(backup);
++    if (backupCount < 0) throw new Error(`BACKUP BLOCK ${backup}: row count unavailable`);
++    return { destination, backup, rowCount: 0, backupCount, resumed: true, destinationMissing: true };
++  }
++
++  const rowCount = await countOfFn(destination);
++  if (rowCount < 0) throw new Error(`BACKUP BLOCK ${destination}: row count unavailable`);
++  if (backupExists) {
++    const backupCount = await countOfFn(backup);
++    if (backupCount < 0) throw new Error(`BACKUP BLOCK ${backup}: row count unavailable`);
++    if (rowCount === 0) {
++      return { destination, backup, rowCount, backupCount, resumed: true, destinationRecreatedEmpty: true };
++    }
++    if (backupCount !== rowCount) {
++      throw new Error(`BACKUP BLOCK ${backup}: existing rows=${backupCount}, expected=${rowCount}`);
++    }
++    const [destinationColumns, backupColumns] = await Promise.all([
++      columnsOfFn(destination), columnsOfFn(backup),
++    ]);
++    const destinationShapeHash = backupShapeHash(destinationColumns);
++    const backupSchemaHash = backupShapeHash(backupColumns);
++    if (destinationShapeHash !== backupSchemaHash) {
++      throw new Error(`BACKUP BLOCK ${backup}: schema hash mismatch`);
++    }
++    const [destinationContentHash, backupContentHash] = await Promise.all([
++      contentHashOfFn(destination, destinationColumns),
++      contentHashOfFn(backup, backupColumns),
++    ]);
++    if (destinationContentHash !== backupContentHash) {
++      throw new Error(`BACKUP BLOCK ${backup}: content hash mismatch with ${destination}`);
++    }
++    return {
++      destination, backup, rowCount, resumed: true,
++      schemaHash: backupSchemaHash, contentHash: backupContentHash,
++    };
++  }
++  if (rowCount <= 0) return { destination, skipped: 'empty', rowCount };
++
++  const destinationColumns = await columnsOfFn(destination);
++  const names = destinationColumns.map((column) => column.name);
++  if (!names.length) throw new Error(`BACKUP BLOCK ${destination}: no columns`);
++  const sql = `CREATE TABLE ${backup} AS (SELECT ${names.join(', ')} FROM ${destination}) WITH DATA`;
++  console.log(apply ? 'BACKUP' : '[DRY] BACKUP', destination, '->', backup, `rows=${rowCount}`);
++  if (!apply) return { destination, backup, rowCount, resumed: false };
++
++  const destinationContentHash = await contentHashOfFn(destination, destinationColumns);
++  await executeFn(sql);
++  if (!(await tableExistsFn(backup))) throw new Error(`BACKUP BLOCK ${backup}: create not visible`);
++  const backupCount = await countOfFn(backup);
++  const backupColumns = await columnsOfFn(backup);
++  const backupContentHash = await contentHashOfFn(backup, backupColumns);
++  if (backupCount !== rowCount
++    || backupShapeHash(backupColumns) !== backupShapeHash(destinationColumns)
++    || backupContentHash !== destinationContentHash) {
++    throw new Error(`BACKUP BLOCK ${backup}: post-create count/schema/content verification failed`);
++  }
++  return {
++    destination, backup, rowCount, resumed: false,
++    schemaHash: backupShapeHash(backupColumns), contentHash: backupContentHash,
++  };
++}
++

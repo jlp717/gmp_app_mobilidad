@@ -1,0 +1,64 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -156,0 +157,59 @@
++  test('sets NOT NULL directly when the TEST column contains no NULLs', () => {
++    const source = [column({ name: 'TIPODOCUMENTO', isNullable: 'NO' })];
++    const destination = [column({ name: 'TIPODOCUMENTO', isNullable: 'YES' })];
++    expect(buildReconciliationPlan(pair, source, destination, {
++      destinationRowCount: 5,
++      destinationNullCounts: { TIPODOCUMENTO: 0 },
++    })).toEqual([expect.objectContaining({
++      kind: 'SET_NOT_NULL', column: 'TIPODOCUMENTO', nullCount: 0,
++    })]);
++  });
++
++  test('blocks nullable-to-NOT-NULL with data until TEST row clearing is explicit', () => {
++    const source = [column({ name: 'TIPODOCUMENTO', isNullable: 'NO' })];
++    const destination = [column({ name: 'TIPODOCUMENTO', isNullable: 'YES' })];
++    expect(() => buildReconciliationPlan(pair, source, destination, {
++      destinationRowCount: 5,
++      destinationNullCounts: { TIPODOCUMENTO: 2 },
++      allowTestRowClear: false,
++    })).toThrow('2 NULL rows require --allow-test-row-clear');
++  });
++
++  test('plans one backed TEST clear before multiple SET NOT NULL operations', () => {
++    const source = [
++      column({ name: 'TIPODOCUMENTO', isNullable: 'NO' }),
++      column({ name: 'ORIGENDOCUMENTO', isNullable: 'NO' }),
++    ];
++    const destination = [
++      column({ name: 'TIPODOCUMENTO', isNullable: 'YES' }),
++      column({ name: 'ORIGENDOCUMENTO', isNullable: 'YES' }),
++    ];
++    const plan = buildReconciliationPlan(pair, source, destination, {
++      destinationRowCount: 5,
++      destinationNullCounts: { TIPODOCUMENTO: 2, ORIGENDOCUMENTO: 1 },
++      allowTestRowClear: true,
++    });
++    expect(plan.map((operation) => operation.kind)).toEqual([
++      'CLEAR_TEST_ROWS', 'SET_NOT_NULL', 'SET_NOT_NULL',
++    ]);
++    expect(plan[0]).toEqual(expect.objectContaining({
++      rowCount: 5,
++      sql: `DELETE FROM ${pair.dst}`,
++    }));
++  });
++
++  test('dry-run obtains exact NULL counts before planning reconciliation', async () => {
++    const source = [column({ name: 'TIPODOCUMENTO', isNullable: 'NO', hasDefault: true })];
++    const destination = [column({ name: 'TIPODOCUMENTO', isNullable: 'YES', hasDefault: true })];
++    const countNullsFn = jest.fn().mockResolvedValue(3);
++    const report = await reconcileMappingPairs([pair], {
++      tableExistsFn: jest.fn().mockResolvedValue(true),
++      columnsOfFn: jest.fn(async (table) => (table === pair.src ? source : destination)),
++      countOfFn: jest.fn().mockResolvedValue(5),
++      countNullsFn,
++      executeFn: jest.fn(),
++      apply: false,
++    });
++    expect(countNullsFn).toHaveBeenCalledWith(pair.dst, 'TIPODOCUMENTO');
++    expect(report[0].operations[0].kind).toBe('CLEAR_TEST_ROWS');
++  });
++

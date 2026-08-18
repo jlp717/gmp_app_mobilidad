@@ -2,6 +2,9 @@
 
 const { buildReceiptPresentation, createRepartoReceiptPdfService } = require('../services/reparto-receipt-pdf-service');
 
+const VALID_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==';
+const CORRUPT_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLQ9wAAAABJRU5ErkJggg==';
+
 function receipt(overrides = {}) {
   return {
     confirmationId: '7',
@@ -49,10 +52,44 @@ test('renders a PDF with a valid header without depending on a fragile parser', 
   expect(result.pdf.subarray(0, 5).toString()).toBe('%PDF-');
 });
 
+test('renders a validated PNG signature without an asynchronous decoder crash', async () => {
+  const result = await createRepartoReceiptPdfService().render({
+    receipt: receipt({ firmaEvidenceId: 'ev_signature' }),
+    signature: { mimeType: 'image/png', contentBase64: VALID_PNG },
+  });
+  expect(result.pdf.subarray(0, 5).toString()).toBe('%PDF-');
+});
+
+test('renders the explicit persisted 0 EUR prepaid invariant without ERP lines', () => {
+  const presentation = buildReceiptPresentation(receipt({
+    status: 'ENTREGADO', lineas: [], cobro: null,
+    prepaidZeroWithoutLines: true, importeTotal: 0,
+  }));
+  expect(presentation.lines).toContain('Sin lineas ERP (prepago 0 EUR)');
+  expect(presentation.footer).toContain('Total entregado valorado: 0.00');
+});
+
+test.each([
+  { prepaidZeroWithoutLines: false, importeTotal: 0, status: 'ENTREGADO', cobro: null },
+  { prepaidZeroWithoutLines: true, importeTotal: 1, status: 'ENTREGADO', cobro: null },
+  { prepaidZeroWithoutLines: true, importeTotal: 0, status: 'PARCIAL', cobro: null },
+  { prepaidZeroWithoutLines: true, importeTotal: 0, status: 'ENTREGADO', cobro: { importeCobrado: 1 } },
+])('fails closed for empty ERP lines without the exact prepaid invariant', (invariant) => {
+  expect(() => buildReceiptPresentation(receipt({ lineas: [], ...invariant })))
+    .toThrow(expect.objectContaining({
+      code: 'REPARTO_RECEIPT_LINES_UNAVAILABLE', statusCode: 503,
+    }));
+});
+
 test('fails closed for an invalid signature payload and an aborted render', async () => {
   await expect(createRepartoReceiptPdfService().render({
     receipt: receipt({ firmaEvidenceId: 'ev_signature' }),
     signature: { mimeType: 'text/plain', contentBase64: 'bm90LWltYWdl' },
+  })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', statusCode: 503 });
+
+  await expect(createRepartoReceiptPdfService().render({
+    receipt: receipt({ firmaEvidenceId: 'ev_signature' }),
+    signature: { mimeType: 'image/png', contentBase64: CORRUPT_PNG },
   })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', statusCode: 503 });
 
   const controller = new AbortController();

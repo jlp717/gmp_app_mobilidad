@@ -1,0 +1,21 @@
+diff --git a/backend/services/reparto-variance-pdf-service.js b/backend/services/reparto-variance-pdf-service.js
+--- a/backend/services/reparto-variance-pdf-service.js
++++ b/backend/services/reparto-variance-pdf-service.js
+@@ -88,9 +88,9 @@ function buildVariancePdfBuffer(payload = {}) {
+     const columns = [
+-      { key: 'codigoArticulo', label: 'Artículo', width: 70 },
+-      { key: 'descripcion', label: 'Descripción', width: 160 },
+-      { key: 'cantidadPedida', label: 'Pedida', width: 55, align: 'right' },
+-      { key: 'cantidadEntregada', label: 'Entregada', width: 62, align: 'right' },
+-      { key: 'cantidadRechazada', label: 'Rech.', width: 45, align: 'right' },
+-      { key: 'cantidadPendiente', label: 'Pend.', width: 45, align: 'right' },
+-      { key: 'diff', label: 'Diff', width: 42, align: 'right' },
+-      { key: 'motivoDiferencia', label: 'Motivo', width: 106 },
++      { key: 'codigoArticulo', label: 'Artículo', width: 60 },
++      { key: 'descripcion', label: 'Descripción', width: 115 },
++      { key: 'cantidadPedida', label: 'Pedida', width: 45, align: 'right' },
++      { key: 'cantidadEntregada', label: 'Entregada', width: 55, align: 'right' },
++      { key: 'cantidadRechazada', label: 'Rech.', width: 40, align: 'right' },
++      { key: 'cantidadPendiente', label: 'Pend.', width: 40, align: 'right' },
++      { key: 'diff', label: 'Diff', width: 40, align: 'right' },
++      { key: 'motivoDiferencia', label: 'Motivo', width: 128 },

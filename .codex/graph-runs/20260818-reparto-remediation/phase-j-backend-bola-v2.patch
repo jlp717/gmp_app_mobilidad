@@ -1,0 +1,103 @@
+diff --git a/backend/routes/entregas.js b/backend/routes/entregas.js
+--- a/backend/routes/entregas.js
++++ b/backend/routes/entregas.js
+@@ -59,0 +60,7 @@
++function isStrictRepartidorSelector(value) {
++    const raw = normalizeCode(value).toUpperCase();
++    return Boolean(raw) && raw !== 'ALL' && raw !== 'BOLA' && !raw.includes(',');
++}
++
+@@ -268,0 +276,3 @@
++        if (!isStrictRepartidorSelector(repartidorId)) {
++            return res.status(422).json({ success: false, code: 'REPARTIDOR_ID_MULTI_NOT_ALLOWED' });
++        }
++
+diff --git a/backend/routes/repartidor.js b/backend/routes/repartidor.js
+--- a/backend/routes/repartidor.js
++++ b/backend/routes/repartidor.js
+@@ -50,1 +50,1 @@
+-function authorizeSingleRepartidorId(req, res, rawId) {
++function authorizeSingleRepartidorId(req, res, rawId) {
+@@ -52,1 +52,1 @@
+-  if (!raw || raw.includes(',') || /^ALL$/i.test(raw)) {
++  if (!raw || raw.includes(',') || /^(ALL|BOLA)$/i.test(raw)) {
+diff --git a/backend/routes/repartidor-finanzas.js b/backend/routes/repartidor-finanzas.js
+--- a/backend/routes/repartidor-finanzas.js
++++ b/backend/routes/repartidor-finanzas.js
+@@ -423,3 +423,6 @@
+ function assertExplicitRepartidorSelector(repartidorId) {
+   const codes = String(repartidorId || '').split(',').map((code) => code.trim().toUpperCase()).filter(Boolean);
++  if (codes.length !== 1 || codes.includes('BOLA')) {
++    throw new UnsupportedRepartidorSelectorError();
++  }
+   if (codes.includes('ALL')) throw new UnsupportedRepartidorSelectorError();
+ }
+@@ -1278,1 +1281,1 @@
+-router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
++router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+diff --git a/backend/src/chatbot/chatbot_authorization.js b/backend/src/chatbot/chatbot_authorization.js
+--- a/backend/src/chatbot/chatbot_authorization.js
++++ b/backend/src/chatbot/chatbot_authorization.js
+@@ -49,0 +50,3 @@
++  if (requested.codes.includes('BOLA')) {
++    return { allowed: false, code: 'REPARTO_SCOPE_FORBIDDEN', driverCodes: [] };
++  }
++
+@@ -68,3 +71,2 @@
+-  const visibleValues = Array.isArray(userContext.vendorCodes)
+-    ? userContext.vendorCodes
+-    : (Array.isArray(userContext.vendedorCodes) ? userContext.vendedorCodes : []);
++  const visibleValues = Array.isArray(userContext.repartidorCodes)
++    ? userContext.repartidorCodes : [];
+diff --git a/backend/src/chatbot/llm-orchestrator.js b/backend/src/chatbot/llm-orchestrator.js
+--- a/backend/src/chatbot/llm-orchestrator.js
++++ b/backend/src/chatbot/llm-orchestrator.js
+@@ -85,0 +86,3 @@
++  // Reparto must use only the server-authorized driver list, never the
++  // commercial vendorScope synthesized for non-Reparto chatbot intents.
++  context.repartidorScope = repartoAuthorization.driverCodes;
+@@ -85,1 +88,0 @@
+-  context.repartidorScope = repartoAuthorization.driverCodes;
+diff --git a/backend/src/chatbot/chatbot_handler.js b/backend/src/chatbot/chatbot_handler.js
+--- a/backend/src/chatbot/chatbot_handler.js
++++ b/backend/src/chatbot/chatbot_handler.js
+@@ -590,3 +590,4 @@
+     const repartidorScope = Array.isArray(context.repartidorScope) && context.repartidorScope.length
+         ? context.repartidorScope
+         : [userCode];
++    // Reparto calls use this dedicated scope, not vendorScope.
+ 
+diff --git a/backend/__tests__/reparto-bola-route-contract.test.js b/backend/__tests__/reparto-bola-route-contract.test.js
+new file mode 100644
+--- /dev/null
++++ b/backend/__tests__/reparto-bola-route-contract.test.js
+@@ -0,0 +1,41 @@
++'use strict';
++
++const fs = require('fs');
++const path = require('path');
++
++describe('BOLA reparto fail-closed route contract', () => {
++  const read = (file) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
++
++  test('pendientes rejects ALL, BOLA and CSV before selector sanitization', () => {
++    const source = read('routes/entregas.js');
++    expect(source).toContain("raw !== 'ALL' && raw !== 'BOLA' && !raw.includes(',')");
++    expect(source.indexOf('isStrictRepartidorSelector(repartidorId)'))
++      .toBeLessThan(source.indexOf('sanitizeCodeListForParams(repartidorId)'));
++  });
++
++  test('single driver routes and finance detail reject BOLA/ALL/CSV selectors', () => {
++    expect(read('routes/repartidor.js')).toContain('/^(ALL|BOLA)$/i');
++    const finance = read('routes/repartidor-finanzas.js');
++    expect(finance).toContain("codes.length !== 1 || codes.includes('BOLA')");
++    expect(finance).toContain("'/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireFinanceRepartidorSelector");
++  });
++
++  test('chatbot reparto does not derive a fleet from commercial vendor scope', () => {
++    const authorization = read('src/chatbot/chatbot_authorization.js');
++    expect(authorization).toContain('userContext.repartidorCodes');
++    expect(authorization).toContain("requested.codes.includes('BOLA')");
++    expect(read('src/chatbot/llm-orchestrator.js')).toContain('server-authorized driver list');
++  });
++});

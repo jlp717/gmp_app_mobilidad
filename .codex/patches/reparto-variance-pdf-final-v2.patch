@@ -1,0 +1,154 @@
+diff --git a/backend/services/reparto-variance-pdf-service.js b/backend/services/reparto-variance-pdf-service.js
+--- a/backend/services/reparto-variance-pdf-service.js
++++ b/backend/services/reparto-variance-pdf-service.js
+@@ -22,5 +22,55 @@ function text(value) {
+   return String(value || '').trim() || '—';
+ }
+ 
++function roundedQty(value) {
++  return Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
++}
++
++function requiredText(value, field) {
++  const normalized = String(value ?? '').trim();
++  if (!normalized) throw new TypeError(`El PDF de diferencias requiere ${field}`);
++  return normalized;
++}
++
++function requiredQty(value, field) {
++  const amount = Number(value);
++  if (!Number.isFinite(amount) || amount < 0) {
++    throw new TypeError(`Cantidad de diferencia inválida: ${field}`);
++  }
++  return roundedQty(amount);
++}
++
++function buildVariancePdfModel(payload = {}) {
++  const documentId = requiredText(payload.documentId, 'documento');
++  const confirmedAt = requiredText(payload.confirmedAt || payload.fecha, 'fecha/hora de confirmación');
++  const repartidorId = requiredText(payload.repartidorId, 'repartidor');
++  const clienteCodigo = String(payload.clienteCodigo ?? '').trim();
++  const clienteNombre = String(payload.clienteNombre ?? '').trim();
++  if (!clienteCodigo && !clienteNombre) throw new TypeError('El PDF de diferencias requiere cliente');
++  if (!Array.isArray(payload.lineas)) throw new TypeError('El PDF de diferencias requiere líneas');
++  const lineas = payload.lineas.map((line, index) => {
++    if (!line || typeof line !== 'object') throw new TypeError(`Línea de diferencia inválida: ${index + 1}`);
++    const cantidadPedida = requiredQty(line.cantidadPedida, `línea ${index + 1} pedida`);
++    const cantidadEntregada = requiredQty(line.cantidadEntregada, `línea ${index + 1} entregada`);
++    const cantidadRechazada = requiredQty(line.cantidadRechazada, `línea ${index + 1} rechazada`);
++    const cantidadPendiente = requiredQty(line.cantidadPendiente, `línea ${index + 1} pendiente`);
++    const diff = roundedQty(Number(line.diff));
++    const calculatedDiff = roundedQty(cantidadEntregada - cantidadPedida);
++    if (!Number.isFinite(diff) || Math.abs(diff - calculatedDiff) > 0.0001) {
++      throw new TypeError(`Diferencia de línea incoherente: ${index + 1}`);
++    }
++    return { codigoArticulo: text(line.codigoArticulo), descripcion: text(line.descripcion || line.lineaId), cantidadPedida, cantidadEntregada, cantidadRechazada, cantidadPendiente, diff, motivoDiferencia: text(line.motivoDiferencia) };
++  });
++  const totals = lineas.reduce((acc, line) => ({ pedida: roundedQty(acc.pedida + line.cantidadPedida), entregada: roundedQty(acc.entregada + line.cantidadEntregada), rechazada: roundedQty(acc.rechazada + line.cantidadRechazada), pendiente: roundedQty(acc.pendiente + line.cantidadPendiente), diff: roundedQty(acc.diff + line.diff) }), { pedida: 0, entregada: 0, rechazada: 0, pendiente: 0, diff: 0 });
++  return { ...payload, documentId, confirmedAt, fecha: String(payload.fecha || confirmedAt).trim(), repartidorId, clienteCodigo, clienteNombre, lineas, totals };
++}
++
+ function buildVariancePdfBuffer(payload = {}) {
+   return new Promise((resolve, reject) => {
+@@ -31,15 +81,19 @@ function buildVariancePdfBuffer(payload = {}) {
+     doc.on('end', () => resolve(Buffer.concat(chunks)));
+     doc.on('error', reject);
+ 
++    let model;
++    try {
++      model = buildVariancePdfModel(payload);
++    } catch (error) {
++      doc.destroy();
++      reject(error);
++      return;
++    }
+     const pageWidth = doc.page.width;
+     const contentWidth = pageWidth - 72;
+-    const lineas = Array.isArray(payload.lineas) ? payload.lineas : [];
++    const lineas = model.lineas;
+     const shortage = lineas.filter((line) => toQty(line.diff) < 0).length;
+     const surplus = lineas.filter((line) => toQty(line.diff) > 0).length;
+-    const totals = lineas.reduce((acc, line) => ({
+-      pedida: acc.pedida + toQty(line.cantidadPedida),
+-      entregada: acc.entregada + toQty(line.cantidadEntregada),
+-      rechazada: acc.rechazada + toQty(line.cantidadRechazada),
+-      pendiente: acc.pendiente + toQty(line.cantidadPendiente),
+-      diff: acc.diff + toQty(line.diff),
+-    }), { pedida: 0, entregada: 0, rechazada: 0, pendiente: 0, diff: 0 });
++    const totals = model.totals;
+@@ -51,16 +105,16 @@ function buildVariancePdfBuffer(payload = {}) {
+       .text('Granja Mari Pepa — Control de reparto', 36, 48, { width: contentWidth });
+     doc.fontSize(9).fillColor('#9ec5ea')
+-      .text(text(payload.fecha), 36, 66, { width: contentWidth });
++      .text(text(model.confirmedAt), 36, 66, { width: contentWidth });
+ 
+     let y = 110;
+     const meta = [
+-      ['Documento', `${text(payload.documentoTipo || 'ALBARAN')} ${text(payload.documentId)}`],
+-      ['Cliente', `${text(payload.clienteCodigo)} — ${text(payload.clienteNombre)}`],
+-      ['Repartidor', `${text(payload.repartidorNombre)} (${text(payload.repartidorId)})`],
+-      ['Comercial', `${text(payload.comercialNombre)} (${text(payload.comercialCode)})`],
+-      ['Estado', text(payload.deliveryStatus)],
++      ['Documento', `${text(model.documentoTipo || 'ALBARAN')} ${text(model.documentId)}`],
++      ['Cliente', `${text(model.clienteCodigo)} — ${text(model.clienteNombre)}`],
++      ['Repartidor', `${text(model.repartidorNombre)} (${text(model.repartidorId)})`],
++      ['Comercial', `${text(model.comercialNombre)} (${text(model.comercialCode)})`],
++      ['Estado', text(model.deliveryStatus)],
+     ];
+@@ -70,7 +124,7 @@ function buildVariancePdfBuffer(payload = {}) {
+     });
+     doc.fillColor(MUTED).font('Helvetica').fontSize(8).text('Observaciones', 48, y + 85, { width: 90 });
+     doc.fillColor(NAVY).font('Helvetica').fontSize(9)
+-      .text(text(payload.observaciones), 140, y + 85, { width: contentWidth - 120, ellipsis: true });
++      .text(text(model.observaciones), 140, y + 85, { width: contentWidth - 120, ellipsis: true });
+     y += 124;
+@@ -160,6 +214,7 @@ function buildVariancePdfBuffer(payload = {}) {
+ }
+ 
+ module.exports = {
++  buildVariancePdfModel,
+   buildVariancePdfBuffer,
+ };
+diff --git a/backend/__tests__/reparto-variance-pdf-service.test.js b/backend/__tests__/reparto-variance-pdf-service.test.js
+new file mode 100644
+--- /dev/null
++++ b/backend/__tests__/reparto-variance-pdf-service.test.js
+@@ -0,0 +1,31 @@
++'use strict';
++
++const { buildVariancePdfBuffer, buildVariancePdfModel } = require('../services/reparto-variance-pdf-service');
++
++function payload(overrides = {}) {
++  return {
++    documentId: 'ALB-2026-000042', documentoTipo: 'ALBARAN', fecha: '2026-08-18', confirmedAt: '2026-08-18T10:25:30.000Z',
++    clienteCodigo: '4300040696', clienteNombre: 'CLIENTE PRUEBA', repartidorId: '08', repartidorNombre: 'REPARTIDOR PRUEBA',
++    comercialCode: '57', comercialNombre: 'COMERCIAL PRUEBA', deliveryStatus: 'PARCIAL', observaciones: 'Bulto deteriorado en recepción',
++    lineas: [
++      { codigoArticulo: 'ART-01', descripcion: 'POLLO ENTERO', cantidadPedida: 12, cantidadEntregada: 9, cantidadRechazada: 2, cantidadPendiente: 1, diff: -3, motivoDiferencia: 'ROTURA' },
++      { codigoArticulo: 'ART-02', descripcion: 'HUEVOS', cantidadPedida: 4, cantidadEntregada: 5, cantidadRechazada: 0, cantidadPendiente: 0, diff: 1, motivoDiferencia: 'UNIDAD EXTRA' },
++    ],
++    ...overrides,
++  };
++}
++
++describe('reparto-variance-pdf-service', () => {
++  test('preserva documento, conductor, marca temporal, líneas y totales auditables', async () => {
++    const model = buildVariancePdfModel(payload());
++    expect(model.documentId).toBe('ALB-2026-000042');
++    expect(model.repartidorId).toBe('08');
++    expect(model.confirmedAt).toBe('2026-08-18T10:25:30.000Z');
++    expect(model.lineas[0]).toEqual(expect.objectContaining({ cantidadPedida: 12, cantidadEntregada: 9, cantidadRechazada: 2, cantidadPendiente: 1, diff: -3, motivoDiferencia: 'ROTURA' }));
++    expect(model.totals).toEqual({ pedida: 16, entregada: 14, rechazada: 2, pendiente: 1, diff: -2 });
++    const pdf = await buildVariancePdfBuffer(payload());
++    expect(Buffer.isBuffer(pdf)).toBe(true);
++    expect(pdf.slice(0, 5).toString()).toBe('%PDF-');
++    expect(pdf.length).toBeGreaterThan(500);
++  });
++  test('rechaza una diferencia que no coincide con pedido y entregado', async () => {
++    await expect(buildVariancePdfBuffer(payload({ lineas: [{ cantidadPedida: 12, cantidadEntregada: 9, cantidadRechazada: 0, cantidadPendiente: 3, diff: -2 }] }))).rejects.toThrow('Diferencia de línea incoherente');
++  });
++  test('rechaza metadatos o cantidades no auditables', () => {
++    expect(() => buildVariancePdfModel(payload({ documentId: '  ' }))).toThrow('requiere documento');
++    expect(() => buildVariancePdfModel(payload({ lineas: [{ cantidadPedida: 'no-numero', cantidadEntregada: 1, cantidadRechazada: 0, cantidadPendiente: 0, diff: 0 }] }))).toThrow('Cantidad de diferencia inválida');
++  });
++});

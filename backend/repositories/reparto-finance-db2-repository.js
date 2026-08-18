@@ -11,7 +11,6 @@ const logger = require('../middleware/logger');
 const {
   resolveRepartoRuntime,
   validateFinanceTableMapping,
-  TABLE_MAPPINGS,
 } = require('../config/reparto-runtime');
 
 class FinanceRepoSchemaError extends Error {
@@ -102,15 +101,10 @@ function cobrosDateOrderBy(info, alias = 'RC') {
   return `${prefix}ANOVENCIMIENTO, ${prefix}MESVENCIMIENTO, ${prefix}DIAVENCIMIENTO`;
 }
 
-function financeReadOverlay(writeTables, runtime) {
-  if (runtime?.tableSet !== 'isolated_test') {
-    return { write: writeTables, sources: [writeTables], overlay: false, production: null };
-  }
-  const production = TABLE_MAPPINGS.production.finance;
-  if (!production?.cobros || production.cobros === writeTables.cobros) {
-    return { write: writeTables, sources: [writeTables], overlay: false, production: null };
-  }
-  return { write: writeTables, sources: [production, writeTables], overlay: true, production };
+function financeReadOverlay(writeTables) {
+  // App state is single-source in every table set. isolated_test resolves to
+  // TEST_* through reparto-runtime; production resolves to its production map.
+  return { write: writeTables, sources: [writeTables], overlay: false, production: null };
 }
 
 function skipIsolatedTestFinanceSeed(env = process.env) {
@@ -625,6 +619,12 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async seedIsolatedTestFinanceFromProduction({ info, ids, dateYmd, force = false } = {}) {
+      // Population belongs exclusively to copy-javier-prod-to-test.js and an
+      // explicit operator --apply. Runtime reads, including GET handlers, must
+      // never copy production app state into TEST tables.
+      if (bindings.runtime?.tableSet === 'isolated_test') {
+        return Object.freeze({ skipped: true, reason: 'explicit_copy_script_required' });
+      }
       const overlay = financeReadOverlay(tables, bindings.runtime);
       if (!overlay.overlay || !overlay.production) {
         return Object.freeze({ skipped: true, reason: 'no_overlay' });
@@ -1294,7 +1294,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       return run(`
     SELECT ID, THRESHOLD_PCT, COMMISSION_PCT, SORT_ORDER, ACTIVE_SN
     FROM ${tables.commissionTiers}
-    WHERE ACTIVE_SN = 'S'
+    WHERE ACTIVE_SN = 'S' AND THRESHOLD_PCT >= 30
     ORDER BY SORT_ORDER, THRESHOLD_PCT
   `, []);
     },

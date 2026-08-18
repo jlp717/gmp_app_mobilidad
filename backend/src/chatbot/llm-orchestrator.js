@@ -3,6 +3,7 @@
 const { getPool } = require('../../config/db');
 const { handleChatMessage } = require('./chatbot_handler');
 const {
+  authorizeChatbotRepartoScope,
   createChatbotUserContext,
   getAllowedVendorCodes,
   normalizeCode,
@@ -31,7 +32,11 @@ function normalizeVendorScope(value) {
 
 function buildChatbotContext(user = {}, conversationHistory = []) {
   const base = createChatbotUserContext(user);
-  const tokenScope = normalizeVendorScope(user.vendorCodes || user.vendedorCodes);
+  const repartoProfile = base.role === 'REPARTIDOR'
+    || (['JEFE_VENTAS', 'ADMIN'].includes(base.role) && base.activeMode === 'REPARTIDOR');
+  const tokenScope = normalizeVendorScope(repartoProfile
+    ? user.repartidorCodes
+    : (user.vendorCodes || user.vendedorCodes));
   const contextForScope = {
     ...base,
     vendorScope: tokenScope,
@@ -60,6 +65,7 @@ async function processMessage({
   user = {},
   clientCode = null,
   conversationHistory = [],
+  repartidorId = null,
 } = {}) {
   const text = String(message || '').trim();
   if (!text) {
@@ -74,6 +80,20 @@ async function processMessage({
       error: 'chatbot role not allowed',
     };
   }
+
+  const repartoAuthorization = authorizeChatbotRepartoScope(user, repartidorId);
+  if (!repartoAuthorization.allowed) {
+    return {
+      success: false,
+      statusCode: ['REPARTO_SCOPE_REQUIRED', 'REPARTO_SCOPE_INVALID'].includes(repartoAuthorization.code) ? 422 : 403,
+      error: repartoAuthorization.code,
+    };
+  }
+  context.repartidorScope = repartoAuthorization.driverCodes;
+  const role = normalizeCode(context.role);
+  const repartoProfile = role === 'REPARTIDOR'
+    || (['JEFE_VENTAS', 'ADMIN'].includes(role) && normalizeCode(context.activeMode) === 'REPARTIDOR');
+  if (repartoProfile) context.vendorScope = [...repartoAuthorization.driverCodes];
 
   const moderation = moderateInput(text);
   if (!moderation.allowed) {
@@ -97,7 +117,7 @@ async function processMessage({
   const pool = getPool();
   const conn = pool?.connect ? await pool.connect() : pool;
   if (!conn) {
-    return { success: false, error: 'Chatbot database connection unavailable' };
+    return { success: false, error: 'CHATBOT_UNAVAILABLE' };
   }
 
   try {

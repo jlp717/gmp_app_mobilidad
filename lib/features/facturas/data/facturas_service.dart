@@ -656,16 +656,16 @@ class FacturasService {
   /// Download PDF
   static String _documentPdfEndpoint(Factura factura, {bool preview = false}) {
     final ts = DateTime.now().millisecondsSinceEpoch;
+    final previewQuery = preview ? 'preview=true&' : '';
     if (factura.isAlbaran) {
-      final serie = Uri.encodeComponent(factura.serie);
       final terminal = factura.terminal ?? 0;
-      return '/repartidor/document/albaran/${factura.ejercicio}/$serie/'
-          '$terminal/${factura.numero}/pdf?_t=$ts';
+      return '/facturas/${factura.serie}/${factura.numero}/'
+          '${factura.ejercicio}/pdf?${previewQuery}documentType=albaran'
+          '&terminal=$terminal&_t=$ts';
     }
 
-    final query = preview ? 'preview=true&_t=$ts' : '_t=$ts';
     return '/facturas/${factura.serie}/${factura.numero}/'
-        '${factura.ejercicio}/pdf?$query';
+        '${factura.ejercicio}/pdf?${previewQuery}_t=$ts';
   }
 
   static Future<File> downloadDocumentoPdf(Factura factura) async {

@@ -19,6 +19,7 @@ class ChatbotService {
   /// Send message to chatbot API with conversation context.
   Future<ChatbotMessageResult> sendMessage({
     required String message,
+    String? repartidorId,
     List<Map<String, String>>? conversationHistory,
     String? clientCode,
   }) async {
@@ -29,6 +30,8 @@ class ChatbotService {
           'conversationHistory': conversationHistory,
         if (clientCode != null && clientCode.trim().isNotEmpty)
           'clientCode': clientCode.trim(),
+        if (repartidorId != null && repartidorId.trim().isNotEmpty)
+          'repartidorId': repartidorId.trim(),
       };
 
       final response = await ApiClient.post('/chatbot/message', body);
@@ -41,8 +44,8 @@ class ChatbotService {
 
       return ChatbotMessageResult(response: text, metadata: metadata);
     } on Exception catch (e) {
-      developer.log('Chatbot error: $e', name: 'chatbot');
-      throw Exception('Error de conexion: $e');
+      developer.log('CHATBOT_REQUEST_FAILED', name: 'chatbot');
+      throw Exception('No se pudo conectar con el asistente.');
     }
   }
 
@@ -52,8 +55,8 @@ class ChatbotService {
       final response = await ApiClient.get('/chatbot/health');
       return response;
     } catch (e) {
-      developer.log('Chatbot health check failed: $e', name: 'chatbot');
-      return {'status': 'error', 'detail': e.toString()};
+      developer.log('CHATBOT_HEALTH_FAILED', name: 'chatbot');
+      return {'status': 'error', 'code': 'CHATBOT_HEALTH_FAILED'};
     }
   }
 }

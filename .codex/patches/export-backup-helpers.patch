@@ -1,0 +1,7 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1755,0 +1756,1 @@
++  backupShapeHash,
++  contentHashOf,
++  affectedSchemaPairs,

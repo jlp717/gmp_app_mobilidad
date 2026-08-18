@@ -10,6 +10,10 @@
 
 const logger = require('../../middleware/logger');
 const {
+    CHATBOT_LOG_EVENTS,
+    emitChatbotLog,
+} = require('./chatbot_log');
+const {
     dbDiscoveryTools,
     pricingTools,
     riskTools,
@@ -554,6 +558,11 @@ async function aggregateObjectivesByMonths(conn, userCode, isJefeVentas, vendorS
     };
 }
 
+function chatbotFailure(response) {
+    emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
+    return response;
+}
+
 async function safeQuery(conn, sql, params = []) {
     try {
         if (params.length > 0) {
@@ -561,7 +570,7 @@ async function safeQuery(conn, sql, params = []) {
         }
         return await conn.query(sql);
     } catch (error) {
-        logger.error(`[CHATBOT-FALLBACK] Query error: ${error.message}`);
+        emitChatbotLog('error', CHATBOT_LOG_EVENTS.databaseQueryFailed);
         return [];
     }
 }
@@ -578,6 +587,15 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
     const isJefeVentas = isSupervisor(context);
     const authContext = { ...context, userCode, isJefeVentas, vendorScope, conn };
     const richResponses = context.richResponses === true;
+    const repartidorScope = Array.isArray(context.repartidorScope) && context.repartidorScope.length
+        ? context.repartidorScope
+        : (userCode ? [userCode] : []);
+    const repartoProfile = context.role === 'REPARTIDOR'
+        || (['JEFE_VENTAS', 'ADMIN'].includes(context.role) && context.activeMode === 'REPARTIDOR');
+    if (repartoProfile && (!context.repartidorScope?.length
+        || vendorScope.some((code) => !repartidorScope.includes(code)))) {
+        throw new Error('CHATBOT_REPARTO_SCOPE_INVARIANT');
+    }
 
     function reply(text, toolName, result, extraMetadata = null) {
         if (!richResponses) return text;
@@ -856,7 +874,7 @@ Puedes preguntar en lenguaje natural, por ejemplo: "facturas de Central Hoteles"
 
     if (intentPatterns.repartidor.test(msg) && intentPatterns.comision.test(msg)) {
         try {
-            const result = await repartidorTools.getRepartidorCommissions(conn, userCode, codes.month, undefined);
+            const result = await repartidorTools.getRepartidorCommissions(conn, repartidorScope, codes.month, undefined);
             const text = `**Comision repartidor ${result.month}/${result.year}**
 - Cobrado: **${result.collected.toLocaleString('es-ES')} EUR**
 - A cobrar: ${result.collectable.toLocaleString('es-ES')} EUR
@@ -865,7 +883,7 @@ Puedes preguntar en lenguaje natural, por ejemplo: "facturas de Central Hoteles"
 - Umbral: ${result.thresholdMet ? 'cumplido' : 'pendiente'}`;
             return reply(text, 'get_repartidor_commissions', result);
         } catch (err) {
-            logger.error('[CHATBOT] Repartidor commission error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando comision del repartidor.';
         }
     }
@@ -881,7 +899,7 @@ Puedes preguntar en lenguaje natural, por ejemplo: "facturas de Central Hoteles"
 - Tramos:
 ${tiers || '- Sin tramos configurados'}`, 'get_commission_config', config);
         } catch (e) {
-            return `Error obteniendo configuracion de comisiones: ${e.message}`;
+            return chatbotFailure('Error obteniendo configuracion de comisiones.');
         }
     }
 
@@ -908,7 +926,7 @@ ${tiers || '- Sin tramos configurados'}`, 'get_commission_config', config);
 ${list}`;
             return reply(text, 'get_commissions_range', result);
         } catch (e) {
-            return `Error obteniendo comisiones acumuladas: ${e.message}`;
+            return chatbotFailure('Error obteniendo comisiones acumuladas.');
         }
     }
 
@@ -922,7 +940,7 @@ ${list}`;
 Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
             return reply(text, 'get_commissions', result);
         } catch (e) {
-            return `Error obteniendo comisiones: ${e.message}`;
+            return chatbotFailure('Error obteniendo comisiones.');
         }
     }
 
@@ -941,7 +959,7 @@ Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
             const list = result.details.slice(0, 10).map(d => `- ${d.clientCode}: **${d.sales.toLocaleString('es-ES')}€** → Comision ${d.commission.toLocaleString('es-ES')}€`).join('\n');
             return reply(`Detalle de comisiones:\n${list}`, 'get_commission_details', result);
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error obteniendo el detalle de comisiones.');
         }
     }
 
@@ -959,7 +977,7 @@ Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
             ).join('\n');
             return reply(`**Objetivos por familia ${result.month}/${result.year}**\n${list}`, 'get_objectives_by_family', result);
         } catch (e) {
-            return `Error obteniendo objetivos por familia: ${e.message}`;
+            return chatbotFailure('Error obteniendo objetivos por familia.');
         }
     }
 
@@ -985,7 +1003,7 @@ Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
 ${list}`;
             return reply(text, 'get_objectives_range', result);
         } catch (e) {
-            return `Error obteniendo objetivos acumulados: ${e.message}`;
+            return chatbotFailure('Error obteniendo objetivos acumulados.');
         }
     }
 
@@ -1000,7 +1018,7 @@ Alcanzado: **${result.achieved.toLocaleString('es-ES')}€** de ${result.target.
 ${status}`;
             return reply(text, 'get_objectives', result);
         } catch (e) {
-            return `Error obteniendo objetivos: ${e.message}`;
+            return chatbotFailure('Error obteniendo objetivos.');
         }
     }
 
@@ -1015,7 +1033,7 @@ Ventas: **${result.sales.toLocaleString('es-ES')}€** | Coste: ${result.cost.to
 Margen: **${result.marginPercent}%** | Clientes: ${result.clients} | Operaciones: ${result.operations}`;
             return reply(text, 'get_margin_global', result);
         } catch (e) {
-            return `Error calculando margen: ${e.message}`;
+            return chatbotFailure('Error calculando margen.');
         }
     }
 
@@ -1037,7 +1055,7 @@ Margen: **${result.marginPercent}%** | Operaciones: ${result.operations}`;
                 groups: [],
             });
         } catch (e) {
-            return `Error calculando margen: ${e.message}`;
+            return chatbotFailure('Error calculando margen.');
         }
     }
 
@@ -1061,7 +1079,7 @@ Pendiente: **${totalDebt.toLocaleString('es-ES')}€** | Vencido: **${overdueDeb
 ${action}`;
             return reply(text, 'get_client_debt', { ...debt, clientCode });
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando deuda.');
         }
     }
 
@@ -1083,7 +1101,7 @@ ${action}`;
             }
             return `**Cliente ${clientCode}** no esta bloqueado. Operaciones permitidas.`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando el bloqueo del cliente.');
         }
     }
 
@@ -1106,7 +1124,7 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
 
 **Recomendacion**: ${risk.recommendation}`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando el riesgo del cliente.');
         }
     }
 
@@ -1126,7 +1144,7 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
 - Disponible: **${credit.availableCredit.toLocaleString('es-ES')}€**
 - Uso: ${Math.round(credit.utilizationPercent)}%`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando el credito del cliente.');
         }
     }
 
@@ -1199,7 +1217,7 @@ ${lines}`;
                 ],
             });
         } catch (e) {
-            return `Error consultando ventas del producto al cliente: ${e.message}`;
+            return chatbotFailure('Error consultando ventas del producto al cliente.');
         }
     }
 
@@ -1214,7 +1232,7 @@ ${lines}`;
             ).join('\n');
             return reply(`**Precio vendido al cliente ${clientCode} - producto ${productCode}**\n${list}`, 'get_price_sold_to_client', result);
         } catch (e) {
-            return `Error consultando precio vendido al cliente: ${e.message}`;
+            return chatbotFailure('Error consultando precio vendido al cliente.');
         }
     }
 
@@ -1230,7 +1248,7 @@ ${lines}`;
 Tarifa: **${price.tariffPrice.toLocaleString('es-ES')}€** | Coste: ${price.cost.toLocaleString('es-ES')}€ | Margen: ${margen}%
 Ultimo vendido: ${price.lastSoldPrice.toLocaleString('es-ES')}€`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando el precio del producto.');
         }
     }
 
@@ -1248,7 +1266,7 @@ Precio suelo: **${breakeven.floorPrice.toLocaleString('es-ES')}€** (margen min
 Margen actual: ${Math.round(breakeven.currentMarginPercent)}%
 No vender por debajo de ${breakeven.floorPrice.toLocaleString('es-ES')}€`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error calculando el precio minimo.');
         }
     }
 
@@ -1266,7 +1284,7 @@ Precio: ${sim.originalPrice.toLocaleString('es-ES')}€ → **${sim.newPrice.toL
 Margen: ${sim.originalMargin.toLocaleString('es-ES')}€ → **${sim.newMargin.toLocaleString('es-ES')}€**
 ${sim.profitable ? 'RENTABLE' : 'NO RENTABLE — genera perdidas'}`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error simulando el descuento.');
         }
     }
 
@@ -1290,7 +1308,7 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
 
 **Accion sugerida**: ${churn.actionSuggestion}`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando abandono de productos.');
         }
     }
 
@@ -1307,7 +1325,7 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
 - Crecimiento margen: **${result.growth.marginPercent}%**`;
             return reply(text, 'get_yoy_comparison', result);
         } catch (e) {
-            return `Error consultando comparativa anual: ${e.message}`;
+            return chatbotFailure('Error consultando comparativa anual.');
         }
     }
 
@@ -1328,7 +1346,7 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
             }
             return `**Comparativa Anual - Cliente ${clientCode}**\n\n${list}${growth}`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando comparativa del cliente.');
         }
     }
 
@@ -1353,7 +1371,7 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
 
 ${list || 'Sin camiones planificados.'}`, 'get_warehouse_dashboard', result);
         } catch (e) {
-            return `Error consultando almacen: ${e.message}`;
+            return chatbotFailure('Error consultando almacen.');
         }
     }
 
@@ -1370,7 +1388,7 @@ ${list || 'Sin camiones planificados.'}`, 'get_warehouse_dashboard', result);
 Total: **${stock.totalStock}** unidades
 ${list}`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error consultando stock.');
         }
     }
 
@@ -1388,7 +1406,7 @@ ${list}`;
                 const list = albs.albaranes.map(a => `- ${a.number}: ${a.amount?.toLocaleString('es-ES')}€`).join('\n');
                 return reply(`Albaranes de factura ${invoiceNumber}:\n${list}`, 'get_albaranes_by_invoice', albs);
             } catch (e) {
-                return `Error: ${e.message}`;
+                return chatbotFailure('Error consultando albaranes.');
             }
         }
         return 'Necesito el numero de factura. Ejemplo: "Albaranes de la factura F/100/2026"';
@@ -1433,7 +1451,7 @@ ${lineList || '- Sin lineas estructuradas'}${detectedText}`;
 ${lineList || '- Sin líneas'}`;
                 return reply(text, 'get_invoice_details', inv);
             } catch (e) {
-                return `Error: ${e.message}`;
+                return chatbotFailure('Error consultando la factura.');
             }
         }
         if (clientCode) {
@@ -1450,7 +1468,7 @@ ${lineList || '- Sin líneas'}`;
                 const text = `Facturas pendientes cliente ${clientCode} (total: **${invs.totalAmount.toLocaleString('es-ES')}€**):\n${list}`;
                 return reply(text, 'get_client_invoices', invs);
             } catch (e) {
-                return `Error: ${e.message}`;
+                return chatbotFailure('Error consultando facturas del cliente.');
             }
         }
         return 'Necesito un numero de factura o codigo de cliente. Ejemplo: "Factura F2024-001" o "Facturas del cliente 12345"';
@@ -1470,7 +1488,7 @@ ${lineList || '- Sin líneas'}`;
                 const list = albs.albaranes.map(a => `- ${a.number}: ${a.amount?.toLocaleString('es-ES')}€`).join('\n');
                 return `Albaranes de factura ${invoiceNumber}:\n${list}`;
             } catch (e) {
-                return `Error: ${e.message}`;
+                return chatbotFailure('Error consultando albaranes.');
             }
         }
         return 'Necesito el numero de factura. Ejemplo: "Albaranes de la factura F2024-001"';
@@ -1500,7 +1518,7 @@ ${lineList || '- Sin líneas'}`;
             ).join('\n');
             return `Clientes encontrados:\n${list}`;
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error buscando clientes.');
         }
     }
 
@@ -1513,7 +1531,7 @@ ${lineList || '- Sin líneas'}`;
             if (products.length === 0) return `No se encontraron productos con "${searchTerm}".`;
             return reply(formatProductResults(searchTerm, products), null, null, productSearchMetadata(products));
         } catch (e) {
-            return `Error: ${e.message}`;
+            return chatbotFailure('Error buscando productos.');
         }
     }
 
@@ -1550,7 +1568,7 @@ ${lineList || '- Sin líneas'}`;
             ).join('\n');
             return reply(`**Top clientes ${result.month}/${result.year}**\n${list || 'Sin clientes para ese periodo.'}`, 'get_top_clients', result);
         } catch (err) {
-            logger.error('[CHATBOT] Top analytics error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando ranking.';
         }
     }
@@ -1581,7 +1599,7 @@ ${lineList || '- Sin líneas'}`;
             ).join('\n');
             return `**Productos comprados (evaluación) cliente ${clientCode}:**\n${list}`;
         } catch (err) {
-            logger.error('[CHATBOT] Client evaluation error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando evaluación del cliente.';
         }
     }
@@ -1590,7 +1608,7 @@ ${lineList || '- Sin líneas'}`;
     if (intentPatterns.repartidor.test(msg)) {
         try {
             if (intentPatterns.comision.test(msg)) {
-                const result = await repartidorTools.getRepartidorCommissions(conn, userCode, codes.month, undefined);
+                const result = await repartidorTools.getRepartidorCommissions(conn, repartidorScope, codes.month, undefined);
                 const text = `**Comision repartidor ${result.month}/${result.year}**
 - Cobrado: **${result.collected.toLocaleString('es-ES')} EUR**
 - A cobrar: ${result.collectable.toLocaleString('es-ES')} EUR
@@ -1601,7 +1619,7 @@ ${lineList || '- Sin líneas'}`;
             }
 
             if (/cobro|liquidacion|liquidaci[oó]n|recaud/i.test(msg)) {
-                const result = await repartidorTools.getRepartidorCollections(conn, userCode, codes.month, undefined);
+                const result = await repartidorTools.getRepartidorCollections(conn, repartidorScope, codes.month, undefined);
                 const list = (result.clients || []).slice(0, 10).map((client) =>
                     `- ${client.clientName || client.clientCode}: ${client.collected.toLocaleString('es-ES')} EUR de ${client.collectable.toLocaleString('es-ES')} EUR (${client.percentage}%)`
                 ).join('\n');
@@ -1615,7 +1633,7 @@ ${list}`;
             }
 
             const result = await repartidorTools.getRepartidorDeliveries(
-                conn, userCode, extractRequestedYear(message), codes.month, undefined
+                conn, repartidorScope, extractRequestedYear(message), codes.month, undefined
             );
             const text = `**Ruta repartidor ${result.day}/${result.month}/${result.year}**
 - Entregas: **${result.totalDeliveries}**
@@ -1624,7 +1642,7 @@ ${list}`;
 - Pendientes: ${result.pending}`;
             return reply(text, 'get_repartidor_deliveries', result);
         } catch (err) {
-            logger.error('[CHATBOT] Repartidor error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando rutero.';
         }
     }
@@ -1651,7 +1669,7 @@ ${list}`;
 ${lines || '- Sin lineas'}`;
             return reply(text, 'get_order_details', order);
         } catch (err) {
-            logger.error('[CHATBOT] Order details error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando pedido.';
         }
     }
@@ -1670,7 +1688,7 @@ ${lines || '- Sin lineas'}`;
             ).join('\n');
             return `**Pedidos cliente ${clientCode}:**\n${text}`;
         } catch (err) {
-            logger.error('[CHATBOT] Client orders error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando pedidos.';
         }
     }
@@ -1687,7 +1705,7 @@ ${lines || '- Sin lineas'}`;
 - Importe: **${result.totalAmount.toLocaleString('es-ES')}€**`;
             return reply(text, 'get_daily_orders', result);
         } catch (err) {
-            logger.error('[CHATBOT] Daily orders error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando pedidos del dia.';
         }
     }
@@ -1706,7 +1724,7 @@ ${lines || '- Sin lineas'}`;
             ).join('\n');
             return `**Cobros pendientes cliente ${clientCode}** (total ${cobros.totalPending.toLocaleString('es-ES')}€):\n${list}`;
         } catch (err) {
-            logger.error('[CHATBOT] Cobros error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando cobros.';
         }
     }
@@ -1724,7 +1742,7 @@ ${lines || '- Sin lineas'}`;
 - Avance: **${result.collectionPercent}%**`;
             return reply(text, 'get_cobros_summary', result);
         } catch (err) {
-            logger.error('[CHATBOT] Cobros summary error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando resumen de cobros.';
         }
     }
@@ -1750,7 +1768,7 @@ Desde aqui puedo ampliar con top clientes, pedidos, cobros, facturas o evolucion
                 ],
             });
         } catch (err) {
-            logger.error('[CHATBOT] Glacius summary error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando Glacius.';
         }
     }
@@ -1767,7 +1785,7 @@ Desde aqui puedo ampliar con top clientes, pedidos, cobros, facturas o evolucion
 - Operaciones: **${result.totalOperations}**`;
             return reply(text, 'get_daily_summary', result);
         } catch (err) {
-            logger.error('[CHATBOT] Daily summary error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando resumen comercial.';
         }
     }
@@ -1802,7 +1820,7 @@ ${list}`, 'get_bolsa_history', result);
 Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')} EUR** | Consumido: ${bolsa.consumido.toLocaleString('es-ES')} EUR | Acumulado: ${bolsa.acumulado.toLocaleString('es-ES')} EUR`;
             return reply(text, 'get_bolsa_status', bolsa);
         } catch (err) {
-            logger.error('[CHATBOT] Bolsa error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando bolsa.';
         }
     }
@@ -1820,7 +1838,7 @@ Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')} EUR** | Con
             ).join('\n');
             return reply(`**Evolución ventas (12 meses):**\n${list}`, 'get_sales_evolution', evo);
         } catch (err) {
-            logger.error('[CHATBOT] Evolution error:', err.message);
+            emitChatbotLog('error', CHATBOT_LOG_EVENTS.handlerFailed);
             return 'Error consultando evolución.';
         }
     }
@@ -1833,7 +1851,7 @@ Saldo disponible: **${bolsa.saldoDisponible.toLocaleString('es-ES')} EUR** | Con
                 return reply(`No he detectado una accion concreta, pero he encontrado estos productos.\n\n${formatProductResults(looseProductQuery, products)}`, null, null, productSearchMetadata(products));
             }
         } catch (err) {
-            logger.warn('[CHATBOT] Loose product fallback skipped:', err.message);
+            emitChatbotLog('warn', CHATBOT_LOG_EVENTS.handlerFailed);
         }
     }
 

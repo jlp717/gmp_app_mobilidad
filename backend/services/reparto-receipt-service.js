@@ -121,6 +121,24 @@ function payment(source, confirmation) {
 }
 
 function createRepartoReceiptService({ repository } = {}) {
+
+function isExactZeroPrepaid(confirmation, storedLines, payments) {
+  if (text(row(confirmation, 'STATUS')) !== 'ENTREGADO'
+      || !Array.isArray(storedLines) || storedLines.length !== 0
+      || !Array.isArray(payments) || payments.length !== 0) return false;
+  const raw = row(confirmation, 'RESULT_JSON');
+  let result;
+  try {
+    result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (_error) {
+    return false;
+  }
+  const proof = result?.receiptProof;
+  return proof?.prepaidZeroWithoutLines === true
+    && proof.plannedImporteTotal === 0
+    && proof.plannedLineCount === 0
+    && proof.actualLineCount === 0;
+}
   assertRepository(repository);
 
   async function getReceipt({ confirmationId, idempotencyKey, actor, signal } = {}) {
@@ -152,10 +170,17 @@ function createRepartoReceiptService({ repository } = {}) {
         code: 'REPARTO_RECEIPT_PAYMENT_AMBIGUOUS', statusCode: 409,
       });
     }
-    const lines = Array.isArray(stored.lines) ? stored.lines.map(receiptLine) : [];
-    if (!lines.length) {
+    if (!Array.isArray(stored.lines)) {
       throw unavailable('REPARTO_RECEIPT_LINES_UNAVAILABLE', 'El recibo no contiene lineas confirmadas');
     }
+    const zeroPrepaid = isExactZeroPrepaid(confirmation, stored.lines, stored.payments);
+    const lines = stored.lines.map(receiptLine);
+    if (!lines.length && !zeroPrepaid) {
+      throw unavailable('REPARTO_RECEIPT_LINES_UNAVAILABLE', 'El recibo no contiene lineas confirmadas');
+    }
+    const importeTotal = zeroPrepaid ? 0 : lines.reduce(
+      (sum, line) => sum + (line.cantidadEntregada * line.precioUnitario), 0,
+    );
     const evidence = (stored.evidences || []).map((item) => Object.freeze({
       evidenceId: text(row(item, 'EVIDENCE_ID')),
       kind: text(row(item, 'EVIDENCE_KIND')),
@@ -210,6 +235,8 @@ function createRepartoReceiptService({ repository } = {}) {
       }),
       observaciones: text(row(confirmation, 'OBSERVACIONES')),
       firmaEvidenceId: signature,
+      prepaidZeroWithoutLines: zeroPrepaid,
+      importeTotal,
       lineas: Object.freeze(lines),
       evidencias: Object.freeze(evidence),
       cobro: payment(stored.payments[0], confirmation),

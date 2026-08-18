@@ -1,0 +1,144 @@
+diff --git a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart
+--- a/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart
++++ b/lib/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart
+@@ -81,6 +81,10 @@ class RepartidorFinanzasState {
+     this.objectivesDetail,
++    this.objectivesClientId,
++    this.objectivesYear,
++    this.objectivesPageLimit = 100,
+     this.deliverySummary,
+     this.isLoadingOverview = false,
+     this.isLoadingClients = false,
+     this.isLoadingDocuments = false,
+     this.isLoadingObjectives = false,
++    this.isLoadingNextObjectives = false,
+     this.error,
+@@ -101,6 +105,10 @@ class RepartidorFinanzasState {
+   final List<RepartidorMonthlyObjective> monthlyObjectives;
+   final RepartidorObjectivesDetail? objectivesDetail;
++  final String? objectivesClientId;
++  final int? objectivesYear;
++  final int objectivesPageLimit;
+   final RepartidorDeliverySummary? deliverySummary;
+@@ -110,11 +118,16 @@ class RepartidorFinanzasState {
+   final bool isLoadingDocuments;
+   final bool isLoadingObjectives;
++  final bool isLoadingNextObjectives;
+   final String? error;
+   final DateTime? lastUpdated;
+ 
+   bool get isLoading =>
+       isLoadingOverview ||
+       isLoadingClients ||
+       isLoadingDocuments ||
+-      isLoadingObjectives;
++      isLoadingObjectives ||
++      isLoadingNextObjectives;
++
++  bool get hasMoreObjectives => objectivesDetail?.hasMore ?? false;
++  int? get objectivesNextOffset => objectivesDetail?.nextOffset;
+@@ -125,6 +138,9 @@ class RepartidorFinanzasState {
+     List<RepartidorMonthlyObjective>? monthlyObjectives,
+     Object? objectivesDetail = _sentinel,
++    Object? objectivesClientId = _sentinel,
++    Object? objectivesYear = _sentinel,
++    int? objectivesPageLimit,
+     Object? deliverySummary = _sentinel,
+@@ -134,6 +150,7 @@ class RepartidorFinanzasState {
+     bool? isLoadingDocuments,
+     bool? isLoadingObjectives,
++    bool? isLoadingNextObjectives,
+     Object? error = _sentinel,
+@@ -146,6 +163,14 @@ class RepartidorFinanzasState {
+           ? this.objectivesDetail
+           : objectivesDetail as RepartidorObjectivesDetail?,
++      objectivesClientId: objectivesClientId == _sentinel
++          ? this.objectivesClientId
++          : objectivesClientId as String?,
++      objectivesYear: objectivesYear == _sentinel
++          ? this.objectivesYear
++          : objectivesYear as int?,
++      objectivesPageLimit: objectivesPageLimit ?? this.objectivesPageLimit,
+       deliverySummary: deliverySummary == _sentinel
+@@ -157,6 +182,8 @@ class RepartidorFinanzasState {
+       isLoadingObjectives: isLoadingObjectives ?? this.isLoadingObjectives,
++      isLoadingNextObjectives:
++          isLoadingNextObjectives ?? this.isLoadingNextObjectives,
+       error: error == _sentinel ? this.error : error as String?,
+@@ -343,19 +370,29 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
+   Future<void> loadObjectives({
+     String? clientId,
+     int? year,
++    int limit = 100,
+     bool forceRefresh = false,
+   }) async {
+@@
+-    state = state.copyWith(isLoadingObjectives: true, error: null);
++    state = state.copyWith(
++      objectivesDetail: null,
++      objectivesClientId: clientId,
++      objectivesYear: selectedYear,
++      objectivesPageLimit: limit,
++      isLoadingObjectives: true,
++      isLoadingNextObjectives: false,
++      error: null,
++    );
+@@
+           year: selectedYear,
+           clientId: clientId,
++          limit: limit,
++          offset: 0,
+           forceRefresh: forceRefresh,
+@@
+     }
+   }
++
++  Future<void> loadNextObjectives({bool forceRefresh = false}) async {
++    final current = state.objectivesDetail;
++    if (current == null ||
++        !current.hasMore ||
++        current.nextOffset == null ||
++        state.isLoadingNextObjectives) {
++      return;
++    }
++
++    final repartidorId = state.filters.repartidorId;
++    final clientId = state.objectivesClientId;
++    final year = state.objectivesYear ?? current.year;
++    final limit = state.objectivesPageLimit;
++    final offset = current.nextOffset!;
++    state = state.copyWith(isLoadingNextObjectives: true, error: null);
++
++    try {
++      final nextPage = await _service.getObjectivesDetail(
++        repartidorId: repartidorId,
++        year: year,
++        clientId: clientId,
++        limit: limit,
++        offset: offset,
++        forceRefresh: forceRefresh,
++      );
++      final sameScope = state.filters.repartidorId == repartidorId &&
++          state.objectivesClientId == clientId &&
++          state.objectivesYear == year &&
++          state.objectivesPageLimit == limit;
++      if (!sameScope) return;
++      state = state.copyWith(
++        objectivesDetail: current.mergePage(nextPage),
++        isLoadingNextObjectives: false,
++        lastUpdated: DateTime.now(),
++      );
++    } catch (_) {
++      final sameScope = state.filters.repartidorId == repartidorId &&
++          state.objectivesClientId == clientId &&
++          state.objectivesYear == year;
++      if (sameScope) {
++        state = state.copyWith(
++          isLoadingNextObjectives: false,
++          error: 'No se pudo cargar la siguiente pagina de objetivos.',
++        );
++      }
++    }
++  }
+ 
+   Future<void> refreshOverview() async {

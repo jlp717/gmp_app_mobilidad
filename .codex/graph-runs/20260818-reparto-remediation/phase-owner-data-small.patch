@@ -1,0 +1,104 @@
+diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
+--- a/lib/features/repartidor/data/repartidor_data_service.dart
++++ b/lib/features/repartidor/data/repartidor_data_service.dart
+@@
+ bool isValidRepartoReceiptEmailAddress(String value) =>
+     RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim());
+ 
++String requireConcreteRepartoOwner(String? value) {
++  if (value == null || !isValidRepartoOwnerId(value)) {
++    throw const RepartidorDataException(
++      'Selecciona un repartidor concreto.',
++      statusCode: 422,
++      code: 'REPARTIDOR_OWNER_REQUIRED',
++    );
++  }
++  return value.trim();
++}
++
++@visibleForTesting
++String repartoSignatureCacheKey({
++  required String repartidorId,
++  required int ejercicio,
++  required String serie,
++  required int terminal,
++  required int numero,
++}) =>
++    'repartidor_signature_${repartidorId}_${ejercicio}_${serie}_${terminal}_$numero';
++
+@@
+   static Future<List<HistoryDocument>> getClientDocuments({
+@@
+     int offset = 0,
+   }) async {
+-    if (repartidorId.trim().isEmpty) {
+-      throw const RepartidorDataException('Falta el repartidor del historial');
+-    }
++    final owner = requireConcreteRepartoOwner(repartidorId);
+@@
+       final queryParams = <String, String>{
+-        'repartidorId': repartidorId,
++        'repartidorId': owner,
+@@
+       final cacheKey =
+-          'repartidor_docs_${clientId}_${repartidorId}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
++          'repartidor_docs_${clientId}_${owner}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
+@@
+     int? albaranTerminal,
+     int? albaranYear,
+-    String? repartidorId,
++    required String repartidorId,
+   }) async {
+-    final rawOwner = repartidorId;
+-    if (rawOwner != null && !isValidRepartoOwnerId(rawOwner)) {
+-      throw const RepartidorDataException(
+-        'Selecciona un repartidor concreto para el documento.',
+-        statusCode: 422,
+-      );
+-    }
++    final owner = requireConcreteRepartoOwner(repartidorId);
+     try {
+-      final ownerHint = rawOwner?.trim() ?? '';
+       final String endpoint;
+       if (type == 'albaran') {
+-        final qs = ownerHint.isEmpty
+-            ? ''
+-            : '?repartidorId=${Uri.encodeComponent(ownerHint)}';
++        final qs = '?repartidorId=${Uri.encodeComponent(owner)}';
+@@
+-        if (ownerHint.isNotEmpty) queryParams['repartidorId'] = ownerHint;
++        queryParams['repartidorId'] = owner;
+@@
+   static Future<List<int>> downloadDeliveryNotePdf({
+     required String confirmationId,
+-    String? repartidorId,
++    required String repartidorId,
+   }) async {
++    final owner = requireConcreteRepartoOwner(repartidorId);
+     try {
+@@
+           confirmationId,
+-          repartidorId: repartidorId,
++          repartidorId: owner,
+@@
+   static Future<Map<String, dynamic>?> getSignature({
+@@
+     required int numero,
++    required String repartidorId,
+   }) async {
++    final owner = requireConcreteRepartoOwner(repartidorId);
+     try {
+@@
+           'terminal': terminal.toString(),
+           'numero': numero.toString(),
++          'repartidorId': owner,
+         },
+-        cacheKey:
+-            'repartidor_signature_${ejercicio}_${serie}_${terminal}_$numero',
++        cacheKey: repartoSignatureCacheKey(
++          repartidorId: owner,
++          ejercicio: ejercicio,
++          serie: serie,
++          terminal: terminal,
++          numero: numero,
++        ),

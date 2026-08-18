@@ -58,6 +58,22 @@ void main() {
     );
   });
 
+  test('clearStaleAcknowledgedIfOpen unlocks a pending delivery', () async {
+    final store = _MemoryStore();
+    final journal = RepartoConfirmationJournal(store);
+    await store.write(
+      const RepartoConfirmationJournalEntry(
+        deliveryId: '2026-A-1-99-C1',
+        state: RepartoOperationState.acknowledged,
+        evidences: {},
+        confirmationId: '7',
+      ),
+    );
+
+    await journal.clearStaleAcknowledgedIfOpen('2026-A-1-99-C1');
+    expect(await store.read('2026-A-1-99-C1'), isNull);
+  });
+
   test('history reprint ZPL includes title, total, receptor and DNI', () {
     final zpl = ZebraPrintService.generateHistoryDeliveryZpl(
       title: 'FACTURA F-9836',

@@ -156,6 +156,7 @@ class RepartoConfirmationRequest {
     required this.status,
     required this.occurredAt,
     required this.lineas,
+    this.allowEmptyLineas = false,
     this.repartidorId,
     this.receiver,
     this.firma,
@@ -171,6 +172,11 @@ class RepartoConfirmationRequest {
   final RepartoDeliveryStatus status;
   final DateTime occurredAt;
   final List<RepartoDeliveryLine> lineas;
+
+  /// Permite el prepago sin lineas validado por Rutero. No se serializa:
+  /// el backend vuelve a contrastar el documento ERP y es la autoridad final.
+  final bool allowEmptyLineas;
+
   final String? repartidorId;
   final RepartoReceiver? receiver;
   final String? firma;
@@ -207,7 +213,7 @@ class RepartoConfirmationRequest {
 
   void _validate() {
     if (!_hasText(itemId)) _invalid('itemId es obligatorio');
-    if (lineas.isEmpty || lineas.length > 250)
+    if ((lineas.isEmpty && !allowEmptyLineas) || lineas.length > 250)
       _invalid('Debe existir entre una y 250 lineas');
     if (occurredAt
         .isAfter(DateTime.now().toUtc().add(const Duration(minutes: 5)))) {
@@ -402,6 +408,8 @@ class RepartoConfirmationOperation {
         status: request.status,
         occurredAt: _occurredAt!,
         lineas: request.lineas,
+        allowEmptyLineas: request.allowEmptyLineas,
+        repartidorId: request.repartidorId,
         receiver: request.receiver,
         firma: request.firma,
         evidencias: request.evidencias,
@@ -430,6 +438,8 @@ class RepartoConfirmationOperation {
       status: request.status,
       occurredAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       lineas: request.lineas,
+      allowEmptyLineas: request.allowEmptyLineas,
+      repartidorId: request.repartidorId,
       receiver: request.receiver,
       firma: request.firma,
       evidencias: request.evidencias,
@@ -543,6 +553,8 @@ class RepartoPersistentConfirmationOperation {
         status: request.status,
         occurredAt: occurredAt,
         lineas: request.lineas,
+        allowEmptyLineas: request.allowEmptyLineas,
+        repartidorId: request.repartidorId,
         receiver: request.receiver,
         firma: request.firma,
         evidencias: request.evidencias,

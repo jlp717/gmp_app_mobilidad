@@ -1,0 +1,72 @@
+diff --git a/backend/services/reparto-variance-notification-service.js b/backend/services/reparto-variance-notification-service.js
+--- a/backend/services/reparto-variance-notification-service.js
++++ b/backend/services/reparto-variance-notification-service.js
+@@ -351,18 +351,39 @@ async function notifyAfterConfirm({
+     comercialCode,
+     deliveryStatus: normalizeText(result.deliveryStatus || command.delivery.status),
++    confirmedAt: normalizeText(result.confirmedAt),
++    observaciones: normalizeText(command.delivery.observaciones),
+     lineas,
+   };
+ 
+   let outboxId = null;
+   try {
++    const tables = notificationTables(env);
++    const existing = await query(
++      `SELECT ID, STATUS
++         FROM ${tables.varianceOutbox}
++        WHERE CONFIRMATION_ID = ?
++        ORDER BY ID
++        FETCH FIRST 1 ROW ONLY`,
++      [Number(result.confirmationId)],
++    );
++    if (existing?.length) {
++      return {
++        skipped: true,
++        reason: 'already_enqueued',
++        confirmationId: String(result.confirmationId),
++      };
++    }
+     await enqueueVarianceOutbox({
+       confirmationId: result.confirmationId,
+       documentId,
+@@ -370,9 +391,17 @@ async function notifyAfterConfirm({
+       comercialCode,
+       payload,
+     }, { query, env });
+     outboxId = Number(result.confirmationId);
+   } catch (error) {
+     logger.error(`[variance] outbox enqueue failed: ${error.message}`);
++    // Never send before durable TEST/production app-state enqueue. Confirmation
++    // remains successful; a transient DB failure is observable and cannot create
++    // an untracked duplicate email.
++    return {
++      skipped: true,
++      reason: 'outbox_unavailable',
++      confirmationId: String(result.confirmationId),
++    };
+   }
+@@ -400,24 +429,6 @@ async function notifyAfterConfirm({
+     } catch (error) {
+       logger.warn(`[variance] outbox status update failed: ${error.message}`);
+     }
+-  } else if (sendResult.sent > 0) {
+-    // Enqueue failed but email went out — try insert as SENT for digest tracking
+-    try {
+-      const tables = notificationTables(env);
+-      await query(
+-        `INSERT INTO ${tables.varianceOutbox}
+-          (CONFIRMATION_ID, DOCUMENT_ID, REPARTIDOR_ID, COMERCIAL_CODE, PAYLOAD_JSON, STATUS, SENT_AT, DIGEST_INCLUDED)
+-         VALUES (?, ?, ?, ?, ?, 'SENT', CURRENT TIMESTAMP, 'N')`,
+-        [
+-          Number(result.confirmationId),
+-          documentId,
+-          repartidorId,
+-          comercialCode || null,
+-          JSON.stringify(payload),
+-        ],
+-      );
+-    } catch (error) {
+-      logger.warn(`[variance] post-send outbox insert failed: ${error.message}`);
+-    }
+   }

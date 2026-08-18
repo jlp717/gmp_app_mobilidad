@@ -1,0 +1,75 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -36,0 +37,1 @@
++const ALLOW_TEST_ROW_CLEAR = process.argv.includes('--allow-test-row-clear');
+@@ -243,0 +245,2 @@
++  destinationNullCounts = {},
++  allowTestRowClear = false,
+@@ -293,0 +298,1 @@
++  let testRowsCleared = false;
+@@ -315,3 +321,17 @@
+-      if (source.isNullable !== 'YES' || destination.isNullable !== 'NO') {
+-        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: SET NOT NULL is destructive`);
+-      }
+-      plan.push({
++      if (source.isNullable === 'NO' && destination.isNullable === 'YES') {
++        const nullCount = Number(destinationNullCounts[delta.name]);
++        if (!Number.isInteger(nullCount) || nullCount < 0) {
++          throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: NULL count unavailable`);
++        }
++        if (nullCount > 0 && !allowTestRowClear) {
++          throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: ${nullCount} NULL rows require --allow-test-row-clear`);
++        }
++        if (nullCount > 0 && !testRowsCleared) {
++          plan.push({ kind: 'CLEAR_TEST_ROWS', rowCount: destinationRowCount, sql: `DELETE FROM ${pair.dst}` });
++          testRowsCleared = true;
++        }
++        plan.push({ kind: 'SET_NOT_NULL', column: delta.name, nullCount,
++          sql: `ALTER TABLE ${pair.dst} ALTER COLUMN ${delta.name} SET NOT NULL` });
++      } else if (source.isNullable === 'YES' && destination.isNullable === 'NO') {
++        plan.push({
+         kind: 'DROP_NOT_NULL',
+@@ -321,0 +342,2 @@
++      } else {
++        throw new Error(`SCHEMA RECONCILE BLOCK ${pair.dst}.${delta.name}: unknown nullability delta`);
++      }
+@@ -352,0 +376,1 @@
++  countNullsFn = countNulls,
+@@ -355,0 +380,1 @@
++  allowTestRowClear = !apply || ALLOW_TEST_ROW_CLEAR,
+@@ -365,0 +391,11 @@
++    const destinationNullCounts = {};
++    if (destinationExists) {
++      const destinationByName = new Map(destinationColumns.map((column) => [column.name, column]));
++      for (const source of sourceColumns) {
++        const destination = destinationByName.get(source.name);
++        if (destination && source.isNullable === 'NO' && destination.isNullable === 'YES') {
++          destinationNullCounts[source.name] = await countNullsFn(pair.dst, source.name);
++        }
++      }
++    }
+@@ -374,0 +411,2 @@
++      destinationNullCounts,
++      allowTestRowClear,
+@@ -487,0 +527,15 @@
++async function countNulls(schemaTable, column) {
++  assertJavierTest(schemaTable);
++  const safeColumn = String(column || '').trim().toUpperCase();
++  if (!/^[A-Z][A-Z0-9_]*$/.test(safeColumn)) {
++    throw new Error(`Invalid TEST column identifier: ${column}`);
++  }
++  const rows = await query(`SELECT COUNT(*) AS N FROM ${schemaTable} WHERE ${safeColumn} IS NULL`);
++  const count = Number(rows?.[0]?.N ?? rows?.[0]?.n);
++  if (!Number.isInteger(count) || count < 0) {
++    throw new Error(`NULL count unavailable for ${schemaTable}.${safeColumn}`);
++  }
++  return count;
++}
++
+@@ -1137,0 +1192,3 @@
++  if (ALLOW_TEST_ROW_CLEAR && (!APPLY || !RECONCILE_TEST_SCHEMA)) {
++    throw new Error('--allow-test-row-clear requires --apply --reconcile-test-schema');
++  }
+@@ -1282,0 +1340,1 @@
++  countNulls,

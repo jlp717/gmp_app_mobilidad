@@ -1,0 +1,42 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -400,0 +401,1 @@
++describe('operational identity and key contracts', () => {
++  const pair = {
++    group: 'finance', key: 'cobros', objectType: 'TABLE',
++    src: 'JAVIER.REPARTIDOR_COBROS', dst: 'JAVIER.TEST_REPARTIDOR_COBROS',
++  };
++
++  test('CREATE LIKE explicitly preserves IBM i identity attributes', () => {
++    expect(createLikeSql(pair)).toContain('INCLUDING IDENTITY');
++  });
++
++  test('recreates PK, CHECK, unique and lookup indexes by signature on TEST only', () => {
++    const contracts = normalizeOperationalContracts([
++      { KIND: 'PRIMARY_KEY', OBJECT_NAME: 'PK_PROD', COLUMN_NAME: 'ID', ORDINAL_POSITION: 1, ORDERING: 'A' },
++      { KIND: 'CHECK', OBJECT_NAME: 'CK_PROD', CHECK_CLAUSE: "STATUS IN ('PENDING','SENT')" },
++      { KIND: 'UNIQUE_INDEX', OBJECT_NAME: 'UX_PROD', COLUMN_NAME: 'IDEMPOTENCY_TOKEN', ORDINAL_POSITION: 1, ORDERING: 'A' },
++      { KIND: 'INDEX', OBJECT_NAME: 'IX_PROD', COLUMN_NAME: 'CODIGOVENDEDOR', ORDINAL_POSITION: 1, ORDERING: 'D' },
++    ]);
++    const plan = buildOperationalContractPlan(pair, contracts, []);
++    expect(plan.map(({ kind }) => kind)).toEqual([
++      'ADD_PRIMARY_KEY', 'ADD_CHECK', 'ADD_INDEX', 'ADD_INDEX',
++    ]);
++    expect(plan.map(({ sql }) => sql).join(' ')).toContain('CREATE UNIQUE INDEX JAVIER.');
++    expect(plan.map(({ sql }) => sql).join(' ')).toContain('CODIGOVENDEDOR DESC');
++    expect(plan.every(({ sql }) => sql.includes(pair.dst))).toBe(true);
++    expect(plan.map(({ sql }) => sql).join(' ')).not.toMatch(/ALTER TABLE JAVIER\.REPARTIDOR_COBROS/);
++  });
++
++  test('normalizes equivalent CHECK whitespace into one signature', () => {
++    const [left] = normalizeOperationalContracts([
++      { KIND: 'CHECK', OBJECT_NAME: 'A', CHECK_CLAUSE: "STATUS IN ('PENDING', 'SENT')" },
++    ]);
++    const [right] = normalizeOperationalContracts([
++      { KIND: 'CHECK', OBJECT_NAME: 'B', CHECK_CLAUSE: "  STATUS   IN ('PENDING', 'SENT')  " },
++    ]);
++    expect(operationalContractSignature(left)).toBe(operationalContractSignature(right));
++  });
++});
++

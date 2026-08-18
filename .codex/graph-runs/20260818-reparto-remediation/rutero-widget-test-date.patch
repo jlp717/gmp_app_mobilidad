@@ -1,0 +1,6 @@
+diff --git a/test/widgets/rutero_detail_completed_test.dart b/test/widgets/rutero_detail_completed_test.dart
+--- a/test/widgets/rutero_detail_completed_test.dart
++++ b/test/widgets/rutero_detail_completed_test.dart
+@@ -16 +16 @@
+-      fecha: DateTime(2026, 8, 18),
++      fecha: '2026-08-18',

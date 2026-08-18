@@ -1,0 +1,30 @@
+diff --git a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+--- a/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
++++ b/lib/features/repartidor/presentation/pages/repartidor_historico_page.dart
+@@ -277,9 +277,9 @@
+       setState(() {
+         _clients = ordered;
+         _clientsQuery = normalizedSearch;
+         _clientRowsConsumed = offset + page.clients.length;
+         _hasMoreClients = page.hasMore;
+         _clientsError = null;
+         _clientsLoadMoreError = null;
+       });
++      if (_selectedClientId != null &&
++          _selectedClientRepartidorId == null &&
++          _documents.isEmpty) {
++        final matches = ordered
++            .where((client) =>
++                client.id == _selectedClientId &&
++                isValidRepartoOwnerId(client.repartidorId ?? ''))
++            .toList(growable: false);
++        if (matches.length == 1) {
++          final client = matches.single;
++          WidgetsBinding.instance.addPostFrameCallback((_) {
++            if (!mounted) return;
++            _loadClientDocuments(client.id, client.name,
++                repartidorId: client.repartidorId);
++          });
++        }
++      }
+     } catch (_) {

@@ -1,0 +1,367 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -63,0 +64 @@
++const BACKUP_MANIFEST_TABLE = 'JAVIER.TEST_COPY_BACKUP_MANIFEST';
+@@ -656,87 +657,314 @@
+-async function backupTestTable(destination, runId, {
+-  tableExistsFn = tableExists,
+-  columnsOfFn = columnsOf,
+-  countOfFn = countOf,
+-  contentHashOfFn = contentHashOf,
+-  executeFn = run,
+-  apply = APPLY,
+-} = {}) {
+-  assertJavierTest(destination);
+-  const backup = backupTableName(destination, runId);
+-  const [destinationExists, backupExists] = await Promise.all([
+-    tableExistsFn(destination),
+-    tableExistsFn(backup),
+-  ]);
+-  if (!destinationExists) {
+-    if (!backupExists) return { destination, skipped: 'missing' };
+-    const backupCount = await countOfFn(backup);
+-    if (backupCount < 0) throw new Error(`BACKUP BLOCK ${backup}: row count unavailable`);
+-    return { destination, backup, rowCount: 0, backupCount, resumed: true, destinationMissing: true };
+-  }
+-
+-  const rowCount = await countOfFn(destination);
+-  if (rowCount < 0) throw new Error(`BACKUP BLOCK ${destination}: row count unavailable`);
+-  if (backupExists) {
+-    const backupCount = await countOfFn(backup);
+-    if (backupCount < 0) throw new Error(`BACKUP BLOCK ${backup}: row count unavailable`);
+-    if (rowCount === 0) {
+-      return { destination, backup, rowCount, backupCount, resumed: true, destinationRecreatedEmpty: true };
+-    }
+-    if (backupCount !== rowCount) {
+-      throw new Error(`BACKUP BLOCK ${backup}: existing rows=${backupCount}, expected=${rowCount}`);
+-    }
+-    const [destinationColumns, backupColumns] = await Promise.all([
+-      columnsOfFn(destination), columnsOfFn(backup),
+-    ]);
+-    const destinationShapeHash = backupShapeHash(destinationColumns);
+-    const backupSchemaHash = backupShapeHash(backupColumns);
+-    if (destinationShapeHash !== backupSchemaHash) {
+-      throw new Error(`BACKUP BLOCK ${backup}: schema hash mismatch`);
+-    }
+-    const [destinationContentHash, backupContentHash] = await Promise.all([
+-      contentHashOfFn(destination, destinationColumns),
+-      contentHashOfFn(backup, backupColumns),
+-    ]);
+-    if (destinationContentHash !== backupContentHash) {
+-      throw new Error(`BACKUP BLOCK ${backup}: content hash mismatch with ${destination}`);
+-    }
+-    return {
+-      destination, backup, rowCount, resumed: true,
+-      schemaHash: backupSchemaHash, contentHash: backupContentHash,
+-    };
+-  }
+-  if (rowCount <= 0) return { destination, skipped: 'empty', rowCount };
+-
+-  const destinationColumns = await columnsOfFn(destination);
+-  const names = destinationColumns.map((column) => column.name);
+-  if (!names.length) throw new Error(`BACKUP BLOCK ${destination}: no columns`);
+-  const sql = `CREATE TABLE ${backup} AS (SELECT ${names.join(', ')} FROM ${destination}) WITH DATA`;
+-  console.log(apply ? 'BACKUP' : '[DRY] BACKUP', destination, '->', backup, `rows=${rowCount}`);
+-  if (!apply) return { destination, backup, rowCount, resumed: false };
+-
+-  const destinationContentHash = await contentHashOfFn(destination, destinationColumns);
+-  await executeFn(sql);
+-  if (!(await tableExistsFn(backup))) throw new Error(`BACKUP BLOCK ${backup}: create not visible`);
+-  const backupCount = await countOfFn(backup);
+-  const backupColumns = await columnsOfFn(backup);
+-  const backupContentHash = await contentHashOfFn(backup, backupColumns);
+-  if (backupCount !== rowCount
+-    || backupShapeHash(backupColumns) !== backupShapeHash(destinationColumns)
+-    || backupContentHash !== destinationContentHash) {
+-    throw new Error(`BACKUP BLOCK ${backup}: post-create count/schema/content verification failed`);
+-  }
+-  return {
+-    destination, backup, rowCount, resumed: false,
+-    schemaHash: backupShapeHash(backupColumns), contentHash: backupContentHash,
+-  };
+-}
+-
+-async function backupMappedDestinations(pairs, runId, dependencies = {}) {
+-  const destinations = [...new Set(pairs.map((pair) => pair.dst))];
+-  const report = [];
+-  for (const destination of destinations) {
+-    report.push(await backupTestTable(destination, runId, dependencies));
+-  }
+-  return report;
+-}
++const BACKUP_MANIFEST_COLUMNS = [
++  'RUN_ID', 'SOURCE_TABLE', 'DESTINATION_TABLE', 'BACKUP_TABLE', 'ROW_COUNT',
++  'SHAPE_HASH', 'CONTENT_HASH', 'STATUS', 'CREATED_AT', 'UPDATED_AT',
++];
++
++const BACKUP_MANIFEST_CREATE_SQL = `CREATE TABLE ${BACKUP_MANIFEST_TABLE} (
++  RUN_ID VARCHAR(24) NOT NULL,
++  SOURCE_TABLE VARCHAR(128) NOT NULL,
++  DESTINATION_TABLE VARCHAR(128) NOT NULL,
++  BACKUP_TABLE VARCHAR(128) NOT NULL,
++  ROW_COUNT BIGINT NOT NULL,
++  SHAPE_HASH CHAR(64) NOT NULL,
++  CONTENT_HASH CHAR(64) NOT NULL,
++  STATUS VARCHAR(16) NOT NULL,
++  CREATED_AT TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  UPDATED_AT TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  PRIMARY KEY (RUN_ID, DESTINATION_TABLE)
++)`;
++
++function validateBackupManifestColumns(columns) {
++  const byName = new Map(columns.map((column) => [column.name, column]));
++  const missing = BACKUP_MANIFEST_COLUMNS.filter((name) => !byName.has(name));
++  if (missing.length) {
++    throw new Error(`BACKUP MANIFEST BLOCK ${BACKUP_MANIFEST_TABLE}: missing columns [${missing.join(',')}]`);
++  }
++  for (const name of BACKUP_MANIFEST_COLUMNS.slice(0, 8)) {
++    if (byName.get(name).isNullable !== 'NO') {
++      throw new Error(`BACKUP MANIFEST BLOCK ${BACKUP_MANIFEST_TABLE}.${name}: must be NOT NULL`);
++    }
++  }
++  return true;
++}
++
++async function ensureBackupManifestTable({
++  tableExistsFn = tableExists,
++  columnsOfFn = columnsOf,
++  executeFn = run,
++  apply = APPLY,
++} = {}) {
++  assertJavierTest(BACKUP_MANIFEST_TABLE);
++  if (await tableExistsFn(BACKUP_MANIFEST_TABLE)) {
++    validateBackupManifestColumns(await columnsOfFn(BACKUP_MANIFEST_TABLE));
++    return { table: BACKUP_MANIFEST_TABLE, operations: [], created: false };
++  }
++  console.log(apply ? 'BACKUP MANIFEST APPLY' : '[DRY] BACKUP MANIFEST', BACKUP_MANIFEST_CREATE_SQL);
++  if (!apply) {
++    return { table: BACKUP_MANIFEST_TABLE, operations: [BACKUP_MANIFEST_CREATE_SQL], created: false };
++  }
++  await executeFn(BACKUP_MANIFEST_CREATE_SQL);
++  if (!(await tableExistsFn(BACKUP_MANIFEST_TABLE))) {
++    throw new Error(`BACKUP MANIFEST BLOCK ${BACKUP_MANIFEST_TABLE}: create not visible`);
++  }
++  validateBackupManifestColumns(await columnsOfFn(BACKUP_MANIFEST_TABLE));
++  return { table: BACKUP_MANIFEST_TABLE, operations: [BACKUP_MANIFEST_CREATE_SQL], created: true };
++}
++
++function normalizeBackupManifestRow(row) {
++  if (!row) return null;
++  const value = (name) => row[name] ?? row[name.toLowerCase()];
++  return {
++    runId: String(value('RUN_ID') || '').trim(),
++    source: String(value('SOURCE_TABLE') || '').trim().toUpperCase(),
++    destination: String(value('DESTINATION_TABLE') || '').trim().toUpperCase(),
++    backup: String(value('BACKUP_TABLE') || '').trim().toUpperCase(),
++    rowCount: Number(value('ROW_COUNT')),
++    shapeHash: String(value('SHAPE_HASH') || '').trim().toLowerCase(),
++    contentHash: String(value('CONTENT_HASH') || '').trim().toLowerCase(),
++    status: String(value('STATUS') || '').trim().toUpperCase(),
++  };
++}
++
++function validateBackupManifestRecord(record, expected) {
++  if (!record) throw new Error(`BACKUP MANIFEST BLOCK ${expected.destination}: missing durable manifest`);
++  const exact = ['runId', 'source', 'destination', 'backup'];
++  for (const key of exact) {
++    if (record[key] !== expected[key]) {
++      throw new Error(`BACKUP MANIFEST BLOCK ${expected.destination}: ${key} mismatch`);
++    }
++  }
++  if (!Number.isInteger(record.rowCount) || record.rowCount < 0) {
++    throw new Error(`BACKUP MANIFEST BLOCK ${expected.destination}: invalid row count`);
++  }
++  if (!/^[a-f0-9]{64}$/.test(record.shapeHash) || !/^[a-f0-9]{64}$/.test(record.contentHash)) {
++    throw new Error(`BACKUP MANIFEST BLOCK ${expected.destination}: invalid SHA-256`);
++  }
++  if (!['PLANNED', 'READY'].includes(record.status)) {
++    throw new Error(`BACKUP MANIFEST BLOCK ${expected.destination}: invalid status ${record.status}`);
++  }
++  return record;
++}
++
++function createDbBackupManifestStore({
++  tableExistsFn = tableExists,
++  columnsOfFn = columnsOf,
++  executeFn = run,
++  queryWithParamsFn = queryWithParams,
++  apply = APPLY,
++} = {}) {
++  return {
++    ensure: () => ensureBackupManifestTable({ tableExistsFn, columnsOfFn, executeFn, apply }),
++    async read(runId, destination) {
++      const rows = await queryWithParamsFn(
++        `SELECT RUN_ID, SOURCE_TABLE, DESTINATION_TABLE, BACKUP_TABLE, ROW_COUNT,
++                SHAPE_HASH, CONTENT_HASH, STATUS
++           FROM ${BACKUP_MANIFEST_TABLE}
++          WHERE RUN_ID = ? AND DESTINATION_TABLE = ?`,
++        [runId, destination],
++      );
++      return normalizeBackupManifestRow(rows?.[0]);
++    },
++    async create(record) {
++      await executeFn(
++        `INSERT INTO ${BACKUP_MANIFEST_TABLE}
++          (RUN_ID, SOURCE_TABLE, DESTINATION_TABLE, BACKUP_TABLE, ROW_COUNT,
++           SHAPE_HASH, CONTENT_HASH, STATUS)
++         VALUES (?, ?, ?, ?, ?, ?, ?, 'PLANNED')`,
++        [record.runId, record.source, record.destination, record.backup, record.rowCount,
++          record.shapeHash, record.contentHash],
++      );
++      return this.read(record.runId, record.destination);
++    },
++    async markReady(record) {
++      if (record.status === 'READY') return record;
++      await executeFn(
++        `UPDATE ${BACKUP_MANIFEST_TABLE}
++            SET STATUS = 'READY', UPDATED_AT = CURRENT_TIMESTAMP
++          WHERE RUN_ID = ? AND DESTINATION_TABLE = ? AND SOURCE_TABLE = ?
++            AND BACKUP_TABLE = ? AND ROW_COUNT = ? AND SHAPE_HASH = ? AND CONTENT_HASH = ?`,
++        [record.runId, record.destination, record.source, record.backup, record.rowCount,
++          record.shapeHash, record.contentHash],
++      );
++      return this.read(record.runId, record.destination);
++    },
++  };
++}
++
++async function validateTableAgainstManifest(schemaTable, manifest, {
++  countOfFn,
++  columnsOfFn,
++  contentHashOfFn,
++}) {
++  const rowCount = await countOfFn(schemaTable);
++  if (rowCount < 0) throw new Error(`BACKUP BLOCK ${schemaTable}: row count unavailable`);
++  const columns = await columnsOfFn(schemaTable);
++  const shapeHash = backupShapeHash(columns);
++  const contentHash = await contentHashOfFn(schemaTable, columns);
++  if (rowCount !== manifest.rowCount
++    || shapeHash !== manifest.shapeHash
++    || contentHash !== manifest.contentHash) {
++    throw new Error(`BACKUP MANIFEST BLOCK ${schemaTable}: count/schema/content mismatch`);
++  }
++  return { rowCount, columns, shapeHash, contentHash };
++}
++
++async function backupTestTable(destination, runId, {
++  source = destination.replace(/^JAVIER\.TEST_/, 'JAVIER.'),
++  tableExistsFn = tableExists,
++  columnsOfFn = columnsOf,
++  countOfFn = countOf,
++  contentHashOfFn = contentHashOf,
++  executeFn = run,
++  queryWithParamsFn = queryWithParams,
++  manifestStore = null,
++  apply = APPLY,
++} = {}) {
++  assertJavierTest(destination);
++  assertJavierSource(source);
++  validateCopyRunId(runId);
++  const normalizedSource = source.toUpperCase();
++  const normalizedDestination = destination.toUpperCase();
++  const backup = backupTableName(normalizedDestination, runId);
++  const store = manifestStore || createDbBackupManifestStore({
++    tableExistsFn, columnsOfFn, executeFn, queryWithParamsFn, apply,
++  });
++  const expected = {
++    runId, source: normalizedSource, destination: normalizedDestination, backup,
++  };
++  const [destinationExists, backupExists] = await Promise.all([
++    tableExistsFn(normalizedDestination),
++    tableExistsFn(backup),
++  ]);
++
++  if (!destinationExists && !backupExists) return { destination, skipped: 'missing' };
++
++  let rowCount = destinationExists ? await countOfFn(normalizedDestination) : 0;
++  if (rowCount < 0) throw new Error(`BACKUP BLOCK ${destination}: row count unavailable`);
++
++  if (backupExists) {
++    await store.ensure();
++    let manifest = validateBackupManifestRecord(
++      await store.read(runId, normalizedDestination), expected,
++    );
++    const verifiedBackup = await validateTableAgainstManifest(backup, manifest, {
++      countOfFn, columnsOfFn, contentHashOfFn,
++    });
++    if (destinationExists && rowCount > 0) {
++      await validateTableAgainstManifest(normalizedDestination, manifest, {
++        countOfFn, columnsOfFn, contentHashOfFn,
++      });
++    }
++    manifest = validateBackupManifestRecord(await store.markReady(manifest), expected);
++    if (manifest.status !== 'READY') {
++      throw new Error(`BACKUP MANIFEST BLOCK ${destination}: READY checkpoint not durable`);
++    }
++    return {
++      destination, backup, rowCount, backupCount: verifiedBackup.rowCount, resumed: true,
++      destinationMissing: !destinationExists,
++      destinationRecreatedEmpty: destinationExists && rowCount === 0,
++      schemaHash: manifest.shapeHash,
++      contentHash: manifest.contentHash,
++    };
++  }
++
++  if (rowCount <= 0) return { destination, skipped: 'empty', rowCount };
++
++  const destinationColumns = await columnsOfFn(normalizedDestination);
++  const names = destinationColumns.map((column) => column.name);
++  if (!names.length) throw new Error(`BACKUP BLOCK ${destination}: no columns`);
++  const shapeHash = backupShapeHash(destinationColumns);
++  const contentHash = await contentHashOfFn(normalizedDestination, destinationColumns);
++  const plannedManifest = {
++    ...expected, rowCount, shapeHash, contentHash, status: 'PLANNED',
++  };
++  const sql = `CREATE TABLE ${backup} AS (SELECT ${names.join(', ')} FROM ${normalizedDestination}) WITH DATA`;
++  console.log(apply ? 'BACKUP' : '[DRY] BACKUP', normalizedDestination, '->', backup, `rows=${rowCount}`);
++  if (!apply) return { destination, backup, rowCount, resumed: false, shapeHash, contentHash };
++
++  await store.ensure();
++  let manifest = await store.read(runId, normalizedDestination);
++  if (manifest) {
++    manifest = validateBackupManifestRecord(manifest, expected);
++    if (manifest.rowCount !== rowCount
++      || manifest.shapeHash !== shapeHash
++      || manifest.contentHash !== contentHash) {
++      throw new Error(`BACKUP MANIFEST BLOCK ${destination}: pre-backup destination changed`);
++    }
++  } else {
++    manifest = validateBackupManifestRecord(await store.create(plannedManifest), expected);
++    if (manifest.rowCount !== rowCount
++      || manifest.shapeHash !== shapeHash
++      || manifest.contentHash !== contentHash) {
++      throw new Error(`BACKUP MANIFEST BLOCK ${destination}: durable readback mismatch`);
++    }
++  }
++
++  await executeFn(sql);
++  if (!(await tableExistsFn(backup))) throw new Error(`BACKUP BLOCK ${backup}: create not visible`);
++  await validateTableAgainstManifest(backup, manifest, {
++    countOfFn, columnsOfFn, contentHashOfFn,
++  });
++  manifest = validateBackupManifestRecord(await store.markReady(manifest), expected);
++  if (manifest.status !== 'READY') {
++    throw new Error(`BACKUP MANIFEST BLOCK ${destination}: READY checkpoint not durable`);
++  }
++  return {
++    destination, backup, rowCount, resumed: false,
++    schemaHash: manifest.shapeHash, contentHash: manifest.contentHash,
++  };
++}
++
++async function backupMappedDestinations(pairs, runId, dependencies = {}) {
++  const byDestination = new Map();
++  for (const pair of pairs) {
++    const existing = byDestination.get(pair.dst);
++    if (existing && existing.src !== pair.src) {
++      throw new Error(`BACKUP BLOCK ${pair.dst}: conflicting sources ${existing.src} and ${pair.src}`);
++    }
++    byDestination.set(pair.dst, pair);
++  }
++  const report = [];
++  for (const pair of byDestination.values()) {
++    report.push(await backupTestTable(pair.dst, runId, { ...dependencies, source: pair.src }));
++  }
++  return report;
++}

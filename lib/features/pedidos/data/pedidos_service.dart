@@ -2116,7 +2116,8 @@ class PedidosService {
     final safeSerie = Uri.encodeComponent(serie.trim());
     final ts = DateTime.now().millisecondsSinceEpoch;
     return ApiClient.getBytes(
-      '/repartidor/document/albaran/$ejercicio/$safeSerie/$terminal/$numero/pdf?preview=true&_t=$ts',
+      '/facturas/$safeSerie/$numero/$ejercicio/pdf?preview=true'
+      '&documentType=albaran&terminal=$terminal&_t=$ts',
     );
   }
 

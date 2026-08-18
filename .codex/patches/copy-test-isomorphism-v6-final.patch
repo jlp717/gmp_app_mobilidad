@@ -1,0 +1,15 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -189,1 +189,1 @@
+-  if (['BIGINT', 'INTEGER', 'SMALLINT', 'DATE', 'TIME', 'TIMESTAMP', 'BOOLEAN'].includes(type)) return type;
++  if (type === 'TIMESTMP') return 'TIMESTAMP';
++  if (['BIGINT', 'INTEGER', 'SMALLINT', 'DATE', 'TIME', 'TIMESTAMP', 'BOOLEAN'].includes(type)) return type;
+@@ -402,1 +403,2 @@
+   const rowCount = await countOfFn(destination);
++  if (rowCount < 0) throw new Error(`BACKUP BLOCK ${destination}: row count unavailable`);
+   if (rowCount <= 0) return { destination, skipped: 'empty', rowCount };
+@@ -407,1 +409,2 @@
+     const backupCount = await countOfFn(backup);
++    if (backupCount < 0) throw new Error(`BACKUP BLOCK ${backup}: row count unavailable`);
+     if (backupCount !== rowCount) {

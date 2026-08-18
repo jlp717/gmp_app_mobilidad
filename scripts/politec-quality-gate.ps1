@@ -37,6 +37,11 @@ function Test-Contains([string]$RelativePath, [string]$Pattern, [string]$Failure
   if ($text -notmatch $Pattern) { Add-Failure $Failure }
 }
 
+function Test-NotContains([string]$RelativePath, [string]$Pattern, [string]$Failure) {
+  $text = Get-Text $RelativePath
+  if ($text -match $Pattern) { Add-Failure $Failure }
+}
+
 function Get-LineIndex([string[]]$Lines, [string]$Pattern) {
   for ($i = 0; $i -lt $Lines.Count; $i++) {
     if ($Lines[$i] -match $Pattern) { return $i }
@@ -94,7 +99,10 @@ foreach ($pattern in $rootScratchPatterns) {
 
 $rootLogFiles = @(Get-ChildItem -LiteralPath $RootDir -File -Filter "*.log" -ErrorAction SilentlyContinue)
 foreach ($file in $rootLogFiles) {
-  Add-Failure "Local log file must live under logs/ and remain untracked: $($file.Name)"
+  $trackedLog = & git -C $RootDir ls-files -- $file.Name
+  if ($trackedLog) {
+    Add-Failure "Tracked log file must live under logs/: $($file.Name)"
+  }
 }
 
 $allowedRootMarkdown = @("AGENTS.md", "CLAUDE.md", "README.md")
@@ -141,9 +149,12 @@ foreach ($relativeRoot in $largeSourceRoots) {
 }
 
 # I - Integration: auth/session cluster safety and readiness before protected routes.
-Test-Contains "backend\middleware\auth.js" "AUTH_SESSION_PREFIX" "Auth middleware must define shared session keys for cluster-safe refresh sessions."
-Test-Contains "backend\middleware\auth.js" "rememberSessionInRedis" "Auth middleware must persist refresh sessions in Redis for PM2 cluster safety."
-Test-Contains "backend\middleware\auth.js" "AUTH_ALLOW_STATELESS_REFRESH_FALLBACK" "Auth middleware must explicitly gate any stateless refresh fallback."
+Test-Contains "backend\middleware\auth.js" "createAuthClaimsSessionStore" "Auth middleware must use the canonical sid/jti Redis session store."
+Test-Contains "backend\middleware\auth.js" "canonicalSessionStore" "Auth middleware must keep a canonical session store for cluster-safe refresh."
+Test-Contains "backend\src\modules\auth\application\auth-claims-session-store.js" "const selectedMode = production \? 'redis'" "Production auth sessions must force Redis mode."
+Test-Contains "backend\src\modules\auth\application\auth-claims-session-store.js" "const requiresRedis = production \|\| selectedMode === 'redis'" "Auth session store must require Redis in production or redis mode."
+Test-Contains "backend\middleware\auth.js" "canonicalSessionStore\.isActive" "Auth middleware must consult canonicalSessionStore.isActive on refresh."
+Test-NotContains "backend\middleware\auth.js" "AUTH_ALLOW_STATELESS_REFRESH_FALLBACK" "Auth middleware must not keep a stateless refresh fallback."
 Test-Contains "backend\config\env.js" "JWT_ACCESS_SECRET must be set" "Production config must fail fast when JWT_ACCESS_SECRET is missing."
 Test-Contains "backend\config\env.js" "JWT_REFRESH_SECRET must be set" "Production config must fail fast when JWT_REFRESH_SECRET is missing."
 Test-Contains "backend\server.js" "app\.get\('/api/ready', requireInternalMetricsAccess" "Readiness must be protected by internal access, not app bearer auth."

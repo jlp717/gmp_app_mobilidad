@@ -348,10 +348,11 @@ exports.validatePasswordStrength = (password) => {
 // =============================================================================
 
 function projectAuthenticatedUser(payload) {
-    const role = payload.role || 'COMERCIAL';
+    const role = String(payload.role || 'COMERCIAL').trim().toUpperCase();
     const isRepartidor = role === 'REPARTIDOR' && payload.isRepartidor === true;
     const vendorCodes = Array.isArray(payload.vendorCodes) ? [...payload.vendorCodes] : [];
     const vendedorCodes = Array.isArray(payload.vendedorCodes) ? [...payload.vendedorCodes] : [];
+    const repartidorCodes = Array.isArray(payload.repartidorCodes) ? [...payload.repartidorCodes] : [];
     return {
         id: payload.id,
         code: payload.user,
@@ -362,12 +363,13 @@ function projectAuthenticatedUser(payload) {
         availableRoles: Array.isArray(payload.availableRoles) ? [...payload.availableRoles] : [],
         activeMode: payload.activeMode || (role === 'JEFE_VENTAS' ? 'COMERCIAL' : role),
         availableModes: Array.isArray(payload.availableModes) ? [...payload.availableModes] : [],
-        isJefeVentas: payload.isJefeVentas === true,
+        isJefeVentas: role === 'JEFE_VENTAS' || role === 'ADMIN',
         isRepartidor,
         codigoConductor: isRepartidor ? payload.codigoConductor || null : null,
         matricula: isRepartidor ? payload.matricula || null : null,
         vendorCodes,
         vendedorCodes,
+        repartidorCodes,
         tipoVendedor: String(payload.tipoVendedor || '-'),
         showCommissions: payload.showCommissions !== false,
         claimsVersion: payload.claimsVersion,
@@ -388,6 +390,7 @@ function projectCanonicalClaims(payload) {
         matricula: user.matricula,
         vendorCodes: user.vendorCodes,
         vendedorCodes: user.vendedorCodes,
+        repartidorCodes: user.repartidorCodes,
         tipoVendedor: user.tipoVendedor,
         showCommissions: user.showCommissions,
         claimsVersion: user.claimsVersion,
@@ -511,7 +514,8 @@ exports.requireRoles = (...roles) => {
 };
 
 exports.requireJefeVentas = (req, res, next) => {
-    if (!req.user?.isJefeVentas) {
+    const role = String(req.user?.role || '').trim().toUpperCase();
+    if (role !== 'JEFE_VENTAS' && role !== 'ADMIN') {
         emitAuthLog('warn', AUTH_LOG.jefeVentasDenied);
         return res.status(403).json({ error: 'Acceso restringido a Jefes de Ventas', code: 'INSUFFICIENT_ROLE' });
     }

@@ -53,3 +53,58 @@ tools:
 poka_yoke:
   confirm_param: confirm
   message: "Set confirm=true after Javier HITL for destructive actions."
+
+audit_graph_nodes:
+  source_of_truth: ".opencode/audit/ACI.yaml"
+  note: "ACI de nodos del grafo de auditoria. Tools siguen en tools: arriba. No duplicar side-effects."
+  nodes:
+    - id: context_loader
+      agent: Context-Manager
+      inputs: [learned.yaml, AGENTS.md, AUDIT_STATE, LEDGER, ACI, project-state, user-corrections]
+      outputs: [context_packet, rules_in_force]
+      side_effects: "No escribe learned.yaml; no muta producto"
+    - id: orchestrator
+      agent: chief-engineer-assistant
+      inputs: [context_packet, flow-policy.yaml, decision-router]
+      outputs: [workstreams, required_agents, gates]
+      side_effects: "handoff-ledger; no implementa producto"
+    - id: coding
+      agents: [Node-Express-Specialist, Flutter-Architecture-Specialist, Flutter-UI-Specialist, Flutter-Data-Specialist, code-autopilot]
+      outputs: [diffs]
+      side_effects: "Producto solo si Orchestrator autoriza fase producto"
+    - id: security
+      agent: appsec-engineer
+      layer2: Security-Validator
+      outputs: [security_verdict]
+      side_effects: "No PASS inventado; no muta produccion"
+    - id: performance
+      agents: [Performance-Analyst, Flutter-Performance-Specialist]
+      outputs: [perf_findings, n_plus_one_report]
+      side_effects: "Solo lectura + metricas"
+    - id: design_motion
+      agent: Visual-Design-Specialist
+      outputs: [visual_risks, motion_notes, motion_tokens]
+      side_effects: "No rediseña UI en fase harness"
+    - id: seo_a11y
+      node: Visual-Design-Specialist
+      kind: owned_by_existing_node
+      outputs: [a11y_verdict, accessibility_notes]
+      side_effects: "No hay quality-a11y-route. Flutter Semantics, no axe."
+    - id: infra
+      agent: sre-engineer
+      layer2: [DevOps-CICD-Specialist, Runtime-Log-Diagnostician]
+      outputs: [health_verdict, deploy_command_allowlist_check]
+      side_effects: "Whitelist git pull origin test + pm2 restart gmp-api"
+    - id: critic
+      agents: [business-critic, Check-Reviewer, truth-teller]
+      outputs: [adversarial_review, false_claim_flags]
+      side_effects: "No confirma por default; no muta codigo; maker nunca se autoevalua"
+    - id: verifier
+      agent: Technical-Verifier
+      outputs: [PASS, WARN, BLOCK, evidence_packet]
+      side_effects: "Escribe .opencode/audit/LEDGER.yaml; max 3 repair iterations"
+    - id: learning_capture
+      agent: memory-formation
+      outputs: [user-corrections.jsonl, learned.yaml_proposal]
+      side_effects: "learned.yaml solo tras si explicito de Javier"
+

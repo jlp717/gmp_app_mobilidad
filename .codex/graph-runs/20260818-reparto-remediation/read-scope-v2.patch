@@ -1,0 +1,277 @@
+diff --git a/backend/routes/repartidor.js b/backend/routes/repartidor.js
+--- a/backend/routes/repartidor.js
++++ b/backend/routes/repartidor.js
+@@ -145 +145 @@ function authorizedRepartidorIds(req, res, rawIds) {
+-    if (isRepartoPrivileged(user)) return ids;
++    if (role === 'ADMIN') return ids;
+@@ -146,3 +146,17 @@ function authorizedRepartidorIds(req, res, rawIds) {
+     if (role === 'JEFE_VENTAS') {
+-        sendRouteError(res, 403, 'REPARTIDOR_MODE_REQUIRED');
+-        return null;
++        if (String(user?.activeMode || '').trim().toUpperCase() !== 'REPARTIDOR') {
++            sendRouteError(res, 403, 'REPARTIDOR_MODE_REQUIRED');
++            return null;
++        }
++        const scope = authenticatedRepartidorScope(user);
++        if (scope.length === 0) {
++            sendRouteError(res, 403, 'REPARTIDOR_SCOPE_REQUIRED');
++            return null;
++        }
++        if (!ids.every((id) => vendorCodesIntersect([id], scope))) {
++            sendRouteError(res, 403, 'REPARTIDOR_ACCESS_DENIED');
++            return null;
++        }
++        return ids;
+     }
+@@ -210,0 +225,20 @@ function uniqueActorCodes(values) {
++function tokenVendorScope(user) {
++    const hasVendorCodes = Array.isArray(user?.vendorCodes);
++    const hasVendedorCodes = Array.isArray(user?.vendedorCodes);
++    return {
++        present: hasVendorCodes || hasVendedorCodes,
++        codes: uniqueActorCodes([
++            ...(hasVendorCodes ? user.vendorCodes : []),
++            ...(hasVendedorCodes ? user.vendedorCodes : []),
++        ]),
++    };
++}
++
++// Claims express global vendor visibility. They are an upper bound for
++// reparto access, not a manager-specific fleet assignment.
++function authenticatedRepartidorScope(user) {
++    return tokenVendorScope(user).codes;
++}
++
+@@ -211,0 +247,2 @@ function actorVendorCodes(user) {
++    const tokenScope = tokenVendorScope(user);
++    if (tokenScope.present) return tokenScope.codes;
+@@ -213,6 +250,0 @@ function actorVendorCodes(user) {
+-    const tokenCodes = [
+-        ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
+-        ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
+-        own,
+-    ];
+@@ -220 +251 @@ function actorVendorCodes(user) {
+-    return uniqueActorCodes([...tokenCodes, ...scoped]);
++    return uniqueActorCodes([own, ...scoped]);
+@@ -243,0 +275,10 @@ function authorizeResolvedOwner(req, res, rows, { requireRepartoOwnerHint = false } = {}) {
++        const scope = authenticatedRepartidorScope(req.user);
++        if (scope.length === 0) {
++            sendRouteError(res, 403, 'REPARTIDOR_SCOPE_REQUIRED');
++            return false;
++        }
++        if (!vendorCodesIntersect([hinted], scope)) {
++            sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
++            return false;
++        }
+@@ -331,0 +374,10 @@ function prevalidateStrictDocumentOwner(req, res) {
++        const scope = authenticatedRepartidorScope(req.user);
++        if (scope.length === 0) {
++            sendRouteError(res, 403, 'REPARTIDOR_SCOPE_REQUIRED');
++            return false;
++        }
++        if (!vendorCodesIntersect([hint], scope)) {
++            sendRouteError(res, 403, 'DOCUMENT_ACCESS_DENIED');
++            return false;
++        }
+diff --git a/backend/routes/entregas.js b/backend/routes/entregas.js
+--- a/backend/routes/entregas.js
++++ b/backend/routes/entregas.js
+@@ -54,0 +55,11 @@ function parseRepartidorSelector(value, { single = false } = {}) {
++// JWT vendor claims are global visibility, not a manager-specific assignment.
++function authenticatedRepartidorScope(user) {
++    return [...new Set([
++        ...(Array.isArray(user?.vendorCodes) ? user.vendorCodes : []),
++        ...(Array.isArray(user?.vendedorCodes) ? user.vendedorCodes : []),
++    ]
++        .map(canonicalRepartidorCode)
++        .filter(Boolean))];
++}
++
+@@ -64,9 +75,13 @@ function canAccessRepartidor(req, repartidorId) {
+-    if (isPrivilegedUser(req)) return true;
+-    if (req.user?.role !== 'REPARTIDOR') return false;
++    const role = normalizeCode(req.user?.role).toUpperCase();
++    if (role === 'ADMIN') return true;
++    if (role === 'JEFE_VENTAS') {
++        if (normalizeCode(req.user?.activeMode).toUpperCase() !== 'REPARTIDOR') return false;
++        const scope = authenticatedRepartidorScope(req.user);
++        return scope.length > 0 && scope.some((code) => codesMatch(code, repartidorId));
++    }
++    if (role !== 'REPARTIDOR') return false;
+     const userCode = normalizeCode(req.user.code || req.user.id || req.user.user);
+-    const targetCode = normalizeCode(repartidorId);
+-    const userNumeric = normalizeNumericCode(userCode);
+-    const targetNumeric = normalizeNumericCode(targetCode);
+-    return userCode === targetCode ||
+-        (userNumeric !== null && targetNumeric !== null && userNumeric === targetNumeric);
++    return codesMatch(userCode, repartidorId);
+@@ -98,0 +114,4 @@ function requireConcreteAlbaranOwner(req, res) {
++        if (!canAccessRepartidor(req, selected[0])) {
++            res.status(403).json({ success: false, code: 'REPARTIDOR_ACCESS_DENIED', error: 'No tienes permisos para consultar este repartidor' });
++            return { allowed: false, hintedOwner: null };
++        }
+@@ -352,0 +373 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
++                code: 'REPARTIDOR_ACCESS_DENIED',
+diff --git a/backend/routes/auth.js b/backend/routes/auth.js
+--- a/backend/routes/auth.js
++++ b/backend/routes/auth.js
+@@ -72,0 +73,30 @@ function repartidoresAccess(user = {}) {
++function canonicalRepartidorCode(value) {
++    const raw = String(value || '').trim().toUpperCase();
++    if (!/^[A-Z0-9]{1,2}$/.test(raw) || raw === 'ALL') return '';
++    return /^\d{1,2}$/.test(raw) ? raw.padStart(2, '0') : raw;
++}
++
++// Claims represent global vendor visibility. Intersection with the reparto
++// catalog prevents selectors outside the authenticated token without claiming
++// these codes are a manager-specific assignment.
++function repartidoresScope(user = {}) {
++    return [...new Set([
++        ...(Array.isArray(user.vendorCodes) ? user.vendorCodes : []),
++        ...(Array.isArray(user.vendedorCodes) ? user.vendedorCodes : []),
++    ].map(canonicalRepartidorCode).filter(Boolean))];
++}
++
++function filterRepartidoresByScope(rows, scope) {
++    const allowed = new Set(scope);
++    const seen = new Set();
++    return (rows || []).filter((row) => {
++        const code = canonicalRepartidorCode(row?.code);
++        if (!code || !allowed.has(code) || seen.has(code)) return false;
++        seen.add(code);
++        return true;
++    }).map((row) => ({ ...row, code: canonicalRepartidorCode(row.code) }));
++}
++
+ router.get('/repartidores', verifyToken, async (req, res) => {
+@@ -84,0 +116,12 @@ router.get('/repartidores', verifyToken, async (req, res) => {
++        const role = String(req.user?.role || '').trim().toUpperCase();
++        const scope = role === 'ADMIN' ? null : repartidoresScope(req.user);
++        if (access === 'FLEET' && role !== 'ADMIN' && scope.length === 0) {
++            return res.status(403).json({ error: 'Scope de reparto no disponible', code: 'REPARTIDOR_SCOPE_REQUIRED' });
++        }
++        const sendCatalog = (catalog) => res.json(
++            role === 'ADMIN'
++                ? catalog
++                : filterRepartidoresByScope(catalog, scope),
++        );
++
+@@ -87 +131 @@ router.get('/repartidores', verifyToken, async (req, res) => {
+-            return res.json(_repartidoresCache);
++            return sendCatalog(_repartidoresCache);
+@@ -136 +180 @@ router.get('/repartidores', verifyToken, async (req, res) => {
+-        res.json(_repartidoresCache);
++        return sendCatalog(_repartidoresCache);
+@@ -144,0 +189,2 @@ router.repartidoresAccess = repartidoresAccess;
++router.repartidoresScope = repartidoresScope;
++router.filterRepartidoresByScope = filterRepartidoresByScope;
+diff --git a/backend/__tests__/entregas-bola-security.test.js b/backend/__tests__/entregas-bola-security.test.js
+--- a/backend/__tests__/entregas-bola-security.test.js
++++ b/backend/__tests__/entregas-bola-security.test.js
+@@ -84,0 +85 @@ describe('entregas BOLA and active-mode guards', () => {
++    mockUser.vendorCodes = ['8', '09', '09'];
+@@ -88,0 +90,17 @@ describe('entregas BOLA and active-mode guards', () => {
++
++  test('JEFE reparto rejects missing scope and any foreign list member before DB', async () => {
++    mockUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    const missingScope = await request(app()).get('/pendientes/08?date=2026-08-18');
++    expect(missingScope.status).toBe(403);
++    expect(missingScope.body.code).toBe('REPARTIDOR_ACCESS_DENIED');
++    expect(mockCachedQuery).not.toHaveBeenCalled();
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++
++    mockUser.vendorCodes = ['8'];
++    const foreign = await request(app()).get('/pendientes/08,09?date=2026-08-18');
++    expect(foreign.status).toBe(403);
++    expect(foreign.body.code).toBe('REPARTIDOR_ACCESS_DENIED');
++    expect(mockCachedQuery).not.toHaveBeenCalled();
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++  });
+@@ -103,0 +123 @@ describe('entregas BOLA and active-mode guards', () => {
++    mockUser.vendorCodes = ['8', '09'];
+@@ -116,0 +137,14 @@ describe('entregas BOLA and active-mode guards', () => {
++
++  test('JEFE foreign concrete hint is rejected before owner/header lookup even when DB would match it', async () => {
++    mockUser = {
++      id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['8'],
++    };
++    mockQueryWithParams.mockResolvedValue([{ CODIGO_REPARTIDOR: '09' }]);
++    const response = await request(app())
++      .get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=09');
++    expect(response.status).toBe(403);
++    expect(response.body.code).toBe('REPARTIDOR_ACCESS_DENIED');
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++  });
+diff --git a/backend/__tests__/repartidor-legacy-read-security.test.js b/backend/__tests__/repartidor-legacy-read-security.test.js
+--- a/backend/__tests__/repartidor-legacy-read-security.test.js
++++ b/backend/__tests__/repartidor-legacy-read-security.test.js
+@@ -128 +128 @@ describe('legacy repartidor read security contracts', () => {
+-      mockUser = { id: '90', code: '90', role, ...(role === 'JEFE_VENTAS' ? { activeMode: 'REPARTIDOR' } : {}) };
++      mockUser = { id: '90', code: '90', role, ...(role === 'JEFE_VENTAS' ? { activeMode: 'REPARTIDOR', vendorCodes: ['5', '06', '06'] } : {}) };
+@@ -139,0 +140,23 @@ describe('legacy repartidor read security contracts', () => {
++  test('JEFE reparto accepts only a canonical subset of token claims', async () => {
++    mockUser = {
++      id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR',
++      vendorCodes: ['5', '06', '06'], vendedorCodes: ['06'],
++    };
++    const visible = await authenticatedGet('/repartidor/collections/daily/05,6')
++      .query({ year: 2026, month: 8 });
++    expect(visible.status).toBe(200);
++
++    jest.clearAllMocks();
++    mockQueryWithParams.mockResolvedValue([]);
++    const foreign = await authenticatedGet('/repartidor/collections/daily/05,07')
++      .query({ year: 2026, month: 8 });
++    expect(foreign.status).toBe(403);
++    expect(foreign.body.code).toBe('REPARTIDOR_ACCESS_DENIED');
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++
++    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    const missing = await authenticatedGet('/repartidor/collections/daily/05');
++    expect(missing.status).toBe(403);
++    expect(missing.body.code).toBe('REPARTIDOR_SCOPE_REQUIRED');
++    expect(mockQueryWithParams).not.toHaveBeenCalled();
++  });
+@@ -347 +370 @@ describe('document ownership and side-effect contracts', () => {
+-      mockUser = { id: '90', code: '90', role, ...(role === 'JEFE_VENTAS' ? { activeMode: 'REPARTIDOR' } : {}) };
++      mockUser = { id: '90', code: '90', role, ...(role === 'JEFE_VENTAS' ? { activeMode: 'REPARTIDOR', vendorCodes: ['6'] } : {}) };
+@@ -435 +458 @@ describe('document ownership and side-effect contracts', () => {
+-    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['5', '06'] };
+@@ -522,0 +546 @@ describe('document ownership and side-effect contracts', () => {
++      vendorCodes: ['05'],
+@@ -552,0 +577 @@ describe('document ownership and side-effect contracts', () => {
++      vendorCodes: ['05'],
+@@ -713 +739 @@ describe('fleet client cards preserve a concrete owner', () => {
+-    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
++    mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', vendorCodes: ['5', '06'] };
+diff --git a/backend/__tests__/auth.test.js b/backend/__tests__/auth.test.js
+--- a/backend/__tests__/auth.test.js
++++ b/backend/__tests__/auth.test.js
+@@ -516,0 +517,25 @@ describe('Auth Flow Tests', () => {
++
++        test('normalizes unique claim codes and filters the reparto catalog by intersection', () => {
++            const scope = authRoutes.repartidoresScope({
++                vendorCodes: ['8', '09', '09'],
++                vendedorCodes: ['08'],
++            });
++            expect(scope).toEqual(['08', '09']);
++            expect(authRoutes.filterRepartidoresByScope([
++                { code: '8', name: 'Ocho' },
++                { code: '08', name: 'Ocho duplicado' },
++                { code: '09', name: 'Nueve' },
++                { code: '10', name: 'Diez' },
++            ], scope)).toEqual([
++                { code: '08', name: 'Ocho' },
++                { code: '09', name: 'Nueve' },
++            ]);
++        });
++
++        test('fails closed to an empty selector scope when claims are absent or invalid', () => {
++            expect(authRoutes.repartidoresScope({})).toEqual([]);
++            expect(authRoutes.repartidoresScope({ vendorCodes: ['ALL', '123', ''] })).toEqual([]);
++            expect(authRoutes.filterRepartidoresByScope([
++                { code: '08', name: 'Ocho' },
++            ], [])).toEqual([]);
++        });

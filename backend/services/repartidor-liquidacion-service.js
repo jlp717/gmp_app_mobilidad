@@ -136,11 +136,17 @@ function normalizeDayEntryQuery(input) {
       || Object.keys(input).some((key) => !['repartidorId', 'date'].includes(key))) {
     throw invalidEntry('La consulta diaria de liquidacion no es valida');
   }
-  if (typeof input.repartidorId !== 'string' || !/^\d{1,20}$/.test(input.repartidorId.trim())) {
-    throw invalidEntry('repartidorId debe ser un codigo numerico');
+  const rawSelector = typeof input.repartidorId === 'string' ? input.repartidorId.trim() : '';
+  const repartidorIds = rawSelector.split(',').map((item) => item.trim()).filter(Boolean);
+  if (!repartidorIds.length || repartidorIds.length > 100
+      || repartidorIds.some((item) => !/^\d{1,20}$/.test(item))) {
+    throw invalidEntry('repartidorId debe contener codigos numericos concretos');
   }
   if (!realDate(input.date)) throw invalidEntry('date debe ser una fecha real YYYY-MM-DD');
-  return Object.freeze({ repartidorId: input.repartidorId.trim(), date: input.date });
+  return Object.freeze({
+    repartidorId: [...new Set(repartidorIds)].join(','),
+    date: input.date,
+  });
 }
 
 function comparableCode(value) {
@@ -535,7 +541,10 @@ function createRepartidorLiquidacionService({ repository } = {}) {
       if (typeof transaction?.listStructuredEntries !== 'function') {
         throw capabilityError('Falta la lectura diaria estructurada de liquidacion');
       }
-      const ledger = await transaction.listStructuredEntries(query);
+      const repartidorIds = Object.freeze(query.repartidorId.split(','));
+      const ledger = await transaction.listStructuredEntries({
+        repartidorId: query.repartidorId, repartidorIds, date: query.date,
+      });
       if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) {
         throw capabilityError('El desglose diario persistido no es valido');
       }

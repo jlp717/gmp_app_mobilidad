@@ -4,7 +4,7 @@ const express = require('express');
 const multer = require('multer');
 const { z } = require('zod');
 const logger = require('../middleware/logger');
-const { verifyToken, requireRoles } = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
 const financeService = require('../services/repartidor-finance-service');
 const {
   notifyAfterConfirm,
@@ -26,6 +26,14 @@ const {
 } = require('../services/delivery-evidence-service');
 const { deleteCachePattern, invalidateCache } = require('../services/redis-cache');
 const { sendEmailWithPdf, generateDeliveryEmailHtml } = require('../services/emailPdfService');
+const {
+  RepartoEmailDeliveryPolicyError,
+  resolveRepartoEmailDelivery,
+  buildRepartoMessageId,
+} = require('../services/reparto-email-delivery-policy');
+const {
+  recordDocumentEmailLedger,
+} = require('../repositories/repartidor-route-db2-repository');
 
 let Sentry = null;
 try {
@@ -53,6 +61,7 @@ function buildCanonicalRuntime(dependencies) {
         throw new RepartoPersistenceError('El generador canÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³nico de recibos no estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ habilitado en este entorno', { code: 'REPARTO_RECEIPT_RUNTIME_UNAVAILABLE', statusCode: 503 });
       },
     }),
+    recordDocumentEmailLedger: dependencies?.recordDocumentEmailLedger || recordDocumentEmailLedger,
   });
 }
 
@@ -111,8 +120,7 @@ function requireCanonicalConfirmationRole(req, res, next) {
   const activeMode = String(user.activeMode || '').trim().toUpperCase();
   // JEFE in Perfil Reparto (activeMode=REPARTIDOR) may supervise confirmations.
   const allowed = role === 'REPARTIDOR'
-    || role === 'ADMIN'
-    || (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR');
+    || ((role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR');
   if (!allowed) {
     return res.status(403).json({
       success: false,
@@ -139,25 +147,35 @@ function evidenceRepartidorId(req, requested) {
   const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
   const authenticated = actorCode(req.user);
   const target = String(requested || '').trim();
-  if (role === 'ADMIN') {
-    if (!target) throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'repartidorId es obligatorio para administrador', 400);
-    return target;
+  if (target && (target.toUpperCase() === 'ALL'
+      || target.includes(',') || !/^[A-Za-z0-9_-]{1,20}$/.test(target))) {
+    throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'Debe seleccionarse un unico repartidor concreto', 422);
   }
-  // JEFE in Perfil Reparto stages evidence for the selected driver (Ver como).
-  if (role === 'JEFE_VENTAS' && activeMode === 'REPARTIDOR') {
-    if (!target) {
-      throw new EvidenceError(
-        'EVIDENCE_REPARTIDOR_REQUIRED',
-        'repartidorId es obligatorio para jefe en perfil reparto',
-        400,
-      );
+  const visible = financeFleetCodes(req.user);
+  if (role === 'REPARTIDOR') {
+    if (visible.length !== 1 || !codesMatch(visible[0], authenticated)) {
+      throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
     }
-    return target;
+    if (target && !codesMatch(visible[0], target)) {
+      throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
+    }
+    return visible[0];
   }
-  if (target && !codesMatch(authenticated, target)) {
+  if ((role !== 'JEFE_VENTAS' && role !== 'ADMIN') || activeMode !== 'REPARTIDOR') {
+    throw new EvidenceError('EVIDENCE_REPARTO_MODE_REQUIRED', 'Activa el Perfil Reparto', 403);
+  }
+  if (!target) {
+    throw new EvidenceError('EVIDENCE_REPARTIDOR_REQUIRED', 'Debe seleccionarse un unico repartidor concreto', 422);
+  }
+  const selected = visible.find((code) => codesMatch(code, target));
+  if (!selected) {
     throw new EvidenceError('EVIDENCE_OWNERSHIP_REQUIRED', 'No tienes permisos para esta entrega', 403);
   }
-  return authenticated;
+  return selected;
+}
+
+function artifactActor(req, requested) {
+  return { role: req.user?.role, repartidorId: evidenceRepartidorId(req, requested) };
 }
 
 function evidenceDocumentId(body) {
@@ -379,7 +397,7 @@ function parseLiquidacionCloseRequest(body) {
 
 const tiersSchema = z.object({
   tiers: z.array(z.object({
-    thresholdPct: z.coerce.number().min(0).max(100),
+    thresholdPct: z.coerce.number().min(30).max(100),
     commissionPct: z.coerce.number().min(0).max(100),
   })).min(1).max(20),
 });
@@ -424,7 +442,14 @@ function normalizedRepartidorSelection(repartidorId) {
 
 function hasFinanceListRole(user) {
   const role = String(user?.role || '').trim().toUpperCase();
-  return role === 'ADMIN' || role === 'JEFE_VENTAS';
+  const activeMode = String(user?.activeMode || '').trim().toUpperCase();
+  return (role === 'ADMIN' || role === 'JEFE_VENTAS') && activeMode === 'REPARTIDOR';
+}
+
+function financeFleetCodes(user) {
+  return (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
+    .filter((code) => typeof code === 'string' || typeof code === 'number')
+    .map(normalizeCode).filter(Boolean);
 }
 
 function requireFinanceRepartidorSelector(req, res, next) {
@@ -548,34 +573,58 @@ function codesMatch(left, right) {
     leftNumeric === rightNumeric;
 }
 
-function canAccessRepartidor(req, repartidorId) {
+function canAccessRepartidor(req, repartidorId, { allowMultiple = false } = {}) {
   const user = req.user || {};
-  if (user.isJefeVentas || user.role === 'JEFE_VENTAS' || user.role === 'ADMIN') {
-    return true;
+  const role = String(user.role || '').trim().toUpperCase();
+  const selected = String(repartidorId || '').split(',').map(normalizeCode).filter(Boolean);
+  if (!selected.length || selected.some((code) => /^ALL$/i.test(code))) return false;
+  if (!allowMultiple && selected.length !== 1) return false;
+  if (role === 'ADMIN' || role === 'JEFE_VENTAS') {
+    if (!hasFinanceListRole(user)) return false;
+    const visible = financeFleetCodes(user);
+    return visible.length > 0
+      && selected.every((target) => visible.some((allowed) => codesMatch(allowed, target)));
   }
-  if (user.role !== 'REPARTIDOR') return false;
+  if (role !== 'REPARTIDOR' || selected.length !== 1) return false;
   const userCode = normalizeCode(user.code || user.id || user.user);
-  const targetCode = normalizeCode(repartidorId);
-  const userNumericCode = normalizeNumericCode(userCode);
-  const targetNumericCode = normalizeNumericCode(targetCode);
-  return userCode === targetCode ||
-    (userNumericCode !== null &&
-      targetNumericCode !== null &&
-      userNumericCode === targetNumericCode);
+  const visible = financeFleetCodes(user);
+  return visible.length === 1 && codesMatch(userCode, selected[0])
+    && codesMatch(visible[0], selected[0]);
 }
 
-function requireRepartidorAccess(resolveRepartidorId) {
+function requireRepartidorAccess(resolveRepartidorId, options) {
   return (req, res, next) => {
     const repartidorId = resolveRepartidorId(req);
-    if (canAccessRepartidor(req, repartidorId)) return next();
+    const raw = String(repartidorId || '').trim();
+    if (!options?.allowMultiple && (!raw || raw.includes(',') || /^ALL$/i.test(raw))) {
+      return res.status(422).json({
+        success: false,
+        code: 'REPARTIDOR_ID_MULTI_NOT_ALLOWED',
+        error: 'Selecciona un unico repartidor concreto',
+      });
+    }
+    if (canAccessRepartidor(req, repartidorId, options)) return next();
     logger.warn('[REPARTIDOR_FINANZAS] Access denied', {
       code: 'REPARTIDOR_ACCESS_DENIED',
     });
     return res.status(403).json({
       success: false,
+      code: 'REPARTIDOR_ACCESS_DENIED',
       error: 'No tienes permisos para operar sobre este repartidor',
     });
   };
+}
+
+function requireSingleFinanceRepartidorSelector(req, res, next) {
+  const raw = String(req.params?.repartidorId || '').trim();
+  if (!raw || raw.includes(',') || /^ALL$/i.test(raw)) {
+    return res.status(422).json({
+      success: false,
+      code: 'REPARTIDOR_ID_MULTI_NOT_ALLOWED',
+      error: 'Selecciona un unico repartidor concreto',
+    });
+  }
+  return next();
 }
 
 async function invalidateFinanceCaches(repartidorId) {
@@ -600,7 +649,7 @@ async function invalidateFinanceCaches(repartidorId) {
   }
 }
 
-router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
     const query = dailySummaryQuerySchema.parse(req.query);
@@ -614,7 +663,7 @@ router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidor
   }
 });
 
-router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
     const query = summaryQuerySchema.parse(req.query);
@@ -629,7 +678,7 @@ router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelect
   }
 });
 
-router.get('/vencimientos/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/vencimientos/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
     assertExplicitRepartidorSelector(params.repartidorId);
@@ -712,7 +761,7 @@ router.post('/cobros/reverse', verifyToken, requireRepartidorAccess((req) => req
     const body = reverseCobroSchema.parse(req.body);
     const user = req.user || {};
     const operador = user.code || user.id || 'unknown';
-    const isPrivileged = user.role === 'ADMIN' || user.role === 'JEFE_VENTAS' || user.isJefeVentas === true;
+    const isPrivileged = hasFinanceListRole(user);
 
     const result = await financeService.reverseCobro({
       idempotencyToken: body.idempotencyToken,
@@ -773,9 +822,12 @@ router.post('/rutero/evidence/photo', setCanonicalArtifactHeaders, verifyToken, 
 router.get('/rutero/evidence/:evidenceId', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
   setEvidenceRequestTimeout(req, res);
   try {
+    if (Object.keys(req.query || {}).some((key) => key !== 'repartidorId')) {
+      throw new EvidenceError('INVALID_EVIDENCE_REQUEST', 'Selector de evidencia invalido', 422);
+    }
     const evidence = await canonicalConfirmationRuntime.evidenceService.retrieve({
       evidenceId: req.params.evidenceId,
-      actor: { role: req.user?.role, repartidorId: actorCode(req.user) },
+      actor: artifactActor(req, req.query?.repartidorId),
     });
     // Response remains JSON/base64. The filename is fixed and never derived
     // from evidence metadata or request input.
@@ -807,8 +859,8 @@ function setCanonicalArtifactHeaders(_req, res, next) {
   return next();
 }
 
-async function renderCanonicalReceipt(req, lookup) {
-  const actor = { role: req.user?.role, repartidorId: actorCode(req.user) };
+async function renderCanonicalReceipt(req, lookup, requestedOwner) {
+  const actor = artifactActor(req, requestedOwner);
   return withCanonicalReceiptTimeout(async (signal) => {
     const receipt = await canonicalConfirmationRuntime.receiptService.getReceipt({
       ...lookup, actor, signal,
@@ -832,12 +884,12 @@ async function renderCanonicalReceipt(req, lookup) {
   });
 }
 
-async function serveCanonicalReceipt(req, res, lookup) {
+async function serveCanonicalReceipt(req, res, lookup, requestedOwner) {
   req.setTimeout?.(canonicalReceiptTimeoutMs + 1000);
   res.setTimeout?.(canonicalReceiptTimeoutMs + 1000);
   setCanonicalReceiptHeaders(res);
   try {
-    const { receipt, rendered } = await renderCanonicalReceipt(req, lookup);
+    const { receipt, rendered } = await renderCanonicalReceipt(req, lookup, requestedOwner);
     return res.status(200).json({
       success: true,
       confirmationId: receipt.confirmationId,
@@ -904,27 +956,28 @@ function parseLiquidacionEntry(schema, body) {
 router.get('/rutero/confirmations/receipt', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
   setCanonicalReceiptHeaders(res);
   const parsed = idempotencyTokenSchema.safeParse(req.query?.idempotencyKey);
-  if (!parsed.success || Object.keys(req.query || {}).some((key) => key !== 'idempotencyKey')) {
+  const allowed = new Set(['idempotencyKey', 'repartidorId']);
+  if (!parsed.success || Object.keys(req.query || {}).some((key) => !allowed.has(key))) {
     return res.status(422).json({
       success: false,
       code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
       error: 'Debe indicarse solo una clave de idempotencia valida',
     });
   }
-  return serveCanonicalReceipt(req, res, { idempotencyKey: parsed.data });
+  return serveCanonicalReceipt(req, res, { idempotencyKey: parsed.data }, req.query?.repartidorId);
 });
 
 router.get('/rutero/confirmations/:confirmationId/receipt', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole,
   (req, res) => {
     setCanonicalReceiptHeaders(res);
-    if (Object.keys(req.query || {}).length !== 0) {
+    if (Object.keys(req.query || {}).some((key) => key !== 'repartidorId')) {
       return res.status(422).json({
         success: false,
         code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
         error: 'El recibo por confirmacion no admite selectores adicionales',
       });
     }
-    return serveCanonicalReceipt(req, res, { confirmationId: req.params.confirmationId });
+    return serveCanonicalReceipt(req, res, { confirmationId: req.params.confirmationId }, req.query?.repartidorId);
   });
 
 router.post(
@@ -932,7 +985,10 @@ router.post(
   verifyToken,
   requireCanonicalConfirmationRole,
   async (req, res) => {
-    const parsed = z.string().trim().email().max(180).safeParse(req.body?.destinatario);
+    const parsed = z.object({
+      destinatario: z.string().trim().email().max(180),
+      repartidorId: z.string().optional(),
+    }).strict().safeParse(req.body);
     if (!parsed.success) {
       return res.status(422).json({
         success: false,
@@ -941,9 +997,9 @@ router.post(
       });
     }
     try {
-      const { receipt, rendered } = await renderCanonicalReceipt(req, {
-        confirmationId: req.params.confirmationId,
-      });
+      const { receipt, rendered } = await renderCanonicalReceipt(
+        req, { confirmationId: req.params.confirmationId }, parsed.data.repartidorId,
+      );
       const clienteNombre = receipt.cliente?.nombre || receipt.clienteNombre || '';
       const numero = receipt.documento?.numero || receipt.confirmationId;
       const serie = receipt.documento?.serie || '';
@@ -951,8 +1007,25 @@ router.post(
         .reduce((sum, line) => (
           sum + (Number(line.cantidadEntregada || 0) * Number(line.precioUnitario || 0))
         ), 0);
-      await sendEmailWithPdf({
-        to: parsed.data,
+      const delivery = resolveRepartoEmailDelivery({
+        recipients: [parsed.data.destinatario],
+        mode: 'manual',
+      });
+      const effectiveRecipient = delivery.effectiveRecipients[0];
+      if (!effectiveRecipient) {
+        throw new RepartoEmailDeliveryPolicyError(
+          'El destinatario efectivo no es valido',
+          'REPARTO_EMAIL_RECIPIENT_REQUIRED',
+        );
+      }
+      const logicalKey = `receipt:${receipt.confirmationId}`;
+      const expectedMessageId = buildRepartoMessageId({
+        kind: 'receipt',
+        identity: logicalKey,
+        recipient: effectiveRecipient,
+      });
+      const sent = await sendEmailWithPdf({
+        to: effectiveRecipient,
         subject: `Nota de entrega ${serie}-${numero} - Granja Mari Pepa`,
         htmlBody: generateDeliveryEmailHtml({
           numero,
@@ -962,13 +1035,41 @@ router.post(
           clienteNombre,
         }),
         pdfBuffer: rendered.pdf,
+        messageId: expectedMessageId,
         pdfFilename: rendered.fileName || `nota_entrega_${numero}.pdf`,
       });
+      const messageId = String(sent?.messageId || '').trim();
+      if (!messageId) {
+        throw new RepartoPersistenceError('El proveedor de correo no confirmo el envio', {
+          code: 'DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED', statusCode: 503,
+        });
+      }
+      try {
+        await canonicalConfirmationRuntime.recordDocumentEmailLedger({
+          operatorId: actorCode(req.user),
+          ownerId: receipt.repartidorId,
+          payloadPreview: `logicalKey=${logicalKey};messageId=${messageId}`,
+        });
+      } catch (_ledgerError) {
+        throw new RepartoPersistenceError('No se pudo registrar la entrega del email', {
+          code: 'EMAIL_DELIVERY_LEDGER_REQUIRED', statusCode: 503,
+        });
+      }
       return res.status(200).json({
         success: true,
-        message: `Email enviado correctamente a ${parsed.data}`,
+        message: 'Email enviado correctamente',
+        messageId,
+        ledgerWritten: true,
+        deliveryPolicy: delivery.policy,
       });
     } catch (error) {
+      if (error instanceof RepartoEmailDeliveryPolicyError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          code: error.code,
+          error: error.message,
+        });
+      }
       if (error instanceof EvidenceError || isEvidenceTimeout(error)) {
         return sendEvidenceError(res, error, 'POST canonical receipt email');
       }
@@ -1096,7 +1197,16 @@ function requireLiquidacionAdjustmentRole(req, res, next) {
   return res.status(403).json({
     success: false,
     code: 'LIQUIDACION_ADJUSTMENT_ROLE_REQUIRED',
-    error: 'Solo JEFE_VENTAS o ADMIN puede crear ajustes',
+    error: 'Solo JEFE_VENTAS en Perfil Reparto o ADMIN puede crear ajustes',
+  });
+}
+
+function requireFinanceManagementRole(req, res, next) {
+  if (hasFinanceListRole(req.user)) return next();
+  return res.status(403).json({
+    success: false,
+    code: 'REPARTIDOR_FINANCE_ROLE_REQUIRED',
+    error: 'Activa el Perfil Reparto para administrar finanzas',
   });
 }
 
@@ -1131,9 +1241,10 @@ router.post('/liquidaciones/ingresos-bancarios', verifyToken,
   createLiquidacionEntryHandler('createBankDeposit', 'POST /liquidaciones/ingresos-bancarios'));
 
 router.get('/liquidaciones/:repartidorId/desglose', verifyToken,
-  requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+  requireFinanceRepartidorSelector,
+  requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
     try {
-      const { repartidorId } = numericParamsSchema.parse(req.params);
+      const { repartidorId } = listParamsSchema.parse(req.params);
       const { date } = z.object({ date: dateSchema }).strict().parse(req.query);
       const ledger = await canonicalLiquidacionService.getDayEntries({ repartidorId, date }, {
         actorId: actorCode(req.user), actorRole: String(req.user?.role || '').trim(),
@@ -1183,7 +1294,7 @@ router.get('/commissions/tiers', verifyToken, async (_req, res) => {
   }
 });
 
-router.put('/commissions/tiers', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.put('/commissions/tiers', verifyToken, requireFinanceManagementRole, async (req, res) => {
   try {
     const body = tiersSchema.parse(req.body);
     const updatedBy = req.user?.code || req.user?.id || 'unknown';
@@ -1197,7 +1308,7 @@ router.put('/commissions/tiers', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN
   }
 });
 
-router.get('/commissions/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/commissions/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
     const params = listParamsSchema.parse(req.params);
     assertExplicitRepartidorSelector(params.repartidorId);
@@ -1213,7 +1324,7 @@ router.get('/commissions/summary/:repartidorId', verifyToken, requireRepartidorA
   }
 });
 
-router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireFinanceManagementRole, async (req, res) => {
   try {
     if (
       process.env.NODE_ENV !== 'test' ||
@@ -1236,7 +1347,7 @@ router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireRoles('JEFE
   }
 });
 
-router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireSingleFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const docId = detailDocIdSchema.parse(req.params.docId);
     const parts = docId.split('-');
@@ -1265,11 +1376,9 @@ router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireRep
   }
 });
 
-router.get('/cuentas/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/cuentas/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
     const { repartidorId } = listParamsSchema.parse(req.params);
-    const saldoActual = await financeService.getSaldoActual(repartidorId);
-
     // A read failure is not an empty summary: that would report a false
     // ultimoCierre to the driver. It is mapped through the typed route error.
     const dateYmd = new Date().toISOString().slice(0, 10);
@@ -1278,7 +1387,15 @@ router.get('/cuentas/:repartidorId', verifyToken, requireFinanceRepartidorSelect
       date: dateYmd
     });
 
-    res.json({ 
+    const saldoActual = Number(summary?.summary?.saldoActual);
+    if (!Number.isFinite(saldoActual)) {
+      const error = new Error('El saldo diario autoritativo no esta disponible');
+      error.code = 'REPARTO_SCHEMA_UNAVAILABLE';
+      error.statusCode = 503;
+      throw error;
+    }
+
+    res.json({
       success: true, 
       cuenta: { 
         saldoActual, 
@@ -1290,7 +1407,7 @@ router.get('/cuentas/:repartidorId', verifyToken, requireFinanceRepartidorSelect
   }
 });
 
-router.get('/evolution/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+router.get('/evolution/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
     const { repartidorId } = listParamsSchema.parse(req.params);
     assertExplicitRepartidorSelector(repartidorId);

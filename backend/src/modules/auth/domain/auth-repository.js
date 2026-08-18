@@ -12,6 +12,10 @@ class AuthRepository extends Repository {
     throw new Error('Method not implemented: findByCode');
   }
 
+  async listRepartidorFleet() {
+    throw new Error('Method not implemented: listRepartidorFleet');
+  }
+
   async updatePassword(userId, newPasswordHash) {
     throw new Error('Method not implemented: updatePassword');
   }

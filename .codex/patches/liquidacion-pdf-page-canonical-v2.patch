@@ -1,0 +1,47 @@
+diff --git a/lib/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart b/lib/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart
+--- a/lib/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart
++++ b/lib/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart
+@@ -8,6 +8,6 @@
+ import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/liquidacion_pdf_builder.dart';
++import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
+ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
+@@ -303,11 +303,7 @@ class _RepartidorLiquidacionDiariaPageState
+   Future<void> _generatePdf(
+-    RepartidorDailySummary summary,
+-    RepartidorLiquidacionLedger? ledger,
++    RepartidorLiquidacionResult liquidacion,
+   ) async {
+     try {
+-      await LiquidacionPdfBuilder.preview(
+-        repartidorId: widget.repartidorId,
+-        date: _sessionDate,
+-        summary: summary,
+-        ledger: ledger,
++      await CanonicalLiquidacionPdfBuilder.preview(
++        liquidacion: liquidacion,
+       );
+@@ -327,11 +323,7 @@ class _RepartidorLiquidacionDiariaPageState
+   Future<void> _sharePdf(
+-    RepartidorDailySummary summary,
+-    RepartidorLiquidacionLedger? ledger,
++    RepartidorLiquidacionResult liquidacion,
+   ) async {
+     try {
+-      await LiquidacionPdfBuilder.shareViaSystem(
+-        repartidorId: widget.repartidorId,
+-        date: _sessionDate,
+-        summary: summary,
+-        ledger: ledger,
++      await CanonicalLiquidacionPdfBuilder.share(
++        liquidacion: liquidacion,
+       );
+@@ -407,4 +399,4 @@ class _RepartidorLiquidacionDiariaPageState
+             : 'Liquidacion cerrada. Abriendo PDF...',
+       );
+-      await _generatePdf(summary, ledger);
++      await _generatePdf(result);
+     } catch (error, stackTrace) {

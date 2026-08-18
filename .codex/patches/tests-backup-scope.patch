@@ -1,0 +1,31 @@
+diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+--- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
++++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
+@@ -563,0 +564,1 @@
++  test('schema-only backs up exactly the three affected pairs and never TEST_FIRMAS', async () => {
++    const affectedRows = [
++      { pair: { dst: 'JAVIER.TEST_REPARTIDOR_COBROS' }, operations: Array(8).fill({ kind: 'X' }) },
++      { pair: { dst: 'JAVIER.TEST_REPARTIDOR_LIQUIDACION_EMAILS' }, operations: Array(6).fill({ kind: 'X' }) },
++      { pair: { dst: 'JAVIER.TEST_DELIVERY_STATUS' }, operations: Array(10).fill({ kind: 'X' }) },
++      { pair: { dst: 'JAVIER.TEST_REPARTIDOR_FIRMAS' }, operations: [] },
++      { pair: { dst: 'JAVIER.TEST_REPARTO_CONFIRMACIONES' }, operations: [] },
++    ];
++    const affected = affectedSchemaPairs(affectedRows);
++    expect(affectedRows.reduce((sum, row) => sum + row.operations.length, 0)).toBe(24);
++    expect(affected.map(({ dst }) => dst)).toEqual([
++      'JAVIER.TEST_REPARTIDOR_COBROS',
++      'JAVIER.TEST_REPARTIDOR_LIQUIDACION_EMAILS',
++      'JAVIER.TEST_DELIVERY_STATUS',
++    ]);
++
++    const tableExistsFn = jest.fn(async (table) => !table.includes('TEST_COPY_BKP_'));
++    await backupMappedDestinations(affected, 'COPY_20260818_A', {
++      tableExistsFn,
++      countOfFn: jest.fn().mockResolvedValue(1),
++      columnsOfFn: jest.fn().mockResolvedValue([column()]),
++      apply: false,
++    });
++    expect(tableExistsFn).not.toHaveBeenCalledWith('JAVIER.TEST_REPARTIDOR_FIRMAS');
++    expect(tableExistsFn).not.toHaveBeenCalledWith('JAVIER.TEST_REPARTO_CONFIRMACIONES');
++  });
++

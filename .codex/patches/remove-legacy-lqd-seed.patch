@@ -1,0 +1,57 @@
+diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
+--- a/backend/scripts/copy-javier-prod-to-test.js
++++ b/backend/scripts/copy-javier-prod-to-test.js
+@@ -1154,53 +1154,0 @@
+-async function seedLqdDerivedCobrosLegacy() {
+-  const dst = TABLE_MAPPINGS.isolated_test.finance.cobros;
+-  assertJavierTest(dst);
+-  assertReadOnlyErp(ERP_LQD);
+-  if (SKIP_CVC) {
+-    console.log('SKIP LQD-derived cobros (--skip-cvc)');
+-    return;
+-  }
+-  if (!(await tableExists(ERP_LQD)) || !(await tableExists(dst))) {
+-    console.log('SKIP LQD cobros seed — missing table');
+-    return;
+-  }
+-
+-  await clearTestRows(dst);
+-  const { whereSql, params } = lqdWindowWhere();
+-  const splits = [
+-    ['EF', 'IMPORTEEFECTIVO'],
+-    ['CH', 'IMPORTECHEQUES'],
+-    ['TJ', 'IMPORTETARJETA'],
+-    ['PD', 'IMPORTEPOSTDATADOS'],
+-  ];
+-  let inserted = 0;
+-  for (const [forma, column] of splits) {
+-    const sql = `
+-      INSERT INTO ${dst} (
+-        CODIGOVENDEDOR, DIACOBRO, MESCOBRO, ANOCOBRO, IMPORTEVENCIMIENTO,
+-        CODIGOFORMAPAGO, LIQUIDADO_SN, LIQUIDACION_TOKEN, NUMEROLIQUIDACION
+-      )
+-      SELECT
+-        CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION, ${column},
+-        '${forma}', 'S',
+-        CAST(('ERP-COB-${forma}-' || TRIM(CODIGOVENDEDOR) || '-'
+-          || TRIM(VARCHAR(ANOLIQUIDACION * 10000 + MESLIQUIDACION * 100 + DIALIQUIDACION))
+-          || '-' || TRIM(VARCHAR(NUMEROLIQUIDACION))) AS VARCHAR(128)),
+-        NUMEROLIQUIDACION
+-      FROM (${lqdDedupeSubquery()}) X
+-      WHERE RN = 1 AND ${column} > 0
+-    `;
+-    console.log(`ERP-SEED LQD→cobros ${forma}${APPLY ? '' : ' [dry-run]'}`);
+-    await run(sql, params);
+-  }
+-  const destCount = APPLY ? await countOf(dst) : await countOf(ERP_LQD, whereSql, params);
+-  inserted = destCount;
+-  summaryRows.push({
+-    label: 'ERP-SEED LQD→cobros',
+-    src: ERP_LQD,
+-    dst,
+-    srcCount: inserted,
+-    destCount,
+-    note: 'EF/CH/TJ/PD from LQD; CVC.DIACOBRO always 0',
+-  });
+-}
+-

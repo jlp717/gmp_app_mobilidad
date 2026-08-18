@@ -23,6 +23,10 @@
  */
 
 const logger = require('../../middleware/logger');
+const {
+    CHATBOT_LOG_EVENTS,
+    emitChatbotLog,
+} = require('./chatbot_log');
 const { extractPdfContent: runPdfExtraction } = require('./pdf_extractor');
 const {
     buildClientVendorParamFilter,
@@ -38,7 +42,7 @@ async function safeQuery(conn, sql, params = []) {
         }
         return await conn.query(sql);
     } catch (error) {
-        logger.error(`[CHATBOT-DB] Query error: ${error.message} | SQL: ${sql.substring(0, 120)}`);
+        emitChatbotLog('error', CHATBOT_LOG_EVENTS.databaseQueryFailed);
         return [];
     }
 }
@@ -56,6 +60,29 @@ function normalizeVendorCode(code) {
 function buildCodeVariants(code) {
     const { raw, unpadded, padded } = normalizeVendorCode(code);
     return [...new Set([raw, unpadded, padded])];
+}
+
+function buildRequiredRepartidorFilter(driverCodes, columnName) {
+    if (!Array.isArray(driverCodes)) {
+        throw new TypeError('REPARTO_SCOPE_REQUIRED');
+    }
+    const safeCodes = [...new Set(driverCodes
+        .map((code) => String(code || '').trim().toUpperCase())
+        .filter((code) => /^[A-Z0-9]{1,10}$/.test(code) && code !== 'ALL'))];
+    if (safeCodes.length === 0 || safeCodes.length > 100) {
+        throw new TypeError('REPARTO_SCOPE_REQUIRED');
+    }
+    const column = `TRIM(${columnName})`;
+    if (safeCodes.length === 1) {
+        return {
+            sql: `AND ${column} = ?`,
+            params: safeCodes,
+        };
+    }
+    return {
+        sql: `AND ${column} IN (${safeCodes.map(() => '?').join(',')})`,
+        params: safeCodes,
+    };
 }
 
 // ── Vendor Filter Builder (Role-Based Access) ────────────────────────────────
@@ -2041,9 +2068,11 @@ const analyticsTools = {
 // ============================================================================
 
 const repartidorTools = {
-    async getRepartidorCollections(conn, userCode, month, year) {
+    async getRepartidorCollections(conn, driverCodes, month, year) {
         const currentYear = year || new Date().getFullYear();
         const currentMonth = month || new Date().getMonth() + 1;
+
+        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
 
         // Get collections summary for repartidor
         const rows = await safeQuery(conn, `
@@ -2068,11 +2097,11 @@ const repartidorTools = {
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.MESREPARTO = ?
               AND OPP.ANOREPARTO = ?
-              AND TRIM(OPP.CODIGOREPARTIDOR) = ?
+              ${repartoFilter.sql}
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, ''))
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
-        `, [currentMonth, currentYear, userCode]);
+        `, [currentMonth, currentYear, ...repartoFilter.params]);
 
         const clients = rows.map(row => {
             const collectable = parseFloat(row.TOTAL_COBRABLE) || 0;
@@ -2126,8 +2155,8 @@ const repartidorTools = {
         };
     },
 
-    async getRepartidorCommissions(conn, userCode, month, year) {
-        const collections = await this.getRepartidorCollections(conn, userCode, month, year);
+    async getRepartidorCommissions(conn, driverCodes, month, year) {
+        const collections = await this.getRepartidorCollections(conn, driverCodes, month, year);
         return {
             month: collections.month,
             year: collections.year,
@@ -2139,10 +2168,12 @@ const repartidorTools = {
         };
     },
 
-    async getRepartidorDeliveries(conn, userCode, year, month, day) {
+    async getRepartidorDeliveries(conn, driverCodes, year, month, day) {
         const currentYear = year || new Date().getFullYear();
         const currentMonth = month || new Date().getMonth() + 1;
         const currentDay = day || new Date().getDate();
+
+        const repartoFilter = buildRequiredRepartidorFilter(driverCodes, 'OPP.CODIGOREPARTIDOR');
 
         const rows = await safeQuery(conn, `
             SELECT 
@@ -2150,8 +2181,8 @@ const repartidorTools = {
                 COUNT(*) as TOTAL_LINES
             FROM DSEDAC.OPP OPP
             WHERE OPP.ANOREPARTO = ? AND OPP.MESREPARTO = ? AND OPP.DIAREPARTO = ?
-              AND TRIM(OPP.CODIGOREPARTIDOR) = ?
-        `, [currentYear, currentMonth, currentDay, userCode]);
+              ${repartoFilter.sql}
+        `, [currentYear, currentMonth, currentDay, ...repartoFilter.params]);
 
         const r = rows[0] || {};
         return {

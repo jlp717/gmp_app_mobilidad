@@ -22,7 +22,7 @@ const mockQuery = jest.fn();
 const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
 const mockCaptureException = jest.fn();
 let mockAuthMode = 'ok';
-let mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR' };
+let mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
 
 jest.mock('../config/db', () => ({
   queryWithParams: (...args) => mockQuery(...args),
@@ -58,7 +58,7 @@ const validCobro = () => ({
   idempotencyToken: 'cobro-gap-0001',
 });
 const validClose = () => ({ repartidorId: '94', date: '2026-08-10', idempotencyToken: 'close-gap-0001' });
-const validTiers = () => ({ tiers: [{ thresholdPct: 0, commissionPct: 1 }] });
+const validTiers = () => ({ tiers: [{ thresholdPct: 30, commissionPct: 1 }] });
 
 function expectNoInfrastructure(spy) {
   expect(mockQuery).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe('repartidor finance HTTP guard coverage', () => {
     mockCaptureException.mockClear();
     mockQuery.mockReset();
     mockAuthMode = 'ok';
-    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR' };
+    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
     routes.resetCanonicalLiquidacionService();
     server = app();
   });
@@ -136,6 +136,28 @@ describe('repartidor finance HTTP guard coverage', () => {
     expect(response.status).toBe(503);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  test('reverse cobro never trusts an inconsistent jefe boolean or a jefe outside reparto mode', async () => {
+    const spy = jest.spyOn(financeService, 'reverseCobro').mockResolvedValue({ reversed: true });
+    const command = { idempotencyToken: 'reverse-gap-0002', repartidorId: '95', reason: 'Duplicado' };
+
+    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'], isJefeVentas: true };
+    let response = await request(server).post('/finanzas/cobros/reverse').send(command);
+    expect(response.status).toBe(403);
+    expectNoInfrastructure(spy);
+
+    mockAuthUser = { id: '7', code: '7', role: 'JEFE_VENTAS' };
+    response = await request(server).post('/finanzas/cobros/reverse').send(command);
+    expect(response.status).toBe(403);
+    expectNoInfrastructure(spy);
+
+    mockAuthUser = { id: '7', code: '7', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['95'] };
+    response = await request(server).post('/finanzas/cobros/reverse').send(command);
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      repartidorId: '95', allowAcrossRepartidores: true,
+    }));
   });
 
   test('liquidacion close guards ownership and derived client totals before the canonical service', async () => {
@@ -222,14 +244,44 @@ describe('repartidor finance HTTP guard coverage', () => {
     expect(response.status).toBe(403);
     expectNoInfrastructure(spy);
 
-    mockAuthUser = { id: '1', code: '1', role: 'ADMIN' };
+    mockAuthUser = { id: '1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR' };
     response = await request(server).put('/finanzas/commissions/tiers').send({ tiers: [] });
     expect(response.status).toBe(400);
     expectNoInfrastructure(spy);
   });
 
+  test('JEFE finance privilege requires active reparto mode and ignores inconsistent boolean flags', async () => {
+    const summary = jest.spyOn(financeService, 'getSummary');
+    mockAuthUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'], isJefeVentas: true };
+    let response = await request(server).get('/finanzas/summary/95');
+    expect(response.status).toBe(403);
+    expect(summary).not.toHaveBeenCalled();
+
+    const save = jest.spyOn(financeService, 'saveCommissionTiers').mockResolvedValue(validTiers().tiers);
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    response = await request(server).put('/finanzas/commissions/tiers').send(validTiers());
+    expect(response.status).toBe(403);
+    expect(save).not.toHaveBeenCalled();
+
+    mockAuthUser.activeMode = 'REPARTIDOR';
+    response = await request(server).put('/finanzas/commissions/tiers').send(validTiers());
+    expect(response.status).toBe(200);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  test('vencimiento detail rejects ALL and CSV before service access', async () => {
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
+    const detail = jest.spyOn(financeService, 'getDetalleVencimiento');
+    for (const selector of ['ALL', '94,95']) {
+      const response = await request(server)
+        .get('/finanzas/vencimientos/' + selector + '/ALB-2026-S-10-404-1/detalle');
+      expect(response.status).toBe(422);
+    }
+    expect(detail).not.toHaveBeenCalled();
+  });
+
   test('commission tier writes delegate only with a permitted role and valid body', async () => {
-    mockAuthUser = { id: '1', code: '1', role: 'ADMIN' };
+    mockAuthUser = { id: '1', code: '1', role: 'ADMIN', activeMode: 'REPARTIDOR' };
     const spy = jest.spyOn(financeService, 'saveCommissionTiers').mockResolvedValue(validTiers().tiers);
     const response = await request(server).put('/finanzas/commissions/tiers').send(validTiers());
     expect(response.status).toBe(200);

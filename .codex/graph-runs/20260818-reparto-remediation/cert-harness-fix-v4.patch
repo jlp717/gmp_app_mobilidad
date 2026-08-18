@@ -1,0 +1,59 @@
+diff --git a/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js b/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js
+--- a/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js
++++ b/.codex/graph-runs/20260818-reparto-remediation/certify-reparto-profile.js
+@@ -268,5 +268,6 @@ function repartoEndpoints(code, { panel = false } = {}) {
+     `/repartidor-finanzas/vencimientos/${encoded}?limit=50&offset=0`,
+     `/repartidor-finanzas/evolution/${encoded}`,
+     `/repartidor-finanzas/commissions/summary/${encoded}`,
++    `/repartidor-finanzas/commissions/tiers`,
+     `/repartidor/history/${encoded}?limit=50&offset=0`,
+     `/repartidor/history/objectives/${encoded}`,
+@@ -340,18 +341,33 @@ async function documentEvidence(base, actor, code) {
+   const history = await request(base, actor, 'GET', `/repartidor/history/${encodeURIComponent(code)}?limit=1&offset=0`);
+   const first = arrayOf(history.body)[0];
+   const clientId = firstDefined(first, ['clientId', 'clienteId', 'CODCLIENTE', 'cliente']);
+-  if (clientId) await evidence(base, actor, `/repartidor/history/documents/${encodeURIComponent(String(clientId))}?limit=1&offset=0`);
++  let documents = { body: {} };
++  if (clientId) {
++    documents = await evidence(base, actor, `/repartidor/history/documents/${encodeURIComponent(String(clientId))}?limit=1&offset=0`);
++  }
+   const pending = await request(base, actor, 'GET', `/entregas/pendientes/${encodeURIComponent(code)}?date=${dateQuery()}&limit=1&offset=0`);
+   const row = arrayOf(pending.body)[0];
+   const number = firstDefined(row, ['numero', 'NUMERO', 'albaran']);
+   const year = firstDefined(row, ['ejercicio', 'EJERCICIO', 'year']);
+   if (number !== undefined && year !== undefined) {
+     const query = new URLSearchParams({ repartidorId: code });
+     for (const [parameter, keys] of Object.entries({ serie: ['serie', 'SERIE'], terminal: ['terminal', 'TERMINAL'], cliente: ['cliente', 'CLIENTE', 'CODCLIENTE'] })) {
+       const value = firstDefined(row, keys);
+       if (value !== undefined) query.set(parameter, String(value));
+     }
+     await evidence(base, actor, `/entregas/albaran/${encodeURIComponent(String(number))}/${encodeURIComponent(String(year))}?${query}`);
++    const serie = firstDefined(row, ['serie', 'SERIE']) || '';
++    const terminal = firstDefined(row, ['terminal', 'TERMINAL']) || '';
++    if (serie && terminal) {
++      await evidence(base, actor, `/repartidor/document/albaran/${encodeURIComponent(String(year))}/${encodeURIComponent(String(serie))}/${encodeURIComponent(String(terminal))}/${encodeURIComponent(String(number))}/pdf`);
++    }
+   }
++  const document = arrayOf(documents.body)[0];
++  const invoiceYear = firstDefined(document, ['ejercicio', 'year', 'EJERCICIO']);
++  const invoiceSerie = firstDefined(document, ['serie', 'SERIE']);
++  const invoiceNumber = firstDefined(document, ['numero', 'number', 'NUMERO']);
++  const kind = String(firstDefined(document, ['tipo', 'type', 'TIPO']) || '').toUpperCase();
++  if (kind.includes('FAC') && invoiceYear !== undefined && invoiceSerie !== undefined && invoiceNumber !== undefined) {
++    await evidence(base, actor, `/repartidor/document/invoice/${encodeURIComponent(String(invoiceYear))}/${encodeURIComponent(String(invoiceSerie))}/${encodeURIComponent(String(invoiceNumber))}/pdf`);
++  }
+   await evidence(base, actor, `/repartidor/history/signature?repartidorId=${encodeURIComponent(code)}`);
+ }
+@@ -373,7 +389,8 @@ async function main() {
+-  await evidence(args.base, reparto, '/repartidores'); // expected role-restricted response, recorded as evidence
+-  await evidence(args.base, jefe, '/repartidores');
+-  const selector = await request(args.base, jefe, 'GET', '/repartidores');
++  const anonymous = { label: 'anonymous', username: 'ANON', role: 'NONE', activeMode: 'NONE' };
++  await evidence(args.base, reparto, '/auth/repartidores'); // expected role-restricted response, recorded as evidence
++  await evidence(args.base, jefe, '/auth/repartidores');
++  const selector = await request(args.base, jefe, 'GET', '/auth/repartidores');
+   const codes = extractRepartidorCodes(selector.body);
+   const allCsv = codes.join(',');
+   if (!codes.length) throw new Error('REPARTIDORES_UNAVAILABLE');
+-  await evidence(args.base, null, `/repartidor/rutero/week/${encodeURIComponent(repartoCode)}`);
++  await evidence(args.base, anonymous, `/repartidor/rutero/week/${encodeURIComponent(repartoCode)}`);
