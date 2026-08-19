@@ -271,6 +271,19 @@ function normalizeIsoDateTime(value, field) {
   return text;
 }
 
+function normalizeOptionalPaymentMetadata(value, field, maxLength) {
+  if (value == null) return '';
+  if (typeof value !== 'string') {
+    throw invalidSnapshot(`${field} debe ser texto cuando se informe`);
+  }
+  const text = value.trim();
+  if (!text) return '';
+  if (text.length > maxLength || /[\u0000-\u001F\u007F]/.test(text)) {
+    throw invalidSnapshot(`${field} excede el formato permitido`);
+  }
+  return text;
+}
+
 function normalizeDaySnapshot(snapshot, command) {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
     throw invalidSnapshot('El snapshot de liquidacion no esta disponible');
@@ -297,6 +310,10 @@ function normalizeDaySnapshot(snapshot, command) {
     amount: normalizedAmount(entry.amount, `payments[${index}].amount`, { nonNegative: true }),
     paymentMethod: normalizedText(entry.paymentMethod, `payments[${index}].paymentMethod`),
     collectedAt: normalizeIsoDateTime(entry.collectedAt, `payments[${index}].collectedAt`),
+    codigoCliente: normalizeOptionalPaymentMetadata(entry.codigoCliente, `payments[${index}].codigoCliente`, 30),
+    nombreCliente: normalizeOptionalPaymentMetadata(entry.nombreCliente, `payments[${index}].nombreCliente`, 160),
+    tipoDocumento: normalizeOptionalPaymentMetadata(entry.tipoDocumento, `payments[${index}].tipoDocumento`, 20),
+    documento: normalizeOptionalPaymentMetadata(entry.documento, `payments[${index}].documento`, 120),
   }));
   const expenses = uniqueEntries(snapshot.expenses, 'expenses', (entry, id, index) => ({
     id,

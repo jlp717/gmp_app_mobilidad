@@ -2271,14 +2271,14 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
 
         const repartidorIdList = authorizedRepartidorIds(req, res, repartidorId);
         if (!repartidorIdList) return;
-        const fetchLimit = pagination.limit.value + pagination.offset.value + 1;
 
         const rows = await repartidorDb.getHistoryClients({
             repartidorIdList,
             search,
-            fetchLimit,
+            limit: pagination.limit.value,
+            offset: pagination.offset.value,
         });
-        logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);        logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
+        logger.info(`[REPARTIDOR] Found ${rows.length} client rows for ${repartidorId}`);
 
         // A fleet client card is owner-specific. The same ERP client assigned
         // to two drivers must remain two isolated drill-down targets.
@@ -2297,9 +2297,9 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
 
         const sortedClients = Array.from(seen.values())
             .sort((a, b) => (Number(b.LAST_VISIT) - Number(a.LAST_VISIT)) || String(a.ID).localeCompare(String(b.ID)));
-        const hasMore = sortedClients.length > pagination.offset.value + pagination.limit.value;
+        const hasMore = sortedClients.length > pagination.limit.value;
         const clients = sortedClients
-            .slice(pagination.offset.value, pagination.offset.value + pagination.limit.value)
+            .slice(0, pagination.limit.value)
             .map(r => {
             const id = (r.ID || '').trim();
             const lv = r.LAST_VISIT || 0;

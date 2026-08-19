@@ -511,47 +511,58 @@ class SyncQueueService {
     }
   }
 
-  /// Best-effort journal reconcile after offline confirm_delivery sync.
+  /// Reconcile the local delivery journal after an accepted offline sync.
+  ///
+  /// A server-side confirmation is not complete from the app's point of view
+  /// until its local journal is acknowledged too. Propagating a failure here
+  /// deliberately preserves the queued idempotent operation for retry instead
+  /// of silently losing the reconciliation work.
   Future<void> _reconcileConfirmDelivery(
     SyncOperation op,
     Map<String, dynamic> response,
   ) async {
-    try {
-      final deliveryId =
-          (op.payload['itemId'] ?? op.payload['deliveryId'])?.toString().trim();
-      if (deliveryId == null || deliveryId.isEmpty) return;
-      final acknowledgement = response['confirmation'] is Map
-          ? Map<String, dynamic>.from(response['confirmation'] as Map)
-          : response;
-      final confirmationId = (acknowledgement['confirmationId'] ??
-              acknowledgement['id'] ??
-              response['confirmationId'])
-          ?.toString();
-      final cobroId = acknowledgement['cobroId']?.toString();
-      final fingerprint = op.payload['_journalFingerprint']?.toString();
-      final idempotencyKey = op.headers?['Idempotency-Key'] ??
-          op.payload['_journalIdempotencyKey']?.toString();
-      if (confirmationId == null ||
-          fingerprint == null ||
-          idempotencyKey == null) {
-        debugPrint(
-          '[SyncQueue] confirm_delivery synced without full journal keys',
-        );
-        return;
-      }
-      final reconciler = confirmDeliveryReconciler;
-      if (reconciler != null) {
-        await reconciler(
-          deliveryId: deliveryId,
-          confirmationId: confirmationId,
-          cobroId: cobroId,
-          fingerprint: fingerprint,
-          idempotencyKey: idempotencyKey,
-        );
-      }
-    } catch (e) {
-      debugPrint('[SyncQueue] confirm_delivery reconcile skipped: $e');
+    final deliveryId =
+        (op.payload['itemId'] ?? op.payload['deliveryId'])?.toString().trim();
+    final acknowledgement = response['confirmation'] is Map
+        ? Map<String, dynamic>.from(response['confirmation'] as Map)
+        : response;
+    final confirmationId = (acknowledgement['confirmationId'] ??
+            acknowledgement['id'] ??
+            response['confirmationId'])
+        ?.toString()
+        .trim();
+    final cobroId = acknowledgement['cobroId']?.toString();
+    final fingerprint = op.payload['_journalFingerprint']?.toString().trim();
+    final idempotencyKey = op.headers?['Idempotency-Key'] ??
+        op.payload['_journalIdempotencyKey']?.toString();
+    final reconciler = confirmDeliveryReconciler;
+
+    if (deliveryId == null ||
+        deliveryId.isEmpty ||
+        confirmationId == null ||
+        confirmationId.isEmpty ||
+        fingerprint == null ||
+        fingerprint.isEmpty ||
+        idempotencyKey == null ||
+        idempotencyKey.isEmpty) {
+      throw StateError(
+        'confirm_delivery aceptada sin claves suficientes para '
+        'reconciliar el diario',
+      );
     }
+    if (reconciler == null) {
+      throw StateError(
+        'confirm_delivery aceptada sin reconciliador de diario disponible',
+      );
+    }
+
+    await reconciler(
+      deliveryId: deliveryId,
+      confirmationId: confirmationId,
+      cobroId: cobroId,
+      fingerprint: fingerprint,
+      idempotencyKey: idempotencyKey,
+    );
   }
 
   /// Optional hook set by app bootstrap / repartidor feature.

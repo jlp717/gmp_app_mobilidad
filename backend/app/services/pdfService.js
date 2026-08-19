@@ -91,8 +91,10 @@ function formatDate(dia, mes, ano) {
 /**
  * Dibujar header corporativo profesional
  */
-function drawHeader(doc, yStart = 10) {
+function drawHeader(doc, yStart = 10, { compact = false } = {}) {
     let yPos = yStart;
+    const imageHeight = compact ? 62 : 140;
+    const imageBottomPadding = 10;
 
     // Franja superior de marca (moderna y delgada)
     doc.rect(0, 0, 595.28, 5)
@@ -105,10 +107,11 @@ function drawHeader(doc, yStart = 10) {
 
     if (fs.existsSync(HEADER_PNG_PATH)) {
         try {
-            // Hacer el header más alto para evitar aspecto aplanado
-            doc.image(HEADER_PNG_PATH, 40, yPos, { width: 515, height: 140 });
+            // Los albaranes usan un banner compacto para reservar espacio al
+            // bloque final de receptor y firma en la misma hoja cuando cabe.
+            doc.image(HEADER_PNG_PATH, 40, yPos, { width: 515, height: imageHeight });
             logoLoaded = true;
-            return yPos + 150;
+            return yPos + imageHeight + imageBottomPadding;
         } catch (e) {
             logger.warn('⚠️ No se pudo cargar header.png');
         }
@@ -116,9 +119,9 @@ function drawHeader(doc, yStart = 10) {
 
     if (!logoLoaded && fs.existsSync(HEADER_PATH)) {
         try {
-            doc.image(HEADER_PATH, 40, yPos, { width: 515, height: 140 });
+            doc.image(HEADER_PATH, 40, yPos, { width: 515, height: imageHeight });
             logoLoaded = true;
-            return yPos + 150;
+            return yPos + imageHeight + imageBottomPadding;
         } catch (e) {
             logger.warn('⚠️ No se pudo cargar header.webp');
         }
@@ -192,13 +195,13 @@ function drawFooter(doc, pageNum, totalPages) {
         });
 }
 
-function ensureContentSpace(doc, y, requiredHeight) {
+function ensureContentSpace(doc, y, requiredHeight, headerOptions = {}) {
     if (y + requiredHeight <= CONTENT_BOTTOM_Y) {
         return y;
     }
 
     doc.addPage();
-    return drawHeader(doc, 10) + 10;
+    return drawHeader(doc, 10, headerOptions) + 10;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -260,7 +263,8 @@ async function generateInvoicePDF(facturaData) {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // HEADER CORPORATIVO
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            let y = drawHeader(doc, 10);
+            const headerOptions = { compact: isAlbaran };
+            let y = drawHeader(doc, 10, headerOptions);
             y += 10;
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -468,7 +472,7 @@ async function generateInvoicePDF(facturaData) {
                 // Comprobar si necesitamos una nueva página con la nueva altura
                 if (y + rowHeight > 700) {
                     doc.addPage();
-                    y = drawHeader(doc, 10) + 10;
+                    y = drawHeader(doc, 10, headerOptions) + 10;
 
                     // Repetir cabecera de tabla
                     doc.rect(40, y, 515, 16)
@@ -567,7 +571,7 @@ async function generateInvoicePDF(facturaData) {
                     // Draw albaran header with subtotal
                     if (y + 25 > 700) {
                         doc.addPage();
-                        y = drawHeader(doc, 10) + 10;
+                        y = drawHeader(doc, 10, headerOptions) + 10;
                     }
 
                     // Albaran header box
@@ -647,8 +651,11 @@ async function generateInvoicePDF(facturaData) {
             const taxRows = grupos.length > 0 ? Math.max(grupos.length, 1) : 0;
             const taxTableHeight = taxRows > 0 ? 16 + (taxRows * 14) : 0;
             const totalsBlockHeight = 12 + (taxTableHeight > 0 ? taxTableHeight + 18 : 0) + 22 + 24 + 28;
+            // Totales, receptor y firma forman una sola unidad: si no caben
+            // juntos se trasladan enteros a la última página, lejos del pie.
+            const closingBlockHeight = totalsBlockHeight + 45 + 110;
 
-            y = ensureContentSpace(doc, y, totalsBlockHeight);
+            y = ensureContentSpace(doc, y, closingBlockHeight, headerOptions);
 
             // Línea final de productos
             doc.moveTo(40, y)
@@ -765,12 +772,6 @@ async function generateInvoicePDF(facturaData) {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
             y += 45;
-
-            // Check if we need a new page
-            if (y + 120 > 700) {
-                doc.addPage();
-                y = drawHeader(doc, 10) + 20;
-            }
 
             if (facturaData.signatureBase64) {
                 // Use dark background for ALL signatures to ensure visibility

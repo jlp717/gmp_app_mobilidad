@@ -28,6 +28,10 @@ function receipt(overrides = {}) {
   };
 }
 
+function pageCount(pdf) {
+  return (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+}
+
 test('builds a deterministic unpaid presentation from actual quantities and observations', () => {
   const presentation = buildReceiptPresentation(receipt());
   expect(presentation.header).toContain('COMPROBANTE DE REPARTO');
@@ -58,6 +62,35 @@ test('renders a validated PNG signature without an asynchronous decoder crash', 
     signature: { mimeType: 'image/png', contentBase64: VALID_PNG },
   });
   expect(result.pdf.subarray(0, 5).toString()).toBe('%PDF-');
+});
+
+test('keeps the compact signature block on a single page and moves it intact after long rows', async () => {
+  const service = createRepartoReceiptPdfService();
+  const signature = { mimeType: 'image/png', contentBase64: VALID_PNG };
+  const shortPdf = await service.render({
+    receipt: receipt({ firmaEvidenceId: 'ev_signature' }),
+    signature,
+  });
+  expect(pageCount(shortPdf.pdf)).toBe(1);
+
+  const longLines = Array.from({ length: 34 }, (_, index) => ({
+    lineaId: `L${index + 1}`,
+    codigoArticulo: `ART${index + 1}`,
+    descripcion: `PRODUCTO CONFIRMADO ${index + 1} CON DESCRIPCION LARGA`,
+    cantidadPedida: 3,
+    cantidadEntregada: 2,
+    cantidadRechazada: 0,
+    cantidadPendiente: 1,
+    precioUnitario: 5,
+    motivoDiferencia: 'FALTANTE',
+    observaciones: 'OBSERVACION DE LINEA PARA PROBAR PAGINACION',
+  }));
+  const longPdf = await service.render({
+    receipt: receipt({ lineas: longLines, firmaEvidenceId: 'ev_signature' }),
+    signature,
+  });
+  expect(pageCount(longPdf.pdf)).toBeGreaterThan(1);
+  expect(longPdf.pdf.subarray(0, 5).toString()).toBe('%PDF-');
 });
 
 test('renders the explicit persisted 0 EUR prepaid invariant without ERP lines', () => {

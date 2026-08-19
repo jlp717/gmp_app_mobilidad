@@ -57,6 +57,23 @@ void main() {
     );
   });
 
+  test('confirmed deliveries invalidate document and owner cache prefixes',
+      () async {
+    final prefixes = <String>[];
+
+    await invalidateRepartoDeliveryReadCachesWith((prefix) async {
+      prefixes.add(prefix);
+    });
+
+    expect(
+        prefixes,
+        containsAll(<String>[
+          'repartidor_docs_',
+          'repartidor_clients_',
+          'repartidor_signature_',
+        ]));
+  });
+
   test('historical email sends owner and requires messageId plus TEST ledger',
       () async {
     Map<String, dynamic>? capturedBody;
@@ -145,6 +162,7 @@ void main() {
               'success': true,
               'localShare': true,
               'sent': false,
+              'whatsappUrl': 'https://wa.me/34600000000',
             },
           ),
         );
@@ -163,6 +181,7 @@ void main() {
 
     expect(result.localShare, isTrue);
     expect(result.sent, isFalse);
+    expect(result.whatsappUrl, 'https://wa.me/34600000000');
     expect(capturedBody, containsPair('repartidorId', '08'));
   });
 

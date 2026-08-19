@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const pdfParse = require('pdf-parse');
 
 const cleanPdfService = require('../services/pdf.service');
@@ -106,6 +109,28 @@ function buildDocumentInvoice(lineCount) {
   };
 }
 
+function buildSignedAlbaran(lineCount) {
+  return {
+    documentType: 'albaran',
+    header: {
+      SERIEALBARAN: 'A', NUMEROALBARAN: 91, EJERCICIOALBARAN: 2026,
+      DIAFACTURA: 31, MESFACTURA: 5, ANOFACTURA: 2026,
+      CODIGOCLIENTEFACTURA: '4300008591',
+      NOMBRECLIENTEFACTURA: 'ALIMENTACION SUPER MAJA, SL',
+      DIRECCIONCLIENTEFACTURA: 'CL NUEVA, 10', POBLACIONCLIENTEFACTURA: 'HUESCAR',
+      PROVINCIACLIENTEFACTURA: 'ALMERIA', CIFCLIENTEFACTURA: 'B19711829',
+      IVA_BREAKDOWN: { BI1: 10, IVA1_PCT: 10, IVA1_IMP: 1 }
+    },
+    receptorNombre: 'Ana', receptorApellidos: 'Lopez', receptorDni: '12345678Z',
+    signatureBase64: fs.readFileSync(path.join(__dirname, '..', 'assets', 'header.png')).toString('base64'),
+    lines: Array.from({ length: lineCount }, (_, index) => ({
+      CODIGOARTICULO: `ART${index + 1}`,
+      DESCRIPCIONARTICULO: `Producto de prueba para albaran ${index + 1}`,
+      CAJASARTICULO: 1, IMPORTENETOARTICULO: 1
+    }))
+  };
+}
+
 function buildLongDeliveryReceipt(lineCount) {
   return {
     albaranNum: 'A-9999',
@@ -153,6 +178,30 @@ describe('invoice PDF total/footer layout', () => {
     expect(text).toContain('Ana');
     expect(text).toContain('Lopez');
     expect(text).toContain('12345678Z');
+  });
+
+  test('keeps a short signed albaran on one A4 page with the closing block before the footer', async () => {
+    const pages = await parsePages(await documentPdfService.generateInvoicePDF(buildSignedAlbaran(2)));
+    const page = pages[0];
+
+    expect(pages).toHaveLength(1);
+    expect(page).toContain('ALBARÁN');
+    expect(page.indexOf('TOTAL CON IVA')).toBeGreaterThan(page.indexOf('Producto de prueba'));
+    expect(page.indexOf('Receptor')).toBeGreaterThan(page.indexOf('TOTAL CON IVA'));
+    expect(page.indexOf('12345678Z')).toBeGreaterThan(page.indexOf('Receptor'));
+    expect(page.indexOf('Inscrita en el registro mercantil')).toBeGreaterThan(page.indexOf('12345678Z'));
+  });
+
+  test('puts the signed albaran closing block only on the final page when rows paginate', async () => {
+    const pages = await parsePages(await documentPdfService.generateInvoicePDF(buildSignedAlbaran(70)));
+    const finalPage = pages.at(-1);
+
+    expect(pages.length).toBeGreaterThan(1);
+    expect(finalPage).toContain('TOTAL CON IVA');
+    expect(finalPage).toContain('Receptor');
+    expect(finalPage).toContain('12345678Z');
+    expect(finalPage.indexOf('TOTAL CON IVA')).toBeLessThan(finalPage.indexOf('Receptor'));
+    expect(pages.slice(0, -1).join(' ')).not.toContain('Receptor');
   });
 
   test('keeps long delivery receipt content and total before closing terms', async () => {

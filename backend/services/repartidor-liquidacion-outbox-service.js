@@ -5,12 +5,14 @@
  */
 
 const { queryWithParams } = require('../config/db');
+const crypto = require('crypto');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const logger = require('../middleware/logger');
 const {
   formatGmpLiquidacionDisplay,
   cashToDeposit,
 } = require('./liquidacion-pdf-service');
+const { redactDeliverySummary } = require('./reparto-email-delivery-policy');
 
 function getSendLiquidacionEmails() {
   // Lazy require avoids circular load with finance service.
@@ -42,6 +44,121 @@ function safeJson(raw) {
   } catch (_) {
     return {};
   }
+}
+
+// The deployed DB2 contract has no PROCESSING status. A cryptographic claim
+// stored in PAYLOAD_JSON makes FAILED serve as a fail-closed in-flight state:
+// a crashed worker cannot be retried automatically and therefore cannot cause
+// a concurrent/duplicate SMTP send.
+const OUTBOX_CLAIM_KEY = '_repartoDeliveryClaim';
+const OUTBOX_REQUEUE_KEY = '_repartoRequeue';
+const MAX_OUTBOX_PAYLOAD_BYTES = 3500;
+
+function serializeOutboxPayload(payload) {
+  const serialized = JSON.stringify(payload);
+  return Buffer.byteLength(serialized, 'utf8') <= MAX_OUTBOX_PAYLOAD_BYTES
+    ? serialized : null;
+}
+
+function parseOutboxPayload(raw) {
+  if (raw && typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
+function buildOutboxClaim(rawPayload, token) {
+  const payload = parseOutboxPayload(rawPayload);
+  if (!payload) return null;
+  return serializeOutboxPayload({
+    ...payload,
+    [OUTBOX_CLAIM_KEY]: { token, claimedAt: new Date().toISOString() },
+  });
+}
+
+function buildOutboxRequeue(rawPayload, token) {
+  const payload = parseOutboxPayload(rawPayload);
+  if (!payload) return null;
+  delete payload[OUTBOX_CLAIM_KEY];
+  return serializeOutboxPayload({
+    ...payload,
+    [OUTBOX_REQUEUE_KEY]: { token, requestedAt: new Date().toISOString() },
+  });
+}
+
+function hasOutboxRequeue(rawPayload, token) {
+  const payload = parseOutboxPayload(rawPayload);
+  return String(payload?.[OUTBOX_REQUEUE_KEY]?.token || '') === String(token || '');
+}
+
+function hasOutboxClaim(rawPayload, token = null) {
+  const payload = parseOutboxPayload(rawPayload);
+  const actual = payload?.[OUTBOX_CLAIM_KEY]?.token;
+  return token === null ? Boolean(actual) : String(actual || '') === String(token || '');
+}
+
+function withoutOutboxClaim(rawPayload) {
+  const payload = parseOutboxPayload(rawPayload);
+  if (!payload) return null;
+  delete payload[OUTBOX_CLAIM_KEY];
+  return serializeOutboxPayload(payload);
+}
+
+async function claimOutboxForDelivery(id, rawPayload, { query, tables }) {
+  let payload = rawPayload;
+  if (payload == null) {
+    const rows = await query(
+      `SELECT PAYLOAD_JSON FROM ${tables.liquidationOutbox}
+        WHERE ID = ? AND STATUS = 'PENDING'
+        FETCH FIRST 1 ROW ONLY`,
+      [id],
+    );
+    if (!rows?.length) return null;
+    payload = rowValue(rows[0], 'PAYLOAD_JSON');
+  }
+  const token = crypto.randomBytes(18).toString('base64url');
+  const claimedPayload = buildOutboxClaim(payload, token);
+  if (!claimedPayload) return null;
+  await query(
+    `UPDATE ${tables.liquidationOutbox}
+        SET STATUS = 'FAILED', PAYLOAD_JSON = ?
+      WHERE ID = ? AND STATUS = 'PENDING'`,
+    [claimedPayload, id],
+  );
+  const rows = await query(
+    `SELECT STATUS, PAYLOAD_JSON FROM ${tables.liquidationOutbox}
+      WHERE ID = ? AND STATUS = 'FAILED'
+      FETCH FIRST 1 ROW ONLY`,
+    [id],
+  );
+  return rows?.length && hasOutboxClaim(rowValue(rows[0], 'PAYLOAD_JSON'), token)
+    ? { token, payload: claimedPayload }
+    : null;
+}
+
+async function completeClaimedOutbox(id, token, status, { payload, results = [], error = null } = {}, { query, tables }) {
+  const merged = deliveryPayload(payload, results, error);
+  delete merged[OUTBOX_CLAIM_KEY];
+  const serialized = serializeOutboxPayload(merged);
+  if (!serialized) throw new Error('outbox delivery payload exceeds safe limit');
+  await query(
+    `UPDATE ${tables.liquidationOutbox}
+        SET STATUS = ?, PAYLOAD_JSON = ?
+      WHERE ID = ? AND STATUS = 'FAILED' AND PAYLOAD_JSON = ?`,
+    [status, serialized, id, payload],
+  );
+  const rows = await query(
+    `SELECT STATUS, PAYLOAD_JSON FROM ${tables.liquidationOutbox}
+      WHERE ID = ? AND STATUS = ?
+      FETCH FIRST 1 ROW ONLY`,
+    [id, status],
+  );
+  return Boolean(rows?.length) && !hasOutboxClaim(rowValue(rows[0], 'PAYLOAD_JSON'));
 }
 
 function mapLiquidacionFromOps(row) {
@@ -137,13 +254,40 @@ function mapLiquidacionFromOps(row) {
   };
 }
 
-async function markOutbox(id, status, error, { query, tables }) {
+function redactOutboxError(error) {
+  const raw = String(error?.code || error?.message || error || 'email delivery failed');
+  return raw
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .slice(0, 240);
+}
+
+function deliveryPayload(payload, results, error) {
+  const previous = safeJson(payload);
+  const summary = redactDeliverySummary(results);
+  return {
+    ...previous,
+    delivery: {
+      attempted: summary.attempted,
+      sent: summary.sent,
+      failed: summary.failed,
+      allSucceeded: summary.allSucceeded,
+      lastError: error ? redactOutboxError(error) : null,
+    },
+  };
+}
+
+async function markOutbox(id, status, { error = null, payload = null, results = [] } = {}, { query, tables }) {
+  const serializedPayload = JSON.stringify(deliveryPayload(payload, results, error));
   await query(
-    `UPDATE ${tables.liquidationOutbox} SET STATUS = ? WHERE ID = ?`,
-    [status, id],
+    `UPDATE ${tables.liquidationOutbox}
+        SET STATUS = ?, PAYLOAD_JSON = ?
+      WHERE ID = ? AND STATUS = 'PENDING'`,
+    [status, serializedPayload, id],
   );
   if (error) {
-    logger.warn(`[liq-outbox] id=${id} marked ${status}: ${error}`);
+    logger.warn(`[liq-outbox] id=${id} marked ${status}: ${redactOutboxError(error)}`);
   }
 }
 
@@ -154,6 +298,7 @@ async function processLiquidacionOutboxIntent({
   liquidacion,
   repartidorId,
   outboxId = null,
+  outboxPayload = null,
 } = {}, {
   query = queryWithParams,
   env = process.env,
@@ -161,6 +306,17 @@ async function processLiquidacionOutboxIntent({
 } = {}) {
   if (!liquidacion) return { sent: 0, skipped: true };
   const send = sendEmails || getSendLiquidacionEmails();
+  let tables = null;
+  let claim = null;
+  if (outboxId != null) {
+    tables = financeTables(env);
+    claim = await claimOutboxForDelivery(outboxId, outboxPayload, { query, tables });
+    if (!claim) {
+      // Another worker owns it or the legacy payload is unsafe to claim.
+      // Never fall through to SMTP in either case.
+      return { sent: 0, skipped: true, reason: 'outbox_claim_unavailable' };
+    }
+  }
 
   const payments = Array.isArray(liquidacion.snapshot?.payments)
     ? liquidacion.snapshot.payments
@@ -210,21 +366,29 @@ async function processLiquidacionOutboxIntent({
       repartidorName: '',
       cobros,
     });
-    const ok = Array.isArray(results) && results.length > 0 && results.every((r) => r.success);
+    const summary = redactDeliverySummary(results);
+    const ok = summary.allSucceeded;
     if (outboxId != null) {
-      const tables = financeTables(env);
-      await markOutbox(outboxId, ok ? 'SENT' : 'FAILED', ok ? null : 'send failed', { query, tables });
+      const completed = await completeClaimedOutbox(outboxId, claim.token, ok ? 'SENT' : 'FAILED', {
+        payload: claim.payload,
+        results,
+        error: ok ? null : 'incomplete email delivery',
+      }, { query, tables });
+      if (!completed) return { sent: 0, skipped: true, reason: 'outbox_claim_lost' };
     }
-    return { sent: (results || []).filter((r) => r.success).length, results, skipped: false };
+    return { sent: summary.sent, results, delivery: summary, skipped: false };
   } catch (error) {
-    logger.error(`[liq-outbox] send failed: ${error.message}`);
+    const redactedError = redactOutboxError(error);
+    logger.error(`[liq-outbox] send failed: ${redactedError}`);
     if (outboxId != null) {
       try {
-        const tables = financeTables(env);
-        await markOutbox(outboxId, 'FAILED', error.message, { query, tables });
+        await completeClaimedOutbox(outboxId, claim.token, 'FAILED', {
+          payload: claim.payload,
+          error: redactedError,
+        }, { query, tables });
       } catch (_) { /* ignore */ }
     }
-    return { sent: 0, error: error.message, skipped: false };
+    return { sent: 0, error: redactedError, skipped: false };
   }
 }
 
@@ -268,7 +432,10 @@ async function processPendingLiquidacionOutbox({
         [liquidacionId],
       );
       if (!opsRows?.length) {
-        await markOutbox(outboxId, 'FAILED', 'liquidacion ops missing', { query, tables });
+        await markOutbox(outboxId, 'FAILED', {
+          payload: rowValue(row, 'PAYLOAD_JSON'),
+          error: 'liquidacion ops missing',
+        }, { query, tables });
         continue;
       }
       const liquidacion = mapLiquidacionFromOps(opsRows[0]);
@@ -276,12 +443,16 @@ async function processPendingLiquidacionOutbox({
         liquidacion,
         repartidorId: liquidacion.repartidorId,
         outboxId,
+        outboxPayload: rowValue(row, 'PAYLOAD_JSON'),
       }, { query, env, sendEmails: send });
       sent += result.sent || 0;
     } catch (error) {
-      logger.error(`[liq-outbox] process id=${outboxId} failed: ${error.message}`);
+      logger.error(`[liq-outbox] process id=${outboxId} failed: ${redactOutboxError(error)}`);
       try {
-        await markOutbox(outboxId, 'FAILED', error.message, { query, tables });
+        await markOutbox(outboxId, 'FAILED', {
+          payload: rowValue(row, 'PAYLOAD_JSON'),
+          error,
+        }, { query, tables });
       } catch (_) { /* ignore */ }
     }
   }
@@ -289,8 +460,61 @@ async function processPendingLiquidacionOutbox({
   return { processed: (rows || []).length, sent };
 }
 
+async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepartidor }, {
+  query = queryWithParams,
+  env = process.env,
+} = {}) {
+  const tables = financeTables(env);
+  const rows = await query(
+    `SELECT O.ID, O.STATUS, O.PAYLOAD_JSON, L.CODIGOVENDEDOR
+       FROM ${tables.liquidationOutbox} O
+       JOIN ${tables.liquidationOps} L ON L.ID = O.LIQUIDACION_ID
+      WHERE L.IDEMPOTENCY_TOKEN = ?
+      ORDER BY O.CREATED_AT DESC
+      FETCH FIRST 1 ROW ONLY`,
+    [idempotencyToken],
+  );
+  const row = rows?.[0];
+  if (!row) return { requeued: false, reason: 'not_found' };
+  const repartidorId = String(rowValue(row, 'CODIGOVENDEDOR') || '').trim();
+  if (!repartidorId || typeof canAccessRepartidor !== 'function' || !canAccessRepartidor(repartidorId)) {
+    return { requeued: false, reason: 'forbidden' };
+  }
+  if (String(rowValue(row, 'STATUS') || '').trim() !== 'FAILED') {
+    return { requeued: false, reason: 'not_failed' };
+  }
+  // A FAILED row containing a claim is possibly in-flight. Never requeue it:
+  // doing so could race an SMTP call and create a duplicate delivery.
+  const currentPayload = rowValue(row, 'PAYLOAD_JSON');
+  if (hasOutboxClaim(currentPayload)) return { requeued: false, reason: 'claimed' };
+  const requeueToken = crypto.randomBytes(18).toString('base64url');
+  const requeuedPayload = buildOutboxRequeue(currentPayload, requeueToken);
+  if (!requeuedPayload) return { requeued: false, reason: 'unsafe_payload' };
+  const id = rowValue(row, 'ID');
+  await query(
+    `UPDATE ${tables.liquidationOutbox}
+        SET STATUS = 'PENDING', PAYLOAD_JSON = ?
+      WHERE ID = ? AND STATUS = 'FAILED' AND PAYLOAD_JSON = ?`,
+    [requeuedPayload, id, currentPayload],
+  );
+  const verified = await query(
+    `SELECT STATUS, PAYLOAD_JSON FROM ${tables.liquidationOutbox}
+      WHERE ID = ? AND STATUS = 'PENDING'
+      FETCH FIRST 1 ROW ONLY`,
+    [id],
+  );
+  const requeued = Boolean(verified?.length) && hasOutboxRequeue(
+    rowValue(verified[0], 'PAYLOAD_JSON'), requeueToken,
+  );
+  return requeued
+    ? { requeued: true, outboxId: String(id), repartidorId }
+    : { requeued: false, reason: 'requeue_lost' };
+}
+
 module.exports = {
   processLiquidacionOutboxIntent,
   processPendingLiquidacionOutbox,
   mapLiquidacionFromOps,
+  redactOutboxError,
+  requeueFailedLiquidacionOutbox,
 };

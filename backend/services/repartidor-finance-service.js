@@ -420,6 +420,144 @@ function mapLiquidacion(row) {
   };
 }
 
+class LiquidacionPdfReadError extends Error {
+  constructor(message, { code = 'LIQUIDACION_PDF_UNAVAILABLE', statusCode = 503 } = {}) {
+    super(message);
+    this.name = 'LiquidacionPdfReadError';
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
+
+function parseLiquidacionSnapshot(value, field) {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid shape');
+    return parsed;
+  } catch (_) {
+    throw new LiquidacionPdfReadError(`El cierre persistido no contiene ${field} valido`);
+  }
+}
+
+function normalizedPersistedLiquidacionTimestamp(value, fallbackDate) {
+  if (value == null || String(value).trim() === '') return `${fallbackDate} 00:00:00`;
+  const text = value instanceof Date ? value.toISOString() : String(value).trim();
+  const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?$/.exec(text);
+  if (!match) {
+    throw new LiquidacionPdfReadError('El cierre persistido contiene una fecha de creación no válida');
+  }
+  const [year, month, day] = match[1].split('-').map(Number);
+  const [hour, minute, second] = match.slice(2, 5).map(Number);
+  const civil = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (civil.getUTCFullYear() !== year || civil.getUTCMonth() !== month - 1
+      || civil.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59) {
+    throw new LiquidacionPdfReadError('El cierre persistido contiene una fecha de creación no válida');
+  }
+  return text;
+}
+
+function normalizedSnapshotPaymentMetadata(value, field, maxLength) {
+  if (value == null) return '';
+  if (typeof value !== 'string') {
+    throw new LiquidacionPdfReadError(`El cierre persistido contiene ${field} no válido`);
+  }
+  const text = value.trim();
+  if (!text) return '';
+  if (text.length > maxLength || /[\u0000-\u001F\u007F]/.test(text)) {
+    throw new LiquidacionPdfReadError(`El cierre persistido contiene ${field} no válido`);
+  }
+  return text;
+}
+
+function liquidacionPdfPaymentTotals(payments) {
+  const totals = { totalEfectivo: 0, totalCheques: 0, totalTarjeta: 0, totalPostdatados: 0 };
+  for (const payment of payments) {
+    const amount = roundMoney(payment.amount);
+    const method = String(payment.paymentMethod || '').trim().toUpperCase();
+    if (/^(EFECTIVO|EF|F0|E|CONTADO|CT)$/.test(method)) totals.totalEfectivo += amount;
+    else if (/^(CHEQUE|CH|TALON|TALON BANCARIO)$/.test(method)) totals.totalCheques += amount;
+    else if (/^(TARJETA|TJ|TPV|TRANSFERENCIA|TR|T0|BIZUM|BI)$/.test(method)) totals.totalTarjeta += amount;
+    else if (/^(POSTDATADO|PD|POSTDATADOS)$/.test(method)) totals.totalPostdatados += amount;
+    else throw new LiquidacionPdfReadError('El snapshot contiene una forma de cobro no clasificable');
+  }
+  return Object.fromEntries(Object.entries(totals).map(([key, amount]) => [key, roundMoney(amount)]));
+}
+
+async function buildClosedLiquidacionPdf({ idempotencyToken, repartidorId }) {
+  const token = normalizeText(idempotencyToken);
+  const owner = normalizeText(repartidorId);
+  if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(token) || !/^[0-9]{1,20}$/.test(owner)) {
+    throw new LiquidacionPdfReadError('El selector de liquidacion no es valido', {
+      code: 'INVALID_LIQUIDACION_PDF_SELECTOR', statusCode: 422,
+    });
+  }
+  const row = await findLiquidacionRowByToken(token);
+  if (!row) {
+    throw new LiquidacionPdfReadError('No existe la liquidacion solicitada', {
+      code: 'LIQUIDACION_NOT_FOUND', statusCode: 404,
+    });
+  }
+  const persistedOwner = normalizeText(value(row, 'CODIGOVENDEDOR'));
+  const status = normalizeText(value(row, 'STATUS')).toUpperCase();
+  if (persistedOwner !== owner) {
+    throw new LiquidacionPdfReadError('La liquidacion no pertenece al repartidor seleccionado', {
+      code: 'LIQUIDACION_OWNER_MISMATCH', statusCode: 403,
+    });
+  }
+  if (status !== 'CLOSED') {
+    throw new LiquidacionPdfReadError('La liquidacion no esta cerrada', {
+      code: 'LIQUIDACION_NOT_CLOSED', statusCode: 409,
+    });
+  }
+  const replayIdentity = parseLiquidacionSnapshot(value(row, 'REPLAY_IDENTITY_JSON'), 'REPLAY_IDENTITY_JSON');
+  const snapshot = parseLiquidacionSnapshot(value(row, 'SNAPSHOT_JSON'), 'SNAPSHOT_JSON');
+  const date = normalizeText(replayIdentity.date);
+  if (normalizeText(replayIdentity.repartidorId) !== owner || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)
+      || normalizeText(snapshot.repartidorId) !== owner || normalizeText(snapshot.date) !== date
+      || !Array.isArray(snapshot.payments) || !snapshot.breakdown || typeof snapshot.breakdown !== 'object') {
+    throw new LiquidacionPdfReadError('El cierre persistido no es coherente');
+  }
+  const paymentTotals = liquidacionPdfPaymentTotals(snapshot.payments);
+  const totalCobrosDia = roundMoney(snapshot.breakdown.payments);
+  const totalAIngresar = roundMoney(
+    Number(snapshot.openingBalance) + paymentTotals.totalEfectivo + paymentTotals.totalCheques
+      + paymentTotals.totalPostdatados - Number(snapshot.breakdown.expenses)
+      + Number(snapshot.breakdown.adjustments),
+  );
+  const ingresoBanco = roundMoney(snapshot.breakdown.bankDeposits);
+  const totals = {
+    ...paymentTotals, totalCobrosDia, saldoActual: roundMoney(snapshot.openingBalance),
+    gastos: roundMoney(snapshot.breakdown.expenses), ajustes: roundMoney(snapshot.breakdown.adjustments),
+    totalAIngresar, ingresoBanco, diff: roundMoney(totalAIngresar - ingresoBanco),
+  };
+  const displayNumber = formatGmpLiquidacionDisplay({
+    year: toInt(value(row, 'ANOLIQUIDACION')) || Number(date.slice(0, 4)),
+    vendorCode: owner, serie: value(row, 'SERIELIQUIDACION') || 'A',
+    numero: toInt(value(row, 'NUMEROLIQUIDACION')),
+  });
+  const cobros = snapshot.payments.map((payment) => ({
+    fecha: String(payment.collectedAt || '').slice(0, 10) || date,
+    codigoCliente: normalizedSnapshotPaymentMetadata(payment.codigoCliente, 'codigoCliente', 30),
+    nombreCliente: normalizedSnapshotPaymentMetadata(payment.nombreCliente, 'nombreCliente', 160),
+    tipoCobro: payment.paymentMethod,
+    tipoDocumento: normalizedSnapshotPaymentMetadata(payment.tipoDocumento, 'tipoDocumento', 20),
+    documento: normalizedSnapshotPaymentMetadata(payment.documento, 'documento', 120) || payment.id,
+    importe: roundMoney(payment.amount),
+  }));
+  const generatedAt = normalizedPersistedLiquidacionTimestamp(
+    value(row, 'CREATED_AT', value(row, 'CREATEDAT')), date,
+  );
+  const pdfBuffer = await buildLiquidacionPdfBuffer({
+    title: `Liquidación Diaria - ${displayNumber}`, displayNumber, repartidorId: owner, dateLabel: date,
+    generatedAt, totals, cobros,
+  });
+  return Object.freeze({
+    pdfBuffer, fileName: `Liquidacion_${displayNumber.replace(/[^A-Za-z0-9_-]+/g, '_')}.pdf`,
+    liquidacionId: String(value(row, 'ID')), idempotencyToken: token,
+    repartidorId: owner, date, status: 'CLOSED',
+  });
+}
+
 class AlreadyDeliveredError extends Error {
   constructor(row) {
     super('Esta entrega ya fue confirmada anteriormente');
@@ -1459,7 +1597,7 @@ function simplePdfBuffer(title, lines) {
 }
 
 async function sendLiquidacionEmails({
-  liquidacion, repartidorEmail, repartidorName, cobros, comercialCodes,
+  liquidacion, repartidorEmail, repartidorName, cobros, comercialCodes, env = process.env,
 }) {
   if (!liquidacion) return [];
 
@@ -1496,7 +1634,9 @@ async function sendLiquidacionEmails({
 
   const delivery = resolveRepartoEmailDelivery({
     recipients: [...recipients],
-    env: process.env,
+    // Passing the runtime explicitly makes the isolated-test sink policy
+    // deterministic for callers/tests while preserving process.env in normal use.
+    env,
     mode: 'automatic',
   });
   const effectiveRecipients = delivery.effectiveRecipients;
@@ -1789,6 +1929,7 @@ module.exports = {
   calculateCommission,
   deleteTestData,
   sendLiquidacionEmails,
+  buildClosedLiquidacionPdf,
   formatGmpLiquidacionDisplay,
   cashToDeposit,
   // Error classes (Req #16: facilita catch tipado en routes)
@@ -1802,6 +1943,7 @@ module.exports = {
   CobroNotFoundError,
   FinanceSchemaUnavailableError,
   LiquidacionEmailRecipientRequiredError,
+  LiquidacionPdfReadError,
   // Audit helper (re-export para tests)
   _auditLog: auditLog,
 };

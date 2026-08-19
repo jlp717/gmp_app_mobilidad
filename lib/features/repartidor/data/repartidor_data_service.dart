@@ -30,10 +30,17 @@ class RepartidorDataException implements Exception {
 /// Backend acknowledgement that a document may be passed to the operating
 /// system share sheet. It deliberately does not represent an external send.
 class LocalDocumentShare {
-  const LocalDocumentShare({required this.localShare, required this.sent});
+  const LocalDocumentShare({
+    required this.localShare,
+    required this.sent,
+    this.whatsappUrl,
+  });
 
   final bool localShare;
   final bool sent;
+
+  /// Optional WhatsApp deep link; opening it never means the attachment was sent.
+  final String? whatsappUrl;
 }
 
 class RepartoReceiptEmailResult {
@@ -76,6 +83,20 @@ String repartoSignatureCacheKey({
   required int numero,
 }) =>
     'repartidor_signature_${repartidorId}_${ejercicio}_${serie}_${terminal}_$numero';
+
+const Set<String> _repartoDeliveryReadCachePrefixes = <String>{
+  'repartidor_docs_',
+  'repartidor_clients_',
+  'repartidor_signature_',
+};
+
+@visibleForTesting
+Future<void> invalidateRepartoDeliveryReadCachesWith(
+  Future<void> Function(String prefix) invalidateByPrefix,
+) =>
+    Future.wait<void>(
+      _repartoDeliveryReadCachePrefixes.map(invalidateByPrefix),
+    );
 
 /// Resultado del resumen de cobros
 class CollectionsSummary {
@@ -409,6 +430,21 @@ class CommissionResult {
 
 /// Servicio de datos para repartidor
 class RepartidorDataService {
+  /// Confirmation changes document state/signature, so stale history must not
+  /// survive the server acknowledgement boundary.
+  static Future<void> invalidateDeliveryReadCaches() async {
+    try {
+      await invalidateRepartoDeliveryReadCachesWith(
+        CacheService.invalidateByPrefix,
+      );
+    } catch (error, stackTrace) {
+      // A cache is an optimization: journal acknowledgement remains durable.
+      debugPrint(
+        '[RepartidorDataService] delivery cache invalidation failed: $error\n$stackTrace',
+      );
+    }
+  }
+
   /// Obtener resumen de cobros/comisiones del mes
   static Future<CollectionsSummary> getCollectionsSummary({
     required String repartidorId,
@@ -549,7 +585,7 @@ class RepartidorDataService {
     if (repartidorId.trim().isEmpty) {
       throw const RepartidorDataException('Falta el repartidor del historial');
     }
-    if (limit < 1 || limit > 100 || offset < 0 || offset > 100) {
+    if (limit < 1 || limit > 100 || offset < 0 || offset > 1000000) {
       throw const RepartidorDataException('Paginación de historial no válida');
     }
     try {
@@ -570,7 +606,7 @@ class RepartidorDataService {
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
-        forceRefresh: true,
+        forceRefresh: false,
       );
 
       final docs = (response['documents'] as List? ?? [])
@@ -1067,20 +1103,25 @@ class RepartidorDataService {
       final localShare = response['localShare'] == true;
       final sent = response['sent'] == true;
       if (response['success'] == true && localShare && !sent) {
-        return const LocalDocumentShare(localShare: true, sent: false);
+        final url = response['whatsappUrl']?.toString().trim();
+        return LocalDocumentShare(
+          localShare: true,
+          sent: false,
+          whatsappUrl: url == null || url.isEmpty ? null : url,
+        );
       }
       throw const RepartidorDataException(
-        'No se pudo preparar el uso compartido local',
+        'No se pudo preparar el envío por WhatsApp.',
       );
     } on ApiException catch (error) {
       throw RepartidorDataException(
-        'No se pudo preparar el uso compartido local.',
+        'No se pudo preparar el envío por WhatsApp.',
         statusCode: error.statusCode,
         code: error.code,
       );
     } catch (_) {
       throw const RepartidorDataException(
-        'No se pudo preparar el uso compartido local',
+        'No se pudo preparar el envío por WhatsApp.',
       );
     }
   }

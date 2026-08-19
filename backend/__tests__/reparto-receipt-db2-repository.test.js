@@ -108,6 +108,37 @@ test('treats a partial financial identity as unpaid and skips cobros lookup', as
   expect(factory).not.toHaveBeenCalled();
 });
 
+test('uses numeric confirmation binds throughout and reads linked evidence metadata once', async () => {
+  const fake = receiptConnection({
+    ID: 7, IDEMPOTENCY_KEY: 'idem-receipt-7', CLIENTE_CODIGO: 'C1', REPARTIDOR_ID: 'R1',
+  });
+  const originalExecute = fake.connection.execute;
+  fake.connection.execute = jest.fn(async (sql, params) => {
+    if (sql.includes('TEST_REPARTO_CONFIRM_EVIDENCIAS')) {
+      fake.calls.push({ sql, params });
+      return [{ EVIDENCE_ID: 'sig-7', EVIDENCE_KIND: 'FIRMA', MIME_TYPE: 'image/png' }];
+    }
+    return originalExecute(sql, params);
+  });
+  const repository = createRepartoReceiptDb2Repository({
+    runtime: runtime(), connectionFactory: jest.fn().mockResolvedValue(fake.connection),
+  });
+
+  const result = await repository.getReceipt({ confirmationId: '7', allowAnyOwner: true });
+
+  expect(result.evidences).toEqual([
+    { EVIDENCE_ID: 'sig-7', EVIDENCE_KIND: 'FIRMA', MIME_TYPE: 'image/png' },
+  ]);
+  const confirmationScopedReads = fake.calls.filter((call) =>
+    call.sql.includes('WHERE ID = ?')
+    || call.sql.includes('WHERE CONFIRMACION_ID = ?'));
+  expect(confirmationScopedReads).not.toHaveLength(0);
+  expect(confirmationScopedReads.every((call) => call.params[0] === 7)).toBe(true);
+  const linkedEvidence = fake.calls.find((call) => call.sql.includes('TEST_REPARTO_CONFIRM_EVIDENCIAS'));
+  expect(linkedEvidence.sql).toContain('SELECT DISTINCT E.EVIDENCE_ID');
+  expect(linkedEvidence.params).toEqual([7]);
+});
+
 test('authorizes the confirmation owner before reading lines, evidence metadata or payments', async () => {
   const fake = receiptConnection({
     ID: 7, IDEMPOTENCY_KEY: 'idem-receipt-7', CLIENTE_CODIGO: 'C1', REPARTIDOR_ID: 'R1',

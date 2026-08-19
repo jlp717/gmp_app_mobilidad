@@ -19,7 +19,7 @@ String repartidorSafeOperationMessage({
     case 'pdfDownload':
       return 'No se pudo preparar el PDF para descargar. Inténtalo de nuevo.';
     case 'pdfShare':
-      return 'No se pudo preparar el PDF para compartir localmente.';
+      return 'No se pudo preparar el PDF para compartir. Inténtalo de nuevo.';
     case 'signature':
       return 'No se pudo guardar la firma. Vuelve a firmar e inténtalo de nuevo.';
     case 'printer':

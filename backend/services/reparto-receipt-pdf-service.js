@@ -141,29 +141,95 @@ function createRepartoReceiptPdfService() {
       document.on('end', () => resolve(Buffer.concat(chunks)));
       document.on('error', reject);
     });
-    document.font('Helvetica-Bold').fontSize(16).text(presentation.header[0]);
-    document.font('Helvetica').fontSize(9);
-    presentation.header.slice(1).forEach((line) => document.text(line));
-    document.moveDown(0.5).font('Helvetica-Bold').text('Lineas confirmadas');
+    const pageWidth = () => document.page.width
+      - document.page.margins.left - document.page.margins.right;
+    const pageBottom = () => document.page.height - document.page.margins.bottom;
+    const pageLeft = () => document.page.margins.left;
+    const drawHeader = ({ continuation = false } = {}) => {
+      document
+        .font('Helvetica-Bold')
+        .fontSize(15)
+        .fillColor('#12355B')
+        .text(
+          continuation
+            ? 'COMPROBANTE DE REPARTO - CONTINUACION'
+            : presentation.header[0],
+          { width: pageWidth() },
+        );
+      document
+        .moveDown(0.15)
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#25364A')
+        .text(presentation.header.slice(1).join('\n'), {
+          width: pageWidth(),
+          lineGap: 1,
+        });
+      document
+        .moveDown(0.35)
+        .font('Helvetica-Bold')
+        .fontSize(9)
+        .fillColor('#12355B')
+        .text('LINEAS CONFIRMADAS', { width: pageWidth() });
+      document.moveDown(0.2).fillColor('#111827');
+    };
+    const addPageWithHeader = () => {
+      document.addPage();
+      drawHeader({ continuation: true });
+    };
+    const ensureSpace = (height) => {
+      if (document.y + height > pageBottom()) addPageWithHeader();
+    };
+
+    drawHeader();
     document.font('Helvetica').fontSize(8);
+    const footerDetails = presentation.footer.slice(1).join('\n');
+    const footerTextHeight = document.heightOfString(footerDetails, {
+      width: pageWidth(), lineGap: 1,
+    });
+    // Footer, recipient, and signature are one acknowledgement block. Reserve
+    // it while writing rows so they remain together on the final page.
+    const finalBlockHeight = footerTextHeight + (signatureImage ? 122 : 34) + 30;
+
     for (const line of presentation.lines) {
       throwIfAborted(signal);
-      document.text(line);
+      const lineHeight = document.heightOfString(line, {
+        width: pageWidth(), lineGap: 1,
+      }) + 8;
+      ensureSpace(lineHeight + finalBlockHeight);
+      document.font('Helvetica').fontSize(8).fillColor('#111827').text(line, {
+        width: pageWidth(), lineGap: 1,
+      });
       document.moveDown(0.25);
     }
-    document.font('Helvetica-Bold').text(presentation.footer[0]);
-    document.font('Helvetica').moveDown(0.5);
-    presentation.footer.slice(1).forEach((line) => document.text(line));
+
+    ensureSpace(finalBlockHeight);
+    document.moveDown(0.25).font('Helvetica-Bold').fontSize(10).fillColor('#12355B')
+      .text(presentation.footer[0], { width: pageWidth() });
+    document.moveDown(0.25).font('Helvetica').fontSize(8).fillColor('#111827')
+      .text(footerDetails, { width: pageWidth(), lineGap: 1 });
     if (signatureImage) {
       try {
-        document.moveDown(0.5).font('Helvetica-Bold').text('Firma registrada');
-        document.image(signatureImage, { fit: [240, 100] });
+        document.moveDown(0.4).font('Helvetica-Bold').fontSize(8)
+          .text('Firma registrada', { width: pageWidth() });
+        const signatureTop = document.y + 3;
+        document.image(signatureImage, pageLeft(), signatureTop, { fit: [220, 86] });
+        document.y = signatureTop + 90;
       } catch (_) {
         throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no se puede representar');
       }
     } else {
-      document.moveDown(0.5).text('Firma: no requerida para este estado');
+      document.moveDown(0.35).font('Helvetica').fontSize(8)
+        .text('Firma: no requerida para este estado', { width: pageWidth() });
     }
+    document
+      .moveDown(0.3)
+      .font('Helvetica')
+      .fontSize(7)
+      .fillColor('#64748B')
+      .text('GMP · comprobante generado desde la confirmacion registrada', {
+        width: pageWidth(), align: 'right',
+      });
     throwIfAborted(signal);
     document.end();
     const pdf = await result;

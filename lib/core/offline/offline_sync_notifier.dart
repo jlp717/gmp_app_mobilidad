@@ -25,6 +25,12 @@ class OfflineSyncNotifier {
   /// Live counters for UI badges (queue + pedidos).
   static final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   static final ValueNotifier<int> failedCount = ValueNotifier<int>(0);
+
+  /// Bumped only after a queued delivery has been acknowledged by the server.
+  /// Route views listen to this instead of treating an offline queue entry as
+  /// a delivered document.
+  static final ValueNotifier<int> deliveryConfirmationRevision =
+      ValueNotifier<int>(0);
   static OfflineSyncSnapshot? lastResult;
 
   static void refreshCounts({int? pending, int? failed}) {
@@ -84,8 +90,16 @@ class OfflineSyncNotifier {
 
   static void deliveryQueued() {
     _show(
-      'Entrega guardada sin conexion. Se enviara al recuperar red.',
+      'Entrega pendiente de sincronizar. No se contabilizara hasta que el servidor la confirme.',
       backgroundColor: Colors.orange.shade700,
+    );
+  }
+
+  static void deliverySynchronized() {
+    deliveryConfirmationRevision.value++;
+    _show(
+      'Entrega sincronizada y registrada correctamente.',
+      backgroundColor: AppTheme.success,
     );
   }
 

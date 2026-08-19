@@ -736,17 +736,189 @@ function canonicalBackupValue(value) {
   return `${typeof value}:${String(value)}`;
 }
 
+const LOB_DATA_TYPES = new Set(['BLOB', 'CLOB', 'DBCLOB', 'NCLOB']);
+const LOB_HASH_CHUNK_CHARS = 8192;
+const MAX_CLOB_HASH_CHUNKS = 128;
+const MAX_BLOB_HASH_CHUNKS = 1024;
+
+function canonicalNumericBackupValue(value) {
+  const source = String(value).trim();
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(source)) return `N:${source}`;
+  const negative = source.startsWith('-');
+  const [rawInteger, rawFraction = ''] = source.replace(/^[+-]/, '').split('.');
+  const integer = rawInteger.replace(/^0+(?=\d)/, '') || '0';
+  const fraction = rawFraction.replace(/0+$/, '');
+  if (integer === '0' && !fraction) return 'N:0';
+  return `N:${negative ? '-' : ''}${integer}${fraction ? `.${fraction}` : ''}`;
+}
+
+function canonicalTemporalBackupValue(value, dataType) {
+  if (value instanceof Date) {
+    const iso = value.toISOString();
+    return dataType === 'DATE' ? `T:${iso.slice(0, 10)}` : `T:${iso.replace(/\.\d{3}Z$/, (match) => `${match.slice(0, -1)}000`)}`;
+  }
+  const source = String(value).trim();
+  if (dataType === 'DATE') return `T:${source.slice(0, 10)}`;
+  const match = source.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/);
+  if (!match) return `T:${source}`;
+  return `T:${match[1]}T${match[2]}.${(match[3] || '').padEnd(6, '0')}`;
+}
+
+function canonicalBackupValueForColumn(value, column) {
+  if (value === null || value === undefined) return '<NULL>';
+  const dataType = String(column.dataType || '').toUpperCase();
+  if (['SMALLINT', 'INTEGER', 'BIGINT', 'DECIMAL', 'NUMERIC', 'DECFLOAT', 'REAL', 'DOUBLE'].includes(dataType)) {
+    return canonicalNumericBackupValue(value);
+  }
+  if (['DATE', 'TIME', 'TIMESTAMP'].includes(dataType)) return canonicalTemporalBackupValue(value, dataType);
+  return canonicalBackupValue(value);
+}
+
+function projectedHashValue(row, alias, fallbackName) {
+  if (Object.prototype.hasOwnProperty.call(row, alias)) return row[alias];
+  if (Object.prototype.hasOwnProperty.call(row, alias.toLowerCase())) return row[alias.toLowerCase()];
+  if (Object.prototype.hasOwnProperty.call(row, fallbackName)) return row[fallbackName];
+  return row[fallbackName.toLowerCase()];
+}
+
+function isLobColumn(column) {
+  return LOB_DATA_TYPES.has(String(column.dataType || '').toUpperCase());
+}
+
+function lobChunkPlan(column, actualLength = column.length) {
+  const declaredLength = Number(column.length);
+  if (!Number.isSafeInteger(declaredLength) || declaredLength < 1) {
+    throw new Error(`BACKUP HASH BLOCK ${column.name}: invalid LOB length metadata`);
+  }
+  const dataType = String(column.dataType || '').toUpperCase();
+  const unitLength = dataType === 'BLOB' ? Math.floor(LOB_HASH_CHUNK_CHARS / 2) : LOB_HASH_CHUNK_CHARS;
+  const effectiveLength = Number(actualLength);
+  if (!Number.isSafeInteger(effectiveLength) || effectiveLength < 0 || effectiveLength > declaredLength) {
+    throw new Error(`BACKUP HASH BLOCK ${column.name}: invalid actual LOB length`);
+  }
+  const count = Math.ceil(effectiveLength / unitLength);
+  const maxChunks = dataType === 'BLOB' ? MAX_BLOB_HASH_CHUNKS : MAX_CLOB_HASH_CHUNKS;
+  if (count > maxChunks) {
+    throw new Error(`BACKUP HASH BLOCK ${column.name}: LOB exceeds ${maxChunks} safe chunks`);
+  }
+  return Array.from({ length: count }, (_, index) => ({
+    index,
+    offset: (index * unitLength) + 1,
+    length: Math.min(unitLength, effectiveLength - (index * unitLength)),
+  }));
+}
+
+function projectedLobMaxLength(row, index, column) {
+  const value = projectedHashValue(row, `H${index}_MAX_LENGTH`, column.name);
+  const length = Number(value);
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new Error(`BACKUP HASH BLOCK ${column.name}: invalid maximum LOB length`);
+  }
+  // Validates catalog metadata and enforces the fixed 1 MiB CLOB / 4 MiB
+  // BLOB ceiling before a data projection is constructed.
+  lobChunkPlan(column, length);
+  return length;
+}
+
+async function actualLobLengthsOf(schemaTable, columns, { queryFn = query } = {}) {
+  const lobColumns = columns
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) => isLobColumn(column));
+  if (!lobColumns.length) return new Map();
+  const projection = lobColumns.map(({ column, index }) => (
+    `COALESCE(MAX(COALESCE(LENGTH(${column.name}), 0)), 0) AS H${index}_MAX_LENGTH`
+  ));
+  const rows = await queryFn(`SELECT ${projection.join(', ')} FROM ${schemaTable}`);
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new Error(`BACKUP HASH BLOCK ${schemaTable}: invalid LOB maximum-length result`);
+  }
+  return new Map(lobColumns.map(({ column, index }) => [
+    index,
+    projectedLobMaxLength(rows[0], index, column),
+  ]));
+}
+
+function contentHashProjection(columns, { lobLengths = null } = {}) {
+  return columns.flatMap((column, index) => {
+    const valueAlias = `H${index}_VALUE`;
+    if (!isLobColumn(column)) return [`${column.name} AS ${valueAlias}`];
+    const nullAlias = `H${index}_NULL`;
+    const lengthAlias = `H${index}_LENGTH`;
+    const maximumLength = lobLengths?.has(index) ? lobLengths.get(index) : column.length;
+    const chunks = lobChunkPlan(column, maximumLength).flatMap(({ index: chunkIndex, offset, length }) => {
+      const chunk = `SUBSTR(${column.name}, ${offset}, ${length})`;
+      const effectiveLength = `CASE WHEN LENGTH(${column.name}) <= ${offset - 1} THEN 0 `
+        + `WHEN LENGTH(${column.name}) - ${offset - 1} > ${length} THEN ${length} `
+        + `ELSE LENGTH(${column.name}) - ${offset - 1} END`;
+      const value = String(column.dataType || '').toUpperCase() === 'BLOB'
+        ? `HEX(${chunk})`
+        : `RTRIM(CAST(${chunk} AS VARCHAR(${LOB_HASH_CHUNK_CHARS})))`;
+      return [
+        `CASE WHEN ${column.name} IS NULL THEN NULL ELSE ${effectiveLength} END AS H${index}_C${chunkIndex}_LENGTH`,
+        `CASE WHEN ${column.name} IS NULL THEN NULL ELSE ${value} END AS H${index}_C${chunkIndex}_VALUE`,
+      ];
+    });
+    // Do not project a LOB directly. IBM i/node-odbc has returned malformed
+    // result sets for direct CLOB values; all LOB data crosses the boundary as
+    // bounded 8 KiB chunks. Per-chunk and total lengths preserve trailing
+    // blanks and SUBSTR padding removed by RTRIM, and fail closed on loss.
+    return [
+      `CASE WHEN ${column.name} IS NULL THEN 1 ELSE 0 END AS ${nullAlias}`,
+      `COALESCE(LENGTH(${column.name}), 0) AS ${lengthAlias}`,
+      ...chunks,
+    ];
+  });
+}
+
+function canonicalLobProjection(row, column, index, schemaTable, maximumLength = column.length) {
+  const nullMarker = projectedHashValue(row, `H${index}_NULL`, column.name);
+  if (String(nullMarker) === '1') return '<NULL>';
+  if (String(nullMarker) !== '0') {
+    throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid LOB null marker`);
+  }
+  const declaredChunks = lobChunkPlan(column, maximumLength);
+  const totalLength = Number(projectedHashValue(row, `H${index}_LENGTH`, column.name));
+  if (!Number.isSafeInteger(totalLength) || totalLength < 0 || totalLength > Number(maximumLength)) {
+    throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid LOB length`);
+  }
+  let summedLength = 0;
+  const chunks = declaredChunks.map(({ index: chunkIndex, length: maxLength }) => {
+    const length = Number(projectedHashValue(row, `H${index}_C${chunkIndex}_LENGTH`, column.name));
+    const value = projectedHashValue(row, `H${index}_C${chunkIndex}_VALUE`, column.name);
+    if (!Number.isSafeInteger(length) || length < 0 || length > maxLength || value === null || value === undefined) {
+      throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid LOB chunk ${chunkIndex}`);
+    }
+    const text = String(value);
+    if (String(column.dataType || '').toUpperCase() === 'BLOB' && !/^[A-Fa-f0-9]*$/.test(text)) {
+      throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid BLOB chunk ${chunkIndex}`);
+    }
+    summedLength += length;
+    return `${length}:${canonicalBackupValue(text)}`;
+  });
+  if (summedLength !== totalLength) {
+    throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: incomplete LOB chunks`);
+  }
+  return `L:${totalLength}:${chunks.join('|')}`;
+}
+
 async function contentHashOf(schemaTable, columns, { queryFn = query } = {}) {
   assertJavierTest(schemaTable);
   const names = columns.map((column) => column.name);
   if (!names.length) throw new Error(`BACKUP HASH BLOCK ${schemaTable}: no columns`);
-  const rows = await queryFn(`SELECT ${names.join(', ')} FROM ${schemaTable}`);
+  const lobLengths = await actualLobLengthsOf(schemaTable, columns, { queryFn });
+  const rows = await queryFn(`SELECT ${contentHashProjection(columns, { lobLengths }).join(', ')} FROM ${schemaTable}`);
+  // DB2 does not guarantee scan order (and CTAS may choose a different access
+  // path). Hash the row multiset, never the result-set order, so the durable
+  // manifest still detects changed values while accepting a faithful backup.
   const rowHashes = (rows || []).map((row) => {
-    const serialized = names.map((name) => canonicalBackupValue(
-      Object.prototype.hasOwnProperty.call(row, name) ? row[name] : row[name.toLowerCase()],
-    )).join('\u001f');
+    const serialized = columns.map((column, index) => (isLobColumn(column)
+      ? canonicalLobProjection(row, column, index, schemaTable, lobLengths.get(index))
+      : canonicalBackupValueForColumn(
+        projectedHashValue(row, `H${index}_VALUE`, column.name),
+        column,
+      ))).join('\u001f');
     return crypto.createHash('sha256').update(serialized).digest('hex');
-  }).sort();
+  }).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
   return crypto.createHash('sha256').update(rowHashes.join('\n')).digest('hex');
 }
 
@@ -1095,6 +1267,19 @@ async function backupMappedDestinations(pairs, runId, dependencies = {}) {
     report.push(await backupTestTable(pair.dst, runId, { ...dependencies, source: pair.src }));
   }
   return report;
+}
+
+async function backupNonSchemaCopyDestinations(pairs, runId, {
+  ensureBackupManifestTableFn = ensureBackupManifestTable,
+  backupMappedDestinationsFn = backupMappedDestinations,
+  backupTestTableFn = backupTestTable,
+  apply = APPLY,
+} = {}) {
+  // The durable manifest is a prerequisite for every APPLY backup checkpoint.
+  // In dry-run this only plans the manifest DDL; it must not write anything.
+  await ensureBackupManifestTableFn({ apply });
+  await backupMappedDestinationsFn(pairs, runId);
+  await backupTestTableFn(TEST_FIRMAS, runId, { source: PROD_FIRMAS });
 }
 
 async function preflightMappingPairs(pairs, {
@@ -1996,9 +2181,7 @@ async function main() {
       }
     } else {
       await preflightMappingPairs(tablePairs);
-      await backupMappedDestinations(tablePairs, runId);
-      await backupTestTable(TEST_FIRMAS, runId, { source: PROD_FIRMAS });
-      await ensureBackupManifestTable({ apply: APPLY });
+      await backupNonSchemaCopyDestinations(tablePairs, runId, { apply: APPLY });
     }
     if (sequenceBlocks.length) throw new Error(sequenceBlocks.join('; '));
     if (RESUME_FIRMAS) {
@@ -2117,6 +2300,7 @@ module.exports = {
   backupTableName,
   backupTestTable,
   backupMappedDestinations,
+  backupNonSchemaCopyDestinations,
   backupShapeHash,
   BACKUP_MANIFEST_TABLE,
   BACKUP_MANIFEST_CREATE_SQL,
@@ -2126,7 +2310,9 @@ module.exports = {
   createDbBackupManifestStore,
   commitBackupManifestWrite,
   contentHashOf,
+  contentHashProjection,
   affectedSchemaPairs,
+  lobChunkPlan,
   runTableStep,
   preflightMappingPairs,
   runAfterCopyPreflight,

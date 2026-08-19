@@ -4,7 +4,7 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_completed.dart';
 
 void main() {
-  testWidgets('la entrega completada conserva la accion local de WhatsApp',
+  testWidgets('la entrega completada abre la accion de WhatsApp',
       (tester) async {
     var whatsappCalls = 0;
     final albaran = AlbaranEntrega(
@@ -36,7 +36,7 @@ void main() {
       ),
     );
 
-    final action = find.text('WhatsApp (selector local)');
+    final action = find.text('Enviar por WhatsApp');
     await tester.scrollUntilVisible(action, 250);
     await tester.tap(action);
 

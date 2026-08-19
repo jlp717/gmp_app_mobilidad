@@ -21,6 +21,11 @@ jest.mock('../middleware/auth', () => ({
 jest.mock('../middleware/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 jest.mock('../services/repartidor-finance-service', () => mockFinance);
 jest.mock('../services/redis-cache', () => ({ deleteCachePattern: jest.fn().mockResolvedValue(undefined) }));
+const mockOutbox = {
+  processLiquidacionOutboxIntent: jest.fn(),
+  requeueFailedLiquidacionOutbox: jest.fn(),
+};
+jest.mock('../services/repartidor-liquidacion-outbox-service', () => mockOutbox);
 
 const routes = require('../routes/repartidor-finanzas');
 
@@ -200,12 +205,28 @@ describe('repartidor liquidation route boundary', () => {
     expect(result.body.canReverseCobros).toBe(false);
   });
 
-  test('legacy resend endpoint cannot bypass the canonical outbox', async () => {
+  test('requeues a failed owned outbox with 202 and never invokes SMTP delivery', async () => {
+    mockOutbox.requeueFailedLiquidacionOutbox.mockResolvedValue({
+      requeued: true, outboxId: '71', repartidorId: '94',
+    });
     const result = await request(makeApp())
       .post('/finanzas/liquidaciones/liquidacion-route-test-0001/resend-emails').send({});
-    expect(result.status).toBe(503);
-    expect(result.body.code).toBe('LIQUIDACION_OUTBOX_RESEND_UNAVAILABLE');
-    expect(mockFinance.findLiquidacionByToken).toBeUndefined();
+    expect(result.status).toBe(202);
+    expect(result.body).toMatchObject({ success: true, requeued: true, outboxId: '71' });
+    expect(mockOutbox.processLiquidacionOutboxIntent).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['forbidden', 403, 'REPARTIDOR_ACCESS_DENIED'],
+    ['claimed', 409, 'LIQUIDACION_OUTBOX_IN_FLIGHT'],
+    ['requeue_lost', 409, 'LIQUIDACION_OUTBOX_REQUEUE_CONFLICT'],
+  ])('rejects resend reason %s without direct delivery', async (reason, status, code) => {
+    mockOutbox.requeueFailedLiquidacionOutbox.mockResolvedValue({ requeued: false, reason });
+    const result = await request(makeApp())
+      .post('/finanzas/liquidaciones/liquidacion-route-test-0001/resend-emails').send({});
+    expect(result.status).toBe(status);
+    expect(result.body.code).toBe(code);
+    expect(mockOutbox.processLiquidacionOutboxIntent).not.toHaveBeenCalled();
   });
 
   test.each([

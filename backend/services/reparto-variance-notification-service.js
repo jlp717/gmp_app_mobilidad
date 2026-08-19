@@ -469,7 +469,8 @@ function previousMadridIsoDate(now = new Date()) {
 }
 
 /**
- * Daily digest: previous Europe/Madrid day, plus any still-open PENDING from that diary.
+ * Daily digest: previous Europe/Madrid day, plus any earlier digest still awaiting
+ * a fully successful delivery.
  */
 async function sendDailyVarianceDigest({
   query = queryWithParams,
@@ -487,6 +488,7 @@ async function sendDailyVarianceDigest({
        AND (
          DATE(CREATED_AT) = ?
          OR (SENT_AT IS NOT NULL AND DATE(SENT_AT) = ?)
+         OR STATUS IN ('PENDING', 'FAILED')
        )
        AND STATUS IN ('PENDING', 'SENT', 'FAILED')
      ORDER BY CREATED_AT
@@ -514,21 +516,23 @@ async function sendDailyVarianceDigest({
   }));
 
   const emails = new Set();
-  const roleRecipients = await resolveRecipients({
-    repartidorId: null,
-    comercialCode: null,
-  }, { query, env });
-  for (const email of roleRecipients.emails || []) emails.add(String(email).toLowerCase());
-
-  const driverCodes = [...new Set(items.map((item) => normalizeVendorCode(item.repartidorId)).filter(Boolean))];
-  const comercialCodes = [...new Set(items.map((item) => normalizeVendorCode(item.comercialCode)).filter(Boolean))];
-  for (const code of driverCodes) {
-    const extra = await resolveRecipients({ repartidorId: code, comercialCode: null }, { query, env });
-    for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
-  }
-  for (const code of comercialCodes) {
-    const extra = await resolveRecipients({ repartidorId: null, comercialCode: code }, { query, env });
-    for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+  try {
+    const roleRecipients = await resolveRecipients({ repartidorId: null, comercialCode: null }, { query, env });
+    for (const email of roleRecipients.emails || []) emails.add(String(email).toLowerCase());
+    const driverCodes = [...new Set(items.map((item) => normalizeVendorCode(item.repartidorId)).filter(Boolean))];
+    const comercialCodes = [...new Set(items.map((item) => normalizeVendorCode(item.comercialCode)).filter(Boolean))];
+    // The directory has no batch recipient API. Resolve each unique vendor once,
+    // never once per outbox row, retaining its cache and ERP fallback behavior.
+    for (const code of driverCodes) {
+      const extra = await resolveRecipients({ repartidorId: code, comercialCode: null }, { query, env });
+      for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+    }
+    for (const code of comercialCodes) {
+      const extra = await resolveRecipients({ repartidorId: null, comercialCode: code }, { query, env });
+      for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+    }
+  } catch (error) {
+    logger.error(`[variance] digest recipient resolution failed: ${error.message}`);
   }
 
   const subject = `Resumen diario diferencias entrega ${digestDate} (${items.length})`;
@@ -537,33 +541,51 @@ async function sendDailyVarianceDigest({
     `${item.documentId} rep=${item.repartidorId} com=${item.comercialCode || ''} lines=${(item.payload.lineas || []).length}`
   )).join('\n');
 
-  let sent = 0;
-  for (const to of emails) {
+  let delivery;
+  try {
+    delivery = resolveRepartoEmailDelivery({ recipients: [...emails], env, mode: 'automatic' });
+  } catch (error) {
+    logger.warn(`[variance] digest delivery policy rejected message: ${error.code || error.message}`);
+    delivery = { effectiveRecipients: [] };
+  }
+  const results = [];
+  const digestIdentity = `${digestDate}|${items.map((item) => item.id).filter((id) => id != null).sort().join(',')}`;
+  for (const to of delivery.effectiveRecipients || []) {
     try {
-      await sendEmail({ to, subject, htmlBody, textBody });
-      sent += 1;
+      const result = await sendEmail({
+        to, subject, htmlBody, textBody,
+        messageId: buildRepartoMessageId({ kind: 'variance-digest', identity: digestIdentity, recipient: to, env }),
+      });
+      results.push({ to, success: true, result });
     } catch (error) {
       logger.error(`[variance] digest email failed to ${to}: ${error.message}`);
+      results.push({ to, success: false });
     }
   }
+  const deliverySummary = redactDeliverySummary(results);
 
   const ids = items.map((item) => item.id).filter((id) => id != null);
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(', ');
     try {
-      await query(
-        `UPDATE ${tables.varianceOutbox}
-            SET DIGEST_INCLUDED = 'S'
-          WHERE ID IN (${placeholders})`,
-        ids,
-      );
+      if (deliverySummary.allSucceeded) {
+        await query(
+          `UPDATE ${tables.varianceOutbox} SET DIGEST_INCLUDED = 'S', ERROR = NULL WHERE ID IN (${placeholders})`,
+          ids,
+        );
+      } else {
+        await query(
+          `UPDATE ${tables.varianceOutbox} SET ERROR = ? WHERE ID IN (${placeholders})`,
+          [`Digest pending: ${deliverySummary.sent}/${deliverySummary.attempted} delivered`, ...ids],
+        );
+      }
     } catch (error) {
       logger.error(`[variance] digest mark failed: ${error.message}`);
     }
   }
 
-  logger.info(`[variance] digest sent=${sent} items=${items.length} date=${digestDate}`);
-  return { sent, items: items.length, digestDate };
+  logger.info(`[variance] digest sent=${deliverySummary.sent} items=${items.length} date=${digestDate}`);
+  return { sent: deliverySummary.sent, items: items.length, digestDate, delivery: deliverySummary };
 }
 
 function rowValue(row, key) {

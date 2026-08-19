@@ -76,6 +76,33 @@ describe('repartidor-liquidacion-service', () => {
     expect(result.outboxIntent).toMatchObject({ type: 'REPARTIDOR_LIQUIDACION_EMAIL', liquidacionId: 'OPS-9' });
   });
 
+  test('persiste los identificadores de cobro que el PDF cerrado debe reproducir', async () => {
+    const snapshot = validSnapshot();
+    snapshot.payments[0] = {
+      ...snapshot.payments[0], codigoCliente: '4300040696',
+      nombreCliente: 'LINARES ROMAN CARLOS ANDRES', tipoDocumento: 'FAC', documento: 'F 000 006290',
+    };
+    const { repository, transaction } = transactionalRepository({ snapshot });
+
+    await createRepartidorLiquidacionService({ repository }).closeDay(validInput(), validActor());
+
+    expect(transaction.insertOperation).toHaveBeenCalledWith(expect.objectContaining({
+      snapshot: expect.objectContaining({ payments: [expect.objectContaining({
+        codigoCliente: '4300040696', nombreCliente: 'LINARES ROMAN CARLOS ANDRES',
+        tipoDocumento: 'FAC', documento: 'F 000 006290',
+      }), expect.any(Object)] }),
+    }));
+  });
+
+  test('rechaza metadatos de cobro no textuales antes de escribir el cierre', async () => {
+    const snapshot = validSnapshot();
+    snapshot.payments[0] = { ...snapshot.payments[0], codigoCliente: { unsafe: true } };
+    const { repository, transaction } = transactionalRepository({ snapshot });
+
+    await expectError(createRepartidorLiquidacionService({ repository }).closeDay(validInput(), validActor()), 'INVALID_LIQUIDACION_SNAPSHOT', 503);
+    expect(transaction.insertOperation).not.toHaveBeenCalled();
+  });
+
   test('replay valida identidad antes de derivar, no duplica outbox y proyecta solo allowlist', async () => {
     const command = validInput();
     const replay = {

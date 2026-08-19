@@ -6,6 +6,7 @@
 /// Nivel 2: Documentos del cliente con filtros avanzados
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -25,6 +26,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 String _sanitizedDocumentActionError(
   Object error, {
@@ -145,8 +147,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   int _clientRowsConsumed = 0;
   int _documentsRequestGeneration = 0;
   String? _clientsQuery;
+  Timer? _clientSearchDebounce;
+  String _clientSearchInput = '';
 
   static const _clientPageSize = 100;
+  static const _clientSearchDebounceDuration = Duration(milliseconds: 300);
 
   // Advanced Filters
   DateTime? _dateFrom;
@@ -186,6 +191,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   void dispose() {
     _clientRequestGeneration++;
     _documentsRequestGeneration++;
+    _clientSearchDebounce?.cancel();
     _searchController.dispose();
     _docSearchController.dispose();
     super.dispose();
@@ -446,6 +452,32 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     setState(() => _isLoading = false);
   }
 
+  void _onClientSearchChanged(String value) {
+    _clientSearchDebounce?.cancel();
+    // Invalidate a request for the previous term before waiting to issue the
+    // next one, so stale responses cannot replace the current result set.
+    _clientRequestGeneration++;
+    setState(() {
+      _clientSearchInput = value;
+      _clients = const [];
+      _clientRowsConsumed = 0;
+      _hasMoreClients = false;
+      _clientsError = null;
+      _clientsLoadMoreError = null;
+      if (_selectedClientId == null) _isLoading = true;
+    });
+    final query = value.trim();
+    _clientSearchDebounce = Timer(_clientSearchDebounceDuration, () {
+      if (!mounted) return;
+      _loadClients(query.isEmpty ? null : query);
+    });
+  }
+
+  void _clearClientSearch() {
+    _searchController.clear();
+    _onClientSearchChanged('');
+  }
+
   // ==========================================================================
   // FILTERING
   // ==========================================================================
@@ -468,18 +500,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       }
       return true;
     }).toList();
-  }
-
-  List<_ClientItem> get _filteredClients {
-    final query = _searchController.text.toLowerCase();
-    if (query.isEmpty) return _clients;
-    return _clients
-        .where(
-          (c) =>
-              c.name.toLowerCase().contains(query) ||
-              c.id.toLowerCase().contains(query),
-        )
-        .toList();
   }
 
   void _clearFilters() {
@@ -597,7 +617,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       lastSync: DateTime.now(),
       isLoading: _isLoading,
       onSync: () => _loadClients(
-        _searchController.text.isNotEmpty ? _searchController.text : null,
+        _clientSearchInput.isNotEmpty ? _clientSearchInput : null,
       ),
     );
   }
@@ -738,6 +758,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Widget _buildClientList() {
+    final clients = _clients;
     return Column(
       children: [
         // Search bar
@@ -745,7 +766,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           padding: const EdgeInsets.all(16),
           child: TextField(
             controller: _searchController,
-            onChanged: (_) => setState(() {}),
+            onChanged: _onClientSearchChanged,
             decoration: InputDecoration(
               hintText: 'Buscar cliente por código o nombre...',
               hintStyle: TextStyle(
@@ -755,15 +776,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 Icons.search,
                 color: AppTheme.textSecondary,
               ),
-              suffixIcon: _searchController.text.isNotEmpty
+              suffixIcon: _clientSearchInput.isNotEmpty
                   ? IconButton(
                       icon: const Icon(
                         Icons.clear,
                         color: AppTheme.textSecondary,
                       ),
                       onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
+                        _clearClientSearch();
                       },
                     )
                   : null,
@@ -795,9 +815,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _searchController.text.isNotEmpty
-                      ? '${_filteredClients.length} de ${_clients.length} clientes'
-                      : '${_clients.length} clientes',
+                  _clientSearchInput.isNotEmpty
+                      ? '${clients.length} clientes encontrados'
+                      : '${clients.length} clientes',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
@@ -820,12 +840,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ? _buildLoadError(
                       _clientsError!,
                       () => _loadClients(
-                        _searchController.text.isNotEmpty
-                            ? _searchController.text
+                        _clientSearchInput.isNotEmpty
+                            ? _clientSearchInput
                             : null,
                       ),
                     )
-                  : _filteredClients.isEmpty
+                  : clients.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -846,20 +866,19 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         )
                       : RefreshIndicator(
                           onRefresh: () => _loadClients(
-                            _searchController.text.isNotEmpty
-                                ? _searchController.text
+                            _clientSearchInput.isNotEmpty
+                                ? _clientSearchInput
                                 : null,
                           ),
                           color: AppTheme.accentIndigo,
                           child: ListView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: _filteredClients.length +
+                            itemCount: clients.length +
                                 (_hasMoreClients ||
                                         _clientsLoadMoreError != null
                                     ? 1
                                     : 0),
                             itemBuilder: (context, index) {
-                              final clients = _filteredClients;
                               if (index < clients.length) {
                                 return _buildClientCard(clients[index]);
                               }
@@ -2067,8 +2086,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 icon: Icons.share_outlined,
                 label: 'Compartir',
                 subtitle: widget.canEmailDocuments
-                    ? 'Compartir localmente, Email, Guardar'
-                    : 'Compartir localmente, Guardar',
+                    ? 'WhatsApp, Email, Guardar'
+                    : 'WhatsApp, Guardar',
                 color: AppTheme.accentIndigo,
                 onTap: () {
                   Navigator.pop(ctx);
@@ -2153,11 +2172,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   child: Icon(Icons.chat, color: Colors.white, size: 20),
                 ),
                 title: const Text(
-                  'Compartir localmente',
+                  'Enviar por WhatsApp',
                   style: TextStyle(color: Colors.white),
                 ),
                 subtitle: const Text(
-                  'Abre el selector del dispositivo; GMP no confirma el envío',
+                  'Prepara el PDF y abre la conversación de WhatsApp',
                 ),
                 onTap: () {
                   Navigator.pop(context);
@@ -2305,15 +2324,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Future<void> _previewDeliveryNote(_DocumentItem doc) async {
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
+      // Historical documents remain viewable even when their old delivery
+      // has no canonical confirmation record.
+      await _previewDocument(doc);
       return;
     }
     final owner = _documentOwner(doc);
@@ -2356,12 +2369,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       );
     } catch (e) {
-      modal.error(
-        _sanitizedDocumentActionError(
-          e,
-          fallback: 'No se pudo visualizar la nota de entrega.',
-        ),
-      );
+      // A canonical receipt may be unavailable for migrated data. The
+      // document endpoint has its own ownership guard and is the safe read
+      // fallback; this is not a delivery confirmation operation.
+      modal.close();
+      if (mounted) await _previewDocument(doc);
     }
   }
 
@@ -2826,7 +2838,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
-      // This response only authorizes opening the local share sheet.
+      // The backend gives the conversation deep-link after it validates owner.
       final localShare = await RepartidorDataService.shareWhatsApp(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
@@ -2851,13 +2863,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       if (!localShare.localShare || localShare.sent) {
         throw const RepartidorDataException(
-          'El servidor no autorizó el uso compartido local.',
+          'No se pudo preparar el envío por WhatsApp.',
         );
       }
       modal.close();
       if (!mounted) return;
 
-      // The user chooses an application in the operating-system share sheet.
+      // The PDF is handed to the platform and then the WhatsApp chat opens.
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
@@ -2876,6 +2888,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         subject: result.message,
         sharePositionOrigin: origin,
       );
+      final url = localShare.whatsappUrl;
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.tryParse(url);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
     } catch (e) {
       modal.close();
       if (mounted) {

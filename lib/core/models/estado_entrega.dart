@@ -60,7 +60,10 @@ enum EstadoEntrega {
       case EstadoEntrega.parcial:
         return AppColors.accentAmber;
       case EstadoEntrega.noEntregado:
-        return AppColors.error;
+        // A failed visit is an operational exception, not a completed
+        // delivery nor a fatal application error. Keep it visually distinct
+        // from delivered/partial work and consistent with the route warning.
+        return AppColors.warning;
       case EstadoEntrega.rechazado:
         return AppColors.textSecondary;
     }

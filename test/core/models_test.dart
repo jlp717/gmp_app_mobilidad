@@ -123,5 +123,11 @@ void main() {
     test('EstadoEntrega has entregado', () {
       expect(EstadoEntrega.entregado, isNotNull);
     });
+
+    test('EstadoEntrega marks a non-delivery as an operational warning', () {
+      expect(EstadoEntrega.noEntregado.color, EstadoEntrega.pendiente.color);
+      expect(EstadoEntrega.noEntregado.color,
+          isNot(EstadoEntrega.entregado.color));
+    });
   });
 }

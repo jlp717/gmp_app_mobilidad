@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 
@@ -555,8 +556,17 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
   @override
   EntregasState build() {
+    void refreshAfterConfirmedOfflineDelivery() {
+      if (state.repartidorId.isEmpty) return;
+      unawaited(cargarAlbaranesPendientes(forceRefresh: true));
+    }
+
+    OfflineSyncNotifier.deliveryConfirmationRevision
+        .addListener(refreshAfterConfirmedOfflineDelivery);
     ref.onDispose(() {
       _debounceTimer?.cancel();
+      OfflineSyncNotifier.deliveryConfirmationRevision
+          .removeListener(refreshAfterConfirmedOfflineDelivery);
     });
     return EntregasState();
   }

@@ -248,7 +248,7 @@ describe('reparto-variance-notification-service', () => {
     expect(previousMadridIsoDate(new Date('2026-08-18T00:15:00+02:00'))).toBe('2026-08-17');
   });
 
-  test('sendDailyVarianceDigest uses previous Madrid day and emails roles plus involved driver/comercial', async () => {
+  test('sendDailyVarianceDigest applies the automatic TEST sink and marks rows only after delivery', async () => {
     const { sendDailyVarianceDigest } = require('../services/reparto-variance-notification-service');
     const query = jest.fn(async (sql) => {
       if (String(sql).includes('SELECT ID, CONFIRMATION_ID')) {
@@ -297,13 +297,49 @@ describe('reparto-variance-notification-service', () => {
     });
 
     expect(query.mock.calls[0][1]).toEqual(['2026-08-17', '2026-08-17']);
-    expect(result).toMatchObject({ sent: 4, items: 1, digestDate: '2026-08-17' });
+    expect(result).toMatchObject({ sent: 1, items: 1, digestDate: '2026-08-17' });
     const tos = sendEmail.mock.calls.map((call) => call[0].to).sort();
-    expect(tos).toEqual([
-      'carlos@example.test',
-      'comercial@example.test',
-      'driver@example.test',
-      'javier@example.test',
-    ]);
+    expect(tos).toEqual(['oficina@example.test']);
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      messageId: expect.stringMatching(/^<gmp-reparto-variance-digest-/),
+    }));
+    expect(query.mock.calls.some(([sql, params]) => (
+      String(sql).includes("SET DIGEST_INCLUDED = 'S'") && params?.[0] === 9
+    ))).toBe(true);
+  });
+
+  test('sendDailyVarianceDigest retains rows when an effective recipient fails', async () => {
+    const { sendDailyVarianceDigest } = require('../services/reparto-variance-notification-service');
+    const query = jest.fn(async (sql) => {
+      if (String(sql).includes('SELECT ID, CONFIRMATION_ID')) {
+        return [{ ID: 12, DOCUMENT_ID: '2026-A-1-2-C2', REPARTIDOR_ID: '08', COMERCIAL_CODE: '33', PAYLOAD_JSON: JSON.stringify({ lineas: [{ codigoArticulo: 'A', diff: -1 }] }) }];
+      }
+      return [];
+    });
+    const env = {
+      NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
+      ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+      REPARTO_WRITES_ENABLED: 'false',
+      REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+      REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
+      REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
+      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test', REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+    };
+    const result = await sendDailyVarianceDigest({
+      query, env,
+      sendEmail: jest.fn(async () => { throw new Error('SMTP unavailable'); }),
+      resolveRecipients: jest.fn(async () => ({ emails: ['driver@example.test'], details: [] })),
+      digestDate: '2026-08-17',
+    });
+    expect(result.delivery).toEqual({ attempted: 1, sent: 0, failed: 1, allSucceeded: false });
+    expect(query.mock.calls.some(([sql]) => String(sql).includes("SET DIGEST_INCLUDED = 'S'"))).toBe(false);
+    const pendingUpdate = query.mock.calls.find(([sql]) => String(sql).includes('SET ERROR = ?'));
+    expect(pendingUpdate?.[1]).toEqual(['Digest pending: 0/1 delivered', 12]);
   });
 });

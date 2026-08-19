@@ -23,10 +23,14 @@ const {
   validateCopyRunId,
   backupTableName,
   backupShapeHash,
+  contentHashOf,
+  contentHashProjection,
+  lobChunkPlan,
   ensureBackupManifestTable,
   commitBackupManifestWrite,
   backupTestTable,
   backupMappedDestinations,
+  backupNonSchemaCopyDestinations,
   affectedSchemaPairs,
   runTableStep,
   runAfterCopyPreflight,
@@ -596,6 +600,114 @@ describe('ERP LQD cobros seed contract', () => {
 describe('resumable backups and table transactions', () => {
   const destination = 'JAVIER.TEST_REPARTIDOR_COBROS';
 
+  test('hashes equivalent DB2 scalar representations as the same unordered row multiset', async () => {
+    const columns = [
+      column(),
+      column({ name: 'IMPORTE', dataType: 'NUMERIC', numericPrecision: '10', numericScale: '2' }),
+      column({ name: 'CREATED_AT', dataType: 'TIMESTAMP' }),
+    ];
+    const sourceRows = [
+      { ID: 1, IMPORTE: '12.50', CREATED_AT: '2026-08-19 07:56:24.123000' },
+      { ID: 2, IMPORTE: '8.00', CREATED_AT: '2026-08-19 08:00:00.000000' },
+    ];
+    const ctasRows = [
+      { ID: BigInt(2), IMPORTE: 8, CREATED_AT: new Date('2026-08-19T08:00:00.000Z') },
+      { ID: BigInt(1), IMPORTE: 12.5, CREATED_AT: new Date('2026-08-19T07:56:24.123Z') },
+    ];
+    const changedRows = [
+      { ID: 1, IMPORTE: '12.50', CREATED_AT: '2026-08-19 07:56:24.123000' },
+      { ID: 2, IMPORTE: '8.01', CREATED_AT: '2026-08-19 08:00:00.000000' },
+    ];
+
+    const sourceHash = await contentHashOf(destination, columns, { queryFn: jest.fn().mockResolvedValue(sourceRows) });
+    const ctasHash = await contentHashOf(destination, columns, { queryFn: jest.fn().mockResolvedValue(ctasRows) });
+    const changedHash = await contentHashOf(destination, columns, { queryFn: jest.fn().mockResolvedValue(changedRows) });
+
+    expect(ctasHash).toBe(sourceHash);
+    expect(changedHash).not.toBe(sourceHash);
+  });
+
+  test('hashes every bounded CLOB chunk and blocks omitted or changed chunk content', async () => {
+    const columns = [
+      column(),
+      column({ name: 'SNAPSHOT_JSON', dataType: 'CLOB', length: '65536' }),
+    ];
+    const projection = contentHashProjection(columns).join(', ');
+    expect(projection).toContain('RTRIM(CAST(SUBSTR(SNAPSHOT_JSON, 1, 8192) AS VARCHAR(8192))) END AS H1_C0_VALUE');
+    expect(projection).toContain('CASE WHEN LENGTH(SNAPSHOT_JSON) <= 0 THEN 0');
+    expect(projection).toContain('SUBSTR(SNAPSHOT_JSON, 57345, 8192)');
+    expect(projection).not.toMatch(/SELECT[^,]*SNAPSHOT_JSON\s+FROM/i);
+
+    const completeRow = { H0_VALUE: 1, H1_NULL: 0, H1_LENGTH: 9000 };
+    for (let index = 0; index < 8; index += 1) {
+      completeRow[`H1_C${index}_LENGTH`] = index === 0 ? 8192 : (index === 1 ? 808 : 0);
+      completeRow[`H1_C${index}_VALUE`] = index === 0 ? 'first-chunk' : (index === 1 ? 'second-chunk' : '');
+    }
+    // Db2 pads SUBSTR to 8192 for a CLOB. Effective length derives from the
+    // full CLOB length, so chunk lengths still sum to that exact total.
+    const changedRow = { ...completeRow, H1_C1_VALUE: 'second-chunk-tampered' };
+    const truncatedRow = { ...completeRow, H1_C1_LENGTH: 0, H1_C1_VALUE: '' };
+    const missingAliasRow = { ...completeRow };
+    delete missingAliasRow.H1_C1_VALUE;
+    const queryFn = jest.fn()
+      .mockResolvedValueOnce([{ H1_MAX_LENGTH: 9000 }])
+      .mockResolvedValueOnce([completeRow])
+      .mockResolvedValueOnce([{ H1_MAX_LENGTH: 9000 }])
+      .mockResolvedValueOnce([changedRow])
+      .mockResolvedValueOnce([{ H1_MAX_LENGTH: 9000 }])
+      .mockResolvedValueOnce([truncatedRow])
+      .mockResolvedValueOnce([{ H1_MAX_LENGTH: 9000 }])
+      .mockResolvedValueOnce([missingAliasRow]);
+
+    const sourceHash = await contentHashOf(destination, columns, { queryFn });
+    const changedHash = await contentHashOf(destination, columns, { queryFn });
+    expect(changedHash).not.toBe(sourceHash);
+    await expect(contentHashOf(destination, columns, { queryFn })).rejects.toThrow('incomplete LOB chunks');
+    await expect(contentHashOf(destination, columns, { queryFn })).rejects.toThrow('invalid LOB chunk 1');
+    expect(queryFn.mock.calls[1][0]).toContain('SUBSTR(SNAPSHOT_JSON, 1, 8192)');
+  });
+
+  test('permits bounded 4 MiB evidence BLOBs and blocks a larger BLOB', () => {
+    const fourMiB = 4 * 1024 * 1024;
+    const plan = lobChunkPlan(column({
+      name: 'CONTENT_BLOB', dataType: 'BLOB', length: String(fourMiB),
+    }));
+    expect(plan).toHaveLength(1024);
+    expect(plan[0]).toEqual({ index: 0, offset: 1, length: 4096 });
+    expect(plan.at(-1)).toEqual({ index: 1023, offset: 4190209, length: 4096 });
+    expect(() => lobChunkPlan(column({
+      name: 'CONTENT_BLOB', dataType: 'BLOB', length: String(fourMiB + 1),
+    }))).toThrow('LOB exceeds 1024 safe chunks');
+  });
+
+  test('plans huge declared BLOBs from their bounded real maximum and blocks oversized values', async () => {
+    const columns = [
+      column(),
+      column({ name: 'CONTENT_BLOB', dataType: 'BLOB', length: '2147483647' }),
+    ];
+    const smallBlob = {
+      H0_VALUE: 1,
+      H1_NULL: 0,
+      H1_LENGTH: 2598,
+      H1_C0_LENGTH: 2598,
+      H1_C0_VALUE: 'AA'.repeat(2598),
+    };
+    const queryFn = jest.fn()
+      .mockResolvedValueOnce([{ H1_MAX_LENGTH: 2598 }])
+      .mockResolvedValueOnce([smallBlob]);
+    await expect(contentHashOf(destination, columns, { queryFn })).resolves.toMatch(/^[a-f0-9]{64}$/);
+    expect(queryFn.mock.calls[0][0]).toContain('MAX(COALESCE(LENGTH(CONTENT_BLOB), 0))');
+    expect(queryFn.mock.calls[0][0]).not.toContain('CONTENT_BLOB AS');
+    expect(queryFn.mock.calls[1][0]).toContain('SUBSTR(CONTENT_BLOB, 1, 2598)');
+    expect(queryFn.mock.calls[1][0]).not.toContain('H1_C1_VALUE');
+
+    const fourMiB = 4 * 1024 * 1024;
+    const fourMiBQuery = jest.fn().mockResolvedValueOnce([{ H1_MAX_LENGTH: fourMiB }]);
+    await expect(contentHashOf(destination, columns, { queryFn: fourMiBQuery })).resolves.toMatch(/^[a-f0-9]{64}$/);
+    const oversized = jest.fn().mockResolvedValueOnce([{ H1_MAX_LENGTH: fourMiB + 1 }]);
+    await expect(contentHashOf(destination, columns, { queryFn: oversized })).rejects.toThrow('LOB exceeds 1024 safe chunks');
+  });
+
   test('requires a bounded explicit run id for apply/resume', () => {
     expect(validateCopyRunId('COPY_20260818_A')).toBe('COPY_20260818_A');
     expect(() => validateCopyRunId('')).toThrow('--copy-run-id is required');
@@ -810,6 +922,34 @@ describe('resumable backups and table transactions', () => {
     });
     expect(tableExistsFn).not.toHaveBeenCalledWith('JAVIER.TEST_REPARTIDOR_FIRMAS');
     expect(tableExistsFn).not.toHaveBeenCalledWith('JAVIER.TEST_REPARTO_CONFIRMACIONES');
+  });
+
+  test('ensures the manifest before non-schema backups and stays mutation-free in dry-run', async () => {
+    const events = [];
+    const pairs = [{ src: 'JAVIER.REPARTIDOR_COBROS', dst: 'JAVIER.TEST_REPARTIDOR_COBROS' }];
+    await backupNonSchemaCopyDestinations(pairs, 'DRY_RUN', {
+      apply: false,
+      ensureBackupManifestTableFn: jest.fn(async ({ apply }) => {
+        events.push(`ensure:${apply}`);
+        return { operations: ['planned'] };
+      }),
+      backupMappedDestinationsFn: jest.fn(async () => { events.push('mapped'); }),
+      backupTestTableFn: jest.fn(async () => { events.push('firmas'); }),
+    });
+    expect(events).toEqual(['ensure:false', 'mapped', 'firmas']);
+  });
+
+  test('fails closed before non-schema backups when manifest setup fails', async () => {
+    const backupMappedDestinationsFn = jest.fn();
+    const backupTestTableFn = jest.fn();
+    await expect(backupNonSchemaCopyDestinations([], 'COPY_20260819_A', {
+      apply: true,
+      ensureBackupManifestTableFn: jest.fn().mockRejectedValue(new Error('manifest unavailable')),
+      backupMappedDestinationsFn,
+      backupTestTableFn,
+    })).rejects.toThrow('manifest unavailable');
+    expect(backupMappedDestinationsFn).not.toHaveBeenCalled();
+    expect(backupTestTableFn).not.toHaveBeenCalled();
   });
 
   test('commits a successful table step and rolls back a failed one', async () => {

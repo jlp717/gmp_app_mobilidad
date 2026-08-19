@@ -68,12 +68,20 @@ jest.mock('../services/facturas.service', () => ({}));
 jest.mock('../services/pdf.service', () => ({}));
 
 const previousTableSet = process.env.REPARTO_TABLE_SET;
+const previousEmailTestAllowlist = process.env.REPARTO_EMAIL_TEST_ALLOWLIST;
+const previousEmailTestSink = process.env.REPARTO_EMAIL_TEST_SINK;
 process.env.REPARTO_TABLE_SET = 'isolated_test';
+process.env.REPARTO_EMAIL_TEST_ALLOWLIST = 'cliente@example.test,jefe@example.test';
+process.env.REPARTO_EMAIL_TEST_SINK = 'cliente@example.test';
 const routes = require('../routes/repartidor');
 
 afterAll(() => {
   if (previousTableSet === undefined) delete process.env.REPARTO_TABLE_SET;
   else process.env.REPARTO_TABLE_SET = previousTableSet;
+  if (previousEmailTestAllowlist === undefined) delete process.env.REPARTO_EMAIL_TEST_ALLOWLIST;
+  else process.env.REPARTO_EMAIL_TEST_ALLOWLIST = previousEmailTestAllowlist;
+  if (previousEmailTestSink === undefined) delete process.env.REPARTO_EMAIL_TEST_SINK;
+  else process.env.REPARTO_EMAIL_TEST_SINK = previousEmailTestSink;
 });
 
 function makeApp() {
@@ -741,6 +749,9 @@ describe('fleet client cards preserve a concrete owner', () => {
       expect.objectContaining({ id: 'C1', repCode: '05', totalDocuments: 2 }),
       expect.objectContaining({ id: 'C1', repCode: '06', totalDocuments: 3 }),
     ]);
+    expect(mockQueryWithParams.mock.calls[0][0]).toContain(
+      'ORDER BY LAST_VISIT DESC, ID ASC, OWNER_ID ASC',
+    );
     const [sql] = mockQueryWithParams.mock.calls[0];
     expect(sql).toMatch(/CODIGOREPARTIDOR[\s\S]*OWNER_ID/);
   });
@@ -778,6 +789,6 @@ describe('client pagination beyond the first 100', () => {
       offset: 100,
       hasMore: true,
     });
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['05', 126]);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['05', 100, 26]);
   });
 });

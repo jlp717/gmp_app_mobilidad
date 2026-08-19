@@ -218,14 +218,14 @@ class RuteroDetailCompleted extends StatelessWidget {
         const SizedBox(height: 10),
         _ShareButton(
           icon: Icons.share,
-          label: 'Compartir PDF (acción local)',
+          label: 'Compartir archivo PDF',
           color: AppTheme.success,
           onTap: onSharePdfLocally,
         ),
         const SizedBox(height: 10),
         _ShareButton(
           icon: Icons.chat,
-          label: 'WhatsApp (selector local)',
+          label: 'Enviar por WhatsApp',
           color: const Color(0xFF25D366),
           onTap: onShareReceiptViaWhatsApp,
         ),

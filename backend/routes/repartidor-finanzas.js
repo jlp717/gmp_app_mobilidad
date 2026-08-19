@@ -11,6 +11,7 @@ const {
 } = require('../services/reparto-variance-notification-service');
 const {
   processLiquidacionOutboxIntent,
+  requeueFailedLiquidacionOutbox,
 } = require('../services/repartidor-liquidacion-outbox-service');
 const {
   buildConfirmationCommand,
@@ -246,6 +247,8 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((raw) => {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === raw;
 }, 'Fecha invalida');
 const idempotencyTokenSchema = z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9_.:-]+$/);
+const liquidacionPdfParamsSchema = z.object({ idempotencyToken: idempotencyTokenSchema });
+const liquidacionPdfQuerySchema = z.object({ repartidorId: numericCodeSchema }).strict();
 const detailDocIdSchema = z.string().trim().regex(
   /^[A-Za-z0-9]{1,10}-\d{4}-[A-Za-z0-9]{1,10}-\d{1,10}-\d{1,10}-\d{1,10}$/,
 );
@@ -1240,6 +1243,30 @@ router.post('/liquidaciones/ingresos-bancarios', verifyToken,
   requireRepartidorAccess((req) => req.liquidacionEntry.repartidorId),
   createLiquidacionEntryHandler('createBankDeposit', 'POST /liquidaciones/ingresos-bancarios'));
 
+router.get('/liquidaciones/:idempotencyToken/pdf', verifyToken,
+  requireRepartidorAccess((req) => req.query?.repartidorId), async (req, res) => {
+    try {
+      const { idempotencyToken } = liquidacionPdfParamsSchema.parse(req.params);
+      const { repartidorId } = liquidacionPdfQuerySchema.parse(req.query);
+      const document = await financeService.buildClosedLiquidacionPdf({
+        idempotencyToken,
+        repartidorId,
+      });
+      res.set('Cache-Control', 'private, no-store');
+      return res.status(200).json({
+        success: true,
+        pdfBase64: document.pdfBuffer.toString('base64'),
+        fileName: document.fileName,
+        liquidacionId: document.liquidacionId,
+        repartidorId: document.repartidorId,
+        date: document.date,
+        status: document.status,
+      });
+    } catch (error) {
+      return sendError(res, error, { action: 'GET /liquidaciones/:idempotencyToken/pdf', params: req.params });
+    }
+  });
+
 router.get('/liquidaciones/:repartidorId/desglose', verifyToken,
   requireFinanceRepartidorSelector,
   requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
@@ -1274,11 +1301,29 @@ router.post('/liquidaciones/:idempotencyToken/reopen', verifyToken, async (req, 
 });
 router.post('/liquidaciones/:idempotencyToken/resend-emails', verifyToken, async (req, res) => {
   try {
-    idempotencyTokenSchema.parse(req.params.idempotencyToken);
-    return res.status(503).json({
-      success: false,
-      code: 'LIQUIDACION_OUTBOX_RESEND_UNAVAILABLE',
-      error: 'El reenvio solo estara disponible mediante el outbox canonico idempotente',
+    const idempotencyToken = idempotencyTokenSchema.parse(req.params.idempotencyToken);
+    const result = await requeueFailedLiquidacionOutbox({
+      idempotencyToken,
+      canAccessRepartidor: (repartidorId) => canAccessRepartidor(req, repartidorId),
+    });
+    if (!result.requeued) {
+      const responses = {
+        not_found: [404, 'LIQUIDACION_OUTBOX_NOT_FOUND', 'No existe un envio de liquidacion para esta clave'],
+        forbidden: [403, 'REPARTIDOR_ACCESS_DENIED', 'No tienes permisos para operar sobre este repartidor'],
+        claimed: [409, 'LIQUIDACION_OUTBOX_IN_FLIGHT', 'El envio esta en curso y no puede reenviarse'],
+        not_failed: [409, 'LIQUIDACION_OUTBOX_NOT_RETRYABLE', 'Solo pueden reenviarse fallos de correo cerrados'],
+        unsafe_payload: [503, 'LIQUIDACION_OUTBOX_UNSAFE_PAYLOAD', 'El reenvio no esta disponible para este registro'],
+        requeue_lost: [409, 'LIQUIDACION_OUTBOX_REQUEUE_CONFLICT', 'El reenvio fue solicitado concurrentemente'],
+      };
+      const [status, code, error] = responses[result.reason] || responses.requeue_lost;
+      return res.status(status).json({ success: false, code, error });
+    }
+    // The scheduler owns delivery. This endpoint only makes an existing
+    // failed intent eligible once more; it never invokes SMTP directly.
+    return res.status(202).json({
+      success: true,
+      requeued: true,
+      outboxId: result.outboxId,
     });
   } catch (error) {
     return sendError(res, error, { action: 'POST /liquidaciones/resend-emails', params: req.params });

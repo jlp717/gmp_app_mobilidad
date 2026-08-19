@@ -1318,12 +1318,25 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
   });
 }
 
-async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {
-  const rows = await chunkedInQuery(
-`
+async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
+  const ids = [...new Set((repartidorIdList || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean))];
+  const pageLimit = Number(limit);
+  const pageOffset = Number(offset);
+  if (!ids.length || !Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > 100 ||
+      !Number.isInteger(pageOffset) || pageOffset < 0 || pageOffset > 1000000) {
+    const error = new Error('History client page is invalid');
+    error.code = 'HISTORY_CLIENTS_PAGE_INVALID';
+    throw error;
+  }
+  const searchFilter = search
+    ? `AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`
+    : '';
+  const sql = `
             SELECT
                 TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
-                    TRIM(UNIQ.CODIGOREPARTIDOR) as OWNER_ID,
+                TRIM(UNIQ.CODIGOREPARTIDOR) as OWNER_ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
                 COUNT(*) as TOTAL_DOCS,
@@ -1341,39 +1354,27 @@ async function getHistoryClients({ repartidorIdList, search, fetchLimit }) {
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
                     AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
                     AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-                WHERE @IN_IDS@
+                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(', ')})
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
             ) UNIQ
             LEFT JOIN DSEDAC.CLI CLI
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(UNIQ.CODIGOCLIENTEALBARAN)
             WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
-              @CLIENT_SEARCH@
+              ${searchFilter}
             GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(UNIQ.CODIGOREPARTIDOR), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
-            ORDER BY LAST_VISIT DESC, ID ASC
-            FETCH FIRST ? ROWS ONLY
-            `,
-            'TRIM(OPP.CODIGOREPARTIDOR)',
-            repartidorIdList,
-            async (sql, params) => {
-                // Apply search filter to each chunk query
-                const searchFilter = search
-                    ? `AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`
-                    : '';
-                const finalSql = sql.replace('@CLIENT_SEARCH@', searchFilter);
-                const finalParams = [...params];
-                if (search) {
-                    const cleanSearch = `%${search.toUpperCase()}%`;
-                    finalParams.push(cleanSearch, cleanSearch, cleanSearch);
-                }
-                finalParams.push(fetchLimit);
-                const cacheKey = `repartidor:clients:${repartidorIdList.join(',')}:${search || ''}:${fetchLimit}`;
-                return runCached(finalSql, cacheKey, TTL.REALTIME, finalParams);
-            },
-            20
-        );
-        
-  return rows;
+            ORDER BY LAST_VISIT DESC, ID ASC, OWNER_ID ASC
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        `;
+  const params = [...ids];
+  if (search) {
+    const cleanSearch = `%${String(search).trim().toUpperCase()}%`;
+    params.push(cleanSearch, cleanSearch, cleanSearch);
+  }
+  // Extra row gives hasMore without a second aggregation query.
+  params.push(pageOffset, pageLimit + 1);
+  const cacheKey = `repartidor:clients:${ids.join(',')}:${search || ''}:${pageLimit}:${pageOffset}`;
+  return runCached(sql, cacheKey, TTL.REALTIME, params);
 }
 
 async function getAlbaranPdfHeader(parsedNumber, serie, parsedYear, parsedTerminal) {

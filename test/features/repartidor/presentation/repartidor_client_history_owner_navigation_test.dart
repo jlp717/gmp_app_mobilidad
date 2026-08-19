@@ -88,4 +88,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(loadedOwner, '08');
   });
+
+  testWidgets('Histórico debounces client searches and restarts pagination',
+      (tester) async {
+    final calls = <({String? search, int offset})>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepartidorHistoricoPage(
+          repartidorId: '08',
+          clientsPageLoader: ({
+            required repartidorId,
+            search,
+            required limit,
+            required offset,
+            required forceRefresh,
+          }) async {
+            calls.add((search: search, offset: offset));
+            return (
+              clients: [
+                HistoryClient(
+                  id: search == null ? 'BASE' : 'ACME',
+                  name: search == null ? 'Cliente base' : 'Cliente ACME',
+                  address: 'Calle 1',
+                  totalDocuments: 1,
+                  repCode: '08',
+                ),
+              ],
+              hasMore: search == null,
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(calls, [(search: null, offset: 0)]);
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'ACME',
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(calls, [(search: null, offset: 0)]);
+
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(calls, [
+      (search: null, offset: 0),
+      (search: 'ACME', offset: 0),
+    ]);
+    expect(find.text('Cliente ACME'), findsOneWidget);
+  });
 }

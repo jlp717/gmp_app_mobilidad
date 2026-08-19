@@ -1,5 +1,8 @@
 // ignore_for_file: public_member_api_docs
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -44,6 +47,17 @@ class RepartidorLiquidacionInputException implements Exception {
   final String message;
   @override
   String toString() => 'RepartidorLiquidacionInputException($code)';
+}
+
+/// Immutable PDF returned by the server for a closed daily settlement.
+class RepartidorLiquidacionPdf {
+  const RepartidorLiquidacionPdf({
+    required this.bytes,
+    required this.fileName,
+  });
+
+  final Uint8List bytes;
+  final String fileName;
 }
 
 class RepartidorFinanzasService {
@@ -342,6 +356,79 @@ class RepartidorFinanzasService {
     final result = RepartidorLiquidacionResult.fromJson(response.body);
     await invalidateAllForRepartidor(repartidorId);
     return result;
+  }
+
+  /// Retrieves the immutable server PDF for an already closed settlement.
+  Future<RepartidorLiquidacionPdf> getClosedLiquidacionPdf({
+    required RepartidorLiquidacionResult liquidacion,
+    required String idempotencyToken,
+  }) async {
+    final resultId = liquidacion.id.trim();
+    final token = idempotencyToken.trim();
+    final repartidorId = liquidacion.repartidorId.trim();
+    final date = liquidacion.date.trim();
+    if (resultId.isEmpty ||
+        !RegExp(r'^[A-Za-z0-9_.:-]{8,128}$').hasMatch(token) ||
+        liquidacion.status != 'CLOSED' ||
+        !RegExp(r'^\d{1,20}$').hasMatch(repartidorId) ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date)) {
+      throw const RepartidorLiquidacionContractException(
+        'LIQUIDACION_PDF_IDENTITY_INVALID',
+        'La liquidacion cerrada no tiene una identidad valida para su PDF',
+      );
+    }
+
+    final response = await _liquidacionGet(
+      '/repartidor-finanzas/liquidaciones/'
+      '${Uri.encodeComponent(token)}/pdf',
+      queryParameters: {'repartidorId': repartidorId},
+    );
+    final returnedId = response['liquidacionId']?.toString().trim();
+    final returnedRepartidor = response['repartidorId']?.toString().trim();
+    final returnedDate = response['date']?.toString().trim();
+    final returnedStatus = response['status']?.toString().trim().toUpperCase();
+    final encoded = response['pdfBase64'];
+    if (response['success'] != true ||
+        returnedId != resultId ||
+        returnedRepartidor != repartidorId ||
+        returnedDate != date ||
+        returnedStatus != 'CLOSED' ||
+        encoded is! String ||
+        encoded.isEmpty ||
+        encoded.length > 20000000) {
+      throw const RepartidorLiquidacionContractException(
+        'LIQUIDACION_PDF_RESPONSE_INVALID',
+        'El servidor devolvio un PDF de liquidacion incompleto o no verificable',
+      );
+    }
+
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(base64Decode(encoded));
+    } on FormatException {
+      throw const RepartidorLiquidacionContractException(
+        'LIQUIDACION_PDF_BASE64_INVALID',
+        'El contenido del PDF de liquidacion no es valido',
+      );
+    }
+    if (bytes.length < 5 ||
+        bytes[0] != 0x25 ||
+        bytes[1] != 0x50 ||
+        bytes[2] != 0x44 ||
+        bytes[3] != 0x46 ||
+        bytes[4] != 0x2d) {
+      throw const RepartidorLiquidacionContractException(
+        'LIQUIDACION_PDF_SIGNATURE_INVALID',
+        'El servidor no devolvio un documento PDF valido',
+      );
+    }
+
+    final requestedFileName = response['fileName']?.toString().trim() ?? '';
+    final fileName =
+        RegExp(r'^[A-Za-z0-9_.-]{1,120}\.pdf$').hasMatch(requestedFileName)
+            ? requestedFileName
+            : 'Liquidacion_$resultId.pdf';
+    return RepartidorLiquidacionPdf(bytes: bytes, fileName: fileName);
   }
 
   Future<RepartidorLiquidacionLedger> getLiquidacionLedger({

@@ -265,7 +265,11 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
         `SELECT * FROM ${tables.confirmation.lines} WHERE CONFIRMACION_ID = ? ORDER BY LINEA_ID`,
         [confirmationId], signal);
       const evidences = await query(connection,
-        `SELECT E.EVIDENCE_ID, E.EVIDENCE_KIND, E.MIME_TYPE FROM ${tables.confirmation.confirmationEvidences} CE INNER JOIN ${tables.confirmation.evidences} E ON E.EVIDENCE_ID = CE.EVIDENCE_ID WHERE CE.CONFIRMACION_ID = ? ORDER BY E.EVIDENCE_ID`,
+        // Evidence retrieval starts from the persisted confirmation link. DISTINCT
+        // keeps a historical duplicate link from making the canonical snapshot
+        // ambiguous; content is still fetched by the evidence service through its
+        // bounded, set-based HEX reader.
+        `SELECT DISTINCT E.EVIDENCE_ID, E.EVIDENCE_KIND, E.MIME_TYPE FROM ${tables.confirmation.confirmationEvidences} CE INNER JOIN ${tables.confirmation.evidences} E ON E.EVIDENCE_ID = CE.EVIDENCE_ID WHERE CE.CONFIRMACION_ID = ? ORDER BY E.EVIDENCE_ID`,
         [confirmationId], signal);
 
       const financialValues = FINANCIAL_DOCUMENT_COLUMNS.map((name) => value(confirmation, name));

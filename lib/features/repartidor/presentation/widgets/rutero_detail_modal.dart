@@ -38,6 +38,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'rutero_detail_completed.dart';
 import 'rutero_detail_header.dart';
@@ -1683,6 +1684,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ..invalidate(repartidorCommissionSummaryProvider);
   }
 
+  Future<void> _refreshAfterAcknowledgedDelivery() async {
+    await RepartidorDataService.invalidateDeliveryReadCaches();
+    try {
+      await widget.ref
+          .read(entregasProvider.notifier)
+          .cargarAlbaranesPendientes(forceRefresh: true);
+      await _invalidateFinanceForDelivery();
+    } catch (_) {
+      // The backend acknowledgement is authoritative. Cache refresh remains
+      // best effort and must never recreate or replay an acknowledged write.
+    }
+  }
+
   double? _parseMoney(String value) {
     final trimmed = value.trim();
     final normalized = trimmed.contains(',')
@@ -1763,6 +1777,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         confirmationId: error.confirmationId,
       );
       if (reconciled) {
+        await _refreshAfterAcknowledgedDelivery();
         if (mounted) setState(() => _isAcknowledgedTombstone = true);
       }
       rethrow;
@@ -1784,15 +1799,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       prepared: prepared,
       response: response,
     );
-    try {
-      await widget.ref
-          .read(entregasProvider.notifier)
-          .cargarAlbaranesPendientes(forceRefresh: true);
-      await _invalidateFinanceForDelivery();
-    } catch (_) {
-      // The backend acknowledgement is authoritative. Cache refresh remains
-      // best effort and must never recreate or replay an acknowledged write.
-    }
+    await _refreshAfterAcknowledgedDelivery();
     return true;
   }
 
@@ -2296,6 +2303,35 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         return;
       }
 
+      // Queued writes are deliberately not presented as completed work. The
+      // current list stays authoritative until SyncQueue receives a valid
+      // server acknowledgement and triggers its refresh revision.
+      if (_lastConfirmWasQueued) {
+        await HapticFeedback.lightImpact();
+        if (!mounted) return;
+        setState(() => _allowProgrammaticDismiss = true);
+        final messenger = ScaffoldMessenger.of(context);
+        Navigator.pop(context);
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: <Widget>[
+                Icon(Icons.cloud_upload_outlined, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Entrega pendiente de sincronizar. No aparecerá como entregada hasta que el servidor confirme.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade700,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
+
       await HapticFeedback.heavyImpact();
       final state = widget.ref.read(entregasProvider);
       final updated = state.albaranes.firstWhere(
@@ -2307,8 +2343,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ..estado = _localDeliveryStatus();
 
       try {
-        if (!_lastConfirmWasQueued &&
-            _deliveryStatus != RepartoDeliveryStatus.noEntregado) {
+        if (_deliveryStatus != RepartoDeliveryStatus.noEntregado) {
           await runRuteroPostConfirmationEffects(
             shouldPrint: _tieneImpresora,
             printTicket: _tryPrintTicketAfterConfirm,
@@ -2333,34 +2368,32 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final messenger = ScaffoldMessenger.of(context);
       final noEntregaSnack =
           _deliveryStatus == RepartoDeliveryStatus.noEntregado;
+      final exceptionSnack = noEntregaSnack ||
+          _deliveryStatus == RepartoDeliveryStatus.parcial ||
+          _deliveryStatus == RepartoDeliveryStatus.rechazado;
+      final snackMessage = switch (_deliveryStatus) {
+        RepartoDeliveryStatus.noEntregado =>
+          'No entrega registrada. No computa como entrega realizada.',
+        RepartoDeliveryStatus.parcial =>
+          'Entrega parcial registrada. La diferencia queda avisada para seguimiento.',
+        RepartoDeliveryStatus.rechazado =>
+          'Entrega rechazada registrada. No computa como entrega realizada.',
+        RepartoDeliveryStatus.entregado => 'Entrega registrada correctamente',
+      };
       Navigator.pop(context);
       messenger.showSnackBar(
         SnackBar(
           content: Row(children: [
             Icon(
-              _lastConfirmWasQueued
-                  ? Icons.cloud_off
-                  : noEntregaSnack
-                      ? Icons.cancel_outlined
-                      : Icons.check_circle,
+              exceptionSnack ? Icons.warning_amber_rounded : Icons.check_circle,
               color: Colors.white,
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                _lastConfirmWasQueued
-                    ? 'Entrega en cola offline. Se sincronizara al recuperar conexion.'
-                    : noEntregaSnack
-                        ? 'No entrega registrada correctamente'
-                        : 'Entrega registrada correctamente',
-              ),
+              child: Text(snackMessage),
             ),
           ]),
-          backgroundColor: _lastConfirmWasQueued
-              ? Colors.orange.shade700
-              : noEntregaSnack
-                  ? AppTheme.warning
-                  : AppTheme.success,
+          backgroundColor: exceptionSnack ? AppTheme.warning : AppTheme.success,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -2559,17 +2592,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 12),
             _buildShareButton(
               icon: Icons.download,
-              label: 'Descargar PDF',
+              label: 'Compartir o guardar PDF',
               color: AppTheme.info,
               onTap: () async {
                 Navigator.pop(ctx);
-                await _downloadReceiptPdf();
+                await _sharePdfLocally();
               },
             ),
             const SizedBox(height: 12),
             _buildShareButton(
               icon: Icons.chat,
-              label: 'WhatsApp (selector local)',
+              label: 'Enviar por WhatsApp',
               color: const Color(0xFF25D366),
               onTap: () async {
                 Navigator.pop(ctx);
@@ -2579,7 +2612,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 12),
             _buildShareButton(
               icon: Icons.share,
-              label: 'Compartir PDF (acción local)',
+              label: 'Compartir archivo PDF',
               color: AppTheme.success,
               onTap: () async {
                 Navigator.pop(ctx);
@@ -2683,6 +2716,35 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
+  Future<File> _prepareAlbaranPdfFile() async {
+    final alb = widget.albaran;
+    final bytes = await RepartidorDataService.downloadDocument(
+      year: alb.ejercicio,
+      serie: alb.serie,
+      number: alb.numeroAlbaran,
+      type: 'albaran',
+      terminal: alb.terminal,
+      repartidorId: alb.codigoRepartidor,
+    );
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final file = File(
+      '${tempDir.path}/albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}_$timestamp.pdf',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  Rect? _shareOrigin() {
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return null;
+    return Rect.fromCenter(
+      center: Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+      width: 1,
+      height: 1,
+    );
+  }
+
   Future<void> _previewReceiptPdf() async {
     final modal =
         AsyncOperationModal.show(context, text: 'Generando vista previa...');
@@ -2720,12 +2782,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
         ),
       );
-    } on RepartoReceiptUnavailableException catch (error) {
-      final presentation = repartoConfirmationErrorPresentation(
-        error: error,
-        acknowledged: _isAcknowledgedTombstone,
+    } on RepartoReceiptUnavailableException {
+      modal.close();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'El recibo confirmado aún no está disponible. Se abre el albarán PDF.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
       );
-      modal.error(presentation.message);
+      await _previewAlbaranPdf();
     } catch (error) {
       modal.error(
         repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
@@ -2770,16 +2838,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         subject: docLabel,
         sharePositionOrigin: origin,
       );
-    } on RepartoReceiptUnavailableException catch (error) {
+    } on RepartoReceiptUnavailableException {
       modal.close();
-      if (mounted) {
-        _showConfirmationError(
-          repartoConfirmationErrorPresentation(
-            error: error,
-            acknowledged: _isAcknowledgedTombstone,
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'El recibo confirmado aún no está disponible. Se prepara el albarán PDF.',
           ),
-        );
-      }
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      await _sharePdfLocally();
     } catch (error) {
       modal.close();
       if (mounted) {
@@ -2808,26 +2878,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context,
       defaultMessage:
           'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}. '
-          'El envío se realiza desde el selector del dispositivo.',
+          'Gracias por su confianza.',
     );
     if (!mounted || form == null) return;
 
     final modal = AsyncOperationModal.show(
       context,
-      text: 'Preparando PDF para compartir localmente...',
+      text: 'Preparando nota de entrega para WhatsApp...',
     );
     try {
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) throw const RepartoReceiptUnavailableException();
-      _cachedPdfBase64 = pdfData;
-      final tempDir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final file = File(
-        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$timestamp.pdf',
-      );
-      await file.writeAsBytes(base64Decode(pdfData));
+      final file = await _prepareAlbaranPdfFile();
 
-      final localShare = await RepartidorDataService.shareWhatsApp(
+      final whatsapp = await RepartidorDataService.shareWhatsApp(
         year: widget.albaran.ejercicio,
         serie: widget.albaran.serie,
         number: widget.albaran.numeroAlbaran,
@@ -2841,33 +2903,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         albaranTerminal: widget.albaran.terminal,
         albaranYear: widget.albaran.ejercicio,
       );
-      if (!localShare.localShare || localShare.sent) {
+      if (!whatsapp.localShare || whatsapp.sent) {
         throw const RepartidorDataException(
-          'El servidor no autorizó el uso compartido local.',
+          'No se pudo preparar el envío por WhatsApp.',
         );
       }
       modal.close();
       if (!mounted) return;
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox == null
-          ? null
-          : Rect.fromCenter(
-              center: Offset(
-                renderBox.size.width / 2,
-                renderBox.size.height / 2,
-              ),
-              width: 1,
-              height: 1,
-            );
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
         text: form.message,
-        sharePositionOrigin: origin,
+        subject: 'Nota de entrega',
+        sharePositionOrigin: _shareOrigin(),
       );
+      final url = whatsapp.whatsappUrl;
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.tryParse(url);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
     } catch (_) {
       modal.close();
       if (mounted) {
-        _showError('No se pudo preparar el PDF para compartir localmente.');
+        _showError('No se pudo preparar la nota de entrega para WhatsApp.');
       }
     }
   }
@@ -2875,52 +2934,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<void> _sharePdfLocally() async {
     final modal = AsyncOperationModal.show(
       context,
-      text: 'Preparando PDF para compartir localmente...',
+      text: 'Preparando nota de entrega...',
     );
     try {
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) throw Exception('Error generando PDF');
-      _cachedPdfBase64 = pdfData;
-
-      final tempDir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final file = File(
-        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$timestamp.pdf',
-      );
-      await file.writeAsBytes(base64Decode(pdfData));
+      final file = await _prepareAlbaranPdfFile();
       modal.close();
       if (!mounted) return;
 
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox == null
-          ? null
-          : Rect.fromCenter(
-              center: Offset(
-                renderBox.size.width / 2,
-                renderBox.size.height / 2,
-              ),
-              width: 1,
-              height: 1,
-            );
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text: 'PDF de la nota de entrega. Compartición local del dispositivo.',
-        sharePositionOrigin: origin,
+        text:
+            'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}',
+        subject: 'Nota de entrega',
+        sharePositionOrigin: _shareOrigin(),
       );
-    } on RepartoReceiptUnavailableException catch (error) {
-      modal.close();
-      if (mounted) {
-        _showConfirmationError(
-          repartoConfirmationErrorPresentation(
-            error: error,
-            acknowledged: _isAcknowledgedTombstone,
-          ),
-        );
-      }
     } catch (error) {
       modal.close();
       if (mounted) {
-        _showError('No se pudo preparar el PDF para compartir localmente.');
+        _showError('No se pudo preparar la nota de entrega.');
       }
     }
   }

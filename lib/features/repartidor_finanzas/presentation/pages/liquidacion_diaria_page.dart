@@ -1,6 +1,7 @@
 // ignore_for_file: public_member_api_docs, lines_longer_than_80_chars
 
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,8 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/repartidor_monthly_summary_bar.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
@@ -233,7 +236,11 @@ class _RepartidorLiquidacionDiariaPageState
               if (closed)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: _LiquidacionClosedState(result: _closedResult!),
+                  child: _LiquidacionClosedState(
+                    result: _closedResult!,
+                    onPreview: () => unawaited(_generatePdf(_closedResult!)),
+                    onShare: () => unawaited(_sharePdf(_closedResult!)),
+                  ),
                 ),
               const SizedBox(height: 24),
               if (!isAggregate)
@@ -300,14 +307,79 @@ class _RepartidorLiquidacionDiariaPageState
 
   String _classicMoney(double value) => value.toStringAsFixed(2);
 
+  bool _canUseOfflinePdfFallback(Object error) =>
+      error is ApiException && error.statusCode == 0;
+
+  Future<void> _previewOfflinePdfFallback(
+    RepartidorLiquidacionResult liquidacion,
+  ) async {
+    try {
+      await CanonicalLiquidacionPdfBuilder.preview(liquidacion: liquidacion);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sin conexión: se muestra una copia local del cierre confirmado.',
+          ),
+        ),
+      );
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            financeErrorMessage(
+                error, 'No se pudo generar el PDF sin conexión'),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _shareOfflinePdfFallback(
+    RepartidorLiquidacionResult liquidacion,
+  ) async {
+    try {
+      await CanonicalLiquidacionPdfBuilder.share(liquidacion: liquidacion);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sin conexión: se comparte una copia local del cierre confirmado.',
+          ),
+        ),
+      );
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            financeErrorMessage(
+                error, 'No se pudo compartir el PDF sin conexión'),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _generatePdf(
     RepartidorLiquidacionResult liquidacion,
   ) async {
     try {
-      await CanonicalLiquidacionPdfBuilder.preview(
-        liquidacion: liquidacion,
-      );
+      final pdf = await ref
+          .read(repartidorLiquidacionActionsProvider)
+          .getClosedLiquidacionPdf(
+            liquidacion: liquidacion,
+            idempotencyToken: _idempotencyToken,
+          );
+      await Printing.layoutPdf(onLayout: (_) async => pdf.bytes);
     } catch (error, stackTrace) {
+      if (_canUseOfflinePdfFallback(error)) {
+        await _previewOfflinePdfFallback(liquidacion);
+        return;
+      }
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -324,10 +396,22 @@ class _RepartidorLiquidacionDiariaPageState
     RepartidorLiquidacionResult liquidacion,
   ) async {
     try {
-      await CanonicalLiquidacionPdfBuilder.share(
-        liquidacion: liquidacion,
+      final pdf = await ref
+          .read(repartidorLiquidacionActionsProvider)
+          .getClosedLiquidacionPdf(
+            liquidacion: liquidacion,
+            idempotencyToken: _idempotencyToken,
+          );
+      await _sharePdfBytes(
+        pdf.bytes,
+        fileName: pdf.fileName,
+        repartidorId: liquidacion.repartidorId,
       );
     } catch (error, stackTrace) {
+      if (_canUseOfflinePdfFallback(error)) {
+        await _shareOfflinePdfFallback(liquidacion);
+        return;
+      }
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -338,6 +422,19 @@ class _RepartidorLiquidacionDiariaPageState
         ),
       );
     }
+  }
+
+  Future<void> _sharePdfBytes(
+    Uint8List bytes, {
+    required String fileName,
+    required String repartidorId,
+  }) {
+    return Share.shareXFiles(
+      <XFile>[
+        XFile.fromData(bytes, mimeType: 'application/pdf', name: fileName),
+      ],
+      subject: 'Liquidación diaria $repartidorId',
+    );
   }
 
   Future<void> _save(
@@ -1031,9 +1128,15 @@ class _BalanceCard extends StatelessWidget {
 }
 
 class _LiquidacionClosedState extends StatelessWidget {
-  const _LiquidacionClosedState({required this.result});
+  const _LiquidacionClosedState({
+    required this.result,
+    required this.onPreview,
+    required this.onShare,
+  });
 
   final RepartidorLiquidacionResult result;
+  final VoidCallback onPreview;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1042,11 +1145,27 @@ class _LiquidacionClosedState extends StatelessWidget {
         : 'Cierre confirmado por el servidor';
     final outbox = result.outboxPending
         ? 'El correo queda pendiente en la bandeja de salida.'
-        : 'No hay correos pendientes.';
+        : 'No hay envíos pendientes en la bandeja de salida.';
     return RepartidorExecutivePanel(
       accentColor: AppColors.success,
       child: ListTile(
         leading: const Icon(Icons.verified, color: AppColors.success),
+        trailing: Wrap(
+          spacing: 2,
+          direction: Axis.vertical,
+          children: [
+            IconButton(
+              tooltip: 'Ver PDF cerrado',
+              onPressed: onPreview,
+              icon: const Icon(Icons.visibility_outlined),
+            ),
+            IconButton(
+              tooltip: 'Compartir PDF',
+              onPressed: onShare,
+              icon: const Icon(Icons.share_outlined),
+            ),
+          ],
+        ),
         title: Text(
           '$status · ${result.status}',
           style: const TextStyle(

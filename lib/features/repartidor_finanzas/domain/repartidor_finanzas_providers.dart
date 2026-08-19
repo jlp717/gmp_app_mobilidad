@@ -706,6 +706,15 @@ class RepartidorLiquidacionActions {
     return result;
   }
 
+  Future<RepartidorLiquidacionPdf> getClosedLiquidacionPdf({
+    required RepartidorLiquidacionResult liquidacion,
+    required String idempotencyToken,
+  }) =>
+      _ref.read(repartidorFinanzasServiceProvider).getClosedLiquidacionPdf(
+            liquidacion: liquidacion,
+            idempotencyToken: idempotencyToken,
+          );
+
   Future<RepartidorLiquidacionEntryResult> createExpense({
     required String repartidorId,
     required DateTime date,
