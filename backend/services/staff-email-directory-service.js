@@ -22,15 +22,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VENDOR_CODE_RE = /^[A-Za-z0-9]{1,2}$/;
 const ROLE_KEY_RE = /^[A-Z][A-Z0-9_]{1,39}$/;
 
-const VARIANCE_ROLE_KEYS = Object.freeze([
-  'OFICINA',
-  'CARLOS_CORBALAN',
+const VARIANCE_ROLE_KEYS = Object.freeze([  'CARLOS_CORBALAN',
   'JAVIER_LACAL',
 ]);
 
-const LIQUIDACION_ROLE_KEYS = Object.freeze([
-  'OFICINA',
-  'CARLOS_CORBALAN',
+const LIQUIDACION_ROLE_KEYS = Object.freeze([  'CARLOS_CORBALAN',
   'JAVIER_LACAL',
 ]);
 
@@ -332,11 +328,26 @@ async function resolveDeliveryVarianceRecipients({
     if (profile.email) emails.add(profile.email.toLowerCase());
   }
 
-  if (normalizeVendorCode(repartidorId)) {
-    await addVendor('repartidor', repartidorId);
+  function addMissingRequired(label, value) {
+    details.push({
+      label,
+      vendorCode: normalizeVendorCode(value),
+      email: null,
+      nombre: null,
+    });
   }
-  if (normalizeVendorCode(comercialCode)) {
-    await addVendor('comercial', comercialCode);
+
+  const repartidorCode = normalizeVendorCode(repartidorId);
+  if (repartidorCode) {
+    await addVendor('repartidor', repartidorCode);
+  } else if (repartidorId !== undefined) {
+    addMissingRequired('repartidor', repartidorId);
+  }
+  const comercial = normalizeVendorCode(comercialCode);
+  if (comercial) {
+    await addVendor('comercial', comercial);
+  } else if (comercialCode !== undefined) {
+    addMissingRequired('comercial', comercialCode);
   }
 
   const roles = await resolveRoleEmails([...VARIANCE_ROLE_KEYS], { query, env });
@@ -351,7 +362,8 @@ async function resolveDeliveryVarianceRecipients({
     if (role.email) emails.add(role.email.toLowerCase());
   }
 
-  return { emails: [...emails], details };
+  const missingRequired = details.filter((detail) => !detail.email).map((detail) => detail.label);
+  return { emails: [...emails], details, missingRequired };
 }
 
 function parseIsoDateParts(value) {
@@ -453,7 +465,6 @@ async function resolveDayRouteComercialCodes({
 
 async function resolveLiquidacionRecipients({
   repartidorId,
-  comercialCodes,
 } = {}, {
   query = queryWithParams,
   env = process.env,
@@ -475,11 +486,13 @@ async function resolveLiquidacionRecipients({
   const driver = normalizeVendorCode(repartidorId);
   if (driver) {
     await addVendor('repartidor', driver);
-  }
-
-  for (const code of uniqueVendorCodes(comercialCodes)) {
-    if (code === driver) continue;
-    await addVendor(`comercial:${code}`, code);
+  } else {
+    details.push({
+      label: 'repartidor',
+      vendorCode: '',
+      email: null,
+      nombre: null,
+    });
   }
 
   const roles = await resolveRoleEmails([...LIQUIDACION_ROLE_KEYS], { query, env });
@@ -494,7 +507,8 @@ async function resolveLiquidacionRecipients({
     if (role.email) emails.add(role.email.toLowerCase());
   }
 
-  return { emails: [...emails], details };
+  const missingRequired = details.filter((detail) => !detail.email).map((detail) => detail.label);
+  return { emails: [...emails], details, missingRequired };
 }
 
 module.exports = {

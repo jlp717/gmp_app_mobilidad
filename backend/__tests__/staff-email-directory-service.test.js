@@ -200,7 +200,6 @@ describe('staff-email-directory-service', () => {
     expect(result.emails.sort()).toEqual([
       'carlos@example.test',
       'com@example.test',
-      'oficina@example.test',
       'rep@example.test',
     ].sort());
     expect(result.details.find((d) => d.label === 'JAVIER_LACAL').email).toBeNull();
@@ -223,7 +222,7 @@ describe('staff-email-directory-service', () => {
     REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
   };
 
-  test('resolveLiquidacionRecipients adds route comerciales plus office roles', async () => {
+  test('resolveLiquidacionRecipients includes only required roles and repartidor', async () => {
     const query = jest.fn(async (sql, params) => {
       if (sql.includes('ROLE_TARGETS')) {
         return [
@@ -253,12 +252,8 @@ describe('staff-email-directory-service', () => {
 
     expect(result.emails.sort()).toEqual([
       'carlos@example.test',
-      'com15@example.test',
-      'com80@example.test',
-      'oficina@example.test',
       'rep@example.test',
     ].sort());
-    expect(result.details.find((d) => d.label === 'comercial:15').email).toBe('com15@example.test');
     expect(result.details.find((d) => d.label === 'comercial:08')).toBeUndefined();
   });
 

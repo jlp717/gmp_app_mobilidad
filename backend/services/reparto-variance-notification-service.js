@@ -307,8 +307,8 @@ async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWit
       });
       results.push({ to, success: true, result });
     } catch (error) {
-      logger.error(`[variance] email failed to ${to}: ${error.message}`);
-      results.push({ to, success: false, error: error.message });
+      logger.error(`[variance] email failed recipient=${results.length + 1}/${recipients.length}: ${String(error?.code || error?.message || 'smtp failure').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')}`);
+      results.push({ success: false, error: 'smtp failure' });
     }
   }
   return { sent: results.filter((r) => r.success).length, results };
@@ -334,7 +334,7 @@ async function notifyAfterConfirm({
 
   const lineas = detectVarianceLines(command.delivery.lineas);
   const deliveryStatus = normalizeText(result.deliveryStatus || command.delivery.status).toUpperCase();
-  const isExceptionStatus = deliveryStatus === 'PARCIAL' || deliveryStatus === 'RECHAZADO';
+  const isExceptionStatus = ['PARCIAL', 'RECHAZADO', 'NO_ENTREGADO'].includes(deliveryStatus);
   // Exception states are operationally material even for a prepaid 0€ document.
   if (lineas.length === 0 && !isExceptionStatus) {
     return { skipped: true, reason: 'no_variance' };
@@ -407,14 +407,17 @@ async function notifyAfterConfirm({
     };
   }
 
-  const { emails, details } = await resolveRecipients({ repartidorId, comercialCode }, { query, env });
+  const { emails, details, missingRequired = [] } = await resolveRecipients({ repartidorId, comercialCode }, { query, env });
   const repartidorDetail = details.find((d) => d.label === 'repartidor');
   const comercialDetail = details.find((d) => d.label === 'comercial');
   payload.repartidorNombre = repartidorDetail?.nombre || '';
   payload.comercialNombre = comercialDetail?.nombre || '';
 
   let delivery;
-  try {
+  if ((missingRequired || []).length > 0 || details.some((detail) => !detail.email)) {
+    logger.warn('[variance] delivery deferred: unresolved required DB recipient');
+    delivery = { effectiveRecipients: [] };
+  } else try {
     delivery = resolveRepartoEmailDelivery({ recipients: emails, env, mode: 'automatic' });
   } catch (error) {
     logger.warn(`[variance] delivery policy rejected message: ${error.code || error.message}`);
@@ -516,23 +519,30 @@ async function sendDailyVarianceDigest({
   }));
 
   const emails = new Set();
+  const missingRequired = new Set();
+  let recipientResolutionFailed = false;
+  function addResolution(resolution) {
+    for (const email of resolution?.emails || []) emails.add(String(email).toLowerCase());
+    for (const label of resolution?.missingRequired || []) missingRequired.add(String(label));
+  }
   try {
-    const roleRecipients = await resolveRecipients({ repartidorId: null, comercialCode: null }, { query, env });
-    for (const email of roleRecipients.emails || []) emails.add(String(email).toLowerCase());
+    const roleRecipients = await resolveRecipients({}, { query, env });
+    addResolution(roleRecipients);
     const driverCodes = [...new Set(items.map((item) => normalizeVendorCode(item.repartidorId)).filter(Boolean))];
     const comercialCodes = [...new Set(items.map((item) => normalizeVendorCode(item.comercialCode)).filter(Boolean))];
     // The directory has no batch recipient API. Resolve each unique vendor once,
     // never once per outbox row, retaining its cache and ERP fallback behavior.
     for (const code of driverCodes) {
-      const extra = await resolveRecipients({ repartidorId: code, comercialCode: null }, { query, env });
-      for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+      const extra = await resolveRecipients({ repartidorId: code }, { query, env });
+      addResolution(extra);
     }
     for (const code of comercialCodes) {
-      const extra = await resolveRecipients({ repartidorId: null, comercialCode: code }, { query, env });
-      for (const email of extra.emails || []) emails.add(String(email).toLowerCase());
+      const extra = await resolveRecipients({ comercialCode: code }, { query, env });
+      addResolution(extra);
     }
   } catch (error) {
     logger.error(`[variance] digest recipient resolution failed: ${error.message}`);
+    recipientResolutionFailed = true;
   }
 
   const subject = `Resumen diario diferencias entrega ${digestDate} (${items.length})`;
@@ -542,7 +552,11 @@ async function sendDailyVarianceDigest({
   )).join('\n');
 
   let delivery;
-  try {
+  const recipientFailureCount = missingRequired.size + (recipientResolutionFailed ? 1 : 0);
+  if (recipientFailureCount > 0) {
+    logger.warn(`[variance] digest delivery deferred: unresolved required DB recipients=${missingRequired.size}`);
+    delivery = { effectiveRecipients: [] };
+  } else try {
     delivery = resolveRepartoEmailDelivery({ recipients: [...emails], env, mode: 'automatic' });
   } catch (error) {
     logger.warn(`[variance] digest delivery policy rejected message: ${error.code || error.message}`);
@@ -558,7 +572,7 @@ async function sendDailyVarianceDigest({
       });
       results.push({ to, success: true, result });
     } catch (error) {
-      logger.error(`[variance] digest email failed to ${to}: ${error.message}`);
+      logger.error(`[variance] digest email failed recipient=${results.length + 1}/${delivery.effectiveRecipients.length}: ${String(error?.code || error?.message || 'smtp failure').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')}`);
       results.push({ to, success: false });
     }
   }
@@ -574,9 +588,12 @@ async function sendDailyVarianceDigest({
           ids,
         );
       } else {
+        const error = recipientFailureCount > 0
+          ? `Digest pending: unresolved recipients (${recipientFailureCount})`
+          : `Digest pending: ${deliverySummary.sent}/${deliverySummary.attempted} delivered`;
         await query(
           `UPDATE ${tables.varianceOutbox} SET ERROR = ? WHERE ID IN (${placeholders})`,
-          [`Digest pending: ${deliverySummary.sent}/${deliverySummary.attempted} delivered`, ...ids],
+          [error, ...ids],
         );
       }
     } catch (error) {
@@ -585,7 +602,13 @@ async function sendDailyVarianceDigest({
   }
 
   logger.info(`[variance] digest sent=${deliverySummary.sent} items=${items.length} date=${digestDate}`);
-  return { sent: deliverySummary.sent, items: items.length, digestDate, delivery: deliverySummary };
+  return {
+    sent: deliverySummary.sent,
+    items: items.length,
+    digestDate,
+    delivery: deliverySummary,
+    unresolvedRecipients: recipientFailureCount,
+  };
 }
 
 function rowValue(row, key) {

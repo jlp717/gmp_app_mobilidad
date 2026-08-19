@@ -6,6 +6,7 @@
 
 const schedule = require('node-schedule');
 const logger = require('../middleware/logger');
+const { redisCache } = require('./redis-cache');
 const { sendDailyVarianceDigest } = require('./reparto-variance-notification-service');
 const {
   processPendingLiquidacionOutbox,
@@ -37,7 +38,25 @@ function buildRule(cronExpr) {
   return rule;
 }
 
+async function runExclusively(jobName, task, ttlMs) {
+  if (!redisCache?.isConnected || typeof redisCache.acquireLock !== 'function') {
+    logger.warn(`[reparto-notify] ${jobName} skipped: Redis leader lock unavailable`);
+    return { skipped: true, reason: 'redis_lock_unavailable' };
+  }
+  const lockKey = `scheduler:${jobName}`;
+  const token = await redisCache.acquireLock('reparto-notify', lockKey, ttlMs);
+  if (!token) {
+    logger.info(`[reparto-notify] ${jobName} skipped: another worker owns the distributed lock`);
+    return { skipped: true, reason: 'not_leader' };
+  }
+  try {
+    return await task();
+  } finally {
+    await redisCache.releaseLock?.('reparto-notify', lockKey, token);
+  }
+}
 async function runVarianceDigestJob() {
+  return runExclusively('variance-digest', async () => {
   const started = new Date().toLocaleString('es-ES', { timeZone: TZ });
   logger.info(`[reparto-notify] variance digest start (${started})`);
   try {
@@ -48,9 +67,11 @@ async function runVarianceDigestJob() {
     logger.error(`[reparto-notify] variance digest error: ${error.message}`);
     throw error;
   }
+  }, 60 * 60 * 1000);
 }
 
 async function runLiquidacionOutboxJob() {
+  return runExclusively('liquidacion-outbox', async () => {
   try {
     const result = await processPendingLiquidacionOutbox();
     if (result.processed > 0) {
@@ -61,6 +82,7 @@ async function runLiquidacionOutboxJob() {
     logger.error(`[reparto-notify] liquidacion outbox error: ${error.message}`);
     throw error;
   }
+  }, 14 * 60 * 1000);
 }
 
 function startRepartoNotificationScheduler() {
@@ -69,8 +91,8 @@ function startRepartoNotificationScheduler() {
     return { digestJob: null, outboxJob: null };
   }
 
-  // PM2 cluster: only instance 0 owns cron (avoid N digests).
-  const instanceRaw = process.env.NODE_APP_INSTANCE ?? process.env.pm_id ?? process.env.INSTANCE_ID;
+  // Explicit PM2 ordinal may designate a local owner. When unavailable, every worker schedules but Redis grants exactly one execution lock per job.
+  const instanceRaw = process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID;
   if (instanceRaw !== undefined && instanceRaw !== '' && String(instanceRaw) !== '0') {
     logger.info(`[reparto-notify] scheduler skipped on worker instance=${instanceRaw}`);
     return { digestJob: null, outboxJob: null };
@@ -124,6 +146,7 @@ function getRepartoNotificationSchedulerStatus() {
       ? new Date(nextDigest).toLocaleString('es-ES', { timeZone: TZ })
       : null,
     outboxDrainActive: outboxJob !== null,
+    distributedExecutionLock: true,
   };
 }
 

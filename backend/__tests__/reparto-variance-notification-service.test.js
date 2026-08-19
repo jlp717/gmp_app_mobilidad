@@ -107,8 +107,14 @@ describe('reparto-variance-notification-service', () => {
     const query = jest.fn(async () => []);
     const sendEmail = jest.fn(async () => ({ success: true, messageId: 'm1' }));
     const resolveRecipients = jest.fn(async () => ({
-      emails: ['oficina@example.test'],
+      emails: [
+        'javier@example.test',
+        'carlos@example.test',
+        'driver@example.test',
+        'comercial@example.test',
+      ],
       details: [],
+      missingRequired: [],
     }));
     const resolveComercial = jest.fn(async () => '15');
 
@@ -116,8 +122,7 @@ describe('reparto-variance-notification-service', () => {
       NODE_ENV: 'test',
       REPARTO_ENVIRONMENT: 'test',
       REPARTO_TABLE_SET: 'isolated_test',
-      REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test',
-      REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'javier@example.test,carlos@example.test,driver@example.test,comercial@example.test',
       ODBC_DSN: 'GMP',
       REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
       REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
@@ -164,15 +169,58 @@ describe('reparto-variance-notification-service', () => {
       { repartidorId: '94', comercialCode: '15' },
       expect.any(Object),
     );
+    expect(sendEmail).toHaveBeenCalledTimes(4);
+    expect(sendEmail.mock.calls.map(([message]) => message.to).sort()).toEqual([
+      'carlos@example.test',
+      'comercial@example.test',
+      'driver@example.test',
+      'javier@example.test',
+    ]);
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
-      to: 'oficina@example.test',
       subject: expect.stringContaining('2026-A-1-100-4300001'),
       pdfBuffer: expect.any(Buffer),
       pdfFilename: expect.stringContaining('Diferencia_entrega_'),
     }));
     expect(result.skipped).toBe(false);
-    expect(result.sent).toBe(1);
+    expect(result.sent).toBe(4);
     expect(query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO'))).toBe(true);
+  });
+
+  test('notifyAfterConfirm fails closed when a required DB recipient is unresolved', async () => {
+    const query = jest.fn(async () => []);
+    const sendEmail = jest.fn();
+    const env = {
+      NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'javier@example.test', ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC', REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER', REPARTO_WRITES_ENABLED: 'false',
+      REPARTO_PRODUCTION_WRITES_APPROVED: 'false', REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false', REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false', REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    };
+
+    const result = await notifyAfterConfirm({
+      command: {
+        delivery: {
+          itemId: '2026-A-1-101-4300001', occurredAt: '2026-08-12T10:00:00+02:00', status: 'PARCIAL',
+          lineas: [{ lineaId: '1', codigoArticulo: 'SKU1', cantidadPedida: 2, cantidadEntregada: 1 }],
+        },
+        actor: { repartidorId: '94' },
+      },
+      result: { created: true, confirmationId: '79', deliveryStatus: 'PARCIAL' },
+    }, {
+      query, env, sendEmail,
+      resolveComercial: jest.fn(async () => '15'),
+      resolveRecipients: jest.fn(async () => ({
+        emails: ['javier@example.test'],
+        details: [{ label: 'repartidor', email: null }],
+        missingRequired: ['repartidor'],
+      })),
+    });
+
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(result.sent).toBe(0);
+    expect(query.mock.calls.some(([sql]) => String(sql).includes("SET STATUS = 'FAILED'"))).toBe(true);
   });
 
   test('notifyAfterConfirm does not send a duplicate for existing durable outbox item', async () => {
@@ -195,7 +243,7 @@ describe('reparto-variance-notification-service', () => {
       query,
       env: {
         NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
-        REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test', REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+        REPARTO_EMAIL_TEST_ALLOWLIST: 'driver@example.test',
         ODBC_DSN: 'GMP', REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
         REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
         REPARTO_WRITES_ENABLED: 'false', REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
@@ -226,7 +274,7 @@ describe('reparto-variance-notification-service', () => {
       query,
       env: {
         NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
-        REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test', REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+        REPARTO_EMAIL_TEST_ALLOWLIST: 'driver@example.test',
         ODBC_DSN: 'GMP', REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
         REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER', REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
         REPARTO_WRITES_ENABLED: 'false', REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
@@ -248,7 +296,7 @@ describe('reparto-variance-notification-service', () => {
     expect(previousMadridIsoDate(new Date('2026-08-18T00:15:00+02:00'))).toBe('2026-08-17');
   });
 
-  test('sendDailyVarianceDigest applies the automatic TEST sink and marks rows only after delivery', async () => {
+  test('sendDailyVarianceDigest preserves all allowlisted DB recipients and marks rows only after delivery', async () => {
     const { sendDailyVarianceDigest } = require('../services/reparto-variance-notification-service');
     const query = jest.fn(async (sql) => {
       if (String(sql).includes('SELECT ID, CONFIRMATION_ID')) {
@@ -273,8 +321,7 @@ describe('reparto-variance-notification-service', () => {
       NODE_ENV: 'test',
       REPARTO_ENVIRONMENT: 'test',
       REPARTO_TABLE_SET: 'isolated_test',
-      REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test',
-      REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'javier@example.test,carlos@example.test,driver@example.test,comercial@example.test',
       ODBC_DSN: 'GMP',
       REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
       REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
@@ -297,9 +344,9 @@ describe('reparto-variance-notification-service', () => {
     });
 
     expect(query.mock.calls[0][1]).toEqual(['2026-08-17', '2026-08-17']);
-    expect(result).toMatchObject({ sent: 1, items: 1, digestDate: '2026-08-17' });
+    expect(result).toMatchObject({ sent: 4, items: 1, digestDate: '2026-08-17' });
     const tos = sendEmail.mock.calls.map((call) => call[0].to).sort();
-    expect(tos).toEqual(['oficina@example.test']);
+    expect(tos).toEqual(['carlos@example.test', 'comercial@example.test', 'driver@example.test', 'javier@example.test']);
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       messageId: expect.stringMatching(/^<gmp-reparto-variance-digest-/),
     }));
@@ -329,7 +376,7 @@ describe('reparto-variance-notification-service', () => {
       REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
       REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
       REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
-      REPARTO_EMAIL_TEST_ALLOWLIST: 'oficina@example.test', REPARTO_EMAIL_TEST_SINK: 'oficina@example.test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'driver@example.test',
     };
     const result = await sendDailyVarianceDigest({
       query, env,

@@ -14,18 +14,18 @@ describe('reparto email delivery policy', () => {
     REPARTO_EMAIL_TEST_SINK: 'sink@example.test',
   };
 
-  test('automatic isolated messages are deduplicated and redirected to the explicit sink', () => {
+  test('automatic isolated messages preserve all allowlisted DB-resolved recipients', () => {
     expect(resolveRepartoEmailDelivery({
-      recipients: ['driver@example.test', 'driver@example.test', 'office@example.test'],
+      recipients: ['sink@example.test', 'auditor@example.test', 'sink@example.test'],
       env: isolatedEnv,
     })).toEqual({
-      effectiveRecipients: ['sink@example.test'],
-      redirected: true,
-      policy: 'isolated_test_sink',
+      effectiveRecipients: ['sink@example.test', 'auditor@example.test'],
+      redirected: false,
+      policy: 'isolated_test_allowlist',
     });
   });
 
-  test('isolated test fails closed without an explicit allowlisted sink', () => {
+  test('isolated test fails closed without an explicit allowlist', () => {
     expect(() => resolveRepartoEmailDelivery({ recipients: ['x@example.test'], env: { REPARTO_TABLE_SET: 'isolated_test' } }))
       .toThrow(RepartoEmailDeliveryPolicyError);
   });

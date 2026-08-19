@@ -17,8 +17,6 @@ const {
 } = require('./liquidacion-pdf-service');
 const {
   resolveLiquidacionRecipients,
-  resolveDayRouteComercialCodes,
-  resolveVendorEmail,
 } = require('./staff-email-directory-service');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { validateFinanceTableMapping } = require('../config/reparto-runtime');
@@ -197,7 +195,6 @@ const {
   cobrosDateOrderBy,
 } = financeRepo.helpers;
 
-const INTERNAL_LIQUIDATION_RECIPIENTS = Object.freeze([]);
 
 const FINANCE_RUNTIME = financeRepo.bindings.runtime;
 
@@ -1597,41 +1594,21 @@ function simplePdfBuffer(title, lines) {
 }
 
 async function sendLiquidacionEmails({
-  liquidacion, repartidorEmail, repartidorName, cobros, comercialCodes, env = process.env,
+  liquidacion, repartidorName, cobros, env = process.env,
 }) {
   if (!liquidacion) return [];
 
   const repartidorId = normalizeText(liquidacion.repartidorId);
-  const resolvedRepartidorEmail = normalizeText(repartidorEmail)
-    || (repartidorId ? await resolveVendorEmail(repartidorId) : null);
-
-  let resolvedComercialCodes = Array.isArray(comercialCodes) ? comercialCodes : null;
-  if (!resolvedComercialCodes) {
-    try {
-      resolvedComercialCodes = await resolveDayRouteComercialCodes({
-        repartidorId,
-        date: liquidacion.date,
-      });
-    } catch (error) {
-      logger.warn(`[REPARTIDOR_FINANZAS] comercial resolve failed: ${error.message}`);
-      resolvedComercialCodes = [];
-    }
-  }
 
   const directory = await resolveLiquidacionRecipients({
     repartidorId,
-    comercialCodes: resolvedComercialCodes,
   });
+  if (directory.missingRequired?.length) {
+    throw new LiquidacionEmailRecipientRequiredError();
+  }
   const recipients = new Set(
     [...(directory.emails || [])].map((email) => String(email).trim().toLowerCase()).filter(Boolean),
   );
-  if (resolvedRepartidorEmail) {
-    recipients.add(String(resolvedRepartidorEmail).trim().toLowerCase());
-  }
-  for (const hardcoded of INTERNAL_LIQUIDATION_RECIPIENTS) {
-    if (normalizeText(hardcoded)) recipients.add(String(hardcoded).trim().toLowerCase());
-  }
-
   const delivery = resolveRepartoEmailDelivery({
     recipients: [...recipients],
     // Passing the runtime explicitly makes the isolated-test sink policy
@@ -1909,7 +1886,6 @@ async function reverseCobro() {
 }
 
 module.exports = {
-  INTERNAL_LIQUIDATION_RECIPIENTS,
   findLiquidacionByToken,
   getDailySummary,
   ensureIsolatedTestFinanceSeed,

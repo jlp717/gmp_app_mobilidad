@@ -52,26 +52,33 @@ function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'au
 
   const allowlist = testAllowlist(env);
   const sink = normalizeEmail(env?.REPARTO_EMAIL_TEST_SINK);
-  if (!allowlist.length || !sink || !allowlist.includes(sink)) {
+  if (!allowlist.length) {
     throw new RepartoEmailDeliveryPolicyError(
-      'El correo de reparto en isolated_test requiere sink y allowlist explícitos',
+      'El correo de reparto en isolated_test requiere allowlist explícita',
       'REPARTO_EMAIL_TEST_POLICY_UNCONFIGURED',
       503,
     );
   }
 
-  if (mode === 'automatic') {
+  if (requestedRecipients.length === 0 && mode === 'automatic') {
+    if (!sink || !allowlist.includes(sink)) {
+      throw new RepartoEmailDeliveryPolicyError(
+        'El fallback técnico de correo en isolated_test requiere sink incluido en allowlist',
+        'REPARTO_EMAIL_TEST_POLICY_UNCONFIGURED',
+        503,
+      );
+    }
     return {
       effectiveRecipients: [sink],
-      redirected: requestedRecipients.length > 0 && !(requestedRecipients.length === 1 && requestedRecipients[0] === sink),
-      policy: 'isolated_test_sink',
+      redirected: false,
+      policy: 'isolated_test_empty_recipient_fallback',
     };
   }
 
   const notAllowed = requestedRecipients.filter((email) => !allowlist.includes(email));
   if (notAllowed.length) {
     throw new RepartoEmailDeliveryPolicyError(
-      'El destinatario no está autorizado para correo de reparto en isolated_test',
+      'Todos los destinatarios de correo de reparto deben estar autorizados en isolated_test',
       'REPARTO_EMAIL_RECIPIENT_NOT_ALLOWED',
       403,
     );
