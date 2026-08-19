@@ -416,6 +416,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           facturaNumber: d.facturaNumber,
           serieFactura: d.serieFactura,
           ejercicioFactura: d.ejercicioFactura,
+          preparationOrderNumber: d.preparationOrderNumber,
+          preparationOrderYear: d.preparationOrderYear,
           date: parsedDate,
           hasValidDate: parsedDate != null,
           amount: d.amount,
@@ -482,23 +484,83 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // FILTERING
   // ==========================================================================
 
+  String _normalizeFlexibleSearch(String value) {
+    var normalized = value.toUpperCase();
+    const substitutions = <String, String>{
+      'Á': 'A',
+      'À': 'A',
+      'Ä': 'A',
+      'Â': 'A',
+      'É': 'E',
+      'È': 'E',
+      'Ë': 'E',
+      'Ê': 'E',
+      'Í': 'I',
+      'Ì': 'I',
+      'Ï': 'I',
+      'Î': 'I',
+      'Ó': 'O',
+      'Ò': 'O',
+      'Ö': 'O',
+      'Ô': 'O',
+      'Ú': 'U',
+      'Ù': 'U',
+      'Ü': 'U',
+      'Û': 'U',
+      'Ñ': 'N',
+    };
+    substitutions.forEach((source, replacement) {
+      normalized = normalized.replaceAll(source, replacement);
+    });
+    return normalized.replaceAll(RegExp(r'[^A-Z0-9]+'), ' ').trim();
+  }
+
+  bool _isOrderedSubsequence(String token, String value) {
+    var valueIndex = 0;
+    for (final codeUnit in token.codeUnits) {
+      valueIndex = value.indexOf(String.fromCharCode(codeUnit), valueIndex);
+      if (valueIndex < 0) return false;
+      valueIndex++;
+    }
+    return true;
+  }
+
+  bool _matchesFlexibleDocumentSearch(_DocumentItem doc, String query) {
+    final tokens = _normalizeFlexibleSearch(query)
+        .split(' ')
+        .where((token) => token.isNotEmpty)
+        .take(6)
+        .toList(growable: false);
+    if (tokens.isEmpty) return true;
+    final values = <String>[
+      doc.number.toString(),
+      (doc.albaranNumber ?? doc.number).toString(),
+      (doc.facturaNumber ?? '').toString(),
+      doc.serie,
+      doc.ejercicio.toString(),
+      doc.terminal.toString(),
+      doc.preparationOrderNumber?.toString() ?? '',
+      doc.preparationOrderYear?.toString() ?? '',
+      doc.type == _DocType.factura ? 'factura' : 'albaran',
+      _statusLabel(doc.status),
+      doc.deliveryObs ?? '',
+      doc.date?.toIso8601String() ?? '',
+      _selectedClientId ?? '',
+      _selectedClientName ?? '',
+    ].map(_normalizeFlexibleSearch).toList(growable: false);
+    return tokens.every((token) => values.any(
+          (value) =>
+              value.contains(token) ||
+              (token.length >= 4 && _isOrderedSubsequence(token, value)),
+        ));
+  }
+
   List<_DocumentItem> get _filteredDocuments {
-    final searchQuery = _docSearchController.text.trim().toLowerCase();
+    final searchQuery = _docSearchController.text.trim();
     return _documents.where((doc) {
       if (_filterDocType != null && doc.type != _filterDocType) return false;
       if (_filterStatus != null && doc.status != _filterStatus) return false;
-      // Search by number
-      if (searchQuery.isNotEmpty) {
-        final numStr = doc.number.toString();
-        final albStr = (doc.albaranNumber ?? doc.number).toString();
-        final factStr = (doc.facturaNumber ?? 0).toString();
-        if (!numStr.contains(searchQuery) &&
-            !albStr.contains(searchQuery) &&
-            !factStr.contains(searchQuery)) {
-          return false;
-        }
-      }
-      return true;
+      return _matchesFlexibleDocumentSearch(doc, searchQuery);
     }).toList();
   }
 
@@ -768,7 +830,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             controller: _searchController,
             onChanged: _onClientSearchChanged,
             decoration: InputDecoration(
-              hintText: 'Buscar cliente por código o nombre...',
+              hintText: 'Nombre, código, dirección, CP o NIF...',
               hintStyle: TextStyle(
                 color: AppTheme.textSecondary.withValues(alpha: 0.5),
               ),
@@ -1759,7 +1821,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         statusIcon = Icons.pie_chart;
         statusLabel = 'Parcial';
       case _DeliveryStatus.notDelivered:
-        statusColor = AppTheme.error;
+        statusColor = AppTheme.warning;
         statusIcon = Icons.cancel;
         statusLabel = 'No entregado';
       case _DeliveryStatus.pending:
@@ -1862,6 +1924,27 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
               ],
             ),
+            if (doc.preparationOrderNumber != null) ...[
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.inventory_2_outlined,
+                    size: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Orden de preparación ${doc.preparationOrderNumber}${doc.preparationOrderYear == null ? '' : ' · ${doc.preparationOrderYear}'}',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 6),
 
             // Row 2: Date + time + signature badge + amount
@@ -3128,7 +3211,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       case _DeliveryStatus.partial:
         return AppTheme.warning;
       case _DeliveryStatus.notDelivered:
-        return AppTheme.error;
+        return AppTheme.warning;
       case _DeliveryStatus.pending:
         return AppTheme.warning;
       case _DeliveryStatus.enRuta:
@@ -3184,6 +3267,8 @@ class _DocumentItem {
     this.facturaNumber,
     this.serieFactura,
     this.ejercicioFactura,
+    this.preparationOrderNumber,
+    this.preparationOrderYear,
     this.pending = 0,
     this.signaturePath,
     this.deliveryDate,
@@ -3206,6 +3291,8 @@ class _DocumentItem {
   final int? facturaNumber;
   final String? serieFactura;
   final int? ejercicioFactura;
+  final int? preparationOrderNumber;
+  final int? preparationOrderYear;
   final DateTime? date;
   final double amount;
   final double pending;

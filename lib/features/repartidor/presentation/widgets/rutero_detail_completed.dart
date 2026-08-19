@@ -32,6 +32,32 @@ class RuteroDetailCompleted extends StatelessWidget {
 
   bool get _isFactura => albaran.numeroFactura > 0;
 
+  bool get _isNoDelivery =>
+      albaran.estado == EstadoEntrega.noEntregado ||
+      albaran.estado == EstadoEntrega.rechazado;
+
+  Color get _outcomeColor => switch (albaran.estado) {
+        EstadoEntrega.entregado => AppTheme.success,
+        EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
+        EstadoEntrega.rechazado => AppTheme.error,
+        _ => AppTheme.info,
+      };
+
+  IconData get _outcomeIcon => switch (albaran.estado) {
+        EstadoEntrega.rechazado => Icons.cancel_outlined,
+        EstadoEntrega.noEntregado => Icons.remove_circle_outline,
+        EstadoEntrega.parcial => Icons.pie_chart_outline,
+        _ => Icons.check_circle,
+      };
+
+  String get _outcomeTitle => switch (albaran.estado) {
+        EstadoEntrega.entregado => 'ENTREGA COMPLETADA',
+        EstadoEntrega.parcial => 'ENTREGA PARCIAL CONFIRMADA',
+        EstadoEntrega.noEntregado => 'NO ENTREGA CONFIRMADA',
+        EstadoEntrega.rechazado => 'ENTREGA RECHAZADA',
+        _ => 'RESULTADO DE ENTREGA',
+      };
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -63,18 +89,18 @@ class RuteroDetailCompleted extends StatelessWidget {
   Widget _buildSuccessBanner() {
     return RepartidorExecutivePanel(
       padding: const EdgeInsets.all(20),
-      accentColor: AppTheme.success,
+      accentColor: _outcomeColor,
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.success.withValues(alpha: 0.2),
+              color: _outcomeColor.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.check_circle,
-              color: AppTheme.success,
+            child: Icon(
+              _outcomeIcon,
+              color: _outcomeColor,
               size: 32,
             ),
           ),
@@ -83,10 +109,10 @@ class RuteroDetailCompleted extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'ENTREGA COMPLETADA',
+                Text(
+                  _outcomeTitle,
                   style: TextStyle(
-                    color: AppTheme.success,
+                    color: _outcomeColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -140,6 +166,14 @@ class RuteroDetailCompleted extends StatelessWidget {
             label: 'Dirección',
             value: '${albaran.direccion}, ${albaran.poblacion}',
           ),
+          if (albaran.ordenPreparacion != null) ...[
+            const Divider(color: AppTheme.borderColor, height: 20),
+            _InfoRow(
+              icon: Icons.inventory_2_outlined,
+              label: 'Orden prep.',
+              value: albaran.ordenPreparacion.toString(),
+            ),
+          ],
           const Divider(color: AppTheme.borderColor, height: 20),
           if (albaran.importeNeto > 0) ...[
             _InfoRow(
@@ -194,7 +228,7 @@ class RuteroDetailCompleted extends StatelessWidget {
     return Column(
       children: [
         const Text(
-          'REENVIAR NOTA DE ENTREGA',
+          'DOCUMENTOS Y ACCIONES',
           style: TextStyle(
             color: AppTheme.textSecondary,
             fontWeight: FontWeight.bold,

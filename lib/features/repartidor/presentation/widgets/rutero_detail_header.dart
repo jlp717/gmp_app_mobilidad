@@ -17,6 +17,31 @@ class RuteroDetailHeader extends StatelessWidget {
 
   bool get _isFactura => albaran.numeroFactura > 0;
   bool get _isUrgent => albaran.esCTR;
+  bool get _isTerminal =>
+      isCompleted ||
+      switch (albaran.estado) {
+        EstadoEntrega.entregado ||
+        EstadoEntrega.parcial ||
+        EstadoEntrega.noEntregado ||
+        EstadoEntrega.rechazado =>
+          true,
+        _ => false,
+      };
+
+  Color get _terminalColor => switch (albaran.estado) {
+        EstadoEntrega.entregado => AppTheme.success,
+        EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
+        EstadoEntrega.rechazado => AppTheme.error,
+        _ => AppTheme.info,
+      };
+
+  String get _terminalLabel => switch (albaran.estado) {
+        EstadoEntrega.entregado => 'ENTREGADO',
+        EstadoEntrega.parcial => 'ENTREGA PARCIAL',
+        EstadoEntrega.noEntregado => 'NO ENTREGADO',
+        EstadoEntrega.rechazado => 'RECHAZADO',
+        _ => 'CONFIRMADO',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -177,19 +202,23 @@ class RuteroDetailHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: (_isUrgent ? AppTheme.error : AppTheme.success)
+              color: (_isTerminal
+                      ? _terminalColor
+                      : _isUrgent
+                          ? AppTheme.error
+                          : AppTheme.success)
                   .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              isCompleted
-                  ? '✓ ENTREGADO'
+              _isTerminal
+                  ? _terminalLabel
                   : _isUrgent
                       ? '⚠ COBRO OBLIGATORIO'
                       : '✓ COBRO OPCIONAL',
               style: TextStyle(
-                color: isCompleted
-                    ? AppTheme.success
+                color: _isTerminal
+                    ? _terminalColor
                     : _isUrgent
                         ? AppTheme.error
                         : AppTheme.success,

@@ -23,6 +23,75 @@ const CANONICAL_CONFIRMATION_STATUSES = Object.freeze([
   'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO',
 ]);
 
+// Search is deliberately normalized on both sides without relying on a DB2
+// UDF. Tokens remain parameterized, bounded and owner-scoped; the relaxed
+// pattern only covers small omitted/extra-character typos, never fuzzy ranking.
+const REPARTIDOR_SEARCH_MAX_TOKENS = 6;
+const REPARTIDOR_SEARCH_TOKEN_MAX_LENGTH = 40;
+const REPARTIDOR_SEARCH_REPLACEMENTS = Object.freeze([
+  ['Á', 'A'], ['À', 'A'], ['Ä', 'A'], ['Â', 'A'],
+  ['É', 'E'], ['È', 'E'], ['Ë', 'E'], ['Ê', 'E'],
+  ['Í', 'I'], ['Ì', 'I'], ['Ï', 'I'], ['Î', 'I'],
+  ['Ó', 'O'], ['Ò', 'O'], ['Ö', 'O'], ['Ô', 'O'],
+  ['Ú', 'U'], ['Ù', 'U'], ['Ü', 'U'], ['Û', 'U'],
+  ['Ñ', 'N'], [' ', ''], ['.', ''], [',', ''], ['-', ''],
+  ['/', ''], ['\\', ''], ['_', ''], ['&', ''], ["'", ''],
+  ['(', ''], [')', ''], ['[', ''], [']', ''], ['{', ''], ['}', ''],
+  [';', ''], [':', ''], ['!', ''], ['?', ''], ['+', ''], ['=', ''],
+  ['*', ''], ['#', ''], ['%', ''], ['@', ''], ['"', ''], ['|', ''],
+  ['<', ''], ['>', ''], ['`', ''], ['~', ''], ['$', ''], ['^', ''],
+]);
+
+function normalizeRepartidorSearchTokens(search) {
+  const normalized = String(search || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+  if (!normalized) return [];
+  return [...new Set(normalized.split(/\s+/)
+    .filter((token) => token.length > 0)
+    .map((token) => token.slice(0, REPARTIDOR_SEARCH_TOKEN_MAX_LENGTH)))]
+    .slice(0, REPARTIDOR_SEARCH_MAX_TOKENS);
+}
+
+function db2SearchSqlLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function db2NormalizedSearchExpression(column) {
+  return REPARTIDOR_SEARCH_REPLACEMENTS.reduce(
+    (expression, [from, to]) =>
+      `REPLACE(${expression}, ${db2SearchSqlLiteral(from)}, ${db2SearchSqlLiteral(to)})`,
+    `UPPER(COALESCE(${column}, ''))`,
+  );
+}
+
+function buildFlexibleRepartidorSearch(search, columns) {
+  const tokens = normalizeRepartidorSearchTokens(search);
+  if (!tokens.length) return { clause: '', params: [], cacheKey: '' };
+  const params = [];
+  const groups = tokens.map((token) => {
+    const patterns = [`%${token}%`];
+    if (token.length >= 4) patterns.push(`%${[...token].join('%')}%`);
+    const matches = [];
+    for (const column of columns) {
+      const expression = db2NormalizedSearchExpression(column);
+      for (const pattern of patterns) {
+        matches.push(`${expression} LIKE ?`);
+        params.push(pattern);
+      }
+    }
+    return `(${matches.join(' OR ')})`;
+  });
+  return {
+    clause: `AND ${groups.join(' AND ')}`,
+    params,
+    cacheKey: tokens.join(' '),
+  };
+}
+
 const LEGACY_ROUTE_READ_TABLES = Object.freeze({
   isolated_test: Object.freeze({
     deliveries: 'JAVIER.TEST_REPARTIDOR_ENTREGAS',
@@ -661,6 +730,8 @@ async function getClientDocuments({
                     CPC.DIADOCUMENTO AS DIA,
                     TRIM(CPC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
                     TRIM(OPP.CODIGOREPARTIDOR) AS DELIVERY_REPARTIDOR,
+                    OPP.NUMEROORDENPREPARACION AS PREPARATION_ORDER_NUMBER,
+                    OPP.EJERCICIOORDENPREPARACION AS PREPARATION_ORDER_YEAR,
                     CPC.IMPORTETOTAL,
                     CAC_J.IMPORTETOTAL AS IMPORTETOTAL_FACTURA,
                     CPC.CONFORMADOSN, CPC.SITUACIONALBARAN,
@@ -1290,16 +1361,21 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
               AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
         `;
   const sqlParams = [startInt, endInt, ...repartidorIdList];
-  if (search) {
-    const cleanSearch = `%${String(search).toUpperCase()}%`;
-    sql += ` AND (
-                UPPER(CLI.NOMBRECLIENTE) LIKE ? OR 
-                UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR
-                CAST(CPC.NUMEROALBARAN AS CHAR(20)) LIKE ? OR
-                CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE ?
-            )`;
-    sqlParams.push(cleanSearch, cleanSearch, cleanSearch, cleanSearch);
-  }
+  const historySearch = buildFlexibleRepartidorSearch(search, [
+    'CLI.NOMBRECLIENTE',
+    'CLI.NOMBREALTERNATIVO',
+    'TRIM(CPC.CODIGOCLIENTEALBARAN)',
+    'CLI.DIRECCION',
+    'CLI.POBLACION',
+    'CLI.PROVINCIA',
+    'CLI.CODIGOPOSTAL',
+    'CLI.NIF',
+    'CAST(CPC.NUMEROALBARAN AS VARCHAR(20))',
+    'CAST(CAC.NUMEROFACTURA AS VARCHAR(20))',
+    'CAST(OPP.NUMEROORDENPREPARACION AS VARCHAR(20))',
+  ]);
+  sql += ` ${historySearch.clause}`;
+  sqlParams.push(...historySearch.params);
   sql += ` ORDER BY FECHA DESC, CPC.EJERCICIOALBARAN DESC, CPC.NUMEROALBARAN DESC, CPC.SERIEALBARAN DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
   sqlParams.push(offset, limit);
@@ -1330,9 +1406,17 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
     error.code = 'HISTORY_CLIENTS_PAGE_INVALID';
     throw error;
   }
-  const searchFilter = search
-    ? `AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`
-    : '';
+  const clientSearch = buildFlexibleRepartidorSearch(search, [
+    'CLI.NOMBRECLIENTE',
+    'CLI.NOMBREALTERNATIVO',
+    'UNIQ.CODIGOCLIENTEALBARAN',
+    'CLI.DIRECCION',
+    'CLI.POBLACION',
+    'CLI.PROVINCIA',
+    'CLI.CODIGOPOSTAL',
+    'CLI.NIF',
+  ]);
+  const searchFilter = clientSearch.clause;
   const sql = `
             SELECT
                 TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
@@ -1366,14 +1450,10 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
             ORDER BY LAST_VISIT DESC, ID ASC, OWNER_ID ASC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         `;
-  const params = [...ids];
-  if (search) {
-    const cleanSearch = `%${String(search).trim().toUpperCase()}%`;
-    params.push(cleanSearch, cleanSearch, cleanSearch);
-  }
+  const params = [...ids, ...clientSearch.params];
   // Extra row gives hasMore without a second aggregation query.
   params.push(pageOffset, pageLimit + 1);
-  const cacheKey = `repartidor:clients:${ids.join(',')}:${search || ''}:${pageLimit}:${pageOffset}`;
+  const cacheKey = `repartidor:clients:${ids.join(',')}:${clientSearch.cacheKey}:${pageLimit}:${pageOffset}`;
   return runCached(sql, cacheKey, TTL.REALTIME, params);
 }
 

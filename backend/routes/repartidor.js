@@ -742,6 +742,8 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             const serie = (row.SERIEALBARAN || 'A').trim();
             const pendingAvailability = overrides.pendingAvailability ||
                 (Number(row.CVC_PRESENT || 0) === 1 ? 'AVAILABLE' : 'UNAVAILABLE');
+            const preparationOrderNumber = Number(referenceRow.PREPARATION_ORDER_NUMBER);
+            const preparationOrderYear = Number(referenceRow.PREPARATION_ORDER_YEAR);
 
             const document = {
                 id: `${subempresa}-${referenceRow.EJERCICIOALBARAN}-${serie}-${referenceRow.TERMINALALBARAN}-${referenceRow.NUMEROALBARAN}`,
@@ -755,6 +757,12 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 serie: (referenceRow.SERIEALBARAN || 'A').trim(),
                 ejercicio: referenceRow.EJERCICIOALBARAN,
                 terminal: referenceRow.TERMINALALBARAN,
+                preparationOrderNumber: Number.isInteger(preparationOrderNumber) && preparationOrderNumber > 0
+                    ? preparationOrderNumber
+                    : null,
+                preparationOrderYear: Number.isInteger(preparationOrderYear) && preparationOrderYear > 0
+                    ? preparationOrderYear
+                    : null,
                 date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
                 time: (row.HORALLEGADA && row.HORALLEGADA > 0)
                     ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`

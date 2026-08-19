@@ -273,6 +273,8 @@ class HistoryDocument {
     this.facturaNumber,
     this.serieFactura,
     this.ejercicioFactura,
+    this.preparationOrderNumber,
+    this.preparationOrderYear,
     this.serie = 'A',
     this.ejercicio = 0,
     this.terminal = 0,
@@ -317,6 +319,12 @@ class HistoryDocument {
       ejercicioFactura: json['ejercicioFactura'] == null
           ? null
           : asInt(json['ejercicioFactura']),
+      preparationOrderNumber: json['preparationOrderNumber'] == null
+          ? null
+          : asInt(json['preparationOrderNumber']),
+      preparationOrderYear: json['preparationOrderYear'] == null
+          ? null
+          : asInt(json['preparationOrderYear']),
       serie: json['serie']?.toString() ?? 'A',
       ejercicio: asInt(json['ejercicio']),
       terminal: asInt(json['terminal']),
@@ -343,6 +351,8 @@ class HistoryDocument {
   final int? facturaNumber;
   final String? serieFactura;
   final int? ejercicioFactura;
+  final int? preparationOrderNumber;
+  final int? preparationOrderYear;
   final String serie;
   final int ejercicio;
   final int terminal;

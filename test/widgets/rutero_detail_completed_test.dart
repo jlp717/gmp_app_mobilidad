@@ -42,4 +42,42 @@ void main() {
 
     expect(whatsappCalls, 1);
   });
+
+  testWidgets('la no-entrega es terminal y conserva la orden', (tester) async {
+    final albaran = AlbaranEntrega(
+      id: '2026-A-1-43-C1',
+      numeroAlbaran: 43,
+      ejercicio: 2026,
+      codigoCliente: 'C1',
+      nombreCliente: 'Cliente no disponible',
+      fecha: '2026-08-19',
+      importeTotal: 10,
+      codigoRepartidor: '08',
+      ordenPreparacion: 991,
+      estado: EstadoEntrega.noEntregado,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RuteroDetailCompleted(
+            albaran: albaran,
+            onPreviewReceiptPdf: () {},
+            onDownloadReceiptPdf: () {},
+            onSharePdfLocally: () {},
+            onShareReceiptViaWhatsApp: () {},
+            buildPrinterConfigSection: () => const SizedBox.shrink(),
+            tieneImpresora: false,
+            items: const <EntregaItem>[],
+            onShowZebraPrintPreview: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('NO ENTREGA CONFIRMADA'), findsOneWidget);
+    expect(find.text('Orden prep.'), findsOneWidget);
+    expect(find.text('991'), findsOneWidget);
+    expect(find.text('Enviar por WhatsApp'), findsOneWidget);
+  });
 }

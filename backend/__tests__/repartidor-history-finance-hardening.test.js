@@ -100,6 +100,25 @@ describe('repartidor history document hardening', () => {
     expect(response.body.documents[0].status).toBe('delivered');
   });
 
+  test('exposes the preparation order from the ERP document snapshot', async () => {
+    mockQueryWithParams.mockResolvedValue([
+      historyRow({
+        PREPARATION_ORDER_NUMBER: 991,
+        PREPARATION_ORDER_YEAR: 2026,
+      }),
+    ]);
+
+    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.documents[0]).toMatchObject({
+      preparationOrderNumber: 991,
+      preparationOrderYear: 2026,
+    });
+    const [sql] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toContain('PREPARATION_ORDER_NUMBER');
+    expect(sql).toContain('PREPARATION_ORDER_YEAR');
+  });
   test('overlays a just-signed TEST confirmation onto DSEDAC history documents', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {

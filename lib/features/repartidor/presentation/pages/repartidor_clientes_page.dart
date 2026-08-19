@@ -367,7 +367,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         controller: _searchController,
         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Buscar por nombre, código o dirección...',
+          hintText: 'Nombre, código, dirección, CP o NIF...',
           hintStyle: TextStyle(
               color: AppTheme.textSecondary.withValues(alpha: 0.6),
               fontSize: 13),

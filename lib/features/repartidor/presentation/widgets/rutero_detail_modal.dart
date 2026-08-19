@@ -559,7 +559,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   bool get _isFactura => widget.albaran.numeroFactura > 0;
   bool get _isUrgent => widget.albaran.esCTR;
-  bool get _isCompleted => widget.albaran.estado == EstadoEntrega.entregado;
+
+  /// Canonical terminal outcomes are read-only. A no-delivery is final too;
+  /// reopening it as an editable confirmation risks an inconsistent replay.
+  bool get _isCompleted => switch (widget.albaran.estado) {
+        EstadoEntrega.entregado ||
+        EstadoEntrega.parcial ||
+        EstadoEntrega.noEntregado ||
+        EstadoEntrega.rechazado =>
+          true,
+        _ => false,
+      };
+
+  Color get _terminalAccentColor => switch (widget.albaran.estado) {
+        EstadoEntrega.entregado => AppTheme.success,
+        EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
+        EstadoEntrega.rechazado => AppTheme.error,
+        _ => AppTheme.info,
+      };
 
   bool get _hasDiscrepancy {
     final anyQtyModified = _items.any((item) => _quantityDiffers(
@@ -592,7 +609,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             landscapeFraction: _isCompleted ? 0.80 : 0.95,
           ),
           accentColor: _isCompleted
-              ? AppTheme.success
+              ? _terminalAccentColor
               : _isUrgent
                   ? AppTheme.obligatorio
                   : AppTheme.info,

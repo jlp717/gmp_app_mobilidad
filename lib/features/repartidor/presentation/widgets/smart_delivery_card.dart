@@ -61,10 +61,28 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   bool get _isFactura => widget.albaran.numeroFactura > 0;
   bool get _isEntregado => widget.albaran.estado == EstadoEntrega.entregado;
+  bool get _isNoEntregado =>
+      widget.albaran.estado == EstadoEntrega.noEntregado ||
+      widget.albaran.estado == EstadoEntrega.rechazado;
+  bool get _isTerminal => switch (widget.albaran.estado) {
+        EstadoEntrega.entregado ||
+        EstadoEntrega.parcial ||
+        EstadoEntrega.noEntregado ||
+        EstadoEntrega.rechazado =>
+          true,
+        _ => false,
+      };
   bool get _isUrgent => widget.albaran.esCTR;
 
+  Color get _terminalColor => switch (widget.albaran.estado) {
+        EstadoEntrega.entregado => AppTheme.success,
+        EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
+        EstadoEntrega.rechazado => AppTheme.error,
+        _ => AppTheme.info,
+      };
+
   Color get _borderColor {
-    if (_isEntregado) return AppTheme.success;
+    if (_isTerminal) return _terminalColor;
     if (widget.albaran.colorEstado == 'purple' || _isFactura)
       return AppTheme.accentIndigo;
     if (widget.albaran.colorEstado == 'red' || _isUrgent)
@@ -74,8 +92,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   BoxDecoration get _cardDecoration {
     Color baseColor;
-    if (_isEntregado) {
-      baseColor = AppTheme.success;
+    if (_isTerminal) {
+      baseColor = _terminalColor;
     } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
       baseColor = AppTheme.accentIndigo;
     } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {
@@ -119,7 +137,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           HapticFeedback.selectionClick();
           widget.onTap();
         },
-        onHorizontalDragStart: _isEntregado
+        onHorizontalDragStart: _isTerminal
             ? null
             : (_) {
                 setState(() {
@@ -127,7 +145,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                   _swipeActionTriggered = false;
                 });
               },
-        onHorizontalDragUpdate: _isEntregado
+        onHorizontalDragUpdate: _isTerminal
             ? null
             : (details) {
                 setState(() {
@@ -135,7 +153,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                       (_dragOffset + details.delta.dx).clamp(-120.0, 120.0);
                 });
               },
-        onHorizontalDragEnd: _isEntregado ? null : _handleDragEnd,
+        onHorizontalDragEnd: _isTerminal ? null : _handleDragEnd,
         child: AnimatedBuilder(
           animation: _scaleAnimation,
           builder: (context, child) {
@@ -220,16 +238,20 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         const SizedBox(width: 8),
 
         // Status indicator
-        if (_isEntregado)
+        if (_isTerminal)
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.success.withValues(alpha: 0.2),
+              color: _terminalColor.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.check,
-              color: AppTheme.success,
+            child: Icon(
+              widget.albaran.estado == EstadoEntrega.rechazado
+                  ? Icons.cancel_outlined
+                  : _isNoEntregado
+                      ? Icons.remove_circle_outline
+                      : Icons.check,
+              color: _terminalColor,
               size: 14,
             ),
           ),
@@ -419,7 +441,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         const SizedBox(width: 8),
 
         // Payment button (if urgent)
-        if (_isUrgent && !_isEntregado)
+        if (_isUrgent && !_isTerminal)
           _buildActionButton(
             icon: Icons.payment,
             label: 'COBRAR',
