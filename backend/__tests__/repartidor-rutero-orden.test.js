@@ -41,6 +41,7 @@ jest.mock('../middleware/auth', () => ({
     req.user = { ...global.__RUTERO_ORDEN_USER__ };
     return next();
   },
+  requireJefeVentas: (_req, _res, next) => next(),
 }));
 jest.mock('../services/circuit-breaker', () => ({
   CircuitBreaker: class CircuitBreaker {
@@ -80,9 +81,9 @@ function makeApp() {
 describe('repartidor day-scoped rutero order', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    global.__RUTERO_ORDEN_USER__ = { id: '05', code: '05', role: 'REPARTIDOR' };
+    global.__RUTERO_ORDEN_USER__ = { id: '05', code: '05', role: 'REPARTIDOR', repartidorCodes: ['05'] };
     mockListOrder.mockResolvedValue([]);
-    mockReplaceOrder.mockImplementation(async (_id, _date, orden) => orden);
+    mockReplaceOrder.mockImplementation(async (_id, _date, orden) => ({ orden, revision: 'next' }));
   });
 
   test('PUT denies foreign repartidor id for REPARTIDOR role', async () => {
@@ -128,10 +129,10 @@ describe('repartidor day-scoped rutero order', () => {
     const res = await request(makeApp())
       .put('/repartidor/rutero/order/05')
       .set('Authorization', 'Bearer t')
-      .send({ date: '2026-08-11', orden });
+      .send({ date: '2026-08-11', orden, baseRevision: 'current' });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(mockReplaceOrder).toHaveBeenCalledWith('05', '2026-08-11', orden, '05');
+    expect(mockReplaceOrder).toHaveBeenCalledWith('05', '2026-08-11', orden, '05', 'current');
   });
 
   test('normalizeOrdenPayload rejects duplicate documentId', () => {
@@ -155,4 +156,26 @@ describe('repartidor day-scoped rutero order', () => {
     ]);
     expect(ordered.map((x) => x.id)).toEqual(['b', 'a', 'c', 'd']);
   });
-});
+
+  test('optimize validates malformed strategy and origin with 422', async () => {
+    const body = { date: '2026-08-11', stops: [{ documentId: 'doc-1', cliente: 'C1' }] };
+    const strategy = await request(makeApp()).post('/repartidor/rutero/order/05/optimize').set('Authorization', 'Bearer t').send({ ...body, strategy: 'unknown' });
+    const origin = await request(makeApp()).post('/repartidor/rutero/order/05/optimize').set('Authorization', 'Bearer t').send({ ...body, origin: { lat: 200, lng: 0 } });
+    expect(strategy.status).toBe(422);
+    expect(strategy.body.code).toBe('RUTERO_STRATEGY_INVALID');
+    expect(origin.status).toBe(422);
+    expect(origin.body.code).toBe('RUTERO_ORIGIN_INVALID');
+  });
+
+  test('optimize returns all stops and diagnostics when optional DB data fails', async () => {
+    const repo = require('../repositories/repartidor-rutero-orden-db2-repository');
+    repo.fetchClientWindows.mockRejectedValueOnce(new Error('CRUT unavailable'));
+    repo.fetchClientGeo.mockRejectedValueOnce(new Error('GEO unavailable'));
+    const res = await request(makeApp()).post('/repartidor/rutero/order/05/optimize').set('Authorization', 'Bearer t').send({
+      date: '2026-08-11', strategy: 'balanced', stops: [{ documentId: 'doc-1', cliente: 'C1' }, { documentId: 'doc-2', cliente: 'C2' }],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.orden).toHaveLength(2);
+    expect(res.body.summary).toMatchObject({ total: 2, missingGps: 2 });
+    expect(res.body.diagnostics).toEqual(expect.arrayContaining(['client_windows_unavailable', 'client_geo_unavailable']));
+  });});

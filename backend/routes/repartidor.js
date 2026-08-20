@@ -38,10 +38,15 @@ const pdfService = require('../services/pdf.service');
 
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
 const {
+  optimizeRoutePackage,
+  annotateRouteTimeline,
+  resolveDepartureMinute,
+  normalizeOrigin,
+} = require('../services/repartidor-rutero-route-optimizer');
+const {
   parseRouteDate,
   normalizeOrdenPayload,
   normalizeOptimizeStopsPayload,
-  optimizeStops,
   preferredStartMinute,
   buildWindowLabel,
   isClosedOnDate,
@@ -92,6 +97,22 @@ function parseBoundedInt(value, { min, max, name, fallback }) {
     const parsed = Number(value);
     if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) return { error: `${name}_INVALID` };
     return { value: parsed };
+}
+
+function parseRuteroOrigin(value) {
+    if (value === undefined || value === null || value === '') return { value: null };
+    if (typeof value !== 'object' || !normalizeOrigin(value)) return { error: 'RUTERO_ORIGIN_INVALID' };
+    return { value: normalizeOrigin(value) };
+}
+
+function parseRuteroDepartureMinute(value) {
+    if (value === undefined || value === null || value === '') return { value: resolveDepartureMinute({}) };
+    if (!/^\d+$/.test(String(value))) return { error: 'RUTERO_DEPARTURE_MINUTE_INVALID' };
+    const minute = Number(value);
+    if (!Number.isSafeInteger(minute) || minute < 0 || minute >= 1440) {
+        return { error: 'RUTERO_DEPARTURE_MINUTE_INVALID' };
+    }
+    return { value: minute };
 }
 
 function parseIsoDate(value, name) {
@@ -1800,12 +1821,12 @@ router.get('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
     if (!repartidorId) return;
     const fecha = parseRouteDate(req.query.date);
     if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
-    const orden = await ruteroOrdenRepo.listOrder(repartidorId, fecha);
-    return res.json({ success: true, orden });
+    const state = await ruteroOrdenRepo.readOrderState(repartidorId, fecha);
+    return res.json({ success: true, orden: state.orden, revision: state.revision });
   } catch (error) {
-    if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') {
-      return sendRouteError(res, 503, error.code);
-    }
+    if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') return sendRouteError(res, 503, error.code);
+    if (error?.statusCode) return sendRouteError(res, error.statusCode, error.code || 'RUTERO_ORDER_READ_FAILED');
+
     logger.error('[REPARTIDOR] Rutero order read failed');
     return sendRouteError(res, 503, 'RUTERO_ORDER_READ_FAILED');
   }
@@ -1829,12 +1850,12 @@ router.put('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
       fecha,
       parsed.value,
       updatedBy,
+      body.baseRevision,
     );
-    return res.json({ success: true, orden });
+    return res.json({ success: true, orden: orden.orden, revision: orden.revision });
   } catch (error) {
-    if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') {
-      return sendRouteError(res, 503, error.code);
-    }
+    if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') return sendRouteError(res, 503, error.code);
+    if (error?.statusCode) return sendRouteError(res, error.statusCode, error.code || 'RUTERO_ORDER_WRITE_FAILED');
     logger.error('[REPARTIDOR] Rutero order write failed');
     return sendRouteError(res, 503, 'RUTERO_ORDER_WRITE_FAILED');
   }
@@ -1852,24 +1873,56 @@ router.post('/rutero/order/:repartidorId/optimize', verifyToken, async (req, res
     const parsed = normalizeOptimizeStopsPayload(req.body || {});
     if (parsed.error) return sendRouteError(res, 422, parsed.error);
 
-    const clientCodes = parsed.stops.map((s) => s.cliente).filter(Boolean);
-    let windowsByCliente = new Map();
-    try {
-      windowsByCliente = await ruteroOrdenRepo.fetchClientWindows(clientCodes);
-    } catch (error) {
-      logger.warn('[REPARTIDOR] CRUT windows unavailable for optimize');
-    }
+    const strategy = String(req.body?.strategy || 'balanced').trim().toLowerCase();
+    if (!['windows_first', 'balanced', 'distance_first'].includes(strategy)) return sendRouteError(res, 422, 'RUTERO_STRATEGY_INVALID');
+    const origin = parseRuteroOrigin(req.body?.origin);
+    if (origin.error) return sendRouteError(res, 422, origin.error);
+    const departure = parseRuteroDepartureMinute(
+      req.body?.departureMinute ?? req.body?.horaSalidaMinute,
+    );
+    if (departure.error) return sendRouteError(res, 422, departure.error);
+    const diagnostics = [];
 
-    const orden = optimizeStops(parsed.stops, parsed.date, windowsByCliente);
+    const clientCodes = parsed.stops.map((s) => s.cliente).filter(Boolean);
+    const [windowsByCliente, geoByCliente] = await Promise.all([
+      ruteroOrdenRepo.fetchClientWindows(clientCodes).catch(() => {
+        logger.warn('[REPARTIDOR] CRUT windows unavailable for optimize');
+        diagnostics.push('client_windows_unavailable');
+        return new Map();
+      }),
+      ruteroOrdenRepo.fetchClientGeo(clientCodes).catch(() => {
+        logger.warn('[REPARTIDOR] GEO unavailable for optimize');
+        diagnostics.push('client_geo_unavailable');
+        return new Map();
+      }),
+    ]);
+
+    const departureMinute = resolveDepartureMinute({
+      departureMinute: req.body?.departureMinute ?? req.body?.horaSalidaMinute,
+    });
+    const packed = optimizeRoutePackage(parsed.stops, parsed.date, windowsByCliente, {
+      geoByCliente,
+      departureMinute,
+      origin: origin.value,
+      strategy,
+    });
+
+
     return res.json({
       success: true,
       repartidorId,
       date: parsed.date,
-      algorithm: 'preferred_window_asc',
-      orden,
+      algorithm: packed.algorithm,
+      explanation: packed.explanation,
+      summary: packed.summary,
+      diagnostics,
+      departureMinute,
+      departureLabel: formatMinuteLabel(departureMinute),
+      orden: packed.orden,
     });
   } catch (error) {
     logger.error('[REPARTIDOR] Rutero optimize failed');
+
     return sendRouteError(res, 503, 'RUTERO_OPTIMIZE_FAILED');
   }
 });
@@ -1885,10 +1938,12 @@ router.get('/rutero/stops-geo/:repartidorId', verifyToken, async (req, res) => {
     const fecha = parseRouteDate(req.query.date);
     if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
 
+    const diagnostics = [];
     let savedOrden = [];
     try {
       savedOrden = await ruteroOrdenRepo.listOrder(repartidorId, fecha);
     } catch (error) {
+      diagnostics.push('saved_route_order_unavailable');
       if (error?.code !== 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') {
         logger.warn('[REPARTIDOR] stops-geo saved order unavailable');
       }
@@ -1904,11 +1959,18 @@ router.get('/rutero/stops-geo/:repartidorId', verifyToken, async (req, res) => {
     ]);
 
     const [windowsByCliente, geoByCliente] = await Promise.all([
-      ruteroOrdenRepo.fetchClientWindows(clientCodes).catch(() => new Map()),
-      ruteroOrdenRepo.fetchClientGeo(clientCodes).catch(() => new Map()),
+      ruteroOrdenRepo.fetchClientWindows(clientCodes).catch(() => {
+        diagnostics.push('client_windows_unavailable');
+        return new Map();
+      }),
+      ruteroOrdenRepo.fetchClientGeo(clientCodes).catch(() => {
+        diagnostics.push('client_geo_unavailable');
+        return new Map();
+      }),
     ]);
 
-    const stops = clientCodes.map((cliente, index) => {
+    const departureMinute = resolveDepartureMinute({});
+    const baseStops = clientCodes.map((cliente, index) => {
       const windowRow = windowsByCliente.get(cliente) || null;
       const geo = geoByCliente.get(cliente) || null;
       const saved = savedOrden.find((row) => row.cliente === cliente);
@@ -1931,15 +1993,31 @@ router.get('/rutero/stops-geo/:repartidorId', verifyToken, async (req, res) => {
       };
     });
 
+    // Prefer saved order positions when present, then annotate ETA timeline.
+    const orderedForEta = [...baseStops].sort((a, b) => {
+      const pa = Number.isFinite(a.posicion) ? a.posicion : 9999;
+      const pb = Number.isFinite(b.posicion) ? b.posicion : 9999;
+      return pa - pb;
+    });
+    const stops = annotateRouteTimeline(orderedForEta, {
+      departureMinute,
+      origin: null,
+    });
+
     return res.json({
       success: true,
       repartidorId,
       date: fecha,
+      departureMinute,
+      departureLabel: formatMinuteLabel(departureMinute),
+      diagnostics,
       stops,
       stats: {
         total: stops.length,
         withGps: stops.filter((s) => s.hasGps).length,
         missingGps: stops.filter((s) => !s.hasGps).length,
+        windowed: stops.filter((s) => s.preferredMinute !== null || s.endMinute !== null).length,
+        conflicts: stops.filter((s) => s.conflict).length,
       },
     });
   } catch (error) {

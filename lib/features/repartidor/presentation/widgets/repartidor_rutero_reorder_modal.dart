@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -5,6 +7,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_route_map_view.dart';
+import 'package:geolocator/geolocator.dart';
 
 class RepartidorRuteroReorderModal extends StatefulWidget {
   const RepartidorRuteroReorderModal({
@@ -29,25 +32,40 @@ class _RepartidorRuteroReorderModalState
   late List<AlbaranEntrega> _ordered;
   late TabController _tabController;
   final Map<String, RuteroStopWindow> _metaByKey = {};
+  RuteroRouteExplanation? _routeExplanation;
   bool _isSaving = false;
   bool _isOptimizing = false;
-  bool _ordenOptimoEnabled = true;
+  RuteroRouteStrategy _strategy = RuteroRouteStrategy.balanced;
+  RuteroRouteOrigin? _origin;
+  late int _departureMinute;
+  String _revision = '';
   bool _loadingMeta = false;
+  bool _isDirty = false;
+  bool _isPolling = false;
+  bool _remoteChangePending = false;
   String? _error;
   String? _info;
   String? _selectedDocumentId;
   final ScrollController _listScrollController = ScrollController();
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _ordered = List<AlbaranEntrega>.from(widget.albaranes);
+    final now = TimeOfDay.now();
+    _departureMinute = now.hour * 60 + now.minute;
     _tabController = TabController(length: 2, vsync: this);
-    _loadStopMeta();
+    _initializeRoute();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _pollOrderState(),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _tabController.dispose();
     _listScrollController.dispose();
     super.dispose();
@@ -57,12 +75,166 @@ class _RepartidorRuteroReorderModalState
       '${widget.date.month.toString().padLeft(2, '0')}-'
       '${widget.date.day.toString().padLeft(2, '0')}';
 
+  Future<void> _initializeRoute() async {
+    await _reloadFromRemote(silent: true);
+    if (mounted) await _loadStopMeta();
+  }
+
+  List<AlbaranEntrega> _mergePersistedOrder(Iterable<String> documentIds) {
+    final pending = {for (final item in _ordered) item.id: item};
+    final merged = <AlbaranEntrega>[];
+    for (final id in documentIds) {
+      final item = pending.remove(id);
+      if (item != null) merged.add(item);
+    }
+    merged.addAll(pending.values);
+    return merged;
+  }
+
+  Future<void> _reloadFromRemote({bool silent = false}) async {
+    try {
+      final state = await RuteroRouteApi.fetchOrderState(
+        repartidorId: widget.repartidorId,
+        dateYmd: _dateYmd,
+      );
+      if (!mounted) return;
+      setState(() {
+        _ordered = _mergePersistedOrder(state.orden);
+        _revision = state.revision;
+        _isDirty = false;
+        _remoteChangePending = false;
+        if (!silent)
+          _info = 'Se ha cargado el orden guardado por otro usuario.';
+      });
+      _refreshLocalEtas();
+    } catch (_) {
+      if (mounted && !silent) {
+        setState(() => _error = 'No se pudo actualizar el orden guardado.');
+      }
+    }
+  }
+
+  Future<void> _pollOrderState() async {
+    if (_isPolling || _isSaving || _isOptimizing || !mounted) return;
+    _isPolling = true;
+    try {
+      final state = await RuteroRouteApi.fetchOrderState(
+        repartidorId: widget.repartidorId,
+        dateYmd: _dateYmd,
+      );
+      if (!mounted || state.revision == _revision) return;
+      if (_isDirty) {
+        setState(() => _remoteChangePending = true);
+      } else {
+        setState(() {
+          _ordered = _mergePersistedOrder(state.orden);
+          _revision = state.revision;
+          _info = 'El orden se ha actualizado desde otra sesión.';
+        });
+        _refreshLocalEtas();
+        await _loadStopMeta();
+      }
+    } catch (_) {
+      // Refresh must never interrupt a manual order.
+    } finally {
+      _isPolling = false;
+    }
+  }
+
+  int get _gpsCoverage =>
+      _ordered.where((albaran) => _metaFor(albaran)?.hasGps == true).length;
+
+  String _friendlyError(Object error, {required String fallback}) {
+    if (error is ApiException) {
+      if (error.statusCode == 409) return 'Otro usuario modificó esta ruta.';
+      if (error.statusCode == 401)
+        return 'La sesión ha caducado. Vuelve a intentarlo.';
+      if (error.statusCode == 503)
+        return 'El servicio no está disponible ahora. Inténtalo de nuevo.';
+      return error.message;
+    }
+    return fallback;
+  }
+
+  Future<void> _useCurrentLocation() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        setState(() => _error =
+            'Activa la ubicación del dispositivo para usarla como salida.');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted)
+          setState(() => _error = 'No se concedió acceso a la ubicación.');
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 12),
+      );
+      if (mounted) {
+        setState(() {
+          _origin = RuteroRouteOrigin(
+              lat: position.latitude, lng: position.longitude);
+          _info = 'La propuesta usará tu ubicación actual como salida.';
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudo obtener tu ubicación.');
+    }
+  }
+
+  String get _departureLabel {
+    final hour = (_departureMinute ~/ 60).toString().padLeft(2, '0');
+    final minute = (_departureMinute % 60).toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  Future<void> _pickDepartureTime() async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: _departureMinute ~/ 60,
+        minute: _departureMinute % 60,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _departureMinute = selected.hour * 60 + selected.minute;
+      _info = 'La propuesta usará salida a las $_departureLabel.';
+    });
+  }
+
   RuteroStopWindow? _metaFor(AlbaranEntrega albaran) =>
       _metaByKey[albaran.id] ?? _metaByKey[albaran.codigoCliente];
+
+  void _refreshLocalEtas() {
+    final annotated = RuteroRouteApi.annotateEtasForOrder(
+      ordered: _ordered
+          .map(
+            (a) => RuteroEtaStopRef(
+              id: a.id,
+              codigoCliente: a.codigoCliente,
+              nombreCliente: a.nombreCliente,
+            ),
+          )
+          .toList(growable: false),
+      metaByKey: _metaByKey,
+    );
+    _metaByKey
+      ..clear()
+      ..addAll(annotated);
+  }
 
   Future<void> _loadStopMeta() async {
     setState(() {
       _loadingMeta = true;
+
       _error = null;
     });
     try {
@@ -90,6 +262,7 @@ class _RepartidorRuteroReorderModalState
             }
             return entries;
           }));
+        _refreshLocalEtas();
         _loadingMeta = false;
       });
     } catch (e) {
@@ -104,7 +277,7 @@ class _RepartidorRuteroReorderModalState
   }
 
   Future<void> _applyOptimalOrder() async {
-    if (!_ordenOptimoEnabled || _ordered.isEmpty || _isOptimizing) return;
+    if (_ordered.isEmpty || _isOptimizing) return;
     setState(() {
       _isOptimizing = true;
       _error = null;
@@ -112,7 +285,7 @@ class _RepartidorRuteroReorderModalState
     });
     HapticFeedback.selectionClick();
     try {
-      final suggested = await RuteroRouteApi.optimizeOrder(
+      final result = await RuteroRouteApi.optimizeOrder(
         repartidorId: widget.repartidorId,
         dateYmd: _dateYmd,
         stops: _ordered
@@ -121,11 +294,27 @@ class _RepartidorRuteroReorderModalState
                   'cliente': a.codigoCliente,
                 })
             .toList(growable: false),
+        strategy: _strategy,
+        origin: _origin,
+        departureMinute: _departureMinute,
       );
+      if (!isCompleteDocumentPermutation(
+        currentIds: _ordered.map((albaran) => albaran.id),
+        proposedIds: result.orden.map((stop) => stop.documentId),
+      )) {
+        if (mounted) {
+          setState(() {
+            _isOptimizing = false;
+            _error =
+                'La propuesta recibida está incompleta. El orden actual no se ha modificado.';
+          });
+        }
+        return;
+      }
 
       final byId = {for (final a in _ordered) a.id: a};
       final next = <AlbaranEntrega>[];
-      for (final stop in suggested) {
+      for (final stop in result.orden) {
         final match = byId.remove(stop.documentId);
         if (match != null) next.add(match);
         if (stop.documentId.isNotEmpty) {
@@ -138,17 +327,32 @@ class _RepartidorRuteroReorderModalState
       next.addAll(byId.values);
 
       if (!mounted) return;
+      final expl = result.explanation;
+      final end = expl?.estimatedEndLabel;
+      final km = expl?.estimatedKm;
       setState(() {
         _ordered = next;
+        _routeExplanation = expl;
         _isOptimizing = false;
-        _info =
-            'Orden óptimo aplicado (temprano→tarde). Puedes seguir arrastrando.';
+        _isDirty = true;
+        final departure = result.departureLabel ?? expl?.departureLabel;
+        _info = 'Orden óptimo'
+            '${departure != null ? ' · salida $departure' : ''}'
+            '${end != null ? ' · fin ~$end' : ''}'
+            '${km != null ? ' · ~${km.toStringAsFixed(0)} km' : ''}. '
+            'Arrastra si quieres ajustar.';
       });
-    } catch (e) {
+      if (_tabController.index != 1) {
+        _tabController.animateTo(1);
+      }
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _isOptimizing = false;
-        _error = 'No se pudo calcular el orden óptimo: $e';
+        _error = _friendlyError(
+          error,
+          fallback: 'No se pudo calcular la propuesta de ruta.',
+        );
       });
     }
   }
@@ -159,6 +363,12 @@ class _RepartidorRuteroReorderModalState
       _error = null;
     });
     try {
+      if (_revision.isEmpty) {
+        throw StateError(
+          'No se ha podido verificar el orden guardado. Recarga antes de guardar.',
+        );
+      }
+
       final orden = _ordered.asMap().entries.map((entry) {
         return {
           'documentId': entry.value.id,
@@ -167,19 +377,24 @@ class _RepartidorRuteroReorderModalState
         };
       }).toList();
 
-      await ApiClient.put(
-        '/repartidor/rutero/order/${widget.repartidorId}',
-        data: {
-          'date': _dateYmd,
-          'orden': orden,
-        },
+      await RuteroRouteApi.saveOrder(
+        repartidorId: widget.repartidorId,
+        dateYmd: _dateYmd,
+        baseRevision: _revision,
+        orden: orden,
       );
 
       if (mounted) Navigator.pop(context, true);
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
         setState(() {
-          _error = 'Error al guardar: $e';
+          _error = _friendlyError(
+            error,
+            fallback: 'No se pudo guardar el orden de ruta.',
+          );
+          if (error is ApiException && error.statusCode == 409) {
+            _remoteChangePending = true;
+          }
           _isSaving = false;
         });
       }
@@ -191,11 +406,17 @@ class _RepartidorRuteroReorderModalState
       if (oldIndex < newIndex) newIndex -= 1;
       final item = _ordered.removeAt(oldIndex);
       _ordered.insert(newIndex, item);
-      _info = 'Orden manual activo';
+      _refreshLocalEtas();
+      _isDirty = true;
+      _info = 'Orden manual pendiente de guardar';
     });
   }
 
   void _selectStop(String documentId) {
+    if (documentId.isEmpty) {
+      setState(() => _selectedDocumentId = null);
+      return;
+    }
     setState(() => _selectedDocumentId = documentId);
     final index = _ordered.indexWhere((a) => a.id == documentId);
     if (index >= 0 && _listScrollController.hasClients) {
@@ -204,9 +425,6 @@ class _RepartidorRuteroReorderModalState
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,
       );
-    }
-    if (_tabController.index != 0) {
-      // Keep map visible; list highlight still scrolls under tab 0 when switched.
     }
   }
 
@@ -269,6 +487,7 @@ class _RepartidorRuteroReorderModalState
           if (_info != null)
             _banner(
                 _info!, AppTheme.info.withValues(alpha: 0.12), AppTheme.info),
+          if (_remoteChangePending) _buildRemoteChangeBanner(),
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -279,6 +498,7 @@ class _RepartidorRuteroReorderModalState
                   metaByDocumentId: _metaByKey,
                   selectedDocumentId: _selectedDocumentId,
                   onStopSelected: _selectStop,
+                  routeExplanation: _routeExplanation,
                 ),
               ],
             ),
@@ -313,39 +533,66 @@ class _RepartidorRuteroReorderModalState
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: const Text(
-                    'Orden óptimo',
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    'Para conductores nuevos · por ventana de entrega',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                  value: _ordenOptimoEnabled,
-                  activeThumbColor: AppTheme.info,
-                  onChanged: (value) =>
-                      setState(() => _ordenOptimoEnabled = value),
-                ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'GPS disponible: $_gpsCoverage/${_ordered.length} paradas',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
               ),
-              const SizedBox(width: 8),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Criterio de propuesta',
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            ),
+          ),
+          const SizedBox(height: 4),
+          SegmentedButton<RuteroRouteStrategy>(
+            segments: RuteroRouteStrategy.values
+                .map((strategy) => ButtonSegment<RuteroRouteStrategy>(
+                      value: strategy,
+                      label: Text(strategy.label),
+                    ))
+                .toList(growable: false),
+            selected: {_strategy},
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            onSelectionChanged: (selected) {
+              setState(() => _strategy = selected.single);
+            },
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _useCurrentLocation,
+                icon: Icon(
+                  _origin == null
+                      ? Icons.my_location_outlined
+                      : Icons.my_location,
+                  size: 16,
+                ),
+                label: Text(_origin == null
+                    ? 'Usar mi ubicación actual'
+                    : 'Salida: ubicación actual'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _pickDepartureTime,
+                icon: const Icon(Icons.schedule_outlined, size: 16),
+                label: Text('Salida $_departureLabel'),
+              ),
               FilledButton.tonalIcon(
-                onPressed:
-                    !_ordenOptimoEnabled || _isOptimizing || _ordered.isEmpty
-                        ? null
-                        : _applyOptimalOrder,
+                onPressed: _isOptimizing || _ordered.isEmpty
+                    ? null
+                    : _applyOptimalOrder,
                 icon: _isOptimizing
                     ? const SizedBox(
                         width: 16,
@@ -353,7 +600,7 @@ class _RepartidorRuteroReorderModalState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Aplicar'),
+                label: const Text('Aplicar propuesta'),
               ),
             ],
           ),
@@ -372,6 +619,32 @@ class _RepartidorRuteroReorderModalState
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(text, style: TextStyle(color: fg, fontSize: 13)),
+    );
+  }
+
+  Widget _buildRemoteChangeBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Otro usuario guardó cambios. Recarga antes de guardar los tuyos.',
+              style: TextStyle(color: AppTheme.warning, fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: _isSaving ? null : _reloadFromRemote,
+            child: const Text('Recargar'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -400,6 +673,8 @@ class _RepartidorRuteroReorderModalState
         final obs = meta?.observacionesSnippet ?? '';
         final closed = meta?.closedDay == true;
         final missingGps = meta == null || !meta.hasGps;
+        final seqColor = ruteroStopColor(index, _ordered.length);
+        final eta = meta?.etaLabel;
 
         return Material(
           key: ValueKey(a.id),
@@ -412,12 +687,12 @@ class _RepartidorRuteroReorderModalState
               radius: 14,
               backgroundColor: closed
                   ? AppTheme.warning.withValues(alpha: 0.25)
-                  : AppTheme.info.withValues(alpha: 0.2),
+                  : seqColor.withValues(alpha: 0.22),
               child: Text(
                 '${index + 1}',
                 style: TextStyle(
                   fontSize: 11,
-                  color: closed ? AppTheme.warning : AppTheme.info,
+                  color: closed ? AppTheme.warning : seqColor,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -436,6 +711,7 @@ class _RepartidorRuteroReorderModalState
               children: [
                 Text(
                   '${a.codigoCliente} · $docLabel'
+                  '${eta != null ? ' · ETA $eta' : ''}'
                   '${window != null ? ' · $window' : ''}'
                   '${closed ? ' · cerrado hoy' : ''}'
                   '${missingGps ? ' · sin GPS' : ''}',

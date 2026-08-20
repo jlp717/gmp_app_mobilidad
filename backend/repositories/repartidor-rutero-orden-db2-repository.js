@@ -1,7 +1,25 @@
 'use strict';
 
-const { queryWithParams } = require('../config/db');
+const { queryWithParams, acquireConfiguredConnection } = require('../config/db');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+
+class RuteroOrderConflictError extends Error {
+  constructor() {
+    super('El orden ha sido modificado por otro usuario');
+    this.name = 'RuteroOrderConflictError';
+    this.code = 'RUTERO_ORDER_CONFLICT';
+    this.statusCode = 409;
+  }
+}
+
+class RuteroOrderTransactionError extends Error {
+  constructor(message = 'No se puede guardar el orden de ruta ahora') {
+    super(message);
+    this.name = 'RuteroOrderTransactionError';
+    this.code = 'RUTERO_ORDER_TRANSACTION_UNAVAILABLE';
+    this.statusCode = 503;
+  }
+}
 
 class RuteroOrdenSchemaError extends Error {
   constructor(message = 'Tabla de orden de rutero no disponible') {
@@ -45,32 +63,39 @@ async function listOrder(repartidorId, fechaRuta, env = process.env) {
   }));
 }
 
-async function replaceOrder(repartidorId, fechaRuta, orden, updatedBy, env = process.env) {
+function rowsOf(result) { return Array.isArray(result) ? result : (result?.rows || []); }
+function orderFromRows(rows) { return rows.map((row) => ({ documentId: String(row.DOCUMENT_ID || row.document_id || '').trim(), cliente: String(row.CLIENTE_CODIGO || row.cliente_codigo || '').trim() || null, posicion: Number(row.ORDEN ?? row.orden) })); }
+function revisionForRows(rows) { return Buffer.from(JSON.stringify(rows.map((row) => [String(row.DOCUMENT_ID || row.document_id || '').trim(), String(row.CLIENTE_CODIGO || row.cliente_codigo || '').trim(), Number(row.ORDEN ?? row.orden ?? 0), String(row.UPDATED_AT || row.updated_at || ''), String(row.UPDATED_BY || row.updated_by || '')]))).toString('base64url'); }
+async function readOrderState(repartidorId, fechaRuta, env = process.env) {
   const table = resolveOrderTable(env);
-  await queryWithParams(
-    `DELETE FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ?`,
-    [repartidorId, fechaRuta],
-    false,
-    false,
-  );
-  for (const row of orden) {
-    await queryWithParams(
-      `INSERT INTO ${table}
-        (REPARTIDOR_ID, FECHA_RUTA, DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY)
-       VALUES (?, ?, ?, ?, ?, CURRENT TIMESTAMP, ?)`,
-      [
-        repartidorId,
-        fechaRuta,
-        row.documentId,
-        row.cliente,
-        row.posicion,
-        String(updatedBy || '').slice(0, 40) || null,
-      ],
-      false,
-      false,
-    );
+  const rows = await queryWithParams(`SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ? ORDER BY ORDEN ASC, DOCUMENT_ID ASC`, [repartidorId, fechaRuta], false, false);
+  return { orden: orderFromRows(rows || []), revision: revisionForRows(rows || []) };
+}
+async function replaceOrder(repartidorId, fechaRuta, orden, updatedBy, baseRevision, env = process.env) {
+  const table = resolveOrderTable(env);
+  if (typeof baseRevision !== 'string' || !baseRevision) throw new RuteroOrderConflictError();
+  let connection;
+  try {
+    connection = await acquireConfiguredConnection();
+    if (typeof connection.query !== 'function' || typeof connection.close !== 'function' || !['beginTransaction', 'commit', 'rollback'].every((m) => typeof connection[m] === 'function')) throw new RuteroOrderTransactionError();
+    const execute = async (sql, params = []) => rowsOf(await connection.query(sql, params));
+    await connection.beginTransaction();
+    await execute(`LOCK TABLE ${table} IN EXCLUSIVE MODE`);
+    const before = await execute(`SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ? ORDER BY ORDEN ASC, DOCUMENT_ID ASC`, [repartidorId, fechaRuta]);
+    if (revisionForRows(before) !== baseRevision) throw new RuteroOrderConflictError();
+    await execute(`DELETE FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ?`, [repartidorId, fechaRuta]);
+    for (const row of orden) await execute(`INSERT INTO ${table} (REPARTIDOR_ID, FECHA_RUTA, DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY) VALUES (?, ?, ?, ?, ?, CURRENT TIMESTAMP, ?)`, [repartidorId, fechaRuta, row.documentId, row.cliente, row.posicion, String(updatedBy || '').slice(0, 40) || null]);
+    const saved = await execute(`SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ? ORDER BY ORDEN ASC, DOCUMENT_ID ASC`, [repartidorId, fechaRuta]);
+    await connection.commit();
+    return { orden: orderFromRows(saved), revision: revisionForRows(saved) };
+  } catch (error) {
+    if (connection) try { await connection.rollback(); } catch (_) { /* best effort */ }
+    throw error;
+  } finally {
+    if (connection) {
+      try { await connection.close(); } catch (_) { /* best effort */ }
+    }
   }
-  return orden;
 }
 
 function uniqueClientCodes(codes) {
@@ -256,9 +281,13 @@ async function fetchClientGeo(clientCodes) {
 }
 
 module.exports = {
+  RuteroOrderConflictError,
+  RuteroOrderTransactionError,
   RuteroOrdenSchemaError,
   resolveOrderTable,
   listOrder,
+  readOrderState,
+  revisionForRows,
   replaceOrder,
   fetchClientWindows,
   fetchClientGeo,

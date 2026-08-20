@@ -9,172 +9,164 @@
   <style>
     html, body, #map { margin: 0; height: 100%; width: 100%; background: #0b1220; }
     .marker {
-      width: 28px; height: 28px; border-radius: 50%;
-      background: #1d8cff; color: #fff; font: 700 12px/28px system-ui, sans-serif;
+      width: 30px; height: 30px; border-radius: 50%;
+      color: #fff; font: 800 12px/30px system-ui, sans-serif;
       text-align: center; border: 2px solid #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,.45);
-      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,.5);
+      cursor: pointer; position: relative;
     }
-    .marker.active { background: #ffb020; transform: scale(1.15); }
-    .marker.missing { background: #64748b; opacity: .85; }
+    .marker.first { box-shadow: 0 0 0 3px rgba(34,197,94,.55), 0 4px 14px rgba(0,0,0,.5); }
+    .marker.last { box-shadow: 0 0 0 3px rgba(249,115,22,.5), 0 4px 14px rgba(0,0,0,.5); }
+    .marker.active { transform: scale(1.22); box-shadow: 0 0 0 4px rgba(255,176,32,.75), 0 6px 18px rgba(0,0,0,.55); }
+    .marker.missing { background: #64748b !important; opacity: .88; }
+    .marker.closed { background: #94a3b8 !important; }
+    .marker .tip {
+      display: none; position: absolute; left: 50%; bottom: calc(100% + 8px);
+      transform: translateX(-50%); background: rgba(11,18,32,.94); color: #e2e8f0;
+      padding: 6px 8px; border-radius: 8px; white-space: nowrap;
+      font: 600 11px/1.25 system-ui, sans-serif; border: 1px solid rgba(148,163,184,.3);
+      pointer-events: none; z-index: 10; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .marker .tip::after {
+      content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+      border: 5px solid transparent; border-top-color: rgba(11,18,32,.94);
+    }
+    .marker:hover .tip, .marker.active .tip { display: block; }
     #badge {
       position: absolute; top: 12px; left: 12px; z-index: 2;
-      background: rgba(11,18,32,.88); color: #e2e8f0; padding: 8px 12px;
-      border-radius: 10px; font: 600 12px/1.3 system-ui, sans-serif;
-      border: 1px solid rgba(148,163,184,.25);
+      background: rgba(11,18,32,.9); color: #e2e8f0; padding: 8px 12px;
+      border-radius: 10px; font: 600 12px/1.35 system-ui, sans-serif;
+      border: 1px solid rgba(148,163,184,.25); max-width: min(280px, 70vw);
     }
+    #legend {
+      position: absolute; bottom: 12px; left: 12px; z-index: 2;
+      background: rgba(11,18,32,.9); color: #cbd5e1; padding: 8px 10px;
+      border-radius: 10px; font: 600 10px/1.4 system-ui, sans-serif;
+      border: 1px solid rgba(148,163,184,.25); display: flex; gap: 8px;
+    }
+    .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
   </style>
 </head>
 <body>
-  <div id="badge">Vista 3D · tiles OSM (sin token Mapbox)</div>
+  <div id="badge">Vista 3D · verde = 1º · naranja = último</div>
+  <div id="legend">
+    <span><i class="swatch" style="background:#22c55e"></i> Inicio</span>
+    <span><i class="swatch" style="background:#38bdf8"></i> Medio</span>
+    <span><i class="swatch" style="background:#f97316"></i> Final</span>
+    <span><i class="swatch" style="background:#ffb020"></i> Selec.</span>
+  </div>
   <div id="map"></div>
   <script>
     const flutter = window.FlutterMapBridge || null;
-    let map = null;
-    let markers = [];
-    let selectedId = null;
-
+    let map = null, markers = [], selectedId = null, popups = [];
     function post(type, payload) {
-      try {
-        if (flutter && flutter.postMessage) {
-          flutter.postMessage(JSON.stringify({ type, ...payload }));
-        }
-      } catch (_) {}
+      try { if (flutter && flutter.postMessage) flutter.postMessage(JSON.stringify({ type, ...payload })); } catch (_) {}
     }
-
-    function clearMarkers() {
-      markers.forEach((m) => m.remove());
-      markers = [];
+    function lerpColor(a, b, t) {
+      const pah = parseInt(a.slice(1), 16), pbh = parseInt(b.slice(1), 16);
+      const ar = (pah >> 16) & 255, ag = (pah >> 8) & 255, ab = pah & 255;
+      const br = (pbh >> 16) & 255, bg = (pbh >> 8) & 255, bb = pbh & 255;
+      return '#' + [Math.round(ar+(br-ar)*t), Math.round(ag+(bg-ag)*t), Math.round(ab+(bb-ab)*t)]
+        .map((x) => x.toString(16).padStart(2, '0')).join('');
     }
-
+    function colorForIndex(index, total) {
+      if (total <= 1) return '#22c55e';
+      const t = index / Math.max(1, total - 1);
+      return t <= 0.5 ? lerpColor('#22c55e', '#38bdf8', t * 2) : lerpColor('#38bdf8', '#f97316', (t - 0.5) * 2);
+    }
+    function clearMarkers() { markers.forEach((m) => m.remove()); markers = []; popups.forEach((p) => p.remove()); popups = []; }
     function fitStops(stops) {
       const withGps = stops.filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
-      if (!withGps.length) {
-        map.jumpTo({ center: [-2.4637, 36.8340], zoom: 10, pitch: 55, bearing: -18 });
-        return;
-      }
+      if (!withGps.length) return;
       if (withGps.length === 1) {
-        map.flyTo({
-          center: [withGps[0].lng, withGps[0].lat],
-          zoom: 14, pitch: 60, bearing: -22, essential: true
-        });
+        map.flyTo({ center: [withGps[0].lng, withGps[0].lat], zoom: 14, pitch: 60, bearing: -22, essential: true });
         return;
       }
-      const bounds = new maplibregl.LngLatBounds(
-        [withGps[0].lng, withGps[0].lat],
-        [withGps[0].lng, withGps[0].lat]
-      );
+      const bounds = new maplibregl.LngLatBounds([withGps[0].lng, withGps[0].lat], [withGps[0].lng, withGps[0].lat]);
       withGps.forEach((s) => bounds.extend([s.lng, s.lat]));
-      map.fitBounds(bounds, { padding: 64, pitch: 58, bearing: -20, duration: 800 });
+      map.fitBounds(bounds, { padding: 72, pitch: 58, bearing: -20, duration: 800 });
     }
-
+    function tipText(stop, index) {
+      const bits = [stop.nombreCliente || stop.cliente || ('Parada ' + (index + 1))];
+      if (stop.etaLabel) bits.push('ETA ' + stop.etaLabel);
+      if (stop.windowLabel) bits.push(stop.windowLabel);
+      return bits.join(' · ');
+    }
     function setRoute(payload) {
       const stops = Array.isArray(payload.stops) ? payload.stops : [];
       selectedId = payload.selectedId || null;
       clearMarkers();
-
+      const badge = document.getElementById('badge');
+      if (badge) {
+        const first = stops[0];
+        badge.textContent = stops.length
+          ? ('Ruta ' + stops.length + ' · 1º ' + (first?.nombreCliente || first?.cliente || '—') + (first?.etaLabel ? (' · ETA ' + first.etaLabel) : ''))
+          : 'Sin paradas';
+      }
       const lineCoords = [];
       stops.forEach((stop, index) => {
         const hasGps = Number.isFinite(stop.lat) && Number.isFinite(stop.lng);
         if (hasGps) lineCoords.push([stop.lng, stop.lat]);
-
         const el = document.createElement('div');
-        el.className = 'marker' +
-          (stop.documentId === selectedId ? ' active' : '') +
-          (!hasGps ? ' missing' : '');
+        el.className = 'marker'
+          + (stop.documentId === selectedId ? ' active' : '')
+          + (!hasGps ? ' missing' : '')
+          + (stop.closedDay ? ' closed' : '')
+          + (index === 0 ? ' first' : '')
+          + (index === stops.length - 1 && stops.length > 1 ? ' last' : '');
+        if (!stop.closedDay && hasGps) el.style.background = colorForIndex(index, stops.length);
         el.textContent = String(index + 1);
-        el.title = stop.nombreCliente || stop.cliente || '';
+        const tip = document.createElement('div'); tip.className = 'tip'; tip.textContent = tipText(stop, index); el.appendChild(tip);
         el.addEventListener('click', (ev) => {
           ev.stopPropagation();
           selectedId = stop.documentId;
-          markers.forEach((m) => {
-            m.getElement().classList.toggle('active', m._docId === selectedId);
-          });
-          post('markerTap', { documentId: stop.documentId, index });
+          markers.forEach((m) => m.getElement().classList.toggle('active', m._docId === selectedId));
+          post('markerTap', { documentId: stop.documentId, index, cliente: stop.cliente || null });
           if (hasGps) {
-            map.easeTo({
-              center: [stop.lng, stop.lat],
-              zoom: Math.max(map.getZoom(), 13.5),
-              pitch: 62,
-              duration: 450
-            });
+            map.easeTo({ center: [stop.lng, stop.lat], zoom: Math.max(map.getZoom(), 13.8), pitch: 62, duration: 450 });
+            const popup = new maplibregl.Popup({ offset: 18, closeButton: false, maxWidth: '240px' })
+              .setLngLat([stop.lng, stop.lat])
+              .setHTML('<div style="font:600 12px/1.35 system-ui,sans-serif;color:#0f172a"><div>#' + (index + 1) + ' '
+                + (stop.nombreCliente || stop.cliente || '') + '</div>'
+                + (stop.etaLabel ? '<div>ETA: <b>' + stop.etaLabel + '</b></div>' : '')
+                + (stop.windowLabel ? '<div>Deseada: ' + stop.windowLabel + '</div>' : '')
+                + (stop.docLabel ? '<div>' + stop.docLabel + '</div>' : '') + '</div>')
+              .addTo(map);
+            popups.forEach((p) => p.remove()); popups = [popup];
           }
         });
-
+        if (!hasGps) return;
         const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-          .setLngLat(hasGps ? [stop.lng, stop.lat] : [-2.4637, 36.8340]);
+          .setLngLat([stop.lng, stop.lat]);
         marker._docId = stop.documentId;
-        if (hasGps) marker.addTo(map);
+        marker.addTo(map);
         markers.push(marker);
       });
-
       const src = map.getSource('route');
-      const geo = {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'LineString', coordinates: lineCoords }
-      };
+      const geo = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: lineCoords } };
       if (src) src.setData(geo);
       else {
         map.addSource('route', { type: 'geojson', data: geo });
-        map.addLayer({
-          id: 'route-glow',
-          type: 'line',
-          source: 'route',
-          paint: {
-            'line-color': '#60a5fa',
-            'line-width': 10,
-            'line-opacity': 0.25,
-            'line-blur': 4
-          }
-        });
-        map.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route',
-          paint: {
-            'line-color': '#38bdf8',
-            'line-width': 4,
-            'line-opacity': 0.95
-          }
-        });
+        map.addLayer({ id: 'route-glow', type: 'line', source: 'route', paint: { 'line-color': '#34d399', 'line-width': 10, 'line-opacity': 0.22, 'line-blur': 4 } });
+        map.addLayer({ id: 'route-line', type: 'line', source: 'route', paint: { 'line-color': '#38bdf8', 'line-width': 4, 'line-opacity': 0.95 } });
       }
       fitStops(stops);
       post('ready', { count: stops.length, withGps: lineCoords.length });
     }
-
     function boot() {
       map = new maplibregl.Map({
         container: 'map',
-        style: {
-          version: 8,
-          sources: {
-            osm: {
-              type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: '© OpenStreetMap'
-            }
-          },
-          layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-        },
-        center: [-2.4637, 36.8340],
-        zoom: 11,
-        pitch: 55,
-        bearing: -18,
-        antialias: true
+        style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] },
+        center: [0, 0], zoom: 1, pitch: 0, bearing: 0, antialias: true
       });
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
       map.on('load', () => post('mapReady', {}));
       window.setRoute = setRoute;
       window.highlightStop = function (documentId) {
         selectedId = documentId;
-        markers.forEach((m) => {
-          m.getElement().classList.toggle('active', m._docId === documentId);
-        });
+        markers.forEach((m) => m.getElement().classList.toggle('active', m._docId === documentId));
       };
     }
-
     boot();
   </script>
 </body>
