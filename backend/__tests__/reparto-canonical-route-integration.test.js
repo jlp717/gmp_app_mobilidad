@@ -10,7 +10,7 @@ const SIGNATURE_EVIDENCE_ID = `ev_${'a'.repeat(64)}`;
 jest.mock('../middleware/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    req.user = { id: 'V94', code: '94', role: 'REPARTIDOR', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] };
     next();
   },
   requireRoles: () => (_req, _res, next) => next(),

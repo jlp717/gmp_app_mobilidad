@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -25,6 +26,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.d
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -149,6 +151,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   String? _clientsQuery;
   Timer? _clientSearchDebounce;
   String _clientSearchInput = '';
+  CancelToken? _activeClientSearchCancelToken;
 
   static const _clientPageSize = 100;
   static const _clientSearchDebounceDuration = Duration(milliseconds: 300);
@@ -192,6 +195,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     _clientRequestGeneration++;
     _documentsRequestGeneration++;
     _clientSearchDebounce?.cancel();
+    _activeClientSearchCancelToken?.cancel('historico_page_disposed');
     _searchController.dispose();
     _docSearchController.dispose();
     super.dispose();
@@ -234,6 +238,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       });
     }
     try {
+      CancelToken? cancelToken;
+      if (!append &&
+          widget.clientsLoader == null &&
+          widget.clientsPageLoader == null) {
+        _activeClientSearchCancelToken?.cancel('historico_search_superseded');
+        cancelToken = CancelToken();
+        _activeClientSearchCancelToken = cancelToken;
+      }
       final legacyLoader = widget.clientsLoader;
       final pageLoader = widget.clientsPageLoader;
       final page = legacyLoader != null
@@ -258,6 +270,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   limit: _clientPageSize,
                   offset: offset,
                   forceRefresh: forceRefresh,
+                  cancelToken: cancelToken,
                 );
       if (!mounted || requestGeneration != _clientRequestGeneration) return;
       final mappedClients = page.clients
@@ -442,12 +455,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         _documents = mappedDocuments;
         _documentsError = null;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted || requestGeneration != _documentsRequestGeneration) return;
       setState(() {
-        // The backend has no reliable document-level hasMore contract yet.
-        // Keep the last complete snapshot rather than inventing pagination.
-        _documentsError = 'No se pudo cargar el historial de documentos';
+        _documentsError = e is RepartidorDataException
+            ? e.message
+            : 'No se pudo cargar el historial de documentos';
       });
     }
     if (!mounted || requestGeneration != _documentsRequestGeneration) return;
@@ -830,7 +843,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             controller: _searchController,
             onChanged: _onClientSearchChanged,
             decoration: InputDecoration(
-              hintText: 'Nombre, código, dirección, CP o NIF...',
+              hintText:
+                  'Nombre, alias, código, DNI, dirección, población o teléfono...',
               hintStyle: TextStyle(
                 color: AppTheme.textSecondary.withValues(alpha: 0.5),
               ),
@@ -1278,7 +1292,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   controller: _docSearchController,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    hintText: 'Buscar nº documento...',
+                    hintText: 'Nº, serie, pedido, estado u observaciones...',
                     hintStyle: TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondary.withValues(alpha: 0.5),
@@ -2456,7 +2470,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       // document endpoint has its own ownership guard and is the safe read
       // fallback; this is not a delivery confirmation operation.
       modal.close();
-      if (mounted) await _previewDocument(doc);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'La nota firmada no está disponible; se abre el albarán ERP.',
+            ),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+        await _previewDocument(doc);
+      }
     }
   }
 
@@ -2800,6 +2824,26 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       text: 'Preparando nota de entrega...',
     );
     try {
+      final confirmationId = doc.confirmationId?.trim() ?? '';
+      if (doc.type != _DocType.factura && confirmationId.isNotEmpty) {
+        final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+          confirmationId: confirmationId,
+          repartidorId: owner,
+        );
+        modal.close();
+        await Printing.layoutPdf(
+          onLayout: (_) async => Uint8List.fromList(bytes),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Nota de entrega enviada a impresión.'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
+        return;
+      }
       final loader =
           widget.signatureLoader ?? RepartidorDataService.getSignature;
       final data = await loader(
@@ -2811,9 +2855,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
       String? grf;
       final raw = data?['base64']?.toString();
+      final layout = await ZebraPrintService.resolveLayout();
+      final logo = await ZebraPrintService.loadCompanyLogoGrf(
+        maxWidth: layout.logoMaxWidth,
+        maxHeight: layout.logoMaxHeight,
+      );
       if (raw != null && raw.isNotEmpty) {
         final bytes = base64Decode(raw);
-        grf = await ZebraPrintService.convertSignatureToGrf(bytes);
+        grf = await ZebraPrintService.convertSignatureToGrf(
+          bytes,
+          maxWidth: (layout.contentWidth * 0.72).round(),
+          maxHeight: 100,
+        );
       }
       final isFactura = doc.type == _DocType.factura;
       final title = isFactura && (doc.facturaNumber ?? 0) > 0
@@ -2829,6 +2882,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         receptorNombre: data?['nombre']?.toString(),
         receptorApellidos: data?['apellidos']?.toString(),
         receptorDni: data?['dni']?.toString(),
+        layout: layout,
+        logoGrf: logo,
       );
       final result = await ZebraPrintService.printTicket(zpl: zpl);
       if (!mounted) return;
@@ -2875,14 +2930,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final isFactura = doc.type == _DocType.factura;
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (!isFactura && confirmationId.isNotEmpty) {
-      try {
-        return await RepartidorDataService.downloadDeliveryNotePdf(
-          confirmationId: confirmationId,
-          repartidorId: owner,
-        );
-      } catch (_) {
-        // Migrated/legacy confirmations fall back to the guarded ERP PDF.
-      }
+      return RepartidorDataService.downloadDeliveryNotePdf(
+        confirmationId: confirmationId,
+        repartidorId: owner,
+      );
     }
     final downloader =
         widget.documentDownloader ?? RepartidorDataService.downloadDocument;

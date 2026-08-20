@@ -331,23 +331,45 @@ describe('repartidor history document hardening', () => {
       historyRow({ TOTAL_COUNT: 3, LOGICAL_POSITION: 2, NUMEROALBARAN: 42 }),
     ]);
 
-    const response = await get('/history/documents/C1').query({ repartidorId: '05', limit: 1, offset: 1 });
+    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
 
     expect(response.status).toBe(200);
     expect(response.body.total).toBe(3);
-    expect(response.body.pagination).toEqual({ limit: 1, offset: 1, hasMore: true, nextOffset: 2 });
+    expect(response.body.pagination).toEqual({ limit: 50, offset: 0, hasMore: true, nextOffset: 1 });
     const [sql, params] = mockQueryWithParams.mock.calls[0];
     expect(sql).toMatch(/LOGICAL_DOCUMENTS[\s\S]*PAGED_DOCUMENTS/i);
     // DB2 for i rejects OFFSET inside CTEs; paginate by ROW_NUMBER bounds.
     expect(sql).toContain('LOGICAL_POSITION > ?');
     expect(sql).toContain('LOGICAL_POSITION <= ?');
     expect(sql).not.toMatch(/OFFSET \? ROWS/i);
+    // CVC/CACFIRMAS must run only against the paged slice (PAGE_DOCS), not the full history.
+    expect(sql).toMatch(/PAGE_DOCS[\s\S]*CVC_INSTALLMENTS|CVC_INSTALLMENTS[\s\S]*PAGE_DOCS/i);
+    expect(sql).toMatch(/INNER JOIN PAGE_DOCS DOC/i);
     expect(sql).toMatch(/CVC\.TIPODOCUMENTO[\s\S]*CVC\.ORIGENDOCUMENTO[\s\S]*CVC\.SUBEMPRESADOCUMENTO[\s\S]*CVC\.EJERCICIODOCUMENTO[\s\S]*CVC\.SERIEDOCUMENTO[\s\S]*CVC\.TERMINALDOCUMENTO[\s\S]*CVC\.NUMERODOCUMENTO[\s\S]*CVC\.XDEDOCUMENTO[\s\S]*CVC\.DEXDOCUMENTO/i);
     expect(sql).toMatch(/TRIM\(CVC\.TIPODOCUMENTO\)\s*=\s*'CAC'/i);
     expect(sql).toMatch(/TRIM\(CVC\.ORIGENDOCUMENTO\)\s*=\s*'B'/i);
-    expect(params.slice(-2)).toEqual([1, 2]);
+    expect(sql).toMatch(/EJERCICIOALBARAN\s*>=\s*\?/i);
+    expect(params.slice(-2)).toEqual([0, 50]);
+    expect(params).toContain(new Date().getUTCFullYear() - 2);
     expect(mockQueryWithParams.mock.calls.some(([sql]) =>
       String(sql).includes('TEST_REPARTO_CONFIRMACIONES'))).toBe(true);
+  });
+
+  test('paginates with explicit year without injecting the default min-year window', async () => {
+    mockQueryWithParams.mockResolvedValue([
+      historyRow({ TOTAL_COUNT: 3, LOGICAL_POSITION: 2, NUMEROALBARAN: 42 }),
+    ]);
+
+    const response = await get('/history/documents/C1').query({
+      repartidorId: '05', limit: 1, offset: 1, year: 2026,
+    });
+
+    expect(response.status).toBe(200);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/EJERCICIOALBARAN\s*=\s*\?/i);
+    expect(sql).not.toMatch(/EJERCICIOALBARAN\s*>=\s*\?/i);
+    expect(params).toEqual(expect.arrayContaining([2026, 1, 2]));
+    expect(params.slice(-2)).toEqual([1, 2]);
   });
 
   test('keeps the real total when the requested page is beyond the final logical document', async () => {

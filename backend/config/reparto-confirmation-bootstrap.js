@@ -99,7 +99,12 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
   const plannedDeliveryPort = createRepartoPlannedDeliveryDb2Port({ schema: 'DSEDAC' });
   // Confirmation remains independent from finance. A payment request still
   // fails closed unless the existing finance capability has been authorized.
-  const cobrosPort = runtime.financeCapabilityApproved && runtime.tableSet === ISOLATED_TEST_TABLE_SET
+  // Cobros write against the versioned tableSet mapping (isolated_test or production).
+  const cobrosEnabled = Boolean(
+    runtime.financeCapabilityApproved
+    && CONFIRMATION_TABLE_SETS.has(runtime.tableSet),
+  );
+  const cobrosPort = cobrosEnabled
     ? createRepartoCobrosDb2Port({ runtime, logger })
     : unavailableCobrosPort();
   const evidenceRepository = createRepartoEvidenceDb2Repository({
@@ -117,7 +122,7 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
     tables: runtime.tables.confirmation,
     evidenceOwnershipPort: evidenceRepository,
     cobrosPort,
-    requireCobrosCapability: runtime.financeCapabilityApproved && runtime.tableSet === ISOLATED_TEST_TABLE_SET,
+    requireCobrosCapability: cobrosEnabled,
     logger,
   });
   const catalogService = createRepartoCatalogService({ catalog: staticCatalogPort() });

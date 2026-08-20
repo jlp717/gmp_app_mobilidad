@@ -184,6 +184,7 @@ class RuteroDetailHeader extends StatelessWidget {
   }
 
   Widget _buildAmountBadge() {
+    final pendingPrice = albaran.isPendingPrice;
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerRight,
@@ -191,10 +192,16 @@ class RuteroDetailHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                .format(albaran.importeTotal),
+            pendingPrice
+                ? 'Pendiente'
+                : NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                    .format(albaran.importeTotal),
             style: TextStyle(
-              color: _isUrgent ? AppTheme.error : AppTheme.textPrimary,
+              color: pendingPrice
+                  ? AppTheme.warning
+                  : _isUrgent
+                      ? AppTheme.error
+                      : AppTheme.textPrimary,
               fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
@@ -202,26 +209,32 @@ class RuteroDetailHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: (_isTerminal
-                      ? _terminalColor
-                      : _isUrgent
-                          ? AppTheme.error
-                          : AppTheme.success)
+              color: (pendingPrice
+                      ? AppTheme.warning
+                      : _isTerminal
+                          ? _terminalColor
+                          : _isUrgent
+                              ? AppTheme.error
+                              : AppTheme.success)
                   .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              _isTerminal
-                  ? _terminalLabel
-                  : _isUrgent
-                      ? '⚠ COBRO OBLIGATORIO'
-                      : '✓ COBRO OPCIONAL',
+              pendingPrice
+                  ? 'PRECIO PENDIENTE'
+                  : _isTerminal
+                      ? _terminalLabel
+                      : _isUrgent
+                          ? '⚠ COBRO OBLIGATORIO'
+                          : '✓ COBRO OPCIONAL',
               style: TextStyle(
-                color: _isTerminal
-                    ? _terminalColor
-                    : _isUrgent
-                        ? AppTheme.error
-                        : AppTheme.success,
+                color: pendingPrice
+                    ? AppTheme.warning
+                    : _isTerminal
+                        ? _terminalColor
+                        : _isUrgent
+                            ? AppTheme.error
+                            : AppTheme.success,
                 fontSize: 9,
                 fontWeight: FontWeight.bold,
               ),

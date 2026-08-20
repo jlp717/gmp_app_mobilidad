@@ -16,18 +16,17 @@ class RepartoConfirmationAcknowledgement {
   factory RepartoConfirmationAcknowledgement.fromResponse(
     Map<String, dynamic> response,
   ) {
-    final confirmationId = response['confirmationId'];
-    final cobroId = response['cobroId'];
+    final confirmationId = normalizeRepartoServerId(response['confirmationId']);
+    final cobroId = normalizeRepartoServerId(response['cobroId']);
     if (response['success'] != true ||
-        confirmationId is! String ||
+        confirmationId == null ||
         !isValidRepartoServerId(confirmationId) ||
-        (cobroId != null &&
-            (cobroId is! String || !isValidRepartoServerId(cobroId)))) {
+        (cobroId != null && !isValidRepartoServerId(cobroId))) {
       throw const RepartoReceiptUnavailableException();
     }
     return RepartoConfirmationAcknowledgement(
       confirmationId: confirmationId,
-      cobroId: cobroId as String?,
+      cobroId: cobroId,
     );
   }
 }

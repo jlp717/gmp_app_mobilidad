@@ -91,6 +91,38 @@ void main() {
       expect(unauthorizedCalled, isFalse);
     });
 
+    test('recycles the transport without losing the canonical bearer', () {
+      ApiClient.resetForTesting();
+      ApiClient.setAuthToken('resume-token');
+      final previousDio = ApiClient.dio;
+
+      ApiClient.reinitialize();
+
+      expect(ApiClient.authToken, 'resume-token');
+      expect(ApiClient.dio, isNot(same(previousDio)));
+      expect(ApiClient.dio.options.headers['Authorization'],
+          'Bearer resume-token');
+    });
+
+    test('passes bounded retry and timeout options to idempotent posts',
+        () async {
+      ApiClient.resetForTesting();
+      final adapter = _CapturePostOptionsAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      await ApiClient.post(
+        '/confirm',
+        const <String, dynamic>{'delivery': 'safe'},
+        idempotent: true,
+        receiveTimeout: const Duration(seconds: 15),
+        maxRetries: 0,
+      );
+
+      expect(adapter.receiveTimeout, const Duration(seconds: 15));
+      expect(adapter.idempotent, isTrue);
+      expect(adapter.maxRetries, 0);
+    });
+
     test('does not logout when a pre-login request returns 401 after login',
         () async {
       ApiClient.resetForTesting();
@@ -177,6 +209,33 @@ class _NoTokenThenLoginAdapter implements HttpClientAdapter {
       200,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _CapturePostOptionsAdapter implements HttpClientAdapter {
+  Duration? receiveTimeout;
+  bool? idempotent;
+  int? maxRetries;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    receiveTimeout = options.receiveTimeout;
+    idempotent = options.extra['idempotent'] as bool?;
+    maxRetries = options.extra['maxRetries'] as int?;
+    return ResponseBody.fromString(
+      jsonEncode(<String, dynamic>{'ok': true}),
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['application/json'],
       },
     );
   }

@@ -168,7 +168,7 @@ describe('reparto cobros DB2 transaction-bound port', () => {
       logger: { info: jest.fn() },
     });
     await port.assertCapabilities(fake.connection);
-    await expect(port.forConnection(fake.connection).insertCobro(payment())).resolves.toEqual({ id: 91, created: true });
+    await expect(port.forConnection(fake.connection).insertCobro(payment())).resolves.toEqual({ id: '91', created: true });
 
     expect(fake.lifecycle.beginTransaction).not.toHaveBeenCalled();
     expect(fake.lifecycle.commit).not.toHaveBeenCalled();
@@ -184,7 +184,7 @@ describe('reparto cobros DB2 transaction-bound port', () => {
     const exact = fakeConnection({ replay: [replayRow()] });
     const port = createRepartoCobrosDb2Port({ runtime: runtime() });
     await port.assertCapabilities(exact.connection);
-    await expect(port.forConnection(exact.connection).insertCobro(payment())).resolves.toEqual({ id: 91, created: false });
+    await expect(port.forConnection(exact.connection).insertCobro(payment())).resolves.toEqual({ id: '91', created: false });
     expect(exact.calls.some((call) => call.sql.startsWith('INSERT INTO'))).toBe(false);
 
     const conflict = fakeConnection({ replay: [replayRow({ IMPORTEVENCIMIENTO: 11 })] });

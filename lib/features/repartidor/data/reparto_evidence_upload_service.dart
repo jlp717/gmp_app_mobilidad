@@ -136,7 +136,10 @@ class RepartoEvidenceUploadService implements RepartoEvidenceUploader {
           headers: <String, String>{
             'Idempotency-Key': idempotencyKey.trim(),
           },
-          extra: const <String, dynamic>{'idempotent': true},
+          // The journal preserves the idempotency key. Return control after
+          // the bounded request instead of holding the modal through several
+          // mobile-network retries; a retry safely resumes the same upload.
+          extra: const <String, dynamic>{'idempotent': true, 'maxRetries': 0},
         ),
       );
       final body = response.data;

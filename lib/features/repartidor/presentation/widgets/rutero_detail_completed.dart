@@ -206,9 +206,45 @@ class RuteroDetailCompleted extends StatelessWidget {
           const Divider(color: AppTheme.borderColor, height: 20),
           _InfoRow(
             icon: Icons.payment,
-            label: 'Forma pago',
+            label: 'Forma pago doc.',
             value: albaran.formaPagoDesc,
           ),
+          if (albaran.hasAppCobro) ...[
+            const Divider(color: AppTheme.borderColor, height: 20),
+            _InfoRow(
+              icon: Icons.payments_outlined,
+              label: 'Cobrado en ruta',
+              value: '${albaran.importeCobrado!.toStringAsFixed(2)} €'
+                  '${albaran.cobroParcial ? ' (parcial)' : ' (total)'}',
+            ),
+            if ((albaran.formaPagoCobro ?? '').trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: _InfoRow(
+                  icon: Icons.credit_card,
+                  label: 'Método cobro',
+                  value: albaran.formaPagoCobro!,
+                ),
+              ),
+            if (albaran.importePendienteCobro != null &&
+                albaran.importePendienteCobro! > 0.004)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: _InfoRow(
+                  icon: Icons.hourglass_bottom,
+                  label: 'Pendiente tras cobro',
+                  value:
+                      '${albaran.importePendienteCobro!.toStringAsFixed(2)} €',
+                ),
+              ),
+          ] else if (_isNoDelivery == false) ...[
+            const Divider(color: AppTheme.borderColor, height: 20),
+            const _InfoRow(
+              icon: Icons.money_off_outlined,
+              label: 'Cobrado en ruta',
+              value: 'Sin cobro',
+            ),
+          ],
           if (albaran.observaciones != null &&
               albaran.observaciones!.isNotEmpty) ...[
             const Divider(color: AppTheme.borderColor, height: 20),

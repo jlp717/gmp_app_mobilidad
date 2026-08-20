@@ -5,6 +5,7 @@ library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -60,13 +61,11 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   String? _error;
   String _searchQuery = '';
   int _requestGeneration = 0;
+  CancelToken? _activeSearchCancelToken;
 
   // Sort options
   _SortBy _sortBy = _SortBy.lastVisit;
   bool _sortAsc = false;
-
-  RepartidorClientsLoader get _clientsLoader =>
-      widget.clientsLoader ?? RepartidorDataService.getHistoryClients;
 
   @override
   void initState() {
@@ -90,6 +89,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   void dispose() {
     _requestGeneration++;
     _searchTimer?.cancel();
+    _activeSearchCancelToken?.cancel('clientes_page_disposed');
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -107,6 +107,12 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
     final normalizedSearch = (search ?? _searchQuery).trim();
     final generation = reset ? ++_requestGeneration : _requestGeneration;
     final offset = reset ? 0 : _clients.length;
+    CancelToken? cancelToken;
+    if (reset && widget.clientsLoader == null) {
+      _activeSearchCancelToken?.cancel('clientes_search_superseded');
+      cancelToken = CancelToken();
+      _activeSearchCancelToken = cancelToken;
+    }
 
     setState(() {
       if (reset) {
@@ -120,13 +126,22 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
     });
 
     try {
-      final page = await _clientsLoader(
-        repartidorId: widget.repartidorId,
-        search: normalizedSearch.isEmpty ? null : normalizedSearch,
-        limit: _pageSize,
-        offset: offset,
-        forceRefresh: forceRefresh,
-      );
+      final page = widget.clientsLoader != null
+          ? await widget.clientsLoader!(
+              repartidorId: widget.repartidorId,
+              search: normalizedSearch.isEmpty ? null : normalizedSearch,
+              limit: _pageSize,
+              offset: offset,
+              forceRefresh: forceRefresh,
+            )
+          : await RepartidorDataService.getHistoryClients(
+              repartidorId: widget.repartidorId,
+              search: normalizedSearch.isEmpty ? null : normalizedSearch,
+              limit: _pageSize,
+              offset: offset,
+              forceRefresh: forceRefresh,
+              cancelToken: cancelToken,
+            );
       if (!mounted || generation != _requestGeneration) return;
 
       setState(() {
@@ -367,7 +382,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         controller: _searchController,
         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Nombre, código, dirección, CP o NIF...',
+          hintText:
+              'Nombre, alias, código, DNI, dirección, población o teléfono...',
           hintStyle: TextStyle(
               color: AppTheme.textSecondary.withValues(alpha: 0.6),
               fontSize: 13),

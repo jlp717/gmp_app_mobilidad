@@ -98,10 +98,16 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                .format(albaran.importeTotal),
+            albaran.isPendingPrice
+                ? 'Pendiente de precio'
+                : NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                    .format(albaran.importeTotal),
             style: TextStyle(
-              color: _isUrgent ? AppTheme.error : AppTheme.textPrimary,
+              color: albaran.isPendingPrice
+                  ? AppTheme.warning
+                  : _isUrgent
+                      ? AppTheme.error
+                      : AppTheme.textPrimary,
               fontSize: Responsive.fontSize(context, small: 28, large: 42),
               fontWeight: FontWeight.bold,
             ),
@@ -110,7 +116,11 @@ class RuteroDetailPayment extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: (_isUrgent ? AppTheme.error : AppTheme.success)
+              color: (albaran.isPendingPrice
+                      ? AppTheme.warning
+                      : _isUrgent
+                          ? AppTheme.error
+                          : AppTheme.success)
                   .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -118,17 +128,31 @@ class RuteroDetailPayment extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _isUrgent ? Icons.priority_high : Icons.info_outline,
+                  albaran.isPendingPrice
+                      ? Icons.hourglass_top
+                      : _isUrgent
+                          ? Icons.priority_high
+                          : Icons.info_outline,
                   size: 16,
-                  color: _isUrgent ? AppTheme.error : AppTheme.success,
+                  color: albaran.isPendingPrice
+                      ? AppTheme.warning
+                      : _isUrgent
+                          ? AppTheme.error
+                          : AppTheme.success,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _isUrgent
-                      ? 'COBRO OBLIGATORIO - ${getPaymentTypeLabel()}'
-                      : 'COBRO OPCIONAL - ${getPaymentTypeLabel()}',
+                  albaran.isPendingPrice
+                      ? 'PRECIO PENDIENTE EN ERP'
+                      : _isUrgent
+                          ? 'COBRO OBLIGATORIO - ${getPaymentTypeLabel()}'
+                          : 'COBRO OPCIONAL - ${getPaymentTypeLabel()}',
                   style: TextStyle(
-                    color: _isUrgent ? AppTheme.error : AppTheme.success,
+                    color: albaran.isPendingPrice
+                        ? AppTheme.warning
+                        : _isUrgent
+                            ? AppTheme.error
+                            : AppTheme.success,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),

@@ -1,6 +1,10 @@
 'use strict';
 
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
+const {
+  resolveDeliveryAmount,
+  allowsEmptyPlannedLines,
+} = require('../services/delivery-amount-resolver');
 
 const ERP_SCHEMA = 'DSEDAC';
 const CLIENT_CODE_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,39}$/;
@@ -102,7 +106,8 @@ function headerQuery(schema, includeClient) {
       TRIM(OPP.CODIGOREPARTIDOR) AS CODIGOREPARTIDOR,
       CPC.EJERCICIOPEDIDO,
       CPC.NUMEROPEDIDO,
-      CPC.IMPORTETOTAL
+      CPC.IMPORTETOTAL,
+      CAC.IMPORTETOTAL AS CAC_IMPORTETOTAL
     FROM ${schema}.CPC CPC
     INNER JOIN ${schema}.OPP OPP
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
@@ -110,6 +115,13 @@ function headerQuery(schema, includeClient) {
       AND TRIM(OPP.SUBEMPRESA) = TRIM(CPC.SUBEMPRESAPEDIDO)
     LEFT JOIN ${schema}.CLI CLI
       ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+    LEFT JOIN ${schema}.CAC CAC
+      ON CAC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
+      AND CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+      AND TRIM(CAC.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+      AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+      AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+      AND TRIM(CAC.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
     WHERE CPC.EJERCICIOALBARAN = ?
       AND TRIM(CPC.SERIEALBARAN) = ?
       AND CPC.TERMINALALBARAN = ?
@@ -255,7 +267,7 @@ function mapFinancialDocument(rows) {
   });
 }
 
-function mapHeader(row, itemId, lineas, financial) {
+function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
   const subempresa = text(row, 'SUBEMPRESA');
   const codigoCliente = text(row, 'CODIGOCLIENTE');
   const repartidorId = text(row, 'CODIGOREPARTIDOR');
@@ -263,7 +275,7 @@ function mapHeader(row, itemId, lineas, financial) {
   const terminal = number(row, 'TERMINALALBARAN');
   const numero = number(row, 'NUMEROALBARAN');
   const serie = text(row, 'SERIEALBARAN');
-  const importeTotal = number(row, 'IMPORTETOTAL');
+  const importeTotal = resolvedAmount.amount;
   if (!subempresa || !codigoCliente || !repartidorId || !serie || !Number.isInteger(ejercicio)
     || !Number.isInteger(terminal) || !Number.isInteger(numero) || importeTotal == null) {
     throw new RepartoPlannedDeliveryError('La cabecera planificada no tiene los datos requeridos', {
@@ -279,6 +291,8 @@ function mapHeader(row, itemId, lineas, financial) {
       subempresa, ejercicio, serie, terminal, numero,
     }),
     importeTotal,
+    amountSource: resolvedAmount.source,
+    pricingState: resolvedAmount.pricingState,
     importePendiente: financial.importePendiente,
     financialDocumentState: financial.state,
     financialDocument: financial.document,
@@ -312,14 +326,34 @@ function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
       number(header, 'TERMINALALBARAN'), number(header, 'NUMEROALBARAN'), text(header, 'CODIGOCLIENTE'),
     ];
     const rawLines = await executeRows(connection, linesQuery(safeSchema), documentParams);
-    const importeTotal = number(header, 'IMPORTETOTAL') || 0;
-    const lineas = mapLines(rawLines, { allowEmpty: importeTotal === 0 });
+    const provisionalLines = mapLines(rawLines, { allowEmpty: true });
+    const lineSum = provisionalLines.reduce((sum, line) => sum + Number(line.importeLinea || 0), 0);
+    const zeroPriceQtyLines = provisionalLines.filter(
+      (line) => Number(line.cantidadPedida) > 0 && Math.abs(Number(line.importeLinea) || 0) < 0.005,
+    ).length;
+    const resolvedAmount = resolveDeliveryAmount({
+      cpcTotal: number(header, 'IMPORTETOTAL') || 0,
+      cacTotal: number(header, 'CAC_IMPORTETOTAL') || 0,
+      lacLineSum: lineSum,
+      qtyLines: provisionalLines.length,
+      zeroPriceQtyLines,
+    });
+    if (!allowsEmptyPlannedLines({
+      importeTotal: resolvedAmount.amount,
+      qtyLines: provisionalLines.length,
+      pricingState: resolvedAmount.pricingState,
+    }) && provisionalLines.length === 0) {
+      throw new RepartoPlannedDeliveryError('La entrega planificada no contiene lineas', {
+        code: 'DELIVERY_SOURCE_INCONSISTENT', statusCode: 409,
+      });
+    }
+    const lineas = provisionalLines;
     const financial = mapFinancialDocument(await executeRows(
       connection,
       financialDocumentQuery(safeSchema),
       documentParams,
     ));
-    return mapHeader(header, itemId, lineas, financial);
+    return mapHeader(header, itemId, lineas, financial, resolvedAmount);
   }
 
   return Object.freeze({

@@ -11,7 +11,7 @@ const mockCaptureException = jest.fn();
 
 jest.mock('../middleware/logger', () => mockLogger);
 jest.mock('../middleware/auth', () => ({
-  verifyToken: (req, _res, next) => { req.user = { id: 'V94', code: '94', role: 'REPARTIDOR' }; next(); },
+  verifyToken: (req, _res, next) => { req.user = { id: 'V94', code: '94', role: 'REPARTIDOR', activeMode: 'REPARTIDOR', repartidorCodes: ['94'] }; next(); },
   requireRoles: () => (_req, _res, next) => next(),
 }));
 jest.mock('../services/repartidor-finance-service', () => mockFinance);

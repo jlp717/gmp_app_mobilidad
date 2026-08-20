@@ -1049,11 +1049,15 @@ class RepartidorFinanzasService {
     int? year,
     bool forceRefresh = false,
   }) async {
+    final resolvedDateFrom =
+        dateFrom ?? (year == null ? '${DateTime.now().year - 2}-01-01' : null);
     final queryParams = <String, dynamic>{
       if (repartidorId != null) 'repartidorId': repartidorId,
-      if (dateFrom != null) 'dateFrom': dateFrom,
+      if (resolvedDateFrom != null) 'dateFrom': resolvedDateFrom,
       if (dateTo != null) 'dateTo': dateTo,
       if (year != null) 'year': year.toString(),
+      'limit': '50',
+      'offset': '0',
     };
 
     final response = await ApiClient.get(
@@ -1062,12 +1066,13 @@ class RepartidorFinanzasService {
       cacheKey: clientDocumentsCacheKey(
         clientId: clientId,
         repartidorId: repartidorId,
-        dateFrom: dateFrom,
+        dateFrom: resolvedDateFrom,
         dateTo: dateTo,
         year: year,
       ),
       cacheTTL: const Duration(minutes: 15),
       forceRefresh: forceRefresh,
+      receiveTimeout: const Duration(seconds: 25),
     );
 
     return _mapList(response['documents'], RepartidorHistoryDocument.fromJson);

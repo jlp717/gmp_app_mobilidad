@@ -6,9 +6,18 @@ const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
-const { resolveConfirmationTables } = require('../repositories/repartidor-route-db2-repository');
+const { resolveConfirmationTables, resolveFinanceWriteTables } = require('../repositories/repartidor-route-db2-repository');
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
 const { applySavedOrder } = require('../services/repartidor-rutero-orden-service');
+const {
+    resolveDeliveryAmount,
+    documentAmountKey,
+    sanitizeErpAmount,
+} = require('../services/delivery-amount-resolver');
+const {
+    loadDeliveryLineAmountStats,
+    emptyLineStats,
+} = require('../services/delivery-line-amount-stats');
 
 /**
  * Strip leading vendor code from VDD names (e.g., "08 DAMIAN" â†’ "DAMIAN")
@@ -388,6 +397,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
               TRIM(COALESCE(CLI.TELEFONO2, '')) as TELEFONO2,
               CPC.IMPORTETOTAL,
+              CAC.IMPORTETOTAL AS CAC_IMPORTETOTAL,
               CPC.IMPORTEBRUTO,
               CPC.IMPORTEBASEIMPONIBLE1 as CPC_BASE1,
               CPC.IMPORTEBASEIMPONIBLE2 as CPC_BASE2,
@@ -469,6 +479,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 const existing = aggregatedMap.get(id);
                 // Sum financial fields
                 existing.IMPORTETOTAL = (parseFloat(existing.IMPORTETOTAL) || 0) + (parseFloat(row.IMPORTETOTAL) || 0);
+                existing.CAC_IMPORTETOTAL = (parseFloat(existing.CAC_IMPORTETOTAL) || 0)
+                    + (parseFloat(row.CAC_IMPORTETOTAL) || 0);
                 existing.IMPORTEBRUTO = (parseFloat(existing.IMPORTEBRUTO) || 0) + (parseFloat(row.IMPORTEBRUTO) || 0);
                 existing.CPC_BASE1 = (parseFloat(existing.CPC_BASE1) || 0) + (parseFloat(row.CPC_BASE1) || 0);
                 existing.CPC_BASE2 = (parseFloat(existing.CPC_BASE2) || 0) + (parseFloat(row.CPC_BASE2) || 0);
@@ -570,11 +582,54 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             }
         }
 
+        let lineStatsByKey = new Map();
+        try {
+            lineStatsByKey = await loadDeliveryLineAmountStats(
+                uniqueRows.map((row) => ({
+                    ejercicio: row.EJERCICIOALBARAN,
+                    serie: row.SERIEALBARAN,
+                    terminal: row.TERMINALALBARAN,
+                    numero: row.NUMEROALBARAN,
+                    cliente: row.CLIENTE,
+                })),
+                (sql, params) => queryWithParams(sql, params, false, false),
+            );
+        } catch (lineStatsError) {
+            logger.warn(`[ENTREGAS] Could not load LAC line amount stats: ${lineStatsError.message || lineStatsError}`);
+        }
+
         // Process rows
         const projectedAlbaranes = uniqueRows.map(row => {
             const serie = (row.SERIEALBARAN || '').trim();
             const cliente = (row.CLIENTE || '').trim();
-            const importeAlbaran = parseMoney(row.IMPORTETOTAL);
+            const base1 = parseMoney(row.CPC_BASE1);
+            const base2 = parseMoney(row.CPC_BASE2);
+            const base3 = parseMoney(row.CPC_BASE3);
+            const pctIva1 = parseMoney(row.CPC_PCTIVA1);
+            const pctIva2 = parseMoney(row.CPC_PCTIVA2);
+            const pctIva3 = parseMoney(row.CPC_PCTIVA3);
+            const iva1 = parseMoney(row.CPC_IVA1);
+            const iva2 = parseMoney(row.CPC_IVA2);
+            const iva3 = parseMoney(row.CPC_IVA3);
+            const netoSum = Math.round((base1 + base2 + base3) * 100) / 100;
+            const ivaSum = Math.round((iva1 + iva2 + iva3) * 100) / 100;
+            const lineStats = lineStatsByKey.get(documentAmountKey({
+                ejercicio: row.EJERCICIOALBARAN,
+                serie,
+                terminal: row.TERMINALALBARAN,
+                numero: row.NUMEROALBARAN,
+                cliente,
+            })) || emptyLineStats();
+            const resolvedAmount = resolveDeliveryAmount({
+                cpcTotal: parseMoney(row.IMPORTETOTAL),
+                cacTotal: parseMoney(row.CAC_IMPORTETOTAL),
+                cpcNetoSum: netoSum,
+                cpcIvaSum: ivaSum,
+                lacLineSum: lineStats.lineSum,
+                qtyLines: lineStats.qtyLines,
+                zeroPriceQtyLines: lineStats.zeroPriceQtyLines,
+            });
+            const importeAlbaran = resolvedAmount.amount;
             const limiteCredito = creditLimitByClient.get(cliente) || 0;
             const riesgoActual = pendingDebtByClient.get(cliente) || 0;
             const creditoSuperaLimite =
@@ -632,27 +687,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 }
             }
 
-            // Use IMPORTETOTAL (correct final amount incl. IVA) instead of IMPORTEBRUTO (gross pre-discount)
-            let importeTotal = importeAlbaran;
-            // AUDIT FIX: Sanitize sentinel amounts
-            if (Math.abs(importeTotal) >= 900000 || Object.is(importeTotal, -0)) {
-                importeTotal = 0;
-            }
+            const importeTotal = importeAlbaran;
             const importeBruto = parseMoney(row.IMPORTEBRUTO);
-
-            // IVA breakdown from CPC (up to 3 tax bases)
-            const base1 = parseMoney(row.CPC_BASE1);
-            const base2 = parseMoney(row.CPC_BASE2);
-            const base3 = parseMoney(row.CPC_BASE3);
-            const pctIva1 = parseMoney(row.CPC_PCTIVA1);
-            const pctIva2 = parseMoney(row.CPC_PCTIVA2);
-            const pctIva3 = parseMoney(row.CPC_PCTIVA3);
-            const iva1 = parseMoney(row.CPC_IVA1);
-            const iva2 = parseMoney(row.CPC_IVA2);
-            const iva3 = parseMoney(row.CPC_IVA3);
-
-            const netoSum = Math.round((base1 + base2 + base3) * 100) / 100;
-            const ivaSum = Math.round((iva1 + iva2 + iva3) * 100) / 100;
 
             // Build IVA breakdown array (only non-zero bases)
             const ivaBreakdown = [];
@@ -684,6 +720,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 ivaSum: ivaSum,
                 ivaBreakdown: ivaBreakdown,
                 checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
+                lineSum: resolvedAmount.lineSum,
+                amountSource: resolvedAmount.source,
+                pricingState: resolvedAmount.pricingState,
+                discrepancy: resolvedAmount.discrepancy,
                 formaPago: fp,
                 formaPagoDesc: paymentInfo.desc,
                 tipoPago: paymentInfo.type,
@@ -865,6 +905,26 @@ function confirmationTables() {
     };
 }
 
+function financeCobrosTable() {
+    const finance = resolveFinanceWriteTables();
+    const cobros = finance?.cobros;
+    if (cobros === 'JAVIER.TEST_REPARTIDOR_COBROS'
+        || cobros === 'JAVIER.REPARTIDOR_COBROS') {
+        return cobros;
+    }
+    return null;
+}
+
+function paymentMethodLabel(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (['EF', 'EFECTIVO', 'CONTADO', 'F0'].includes(normalized)) return 'EFECTIVO';
+    if (['TJ', 'TARJETA', 'TPV'].includes(normalized)) return 'TARJETA';
+    if (['BI', 'BIZUM'].includes(normalized)) return 'BIZUM';
+    if (['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0'].includes(normalized)) return 'TRANSFERENCIA';
+    if (['CH', 'CHEQUE', 'TALON'].includes(normalized)) return 'CHEQUE';
+    return normalized || null;
+}
+
 const CANONICAL_LIST_STATUSES = Object.freeze(['ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO']);
 
 async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
@@ -874,14 +934,35 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
     if (!documentIds.length || !drivers.length) return albaranes;
     const tables = confirmationTables();
     if (!tables?.confirmations) return albaranes;
+    const cobrosTable = financeCobrosTable();
     try {
         const documentPlaceholders = documentIds.map(() => '?').join(', ');
         const driverPlaceholders = drivers.map(() => '?').join(', ');
+        const paymentSelect = cobrosTable
+            ? `,
+              C.ID AS CONFIRMATION_ID,
+              CO.ID AS COBRO_ID,
+              CO.IMPORTEVENCIMIENTO AS IMPORTE_COBRADO,
+              CO.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE_COBRO,
+              TRIM(CO.CODIGOFORMAPAGO) AS FORMA_PAGO_COBRO`
+            : `,
+              C.ID AS CONFIRMATION_ID,
+              CAST(NULL AS INTEGER) AS COBRO_ID,
+              CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_COBRADO,
+              CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_PENDIENTE_COBRO,
+              CAST(NULL AS VARCHAR(10)) AS FORMA_PAGO_COBRO`;
+        const paymentJoin = cobrosTable
+            ? ` LEFT JOIN ${cobrosTable} CO
+                 ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)`
+            : '';
         const rows = await queryWithParams(
-            `SELECT TRIM(DOCUMENT_ID) AS DOCUMENT_ID, TRIM(STATUS) AS STATUS
-               FROM ${tables.confirmations}
-              WHERE TRIM(DOCUMENT_ID) IN (${documentPlaceholders})
-                AND TRIM(REPARTIDOR_ID) IN (${driverPlaceholders})`,
+            `SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
+                    TRIM(C.STATUS) AS STATUS
+                    ${paymentSelect}
+               FROM ${tables.confirmations} C
+               ${paymentJoin}
+              WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
+                AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})`,
             [...documentIds, ...drivers],
             false,
             false,
@@ -890,16 +971,48 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
         for (const row of Array.isArray(rows) ? rows : []) {
             const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
             const status = String(row.STATUS || row.status || '').trim().toUpperCase();
-            if (id && CANONICAL_LIST_STATUSES.includes(status)) byId.set(id, status);
+            if (!id || !CANONICAL_LIST_STATUSES.includes(status)) continue;
+            const importeCobrado = Number(row.IMPORTE_COBRADO ?? row.importe_cobrado);
+            const importePendienteCobro = Number(
+                row.IMPORTE_PENDIENTE_COBRO ?? row.importe_pendiente_cobro,
+            );
+            const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
+            byId.set(id, {
+                status,
+                confirmationId: row.CONFIRMATION_ID == null && row.confirmation_id == null
+                    ? null
+                    : String(row.CONFIRMATION_ID ?? row.confirmation_id),
+                cobroId: row.COBRO_ID == null && row.cobro_id == null
+                    ? null
+                    : String(row.COBRO_ID ?? row.cobro_id),
+                cobrado: hasCobro,
+                importeCobrado: hasCobro ? Math.round(importeCobrado * 100) / 100 : null,
+                importePendienteCobro: hasCobro && Number.isFinite(importePendienteCobro)
+                    ? Math.round(importePendienteCobro * 100) / 100
+                    : null,
+                formaPagoCobro: paymentMethodLabel(
+                    row.FORMA_PAGO_COBRO ?? row.forma_pago_cobro,
+                ),
+                cobroParcial: hasCobro
+                    && Number.isFinite(importePendienteCobro)
+                    && importePendienteCobro > 0.004,
+            });
         }
         if (!byId.size) return albaranes;
         return albaranes.map((item) => {
-            const status = byId.get(String(item.id || '').trim());
-            if (!status) return item;
+            const match = byId.get(String(item.id || '').trim());
+            if (!match) return item;
             return {
                 ...item,
-                estado: status,
-                colorEstado: status === 'ENTREGADO' ? 'green' : item.colorEstado,
+                estado: match.status,
+                colorEstado: match.status === 'ENTREGADO' ? 'green' : item.colorEstado,
+                confirmationId: match.confirmationId,
+                cobroId: match.cobroId,
+                cobrado: match.cobrado,
+                importeCobrado: match.importeCobrado,
+                importePendienteCobro: match.importePendienteCobro,
+                formaPagoCobro: match.formaPagoCobro,
+                cobroParcial: match.cobroParcial,
             };
         });
     } catch (_error) {
@@ -1015,12 +1128,13 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             headerParams.push(terminal);
         }
 
-        // 2. Get Header from CPC (uses IMPORTETOTAL - correct final amount)
+        // 2. Get Header from CPC + CAC (collectable amount resolved below)
         const headerSql = `
             SELECT
                 CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN,
                 CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                 CPC.IMPORTETOTAL as IMPORTE,
+                CAC.IMPORTETOTAL as CAC_IMPORTE,
                 CPC.IMPORTEBRUTO as IMPORTE_BRUTO,
                 CPC.IMPORTEBASEIMPONIBLE1 as CPC_BASE1,
                 CPC.IMPORTEBASEIMPONIBLE2 as CPC_BASE2,
@@ -1116,6 +1230,49 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
         if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
         if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
 
+        const albaranItems = items.map(i => {
+                const confirmedLine = canonical.linesById.get(String(i.SECUENCIA));
+                const unidades = parseFloat(i.CANTIDADUNIDADES) || 0;
+                const envases = parseFloat(i.CANTIDADENVASES) || 0;
+                const cantidadPedida = unidades > 0 ? unidades : envases;
+                const cantidadEntregada = confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_ENTREGADA) : null;
+                const secuencia = String(i.SECUENCIA ?? '').trim();
+                const codigoArticulo = String(i.CODIGOARTICULO ?? '').trim() || secuencia;
+                const totalLinea = sanitizeErpAmount(i.IMPORTEVENTA);
+                return {
+                    itemId: secuencia,
+                    codigoArticulo,
+                    descripcion: i.DESCRIPCION,
+                    cantidadPedida,
+                    bultos: envases,
+                    cantidadCajas: 0,
+                    totalLinea,
+                    unidad: i.UNIDADMEDIDA,
+                    precioUnitario: cantidadPedida !== 0 ? totalLinea / cantidadPedida : 0,
+                    cantidadEntregada,
+                    cantidadRechazada: confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_RECHAZADA) : null,
+                    cantidadPendiente: confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_PENDIENTE) : null,
+                    confirmationState: canonical.availability === 'UNAVAILABLE' ? 'UNAVAILABLE' : (confirmedLine ? 'CONFIRMED' : 'NOT_CONFIRMED'),
+                    estado: confirmedLine ? (cantidadEntregada >= cantidadPedida ? 'ENTREGADO' : 'PARCIAL') : 'PENDIENTE'
+                };
+            }).filter((line) => line.cantidadPedida > 0 || line.bultos > 0);
+
+        const lineSumRounded = Math.round(
+            albaranItems.reduce((sum, item) => sum + (Number(item.totalLinea) || 0), 0) * 100,
+        ) / 100;
+        const zeroPriceQtyLines = albaranItems.filter(
+            (item) => (Number(item.cantidadPedida) || 0) > 0 && Math.abs(Number(item.totalLinea) || 0) < 0.005,
+        ).length;
+        const resolvedAmount = resolveDeliveryAmount({
+            cpcTotal: parseFloat(header.IMPORTE) || 0,
+            cacTotal: parseFloat(header.CAC_IMPORTE) || 0,
+            cpcNetoSum: netoSum,
+            cpcIvaSum: ivaSum,
+            lacLineSum: lineSumRounded,
+            qtyLines: albaranItems.length,
+            zeroPriceQtyLines,
+        });
+
         const albaran = {
             id: documentId,
             numeroAlbaran: header.NUMEROALBARAN,
@@ -1130,50 +1287,23 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             serieFactura: (header.SERIEFACTURA || '').trim(),
             documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARAN',
             fecha: isoDocumentDate(header, todayIsoDate()),
-            importe: parseFloat(header.IMPORTE) || 0,
+            importe: resolvedAmount.amount,
             importeBruto: parseFloat(header.IMPORTE_BRUTO) || 0,
             netoSum: netoSum,
             ivaSum: ivaSum,
             ivaBreakdown: ivaBreakdown,
             checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
             formaPago: (header.FORMA_PAGO || '').trim(),
-            items: items.map(i => {
-                const confirmedLine = canonical.linesById.get(String(i.SECUENCIA));
-                const unidades = parseFloat(i.CANTIDADUNIDADES) || 0;
-                const envases = parseFloat(i.CANTIDADENVASES) || 0;
-                const cantidadPedida = unidades > 0 ? unidades : envases;
-                const cantidadEntregada = confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_ENTREGADA) : null;
-                const secuencia = String(i.SECUENCIA ?? '').trim();
-                const codigoArticulo = String(i.CODIGOARTICULO ?? '').trim() || secuencia;
-                return {
-                    itemId: secuencia,
-                    codigoArticulo,
-                    descripcion: i.DESCRIPCION,
-                    cantidadPedida,
-                    bultos: envases,
-                    cantidadCajas: 0,
-                    totalLinea: parseFloat(i.IMPORTEVENTA) || 0,
-                    unidad: i.UNIDADMEDIDA,
-                    precioUnitario: cantidadPedida !== 0 ? (parseFloat(i.IMPORTEVENTA) || 0) / cantidadPedida : 0,
-                    cantidadEntregada,
-                    cantidadRechazada: confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_RECHAZADA) : null,
-                    cantidadPendiente: confirmedLine ? confirmedQuantity(confirmedLine.CANTIDAD_PENDIENTE) : null,
-                    confirmationState: canonical.availability === 'UNAVAILABLE' ? 'UNAVAILABLE' : (confirmedLine ? 'CONFIRMED' : 'NOT_CONFIRMED'),
-                    estado: confirmedLine ? (cantidadEntregada >= cantidadPedida ? 'ENTREGADO' : 'PARCIAL') : 'PENDIENTE'
-                };
-            }).filter((line) => line.cantidadPedida > 0 || line.bultos > 0),
+            items: albaranItems,
             confirmationAvailability: canonical.availability,
             confirmedAt: canonical.confirmation?.CONFIRMED_AT || null,
-            estado: canonicalStatus || 'PENDIENTE'
+            estado: canonicalStatus || 'PENDIENTE',
+            lineSum: lineSumRounded,
+            amountSource: resolvedAmount.source,
+            pricingState: resolvedAmount.pricingState,
+            discrepancy: resolvedAmount.discrepancy
+                || Math.abs(resolvedAmount.amount - Math.round((netoSum + ivaSum) * 100) / 100) > 0.01,
         };
-
-        // LAC remains a raw diagnostic: it is not the financial source of truth.
-        const lineSum = albaran.items.reduce((sum, item) => sum + item.totalLinea, 0);
-        const lineSumRounded = Math.round(lineSum * 100) / 100;
-        albaran.lineSum = lineSumRounded;
-        const cpcGross = Number(albaran.importe) || 0;
-        const calculatedGross = Math.round((Number(albaran.netoSum || 0) + Number(albaran.ivaSum || 0)) * 100) / 100;
-        albaran.discrepancy = Math.abs(cpcGross - calculatedGross) > 0.01;
 
         res.json({ success: true, albaran });
     } catch (error) {

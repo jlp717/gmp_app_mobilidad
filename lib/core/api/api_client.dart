@@ -983,14 +983,20 @@ class ApiClient {
     Map<String, dynamic> data, {
     Map<String, String>? headers,
     bool idempotent = false,
+    Duration? receiveTimeout,
+    int? maxRetries,
   }) async {
     try {
       final response = await dio.post(
         endpoint,
         data: data,
         options: Options(
+          receiveTimeout: receiveTimeout,
           headers: headers == null ? null : Map<String, String>.from(headers),
-          extra: <String, dynamic>{'idempotent': idempotent},
+          extra: <String, dynamic>{
+            'idempotent': idempotent,
+            if (maxRetries != null) 'maxRetries': maxRetries,
+          },
         ),
       );
       return response.data as Map<String, dynamic>;
@@ -1005,18 +1011,7 @@ class ApiClient {
     Map<String, dynamic> data, {
     Duration? receiveTimeout,
   }) async {
-    try {
-      final response = await dio.post(
-        endpoint,
-        data: data,
-        options: receiveTimeout != null
-            ? Options(receiveTimeout: receiveTimeout)
-            : null,
-      );
-      return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
+    return post(endpoint, data, receiveTimeout: receiveTimeout);
   }
 
   /// PUT request
@@ -1111,7 +1106,12 @@ class ApiClient {
         serverCode = data['code'] as String?;
         final rawConfirmationId = data['confirmationId'];
         if (rawConfirmationId is String && rawConfirmationId.isNotEmpty) {
-          serverConfirmationId = rawConfirmationId;
+          serverConfirmationId = rawConfirmationId.trim();
+        } else if (rawConfirmationId is num && rawConfirmationId.isFinite) {
+          serverConfirmationId =
+              rawConfirmationId == rawConfirmationId.roundToDouble()
+                  ? rawConfirmationId.toInt().toString()
+                  : rawConfirmationId.toString();
         }
       }
 
@@ -1237,6 +1237,10 @@ class _RetryInterceptor extends Interceptor {
   Future<void> onError(
       DioException err, ErrorInterceptorHandler handler) async {
     final shouldRetry = _shouldRetry(err);
+    final configuredRetries = err.requestOptions.extra['maxRetries'];
+    final retryLimit = configuredRetries is int && configuredRetries >= 0
+        ? configuredRetries
+        : _maxRetries;
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
     if (retryCount == 0) {
@@ -1248,14 +1252,14 @@ class _RetryInterceptor extends Interceptor {
       );
     }
 
-    if (shouldRetry && retryCount < _maxRetries) {
+    if (shouldRetry && retryCount < retryLimit) {
       // FIX: Use longer backoff for 429 rate limit errors
       final isRateLimited = err.response?.statusCode == 429;
       final baseDelay = isRateLimited ? _retryDelay * 2 : _retryDelay;
       final delay = baseDelay * (retryCount + 1);
 
       debugPrint(
-        '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries) in ${delay.inSeconds}s...',
+        '[ApiClient] Retrying request (${retryCount + 1}/$retryLimit) in ${delay.inSeconds}s...',
       );
 
       // Exponential backoff

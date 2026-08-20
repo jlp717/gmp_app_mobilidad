@@ -96,7 +96,10 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
             const Duration(seconds: 3),
           );
       if (png == null || !mounted) return;
-      final grf = await ZebraPrintService.convertSignatureToGrf(png);
+      final grf = await ZebraPrintService.convertSignatureToGrf(
+        png,
+        maxWidth: 280,
+      );
       if (!mounted) return;
       setState(() => _signatureGrf = grf);
     } catch (_) {
@@ -138,6 +141,15 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
       final albaranLabel = widget.albaran.numeroFactura > 0
           ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
           : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}';
+
+      final layout = await ZebraPrintService.resolveLayout(
+        printerName: widget.printerName,
+      );
+      final logo = await ZebraPrintService.loadCompanyLogoGrf(
+        maxWidth: layout.logoMaxWidth,
+        maxHeight: layout.logoMaxHeight,
+      );
+
       final zpl = ZebraPrintService.generateDeliveryZpl(
         albaran: widget.albaran,
         items: widget.items,
@@ -146,6 +158,8 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
         receptorDni: widget.receptorDni,
         signatureGrf: _signatureGrf,
         fechaFirma: DateTime.now(),
+        layout: layout,
+        logoGrf: logo,
       );
       final escPos = ZebraPrintService.generateEscPosTicket(
         clientName: widget.albaran.nombreCliente,

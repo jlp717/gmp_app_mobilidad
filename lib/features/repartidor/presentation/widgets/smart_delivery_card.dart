@@ -263,10 +263,16 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                  .format(widget.albaran.importeTotal),
+              widget.albaran.isPendingPrice
+                  ? 'Pendiente'
+                  : NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                      .format(widget.albaran.importeTotal),
               style: TextStyle(
-                color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
+                color: widget.albaran.isPendingPrice
+                    ? AppTheme.warning
+                    : _isUrgent
+                        ? AppTheme.obligatorio
+                        : AppTheme.textPrimary,
                 fontSize: Responsive.isSmall(context) ? 17 : 20,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0,
@@ -277,16 +283,22 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: _getPaymentColor().withValues(alpha: 0.15),
+                color: (widget.albaran.isPendingPrice
+                        ? AppTheme.warning
+                        : _getPaymentColor())
+                    .withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: _getPaymentColor().withValues(alpha: 0.4),
+                  color: (widget.albaran.isPendingPrice
+                          ? AppTheme.warning
+                          : _getPaymentColor())
+                      .withValues(alpha: 0.4),
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_isUrgent) ...[
+                  if (_isUrgent && !widget.albaran.isPendingPrice) ...[
                     Icon(
                       Icons.priority_high,
                       size: 10,
@@ -295,9 +307,13 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                     const SizedBox(width: 2),
                   ],
                   Text(
-                    _getPaymentLabel(),
+                    widget.albaran.isPendingPrice
+                        ? 'PRECIO PENDIENTE'
+                        : _getPaymentLabel(),
                     style: TextStyle(
-                      color: _getPaymentColor(),
+                      color: widget.albaran.isPendingPrice
+                          ? AppTheme.warning
+                          : _getPaymentColor(),
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
@@ -494,23 +510,31 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     );
   }
 
-  Color _getPaymentColor() {
-    if (widget.albaran.esCTR) return AppTheme.obligatorio;
-    if (widget.albaran.colorEstado == 'green') return AppTheme.success;
-    if (widget.albaran.colorEstado == 'orange') return AppTheme.opcional;
-    return AppTheme.credito;
-  }
-
   String _getPaymentLabel() {
+    if (widget.albaran.hasAppCobro) {
+      final method = (widget.albaran.formaPagoCobro ?? '').trim();
+      final kind = widget.albaran.cobroParcial ? 'PARCIAL' : 'COBRADO';
+      if (method.isEmpty) return kind;
+      return '$kind · $method';
+    }
     final code = widget.albaran.tipoPago.toUpperCase().trim();
-    if (code == '01' || code == 'CNT' || code.contains('CONTADO'))
+    if (code == '01' || code == 'CNT' || code.contains('CONTADO')) {
       return 'CONTADO';
+    }
     if (code.contains('REP')) return 'REPOSICIÓN';
     if (code.contains('MEN')) return 'MENSUAL';
     if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
     if (code.contains('TAR')) return 'TARJETA';
     if (code.contains('TRA')) return 'TRANSFER';
     return code.length > 8 ? code.substring(0, 8) : code;
+  }
+
+  Color _getPaymentColor() {
+    if (widget.albaran.hasAppCobro) return AppTheme.success;
+    if (widget.albaran.esCTR) return AppTheme.obligatorio;
+    if (widget.albaran.colorEstado == 'green') return AppTheme.success;
+    if (widget.albaran.colorEstado == 'orange') return AppTheme.opcional;
+    return AppTheme.credito;
   }
 
   void _handleDragEnd(DragEndDetails details) {

@@ -171,8 +171,8 @@ class RepartoConfirmationJournalEntry {
     final confirmationFingerprint = json['confirmationFingerprint'];
     final confirmationIdempotencyKey = json['confirmationIdempotencyKey'];
     final decodedState = RepartoOperationState.values.byName(stateName);
-    final confirmationId = json['confirmationId'];
-    final cobroId = json['cobroId'];
+    final confirmationId = normalizeRepartoServerId(json['confirmationId']);
+    final cobroId = normalizeRepartoServerId(json['cobroId']);
     final state = version == 1 &&
             decodedState == RepartoOperationState.acknowledged &&
             confirmationId == null
@@ -186,11 +186,8 @@ class RepartoConfirmationJournalEntry {
             (confirmationIdempotencyKey is! String ||
                 !RegExp(r'^[A-Za-z0-9_.:-]{8,128}$')
                     .hasMatch(confirmationIdempotencyKey))) ||
-        (confirmationId != null &&
-            (confirmationId is! String ||
-                !isValidRepartoServerId(confirmationId))) ||
-        (cobroId != null &&
-            (cobroId is! String || !isValidRepartoServerId(cobroId)))) {
+        (confirmationId != null && !isValidRepartoServerId(confirmationId)) ||
+        (cobroId != null && !isValidRepartoServerId(cobroId))) {
       throw const FormatException('Invalid confirmation identity metadata');
     }
     final hasConfirmationIdentity = confirmationFingerprint != null ||
@@ -220,8 +217,8 @@ class RepartoConfirmationJournalEntry {
           Map<String, RepartoEvidenceJournalRecord>.unmodifiable(evidences),
       confirmationFingerprint: confirmationFingerprint as String?,
       confirmationIdempotencyKey: confirmationIdempotencyKey as String?,
-      confirmationId: confirmationId as String?,
-      cobroId: cobroId as String?,
+      confirmationId: confirmationId,
+      cobroId: cobroId,
       occurredAt: occurredAt,
     );
   }
@@ -588,3 +585,20 @@ class RepartoReceiptUnavailableException implements Exception {
 bool isValidRepartoServerId(String value) =>
     value == value.trim() &&
     RegExp(r'^[A-Za-z0-9_.:-]{1,128}$').hasMatch(value);
+
+/// Coerce JSON/DB2 identity scalars to a trimmed server id string.
+String? normalizeRepartoServerId(Object? value) {
+  if (value == null) return null;
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+  if (value is num) {
+    if (value is double && (value.isNaN || value.isInfinite)) return null;
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    return value.toString();
+  }
+  return null;
+}

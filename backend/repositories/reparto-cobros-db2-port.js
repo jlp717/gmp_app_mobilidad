@@ -92,10 +92,13 @@ function parseQualified(identifier) {
 
 function assertRuntime(runtime) {
   const validation = validateFinanceTableMapping(runtime);
-  if (!validation.valid || runtime.tableSet !== 'isolated_test' || !runtime.writesEnabled
+  const allowedTableSet = runtime.tableSet === 'isolated_test'
+    || runtime.tableSet === 'production';
+  if (!validation.valid || !allowedTableSet || !runtime.writesEnabled
       || !runtime.financeCapabilityApproved) {
     throw new RepartoCobrosCapabilityError('El runtime de cobros no esta autorizado', {
       mappingErrors: validation.errors,
+      tableSet: runtime.tableSet || null,
     });
   }
 }
@@ -291,7 +294,7 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
             });
           }
           return Object.freeze({
-            id: rowValue(replayRows[0], 'ID'),
+            id: String(rowValue(replayRows[0], 'ID')).trim(),
             created: false,
           });
         }
@@ -325,7 +328,7 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
         const id = rowValue(identityRows[0], 'ID');
         if (id == null) throw new RepartoCobrosCapabilityError('DB2 no devolvio el identificador del cobro');
         logger.info?.('reparto cobro inserted', { tableSet: runtime.tableSet });
-        return Object.freeze({ id, created: true });
+        return Object.freeze({ id: String(id).trim(), created: true });
       },
     });
   }

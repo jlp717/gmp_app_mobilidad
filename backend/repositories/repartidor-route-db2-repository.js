@@ -676,6 +676,7 @@ async function getClientDocuments({
   repartidorIds,
   clientCode,
   yearValue,
+  minYearValue,
   dateFromValue,
   dateToValue,
   pageOffset,
@@ -704,13 +705,20 @@ async function getClientDocuments({
   const dsCols = getDeliveryStatusColumns('DS');
   const dsAvail = isDeliveryStatusAvailable();
 
+  // Prefer an exact year, otherwise a bounded window (UI "últimos 3 años").
+  // Unscoped history scans routinely timed out at ~29s on production.
   let yearFilter = '';
   const yearFilterParams = [];
   if (yearValue) {
     yearFilter = ` AND CPC.EJERCICIOALBARAN = ?`;
     yearFilterParams.push(yearValue);
+  } else if (minYearValue) {
+    yearFilter = ` AND CPC.EJERCICIOALBARAN >= ?`;
+    yearFilterParams.push(minYearValue);
   }
 
+  // Keep the source scan lean: page first, then attach CVC pending + legacy
+  // signatures only for the returned logical page (not the whole history).
   const sql = `
             WITH SOURCE_DOCUMENTS AS (
                 SELECT
@@ -731,18 +739,12 @@ async function getClientDocuments({
                     COALESCE(CAC_J.NUMEROFACTURA, 0) AS NUMEROFACTURA,
                     COALESCE(TRIM(CAC_J.SERIEFACTURA), '') AS SERIEFACTURA,
                     COALESCE(CAC_J.EJERCICIOFACTURA, 0) AS EJERCICIOFACTURA,
-                    COALESCE(CF_J.FIRMANOMBRE, '') AS LEGACY_FIRMA_NOMBRE,
-                    CF_J.DIA AS LEGACY_DIA, CF_J.MES AS LEGACY_MES,
-                    CF_J.ANO AS LEGACY_ANO, CF_J.HORA AS LEGACY_HORA,
                     ROW_NUMBER() OVER (
                         PARTITION BY CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN,
                             TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN,
                             CPC.NUMEROALBARAN, TRIM(CPC.CODIGOCLIENTEALBARAN)
-                        ORDER BY COALESCE(CF_J.ANO, 0) DESC,
-                            COALESCE(CF_J.MES, 0) DESC, COALESCE(CF_J.DIA, 0) DESC,
-                            COALESCE(CF_J.HORA, 0) DESC, OPP.SUBEMPRESA,
-                            OPP.EJERCICIOORDENPREPARACION,
-                            OPP.NUMEROORDENPREPARACION
+                        ORDER BY OPP.EJERCICIOORDENPREPARACION DESC,
+                            OPP.NUMEROORDENPREPARACION DESC, OPP.SUBEMPRESA
                     ) AS ALBARAN_RANK
                 FROM DSEDAC.CPC CPC
                 ${repartidorJoin}
@@ -754,11 +756,6 @@ async function getClientDocuments({
                     AND CAC_J.TERMINALALBARAN = CPC.TERMINALALBARAN
                     AND CAC_J.NUMEROALBARAN = CPC.NUMEROALBARAN
                     AND TRIM(CAC_J.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-                LEFT JOIN DSEDAC.CACFIRMAS CF_J
-                    ON CF_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                    AND TRIM(CF_J.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
-                    AND CF_J.TERMINALALBARAN = CPC.TERMINALALBARAN
-                    AND CF_J.NUMEROALBARAN = CPC.NUMEROALBARAN
                 WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
@@ -767,6 +764,46 @@ async function getClientDocuments({
             ),
             UNIQUE_DOCUMENTS AS (
                 SELECT * FROM SOURCE_DOCUMENTS WHERE ALBARAN_RANK = 1
+            ),
+            DOCUMENT_ROWS AS (
+                SELECT DOC.*,
+                    CASE WHEN DOC.NUMEROFACTURA > 0 THEN
+                        'F-' || TRIM(CHAR(DOC.SUBEMPRESAALBARAN)) || '-' ||
+                        TRIM(CHAR(DOC.EJERCICIOFACTURA)) || '-' ||
+                        DOC.SERIEFACTURA || '-' || TRIM(CHAR(DOC.NUMEROFACTURA))
+                    ELSE
+                        'A-' || TRIM(CHAR(DOC.SUBEMPRESAALBARAN)) || '-' ||
+                        TRIM(CHAR(DOC.EJERCICIOALBARAN)) || '-' ||
+                        DOC.SERIEALBARAN || '-' || TRIM(CHAR(DOC.TERMINALALBARAN)) ||
+                        '-' || TRIM(CHAR(DOC.NUMEROALBARAN))
+                    END AS LOGICAL_KEY
+                FROM UNIQUE_DOCUMENTS DOC
+            ),
+            LOGICAL_DOCUMENTS AS (
+                SELECT LOGICAL_KEY,
+                    MAX(ANO * 10000 + MES * 100 + DIA) AS SORT_DATE,
+                    MAX(CASE WHEN NUMEROFACTURA > 0 THEN NUMEROFACTURA ELSE NUMEROALBARAN END) AS SORT_NUMBER
+                FROM DOCUMENT_ROWS
+                GROUP BY LOGICAL_KEY
+            ),
+            NUMBERED_DOCUMENTS AS (
+                SELECT LOGICAL_DOCUMENTS.*,
+                    COUNT(*) OVER () AS TOTAL_COUNT,
+                    ROW_NUMBER() OVER (
+                        ORDER BY SORT_DATE DESC, SORT_NUMBER DESC, LOGICAL_KEY DESC
+                    ) AS LOGICAL_POSITION
+                FROM LOGICAL_DOCUMENTS
+            ),
+            PAGED_DOCUMENTS AS (
+                SELECT * FROM NUMBERED_DOCUMENTS
+                WHERE LOGICAL_POSITION > ?
+                  AND LOGICAL_POSITION <= ?
+            ),
+            PAGE_DOCS AS (
+                SELECT DOC.*
+                FROM DOCUMENT_ROWS DOC
+                INNER JOIN PAGED_DOCUMENTS PAGED_ROW
+                    ON DOC.LOGICAL_KEY = PAGED_ROW.LOGICAL_KEY
             ),
             CVC_INSTALLMENTS AS (
                 SELECT
@@ -785,7 +822,7 @@ async function getClientDocuments({
                         THEN 1 ELSE 0
                     END AS AMBIGUOUS_INSTALLMENT
                 FROM DSEDAC.CVC CVC
-                INNER JOIN UNIQUE_DOCUMENTS DOC
+                INNER JOIN PAGE_DOCS DOC
                     ON TRIM(CVC.TIPODOCUMENTO) = 'CAC'
                     AND TRIM(CVC.ORIGENDOCUMENTO) = 'B'
                     AND TRIM(CVC.SUBEMPRESADOCUMENTO) = TRIM(DOC.SUBEMPRESAALBARAN)
@@ -810,7 +847,7 @@ async function getClientDocuments({
                 GROUP BY SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO,
                     TERMINALDOCUMENTO, NUMERODOCUMENTO, CLIENTE
             ),
-            DOCUMENT_ROWS AS (
+            ENRICHED_PAGE AS (
                 SELECT DOC.*,
                     CASE
                         WHEN CVC_DOC.NUMERODOCUMENTO IS NULL
@@ -818,17 +855,10 @@ async function getClientDocuments({
                         THEN 0 ELSE 1
                     END AS CVC_PRESENT,
                     CVC_DOC.IMPORTE_PENDIENTE AS CVC_PENDING,
-                    CASE WHEN DOC.NUMEROFACTURA > 0 THEN
-                        'F-' || TRIM(CHAR(DOC.SUBEMPRESAALBARAN)) || '-' ||
-                        TRIM(CHAR(DOC.EJERCICIOFACTURA)) || '-' ||
-                        DOC.SERIEFACTURA || '-' || TRIM(CHAR(DOC.NUMEROFACTURA))
-                    ELSE
-                        'A-' || TRIM(CHAR(DOC.SUBEMPRESAALBARAN)) || '-' ||
-                        TRIM(CHAR(DOC.EJERCICIOALBARAN)) || '-' ||
-                        DOC.SERIEALBARAN || '-' || TRIM(CHAR(DOC.TERMINALALBARAN)) ||
-                        '-' || TRIM(CHAR(DOC.NUMEROALBARAN))
-                    END AS LOGICAL_KEY
-                FROM UNIQUE_DOCUMENTS DOC
+                    COALESCE(CF_J.FIRMANOMBRE, '') AS LEGACY_FIRMA_NOMBRE,
+                    CF_J.DIA AS LEGACY_DIA, CF_J.MES AS LEGACY_MES,
+                    CF_J.ANO AS LEGACY_ANO, CF_J.HORA AS LEGACY_HORA
+                FROM PAGE_DOCS DOC
                 LEFT JOIN CVC_DOCUMENTS CVC_DOC
                     ON CVC_DOC.SUBEMPRESADOCUMENTO = TRIM(DOC.SUBEMPRESAALBARAN)
                     AND CVC_DOC.EJERCICIODOCUMENTO = DOC.EJERCICIOALBARAN
@@ -836,26 +866,11 @@ async function getClientDocuments({
                     AND CVC_DOC.TERMINALDOCUMENTO = DOC.TERMINALALBARAN
                     AND CVC_DOC.NUMERODOCUMENTO = DOC.NUMEROALBARAN
                     AND CVC_DOC.CLIENTE = DOC.CODIGOCLIENTEALBARAN
-            ),
-            LOGICAL_DOCUMENTS AS (
-                SELECT LOGICAL_KEY,
-                    MAX(ANO * 10000 + MES * 100 + DIA) AS SORT_DATE,
-                    MAX(CASE WHEN NUMEROFACTURA > 0 THEN NUMEROFACTURA ELSE NUMEROALBARAN END) AS SORT_NUMBER
-                FROM DOCUMENT_ROWS
-                GROUP BY LOGICAL_KEY
-            ),
-            NUMBERED_DOCUMENTS AS (
-                SELECT LOGICAL_DOCUMENTS.*,
-                    COUNT(*) OVER () AS TOTAL_COUNT,
-                    ROW_NUMBER() OVER (
-                        ORDER BY SORT_DATE DESC, SORT_NUMBER DESC, LOGICAL_KEY DESC
-                    ) AS LOGICAL_POSITION
-                FROM LOGICAL_DOCUMENTS
-            ),
-            PAGED_DOCUMENTS AS (
-                SELECT * FROM NUMBERED_DOCUMENTS
-                WHERE LOGICAL_POSITION > ?
-                  AND LOGICAL_POSITION <= ?
+                LEFT JOIN DSEDAC.CACFIRMAS CF_J
+                    ON CF_J.EJERCICIOALBARAN = DOC.EJERCICIOALBARAN
+                    AND TRIM(CF_J.SERIEALBARAN) = DOC.SERIEALBARAN
+                    AND CF_J.TERMINALALBARAN = DOC.TERMINALALBARAN
+                    AND CF_J.NUMEROALBARAN = DOC.NUMEROALBARAN
             ),
             TOTAL_META AS (
                 SELECT COUNT(*) AS TOTAL_COUNT FROM LOGICAL_DOCUMENTS
@@ -865,7 +880,7 @@ async function getClientDocuments({
                 CASE WHEN PAGED_ROW.LOGICAL_KEY IS NULL THEN 1 ELSE 0 END AS META_ONLY
             FROM TOTAL_META META
             LEFT JOIN PAGED_DOCUMENTS PAGED_ROW ON META.TOTAL_COUNT = META.TOTAL_COUNT
-            LEFT JOIN DOCUMENT_ROWS DOC ON DOC.LOGICAL_KEY = PAGED_ROW.LOGICAL_KEY
+            LEFT JOIN ENRICHED_PAGE DOC ON DOC.LOGICAL_KEY = PAGED_ROW.LOGICAL_KEY
             ORDER BY PAGED_ROW.LOGICAL_POSITION, DOC.ANO DESC, DOC.MES DESC, DOC.DIA DESC,
                 DOC.NUMEROALBARAN DESC, DOC.SERIEALBARAN DESC,
                 DOC.TERMINALALBARAN DESC
@@ -1361,6 +1376,8 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
     'CLI.PROVINCIA',
     'CLI.CODIGOPOSTAL',
     'CLI.NIF',
+    'CLI.TELEFONO1',
+    'CLI.TELEFONO2',
     'CAST(CPC.NUMEROALBARAN AS VARCHAR(20))',
     'CAST(CAC.NUMEROFACTURA AS VARCHAR(20))',
     'CAST(OPP.NUMEROORDENPREPARACION AS VARCHAR(20))',
@@ -1400,47 +1417,52 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
   const clientSearch = buildFlexibleRepartidorSearch(search, [
     'CLI.NOMBRECLIENTE',
     'CLI.NOMBREALTERNATIVO',
-    'UNIQ.CODIGOCLIENTEALBARAN',
+    'CLI.CODIGOCLIENTE',
     'CLI.DIRECCION',
     'CLI.POBLACION',
     'CLI.PROVINCIA',
     'CLI.CODIGOPOSTAL',
     'CLI.NIF',
+    'CLI.TELEFONO1',
+    'CLI.TELEFONO2',
   ]);
-  const searchFilter = clientSearch.clause;
   const sql = `
-            SELECT
-                TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
-                TRIM(UNIQ.CODIGOREPARTIDOR) as OWNER_ID,
-                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
-                TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                COUNT(*) as TOTAL_DOCS,
-                COALESCE(SUM(UNIQ.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                MAX(UNIQ.ANODOCUMENTO * 10000 + UNIQ.MESDOCUMENTO * 100 + UNIQ.DIADOCUMENTO) as LAST_VISIT
-            FROM (
+            WITH MATCHED_DELIVERIES AS (
                 SELECT DISTINCT
                     CPC.CODIGOCLIENTEALBARAN,
                     OPP.CODIGOREPARTIDOR,
                     CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     CPC.IMPORTETOTAL,
                     CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
-                FROM DSEDAC.CPC CPC
-                INNER JOIN DSEDAC.OPP OPP
-                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
-                    AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(', ')})
+                FROM DSEDAC.OPP OPP
+                INNER JOIN DSEDAC.CPC CPC
+                    ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                    AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
+                    AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+                WHERE OPP.CODIGOREPARTIDOR IN (${ids.map(() => '?').join(', ')})
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
-            ) UNIQ
-            LEFT JOIN DSEDAC.CLI CLI
-                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(UNIQ.CODIGOCLIENTEALBARAN)
+            )
+            SELECT
+                TRIM(DELIVERIES.CODIGOCLIENTEALBARAN) as ID,
+                TRIM(DELIVERIES.CODIGOREPARTIDOR) as OWNER_ID,
+                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
+                COUNT(*) as TOTAL_DOCS,
+                COALESCE(SUM(DELIVERIES.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
+                MAX(DELIVERIES.ANODOCUMENTO * 10000 + DELIVERIES.MESDOCUMENTO * 100 + DELIVERIES.DIADOCUMENTO) as LAST_VISIT
+            FROM MATCHED_DELIVERIES DELIVERIES
+            INNER JOIN DSEDAC.CLI CLI
+                ON CLI.CODIGOCLIENTE = DELIVERIES.CODIGOCLIENTEALBARAN
             WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
-              ${searchFilter}
-            GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(UNIQ.CODIGOREPARTIDOR), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+              ${clientSearch.clause}
+            GROUP BY TRIM(DELIVERIES.CODIGOCLIENTEALBARAN), TRIM(DELIVERIES.CODIGOREPARTIDOR),
+                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')),
+                TRIM(COALESCE(CLI.DIRECCION, ''))
             ORDER BY LAST_VISIT DESC, ID ASC, OWNER_ID ASC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         `;
+  // Reduce by repartidor before applying the intentionally flexible client search.
   const params = [...ids, ...clientSearch.params];
   // Extra row gives hasMore without a second aggregation query.
   params.push(pageOffset, pageLimit + 1);
@@ -1660,6 +1682,7 @@ module.exports = {
   getClientDocuments,
   overlayCanonicalConfirmations,
   resolveConfirmationTables,
+  resolveFinanceWriteTables,
   confirmationStatusOverlayTables,
   isIsolatedTestTableSet,
   getAppCollectedOverlay,

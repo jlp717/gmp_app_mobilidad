@@ -168,18 +168,25 @@ describe('Repartidor route parameter binding', () => {
     expect(res.status).toBe(200);
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toContain('WITH MATCHED_DELIVERIES');
+    expect(sql).toContain('FROM DSEDAC.OPP OPP');
+    expect(sql).toContain('FROM MATCHED_DELIVERIES DELIVERIES');
+    expect(sql).toContain('WHERE OPP.CODIGOREPARTIDOR IN (?)');
+    expect(sql).not.toContain('TRIM(OPP.CODIGOREPARTIDOR) IN');
     expect(sql).toContain('CLI.DIRECCION');
     expect(sql).toContain('CLI.CODIGOPOSTAL');
     expect(sql).toContain('CLI.NIF');
+    expect(sql).toContain('CLI.TELEFONO1');
+    expect(sql).toContain('CLI.TELEFONO2');
     expect(sql).toContain("''''");
     expect(sql).toContain("'&'");
-    expect(params[0]).toBe('05');
     expect(params).toEqual(expect.arrayContaining([
       '%HELADERIA%',
       '%CACHMBA%',
       '%C%A%C%H%M%B%A%',
       '%MAYOR%',
     ]));
+    expect(params[0]).toBe('05');
     expect(params.slice(-2)).toEqual([0, 11]);
   });
   test('GET /pendientes binds a single repartidor id as parameter array', async () => {

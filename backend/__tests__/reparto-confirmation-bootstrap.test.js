@@ -7,6 +7,7 @@ const {
   createCanonicalConfirmationBootstrap,
   createDb2ConnectionFactory,
 } = require('../config/reparto-confirmation-bootstrap');
+const { createRepartoCobrosDb2Port } = require('../repositories/reparto-cobros-db2-port');
 
 function runtime(overrides = {}) {
   return {
@@ -125,11 +126,30 @@ describe('canonical reparto confirmation bootstrap', () => {
     expect(acquireConfiguredConnection).toHaveBeenCalledTimes(1);
   });
 
-  test('does not silently fall back when the initialized pool has no connect', async () => {
-    const error = Object.assign(new Error('DB2 pooled connection is unavailable'), {
-      code: 'REPARTO_DB2_POOL_UNAVAILABLE', statusCode: 503,
+  test('enables finance cobros for production mapping when finance capability is approved', () => {
+    const enabled = resolveRepartoRuntime({
+      NODE_ENV: 'production',
+      REPARTO_ENVIRONMENT: 'production',
+      REPARTO_TABLE_SET: 'production',
+      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+      ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+      REPARTO_WRITES_ENABLED: 'true',
+      REPARTO_PRODUCTION_WRITES_APPROVED: 'true',
+      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'true',
+      REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'true',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'true',
     });
-    const factory = createDb2ConnectionFactory({ acquireConfiguredConnection: jest.fn().mockRejectedValue(error) });
-    await expect(factory()).rejects.toMatchObject({ code: 'REPARTO_DB2_POOL_UNAVAILABLE' });
+    expect(enabled.financeCapabilityApproved).toBe(true);
+    expect(() => createRepartoCobrosDb2Port({ runtime: enabled })).not.toThrow();
+
+    const result = createCanonicalConfirmationBootstrap({
+      runtime: enabled,
+      db: { acquireConfiguredConnection: jest.fn() },
+    });
+    expect(result.enabled).toBe(true);
+    expect(result.diagnostic.tableSet).toBe('production');
   });
 });

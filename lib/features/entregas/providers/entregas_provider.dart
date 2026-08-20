@@ -72,6 +72,14 @@ double _optionalDoubleAlias(
   return defaultValue;
 }
 
+double? _optionalNullableDouble(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    if (!json.containsKey(key) || json[key] == null) continue;
+    return _requiredDoubleAlias(json, <String>[key]);
+  }
+  return null;
+}
+
 int _requiredIntAlias(Map<String, dynamic> json, List<String> keys) {
   final value = _requiredDoubleAlias(json, keys);
   if (value != value.roundToDouble()) {
@@ -297,6 +305,8 @@ class AlbaranEntrega {
     this.ordenPreparacion,
     this.discrepancy = false,
     this.lineSum = 0,
+    this.pricingState = 'READY',
+    this.amountSource = 'CPC_IMPORTETOTAL',
     this.estado = EstadoEntrega.pendiente,
     this.items = const [],
     this.observaciones,
@@ -304,6 +314,13 @@ class AlbaranEntrega {
     this.firma,
     this.horaEntrega,
     this.horaPrevista,
+    this.confirmationId,
+    this.cobroId,
+    this.cobrado = false,
+    this.importeCobrado,
+    this.importePendienteCobro,
+    this.formaPagoCobro,
+    this.cobroParcial = false,
   });
 
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
@@ -353,6 +370,8 @@ class AlbaranEntrega {
           : _requiredIntAlias(json, const <String>['ordenPreparacion']),
       discrepancy: json['discrepancy'] == true,
       lineSum: _optionalDoubleAlias(json, const <String>['lineSum']),
+      pricingState: json['pricingState']?.toString() ?? 'READY',
+      amountSource: json['amountSource']?.toString() ?? 'CPC_IMPORTETOTAL',
       estado: EstadoEntrega.fromString('${json['estado'] ?? 'PENDIENTE'}'),
       items: _parseEntregaItems(json['items']),
       observaciones: json['observaciones']?.toString(),
@@ -362,6 +381,17 @@ class AlbaranEntrega {
           [],
       firma: json['firma']?.toString(),
       horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
+      confirmationId: json['confirmationId']?.toString(),
+      cobroId: json['cobroId']?.toString(),
+      cobrado: json['cobrado'] == true,
+      importeCobrado:
+          _optionalNullableDouble(json, const <String>['importeCobrado']),
+      importePendienteCobro: _optionalNullableDouble(
+        json,
+        const <String>['importePendienteCobro'],
+      ),
+      formaPagoCobro: json['formaPagoCobro']?.toString(),
+      cobroParcial: json['cobroParcial'] == true,
     );
   }
   final String id;
@@ -402,6 +432,8 @@ class AlbaranEntrega {
   final int? ordenPreparacion;
   final bool discrepancy;
   final double lineSum;
+  final String pricingState;
+  final String amountSource;
   EstadoEntrega estado;
   List<EntregaItem> items;
   String? observaciones;
@@ -409,6 +441,91 @@ class AlbaranEntrega {
   String? firma;
   DateTime? horaEntrega;
   final String? horaPrevista;
+  final String? confirmationId;
+  final String? cobroId;
+  final bool cobrado;
+  final double? importeCobrado;
+  final double? importePendienteCobro;
+  final String? formaPagoCobro;
+  final bool cobroParcial;
+
+  bool get isPendingPrice => pricingState == 'PENDING_PRICE';
+  bool get isZeroEmpty => pricingState == 'ZERO_EMPTY';
+  bool get hasAppCobro =>
+      cobrado && (importeCobrado != null && importeCobrado! > 0.004);
+
+  AlbaranEntrega copyWith({
+    double? importeTotal,
+    double? importeBruto,
+    double? importeNeto,
+    double? importeIva,
+    List<IvaBreakdownItem>? ivaBreakdown,
+    String? checksum,
+    bool? discrepancy,
+    double? lineSum,
+    String? pricingState,
+    String? amountSource,
+    EstadoEntrega? estado,
+    List<EntregaItem>? items,
+    String? observaciones,
+  }) {
+    return AlbaranEntrega(
+      id: id,
+      numeroAlbaran: numeroAlbaran,
+      ejercicio: ejercicio,
+      serie: serie,
+      terminal: terminal,
+      numeroFactura: numeroFactura,
+      serieFactura: serieFactura,
+      codigoCliente: codigoCliente,
+      nombreCliente: nombreCliente,
+      nombreComercial: nombreComercial,
+      nombreFiscal: nombreFiscal,
+      direccion: direccion,
+      poblacion: poblacion,
+      telefono: telefono,
+      telefono2: telefono2,
+      emailCliente: emailCliente,
+      fecha: fecha,
+      importeTotal: importeTotal ?? this.importeTotal,
+      importeBruto: importeBruto ?? this.importeBruto,
+      importeNeto: importeNeto ?? this.importeNeto,
+      importeIva: importeIva ?? this.importeIva,
+      ivaBreakdown: ivaBreakdown ?? this.ivaBreakdown,
+      checksum: checksum ?? this.checksum,
+      formaPago: formaPago,
+      formaPagoDesc: formaPagoDesc,
+      tipoPago: tipoPago,
+      diasPago: diasPago,
+      esCTR: esCTR,
+      puedeCobrarse: puedeCobrarse,
+      colorEstado: colorEstado,
+      ruta: ruta,
+      codigoVendedor: codigoVendedor,
+      nombreVendedor: nombreVendedor,
+      codigoRepartidor: codigoRepartidor,
+      nombreRepartidor: nombreRepartidor,
+      ordenPreparacion: ordenPreparacion,
+      discrepancy: discrepancy ?? this.discrepancy,
+      lineSum: lineSum ?? this.lineSum,
+      pricingState: pricingState ?? this.pricingState,
+      amountSource: amountSource ?? this.amountSource,
+      estado: estado ?? this.estado,
+      items: items ?? this.items,
+      observaciones: observaciones ?? this.observaciones,
+      fotos: fotos,
+      firma: firma,
+      horaEntrega: horaEntrega,
+      horaPrevista: horaPrevista,
+      confirmationId: confirmationId,
+      cobroId: cobroId,
+      cobrado: cobrado,
+      importeCobrado: importeCobrado,
+      importePendienteCobro: importePendienteCobro,
+      formaPagoCobro: formaPagoCobro,
+      cobroParcial: cobroParcial,
+    );
+  }
 
   static String? _parseHoraPrevista(dynamic val) {
     if (val == null) return null;
@@ -860,7 +977,26 @@ class EntregasNotifier extends Notifier<EntregasState> {
       if (response['success'] == true && response['albaran'] != null) {
         final albaran = AlbaranEntrega.fromJson(
             response['albaran'] as Map<String, dynamic>);
-        state = state.copyWith(albaranSeleccionado: albaran);
+        final patched = state.albaranes.map((existing) {
+          if (existing.id != albaran.id) return existing;
+          return existing.copyWith(
+            importeTotal: albaran.importeTotal,
+            importeBruto: albaran.importeBruto,
+            importeNeto: albaran.importeNeto,
+            importeIva: albaran.importeIva,
+            ivaBreakdown: albaran.ivaBreakdown,
+            checksum: albaran.checksum,
+            discrepancy: albaran.discrepancy,
+            lineSum: albaran.lineSum,
+            pricingState: albaran.pricingState,
+            amountSource: albaran.amountSource,
+            items: albaran.items.isNotEmpty ? albaran.items : existing.items,
+          );
+        }).toList(growable: false);
+        state = state.copyWith(
+          albaranes: patched,
+          albaranSeleccionado: albaran,
+        );
         return albaran;
       }
     } catch (error) {

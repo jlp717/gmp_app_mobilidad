@@ -438,10 +438,17 @@ bool isWarehouseUiMode(AuthState? authState) {
 class AuthNotifier extends AsyncNotifier<AuthState> {
   // A role switch must not silently shorten the local session. The mobile
   // session contract is one fixed day, independent of the active role.
-  static const Duration _localSessionDuration = Duration(hours: 24);
+  /// Fixed local session TTL, exposed solely for the regression contract.
+  @visibleForTesting
+  static const Duration localSessionDuration = Duration(hours: 24);
   static const Duration _accessTokenDuration = Duration(hours: 1);
   static const Duration _resumeRefreshThreshold = Duration(minutes: 5);
   static const String _sessionExpiresAtKey = 'session_expires_at';
+
+  /// Calculates the local deadline independently of any active UI role.
+  @visibleForTesting
+  static DateTime localSessionDeadline(DateTime now) =>
+      now.add(localSessionDuration);
 
   Timer? _sessionExpiryTimer;
   Future<void>? _logoutInFlight;
@@ -603,7 +610,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> _persistNewSessionDeadline() async {
-    final expiresAt = DateTime.now().add(_localSessionDuration);
+    final expiresAt = localSessionDeadline(DateTime.now());
     await SecureStorage.writeSecureData(
       _sessionExpiresAtKey,
       expiresAt.millisecondsSinceEpoch.toString(),
@@ -658,7 +665,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       response,
       accessTokenKey: accessTokenKey,
     );
-    final localExpiresAt = DateTime.now().add(_localSessionDuration);
+    final localExpiresAt = localSessionDeadline(DateTime.now());
     await ref.read(authSessionPersistenceProvider).commit(
           CanonicalLocalAuthSession(
             accessToken: rotation.accessToken,

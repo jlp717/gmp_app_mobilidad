@@ -5,10 +5,15 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/thermal_ticket_layout.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+export 'package:gmp_app_mobilidad/features/repartidor/data/thermal_ticket_layout.dart'
+    show ThermalTicketLayout, ZplGraphic;
 
 enum PrinterFailureCode {
   noAddress,
@@ -118,6 +123,13 @@ class ZebraPrintService {
       _prefProtocol,
       protocol == 'escpos' ? 'escpos' : 'zpl',
     );
+    // Seed paper width from model name when user has not overridden it.
+    if (!prefs.containsKey(_prefPaperWidthMm)) {
+      await prefs.setInt(
+        _prefPaperWidthMm,
+        ThermalTicketLayout.inferWidthMm(name),
+      );
+    }
   }
 
   // -- Bluetooth permissions --
@@ -251,28 +263,38 @@ class ZebraPrintService {
 
   // -- ZPL generation --
 
-  /// Column positions matching PDF layout:
-  /// Ptda | Artículo/Descripción | Bultos | Imp.Neto
-  static const int _colPtda = 20;
-  static const int _colDesc = 60;
-  static const int _colBult = 400;
-  static const int _colImp = 470;
-  static const int _lineW = 550;
-  static const int _xLeft = 20;
+  static const String _prefPaperWidthMm = 'repartidor_printer_paper_width_mm';
+  static const String _logoAssetPath = 'assets/branding/ticket_header.png';
+  static ZplGraphic? _cachedLogoGrf;
+  static int? _cachedLogoMaxWidth;
 
-  /// Convert PNG signature bytes to ZPL GRF (Graphic Field ASCII) format.
-  /// Returns a `^GFA,...` command string or null on failure.
+  /// Convert PNG signature bytes to ZPL GRF (`^GFA,...`) or null on failure.
   static Future<String?> convertSignatureToGrf(
     Uint8List pngBytes, {
     int maxWidth = 300,
     int maxHeight = 100,
   }) async {
+    final graphic = await convertPngToGrf(
+      pngBytes,
+      maxWidth: maxWidth,
+      maxHeight: maxHeight,
+    );
+    return graphic?.command;
+  }
+
+  /// Convert PNG to monochrome ZPL graphic with measured size (centering).
+  static Future<ZplGraphic?> convertPngToGrf(
+    Uint8List pngBytes, {
+    int maxWidth = 300,
+    int maxHeight = 100,
+    int blackThreshold = 160,
+  }) async {
     try {
       return await () async {
+        // Decode by width only — never force both axes (distorts banner).
         final codec = await ui.instantiateImageCodec(
           pngBytes,
           targetWidth: maxWidth,
-          targetHeight: maxHeight,
         );
         final frame = await codec.getNextFrame();
         final image = frame.image;
@@ -284,12 +306,11 @@ class ZebraPrintService {
         final srcW = image.width;
         final srcH = image.height;
 
-        // Scale to fit within maxWidth x maxHeight
         final scaleX = srcW > maxWidth ? maxWidth / srcW : 1.0;
         final scaleY = srcH > maxHeight ? maxHeight / srcH : 1.0;
         final scale = scaleX < scaleY ? scaleX : scaleY;
-        final outW = (srcW * scale).toInt();
-        final outH = (srcH * scale).toInt();
+        final outW = (srcW * scale).round().clamp(1, maxWidth);
+        final outH = (srcH * scale).round().clamp(1, maxHeight);
 
         final bytesPerRow = (outW + 7) ~/ 8;
         final totalBytes = bytesPerRow * outH;
@@ -307,8 +328,9 @@ class ZebraPrintService {
                 final r = pixels[pixelIdx];
                 final g = pixels[pixelIdx + 1];
                 final b = pixels[pixelIdx + 2];
-                // Luminance < 128 = black (ink on paper)
-                if ((r * 299 + g * 587 + b * 114) ~/ 1000 < 128) {
+                final a = pixels[pixelIdx + 3];
+                if (a < 32) continue;
+                if ((r * 299 + g * 587 + b * 114) ~/ 1000 < blackThreshold) {
                   byte |= 0x80 >> bit;
                 }
               }
@@ -317,13 +339,130 @@ class ZebraPrintService {
           }
         }
 
-        return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,$hex';
+        return ZplGraphic(
+          command: '^GFA,$totalBytes,$totalBytes,$bytesPerRow,$hex',
+          widthDots: outW,
+          heightDots: outH,
+        );
       }()
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 6));
     } catch (_) {
       debugPrint('[ZEBRA] GRF conversion failed or timed out');
       return null;
     }
+  }
+
+  /// Paper width mm (58|80). Pref override, else infer from printer name.
+  static Future<int> getPaperWidthMm({String? printerName}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(_prefPaperWidthMm);
+    if (saved == 58 || saved == 80) return saved!;
+    return ThermalTicketLayout.inferWidthMm(
+      printerName ?? await getSavedPrinterName(),
+    );
+  }
+
+  static Future<void> setPaperWidthMm(int widthMm) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefPaperWidthMm, widthMm <= 58 ? 58 : 80);
+  }
+
+  /// Resolve adaptive layout for current / given printer.
+  static Future<ThermalTicketLayout> resolveLayout({
+    String? printerName,
+    int? widthMm,
+  }) async {
+    final mm = widthMm ?? await getPaperWidthMm(printerName: printerName);
+    return ThermalTicketLayout.forPrinter(
+      printerName: printerName ?? await getSavedPrinterName(),
+      widthMmOverride: mm,
+    );
+  }
+
+  /// Company header art (same PNG as factura/albarán PDF).
+  static Future<ZplGraphic?> loadCompanyLogoGrf({
+    required int maxWidth,
+    int maxHeight = 88,
+  }) async {
+    final cacheKey = maxWidth * 1000 + maxHeight;
+    if (_cachedLogoGrf != null && _cachedLogoMaxWidth == cacheKey) {
+      return _cachedLogoGrf;
+    }
+    try {
+      final data = await rootBundle.load(_logoAssetPath);
+      final graphic = await convertPngToGrf(
+        data.buffer.asUint8List(),
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
+        blackThreshold: 180,
+      );
+      _cachedLogoGrf = graphic;
+      _cachedLogoMaxWidth = cacheKey;
+      return graphic;
+    } catch (e) {
+      debugPrint('[ZEBRA] Logo asset missing ($_logoAssetPath): $e');
+      return null;
+    }
+  }
+
+  static void _writeZplPreamble(StringBuffer buf, ThermalTicketLayout layout) {
+    buf.writeln('^XA');
+    buf.writeln('^CI28');
+    // Continuous media + tear-off; origin at top-left of printable area.
+    buf.writeln('^MNN');
+    buf.writeln('^MMT');
+    buf.writeln('^MFN,N');
+    buf.writeln('^LH0,0');
+    buf.writeln('^LT0');
+    buf.writeln('^LS0');
+    buf.writeln('^PON');
+    buf.writeln('^PW${layout.printWidthDots}');
+  }
+
+  static void _writeCentered(
+    StringBuffer buf,
+    ThermalTicketLayout layout,
+    int y,
+    int font,
+    String text,
+  ) {
+    final safe = _sanitizeZpl(text);
+    final maxChars = layout.charsFor(font);
+    final clipped = _truncate(safe, maxChars);
+    final textW = clipped.length * layout.charDots(font);
+    final x = layout.centerX(textW);
+    buf.writeln('^CF0,$font');
+    buf.writeln('^FO$x,$y^FD$clipped^FS');
+  }
+
+  static void _writeLeft(
+    StringBuffer buf,
+    ThermalTicketLayout layout,
+    int y,
+    int font,
+    String text, {
+    int? x,
+    int? maxChars,
+  }) {
+    final safe = _sanitizeZpl(text);
+    final startX = x ?? layout.xLeft;
+    final budget = maxChars ?? layout.charsBetween(startX, layout.xRight, font);
+    final clipped = _truncate(safe, budget);
+    final textW = clipped.length * layout.charDots(font);
+    final fo = layout.clampX(startX, textW);
+    buf.writeln('^CF0,$font');
+    buf.writeln('^FO$fo,$y^FD$clipped^FS');
+  }
+
+  static void _writeSep(
+    StringBuffer buf,
+    ThermalTicketLayout layout,
+    int y, {
+    int thickness = 1,
+  }) {
+    buf.writeln(
+      '^FO${layout.xLeft},$y^GB${layout.lineW},$thickness,$thickness^FS',
+    );
   }
 
   /// Strip leading numeric vendor code from name (e.g., "08 DAMIAN" → "DAMIAN")
@@ -332,7 +471,6 @@ class ZebraPrintService {
   }
 
   /// Escape ZPL special characters in field data to prevent ZPL injection.
-  /// ZPL interprets ^ and ~ as command prefixes even within ^FD...^FS blocks.
   static String _sanitizeZpl(String text) {
     return text
         .replaceAll('^', '_^')
@@ -352,253 +490,267 @@ class ZebraPrintService {
     String? receptorDni,
     String? signatureGrf,
     DateTime? fechaFirma,
+    ThermalTicketLayout? layout,
+    ZplGraphic? logoGrf,
   }) {
+    final L = layout ?? const ThermalTicketLayout(widthMm: 80);
     final buf = StringBuffer();
-    var y = 25;
+    var y = L.yStart;
 
-    buf.writeln('^XA');
-    buf.writeln('^CI28'); // UTF-8 for Spanish chars
-    buf.writeln('^MNN'); // Continuous media mode (receipt paper)
+    _writeZplPreamble(buf, L);
 
-    // ═══ HEADER — Company ═══
-    buf.writeln('^CF0,30');
-    buf.writeln('^FO$_xLeft,$y^FDGRANJA MARI PEPA S.L.^FS');
-    y += 34;
-    buf.writeln('^CF0,16');
-    buf.writeln(
-      '^FO$_xLeft,$y^FDPol. Ind. Saprelorca - Parcela D3^FS',
-    );
-    y += 20;
-    buf.writeln(
-      '^FO$_xLeft,$y^FD30817 Lorca (Murcia)^FS',
-    );
-    y += 20;
-    buf.writeln(
-      '^FO$_xLeft,$y^FDCIF: B04008710 · Tel: 968 47 08 80^FS',
-    );
-    y += 26;
+    // ═══ LOGO — top of printable area, centered inside side margins ═══
+    if (logoGrf != null) {
+      final lx = L.centerX(logoGrf.widthDots);
+      buf.writeln('^FO$lx,$y${logoGrf.command}^FS');
+      y += logoGrf.heightDots + 8;
+    } else {
+      // Fallback text header only when banner asset missing.
+      final fTitle = L.fontSize(28);
+      final fMeta = L.fontSize(15);
+      _writeCentered(buf, L, y, fTitle, 'GRANJA MARI PEPA S.L.');
+      y += L.rowGap(fTitle);
+      _writeCentered(buf, L, y, fMeta, 'Pol. Ind. Saprelorca - Parcela D3');
+      y += L.rowGap(fMeta) - 2;
+      _writeCentered(buf, L, y, fMeta, '30817 Lorca (Murcia)');
+      y += L.rowGap(fMeta) - 2;
+      _writeCentered(buf, L, y, fMeta, 'CIF: B04008710  Tel: 968 47 08 80');
+      y += L.rowGap(fMeta);
+    }
 
-    // Double separator
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,2,2^FS');
-    y += 5;
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
-    y += 10;
+    final fBody = L.fontSize(16);
+    final fMeta = L.fontSize(15);
 
-    // ═══ DOCUMENT TYPE + NUMBER (full reference: serie-terminal-numero) ═══
+    _writeSep(buf, L, y, thickness: 2);
+    y += 8;
+    _writeSep(buf, L, y, thickness: 1);
+    y += 12;
+
+    // ═══ DOCUMENT TYPE + NUMBER ═══
     final isFactura = albaran.numeroFactura > 0;
     final docType = isFactura ? 'FACTURA' : 'ALBARAN';
     final docNum = isFactura
         ? '${albaran.serieFactura}-${albaran.terminal}-${albaran.numeroFactura}'
         : '${albaran.serie}-${albaran.terminal}-${albaran.numeroAlbaran}';
-    buf.writeln('^CF0,28');
-    buf.writeln('^FO$_xLeft,$y^FD$docType: ${_sanitizeZpl(docNum)}^FS');
-    y += 32;
-    buf.writeln('^CF0,18');
-    buf.writeln('^FO$_xLeft,$y^FDFecha: ${albaran.fecha}^FS');
-    y += 24;
+    final fDoc = L.fontSize(26);
+    _writeLeft(buf, L, y, fDoc, '$docType: $docNum');
+    y += L.rowGap(fDoc);
+    _writeLeft(buf, L, y, fBody, 'Fecha: ${albaran.fecha}');
+    y += L.rowGap(fBody);
     if (albaran.ordenPreparacion != null) {
-      buf.writeln('^CF0,18');
-      buf.writeln(
-        '^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion!}^FS',
+      _writeLeft(
+        buf,
+        L,
+        y,
+        fBody,
+        'Orden Prep.: ${albaran.ordenPreparacion!}',
       );
-      y += 24;
+      y += L.rowGap(fBody);
     }
 
     // ═══ CLIENT INFO ═══
-    buf.writeln('^CF0,20');
-    buf.writeln(
-      '^FO$_xLeft,$y^FDCliente: ${_sanitizeZpl(albaran.codigoCliente)}^FS',
-    );
-    y += 24;
-    buf.writeln('^CF0,18');
-    buf.writeln(
-      '^FO$_xLeft,$y^FD${_truncate(_sanitizeZpl(albaran.nombreCliente), 42)}^FS',
-    );
-    y += 22;
+    final fClient = L.fontSize(18);
+    _writeLeft(buf, L, y, fClient, 'Cliente: ${albaran.codigoCliente}');
+    y += L.rowGap(fClient);
+    _writeLeft(buf, L, y, fBody, albaran.nombreCliente);
+    y += L.rowGap(fBody);
     if (albaran.direccion.isNotEmpty) {
-      buf.writeln('^CF0,16');
-      buf.writeln(
-        '^FO$_xLeft,$y^FD${_truncate(_sanitizeZpl(albaran.direccion), 46)}^FS',
-      );
-      y += 20;
+      for (final line in _wrapText(
+        _sanitizeZpl(albaran.direccion),
+        L.charsFor(fMeta),
+      )) {
+        _writeLeft(buf, L, y, fMeta, line);
+        y += L.rowGap(fMeta) - 2;
+      }
     }
-    buf.writeln('^CF0,16');
-    buf.writeln(
-      '^FO$_xLeft,$y^FDForma de pago: ${_sanitizeZpl(albaran.formaPagoDesc)}^FS',
-    );
-    y += 24;
+    _writeLeft(buf, L, y, fMeta, 'Forma de pago: ${albaran.formaPagoDesc}');
+    y += L.rowGap(fMeta) + 2;
 
-    // Separator
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
-    y += 8;
+    _writeSep(buf, L, y);
+    y += 10;
 
     // ═══ PRODUCT TABLE HEADER ═══
-    buf.writeln('^CF0,16');
-    buf.writeln('^FO$_colPtda,$y^FDPtda^FS');
-    buf.writeln('^FO$_colDesc,$y^FDArticulo / Descripcion^FS');
-    buf.writeln('^FO$_colBult,$y^FDBultos^FS');
-    buf.writeln('^FO$_colImp,$y^FDImp.Neto^FS');
-    y += 20;
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
-    y += 6;
+    final descMax = L.charsBetween(L.colDesc, L.colBult - 4, fMeta);
+    buf.writeln('^CF0,$fMeta');
+    buf.writeln('^FO${L.colPtda},$y^FDPtda^FS');
+    buf.writeln('^FO${L.colDesc},$y^FDArticulo / Descripcion^FS');
+    buf.writeln('^FO${L.colBult},$y^FDBult^FS');
+    buf.writeln('^FO${L.colImp},$y^FDImporte^FS');
+    y += L.rowGap(fMeta);
+    _writeSep(buf, L, y);
+    y += 8;
 
     // ═══ PRODUCT LINES ═══
     var totalBultos = 0.0;
+    final descChars = L.charsBetween(L.colDesc, L.colBult - 4, fBody);
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final partida = '${i + 1}';
-      // Use CANTIDADENVASES (bultos) for the Bultos column, not CANTIDADUNIDADES
       final bultos = item.bultos > 0 ? item.bultos : item.cantidadPedida;
       totalBultos += bultos;
       final importe = item.cantidadPedida * item.precioUnitario;
 
-      // Line 1: Ptda + article code + bultos + importe
-      buf.writeln('^CF0,16');
-      buf.writeln('^FO$_colPtda,$y^FD$partida^FS');
+      buf.writeln('^CF0,$fBody');
+      buf.writeln('^FO${L.colPtda},$y^FD$partida^FS');
       if (item.codigoArticulo.isNotEmpty) {
-        buf.writeln('^CF0,14');
-        buf.writeln(
-          '^FO$_colDesc,$y^FD${_truncate(_sanitizeZpl(item.codigoArticulo), 30)}^FS',
+        _writeLeft(
+          buf,
+          L,
+          y,
+          fMeta,
+          item.codigoArticulo,
+          x: L.colDesc,
+          maxChars: descChars,
         );
       }
-      buf.writeln('^CF0,16');
+      buf.writeln('^CF0,$fBody');
       buf.writeln(
-        '^FO$_colBult,$y^FD${_formatQuantity(bultos).padLeft(4)}^FS',
+        '^FO${L.colBult},$y^FD${_formatQuantity(bultos)}^FS',
       );
       buf.writeln(
-        '^FO$_colImp,$y^FD${importe.toStringAsFixed(2).padLeft(8)}^FS',
+        '^FO${L.colImp},$y^FD${importe.toStringAsFixed(2)}^FS',
       );
-      y += 18;
+      y += L.rowGap(fBody);
 
-      // Line 2: Description
-      buf.writeln('^CF0,16');
-      buf.writeln(
-        '^FO$_colDesc,$y^FD${_truncate(_sanitizeZpl(item.descripcion), 38)}^FS',
+      _writeLeft(
+        buf,
+        L,
+        y,
+        fBody,
+        item.descripcion,
+        x: L.colDesc,
+        maxChars: descChars + (descMax > descChars ? 2 : 0),
       );
-      y += 20;
+      y += L.rowGap(fBody) + 2;
     }
 
-    // ═══ TOTALS SECTION ═══
-    y += 4;
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,2,2^FS');
-    y += 10;
+    // ═══ TOTALS ═══
+    y += 2;
+    _writeSep(buf, L, y, thickness: 2);
+    y += 12;
 
-    // Bultos total
-    buf.writeln('^CF0,18');
-    buf.writeln(
-      '^FO300,$y^FDBultos: ${_formatQuantity(totalBultos)}^FS',
+    _writeLeft(
+      buf,
+      L,
+      y,
+      fBody,
+      'Bultos: ${_formatQuantity(totalBultos)}',
+      x: L.totalsAnchor,
     );
-    y += 22;
+    y += L.rowGap(fBody);
 
-    // Importe Neto (base sin IVA)
     if (albaran.importeNeto > 0) {
-      buf.writeln(
-        '^FO300,$y^FDImporte Neto: '
-        '${_sanitizeZpl(albaran.importeNeto.toStringAsFixed(2))} EUR^FS',
+      _writeLeft(
+        buf,
+        L,
+        y,
+        fBody,
+        'Importe Neto: ${albaran.importeNeto.toStringAsFixed(2)} EUR',
+        x: L.totalsAnchor,
       );
-      y += 22;
+      y += L.rowGap(fBody);
     }
 
-    // IVA breakdown
     if (albaran.ivaBreakdown.isNotEmpty) {
       for (final iva in albaran.ivaBreakdown) {
-        buf.writeln('^CF0,16');
-        buf.writeln(
-          '^FO300,$y^FDIVA ${iva.pct.toStringAsFixed(0)}%: '
-          '${_sanitizeZpl(iva.iva.toStringAsFixed(2))} EUR^FS',
+        _writeLeft(
+          buf,
+          L,
+          y,
+          fMeta,
+          'IVA ${iva.pct.toStringAsFixed(0)}%: ${iva.iva.toStringAsFixed(2)} EUR',
+          x: L.totalsAnchor,
         );
-        y += 20;
+        y += L.rowGap(fMeta);
       }
     }
 
     y += 4;
-    // TOTAL (bold/large)
-    buf.writeln('^CF0,26');
-    buf.writeln(
-      '^FO$_xLeft,$y^FDTOTAL: '
-      '${_sanitizeZpl(albaran.importeTotal.toStringAsFixed(2))} EUR^FS',
+    _writeSep(buf, L, y);
+    y += 8;
+    final fTotal = L.fontSize(26);
+    _writeLeft(
+      buf,
+      L,
+      y,
+      fTotal,
+      'TOTAL: ${albaran.importeTotal.toStringAsFixed(2)} EUR',
     );
-    y += 32;
-
-    // ═══ SEPARATOR ═══
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
-    y += 10;
+    y += L.rowGap(fTotal);
+    _writeSep(buf, L, y);
+    y += 12;
 
     // ═══ SIGNATURE ═══
     if (receptorNombre != null && receptorNombre.isNotEmpty) {
-      buf.writeln('^CF0,18');
-      buf.writeln(
-        '^FO$_xLeft,$y^FDFirmante: ${_sanitizeZpl(receptorNombre)}^FS',
-      );
-      y += 22;
+      _writeLeft(buf, L, y, fBody, 'Firmante: $receptorNombre');
+      y += L.rowGap(fBody);
       if (receptorDni != null && receptorDni.isNotEmpty) {
-        buf.writeln('^CF0,16');
-        buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: ${_sanitizeZpl(receptorDni)}^FS');
-        y += 20;
+        _writeLeft(buf, L, y, fMeta, 'DNI/NIF: $receptorDni');
+        y += L.rowGap(fMeta);
       }
 
-      // Render actual signature image (GRF) or fallback to box
       if (signatureGrf != null && signatureGrf.isNotEmpty) {
-        buf.writeln('^FO$_xLeft,$y$signatureGrf^FS');
-        y += 106; // GRF is maxHeight=100 + margin
+        final sigW = (L.contentWidth * 0.72).round().clamp(160, L.contentWidth);
+        final sx = L.centerX(sigW);
+        buf.writeln('^FO$sx,$y$signatureGrf^FS');
+        y += 110;
       } else {
-        buf.writeln('^FO$_xLeft,$y^GB200,60,1^FS');
-        buf.writeln('^CF0,14');
-        buf.writeln('^FO${_xLeft + 50},${y + 20}^FD[FIRMADO]^FS');
-        y += 66;
+        final boxW = (L.contentWidth * 0.55).round();
+        buf.writeln('^FO${L.xLeft},$y^GB$boxW,60,1^FS');
+        buf.writeln('^CF0,$fMeta');
+        buf.writeln('^FO${L.xLeft + 40},${y + 20}^FD[FIRMADO]^FS');
+        y += 70;
       }
 
-      // Fecha firma
       if (fechaFirma != null) {
-        buf.writeln('^CF0,14');
         final ff = '${fechaFirma.day.toString().padLeft(2, '0')}/'
             '${fechaFirma.month.toString().padLeft(2, '0')}/'
             '${fechaFirma.year} '
             '${fechaFirma.hour.toString().padLeft(2, '0')}:'
             '${fechaFirma.minute.toString().padLeft(2, '0')}';
-        buf.writeln('^FO$_xLeft,$y^FDFecha firma: $ff^FS');
-        y += 18;
+        _writeLeft(buf, L, y, fMeta, 'Fecha firma: $ff');
+        y += L.rowGap(fMeta);
       }
     }
 
     // ═══ OBSERVATIONS ═══
     if (observaciones.isNotEmpty) {
-      buf.writeln('^CF0,16');
-      for (final line in _wrapText(_sanitizeZpl(observaciones), 52)) {
-        buf.writeln('^FO$_xLeft,$y^FDObs: $line^FS');
-        y += 18;
+      for (final line
+          in _wrapText(_sanitizeZpl(observaciones), L.charsFor(fMeta))) {
+        _writeLeft(buf, L, y, fMeta, 'Obs: $line');
+        y += L.rowGap(fMeta);
       }
       y += 4;
     }
 
     // ═══ FOOTER ═══
-    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
-    y += 8;
-    buf.writeln('^CF0,14');
-    buf.writeln(
-      '^FO$_xLeft,$y^FDLa posesion de este documento '
-      'NO implica el pago de la misma^FS',
-    );
-    y += 16;
-    buf.writeln(
-      '^FO$_xLeft,$y^FDNo se admiten devoluciones una vez '
-      'aceptada la recepcion^FS',
-    );
-    y += 18;
-    buf.writeln('^CF0,16');
+    _writeSep(buf, L, y);
+    y += 10;
+    for (final line in _wrapText(
+      'La posesion de este documento NO implica el pago de la misma',
+      L.charsFor(fMeta),
+    )) {
+      _writeLeft(buf, L, y, fMeta, line);
+      y += L.rowGap(fMeta) - 2;
+    }
+    for (final line in _wrapText(
+      'No se admiten devoluciones una vez aceptada la recepcion',
+      L.charsFor(fMeta),
+    )) {
+      _writeLeft(buf, L, y, fMeta, line);
+      y += L.rowGap(fMeta) - 2;
+    }
+    y += 4;
     final repartidorDisplay = _stripCodePrefix(
       albaran.nombreRepartidor.isNotEmpty
           ? albaran.nombreRepartidor
           : albaran.codigoRepartidor,
     );
-    buf.writeln(
-      '^FO$_xLeft,$y^FDEntregado por: ${_sanitizeZpl(repartidorDisplay)}^FS',
-    );
-    y += 24;
+    _writeLeft(buf, L, y, fBody, 'Entregado por: $repartidorDisplay');
+    y += L.rowGap(fBody);
 
-    // Set label length to match actual content (fixes double-height paper)
-    buf.writeln('^LL${y + 10}');
-
+    // Content height + bottom margin only (no dead paper).
+    buf.writeln('^LL${L.labelLength(y)}');
     buf.writeln('^XZ');
     return buf.toString();
   }
@@ -608,7 +760,6 @@ class ZebraPrintService {
   static const int _escPosLineWidth = 32;
 
   /// Simple ESC/POS ticket bytes for generic Bluetooth printers.
-  /// ESC @ init, ASCII text lines (<=32 chars), GS V 0 cut.
   static Uint8List generateEscPosTicket({
     required String clientName,
     required String albaranLabel,
@@ -624,7 +775,16 @@ class ZebraPrintService {
       out.add(ascii.encode('$line\n'));
     }
 
-    writeLine('GRANJA MARI PEPA S.L.');
+    void writeCentered(String text) {
+      final clipped = _truncate(_toAscii(text), _escPosLineWidth);
+      final pad =
+          ((_escPosLineWidth - clipped.length) / 2).floor().clamp(0, 16);
+      out.add(ascii.encode('${' ' * pad}$clipped\n'));
+    }
+
+    out.add(const [0x1B, 0x61, 0x01]); // center
+    writeCentered('GRANJA MARI PEPA S.L.');
+    out.add(const [0x1B, 0x61, 0x00]); // left
     writeLine(albaranLabel);
     writeLine(clientName);
     writeLine('-' * _escPosLineWidth);
@@ -637,9 +797,11 @@ class ZebraPrintService {
         writeLine(desc);
       }
       final parts = <String>[];
-      if (qty != null)
+      if (qty != null) {
         parts.add(
-            'x${_formatQuantity(qty is num ? qty : num.tryParse(qty.toString()) ?? 0)}');
+          'x${_formatQuantity(qty is num ? qty : num.tryParse(qty.toString()) ?? 0)}',
+        );
+      }
       if (importe != null) {
         final amount = importe is num
             ? importe.toDouble()
@@ -675,55 +837,58 @@ class ZebraPrintService {
     String? receptorNombre,
     String? receptorApellidos,
     String? receptorDni,
+    ThermalTicketLayout? layout,
+    ZplGraphic? logoGrf,
   }) {
+    final L = layout ?? const ThermalTicketLayout(widthMm: 80);
     final buf = StringBuffer();
-    var y = 25;
-    buf.writeln('^XA');
-    buf.writeln('^CI28');
-    buf.writeln('^MNN');
-    buf.writeln('^CF0,28');
-    buf.writeln('^FO20,$y^FDGRANJA MARI PEPA S.L.^FS');
-    y += 34;
-    buf.writeln('^CF0,22');
-    buf.writeln('^FO20,$y^FD${_sanitizeZpl(title)}^FS');
-    y += 28;
-    buf.writeln('^CF0,18');
-    buf.writeln('^FO20,$y^FD${_truncate(_sanitizeZpl(clientName), 42)}^FS');
-    y += 24;
-    buf.writeln('^FO20,$y^FDFecha: ${_sanitizeZpl(dateLabel)}^FS');
-    y += 24;
-    buf.writeln('^CF0,24');
-    buf.writeln(
-      '^FO20,$y^FDTOTAL: ${_sanitizeZpl(total.toStringAsFixed(2))} EUR^FS',
-    );
-    y += 32;
+    var y = L.yStart;
+    _writeZplPreamble(buf, L);
+
+    if (logoGrf != null) {
+      final lx = L.centerX(logoGrf.widthDots);
+      buf.writeln('^FO$lx,$y${logoGrf.command}^FS');
+      y += logoGrf.heightDots + 8;
+    } else {
+      final fTitle = L.fontSize(26);
+      _writeCentered(buf, L, y, fTitle, 'GRANJA MARI PEPA S.L.');
+      y += L.rowGap(fTitle);
+    }
+
+    final fBody = L.fontSize(18);
+    final fMeta = L.fontSize(15);
+    _writeLeft(buf, L, y, fBody, title);
+    y += L.rowGap(fBody);
+    _writeLeft(buf, L, y, fMeta, clientName);
+    y += L.rowGap(fMeta);
+    _writeLeft(buf, L, y, fMeta, 'Fecha: $dateLabel');
+    y += L.rowGap(fMeta);
+    final fTotal = L.fontSize(24);
+    _writeLeft(buf, L, y, fTotal, 'TOTAL: ${total.toStringAsFixed(2)} EUR');
+    y += L.rowGap(fTotal);
     final receptorFull = [
       receptorNombre?.trim() ?? '',
       receptorApellidos?.trim() ?? '',
     ].where((part) => part.isNotEmpty).join(' ');
     if (receptorFull.isNotEmpty) {
-      buf.writeln('^CF0,16');
-      buf.writeln(
-        '^FO20,$y^FDReceptor: ${_truncate(_sanitizeZpl(receptorFull), 40)}^FS',
-      );
-      y += 22;
+      _writeLeft(buf, L, y, fMeta, 'Receptor: $receptorFull');
+      y += L.rowGap(fMeta);
     }
     final dni = receptorDni?.trim() ?? '';
     if (dni.isNotEmpty) {
-      buf.writeln('^CF0,16');
-      buf.writeln('^FO20,$y^FDDNI: ${_sanitizeZpl(dni)}^FS');
-      y += 22;
+      _writeLeft(buf, L, y, fMeta, 'DNI: $dni');
+      y += L.rowGap(fMeta);
     }
     if (signatureGrf != null && signatureGrf.isNotEmpty) {
-      buf.writeln('^FO20,$y$signatureGrf^FS');
-      y += 106;
+      final sigW = (L.contentWidth * 0.72).round().clamp(160, L.contentWidth);
+      buf.writeln('^FO${L.centerX(sigW)},$y$signatureGrf^FS');
+      y += 110;
     }
-    buf.writeln('^FO20,$y^GB550,1,1^FS');
-    y += 16;
-    buf.writeln('^CF0,14');
-    buf.writeln('^FO20,$y^FDReimpresion nota de entrega^FS');
-    y += 20;
-    buf.writeln('^LL${y + 10}');
+    _writeSep(buf, L, y);
+    y += 12;
+    _writeLeft(buf, L, y, fMeta, 'Reimpresion nota de entrega');
+    y += L.rowGap(fMeta);
+    buf.writeln('^LL${L.labelLength(y)}');
     buf.writeln('^XZ');
     return buf.toString();
   }

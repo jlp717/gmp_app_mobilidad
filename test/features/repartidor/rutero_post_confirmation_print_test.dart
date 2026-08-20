@@ -39,4 +39,38 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(shareCalls, 1);
   });
+
+  test('la recarga posterior al acuse no bloquea el resultado terminal',
+      () async {
+    final cacheStarted = Completer<void>();
+    final cacheNeverCompletes = Completer<void>();
+    var providerRefreshCalls = 0;
+
+    scheduleRuteroAcknowledgedRefresh(
+      invalidateCaches: () {
+        cacheStarted.complete();
+        return cacheNeverCompletes.future;
+      },
+      refreshProviders: () async {
+        providerRefreshCalls += 1;
+      },
+    );
+
+    await cacheStarted.future.timeout(const Duration(milliseconds: 100));
+    expect(providerRefreshCalls, 0);
+  });
+
+  test('la recarga posterior continúa con proveedores tras invalidar caché',
+      () async {
+    final providerRefreshed = Completer<void>();
+
+    scheduleRuteroAcknowledgedRefresh(
+      invalidateCaches: () async {},
+      refreshProviders: () async {
+        providerRefreshed.complete();
+      },
+    );
+
+    await providerRefreshed.future.timeout(const Duration(milliseconds: 100));
+  });
 }

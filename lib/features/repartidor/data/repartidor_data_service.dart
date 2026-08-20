@@ -5,6 +5,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -526,6 +527,7 @@ class RepartidorDataService {
     int limit = 100,
     int offset = 0,
     bool forceRefresh = false,
+    CancelToken? cancelToken,
   }) async {
     if (repartidorId.trim().isEmpty ||
         limit < 1 ||
@@ -562,6 +564,7 @@ class RepartidorDataService {
         cacheKey: cacheKey,
         cacheTTL: CacheService.defaultTTL,
         forceRefresh: forceRefresh,
+        cancelToken: cancelToken,
       );
 
       final clients = (response['clients'] as List? ?? [])
@@ -588,8 +591,9 @@ class RepartidorDataService {
     String? dateFrom,
     String? dateTo,
     int? year,
-    int limit = 100,
+    int limit = 50,
     int offset = 0,
+    CancelToken? cancelToken,
   }) async {
     final owner = requireConcreteRepartoOwner(repartidorId);
     if (repartidorId.trim().isEmpty) {
@@ -599,17 +603,21 @@ class RepartidorDataService {
       throw const RepartidorDataException('Paginación de historial no válida');
     }
     try {
+      // "Últimos 3 años" must never hit the unbounded CPC scan that timed
+      // out at ~29s on production (503 REPARTIDOR_DOCUMENTS_FAILED).
+      final resolvedDateFrom = dateFrom ??
+          (year == null ? '${DateTime.now().year - 2}-01-01' : null);
       final queryParams = <String, String>{
         'repartidorId': owner,
         'limit': limit.toString(),
         'offset': offset.toString(),
       };
-      if (dateFrom != null) queryParams['dateFrom'] = dateFrom;
+      if (resolvedDateFrom != null) queryParams['dateFrom'] = resolvedDateFrom;
       if (dateTo != null) queryParams['dateTo'] = dateTo;
       if (year != null) queryParams['year'] = year.toString();
 
       final cacheKey =
-          'repartidor_docs_${clientId}_${owner}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
+          'repartidor_docs_${clientId}_${owner}_${year ?? 'multi'}_${resolvedDateFrom ?? ''}_${dateTo ?? ''}_${limit}_$offset';
 
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
@@ -617,6 +625,8 @@ class RepartidorDataService {
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
         forceRefresh: false,
+        cancelToken: cancelToken,
+        receiveTimeout: const Duration(seconds: 25),
       );
 
       final docs = (response['documents'] as List? ?? [])
@@ -627,7 +637,21 @@ class RepartidorDataService {
           .toList();
 
       return docs;
-    } catch (_) {
+    } on ApiException catch (error) {
+      if (error.statusCode == 503) {
+        throw const RepartidorDataException(
+          'El historial de documentos tarda demasiado. Prueba un año concreto.',
+          statusCode: 503,
+          code: 'REPARTIDOR_DOCUMENTS_FAILED',
+        );
+      }
+      throw RepartidorDataException(
+        'No se pudo cargar el historial de documentos',
+        statusCode: error.statusCode,
+        code: error.code,
+      );
+    } catch (error) {
+      if (error is RepartidorDataException) rethrow;
       throw const RepartidorDataException(
         'No se pudo cargar el historial de documentos',
       );

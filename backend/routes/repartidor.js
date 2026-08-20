@@ -663,11 +663,18 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         const pageLimit = pagination.limit.value;
         const pageOffset = pagination.offset.value;
         const clientCode = clientId;
+        // Keep unfiltered history bounded: the mobile UI presents the last
+        // three years unless the caller explicitly supplies a year or range.
+        const yearValue = yearResult.value;
+        const minYearValue = (!yearValue && !dateFromResult.value)
+            ? (new Date().getUTCFullYear() - 2)
+            : null;
 
         const docResult = await repartidorDb.getClientDocuments({
             repartidorIds: ids,
             clientCode,
-            yearValue: yearResult.value,
+            yearValue,
+            minYearValue,
             dateFromValue: dateFromResult.value,
             dateToValue: dateToResult.value,
             pageOffset,

@@ -193,6 +193,8 @@ class OfflineAwareApi {
     Map<String, String>? headers,
     bool idempotent = false,
     Map<String, dynamic>? queueExtras,
+    Duration? receiveTimeout,
+    int? maxRetries,
   }) async {
     if (_isOnline) {
       try {
@@ -201,6 +203,8 @@ class OfflineAwareApi {
           data,
           headers: headers,
           idempotent: idempotent,
+          receiveTimeout: receiveTimeout,
+          maxRetries: maxRetries,
         );
         // Update cache if cacheKey provided
         if (cacheKey != null) {

@@ -36,6 +36,7 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -66,6 +67,24 @@ Future<void> runRuteroPostConfirmationEffects({
   await shareReceipt();
 }
 
+/// Starts non-critical read invalidation after the server has durably accepted
+/// a delivery. This must never delay the terminal confirmation outcome: the
+/// journal acknowledgement is already persisted before it is called.
+@visibleForTesting
+void scheduleRuteroAcknowledgedRefresh({
+  required Future<void> Function() invalidateCaches,
+  required Future<void> Function() refreshProviders,
+}) {
+  unawaited(Future<void>(() async {
+    try {
+      await invalidateCaches();
+      await refreshProviders();
+    } catch (_) {
+      // A later resume or pull-to-refresh retries reads without replaying ACK.
+    }
+  }));
+}
+
 RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
   required Object error,
   required bool acknowledged,
@@ -83,6 +102,22 @@ RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
         error.statusCode == 409 &&
         error.code == 'DELIVERY_ALREADY_CONFIRMED') {
       return RepartoConfirmationErrorDisposition.alreadyConfirmed;
+    }
+    final code = error.code ?? '';
+    final status = error.statusCode ?? 0;
+    // Payment / capability failures are actionable: show the real message and
+    // allow retry after the driver adjusts amount/method or connectivity.
+    if (status == 422 ||
+        status == 503 ||
+        code == 'INVALID_PAYMENT_AMOUNT' ||
+        code == 'PAYMENT_DOCUMENT_UNAVAILABLE' ||
+        code == 'REPARTO_COBROS_CAPABILITY_UNAVAILABLE' ||
+        code == 'REPARTO_COBRO_COMMERCIAL_CONFLICT' ||
+        code == 'REPARTO_INVALID_PAYMENT') {
+      return RepartoConfirmationErrorDisposition.retryable;
+    }
+    if (status >= 400 && status < 500 && status != 409) {
+      return RepartoConfirmationErrorDisposition.retryable;
     }
     return RepartoConfirmationErrorDisposition.manualReview;
   }
@@ -114,18 +149,66 @@ RepartoConfirmationErrorPresentation repartoConfirmationErrorPresentation({
         canRetry: false,
       );
     case RepartoConfirmationErrorDisposition.manualReview:
+      if (error is ApiException) {
+        final detail = error.message.trim();
+        if (detail.isNotEmpty) {
+          return RepartoConfirmationErrorPresentation(
+            message: detail,
+            canRetry: false,
+          );
+        }
+      }
       return const RepartoConfirmationErrorPresentation(
         message: 'El resultado de la confirmación no es concluyente. '
             'La operación requiere revisión manual.',
         canRetry: false,
       );
     case RepartoConfirmationErrorDisposition.retryable:
-      return RepartoConfirmationErrorPresentation(
-        message: error is RepartoEvidenceUploadException
-            ? repartoEvidenceErrorMessage(error)
-            : 'No se pudo registrar la entrega. Reinténtalo.',
+      if (error is RepartoEvidenceUploadException) {
+        return RepartoConfirmationErrorPresentation(
+          message: repartoEvidenceErrorMessage(error),
+          canRetry: true,
+        );
+      }
+      if (error is ApiException) {
+        final mapped = _paymentConfirmationErrorMessage(error);
+        if (mapped != null) {
+          return RepartoConfirmationErrorPresentation(
+            message: mapped,
+            canRetry: true,
+          );
+        }
+        final detail = error.message.trim();
+        if (detail.isNotEmpty) {
+          return RepartoConfirmationErrorPresentation(
+            message: detail,
+            canRetry: true,
+          );
+        }
+      }
+      return const RepartoConfirmationErrorPresentation(
+        message: 'No se pudo registrar la entrega. Reinténtalo.',
         canRetry: true,
       );
+  }
+}
+
+String? _paymentConfirmationErrorMessage(ApiException error) {
+  switch (error.code) {
+    case 'INVALID_PAYMENT_AMOUNT':
+      return 'El importe cobrado supera lo pendiente de esta entrega. '
+          'Ajusta la cantidad e inténtalo de nuevo.';
+    case 'PAYMENT_DOCUMENT_UNAVAILABLE':
+      return 'No hay saldo cobrable para este documento. '
+          'Puedes entregar sin marcar cobro.';
+    case 'REPARTO_COBROS_CAPABILITY_UNAVAILABLE':
+      return 'El cobro no está disponible ahora mismo. '
+          'Entrega sin cobro o reinténtalo más tarde.';
+    case 'REPARTO_COBRO_COMMERCIAL_CONFLICT':
+      return 'Este documento ya tiene cobros en el ERP. '
+          'No se puede registrar otro cobro desde el rutero.';
+    default:
+      return null;
   }
 }
 
@@ -246,10 +329,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String? _spotlightField;
 
   String? _cachedPdfBase64;
+  late AlbaranEntrega _albaran;
 
   @override
   void initState() {
     super.initState();
+    _albaran = widget.albaran;
     _confirmationJournal = RepartoConfirmationJournal(
         widget.confirmationJournalStore ??
             HiveRepartoConfirmationJournalStore());
@@ -264,9 +349,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       vsync: this,
     )..forward();
 
-    _observacionesController.text = widget.albaran.observaciones ?? '';
+    _observacionesController.text = _albaran.observaciones ?? '';
     _importeCobradoController.text =
-        widget.albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
+        _albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
 
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
@@ -449,33 +534,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _loadItems() async {
     try {
-      List<EntregaItem> items;
-      if (widget.albaran.items.isNotEmpty) {
-        items = widget.albaran.items;
-      } else {
-        final notifier = widget.ref.read(entregasProvider.notifier);
-        final albaranDetalle = await notifier.obtenerDetalleAlbaran(
-          widget.albaran.numeroAlbaran,
-          widget.albaran.ejercicio,
-          widget.albaran.serie,
-          widget.albaran.terminal,
-          widget.albaran.codigoCliente,
-          deliveryId: widget.albaran.id,
-          repartidorId: widget.albaran.codigoRepartidor,
-        );
-        if (albaranDetalle == null) {
-          if (mounted) {
-            setState(() {
-              _itemsError = 'No se pudo cargar el detalle del albaran';
-              _isLoadingItems = false;
-            });
-          }
-          return;
+      final notifier = widget.ref.read(entregasProvider.notifier);
+      final albaranDetalle = await notifier.obtenerDetalleAlbaran(
+        widget.albaran.numeroAlbaran,
+        widget.albaran.ejercicio,
+        widget.albaran.serie,
+        widget.albaran.terminal,
+        widget.albaran.codigoCliente,
+        deliveryId: widget.albaran.id,
+        repartidorId: widget.albaran.codigoRepartidor,
+      );
+      if (albaranDetalle == null) {
+        if (mounted) {
+          setState(() {
+            _itemsError = 'No se pudo cargar el detalle del albaran';
+            _isLoadingItems = false;
+          });
         }
-        items = albaranDetalle.items;
+        return;
       }
 
-      final filtered = items.where((item) {
+      final sourceItems = albaranDetalle.items.isNotEmpty
+          ? albaranDetalle.items
+          : widget.albaran.items;
+      final filtered = sourceItems.where((item) {
         final desc = item.descripcion.trim();
         if (desc.toLowerCase().startsWith('pedido:')) return false;
         if (item.cantidadPedida <= 0 && item.bultos <= 0) return false;
@@ -485,6 +567,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final identityError = validateRuteroLineIdentities(filtered);
       if (mounted) {
         setState(() {
+          _albaran = widget.albaran.copyWith(
+            importeTotal: albaranDetalle.importeTotal,
+            importeBruto: albaranDetalle.importeBruto,
+            importeNeto: albaranDetalle.importeNeto,
+            importeIva: albaranDetalle.importeIva,
+            ivaBreakdown: albaranDetalle.ivaBreakdown,
+            checksum: albaranDetalle.checksum,
+            discrepancy: albaranDetalle.discrepancy,
+            lineSum: albaranDetalle.lineSum,
+            pricingState: albaranDetalle.pricingState,
+            amountSource: albaranDetalle.amountSource,
+            items: filtered,
+          );
+          if (!_isPaid) {
+            _importeCobradoController.text =
+                _albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
+          }
           _itemsError = identityError;
           _items = filtered;
           _isLoadingItems = false;
@@ -616,7 +715,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           child: Column(
             children: [
               RuteroDetailHeader(
-                albaran: widget.albaran,
+                albaran: _albaran,
                 isCompleted: _isCompleted,
               ),
               if (_isCompleted)
@@ -653,7 +752,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Widget _buildCompletedView() {
     return RuteroDetailCompleted(
-      albaran: widget.albaran,
+      albaran: _albaran,
       onPreviewReceiptPdf: _previewReceiptPdf,
       onDownloadReceiptPdf: _downloadReceiptPdf,
       onSharePdfLocally: _sharePdfLocally,
@@ -779,7 +878,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Widget _buildPaymentTab() {
     return RuteroDetailPayment(
-      albaran: widget.albaran,
+      albaran: _albaran,
       selectedPaymentMethod: _selectedPaymentMethod,
       isPaid: _isPaid,
       pagoError: _pagoError,
@@ -803,9 +902,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _removeIssue('pago');
             _removeIssue('importe');
             if (_importeCobradoController.text.trim().isEmpty) {
-              _importeCobradoController.text = widget.albaran.importeTotal
-                  .toStringAsFixed(2)
-                  .replaceAll('.', ',');
+              _importeCobradoController.text =
+                  _albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
             }
           }
         });
@@ -1701,20 +1799,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ..invalidate(repartidorCommissionSummaryProvider);
   }
 
-  Future<void> _refreshAfterAcknowledgedDelivery() async {
-    await RepartidorDataService.invalidateDeliveryReadCaches();
-    // ACK is authoritative. Refresh DB2/finance in background so a busy
-    // server cannot leave the confirmation spinner stuck.
-    unawaited(Future<void>(() async {
-      try {
+  void _refreshAfterAcknowledgedDelivery() {
+    // The acknowledgement is durable at this point. Cache and provider reads
+    // are best effort, so DB2 latency cannot keep the confirmation spinner on.
+    scheduleRuteroAcknowledgedRefresh(
+      invalidateCaches: RepartidorDataService.invalidateDeliveryReadCaches,
+      refreshProviders: () async {
         await widget.ref
             .read(entregasProvider.notifier)
             .cargarAlbaranesPendientes(forceRefresh: true);
         await _invalidateFinanceForDelivery();
-      } catch (_) {
-        // Resume/pull-to-refresh retries without replaying the ACK.
-      }
-    }));
+      },
+    );
   }
 
   double? _parseMoney(String value) {
@@ -1741,8 +1837,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ? null
           : _repartidorIdsParaInvalidar().first,
       lineas: _buildCanonicalLines(),
-      allowEmptyLineas:
-          widget.albaran.importeTotal.abs() < 0.005 && _items.isEmpty,
+      allowEmptyLineas: _albaran.isZeroEmpty && _items.isEmpty,
       receiver: _deliveryStatus == RepartoDeliveryStatus.noEntregado
           ? null
           : RepartoReceiver(
@@ -1777,6 +1872,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           '_journalFingerprint': prepared.fingerprint,
           '_journalIdempotencyKey': prepared.idempotencyKey,
         },
+        receiveTimeout: const Duration(seconds: 15),
+        maxRetries: 0,
       );
       if (response['queued'] == true) {
         SyncQueueService.confirmDeliveryReconciler ??=
@@ -1797,7 +1894,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         confirmationId: error.confirmationId,
       );
       if (reconciled) {
-        await _refreshAfterAcknowledgedDelivery();
+        _refreshAfterAcknowledgedDelivery();
         if (mounted) setState(() => _isAcknowledgedTombstone = true);
       }
       rethrow;
@@ -1819,7 +1916,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       prepared: prepared,
       response: response,
     );
-    await _refreshAfterAcknowledgedDelivery();
+    _refreshAfterAcknowledgedDelivery();
     return true;
   }
 
@@ -2040,7 +2137,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       items: _items,
       isLoading: _isLoadingItems,
       loadError: _itemsError,
-      allowEmpty: widget.albaran.importeTotal.abs() < 0.005,
+      allowEmpty: _albaran.isZeroEmpty,
     );
     final anyQtyModified = _items.any((item) => _quantityDiffers(
           _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
@@ -2048,6 +2145,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ));
     final anyUnchecked =
         _items.any((item) => !(_productChecked[ruteroLineKey(item)] ?? false));
+
+    if (_albaran.isPendingPrice) {
+      _showError(
+        'Importe pendiente de precio/pesaje en ERP. No se puede confirmar a 0,00 €.',
+      );
+      return false;
+    }
 
     final result = validateRuteroDeliveryForm(
       RuteroDeliveryValidationInput(
@@ -2067,7 +2171,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         signatureEmpty: _signatureController.isEmpty,
         hasPersistedSignature: _hasPersistedSignature,
         importeCobradoText: _importeCobradoController.text,
-        importeTotal: widget.albaran.importeTotal,
+        importeTotal: _albaran.importeTotal,
       ),
     );
 
@@ -2513,6 +2617,37 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  Future<void> _printCanonicalDeliveryNote() async {
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando nota de entrega...',
+    );
+    try {
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
+      if (pdfData == null || pdfData.isEmpty) {
+        throw const RepartoReceiptUnavailableException();
+      }
+      _cachedPdfBase64 = pdfData;
+      modal.close();
+      await Printing.layoutPdf(
+        onLayout: (_) async => Uint8List.fromList(base64Decode(pdfData)),
+      );
+    } on RepartoReceiptUnavailableException {
+      modal.close();
+      if (mounted) {
+        _showError('La nota firmada todavía no está disponible para imprimir.');
+      }
+    } catch (error) {
+      modal.close();
+      if (mounted) {
+        _showError(repartidorSafeOperationMessage(
+          error: error,
+          operation: 'receiptPrint',
+        ));
+      }
+    }
+  }
+
   Future<void> _tryPrintTicketAfterConfirm() async {
     try {
       await _showZebraPrintPreview().timeout(const Duration(seconds: 12));
@@ -2625,7 +2760,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               color: AppTheme.warning,
               onTap: () async {
                 Navigator.pop(ctx);
-                await _tryPrintTicketAfterConfirm();
+                await _printCanonicalDeliveryNote();
               },
             ),
             const SizedBox(height: 12),
@@ -2748,26 +2883,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<File> _prepareAlbaranPdfFile() async {
     final alb = widget.albaran;
     List<int> bytes;
-    final confirmationId = await _confirmationJournal
-        .receiptConfirmationId(alb.id)
-        .catchError((_) => '');
+    final confirmationId = await _resolveReceiptConfirmationId().catchError(
+      (_) => '',
+    );
     if (confirmationId.trim().isNotEmpty &&
         isValidRepartoOwnerId(alb.codigoRepartidor)) {
-      try {
-        bytes = await RepartidorDataService.downloadDeliveryNotePdf(
-          confirmationId: confirmationId,
-          repartidorId: alb.codigoRepartidor,
-        );
-      } catch (_) {
-        bytes = await RepartidorDataService.downloadDocument(
-          year: alb.ejercicio,
-          serie: alb.serie,
-          number: alb.numeroAlbaran,
-          type: 'albaran',
-          terminal: alb.terminal,
-          repartidorId: alb.codigoRepartidor,
-        );
-      }
+      bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+        confirmationId: confirmationId,
+        repartidorId: alb.codigoRepartidor,
+      );
     } else {
       bytes = await RepartidorDataService.downloadDocument(
         year: alb.ejercicio,
@@ -3051,8 +3175,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
     final modal = AsyncOperationModal.show(context, text: 'Enviando recibo...');
     try {
-      final confirmationId =
-          await _confirmationJournal.receiptConfirmationId(widget.albaran.id);
+      final confirmationId = await _resolveReceiptConfirmationId();
       await RepartidorDataService.emailDeliveryNote(
         confirmationId: confirmationId,
         destinatario: email,
@@ -3080,10 +3203,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
+  Future<String> _resolveReceiptConfirmationId() async {
+    try {
+      return await _confirmationJournal
+          .receiptConfirmationId(widget.albaran.id);
+    } on RepartoReceiptUnavailableException {
+      final fromList = widget.albaran.confirmationId?.trim() ?? '';
+      if (fromList.isNotEmpty && isValidRepartoServerId(fromList)) {
+        return fromList;
+      }
+      throw const RepartoReceiptUnavailableException();
+    }
+  }
+
   Future<String?> _generateReceiptPdf() async {
     try {
-      final confirmationId =
-          await _confirmationJournal.receiptConfirmationId(widget.albaran.id);
+      final confirmationId = await _resolveReceiptConfirmationId();
       final response = await ApiClient.get(
         RepartoCanonicalReceiptRequest(
           confirmationId,

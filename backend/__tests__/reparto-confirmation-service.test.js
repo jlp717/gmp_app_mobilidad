@@ -610,6 +610,27 @@ describe('transactional reparto confirmation service', () => {
     },
   );
 
+  test('rejects quantity or weight with an ERP price still pending before writes', async () => {
+    const repository = createFakeRepository({
+      planned: plannedDelivery({
+        pricingState: 'PENDING_PRICE',
+        amountSource: 'ERP_PRICE_PENDING',
+        importePendiente: 0,
+        importeTotal: 0,
+        lineas: [{
+          lineaId: '1', codigoArticulo: 'ART-1', cantidadPedida: 4, precioUnitario: 0,
+        }],
+      }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+
+    await expect(service.confirm(command({ delivery: { lineas: [command().delivery.lineas[0]] } }))).rejects.toMatchObject({
+      code: 'DELIVERY_PRICING_PENDING', statusCode: 409,
+      details: { amountSource: 'ERP_PRICE_PENDING', pricingState: 'PENDING_PRICE' },
+    });
+    expect(repository.snapshot().events).toEqual([]);
+  });
+
 
   test('rejects a paid confirmation when the planned financial identity is incomplete', async () => {
     const source = plannedDelivery();

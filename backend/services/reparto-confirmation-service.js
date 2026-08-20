@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { allowsEmptyPlannedLines, PRICING_STATE } = require('./delivery-amount-resolver');
 
 class RepartoPersistenceError extends Error {
   constructor(message, { code, statusCode = 409, details } = {}) {
@@ -157,7 +158,11 @@ function assertPlannedDelivery(planned, command) {
     });
   }
   if (plannedLines.size === 0) {
-    if (Number(planned.importeTotal) !== 0) {
+    if (!allowsEmptyPlannedLines({
+      importeTotal: planned.importeTotal,
+      qtyLines: 0,
+      pricingState: planned.pricingState,
+    })) {
       throw new RepartoPersistenceError('Las lineas no coinciden con el documento planificado', {
         code: 'PLANNED_LINES_MISMATCH',
         statusCode: 422,
@@ -351,6 +356,19 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
         command.delivery.itemId,
         command.actor.repartidorId,
       );
+      if (planned.pricingState === PRICING_STATE.PENDING_PRICE) {
+        throw new RepartoPersistenceError(
+          'El albaran tiene cantidad/peso sin precio cerrado en ERP; no se puede confirmar a 0 EUR',
+          {
+            code: 'DELIVERY_PRICING_PENDING',
+            statusCode: 409,
+            details: {
+              amountSource: planned.amountSource,
+              pricingState: planned.pricingState,
+            },
+          },
+        );
+      }
       const actualLines = assertPlannedDelivery(planned, command);
       const evidenceRequirements = [
         ...(command.delivery.firma ? [{

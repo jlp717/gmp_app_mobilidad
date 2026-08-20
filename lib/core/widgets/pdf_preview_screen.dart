@@ -7,6 +7,7 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 /// ---------------------------------------------------------------------------
@@ -149,6 +150,22 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     }
   }
 
+  Future<void> _printPdf() async {
+    try {
+      await Printing.layoutPdf(
+        onLayout: (_) async => widget.pdfBytes,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo imprimir el PDF. Inténtalo de nuevo.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _sharePdf() async {
     try {
       if (_tempPath == null) return;
@@ -211,6 +228,11 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.print, color: AppTheme.warning),
+            tooltip: 'Imprimir PDF',
+            onPressed: _printPdf,
+          ),
           IconButton(
             icon: const Icon(Icons.share, color: AppTheme.info),
             tooltip: 'Compartir',

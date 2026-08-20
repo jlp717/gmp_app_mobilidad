@@ -21,7 +21,7 @@ jest.mock('../middleware/logger', () => ({
 }));
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '98', code: '98', role: 'ADMIN' };
+    req.user = { id: '98', code: '98', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['98'] };
     next();
   },
 }));
@@ -214,18 +214,18 @@ describe('GET /albaran exact identity and canonical quantities', () => {
 
   test('accepts cliente and legacy codigoCliente query names', async () => {
     detailMocks();
-    const legacy = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&codigoCliente=C1');
+    const legacy = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&codigoCliente=C1&repartidorId=98');
     expect(legacy.status).toBe(200);
     expect(legacy.body.success).toBe(true);
 
-    const canonical = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    const canonical = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
     expect(canonical.status).toBe(200);
     expect(canonical.body.success).toBe(true);
   });
 
   test('projects partial quantities by line identity without merging duplicate article codes', async () => {
     detailMocks();
-    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
     expect(response.status).toBe(200);
     expect(response.body.albaran.confirmationAvailability).toBe('AVAILABLE');
     expect(response.body.albaran.items).toEqual([
@@ -236,7 +236,7 @@ describe('GET /albaran exact identity and canonical quantities', () => {
 
   test('distinguishes unavailable confirmation schema from a confirmed zero quantity', async () => {
     detailMocks({ unavailable: true });
-    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
     expect(response.status).toBe(200);
     expect(response.body.albaran.confirmationAvailability).toBe('UNAVAILABLE');
     expect(response.body.albaran.items.every((line) => line.cantidadEntregada === null)).toBe(true);
@@ -244,14 +244,14 @@ describe('GET /albaran exact identity and canonical quantities', () => {
 
   test('rejects ambiguous duplicate canonical line identities', async () => {
     detailMocks({ duplicateConfirmationLine: true });
-    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('AMBIGUOUS_CONFIRMATION_LINE');
   });
 
   test('binds full CAC and LAC identity so homonymous documents cannot mix', async () => {
     detailMocks();
-    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
 
     expect(response.status).toBe(200);
     const headerCall = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('FROM DSEDAC.CPC CPC'));
@@ -264,7 +264,7 @@ describe('GET /albaran exact identity and canonical quantities', () => {
 
   test('keeps a legacy receipt POST fail-closed and points callers at canonical confirmation receipts', async () => {
     detailMocks();
-    const detail = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1');
+    const detail = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
     expect(detail.status).toBe(200);
     expect(detail.body.albaran.id).toBe('2026-A-1-42-C1');
 

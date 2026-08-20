@@ -113,7 +113,7 @@ describe('DB2 planned delivery read port', () => {
     expect(() => createRepartoPlannedDeliveryDb2Port({ schema: 'JAVIER' })).toThrow(RepartoPlannedDeliveryError);
   });
 
-  test('accepts prepaid zero-importe lines and envase quantities', async () => {
+  test('accepts catch-weight lines with qty and zero price as PENDING_PRICE (not empty prepaid)', async () => {
     const port = createRepartoPlannedDeliveryDb2Port();
     const planned = await port.forConnection(connection({
       headers: [header({ IMPORTETOTAL: '0' })],
@@ -126,6 +126,7 @@ describe('DB2 planned delivery read port', () => {
       })],
       financials: [],
     })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
+    expect(planned.pricingState).toBe('PENDING_PRICE');
     expect(planned.lineas).toEqual([expect.objectContaining({
       lineaId: '1',
       codigoArticulo: '1',
@@ -145,6 +146,7 @@ describe('DB2 planned delivery read port', () => {
     })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
     expect(planned).toMatchObject({
       importeTotal: 0,
+      pricingState: 'ZERO_EMPTY',
       importePendiente: 0,
       financialDocumentState: 'MISSING',
       financialDocument: null,
