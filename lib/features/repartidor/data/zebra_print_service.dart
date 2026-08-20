@@ -502,6 +502,8 @@ class ZebraPrintService {
     // ═══ LOGO — top of printable area, centered inside side margins ═══
     if (logoGrf != null) {
       final lx = L.centerX(logoGrf.widthDots);
+      // Machine-readable size for geometry audits (Zebra ignores ^FX).
+      buf.writeln('^FXlogo,${logoGrf.widthDots},${logoGrf.heightDots}');
       buf.writeln('^FO$lx,$y${logoGrf.command}^FS');
       y += logoGrf.heightDots + 8;
     } else {
@@ -847,6 +849,7 @@ class ZebraPrintService {
 
     if (logoGrf != null) {
       final lx = L.centerX(logoGrf.widthDots);
+      buf.writeln('^FXlogo,${logoGrf.widthDots},${logoGrf.heightDots}');
       buf.writeln('^FO$lx,$y${logoGrf.command}^FS');
       y += logoGrf.heightDots + 8;
     } else {

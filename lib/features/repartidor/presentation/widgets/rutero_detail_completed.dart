@@ -4,33 +4,43 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 
+/// Post-delivery surface: **nota de entrega** and **albarán/factura**
+/// (ERP PDF with signature) as separate action groups.
 class RuteroDetailCompleted extends StatelessWidget {
   const RuteroDetailCompleted({
     required this.albaran,
-    required this.onPreviewReceiptPdf,
-    required this.onDownloadReceiptPdf,
-    required this.onSharePdfLocally,
-    required this.onShareReceiptViaWhatsApp,
+    required this.onPreviewDeliveryNotePdf,
+    required this.onShareDeliveryNotePdf,
+    required this.onShareDeliveryNoteWhatsApp,
+    required this.onPreviewCommercialPdf,
+    required this.onShareCommercialPdf,
+    required this.onShareCommercialWhatsApp,
     required this.buildPrinterConfigSection,
     required this.tieneImpresora,
     required this.items,
     required this.onShowZebraPrintPreview,
-    this.onEmailReceipt,
+    this.onEmailDeliveryNote,
+    this.onPrintDeliveryNotePdf,
     super.key,
   });
 
   final AlbaranEntrega albaran;
-  final VoidCallback onPreviewReceiptPdf;
-  final VoidCallback onDownloadReceiptPdf;
-  final VoidCallback onSharePdfLocally;
-  final VoidCallback onShareReceiptViaWhatsApp;
+  final VoidCallback onPreviewDeliveryNotePdf;
+  final VoidCallback onShareDeliveryNotePdf;
+  final VoidCallback onShareDeliveryNoteWhatsApp;
+  final VoidCallback onPreviewCommercialPdf;
+  final VoidCallback onShareCommercialPdf;
+  final VoidCallback onShareCommercialWhatsApp;
   final Widget Function() buildPrinterConfigSection;
-  final VoidCallback? onEmailReceipt;
+  final VoidCallback? onEmailDeliveryNote;
+  final VoidCallback? onPrintDeliveryNotePdf;
   final bool tieneImpresora;
   final List<EntregaItem> items;
   final VoidCallback onShowZebraPrintPreview;
 
   bool get _isFactura => albaran.numeroFactura > 0;
+
+  String get _commercialLabel => _isFactura ? 'Factura' : 'Albarán';
 
   bool get _isNoDelivery =>
       albaran.estado == EstadoEntrega.noEntregado ||
@@ -68,14 +78,14 @@ class RuteroDetailCompleted extends StatelessWidget {
           const SizedBox(height: 20),
           _buildSummaryInfo(context),
           const SizedBox(height: 24),
-          _buildShareSection(),
+          _buildDocumentsSection(),
           const SizedBox(height: 16),
           buildPrinterConfigSection(),
           if (tieneImpresora && items.isNotEmpty) ...[
             const SizedBox(height: 10),
             _ShareButton(
               icon: Icons.print,
-              label: 'Imprimir ticket',
+              label: 'Imprimir ticket térmico',
               color: AppTheme.info,
               onTap: onShowZebraPrintPreview,
             ),
@@ -259,54 +269,103 @@ class RuteroDetailCompleted extends StatelessWidget {
     );
   }
 
-  Widget _buildShareSection() {
-    final emailAction = onEmailReceipt;
-    return Column(
-      children: [
-        const Text(
-          'DOCUMENTOS Y ACCIONES',
-          style: TextStyle(
+  Widget _sectionTitle(String text) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10, top: 4),
+        child: Text(
+          text,
+          style: const TextStyle(
             color: AppTheme.textSecondary,
             fontWeight: FontWeight.bold,
             fontSize: 12,
+            letterSpacing: 0.4,
           ),
         ),
-        const SizedBox(height: 12),
-        _ShareButton(
-          icon: Icons.visibility,
-          label: 'Ver PDF',
-          color: AppTheme.accentIndigo,
-          onTap: onPreviewReceiptPdf,
+      ),
+    );
+  }
+
+  Widget _buildDocumentsSection() {
+    final emailAction = onEmailDeliveryNote;
+    final printNote = onPrintDeliveryNotePdf;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionTitle('NOTA DE ENTREGA'),
+        const Text(
+          'Comprobante de la entrega con firma y líneas confirmadas.',
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
         ),
         const SizedBox(height: 10),
         _ShareButton(
-          icon: Icons.download,
-          label: 'Descargar PDF',
-          color: AppTheme.info,
-          onTap: onDownloadReceiptPdf,
+          icon: Icons.receipt_long,
+          label: 'Ver nota de entrega',
+          color: AppTheme.accentIndigo,
+          onTap: onPreviewDeliveryNotePdf,
         ),
         const SizedBox(height: 10),
         _ShareButton(
           icon: Icons.share,
-          label: 'Compartir archivo PDF',
+          label: 'Compartir nota de entrega',
           color: AppTheme.success,
-          onTap: onSharePdfLocally,
+          onTap: onShareDeliveryNotePdf,
         ),
         const SizedBox(height: 10),
         _ShareButton(
           icon: Icons.chat,
-          label: 'Enviar por WhatsApp',
+          label: 'Nota por WhatsApp',
           color: const Color(0xFF25D366),
-          onTap: onShareReceiptViaWhatsApp,
+          onTap: onShareDeliveryNoteWhatsApp,
         ),
-        const SizedBox(height: 10),
-        if (emailAction != null)
+        if (emailAction != null) ...[
+          const SizedBox(height: 10),
           _ShareButton(
             icon: Icons.email_outlined,
-            label: 'Enviar por email',
+            label: 'Email nota de entrega',
             color: AppTheme.accentIndigo,
             onTap: emailAction,
           ),
+        ],
+        if (printNote != null) ...[
+          const SizedBox(height: 10),
+          _ShareButton(
+            icon: Icons.print_outlined,
+            label: 'Imprimir nota (PDF)',
+            color: AppTheme.warning,
+            onTap: printNote,
+          ),
+        ],
+        const SizedBox(height: 22),
+        _sectionTitle(
+          _isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
+        ),
+        const Text(
+          'Documento comercial ERP. Incluye la firma cuando está disponible.',
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+        ),
+        const SizedBox(height: 10),
+        _ShareButton(
+          icon: Icons.picture_as_pdf,
+          label: 'Ver $_commercialLabel',
+          color: AppTheme.info,
+          onTap: onPreviewCommercialPdf,
+        ),
+        const SizedBox(height: 10),
+        _ShareButton(
+          icon: Icons.ios_share,
+          label: 'Compartir $_commercialLabel',
+          color: AppTheme.success,
+          onTap: onShareCommercialPdf,
+        ),
+        const SizedBox(height: 10),
+        _ShareButton(
+          icon: Icons.chat,
+          label: '$_commercialLabel por WhatsApp',
+          color: const Color(0xFF25D366),
+          onTap: onShareCommercialWhatsApp,
+        ),
       ],
     );
   }
@@ -376,14 +435,19 @@ class _ShareButton extends StatelessWidget {
           children: [
             Icon(icon, color: effectiveColor, size: 24),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style:
-                  TextStyle(color: effectiveColor, fontWeight: FontWeight.w600),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: effectiveColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-            const Spacer(),
-            Icon(Icons.chevron_right,
-                color: effectiveColor.withValues(alpha: 0.6)),
+            Icon(
+              Icons.chevron_right,
+              color: effectiveColor.withValues(alpha: 0.6),
+            ),
           ],
         ),
       ),

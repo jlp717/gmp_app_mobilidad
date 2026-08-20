@@ -1286,6 +1286,7 @@ class RepartidorDailySummary {
     this.ingresoBanco = 0,
     this.entregado = 0,
     this.deudaPendiente = 0,
+    this.ajustes = 0,
     this.canReverseCobros = false,
     List<RepartidorCobroDia> cobros = const [],
   }) : cobros = List.unmodifiable(cobros);
@@ -1330,6 +1331,7 @@ class RepartidorDailySummary {
       cobrosCount: count(const ['cobrosCount', 'COBROS_COUNT']),
       entregado: money(const ['entregado', 'TOTAL_REPARTIDO']),
       deudaPendiente: money(const ['deudaPendiente', 'DEUDA_PENDIENTE']),
+      ajustes: money(const ['ajustes', 'TOTAL_AJUSTES']),
       canReverseCobros: json['canReverseCobros'] == true,
       cobros: _jsonMapList(json['cobros'])
           .map(RepartidorCobroDia.fromJson)
@@ -1348,9 +1350,10 @@ class RepartidorDailySummary {
   final double gastos;
   final double totalAIngresar;
   final double ingresoBanco;
-  final int cobrosCount;
   final double entregado;
   final double deudaPendiente;
+  final double ajustes;
+  final int cobrosCount;
 
   /// Capability autorizada explícitamente por el backend. Fail-closed.
   final bool canReverseCobros;

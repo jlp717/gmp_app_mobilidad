@@ -31,3 +31,6 @@ coverage/
 
 # Cache
 .cache/
+
+# WhatsApp Baileys session (QR-linked company phone — never commit)
+data/whatsapp-baileys/

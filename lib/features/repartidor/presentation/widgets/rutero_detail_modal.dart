@@ -753,12 +753,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Widget _buildCompletedView() {
     return RuteroDetailCompleted(
       albaran: _albaran,
-      onPreviewReceiptPdf: _previewReceiptPdf,
-      onDownloadReceiptPdf: _downloadReceiptPdf,
-      onSharePdfLocally: _sharePdfLocally,
-      onShareReceiptViaWhatsApp: _shareReceiptViaWhatsApp,
+      onPreviewDeliveryNotePdf: _previewReceiptPdf,
+      onShareDeliveryNotePdf: _shareDeliveryNoteLocally,
+      onShareDeliveryNoteWhatsApp: _shareDeliveryNoteViaWhatsApp,
+      onPreviewCommercialPdf: _previewCommercialPdf,
+      onShareCommercialPdf: _shareCommercialLocally,
+      onShareCommercialWhatsApp: _shareCommercialViaWhatsApp,
+      onEmailDeliveryNote: _emailReceipt,
+      onPrintDeliveryNotePdf: _printCanonicalDeliveryNote,
       buildPrinterConfigSection: _buildPrinterConfigSection,
-      onEmailReceipt: _emailReceipt,
       tieneImpresora: _tieneImpresora,
       items: _items,
       onShowZebraPrintPreview: _showZebraPrintPreview,
@@ -2501,9 +2504,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'Entrega parcial registrada. La diferencia queda avisada para seguimiento.',
         RepartoDeliveryStatus.rechazado =>
           'Entrega rechazada registrada. No computa como entrega realizada.',
-        RepartoDeliveryStatus.entregado => 'Entrega registrada correctamente',
+        RepartoDeliveryStatus.entregado =>
+          'Entrega registrada. Ya puedes ver la nota y el albarán/factura.',
       };
-      Navigator.pop(context);
+      // Stay on completed view so today's stop keeps both document actions.
       messenger.showSnackBar(
         SnackBar(
           content: Row(children: [
@@ -2696,6 +2700,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _showShareReceiptDialog() async {
+    final isFactura = widget.albaran.numeroFactura > 0;
+    final commercialLabel = isFactura ? 'factura' : 'albarán';
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -2708,98 +2714,141 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         title: const Row(
           children: [
             RepartidorExecutiveIcon(
-              icon: Icons.share,
+              icon: Icons.folder_shared_outlined,
               color: AppTheme.info,
             ),
             SizedBox(width: 12),
-            Text('Compartir Nota',
-                style: TextStyle(color: AppTheme.textPrimary)),
+            Expanded(
+              child: Text(
+                'Documentos de la entrega',
+                style: TextStyle(color: AppTheme.textPrimary),
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '¿Desea enviar la nota de entrega al cliente?',
-              style: TextStyle(color: AppTheme.textSecondary),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Elige qué documento quieres ver o enviar. Son dos cosas distintas.',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'NOTA DE ENTREGA',
+                  style: TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.receipt_long,
+                  label: 'Ver nota de entrega',
+                  color: AppTheme.accentIndigo,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _previewReceiptPdf();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.share,
+                  label: 'Compartir nota',
+                  color: AppTheme.success,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _shareDeliveryNoteLocally();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.chat,
+                  label: 'Nota por WhatsApp',
+                  color: const Color(0xFF25D366),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _shareDeliveryNoteViaWhatsApp();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.email,
+                  label: 'Email nota de entrega',
+                  color: AppTheme.accentIndigo,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _emailReceipt();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.print,
+                  label: 'Imprimir nota (PDF)',
+                  color: AppTheme.warning,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _printCanonicalDeliveryNote();
+                  },
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.picture_as_pdf,
+                  label: 'Ver $commercialLabel',
+                  color: AppTheme.info,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _previewCommercialPdf();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.ios_share,
+                  label: 'Compartir $commercialLabel',
+                  color: AppTheme.success,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _shareCommercialLocally();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildShareButton(
+                  icon: Icons.chat,
+                  label:
+                      '${commercialLabel[0].toUpperCase()}${commercialLabel.substring(1)} por WhatsApp',
+                  color: const Color(0xFF25D366),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _shareCommercialViaWhatsApp();
+                  },
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            _buildShareButton(
-              icon: Icons.picture_as_pdf,
-              label: 'Ver albarán PDF',
-              color: AppTheme.accentIndigo,
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _previewAlbaranPdf();
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildShareButton(
-              icon: Icons.visibility,
-              label: 'Ver recibo PDF',
-              color: AppTheme.accentIndigo,
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _previewReceiptPdf();
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildShareButton(
-              icon: Icons.download,
-              label: 'Compartir o guardar PDF',
-              color: AppTheme.info,
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _sharePdfLocally();
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildShareButton(
-              icon: Icons.print,
-              label: 'Imprimir nota',
-              color: AppTheme.warning,
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _printCanonicalDeliveryNote();
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildShareButton(
-              icon: Icons.chat,
-              label: 'Enviar por WhatsApp',
-              color: const Color(0xFF25D366),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _shareReceiptViaWhatsApp();
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildShareButton(
-              icon: Icons.share,
-              label: 'Compartir archivo PDF',
-              color: AppTheme.success,
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _sharePdfLocally();
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildShareButton(
-              icon: Icons.email,
-              label: 'Enviar por email',
-              color: AppTheme.accentIndigo,
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _emailReceipt();
-              },
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Omitir',
-                style: TextStyle(color: AppTheme.textTertiary)),
+            child: const Text(
+              'Seguir en la entrega',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
           ),
         ],
       ),
@@ -2838,29 +2887,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
-  Future<void> _previewAlbaranPdf() async {
-    final modal =
-        AsyncOperationModal.show(context, text: 'Cargando albarán...');
+  Future<void> _previewCommercialPdf() async {
+    final alb = widget.albaran;
+    final isFactura = alb.numeroFactura > 0;
+    final modal = AsyncOperationModal.show(
+      context,
+      text: isFactura ? 'Cargando factura...' : 'Cargando albarán...',
+    );
     try {
-      final alb = widget.albaran;
-      final bytes = await RepartidorDataService.downloadDocument(
-        year: alb.ejercicio,
-        serie: alb.serie,
-        number: alb.numeroAlbaran,
-        type: 'albaran',
-        terminal: alb.terminal,
-        repartidorId: alb.codigoRepartidor,
-      );
+      final bytes = await _downloadCommercialPdfBytes();
       modal.close();
       if (!mounted) return;
+      final title = isFactura
+          ? 'Factura ${alb.serieFactura}/${alb.numeroFactura}'
+          : 'Albarán ${alb.serie}/${alb.numeroAlbaran}';
+      final fileName = isFactura
+          ? 'Factura_${alb.ejercicio}_${alb.serieFactura}_${alb.numeroFactura}.pdf'
+          : 'Albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}.pdf';
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
             pdfBytes: Uint8List.fromList(bytes),
-            title: 'Albarán ${alb.serie}/${alb.numeroAlbaran}',
-            fileName:
-                'Albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}.pdf',
+            title: title,
+            fileName: fileName,
           ),
         ),
       );
@@ -2880,35 +2930,79 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
-  Future<File> _prepareAlbaranPdfFile() async {
+  /// ERP albarán PDF (legacy name kept for fallbacks).
+  Future<void> _previewAlbaranPdf() => _previewCommercialPdf();
+
+  Future<List<int>> _downloadCommercialPdfBytes() async {
     final alb = widget.albaran;
-    List<int> bytes;
-    final confirmationId = await _resolveReceiptConfirmationId().catchError(
-      (_) => '',
-    );
-    if (confirmationId.trim().isNotEmpty &&
-        isValidRepartoOwnerId(alb.codigoRepartidor)) {
-      bytes = await RepartidorDataService.downloadDeliveryNotePdf(
-        confirmationId: confirmationId,
-        repartidorId: alb.codigoRepartidor,
-      );
-    } else {
-      bytes = await RepartidorDataService.downloadDocument(
+    final isFactura = alb.numeroFactura > 0;
+    if (isFactura) {
+      return RepartidorDataService.downloadDocument(
         year: alb.ejercicio,
-        serie: alb.serie,
-        number: alb.numeroAlbaran,
-        type: 'albaran',
+        serie: alb.serieFactura.isNotEmpty ? alb.serieFactura : alb.serie,
+        number: alb.numeroFactura,
+        type: 'factura',
         terminal: alb.terminal,
+        facturaNumber: alb.numeroFactura,
+        serieFactura:
+            alb.serieFactura.isNotEmpty ? alb.serieFactura : alb.serie,
+        ejercicioFactura: alb.ejercicio,
+        albaranNumber: alb.numeroAlbaran,
+        albaranSerie: alb.serie,
+        albaranTerminal: alb.terminal,
+        albaranYear: alb.ejercicio,
         repartidorId: alb.codigoRepartidor,
       );
     }
+    return RepartidorDataService.downloadDocument(
+      year: alb.ejercicio,
+      serie: alb.serie,
+      number: alb.numeroAlbaran,
+      type: 'albaran',
+      terminal: alb.terminal,
+      repartidorId: alb.codigoRepartidor,
+    );
+  }
+
+  Future<File> _prepareCommercialPdfFile() async {
+    final alb = widget.albaran;
+    final bytes = await _downloadCommercialPdfBytes();
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final isFactura = alb.numeroFactura > 0;
     final file = File(
-      '${tempDir.path}/albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}_$timestamp.pdf',
+      isFactura
+          ? '${tempDir.path}/factura_${alb.ejercicio}_${alb.serieFactura}_${alb.numeroFactura}_$timestamp.pdf'
+          : '${tempDir.path}/albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}_$timestamp.pdf',
     );
     await file.writeAsBytes(bytes, flush: true);
     return file;
+  }
+
+  Future<File> _prepareDeliveryNotePdfFile() async {
+    final alb = widget.albaran;
+    final confirmationId = await _resolveReceiptConfirmationId();
+    final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+      confirmationId: confirmationId,
+      repartidorId: alb.codigoRepartidor,
+    );
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final label = alb.numeroFactura > 0
+        ? 'F${alb.numeroFactura}'
+        : 'A${alb.numeroAlbaran}';
+    final file = File('${tempDir.path}/nota_entrega_${label}_$timestamp.pdf');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  Future<File> _prepareAlbaranPdfFile() async {
+    // Prefer nota when available; otherwise commercial ERP PDF.
+    try {
+      return await _prepareDeliveryNotePdfFile();
+    } catch (_) {
+      return _prepareCommercialPdfFile();
+    }
   }
 
   Rect? _shareOrigin() {
@@ -2923,7 +3017,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _previewReceiptPdf() async {
     final modal =
-        AsyncOperationModal.show(context, text: 'Generando vista previa...');
+        AsyncOperationModal.show(context, text: 'Generando nota de entrega...');
     try {
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('No se pudo generar el PDF');
@@ -2933,9 +3027,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!mounted) return;
 
       final pdfBytes = base64Decode(pdfData);
-      final docLabel = widget.albaran.numeroFactura > 0
-          ? 'Factura ${widget.albaran.numeroFactura}'
-          : 'Albarán ${widget.albaran.numeroAlbaran}';
+      const title = 'Nota de entrega';
       final fileName =
           'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
 
@@ -2945,7 +3037,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
             pdfBytes: pdfBytes,
-            title: docLabel,
+            title: title,
             fileName: fileName,
             onEmailTap: () {
               Navigator.pop(context);
@@ -2953,7 +3045,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             onWhatsAppTap: () {
               Navigator.pop(context);
-              unawaited(_shareReceiptViaWhatsApp());
+              unawaited(_shareDeliveryNoteViaWhatsApp());
             },
           ),
         ),
@@ -2964,12 +3056,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'El recibo confirmado aún no está disponible. Se abre el albarán PDF.',
+            'La nota de entrega aún no está disponible. Se abre el documento comercial.',
           ),
           backgroundColor: AppTheme.warning,
         ),
       );
-      await _previewAlbaranPdf();
+      await _previewCommercialPdf();
     } catch (error) {
       modal.error(
         repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
@@ -2979,40 +3071,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _downloadReceiptPdf() async {
-    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
+    await _shareDeliveryNoteLocally();
+  }
+
+  Future<void> _shareDeliveryNoteLocally() async {
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando nota de entrega...',
+    );
     try {
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) {
-        throw Exception('Error al generar el PDF');
-      }
-      _cachedPdfBase64 = pdfData;
-
-      final tempDir = await getTemporaryDirectory();
-      final docLabel = widget.albaran.numeroFactura > 0
-          ? 'Factura_${widget.albaran.numeroFactura}'
-          : 'Albaran_${widget.albaran.numeroAlbaran}';
-      final dlTs = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${tempDir.path}/Nota_Entrega_${docLabel}_$dlTs.pdf');
-      await file.writeAsBytes(base64Decode(pdfData));
-
+      final file = await _prepareDeliveryNotePdfFile();
       modal.close();
       if (!mounted) return;
-
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox != null
-          ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
-              width: 1,
-              height: 1,
-            )
-          : null;
-
       await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Guardar $docLabel',
-        subject: docLabel,
-        sharePositionOrigin: origin,
+        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
+        text:
+            'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}',
+        subject: 'Nota de entrega',
+        sharePositionOrigin: _shareOrigin(),
       );
     } on RepartoReceiptUnavailableException {
       modal.close();
@@ -3020,31 +3096,49 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'El recibo confirmado aún no está disponible. Se prepara el albarán PDF.',
+            'La nota aún no está lista. Se comparte el albarán/factura.',
           ),
           backgroundColor: AppTheme.warning,
         ),
       );
-      await _sharePdfLocally();
-    } catch (error) {
+      await _shareCommercialLocally();
+    } catch (_) {
       modal.close();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              repartidorSafeOperationMessage(
-                error: error,
-                operation: 'pdfDownload',
-              ),
-            ),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        _showError('No se pudo preparar la nota de entrega.');
       }
     }
   }
 
-  Future<void> _shareReceiptViaWhatsApp() async {
+  Future<void> _shareCommercialLocally() async {
+    final isFactura = widget.albaran.numeroFactura > 0;
+    final label = isFactura ? 'factura' : 'albarán';
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando $label...',
+    );
+    try {
+      final file = await _prepareCommercialPdfFile();
+      modal.close();
+      if (!mounted) return;
+      final subject = isFactura
+          ? 'Factura ${widget.albaran.numeroFactura}'
+          : 'Albarán ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}';
+      await Share.shareXFiles(
+        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
+        text: subject,
+        subject: subject,
+        sharePositionOrigin: _shareOrigin(),
+      );
+    } catch (_) {
+      modal.close();
+      if (mounted) {
+        _showError('No se pudo preparar el $label.');
+      }
+    }
+  }
+
+  Future<void> _shareDeliveryNoteViaWhatsApp() async {
     final owner = widget.albaran.codigoRepartidor.trim();
     if (!isValidRepartoOwnerId(owner)) {
       _showError('Selecciona un repartidor concreto para compartir.');
@@ -3063,33 +3157,106 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       text: 'Preparando nota de entrega para WhatsApp...',
     );
     try {
-      final file = await _prepareAlbaranPdfFile();
-
-      final whatsapp = await RepartidorDataService.shareWhatsApp(
-        year: widget.albaran.ejercicio,
-        serie: widget.albaran.serie,
-        number: widget.albaran.numeroAlbaran,
-        type: 'albaran',
-        telefono: form.phone,
-        repartidorId: owner,
-        clienteNombre: widget.albaran.nombreCliente,
-        terminal: widget.albaran.terminal,
-        albaranNumber: widget.albaran.numeroAlbaran,
-        albaranSerie: widget.albaran.serie,
-        albaranTerminal: widget.albaran.terminal,
-        albaranYear: widget.albaran.ejercicio,
-      );
-      if (!whatsapp.localShare || whatsapp.sent) {
-        throw const RepartidorDataException(
-          'No se pudo preparar el envío por WhatsApp.',
-        );
-      }
+      final file = await _prepareDeliveryNotePdfFile();
       modal.close();
       if (!mounted) return;
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
         text: form.message,
         subject: 'Nota de entrega',
+        sharePositionOrigin: _shareOrigin(),
+      );
+    } on RepartoReceiptUnavailableException {
+      modal.close();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La nota aún no está lista. Se envía el documento comercial.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      await _shareCommercialViaWhatsApp(prefilled: form);
+    } catch (_) {
+      modal.close();
+      if (mounted) {
+        _showError('No se pudo preparar la nota de entrega para WhatsApp.');
+      }
+    }
+  }
+
+  Future<void> _shareCommercialViaWhatsApp({
+    WhatsAppFormResult? prefilled,
+  }) async {
+    final owner = widget.albaran.codigoRepartidor.trim();
+    if (!isValidRepartoOwnerId(owner)) {
+      _showError('Selecciona un repartidor concreto para compartir.');
+      return;
+    }
+    final isFactura = widget.albaran.numeroFactura > 0;
+    final docLabel = isFactura ? 'Factura' : 'Albarán';
+    final form = prefilled ??
+        await WhatsAppFormModal.show(
+          context,
+          defaultMessage:
+              '$docLabel ${isFactura ? widget.albaran.numeroFactura : '${widget.albaran.serie}-${widget.albaran.numeroAlbaran}'}. '
+              'Gracias por su confianza.',
+        );
+    if (!mounted || form == null) return;
+
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Enviando $docLabel por WhatsApp...',
+    );
+    try {
+      final whatsapp = await RepartidorDataService.shareWhatsApp(
+        year: widget.albaran.ejercicio,
+        serie: isFactura && widget.albaran.serieFactura.isNotEmpty
+            ? widget.albaran.serieFactura
+            : widget.albaran.serie,
+        number: isFactura
+            ? widget.albaran.numeroFactura
+            : widget.albaran.numeroAlbaran,
+        type: isFactura ? 'factura' : 'albaran',
+        telefono: form.phone,
+        repartidorId: owner,
+        clienteNombre: widget.albaran.nombreCliente,
+        mensaje: form.message,
+        terminal: widget.albaran.terminal,
+        albaranNumber: widget.albaran.numeroAlbaran,
+        albaranSerie: widget.albaran.serie,
+        albaranTerminal: widget.albaran.terminal,
+        albaranYear: widget.albaran.ejercicio,
+      );
+
+      if (whatsapp.deliveredByBot) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$docLabel enviado por el WhatsApp corporativo (mensaje + PDF).',
+            ),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+        return;
+      }
+
+      if (!whatsapp.localShare || whatsapp.sent) {
+        throw const RepartidorDataException(
+          'No se pudo preparar el envío por WhatsApp.',
+        );
+      }
+
+      final file = await _prepareCommercialPdfFile();
+      modal.close();
+      if (!mounted) return;
+      await Share.shareXFiles(
+        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
+        text: form.message,
+        subject: docLabel,
         sharePositionOrigin: _shareOrigin(),
       );
       final url = whatsapp.whatsappUrl;
@@ -3102,35 +3269,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } catch (_) {
       modal.close();
       if (mounted) {
-        _showError('No se pudo preparar la nota de entrega para WhatsApp.');
+        _showError('No se pudo preparar el $docLabel para WhatsApp.');
       }
     }
   }
 
-  Future<void> _sharePdfLocally() async {
-    final modal = AsyncOperationModal.show(
-      context,
-      text: 'Preparando nota de entrega...',
-    );
-    try {
-      final file = await _prepareAlbaranPdfFile();
-      modal.close();
-      if (!mounted) return;
+  Future<void> _shareReceiptViaWhatsApp() => _shareDeliveryNoteViaWhatsApp();
 
-      await Share.shareXFiles(
-        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text:
-            'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}',
-        subject: 'Nota de entrega',
-        sharePositionOrigin: _shareOrigin(),
-      );
-    } catch (error) {
-      modal.close();
-      if (mounted) {
-        _showError('No se pudo preparar la nota de entrega.');
-      }
-    }
-  }
+  Future<void> _sharePdfLocally() => _shareDeliveryNoteLocally();
 
   Future<void> _showEmailUnavailable() async {
     if (!mounted) return;

@@ -217,19 +217,40 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
   const documentIds = [...new Set(rows.map((row) => canonicalDocumentId(row, clientCode)).filter(Boolean))];
   const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (!documentIds.length || !drivers.length) return rows;
+  const cobrosTable = (() => {
+    const finance = resolveFinanceWriteTables();
+    return allowedFinanceCobrosTable(finance?.cobros) ? finance.cobros : null;
+  })();
   try {
     const documentPlaceholders = documentIds.map(() => '?').join(', ');
     const driverPlaceholders = drivers.map(() => '?').join(', ');
     const byId = new Map();
     for (const tables of tablesList) {
+      const paymentSelect = cobrosTable
+        ? `,
+              CO.ID AS COBRO_ID,
+              CO.IMPORTEVENCIMIENTO AS IMPORTE_COBRADO,
+              CO.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE_COBRO,
+              TRIM(CO.CODIGOFORMAPAGO) AS FORMA_PAGO_COBRO`
+        : `,
+              CAST(NULL AS INTEGER) AS COBRO_ID,
+              CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_COBRADO,
+              CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_PENDIENTE_COBRO,
+              CAST(NULL AS VARCHAR(10)) AS FORMA_PAGO_COBRO`;
+      const paymentJoin = cobrosTable
+        ? ` LEFT JOIN ${cobrosTable} CO
+               ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)`
+        : '';
       const confirmRows = await runQueryWithParams(
-        `SELECT TRIM(DOCUMENT_ID) AS DOCUMENT_ID,
-              TRIM(STATUS) AS STATUS,
-              ID,
-              FIRMA_EVIDENCE_ID
-         FROM ${tables.confirmations}
-        WHERE TRIM(DOCUMENT_ID) IN (${documentPlaceholders})
-          AND TRIM(REPARTIDOR_ID) IN (${driverPlaceholders})`,
+        `SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
+              TRIM(C.STATUS) AS STATUS,
+              C.ID,
+              C.FIRMA_EVIDENCE_ID
+              ${paymentSelect}
+         FROM ${tables.confirmations} C
+         ${paymentJoin}
+        WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
+          AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})`,
         [...documentIds, ...drivers],
         false,
       );
@@ -237,10 +258,37 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
         const status = String(row.STATUS || row.status || '').trim().toUpperCase();
         if (!id || !CANONICAL_CONFIRMATION_STATUSES.includes(status)) continue;
+        const importeCobrado = Number(row.IMPORTE_COBRADO ?? row.importe_cobrado);
+        const importePendienteCobro = Number(
+          row.IMPORTE_PENDIENTE_COBRO ?? row.importe_pendiente_cobro,
+        );
+        const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
+        const formaRaw = String(
+          row.FORMA_PAGO_COBRO ?? row.forma_pago_cobro ?? '',
+        ).trim().toUpperCase();
+        let formaPagoCobro = null;
+        if (['EF', 'EFECTIVO', 'CONTADO', 'F0'].includes(formaRaw)) formaPagoCobro = 'EFECTIVO';
+        else if (['TJ', 'TARJETA', 'TPV'].includes(formaRaw)) formaPagoCobro = 'TARJETA';
+        else if (['BI', 'BIZUM'].includes(formaRaw)) formaPagoCobro = 'BIZUM';
+        else if (['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0'].includes(formaRaw)) formaPagoCobro = 'TRANSFERENCIA';
+        else if (['CH', 'CHEQUE', 'TALON'].includes(formaRaw)) formaPagoCobro = 'CHEQUE';
+        else if (formaRaw) formaPagoCobro = formaRaw;
         byId.set(id, {
           status,
           confirmationId: jsonSafeScalar(row.ID ?? row.id ?? null),
           firmaEvidenceId: row.FIRMA_EVIDENCE_ID || row.firma_evidence_id || null,
+          cobroId: row.COBRO_ID == null && row.cobro_id == null
+            ? null
+            : String(row.COBRO_ID ?? row.cobro_id),
+          cobrado: hasCobro,
+          importeCobrado: hasCobro ? Math.round(importeCobrado * 100) / 100 : null,
+          importePendienteCobro: hasCobro && Number.isFinite(importePendienteCobro)
+            ? Math.round(importePendienteCobro * 100) / 100
+            : null,
+          formaPagoCobro,
+          cobroParcial: hasCobro
+            && Number.isFinite(importePendienteCobro)
+            && importePendienteCobro > 0.004,
         });
       }
     }
@@ -254,6 +302,12 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         CANONICAL_STATUS: match.status,
         CANONICAL_CONFIRMATION_ID: match.confirmationId,
         CANONICAL_FIRMA_EVIDENCE_ID: match.firmaEvidenceId,
+        CANONICAL_COBRO_ID: match.cobroId,
+        CANONICAL_COBRADO: match.cobrado,
+        CANONICAL_IMPORTE_COBRADO: match.importeCobrado,
+        CANONICAL_IMPORTE_PENDIENTE_COBRO: match.importePendienteCobro,
+        CANONICAL_FORMA_PAGO_COBRO: match.formaPagoCobro,
+        CANONICAL_COBRO_PARCIAL: match.cobroParcial,
       };
     });
   } catch (_error) {

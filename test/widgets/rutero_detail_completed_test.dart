@@ -4,9 +4,10 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_completed.dart';
 
 void main() {
-  testWidgets('la entrega completada abre la accion de WhatsApp',
+  testWidgets('entrega completada ofrece nota y albarán por separado',
       (tester) async {
-    var whatsappCalls = 0;
+    var noteWhatsApp = 0;
+    var commercialPreview = 0;
     final albaran = AlbaranEntrega(
       id: '2026-A-1-42-C1',
       numeroAlbaran: 42,
@@ -16,6 +17,7 @@ void main() {
       fecha: '2026-08-18',
       importeTotal: 0,
       codigoRepartidor: '08',
+      estado: EstadoEntrega.entregado,
     );
 
     await tester.pumpWidget(
@@ -23,10 +25,12 @@ void main() {
         home: Scaffold(
           body: RuteroDetailCompleted(
             albaran: albaran,
-            onPreviewReceiptPdf: () {},
-            onDownloadReceiptPdf: () {},
-            onSharePdfLocally: () {},
-            onShareReceiptViaWhatsApp: () => whatsappCalls += 1,
+            onPreviewDeliveryNotePdf: () {},
+            onShareDeliveryNotePdf: () {},
+            onShareDeliveryNoteWhatsApp: () => noteWhatsApp += 1,
+            onPreviewCommercialPdf: () => commercialPreview += 1,
+            onShareCommercialPdf: () {},
+            onShareCommercialWhatsApp: () {},
             buildPrinterConfigSection: () => const SizedBox.shrink(),
             tieneImpresora: false,
             items: const <EntregaItem>[],
@@ -36,11 +40,20 @@ void main() {
       ),
     );
 
-    final action = find.text('Enviar por WhatsApp');
-    await tester.scrollUntilVisible(action, 250);
-    await tester.tap(action);
+    expect(find.text('NOTA DE ENTREGA'), findsOneWidget);
+    expect(find.text('ALBARÁN (CON FIRMA)'), findsOneWidget);
+    expect(find.text('Ver nota de entrega'), findsOneWidget);
+    expect(find.text('Ver Albarán'), findsOneWidget);
 
-    expect(whatsappCalls, 1);
+    final noteAction = find.text('Nota por WhatsApp');
+    await tester.scrollUntilVisible(noteAction, 250);
+    await tester.tap(noteAction);
+    expect(noteWhatsApp, 1);
+
+    final commercialAction = find.text('Ver Albarán');
+    await tester.scrollUntilVisible(commercialAction, 250);
+    await tester.tap(commercialAction);
+    expect(commercialPreview, 1);
   });
 
   testWidgets('la no-entrega es terminal y conserva la orden', (tester) async {
@@ -62,10 +75,12 @@ void main() {
         home: Scaffold(
           body: RuteroDetailCompleted(
             albaran: albaran,
-            onPreviewReceiptPdf: () {},
-            onDownloadReceiptPdf: () {},
-            onSharePdfLocally: () {},
-            onShareReceiptViaWhatsApp: () {},
+            onPreviewDeliveryNotePdf: () {},
+            onShareDeliveryNotePdf: () {},
+            onShareDeliveryNoteWhatsApp: () {},
+            onPreviewCommercialPdf: () {},
+            onShareCommercialPdf: () {},
+            onShareCommercialWhatsApp: () {},
             buildPrinterConfigSection: () => const SizedBox.shrink(),
             tieneImpresora: false,
             items: const <EntregaItem>[],
@@ -78,6 +93,48 @@ void main() {
     expect(find.text('NO ENTREGA CONFIRMADA'), findsOneWidget);
     expect(find.text('Orden prep.'), findsOneWidget);
     expect(find.text('991'), findsOneWidget);
-    expect(find.text('Enviar por WhatsApp'), findsOneWidget);
+    expect(find.text('Nota por WhatsApp'), findsOneWidget);
+    expect(find.text('Ver Albarán'), findsOneWidget);
+  });
+
+  testWidgets('si hay factura, el bloque comercial se etiqueta Factura',
+      (tester) async {
+    final albaran = AlbaranEntrega(
+      id: '2026-A-1-44-C1',
+      numeroAlbaran: 44,
+      ejercicio: 2026,
+      codigoCliente: 'C1',
+      nombreCliente: 'Cliente factura',
+      fecha: '2026-08-20',
+      importeTotal: 36.4,
+      codigoRepartidor: '08',
+      numeroFactura: 9836,
+      serieFactura: 'F',
+      estado: EstadoEntrega.entregado,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RuteroDetailCompleted(
+            albaran: albaran,
+            onPreviewDeliveryNotePdf: () {},
+            onShareDeliveryNotePdf: () {},
+            onShareDeliveryNoteWhatsApp: () {},
+            onPreviewCommercialPdf: () {},
+            onShareCommercialPdf: () {},
+            onShareCommercialWhatsApp: () {},
+            buildPrinterConfigSection: () => const SizedBox.shrink(),
+            tieneImpresora: false,
+            items: const <EntregaItem>[],
+            onShowZebraPrintPreview: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('FACTURA (CON FIRMA)'), findsOneWidget);
+    expect(find.text('Ver Factura'), findsOneWidget);
+    expect(find.text('NOTA DE ENTREGA'), findsOneWidget);
   });
 }

@@ -82,12 +82,39 @@ describe('Email PDF Service', () => {
         expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({
             to: 'cliente@example.com',
             subject: 'Factura A-1',
-            attachments: [
+            replyTo: 'pedidos@mari-pepa.com',
+            headers: expect.objectContaining({
+                'List-Unsubscribe': expect.stringContaining('mailto:pedidos@mari-pepa.com'),
+                Organization: 'Granja Mari Pepa',
+            }),
+            attachments: expect.arrayContaining([
                 expect.objectContaining({
                     filename: 'Factura_A_1_2026.pdf',
                     contentType: 'application/pdf'
                 })
-            ]
+            ])
         }));
+    });
+
+    test('delivery HTML includes corporate branding and escapes custom body', () => {
+        const { service } = loadService();
+        const withClient = service.generateDeliveryEmailHtml({
+            numero: 12,
+            serie: 'A',
+            clienteNombre: 'Cliente <script>',
+        });
+        expect(withClient).toContain('Albarán A-12');
+        expect(withClient).toContain('Cliente &lt;script&gt;');
+        expect(withClient).toContain('pedidos@mari-pepa.com');
+        expect(withClient).toContain('RGSEAA');
+        expect(withClient).not.toContain('<script>');
+
+        const withCustom = service.generateDeliveryEmailHtml({
+            numero: 12,
+            serie: 'A',
+            customBody: 'Hola <b>x</b>',
+        });
+        expect(withCustom).toContain('Hola &lt;b&gt;x&lt;/b&gt;');
+        expect(withCustom).not.toContain('<b>x</b>');
     });
 });

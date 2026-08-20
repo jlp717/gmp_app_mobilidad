@@ -17,12 +17,13 @@ const repartidorDb = require('../repositories/repartidor-route-db2-repository');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const whatsappGateway = require('../services/whatsappGatewayService');
 const {
     RepartoEmailDeliveryPolicyError,
     resolveRepartoEmailDelivery,
     buildRepartoMessageId,
 } = require('../services/reparto-email-delivery-policy');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireJefeVentas } = require('../middleware/auth');
 const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
 
 const repartidorBreaker = new RepartidorCircuitBreaker({
@@ -804,6 +805,32 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                     : referenceRow.CANONICAL_CONFIRMATION_ID == null
                     ? null
                     : String(referenceRow.CANONICAL_CONFIRMATION_ID),
+                cobroId: overrides.cobroId !== undefined
+                    ? overrides.cobroId
+                    : referenceRow.CANONICAL_COBRO_ID == null
+                    ? null
+                    : String(referenceRow.CANONICAL_COBRO_ID),
+                cobrado: overrides.cobrado !== undefined
+                    ? overrides.cobrado
+                    : referenceRow.CANONICAL_COBRADO === true,
+                importeCobrado: overrides.importeCobrado !== undefined
+                    ? overrides.importeCobrado
+                    : (Number.isFinite(Number(referenceRow.CANONICAL_IMPORTE_COBRADO))
+                        ? Number(referenceRow.CANONICAL_IMPORTE_COBRADO)
+                        : null),
+                importePendienteCobro: overrides.importePendienteCobro !== undefined
+                    ? overrides.importePendienteCobro
+                    : (Number.isFinite(Number(referenceRow.CANONICAL_IMPORTE_PENDIENTE_COBRO))
+                        ? Number(referenceRow.CANONICAL_IMPORTE_PENDIENTE_COBRO)
+                        : null),
+                formaPagoCobro: overrides.formaPagoCobro !== undefined
+                    ? overrides.formaPagoCobro
+                    : (referenceRow.CANONICAL_FORMA_PAGO_COBRO
+                        ? String(referenceRow.CANONICAL_FORMA_PAGO_COBRO)
+                        : null),
+                cobroParcial: overrides.cobroParcial !== undefined
+                    ? overrides.cobroParcial
+                    : referenceRow.CANONICAL_COBRO_PARCIAL === true,
                 signaturePath: referenceRow.FIRMA_PATH || null,
                 deliveryDate: referenceRow.DELIVERY_UPDATED_AT || null,
                 deliveryRepartidor: referenceRow.DELIVERY_REPARTIDOR || null,
@@ -878,10 +905,12 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             // Use the most recent row for display metadata (date, status, etc.)
             const primaryRow = fRows[0]; // Already sorted by date DESC
             const canonicalConfirmationRow = fRows.find((row) => row.CANONICAL_CONFIRMATION_ID != null);
+            const cobroRow = fRows.find((row) => row.CANONICAL_COBRADO === true)
+                || canonicalConfirmationRow;
             const referenceRow = fRows.find((row) => !!row.CANONICAL_FIRMA_EVIDENCE_ID)
                 || fRows.find((row) => !!row.FIRMA_PATH)
                 || fRows.find((row) => String(row.LEGACY_FIRMA_NOMBRE || '').trim())
-                || canonicalConfirmationRow
+                || cobroRow
                 || primaryRow;
 
             const statuses = fRows.map(r => computeRowStatus(r));
@@ -920,6 +949,20 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 confirmationId: canonicalConfirmationRow?.CANONICAL_CONFIRMATION_ID == null
                     ? undefined
                     : String(canonicalConfirmationRow.CANONICAL_CONFIRMATION_ID),
+                cobroId: cobroRow?.CANONICAL_COBRO_ID == null
+                    ? undefined
+                    : String(cobroRow.CANONICAL_COBRO_ID),
+                cobrado: cobroRow?.CANONICAL_COBRADO === true,
+                importeCobrado: Number.isFinite(Number(cobroRow?.CANONICAL_IMPORTE_COBRADO))
+                    ? Number(cobroRow.CANONICAL_IMPORTE_COBRADO)
+                    : null,
+                importePendienteCobro: Number.isFinite(Number(cobroRow?.CANONICAL_IMPORTE_PENDIENTE_COBRO))
+                    ? Number(cobroRow.CANONICAL_IMPORTE_PENDIENTE_COBRO)
+                    : null,
+                formaPagoCobro: cobroRow?.CANONICAL_FORMA_PAGO_COBRO
+                    ? String(cobroRow.CANONICAL_FORMA_PAGO_COBRO)
+                    : null,
+                cobroParcial: cobroRow?.CANONICAL_COBRO_PARCIAL === true,
                 albaranes: albaranes.length > 1 ? albaranes : undefined
             }));
 
@@ -1908,6 +1951,7 @@ router.post('/rutero/order/:repartidorId/optimize', verifyToken, async (req, res
     });
 
 
+
     return res.json({
       success: true,
       repartidorId,
@@ -2570,27 +2614,144 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
 });
 
 // =============================================================================
-// POST /document/share/whatsapp
-// WhatsApp share with PDF base64 for repartidor documents (albaranes/facturas)
+// WhatsApp gateway admin (Baileys QR pairing — JEFE_VENTAS / ADMIN)
 // =============================================================================
-router.post('/document/share/whatsapp', verifyToken, (req, res) => {
+router.get('/whatsapp/gateway/status', verifyToken, requireJefeVentas, (req, res) => {
+    return res.json({ success: true, gateway: whatsappGateway.getStatus() });
+});
+
+router.get('/whatsapp/gateway/qr', verifyToken, requireJefeVentas, async (req, res) => {
+    try {
+        if (!whatsappGateway.baileys.isConfigured()) {
+            return sendRouteError(res, 503, 'WHATSAPP_BAILEYS_DISABLED');
+        }
+        const payload = await whatsappGateway.baileys.getQrDataUrl();
+        return res.json({ success: true, ...payload });
+    } catch (error) {
+        logger.error('[REPARTIDOR] WhatsApp QR failed', { code: error.code || null });
+        return sendRouteError(res, 503, error.code || 'WHATSAPP_QR_FAILED');
+    }
+});
+
+router.post('/whatsapp/gateway/start', verifyToken, requireJefeVentas, async (req, res) => {
+    try {
+        if (!whatsappGateway.baileys.isConfigured()) {
+            return sendRouteError(res, 503, 'WHATSAPP_BAILEYS_DISABLED');
+        }
+        await whatsappGateway.baileys.startSocket({ forceNewQr: req.body?.forceNewQr === true });
+        return res.json({ success: true, gateway: whatsappGateway.getStatus() });
+    } catch (error) {
+        logger.error('[REPARTIDOR] WhatsApp start failed', { code: error.code || null });
+        return sendRouteError(res, 503, error.code || 'WHATSAPP_START_FAILED');
+    }
+});
+
+// =============================================================================
+// POST /document/share/whatsapp
+// Corporate bot (Baileys free / Cloud API) when ready; otherwise local share.
+// =============================================================================
+router.post('/document/share/whatsapp', verifyToken, async (req, res) => {
     const phone = String(req.body?.telefono || '').replace(/\D/g, '');
     if (!/^\d{7,15}$/.test(phone)) {
         return sendRouteError(res, 422, 'PHONE_INVALID');
     }
     const key = req.documentOwnershipKey;
+    if (!key) {
+        return sendRouteError(res, 422, 'DOCUMENT_KEY_INVALID');
+    }
     const documentType = Object.prototype.hasOwnProperty.call(key, 'terminal') ? 'Albaran' : 'Factura';
     const reference = `${key.series}-${key.number}`;
-    const message = `Granja Mari Pepa\n\n${documentType}: ${reference}\n\nEl usuario debe confirmar el envio desde su dispositivo.`;
-    return res.json({
+    const clienteNombre = String(req.body?.clienteNombre || '').trim();
+    const caption = String(req.body?.mensaje || req.body?.message || '')
+        .trim()
+        .slice(0, 900)
+        || `Granja Mari Pepa\n\n${documentType}: ${reference}`;
+
+    // Default / fallback: deep-link + OS share (no corporate send).
+    const localPayload = {
         success: true,
-        whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-        message,
+        whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`,
+        message: caption,
         localShare: true,
         sent: false,
         deliveryConfirmed: false,
-        shareMode: 'LOCAL_USER_ACTION'
-    });
+        shareMode: 'LOCAL_USER_ACTION',
+    };
+
+    if (!whatsappGateway.isBotConfigured()) {
+        return res.json(localPayload);
+    }
+
+    try {
+        // If Baileys enabled but not paired yet, and no Cloud — return typed error
+        // so the app can show "gateway no emparejado" instead of fake local success
+        // only when the caller explicitly asked for bot-only. Prefer bot when ready;
+        // if pending and cloud absent, attempt send (throws NOT_PAIRED) and map below.
+        if (!whatsappGateway.isBotReady() && whatsappGateway.baileys.isConfigured() && !whatsappGateway.cloud.isConfigured()) {
+            return sendRouteError(res, 503, 'WHATSAPP_BAILEYS_NOT_PAIRED');
+        }
+
+        const isAlbaran = Object.prototype.hasOwnProperty.call(key, 'terminal');
+        let headers;
+        let lines = [];
+        if (isAlbaran) {
+            headers = await repartidorDb.getAlbaranPdfHeader(key.number, key.series, key.year, key.terminal);
+            if (headers && headers.length) {
+                lines = await repartidorDb.getAlbaranLines(key.year, key.series, key.terminal, key.number);
+            }
+        } else {
+            headers = await repartidorDb.getInvoiceHeaderByFactura(key.number, key.series, key.year);
+        }
+        if (!headers || headers.length === 0) {
+            return sendRouteError(res, 404, 'DOCUMENT_NOT_FOUND');
+        }
+        const header = headers[0];
+        const pdfBuffer = await generateInvoicePDF({
+            header,
+            lines: lines || [],
+            documentType: isAlbaran ? 'albaran' : 'factura',
+        });
+        const filename = `${isAlbaran ? 'Albaran' : 'Factura'}_${key.series}-${key.number}.pdf`
+            .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+        const result = await whatsappGateway.sendDocumentFromBot({
+            telefono: phone,
+            pdfBuffer,
+            filename,
+            caption,
+            bodyParams: [
+                reference,
+                clienteNombre || header.NOMBRECLIENTEFACTURA || documentType,
+            ],
+        });
+
+        return res.json({
+            success: true,
+            localShare: false,
+            sent: true,
+            deliveryConfirmed: true,
+            shareMode: 'BOT_GATEWAY',
+            provider: result.provider,
+            mode: result.mode,
+            messageId: result.messageId,
+            message: caption,
+        });
+    } catch (error) {
+        logger.error('[REPARTIDOR] WhatsApp gateway send failed', {
+            code: error.code || null,
+            status: error.status || null,
+        });
+        if (error.code === 'PHONE_INVALID') {
+            return sendRouteError(res, 422, 'PHONE_INVALID');
+        }
+        if (error.code === 'WHATSAPP_BAILEYS_NOT_PAIRED') {
+            return sendRouteError(res, 503, 'WHATSAPP_BAILEYS_NOT_PAIRED');
+        }
+        if (error.code === 'WHATSAPP_NUMBER_NOT_REGISTERED') {
+            return sendRouteError(res, 422, 'WHATSAPP_NUMBER_NOT_REGISTERED');
+        }
+        return sendRouteError(res, 503, 'WHATSAPP_DELIVERY_FAILED');
+    }
 });
 
 module.exports = router;

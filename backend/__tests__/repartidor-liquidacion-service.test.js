@@ -21,7 +21,8 @@ const validSnapshot = () => ({
   pending: [{ id: 'PEN-1', amount: 2, reason: 'CLIENTE_AUSENTE' }],
   openingBalance: 4,
   breakdown: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 4, pending: 2 },
-  balance: 21,
+  // Solo efectivo (20) arrastra deuda: 4 + 20 - 3 - 1 - 4 = 16
+  balance: 16,
 });
 
 function transactionalRepository({ replay = null, locked = false, snapshot = validSnapshot(), on = () => {}, capabilityError } = {}) {
@@ -112,7 +113,7 @@ describe('repartidor-liquidacion-service', () => {
     };
     const { repository, transaction } = transactionalRepository({ replay });
     const result = await createRepartidorLiquidacionService({ repository }).closeDay(command, validActor());
-    expect(result).toEqual({ created: false, liquidacion: { id: 'OPS-OLD', marker: buildLiquidacionCommand(command).marker, repartidorId: 'R-17', date: command.date, status: 'CLOSED', snapshot: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 4, pending: 2, openingBalance: 4, balance: 21 } }, outboxId: null, outboxIntent: null });
+    expect(result).toEqual({ created: false, liquidacion: { id: 'OPS-OLD', marker: buildLiquidacionCommand(command).marker, repartidorId: 'R-17', date: command.date, status: 'CLOSED', snapshot: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 4, pending: 2, openingBalance: 4, balance: 16 } }, outboxId: null, outboxIntent: null });
     expect(JSON.stringify(result)).not.toMatch(/COB-1|dni|internalToken|idempotency/i);
     expect(transaction.deriveDaySnapshot).not.toHaveBeenCalled();
     expect(transaction.enqueueEmailOutbox).not.toHaveBeenCalled();
@@ -250,22 +251,22 @@ describe('repartidor-liquidacion-service', () => {
     expect(repository.assertCapabilities).toHaveBeenCalledWith(expect.objectContaining({ requiresOutbox: false }));
   });
 
-  test('el saldo baja si se ingresa de mas y sube si se ingresa de menos', () => {
+  test('el saldo baja si se ingresa de mas y sube si se ingresa de menos (solo efectivo)', () => {
     const command = buildLiquidacionCommand(validInput({ sendEmails: false }));
     const under = normalizeDaySnapshot({
       ...validSnapshot(),
       bankDeposits: [{ id: 'ING-1', amount: 1 }],
       breakdown: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 1, pending: 2 },
-      balance: 24,
+      balance: 19,
     }, command);
     const over = normalizeDaySnapshot({
       ...validSnapshot(),
       bankDeposits: [{ id: 'ING-1', amount: 40 }],
       breakdown: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 40, pending: 2 },
-      balance: -15,
+      balance: -20,
     }, command);
-    expect(under.balance).toBe(24);
-    expect(over.balance).toBe(-15);
+    expect(under.balance).toBe(19);
+    expect(over.balance).toBe(-20);
   });
 
   test('los datos derivados del cliente siguen prohibidos y rollback queda delegado al repositorio', async () => {

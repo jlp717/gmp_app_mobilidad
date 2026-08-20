@@ -23,23 +23,39 @@ describe('liquidacion-pdf-service', () => {
     })).toBe('GMP 2026 A 057 002082');
   });
 
-  test('cashToDeposit excludes tarjeta', () => {
+  test('cashToDeposit = efectivo + saldo − gastos ± ajustes; cheques/tarjeta fuera', () => {
     expect(cashToDeposit({
       totalEfectivo: 844.29,
-      totalCheques: 0,
-      totalPostdatados: 0,
       saldoActual: -1.69,
       gastos: 0,
       ajustes: 0,
     })).toBe(842.6);
     expect(cashToDeposit({
       totalEfectivo: 300,
-      totalCheques: 0,
-      totalPostdatados: 0,
       saldoActual: 25,
       gastos: 0,
       ajustes: 0,
     })).toBe(325);
+    // Cheques/postdatados intentionally ignored even if passed by old callers.
+    expect(cashToDeposit({
+      totalEfectivo: 100,
+      totalCheques: 50,
+      totalPostdatados: 20,
+      saldoActual: 10,
+      gastos: 5,
+      ajustes: 0,
+    })).toBe(105);
+  });
+
+  test('computeClosingBalance arrastra solo efectivo', () => {
+    const { computeClosingBalance } = require('../services/liquidacion-pdf-service');
+    expect(computeClosingBalance({
+      openingBalance: -1.69,
+      cashPayments: 844.29,
+      expenses: 0,
+      adjustments: 0,
+      bankDeposits: 840,
+    })).toBe(2.6);
   });
 
   test('payment and document labels match paper', () => {

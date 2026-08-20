@@ -516,11 +516,12 @@ async function buildClosedLiquidacionPdf({ idempotencyToken, repartidorId }) {
   }
   const paymentTotals = liquidacionPdfPaymentTotals(snapshot.payments);
   const totalCobrosDia = roundMoney(snapshot.breakdown.payments);
-  const totalAIngresar = roundMoney(
-    Number(snapshot.openingBalance) + paymentTotals.totalEfectivo + paymentTotals.totalCheques
-      + paymentTotals.totalPostdatados - Number(snapshot.breakdown.expenses)
-      + Number(snapshot.breakdown.adjustments),
-  );
+  const totalAIngresar = cashToDeposit({
+    totalEfectivo: paymentTotals.totalEfectivo,
+    saldoActual: Number(snapshot.openingBalance),
+    gastos: Number(snapshot.breakdown.expenses),
+    ajustes: Number(snapshot.breakdown.adjustments),
+  });
   const ingresoBanco = roundMoney(snapshot.breakdown.bankDeposits);
   const totals = {
     ...paymentTotals, totalCobrosDia, saldoActual: roundMoney(snapshot.openingBalance),
@@ -920,7 +921,14 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
       saldoActual,
       totalCobrosDia,
       gastos,
-      totalAIngresar: roundMoney(saldoActual + totalCobrosDia - gastos),
+      totalAIngresar: roundMoney(
+        cashToDeposit({
+          totalEfectivo: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
+          saldoActual,
+          gastos,
+          ajustes: 0,
+        }),
+      ),
       ingresoBanco: 0,
       totalEfectivo2: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
       entregado: 0,
@@ -1002,8 +1010,6 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   const ajustes = roundMoney(structured.ajustes);
   const totalAIngresar = cashToDeposit({
     totalEfectivo,
-    totalCheques,
-    totalPostdatados,
     saldoActual,
     gastos,
     ajustes,

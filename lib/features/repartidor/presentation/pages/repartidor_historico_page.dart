@@ -445,6 +445,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           hasLegacySignature: d.hasLegacySignature,
           legacyDate: d.legacyDate,
           confirmationId: d.confirmationId,
+          cobroId: d.cobroId,
+          cobrado: d.cobrado,
+          importeCobrado: d.importeCobrado,
+          importePendienteCobro: d.importePendienteCobro,
+          formaPagoCobro: d.formaPagoCobro,
+          cobroParcial: d.cobroParcial,
           repartidorId: resolveRepartoDocumentOwner(
             documentOwner: d.deliveryRepartidor,
             selectedOwner: owner,
@@ -1359,6 +1365,29 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   onTap: _showDateRangePicker,
                 ),
               ),
+              // Quick "today" filter for same-day deliveries
+              SizedBox(
+                height: 38,
+                child: OutlinedButton.icon(
+                  onPressed: _filterTodayDocuments,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor:
+                        _isTodayFilterActive ? Colors.white : AppTheme.success,
+                    backgroundColor: _isTodayFilterActive
+                        ? AppTheme.success
+                        : AppTheme.success.withValues(alpha: 0.12),
+                    side: BorderSide(
+                      color: AppTheme.success.withValues(alpha: 0.45),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.today, size: 16),
+                  label: const Text('Hoy', style: TextStyle(fontSize: 12)),
+                ),
+              ),
               // Doc type dropdown
               Container(
                 height: 38,
@@ -2027,6 +2056,41 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     ),
                   ),
                 ],
+                if (doc.hasAppCobro) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: AppTheme.success.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.payments_outlined,
+                          size: 11,
+                          color: AppTheme.success,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          doc.cobroBadgeLabel ?? 'COBRADO',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.success,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (hasAnySignature) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -2140,6 +2204,35 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                             color: AppTheme.textSecondary,
                           ),
                         ),
+                        if (doc.hasAppCobro) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            [
+                              doc.cobroParcial ? 'Cobro parcial' : 'Cobrado',
+                              CurrencyFormatter.format(doc.importeCobrado!),
+                              if ((doc.formaPagoCobro ?? '').trim().isNotEmpty)
+                                doc.formaPagoCobro!.trim(),
+                              if (doc.importePendienteCobro != null &&
+                                  doc.importePendienteCobro! > 0.004)
+                                'pend. ${CurrencyFormatter.format(doc.importePendienteCobro!)}',
+                            ].join(' · '),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ] else if (doc.status == _DeliveryStatus.delivered ||
+                            doc.status == _DeliveryStatus.partial) ...[
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Sin cobro en ruta',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -2979,18 +3072,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     final modal = AsyncOperationModal.show(
       context,
-      text: 'Preparando documento...',
+      text: 'Enviando documento por WhatsApp...',
     );
     try {
-      final bytes = await _downloadDocumentForAction(doc, owner);
-
-      // Save PDF to temp file
-      final tempDir = await getTemporaryDirectory();
-      final fileName = '${typeLabel}_${doc.number}.pdf';
-      final file = File('${tempDir.path}/$fileName');
-      await file.writeAsBytes(bytes);
-
-      // The backend gives the conversation deep-link after it validates owner.
+      // The backend validates owner and, when Cloud API is enabled, sends
+      // message + PDF from the corporate WhatsApp number.
       final localShare = await RepartidorDataService.shareWhatsApp(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
@@ -3004,6 +3090,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         telefono: result.phone,
         repartidorId: owner,
         clienteNombre: clientName,
+        mensaje: result.message,
         facturaNumber: doc.facturaNumber,
         serieFactura: doc.serieFactura,
         ejercicioFactura: doc.ejercicioFactura,
@@ -3013,15 +3100,36 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranYear: doc.ejercicio,
       );
 
+      if (localShare.deliveredByBot) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$typeLabel enviado por el WhatsApp corporativo (mensaje + PDF).',
+            ),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+        return;
+      }
+
       if (!localShare.localShare || localShare.sent) {
         throw const RepartidorDataException(
           'No se pudo preparar el envío por WhatsApp.',
         );
       }
+
+      final bytes = await _downloadDocumentForAction(doc, owner);
+      final tempDir = await getTemporaryDirectory();
+      final fileName = '${typeLabel}_${doc.number}.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
       modal.close();
       if (!mounted) return;
 
-      // The PDF is handed to the platform and then the WhatsApp chat opens.
+      // Fallback: PDF handed to the platform and WhatsApp chat opens.
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
@@ -3189,6 +3297,31 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
   }
 
+  bool get _isTodayFilterActive {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _dateFrom != null &&
+        _dateTo != null &&
+        _dateFrom!.year == today.year &&
+        _dateFrom!.month == today.month &&
+        _dateFrom!.day == today.day &&
+        _dateTo!.year == today.year &&
+        _dateTo!.month == today.month &&
+        _dateTo!.day == today.day;
+  }
+
+  void _filterTodayDocuments() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    setState(() {
+      _dateFrom = today;
+      _dateTo = today;
+    });
+    if (_selectedClientId != null) {
+      _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+    }
+  }
+
   void _cycleDocType() {
     setState(() {
       if (_filterDocType == null) {
@@ -3327,6 +3460,12 @@ class _DocumentItem {
     this.hasLegacySignature = false,
     this.legacyDate,
     this.confirmationId,
+    this.cobroId,
+    this.cobrado = false,
+    this.importeCobrado,
+    this.importePendienteCobro,
+    this.formaPagoCobro,
+    this.cobroParcial = false,
     this.repartidorId,
   });
   final String id;
@@ -3356,7 +3495,24 @@ class _DocumentItem {
   final bool hasLegacySignature;
   final String? legacyDate;
   final String? confirmationId;
+  final String? cobroId;
+  final bool cobrado;
+  final double? importeCobrado;
+  final double? importePendienteCobro;
+  final String? formaPagoCobro;
+  final bool cobroParcial;
   final String? repartidorId;
+
+  bool get hasAppCobro =>
+      cobrado && (importeCobrado != null && importeCobrado! > 0.004);
+
+  String? get cobroBadgeLabel {
+    if (!hasAppCobro) return null;
+    final method = (formaPagoCobro ?? '').trim();
+    final kind = cobroParcial ? 'PARCIAL' : 'COBRADO';
+    if (method.isEmpty) return kind;
+    return '$kind · $method';
+  }
 }
 
 // =============================================================================

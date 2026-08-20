@@ -28,13 +28,15 @@ class RepartidorDataException implements Exception {
   String toString() => code == null ? message : '[$code] $message';
 }
 
-/// Backend acknowledgement that a document may be passed to the operating
-/// system share sheet. It deliberately does not represent an external send.
+/// Backend acknowledgement for WhatsApp delivery.
+/// [localShare]=true means OS share sheet; [sent]=true means Cloud bot delivered.
 class LocalDocumentShare {
   const LocalDocumentShare({
     required this.localShare,
     required this.sent,
     this.whatsappUrl,
+    this.shareMode,
+    this.messageId,
   });
 
   final bool localShare;
@@ -42,6 +44,12 @@ class LocalDocumentShare {
 
   /// Optional WhatsApp deep link; opening it never means the attachment was sent.
   final String? whatsappUrl;
+
+  /// LOCAL_USER_ACTION | CLOUD_API
+  final String? shareMode;
+  final String? messageId;
+
+  bool get deliveredByBot => sent && !localShare;
 }
 
 class RepartoReceiptEmailResult {
@@ -288,6 +296,12 @@ class HistoryDocument {
     this.hasLegacySignature = false,
     this.legacyDate,
     this.confirmationId,
+    this.cobroId,
+    this.cobrado = false,
+    this.importeCobrado,
+    this.importePendienteCobro,
+    this.formaPagoCobro,
+    this.cobroParcial = false,
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
@@ -300,6 +314,12 @@ class HistoryDocument {
     double asDouble(dynamic value) {
       if (value is num) return value.toDouble();
       return double.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    double? asNullableDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString());
     }
 
     bool asBool(dynamic value) {
@@ -343,6 +363,12 @@ class HistoryDocument {
       hasLegacySignature: asBool(json['hasLegacySignature']),
       legacyDate: json['legacyDate']?.toString(),
       confirmationId: json['confirmationId']?.toString(),
+      cobroId: json['cobroId']?.toString(),
+      cobrado: asBool(json['cobrado']),
+      importeCobrado: asNullableDouble(json['importeCobrado']),
+      importePendienteCobro: asNullableDouble(json['importePendienteCobro']),
+      formaPagoCobro: json['formaPagoCobro']?.toString(),
+      cobroParcial: asBool(json['cobroParcial']),
     );
   }
   final String id;
@@ -372,6 +398,15 @@ class HistoryDocument {
   final bool hasLegacySignature;
   final String? legacyDate;
   final String? confirmationId;
+  final String? cobroId;
+  final bool cobrado;
+  final double? importeCobrado;
+  final double? importePendienteCobro;
+  final String? formaPagoCobro;
+  final bool cobroParcial;
+
+  bool get hasAppCobro =>
+      cobrado && (importeCobrado != null && importeCobrado! > 0.004);
 }
 
 /// Objetivo mensual
@@ -1086,8 +1121,9 @@ class RepartidorDataService {
     }
   }
 
-  /// Requests permission to present the operating-system share sheet.
-  /// This operation never means that GMP sent a WhatsApp message.
+  /// Requests WhatsApp delivery.
+  /// When Cloud API is configured server-side, returns [LocalDocumentShare.deliveredByBot].
+  /// Otherwise returns a local share intent (OS sheet) — never implies GMP sent the message.
   static Future<LocalDocumentShare> shareWhatsApp({
     required int year,
     required String serie,
@@ -1096,6 +1132,7 @@ class RepartidorDataService {
     required String telefono,
     required String repartidorId,
     String? clienteNombre,
+    String? mensaje,
     int terminal = 0,
     // Factura specific
     int? facturaNumber,
@@ -1125,6 +1162,8 @@ class RepartidorDataService {
         'terminal': terminal,
         'repartidorId': owner,
         'clienteNombre': clienteNombre,
+        if (mensaje != null && mensaje.trim().isNotEmpty)
+          'mensaje': mensaje.trim(),
         'facturaNumber': facturaNumber,
         'serieFactura': serieFactura,
         'ejercicioFactura': ejercicioFactura,
@@ -1136,18 +1175,38 @@ class RepartidorDataService {
 
       final localShare = response['localShare'] == true;
       final sent = response['sent'] == true;
+      final shareMode = response['shareMode']?.toString();
+      final messageId = response['messageId']?.toString();
+
+      if (response['success'] == true && sent && !localShare) {
+        return LocalDocumentShare(
+          localShare: false,
+          sent: true,
+          shareMode: shareMode ?? 'BOT_GATEWAY',
+          messageId: messageId,
+        );
+      }
+
       if (response['success'] == true && localShare && !sent) {
         final url = response['whatsappUrl']?.toString().trim();
         return LocalDocumentShare(
           localShare: true,
           sent: false,
           whatsappUrl: url == null || url.isEmpty ? null : url,
+          shareMode: shareMode ?? 'LOCAL_USER_ACTION',
         );
       }
       throw const RepartidorDataException(
         'No se pudo preparar el envío por WhatsApp.',
       );
     } on ApiException catch (error) {
+      if (error.code == 'WHATSAPP_BAILEYS_NOT_PAIRED') {
+        throw const RepartidorDataException(
+          'WhatsApp corporativo no vinculado. Un jefe debe emparejar el móvil de empresa (QR).',
+          statusCode: 503,
+          code: 'WHATSAPP_BAILEYS_NOT_PAIRED',
+        );
+      }
       throw RepartidorDataException(
         'No se pudo preparar el envío por WhatsApp.',
         statusCode: error.statusCode,

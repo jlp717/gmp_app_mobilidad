@@ -185,6 +185,41 @@ void main() {
     expect(capturedBody, containsPair('repartidorId', '08'));
   });
 
+  test('cloud WhatsApp contract marks bot delivery without local share',
+      () async {
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.resolve(
+          Response<Map<String, dynamic>>(
+            requestOptions: options,
+            statusCode: 200,
+            data: const {
+              'success': true,
+              'localShare': false,
+              'sent': true,
+              'shareMode': 'BOT_GATEWAY',
+              'messageId': 'wamid.ABC',
+            },
+          ),
+        );
+      },
+    );
+    ApiClient.dio.interceptors.add(interceptor);
+
+    final result = await RepartidorDataService.shareWhatsApp(
+      year: 2026,
+      serie: 'A',
+      number: 1,
+      type: 'albaran',
+      telefono: '600000000',
+      repartidorId: '08',
+      mensaje: 'Albarán listo',
+    );
+
+    expect(result.deliveredByBot, isTrue);
+    expect(result.messageId, 'wamid.ABC');
+  });
+
   test('history and signature carry owner in URL and isolate cache keys',
       () async {
     final requests = <RequestOptions>[];

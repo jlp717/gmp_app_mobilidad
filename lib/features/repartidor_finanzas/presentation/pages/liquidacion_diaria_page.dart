@@ -190,40 +190,121 @@ class _RepartidorLiquidacionDiariaPageState
                 label: 'Total efectivo',
                 value: summary.totalEfectivo,
                 striped: false,
+                valueColor: const Color(0xFF067A58),
               ),
               _ClassicReadRow(
-                label: 'Total cheques',
+                label: 'Total cheques / cartera',
                 value: summary.totalCheques,
                 striped: true,
+                subtitle: 'No ingreso banco',
+              ),
+              _ClassicReadRow(
+                label: 'Total tarjeta',
+                value: summary.totalTarjeta,
+                striped: false,
+                subtitle: 'No ingreso banco (TPV)',
               ),
               _ClassicReadRow(
                 label: 'Total postdatados',
                 value: summary.totalPostdatados,
+                striped: true,
+                subtitle: 'No ingreso banco',
+              ),
+              _ClassicReadRow(
+                label: 'Total cobros del día',
+                value: summary.totalCobrosDia,
                 striped: false,
               ),
               _ClassicReadRow(
-                label: 'Saldo actual',
+                label: 'Saldo actual (deuda)',
                 value: summary.saldoActual,
                 striped: true,
+                valueColor:
+                    summary.saldoActual < 0 ? const Color(0xFFC62828) : null,
+                subtitle: 'Arrastre liquidación anterior',
               ),
+              _ClassicReadRow(
+                label: 'Gastos',
+                value: summary.gastos,
+                striped: false,
+              ),
+              if (summary.ajustes != 0)
+                _ClassicReadRow(
+                  label: 'Ajustes',
+                  value: summary.ajustes,
+                  striped: true,
+                ),
               _ClassicReadRow(
                 label: 'Total a ingresar',
                 value: summary.totalAIngresar,
-                striped: false,
+                striped: summary.ajustes == 0,
                 valueColor: const Color(0xFFC62828),
+                subtitle: 'Efectivo + deuda − gastos ± ajustes',
               ),
               _ClassicInputRow(
                 label: 'Ingreso en banco',
                 controller: _ingresoBancoController,
                 striped: true,
                 enabled: !closed && !isAggregate,
+                subtitle: 'Solo efectivo depositado',
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Text(
+                  'Fórmula: total a ingresar = efectivo + saldo − gastos ± ajustes. '
+                  'Nuevo saldo = total a ingresar − ingreso banco.',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              if (!closed && !isAggregate) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _LiquidacionEntryActions(
+                    isSubmitting: _submittingEntry,
+                    canCreateAdjustments: widget.canCreateAdjustments,
+                    onExpense: () =>
+                        unawaited(_openEntryDialog(_EntryKind.expense)),
+                    onBankDeposit: () =>
+                        unawaited(_openEntryDialog(_EntryKind.bankDeposit)),
+                    onAdjustment: () =>
+                        unawaited(_openEntryDialog(_EntryKind.adjustment)),
+                  ),
+                ),
+              ],
+              if (asyncLedger != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: asyncLedger.when(
+                    data: (ledger) => _LiquidacionLedgerPanel(
+                      ledger: ledger,
+                      onRetry: () => ref.invalidate(
+                        repartidorLiquidacionLedgerProvider(ledgerArgs),
+                      ),
+                    ),
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: LinearProgressIndicator(),
+                    ),
+                    error: (error, _) => Text(
+                      financeErrorMessage(
+                        error,
+                        'No se pudo cargar el desglose de liquidación.',
+                      ),
+                      style: const TextStyle(color: Color(0xFFC62828)),
+                    ),
+                  ),
+                ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: Divider(color: Colors.black, thickness: 3, height: 8),
               ),
               _ClassicReadRow(
-                label: 'Total efectivo',
+                label: 'Total efectivo (control)',
                 value: summary.totalEfectivo,
                 striped: false,
               ),
@@ -232,6 +313,7 @@ class _RepartidorLiquidacionDiariaPageState
                 controller: _entregadoController,
                 striped: true,
                 enabled: !closed && !isAggregate,
+                subtitle: 'Solo informativo; no se envía al cierre',
               ),
               if (closed)
                 Padding(
@@ -1727,13 +1809,15 @@ class _ClassicReadRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.striped,
-    this.valueColor = const Color(0xFF1565C0),
+    this.valueColor,
+    this.subtitle,
   });
 
   final String label;
   final double value;
   final bool striped;
-  final Color valueColor;
+  final Color? valueColor;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -1744,19 +1828,32 @@ class _ClassicReadRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty)
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
               ),
             ),
             Text(
               '${value.toStringAsFixed(2)} €',
               style: TextStyle(
-                color: valueColor,
+                color: valueColor ?? const Color(0xFF1565C0),
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
@@ -1774,12 +1871,14 @@ class _ClassicInputRow extends StatelessWidget {
     required this.controller,
     required this.striped,
     required this.enabled,
+    this.subtitle,
   });
 
   final String label;
   final TextEditingController controller;
   final bool striped;
   final bool enabled;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -1791,13 +1890,26 @@ class _ClassicInputRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 160,
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty)
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
               ),
             ),
             Expanded(

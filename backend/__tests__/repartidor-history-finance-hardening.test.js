@@ -143,9 +143,40 @@ describe('repartidor history document hardening', () => {
     const confirmSql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
       .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
-    expect(confirmSql).toContain('TRIM(DOCUMENT_ID) IN');
-    expect(confirmSql).toContain('TRIM(REPARTIDOR_ID) IN');
+    expect(confirmSql).toContain('TRIM(C.DOCUMENT_ID) IN');
+    expect(confirmSql).toContain('TRIM(C.REPARTIDOR_ID) IN');
     expect(confirmSql).not.toContain('PEDIDOS_CAB');
+  });
+
+  test('exposes app cobro fields from the canonical confirmation overlay', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
+        return [{
+          DOCUMENT_ID: '2026-A-1-42-C1',
+          STATUS: 'ENTREGADO',
+          ID: 88,
+          FIRMA_EVIDENCE_ID: null,
+          COBRO_ID: 91,
+          IMPORTE_COBRADO: 40,
+          IMPORTE_PENDIENTE_COBRO: 0,
+          FORMA_PAGO_COBRO: 'EF',
+        }];
+      }
+      return [historyRow({ CONFORMADOSN: 'N', DELIVERY_STATUS: null })];
+    });
+
+    const response = await get('/history/documents/C1').query({ repartidorId: '05' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.documents[0]).toMatchObject({
+      confirmationId: '88',
+      cobrado: true,
+      cobroId: '91',
+      importeCobrado: 40,
+      importePendienteCobro: 0,
+      formaPagoCobro: 'EFECTIVO',
+      cobroParcial: false,
+    });
   });
 
   test('isolated_test reads production confirmations then overlays TEST quantities/status', async () => {

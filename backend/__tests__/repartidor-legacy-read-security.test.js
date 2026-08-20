@@ -42,6 +42,35 @@ jest.mock('../services/emailPdfService', () => ({
   cachePdf: jest.fn(),
   getCachedPdf: jest.fn(),
 }));
+jest.mock('../services/whatsappCloudService', () => ({
+  isConfigured: jest.fn(() => false),
+  isEnabled: jest.fn(() => false),
+  sendDocumentFromBot: jest.fn(),
+}));
+jest.mock('../services/whatsappBaileysService', () => ({
+  isConfigured: jest.fn(() => false),
+  isEnabled: jest.fn(() => false),
+  isReady: jest.fn(() => false),
+  getStatus: jest.fn(() => ({ provider: 'BAILEYS', enabled: false, ready: false })),
+  ensureReady: jest.fn(async () => false),
+  sendDocumentFromBot: jest.fn(),
+  getQrDataUrl: jest.fn(),
+  startSocket: jest.fn(),
+}));
+jest.mock('../services/whatsappGatewayService', () => ({
+  isBotConfigured: jest.fn(() => false),
+  isBotReady: jest.fn(() => false),
+  getStatus: jest.fn(() => ({ activeProvider: 'NONE', botReady: false })),
+  sendDocumentFromBot: jest.fn(),
+  baileys: {
+    isConfigured: jest.fn(() => false),
+    getQrDataUrl: jest.fn(),
+    startSocket: jest.fn(),
+  },
+  cloud: {
+    isConfigured: jest.fn(() => false),
+  },
+}));
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, res, next) => {
     if (!req.headers.authorization || !mockUser) {
@@ -51,6 +80,19 @@ jest.mock('../middleware/auth', () => ({
       ? { repartidorCodes: mockUser.repartidorCodes || [mockUser.code] }
       : {};
     req.user = { ...mockUser, ...selfFleet };
+    return next();
+  },
+  requireJefeVentas: (req, res, next) => {
+    const role = String(req.user?.role || '').toUpperCase();
+    if (role !== 'JEFE_VENTAS' && role !== 'ADMIN') {
+      return res.status(403).json({ success: false, code: 'AUTH_JEFE_VENTAS_DENIED' });
+    }
+    return next();
+  },
+  requireRoles: (...roles) => (req, res, next) => {
+    if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({ success: false, code: 'AUTH_ROLE_DENIED' });
+    }
     return next();
   },
 }));

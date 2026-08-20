@@ -4,6 +4,15 @@ const {
   validateConfirmationTableMapping,
   validateFinanceTableMapping,
 } = require('../config/reparto-runtime');
+const {
+  cashToDeposit,
+  computeClosingBalance,
+  sumCashPayments,
+  CASH_METHOD_RE,
+  CHEQUE_METHOD_RE,
+  CARD_METHOD_RE,
+  POSTDATED_METHOD_RE,
+} = require('../services/liquidacion-pdf-service');
 
 const MARKER_MAX_LENGTH = 30;
 const BASE_TABLE_KEYS = Object.freeze([
@@ -879,8 +888,13 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           adjustments: sum(adjustments, 'signedAmount'), bankDeposits: sum(bankDeposits),
           pending: sum(pending),
         };
-        const balance = openingBalance + breakdown.payments - breakdown.expenses
-          + breakdown.adjustments - breakdown.bankDeposits;
+        const balance = computeClosingBalance({
+          openingBalance,
+          cashPayments: sumCashPayments(payments),
+          expenses: breakdown.expenses,
+          adjustments: breakdown.adjustments,
+          bankDeposits: breakdown.bankDeposits,
+        });
         return { repartidorId, date, deliveries, payments, expenses, adjustments,
           bankDeposits, pending, openingBalance, breakdown, balance };
       },
@@ -889,19 +903,23 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         const { year, month, day } = dateParts(input.date);
         const byMethod = (pattern) => input.snapshot.payments
           .filter((payment) => pattern.test(payment.paymentMethod)).reduce((sum, payment) => sum + payment.amount, 0);
-        const cash = byMethod(/^(EFECTIVO|EF|F0|E|CONTADO|CT)$/i);
-        const cheques = byMethod(/^(CHEQUE|CH|TALON|TALON BANCARIO)$/i);
-        const cards = byMethod(/^(TARJETA|TJ|TPV|TRANSFERENCIA|TR|T0|BIZUM|BI)$/i);
-        const postdated = byMethod(/^(POSTDATADO|PD|POSTDATADOS)$/i);
+        const cash = byMethod(CASH_METHOD_RE);
+        const cheques = byMethod(CHEQUE_METHOD_RE);
+        const cards = byMethod(CARD_METHOD_RE);
+        const postdated = byMethod(POSTDATED_METHOD_RE);
         const classifiedPayments = cash + cheques + cards + postdated;
         if (Math.abs(classifiedPayments - input.snapshot.breakdown.payments) > 0.00001) {
           throw new LiquidacionRepositoryUnavailableError(
             'Hay formas de pago autoritativas sin clasificacion LQD',
           );
         }
-        const cashToBank = cash + cheques + postdated;
-        const totalToDeposit = input.snapshot.openingBalance + cashToBank
-          - input.snapshot.breakdown.expenses + input.snapshot.breakdown.adjustments;
+        // Solo efectivo entra en ingreso banco / arrastre de deuda.
+        const totalToDeposit = cashToDeposit({
+          totalEfectivo: cash,
+          saldoActual: input.snapshot.openingBalance,
+          gastos: input.snapshot.breakdown.expenses,
+          ajustes: input.snapshot.breakdown.adjustments,
+        });
         await execute(connection,
           `INSERT INTO ${finance.liquidationOps} (`
             + 'IDEMPOTENCY_TOKEN, IDMARCALIQUIDACION, CODIGOVENDEDOR, DIALIQUIDACION, MESLIQUIDACION, '

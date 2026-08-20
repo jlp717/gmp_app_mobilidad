@@ -14,7 +14,13 @@ const LINE = '#c5d4e8';
 const CARD_BG = '#eef6ff';
 const CARD_GREEN = '#e7f8f1';
 const CARD_AMBER = '#fff6e0';
+const CARD_MUTED = '#f1f5f9';
 const WHITE = '#ffffff';
+
+const CASH_METHOD_RE = /^(EFECTIVO|EF|F0|E|CONTADO|CT)$/i;
+const CHEQUE_METHOD_RE = /^(CHEQUE|CH|TALON|TALON BANCARIO)$/i;
+const CARD_METHOD_RE = /^(TARJETA|TJ|TPV|TRANSFERENCIA|TR|T0|BIZUM|BI)$/i;
+const POSTDATED_METHOD_RE = /^(POSTDATADO|PD|POSTDATADOS)$/i;
 
 function toNumber(raw) {
   const num = Number(raw);
@@ -54,32 +60,80 @@ function formatGmpLiquidacionDisplay({
   return `GMP ${safeYear} ${serieLetter} ${pad(vendor, 3)} ${pad(safeNumero, 6)}`;
 }
 
+function isCashPaymentMethod(raw) {
+  return CASH_METHOD_RE.test(String(raw || '').trim());
+}
+
+function isChequePaymentMethod(raw) {
+  return CHEQUE_METHOD_RE.test(String(raw || '').trim());
+}
+
+function isCardPaymentMethod(raw) {
+  return CARD_METHOD_RE.test(String(raw || '').trim());
+}
+
+function isPostdatedPaymentMethod(raw) {
+  return POSTDATED_METHOD_RE.test(String(raw || '').trim());
+}
+
+/**
+ * Cash treasury deposit target.
+ * Cheques / cartera / tarjeta never enter bank cash deposit.
+ *
+ * totalAIngresar = efectivo + saldoActual − gastos + ajustes
+ * Identity: totalEfectivo = totalAIngresar − saldoActual  (when gastos=ajustes=0)
+ */
 function cashToDeposit({
   totalEfectivo = 0,
-  totalCheques = 0,
-  totalPostdatados = 0,
   saldoActual = 0,
   gastos = 0,
   ajustes = 0,
 } = {}) {
   return roundMoney(
     toNumber(totalEfectivo)
-      + toNumber(totalCheques)
-      + toNumber(totalPostdatados)
       + toNumber(saldoActual)
       - toNumber(gastos)
       + toNumber(ajustes),
   );
 }
 
+/**
+ * Carry-forward debt written to REPARTIDOR_FINANCIAL_BALANCES.SALDO_PENDIENTE.
+ * Only cash affects treasury debt; tarjeta/cheques/postdatados stay out.
+ */
+function computeClosingBalance({
+  openingBalance = 0,
+  cashPayments = 0,
+  expenses = 0,
+  adjustments = 0,
+  bankDeposits = 0,
+} = {}) {
+  return roundMoney(
+    toNumber(openingBalance)
+      + toNumber(cashPayments)
+      - toNumber(expenses)
+      + toNumber(adjustments)
+      - toNumber(bankDeposits),
+  );
+}
+
+function sumCashPayments(payments = []) {
+  return roundMoney(
+    (Array.isArray(payments) ? payments : []).reduce((sum, payment) => {
+      if (!isCashPaymentMethod(payment?.paymentMethod)) return sum;
+      return sum + toNumber(payment?.amount);
+    }, 0),
+  );
+}
+
 function paymentTypeLabel(raw) {
   const value = String(raw || '').trim().toUpperCase();
-  if (['EFECTIVO', 'EF', 'F0', 'E', 'CONTADO', 'CT'].includes(value)) return 'EFECTIVO';
-  if (['TARJETA', 'TJ', 'TPV', 'T0'].includes(value)) return 'TARJETA';
+  if (CASH_METHOD_RE.test(value)) return 'EFECTIVO';
+  if (CARD_METHOD_RE.test(value)) return 'TARJETA';
   if (['TRANSFERENCIA', 'TR'].includes(value)) return 'TRANSFERENCIA';
   if (['BIZUM', 'BI'].includes(value)) return 'BIZUM';
-  if (['CHEQUE', 'CH', 'TALON', 'TALON BANCARIO'].includes(value)) return 'CHEQUE';
-  if (['POSTDATADO', 'PD', 'POSTDATADOS'].includes(value)) return 'POSTDATADO';
+  if (CHEQUE_METHOD_RE.test(value)) return 'CHEQUE';
+  if (POSTDATED_METHOD_RE.test(value)) return 'POSTDATADO';
   return value || '—';
 }
 
@@ -114,11 +168,20 @@ function normalizeTotals(input = {}) {
   const totalAIngresar = roundMoney(
     input.totalAIngresar
       ?? cashToDeposit({
-        totalEfectivo, totalCheques, totalPostdatados, saldoActual, gastos, ajustes,
+        totalEfectivo, saldoActual, gastos, ajustes,
       }),
   );
   const ingresoBanco = roundMoney(input.ingresoBanco);
   const diff = roundMoney(input.diff ?? (totalAIngresar - ingresoBanco));
+  const saldoResultante = roundMoney(
+    input.saldoResultante ?? computeClosingBalance({
+      openingBalance: saldoActual,
+      cashPayments: totalEfectivo,
+      expenses: gastos,
+      adjustments: ajustes,
+      bankDeposits: ingresoBanco,
+    }),
+  );
   return {
     totalEfectivo,
     totalCheques,
@@ -131,15 +194,24 @@ function normalizeTotals(input = {}) {
     totalAIngresar,
     ingresoBanco,
     diff,
+    saldoResultante,
   };
 }
 
-function drawCard(doc, { x, y, width, height, fill, border, label, value, valueColor }) {
+function drawCard(doc, {
+  x, y, width, height, fill, border, label, value, valueColor, hint,
+}) {
   doc.roundedRect(x, y, width, height, 8).fillAndStroke(fill, border);
-  doc.fillColor(MUTED).font('Helvetica').fontSize(8)
-    .text(label, x + 10, y + 9, { width: width * 0.52 });
+  doc.fillColor(MUTED).font('Helvetica').fontSize(7.5)
+    .text(label, x + 10, y + (hint ? 6 : 9), { width: width * 0.55 });
+  if (hint) {
+    doc.fillColor(MUTED).fontSize(6.5).text(hint, x + 10, y + 16, { width: width * 0.55 });
+  }
   doc.fillColor(valueColor || NAVY).font('Helvetica-Bold').fontSize(10)
-    .text(value, x + width * 0.48, y + 8, { width: width * 0.48 - 12, align: 'right' });
+    .text(value, x + width * 0.48, y + (hint ? 8 : 8), {
+      width: width * 0.48 - 12,
+      align: 'right',
+    });
   doc.font('Helvetica');
 }
 
@@ -225,7 +297,7 @@ function buildLiquidacionPdfBuffer({
       y += 36;
     } else {
       rows.forEach((cobro, index) => {
-        if (y > doc.page.height - 160) {
+        if (y > doc.page.height - 220) {
           doc.addPage();
           y = 48;
           doc.rect(36, y, contentWidth, 22).fill(NAVY);
@@ -261,7 +333,7 @@ function buildLiquidacionPdfBuffer({
       });
       doc.rect(36, y, contentWidth, 22).fill(GREEN_DARK);
       doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(9)
-        .text('Total cobros', 48, y + 6, { width: 200 });
+        .text('Total cobros del día', 48, y + 6, { width: 200 });
       doc.text(formatEuro(summary.totalCobrosDia), pageWidth - 36 - 90, y + 6, {
         width: 80,
         align: 'right',
@@ -269,68 +341,118 @@ function buildLiquidacionPdfBuffer({
       y += 36;
     }
 
-    if (y > doc.page.height - 210) {
+    if (y > doc.page.height - 280) {
       doc.addPage();
       y = 48;
     }
 
     doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(12)
       .text('Resumen tesorería', 36, y);
-    y += 20;
+    y += 18;
     const colWidth = (contentWidth - 12) / 2;
     const leftItems = [
-      { label: 'Total efectivo', value: summary.totalEfectivo, fill: CARD_GREEN, color: GREEN_DARK },
-      { label: 'Total cheques', value: summary.totalCheques, fill: CARD_BG, color: NAVY },
-      { label: 'Total tarjeta', value: summary.totalTarjeta, fill: CARD_BG, color: NAVY },
-      { label: 'Total postdatados', value: summary.totalPostdatados, fill: CARD_BG, color: NAVY },
-      { label: 'Total cobros día', value: summary.totalCobrosDia, fill: CARD_GREEN, color: GREEN_DARK },
+      {
+        label: 'Total efectivo', value: summary.totalEfectivo,
+        fill: CARD_GREEN, color: GREEN_DARK, hint: 'Entra en ingreso banco',
+      },
+      {
+        label: 'Total cheques / cartera', value: summary.totalCheques,
+        fill: CARD_MUTED, color: MUTED, hint: 'No ingreso banco',
+      },
+      {
+        label: 'Total tarjeta', value: summary.totalTarjeta,
+        fill: CARD_MUTED, color: MUTED, hint: 'No ingreso banco (TPV)',
+      },
+      {
+        label: 'Total postdatados', value: summary.totalPostdatados,
+        fill: CARD_MUTED, color: MUTED, hint: 'No ingreso banco',
+      },
+      {
+        label: 'Total cobros día', value: summary.totalCobrosDia,
+        fill: CARD_GREEN, color: GREEN_DARK, hint: 'Suma de todas las formas',
+      },
     ];
     const rightItems = [
-      { label: 'Saldo actual', value: summary.saldoActual, fill: CARD_AMBER, color: summary.saldoActual < 0 ? RED : NAVY },
-      { label: 'Gastos', value: summary.gastos, fill: CARD_BG, color: NAVY },
-      { label: 'Total a ingresar', value: summary.totalAIngresar, fill: CARD_GREEN, color: GREEN_DARK },
-      { label: 'Ingreso en banco', value: summary.ingresoBanco, fill: CARD_BG, color: NAVY },
-      { label: 'Diferencia', value: summary.diff, fill: summary.diff === 0 ? CARD_GREEN : CARD_AMBER, color: summary.diff === 0 ? GREEN_DARK : RED },
+      {
+        label: 'Saldo actual (deuda)', value: summary.saldoActual,
+        fill: CARD_AMBER, color: summary.saldoActual < 0 ? RED : NAVY,
+        hint: 'Arrastre desde liquidación anterior',
+      },
+      {
+        label: 'Gastos', value: summary.gastos,
+        fill: CARD_BG, color: NAVY, hint: 'Restan del efectivo a ingresar',
+      },
+      {
+        label: 'Total a ingresar', value: summary.totalAIngresar,
+        fill: CARD_GREEN, color: GREEN_DARK, hint: 'Efectivo + deuda − gastos ± ajustes',
+      },
+      {
+        label: 'Ingreso en banco', value: summary.ingresoBanco,
+        fill: CARD_BG, color: NAVY, hint: 'Efectivo depositado hoy',
+      },
+      {
+        label: 'Diferencia / nuevo saldo', value: summary.diff,
+        fill: summary.diff === 0 ? CARD_GREEN : CARD_AMBER,
+        color: summary.diff === 0 ? GREEN_DARK : RED,
+        hint: 'Se arrastra a la siguiente liquidación',
+      },
     ];
 
-    const rowHeight = 28;
+    const rowHeight = 34;
     leftItems.forEach((item, index) => {
       const ly = y + index * (rowHeight + 6);
       drawCard(doc, {
-        x: 36,
-        y: ly,
-        width: colWidth,
-        height: rowHeight,
-        fill: item.fill,
-        border: LINE,
-        label: item.label,
-        value: formatEuro(item.value),
-        valueColor: item.color,
+        x: 36, y: ly, width: colWidth, height: rowHeight,
+        fill: item.fill, border: LINE, label: item.label,
+        value: formatEuro(item.value), valueColor: item.color, hint: item.hint,
       });
       const right = rightItems[index];
       if (right) {
         drawCard(doc, {
-          x: 36 + colWidth + 12,
-          y: ly,
-          width: colWidth,
-          height: rowHeight,
-          fill: right.fill,
-          border: LINE,
-          label: right.label,
-          value: formatEuro(right.value),
-          valueColor: right.color,
+          x: 36 + colWidth + 12, y: ly, width: colWidth, height: rowHeight,
+          fill: right.fill, border: LINE, label: right.label,
+          value: formatEuro(right.value), valueColor: right.color, hint: right.hint,
         });
       }
     });
 
-    y += leftItems.length * (rowHeight + 6) + 12;
-    doc.roundedRect(36, y, contentWidth, 36, 8).fillAndStroke('#fff8e6', AMBER);
-    doc.fillColor(NAVY_DEEP).font('Helvetica').fontSize(8)
+    y += leftItems.length * (rowHeight + 6) + 10;
+
+    if (y > doc.page.height - 120) {
+      doc.addPage();
+      y = 48;
+    }
+
+    doc.roundedRect(36, y, contentWidth, 88, 8).fillAndStroke('#fff8e6', AMBER);
+    doc.fillColor(NAVY_DEEP).font('Helvetica-Bold').fontSize(9)
+      .text('Cálculo de deuda (arrastre)', 48, y + 10);
+    doc.font('Helvetica').fontSize(8).fillColor(SLATE)
       .text(
-        'Total a ingresar = efectivo + cheques + postdatados + saldo actual − gastos + ajustes. '
-        + 'La tarjeta no se ingresa en efectivo: ya está cobrada en TPV.',
+        `Saldo anterior ${formatEuro(summary.saldoActual)}`
+        + `  +  Efectivo ${formatEuro(summary.totalEfectivo)}`
+        + `  −  Gastos ${formatEuro(summary.gastos)}`
+        + `  ±  Ajustes ${formatEuro(summary.ajustes)}`
+        + `  =  Total a ingresar ${formatEuro(summary.totalAIngresar)}`,
         48,
-        y + 10,
+        y + 28,
+        { width: contentWidth - 24 },
+      );
+    doc.text(
+      `Total a ingresar ${formatEuro(summary.totalAIngresar)}`
+      + `  −  Ingreso banco ${formatEuro(summary.ingresoBanco)}`
+      + `  =  Saldo resultante ${formatEuro(summary.saldoResultante)}`
+      + '  (única fila de deuda activa del repartidor).',
+      48,
+      y + 46,
+      { width: contentWidth - 24 },
+    );
+    doc.fillColor(MUTED).fontSize(7.5)
+      .text(
+        'Cheques, cartera y tarjeta no entran en el ingreso en banco. '
+        + 'La deuda vive en JAVIER.REPARTIDOR_FINANCIAL_BALANCES.SALDO_PENDIENTE '
+        + '(una fila por repartidor; se actualiza en cada cierre).',
+        48,
+        y + 66,
         { width: contentWidth - 24 },
       );
 
@@ -342,7 +464,17 @@ module.exports = {
   formatEuro,
   formatGmpLiquidacionDisplay,
   cashToDeposit,
+  computeClosingBalance,
+  sumCashPayments,
+  isCashPaymentMethod,
+  isChequePaymentMethod,
+  isCardPaymentMethod,
+  isPostdatedPaymentMethod,
   paymentTypeLabel,
   paperDocumentLabel,
   buildLiquidacionPdfBuffer,
+  CASH_METHOD_RE,
+  CHEQUE_METHOD_RE,
+  CARD_METHOD_RE,
+  POSTDATED_METHOD_RE,
 };

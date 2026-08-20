@@ -5,6 +5,10 @@ const {
   buildLiquidacionCommand,
   assertReplayCompatible,
 } = require('./repartidor-liquidacion-contract');
+const {
+  computeClosingBalance,
+  sumCashPayments,
+} = require('./liquidacion-pdf-service');
 
 class LiquidacionApplicationError extends Error {
   constructor(message, { code = 'LIQUIDACION_APPLICATION_ERROR', statusCode = 409, details } = {}) {
@@ -358,8 +362,14 @@ function normalizeDaySnapshot(snapshot, command) {
   }
   const openingBalance = normalizedAmount(snapshot.openingBalance, 'snapshot.openingBalance');
   const balance = normalizedAmount(snapshot.balance, 'snapshot.balance');
-  const expectedBalance = Math.round((openingBalance + totals.payments - totals.expenses
-    + totals.adjustments - totals.bankDeposits + Number.EPSILON) * 100) / 100;
+  const cashPayments = sumCashPayments(payments);
+  const expectedBalance = computeClosingBalance({
+    openingBalance,
+    cashPayments,
+    expenses: totals.expenses,
+    adjustments: totals.adjustments,
+    bankDeposits: totals.bankDeposits,
+  });
   if (!equalMoney(balance, expectedBalance)) {
     throw invalidSnapshot('snapshot.balance no coincide con el detalle derivado');
   }
