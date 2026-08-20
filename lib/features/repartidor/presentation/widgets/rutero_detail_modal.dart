@@ -1703,15 +1703,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _refreshAfterAcknowledgedDelivery() async {
     await RepartidorDataService.invalidateDeliveryReadCaches();
-    try {
-      await widget.ref
-          .read(entregasProvider.notifier)
-          .cargarAlbaranesPendientes(forceRefresh: true);
-      await _invalidateFinanceForDelivery();
-    } catch (_) {
-      // The backend acknowledgement is authoritative. Cache refresh remains
-      // best effort and must never recreate or replay an acknowledged write.
-    }
+    // ACK is authoritative. Refresh DB2/finance in background so a busy
+    // server cannot leave the confirmation spinner stuck.
+    unawaited(Future<void>(() async {
+      try {
+        await widget.ref
+            .read(entregasProvider.notifier)
+            .cargarAlbaranesPendientes(forceRefresh: true);
+        await _invalidateFinanceForDelivery();
+      } catch (_) {
+        // Resume/pull-to-refresh retries without replaying the ACK.
+      }
+    }));
   }
 
   double? _parseMoney(String value) {
@@ -2360,13 +2363,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ..estado = _localDeliveryStatus();
 
       try {
-        if (_deliveryStatus != RepartoDeliveryStatus.noEntregado) {
-          await runRuteroPostConfirmationEffects(
-            shouldPrint: _tieneImpresora,
-            printTicket: _tryPrintTicketAfterConfirm,
-            shareReceipt: _showShareReceiptDialog,
-          );
-        }
+        await runRuteroPostConfirmationEffects(
+          shouldPrint: _tieneImpresora &&
+              _deliveryStatus != RepartoDeliveryStatus.noEntregado,
+          printTicket: _tryPrintTicketAfterConfirm,
+          shareReceipt: _showShareReceiptDialog,
+        );
       } catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2618,6 +2620,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(height: 12),
             _buildShareButton(
+              icon: Icons.print,
+              label: 'Imprimir nota',
+              color: AppTheme.warning,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _tryPrintTicketAfterConfirm();
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildShareButton(
               icon: Icons.chat,
               label: 'Enviar por WhatsApp',
               color: const Color(0xFF25D366),
@@ -2735,14 +2747,37 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<File> _prepareAlbaranPdfFile() async {
     final alb = widget.albaran;
-    final bytes = await RepartidorDataService.downloadDocument(
-      year: alb.ejercicio,
-      serie: alb.serie,
-      number: alb.numeroAlbaran,
-      type: 'albaran',
-      terminal: alb.terminal,
-      repartidorId: alb.codigoRepartidor,
-    );
+    List<int> bytes;
+    final confirmationId = await _confirmationJournal
+        .receiptConfirmationId(alb.id)
+        .catchError((_) => '');
+    if (confirmationId.trim().isNotEmpty &&
+        isValidRepartoOwnerId(alb.codigoRepartidor)) {
+      try {
+        bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+          confirmationId: confirmationId,
+          repartidorId: alb.codigoRepartidor,
+        );
+      } catch (_) {
+        bytes = await RepartidorDataService.downloadDocument(
+          year: alb.ejercicio,
+          serie: alb.serie,
+          number: alb.numeroAlbaran,
+          type: 'albaran',
+          terminal: alb.terminal,
+          repartidorId: alb.codigoRepartidor,
+        );
+      }
+    } else {
+      bytes = await RepartidorDataService.downloadDocument(
+        year: alb.ejercicio,
+        serie: alb.serie,
+        number: alb.numeroAlbaran,
+        type: 'albaran',
+        terminal: alb.terminal,
+        repartidorId: alb.codigoRepartidor,
+      );
+    }
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final file = File(

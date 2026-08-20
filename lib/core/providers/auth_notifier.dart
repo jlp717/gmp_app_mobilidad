@@ -436,7 +436,9 @@ bool isWarehouseUiMode(AuthState? authState) {
 // the provider and force re-initialization, causing session loss and
 // triggering rate limiting from repeated login attempts.
 class AuthNotifier extends AsyncNotifier<AuthState> {
-  static const Duration _localSessionDuration = Duration(days: 7);
+  // A role switch must not silently shorten the local session. The mobile
+  // session contract is one fixed day, independent of the active role.
+  static const Duration _localSessionDuration = Duration(hours: 24);
   static const Duration _accessTokenDuration = Duration(hours: 1);
   static const Duration _resumeRefreshThreshold = Duration(minutes: 5);
   static const String _sessionExpiresAtKey = 'session_expires_at';
@@ -656,6 +658,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       response,
       accessTokenKey: accessTokenKey,
     );
+    final localExpiresAt = DateTime.now().add(_localSessionDuration);
     await ref.read(authSessionPersistenceProvider).commit(
           CanonicalLocalAuthSession(
             accessToken: rotation.accessToken,
@@ -663,13 +666,13 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             userJson: jsonEncode(projection.user.toJson()),
             vendedorCodes: projection.vendedorCodes,
             activeMode: projection.activeMode,
-            expiresAt: rotation.expiresAt,
+            expiresAt: localExpiresAt,
           ),
         );
 
     // Publish bearer and UI only after every local write succeeded.
     ApiClient.setAuthToken(rotation.accessToken);
-    _applySessionDeadline(rotation.expiresAt);
+    _applySessionDeadline(localExpiresAt);
     await _clearLocalSessionCache();
     _applyCacheScope(projection.user, projection.vendedorCodes);
     final previous = state.value;
@@ -733,6 +736,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         if (refreshedToken != null && refreshedToken.isNotEmpty) {
           ApiClient.setAuthToken(refreshedToken);
         }
+      } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity) {
+        debugPrint(
+            '[AuthNotifier] Resume refresh deferred: network unavailable');
+        ApiClient.setAuthToken(token);
       } else {
         return false;
       }

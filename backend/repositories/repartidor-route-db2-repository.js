@@ -8,7 +8,6 @@
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
-const { chunkedInQuery } = require('../utils/common');
 const {
   isDeliveryStatusAvailable,
   isDeliveryStatusNewSchema,
@@ -72,12 +71,17 @@ function buildFlexibleRepartidorSearch(search, columns) {
   const tokens = normalizeRepartidorSearchTokens(search);
   if (!tokens.length) return { clause: '', params: [], cacheKey: '' };
   const params = [];
+  const fastSimpleSearch = tokens.length === 1 && /^[A-Z0-9]+$/.test(tokens[0]);
   const groups = tokens.map((token) => {
     const patterns = [`%${token}%`];
     if (token.length >= 4) patterns.push(`%${[...token].join('%')}%`);
     const matches = [];
     for (const column of columns) {
-      const expression = db2NormalizedSearchExpression(column);
+      // Simple ASCII tokens (the common "cha" case) avoid the nested
+      // REPLACE chain; accents/punctuation keep the normalized path.
+      const expression = fastSimpleSearch && /^[A-Z0-9]+$/.test(token)
+        ? `UPPER(COALESCE(${column}, ''))`
+        : db2NormalizedSearchExpression(column);
       for (const pattern of patterns) {
         matches.push(`${expression} LIKE ?`);
         params.push(pattern);
@@ -204,19 +208,6 @@ function canonicalDocumentId(row, clientCode) {
   const cliente = String(row?.CODIGOCLIENTEALBARAN || clientCode || '').trim();
   if (!ejercicio || !serie || numero == null || numero === '' || !cliente) return '';
   return `${ejercicio}-${serie}-${terminal}-${numero}-${cliente}`;
-}
-
-function blobToBase64(raw) {
-  if (raw == null) return null;
-  if (Buffer.isBuffer(raw)) return raw.length ? raw.toString('base64') : null;
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    return trimmed ? trimmed : null;
-  }
-  if (raw instanceof Uint8Array) {
-    return raw.length ? Buffer.from(raw).toString('base64') : null;
-  }
-  return null;
 }
 
 async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode } = {}) {

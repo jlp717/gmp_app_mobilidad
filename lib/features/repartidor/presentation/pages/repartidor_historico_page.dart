@@ -2868,6 +2868,45 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     await _runShareAction(() => _shareLocalDocumentUnlocked(doc));
   }
 
+  Future<List<int>> _downloadDocumentForAction(
+    _DocumentItem doc,
+    String owner,
+  ) async {
+    final isFactura = doc.type == _DocType.factura;
+    final confirmationId = doc.confirmationId?.trim() ?? '';
+    if (!isFactura && confirmationId.isNotEmpty) {
+      try {
+        return await RepartidorDataService.downloadDeliveryNotePdf(
+          confirmationId: confirmationId,
+          repartidorId: owner,
+        );
+      } catch (_) {
+        // Migrated/legacy confirmations fall back to the guarded ERP PDF.
+      }
+    }
+    final downloader =
+        widget.documentDownloader ?? RepartidorDataService.downloadDocument;
+    return downloader(
+      year: isFactura
+          ? (doc.ejercicioFactura ?? doc.ejercicio)
+          : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
+      serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
+      number: isFactura
+          ? (doc.facturaNumber ?? doc.number)
+          : (doc.albaranNumber ?? doc.number),
+      terminal: doc.terminal,
+      type: isFactura ? 'factura' : 'albaran',
+      facturaNumber: doc.facturaNumber,
+      serieFactura: doc.serieFactura,
+      ejercicioFactura: doc.ejercicioFactura,
+      albaranNumber: doc.albaranNumber ?? doc.number,
+      albaranSerie: doc.serie,
+      albaranTerminal: doc.terminal,
+      albaranYear: doc.ejercicio,
+      repartidorId: owner,
+    );
+  }
+
   Future<void> _shareLocalDocumentUnlocked(_DocumentItem doc) async {
     final owner = _documentOwner(doc);
     if (owner == null) {
@@ -2892,28 +2931,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       text: 'Preparando documento...',
     );
     try {
-      // Download document as PDF
-      final downloader =
-          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
-      final bytes = await downloader(
-        year: isFactura
-            ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
-        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
-        number: isFactura
-            ? (doc.facturaNumber ?? doc.number)
-            : (doc.albaranNumber ?? doc.number),
-        terminal: doc.terminal,
-        type: isFactura ? 'factura' : 'albaran',
-        facturaNumber: doc.facturaNumber,
-        serieFactura: doc.serieFactura,
-        ejercicioFactura: doc.ejercicioFactura,
-        albaranNumber: doc.albaranNumber ?? doc.number,
-        albaranSerie: doc.serie,
-        albaranTerminal: doc.terminal,
-        albaranYear: doc.ejercicio,
-        repartidorId: owner,
-      );
+      final bytes = await _downloadDocumentForAction(doc, owner);
 
       // Save PDF to temp file
       final tempDir = await getTemporaryDirectory();
@@ -3012,27 +3030,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
     try {
       final isFactura = doc.type == _DocType.factura;
-      final downloader =
-          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
-      final bytes = await downloader(
-        year: isFactura
-            ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
-        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
-        number: isFactura
-            ? (doc.facturaNumber ?? doc.number)
-            : (doc.albaranNumber ?? doc.number),
-        terminal: doc.terminal,
-        type: isFactura ? 'factura' : 'albaran',
-        facturaNumber: doc.facturaNumber,
-        serieFactura: doc.serieFactura,
-        ejercicioFactura: doc.ejercicioFactura,
-        albaranNumber: doc.albaranNumber ?? doc.number,
-        albaranSerie: doc.serie,
-        albaranTerminal: doc.terminal,
-        albaranYear: doc.ejercicio,
-        repartidorId: owner,
-      );
+      final bytes = await _downloadDocumentForAction(doc, owner);
       modal.close();
 
       final tempDir = await getTemporaryDirectory();

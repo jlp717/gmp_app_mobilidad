@@ -583,8 +583,10 @@ class ApiClient {
       return true;
     } on DioException catch (e) {
       _lastTokenRefreshFailedDueToConnectivity = _isNetworkError(e);
-      final diverged = onAuthSessionDiverged;
-      if (diverged != null) await diverged();
+      if (!_lastTokenRefreshFailedDueToConnectivity) {
+        final diverged = onAuthSessionDiverged;
+        if (diverged != null) await diverged();
+      }
       debugPrint('[ApiClient] Token refresh failed');
       return false;
     } catch (_) {
