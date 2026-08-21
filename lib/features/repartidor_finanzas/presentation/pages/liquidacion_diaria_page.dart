@@ -268,11 +268,11 @@ class _RepartidorLiquidacionDiariaPageState
                     isSubmitting: _submittingEntry,
                     canCreateAdjustments: widget.canCreateAdjustments,
                     onExpense: () =>
-                        unawaited(_openEntryDialog(_EntryKind.expense)),
+                        unawaited(_showEntryDialog(_EntryKind.expense)),
                     onBankDeposit: () =>
-                        unawaited(_openEntryDialog(_EntryKind.bankDeposit)),
+                        unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
                     onAdjustment: () =>
-                        unawaited(_openEntryDialog(_EntryKind.adjustment)),
+                        unawaited(_showEntryDialog(_EntryKind.adjustment)),
                   ),
                 ),
               ],
@@ -281,7 +281,7 @@ class _RepartidorLiquidacionDiariaPageState
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: asyncLedger.when(
                     data: (ledger) => _LiquidacionLedgerPanel(
-                      ledger: ledger,
+                      ledger: AsyncValue.data(ledger),
                       onRetry: () => ref.invalidate(
                         repartidorLiquidacionLedgerProvider(ledgerArgs),
                       ),
