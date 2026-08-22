@@ -53,6 +53,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 2
+          submodules: false
 
       - name: Check version info
         id: version
@@ -109,6 +110,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          submodules: false
 
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
@@ -118,9 +121,6 @@ jobs:
           cache: true
           cache-path: ~/.pub-cache
 
-      - name: Flutter dependencies
-        run: flutter pub get
-
       - name: Get Flutter packages cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
@@ -128,6 +128,9 @@ jobs:
           key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
           restore-keys: |
             ${{ runner.os }}-flutter-pub-
+
+      - name: Flutter dependencies
+        run: flutter pub get
 
       - name: Flutter format check
         run: dart format --output=none --set-exit-if-changed lib test
@@ -276,7 +279,7 @@ jobs:
           else
             echo "result=failed" >> $GITHUB_OUTPUT
             # Extract failed test names for rapid diagnosis
-            echo "$RESULT" | grep -B1 "â—" | grep -v "^--$" | head -10 | while read line; do
+            echo "$RESULT" | grep -B1 "*" | grep -v "^--$" | head -10 | while read line; do
               echo "::error::Test failed: $line"
             done
             exit 1
@@ -401,7 +404,7 @@ jobs:
           # Check for default secrets (exclude test files)
           SECRET_MATCHES=$(grep -rn "default-secret\|dev-access-secret\|dev-refresh-secret" backend --include="*.js" --include="*.ts" 2>/dev/null | grep -v "===" | grep -v "!==" | grep -v ".test." | grep -v "__tests__" | grep -v "instrument." || true)
           if [ -n "$SECRET_MATCHES" ]; then
-            echo "âŒ Found hardcoded default secrets!"
+            echo "X Found hardcoded default secrets!"
             echo "$SECRET_MATCHES"
             FOUND=1
           fi
@@ -409,7 +412,7 @@ jobs:
           # Check for .env files in repo
           ENV_FILES=$(git ls-files | grep -E "\.env$|\.env\.(local|production|staging|produccion)$" 2>/dev/null || true)
           if [ -n "$ENV_FILES" ]; then
-            echo "âŒ Found .env files committed!"
+            echo "X Found .env files committed!"
             echo "$ENV_FILES"
             FOUND=1
           fi
@@ -418,7 +421,7 @@ jobs:
             echo "Security scan failed - remove hardcoded secrets before deploying"
             exit 1
           fi
-          echo "âœ… No hardcoded secrets found"
+          echo "OK No hardcoded secrets found"
 
       - name: Generate SBOM
         run: |
@@ -529,16 +532,16 @@ jobs:
 
       - name: Build summary
         run: |
-          echo "## âœ… Build Successful" >> $GITHUB_STEP_SUMMARY
+          echo "## OK Build Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Android Debug APK" >> $GITHUB_STEP_SUMMARY
           echo "- Size: ${{ steps.size.outputs.size }}" >> $GITHUB_STEP_SUMMARY
           echo "- Path: \`${{ steps.build.outputs.apk_path }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Quality Gates" >> $GITHUB_STEP_SUMMARY
-          echo "- âœ… Lint: Passed" >> $GITHUB_STEP_SUMMARY
-          echo "- âœ… Tests: Passed" >> $GITHUB_STEP_SUMMARY
-          echo "- âœ… Security: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- OK Lint: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- OK Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- OK Security: Passed" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================================================
   # PHASE 5b: BUILD ANDROID (Main Branch - Release)
@@ -617,7 +620,7 @@ jobs:
 
       - name: APK size report
         run: |
-          echo "## âœ… Release Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## OK Release Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### APK Sizes" >> $GITHUB_STEP_SUMMARY
           ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null | awk '{print "- " $9 ": " $5}' >> $GITHUB_STEP_SUMMARY
@@ -717,7 +720,7 @@ jobs:
       - name: Collect failure details
         id: details
         run: |
-          echo "## âŒ CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
+          echo "## X CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
@@ -727,7 +730,7 @@ jobs:
           STATUS="${{ needs.flutter-lint.result }}"
           echo "| Flutter Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
           if [ "$STATUS" != "success" ]; then
-            echo "| â†’ Errors | ${{ needs.flutter-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| -> Errors | ${{ needs.flutter-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check Backend lint
@@ -735,7 +738,7 @@ jobs:
           STATUS="${{ needs.backend-lint.result }}"
           echo "| Backend Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
           if [ "$STATUS" != "success" ]; then
-            echo "| â†’ Errors | ${{ needs.backend-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| -> Errors | ${{ needs.backend-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check Backend tests
@@ -756,12 +759,12 @@ jobs:
       - name: Failure links
         run: |
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ðŸ”— Links" >> $GITHUB_STEP_SUMMARY
+          echo "###  Links" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           echo "- [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ðŸ› ï¸ Quick Fix Commands" >> $GITHUB_STEP_SUMMARY
+          echo "###  Quick Fix Commands" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "# Reproduce locally:" >> $GITHUB_STEP_SUMMARY
