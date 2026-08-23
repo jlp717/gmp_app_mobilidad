@@ -51,60 +51,23 @@ ENV/
 .opencode/memory/**
 !.opencode/memory/FIELD-GUIDE.md
 !.opencode/skills/
-!.opencode/skills/v5-playbook-orchestra/
-!.opencode/skills/v5-playbook-orchestra/**
-!.opencode/skills/progressive-context/
-!.opencode/skills/progressive-context/**
-!.opencode/skills/code-quality-contract/
-!.opencode/skills/code-quality-contract/**
+!.opencode/skills/**
 !.opencode/agents/
-.opencode/agents/**
-!.opencode/agents/memory-cleaner.md
-!.opencode/agents/Metrics-Observer.md
-!.opencode/agents/Release-Notifier.md
-!.opencode/agents/Context-Manager.md
-!.opencode/agents/memory-formation.md
-!.opencode/agents/Visual-Design-Specialist.md
-!.opencode/agents/chief-engineer-assistant.md
-!.opencode/agents/GMP-Orchestrator.md
-!.opencode/agents/maker.md
-!.opencode/agents/Check-Reviewer.md
-!.opencode/agents/Technical-Verifier.md
-!.opencode/agents/Repo-Explorer.md
-!.opencode/agents/Architect-Planner.md
-!.opencode/agents/qa-automation-lead.md
-!.opencode/agents/appsec-engineer.md
-!.opencode/agents/sre-engineer.md
-!.opencode/agents/DB2-AS400-Specialist.md
-!.opencode/agents/product-ux.md
+!.opencode/agents/**
 !.opencode/AGENTS.md
+!.opencode/DEPRECATED.md
 !.opencode/scripts/
-.opencode/scripts/**
-!.opencode/scripts/readiness-smoke.mjs
+!.opencode/scripts/**
 !.opencode/rules/
 !.opencode/rules/**
 !.opencode/audit/
 !.opencode/audit/**
 !.opencode/tools/
-.opencode/tools/**
-!.opencode/tools/intent-validator.ts
-!.opencode/tools/sandbox-run.ts
-!.opencode/tools/state-manager.ts
-!.opencode/tools/goal-loop-manager.ts
-!.opencode/tools/parallel-dispatch.ts
-!.opencode/tools/semantic-memory-pruner.ts
-!.opencode/tools/telegram-notify.ts
-!.opencode/tools/elite-quality-gate.ts
-!.opencode/tools/readiness-smoke.ts
-!.opencode/tools/agent-roster-audit.ts
-!.opencode/tools/model-assignment-audit.ts
-!.opencode/tools/workflow-state-audit.ts
-!.opencode/tools/flow-policy-check.ts
-!.opencode/tools/decision-router.ts
-!.opencode/tools/code-quality-contract.ts
+!.opencode/tools/**
 !.opencode/plugins/
-.opencode/plugins/**
-!.opencode/plugins/flow-observability.ts
+!.opencode/plugins/**
+!.opencode/lib/
+!.opencode/lib/**
 .opencode-runtime/
 .env
 .config/
@@ -205,8 +168,21 @@ key.properties
 android/key.properties
 upload-keystore.jks
 
-# IDE
-.claude/
+# IDE (Claude Code: track governance, ignore runtime noise)
+.claude/*
+!.claude/settings.json
+!.claude/agents/
+!.claude/agents/**
+!.claude/hooks/
+!.claude/hooks/**
+!.claude/skills/
+!.claude/skills/**
+!.claude/config/
+!.claude/config/**
+!.claude/memory/
+!.claude/memory/**
+!.claude/commands/
+!.claude/commands/**
 .idea/
 
 # RuFlo / Claude-Flow runtime (keep config.yaml, ignore everything else)
@@ -357,8 +333,7 @@ backend/scripts/testing/
 acouz/
 .acouz/
 # GuardVibe (auto-added by guardvibe init)
-.mcp.json
-CLAUDE.md
+# .mcp.json tracked (MCP servers), CLAUDE.md tracked
 .guardvibe/
 
 docs/opencode-agent-governance/evals/last-validation.json
