@@ -87,6 +87,7 @@ class Db2AuthRepository extends AuthRepository {
         WHERE V.CODIGOVENDEDOR = P.CODIGOVENDEDOR
           AND V.SUBEMPRESA = 'GMP'
       )
+      AND COALESCE(NULLIF(TRIM(P.ESTADO), ''), '') <> 'A'
         AND TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
       ORDER BY TRIM(P.CODIGOVENDEDOR)
       FETCH FIRST 2 ROWS ONLY
@@ -165,6 +166,7 @@ class Db2AuthRepository extends AuthRepository {
         WHERE V.CODIGOVENDEDOR = P.CODIGOVENDEDOR
           AND V.SUBEMPRESA = 'GMP'
       )
+      AND COALESCE(NULLIF(TRIM(P.ESTADO), ''), '') <> 'A'
         AND REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '')
           LIKE '%' || CAST(? AS VARCHAR(100)) || '%'
       ORDER BY TRIM(P.CODIGOVENDEDOR)
