@@ -20,6 +20,13 @@
     .marker.active { transform: scale(1.22); box-shadow: 0 0 0 4px rgba(255,176,32,.75), 0 6px 18px rgba(0,0,0,.55); }
     .marker.missing { background: #64748b !important; opacity: .88; }
     .marker.closed { background: #94a3b8 !important; }
+    .marker .label {
+      display: block; position: absolute; left: 50%; top: calc(100% + 4px);
+      transform: translateX(-50%); background: rgba(255,255,255,.96); color: #0f172a;
+      padding: 2px 6px; border-radius: 6px; white-space: nowrap;
+      font: 700 11px/1.2 system-ui, sans-serif; border: 1px solid rgba(15,23,42,.15);
+      box-shadow: 0 2px 8px rgba(0,0,0,.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis;
+    }
     .marker .tip {
       display: none; position: absolute; left: 50%; bottom: calc(100% + 8px);
       transform: translateX(-50%); background: rgba(11,18,32,.94); color: #e2e8f0;
@@ -44,7 +51,7 @@
       border-radius: 10px; font: 600 10px/1.4 system-ui, sans-serif;
       border: 1px solid rgba(148,163,184,.25); display: flex; gap: 8px;
     }
-    .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,.6); }
   </style>
 </head>
 <body>
@@ -74,6 +81,7 @@
       const t = index / Math.max(1, total - 1);
       return t <= 0.5 ? lerpColor('#22c55e', '#38bdf8', t * 2) : lerpColor('#38bdf8', '#f97316', (t - 0.5) * 2);
     }
+    function isValidSpain(lat, lng){ return Number.isFinite(lat) && Number.isFinite(lng) && lat>=27 && lat<=44 && lng>=-18 && lng<=5; }
     function clearMarkers() { markers.forEach((m) => m.remove()); markers = []; popups.forEach((p) => p.remove()); popups = []; }
     function fitStops(stops) {
       const withGps = stops.filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
@@ -105,7 +113,7 @@
       }
       const lineCoords = [];
       stops.forEach((stop, index) => {
-        const hasGps = Number.isFinite(stop.lat) && Number.isFinite(stop.lng);
+        const hasGps = isValidSpain(stop.lat, stop.lng);
         if (hasGps) lineCoords.push([stop.lng, stop.lat]);
         const el = document.createElement('div');
         el.className = 'marker'
@@ -126,7 +134,7 @@
             map.easeTo({ center: [stop.lng, stop.lat], zoom: Math.max(map.getZoom(), 13.8), pitch: 62, duration: 450 });
             const popup = new maplibregl.Popup({ offset: 18, closeButton: false, maxWidth: '240px' })
               .setLngLat([stop.lng, stop.lat])
-              .setHTML('<div style="font:600 12px/1.35 system-ui,sans-serif;color:#0f172a"><div>#' + (index + 1) + ' '
+              .setHTML('<div style="font:700 13px/1.4 system-ui,sans-serif;color:#0f172a"><div style=\'font-size:15px\'>#' + (index + 1) + ' '
                 + (stop.nombreCliente || stop.cliente || '') + '</div>'
                 + (stop.etaLabel ? '<div>ETA: <b>' + stop.etaLabel + '</b></div>' : '')
                 + (stop.windowLabel ? '<div>Deseada: ' + stop.windowLabel + '</div>' : '')
@@ -157,7 +165,7 @@
       map = new maplibregl.Map({
         container: 'map',
         style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] },
-        center: [0, 0], zoom: 1, pitch: 0, bearing: 0, antialias: true
+        center: [-2.4637, 36.834], zoom: 10, pitch: 45, bearing: -12, antialias: true
       });
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
       map.on('load', () => post('mapReady', {}));

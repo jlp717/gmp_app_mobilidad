@@ -316,6 +316,9 @@ backend/scripts/cobros/
 backend/scripts/db/
 backend/scripts/testing/
 
+# Root temp fix scripts (one-off)
+fix_*.js
+
 # Docker
 .docker/
 *.docker

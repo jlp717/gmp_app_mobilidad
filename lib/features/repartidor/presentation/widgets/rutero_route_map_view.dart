@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Sequence color: green (1st) → sky → orange (last).
 Color ruteroStopColor(int index, int total) {
@@ -19,6 +20,15 @@ Color ruteroStopColor(int index, int total) {
   }
   return Color.lerp(AppColors.info, const Color(0xFFF97316), (t - 0.5) * 2)!;
 }
+
+// ponytail: Spain bbox 27-44 / -18-5 rejects Africa/0,0 garbage. Upgrade: tighten per delegación if needed.
+bool _isValidSpainLatLng(double? lat, double? lng) {
+  if (lat == null || lng == null) return false;
+  if (!lat.isFinite || !lng.isFinite) return false;
+  return lat >= 27 && lat <= 44 && lng >= -18 && lng <= 5;
+}
+
+const LatLng _kAlmeriaCenter = LatLng(36.834, -2.4637);
 
 /// 3D MapLibre (OSM tiles, no Mapbox token) with flutter_map 2.5D fallback.
 class RuteroRouteMapView extends StatefulWidget {
@@ -160,8 +170,8 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
         'cliente': albaran.codigoCliente,
         'nombreCliente': albaran.nombreCliente,
         'index': entry.key,
-        'lat': meta?.lat,
-        'lng': meta?.lng,
+        'lat': _isValidSpainLatLng(meta?.lat, meta?.lng) ? meta?.lat : null,
+        'lng': _isValidSpainLatLng(meta?.lat, meta?.lng) ? meta?.lng : null,
         'windowLabel': meta?.windowLabel,
         'etaLabel': meta?.etaLabel,
         'closedDay': meta?.closedDay == true,
@@ -202,7 +212,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
 
   LatLng get _center {
     final points = _geoPoints();
-    if (points.isEmpty) return const LatLng(0, 0);
+    if (points.isEmpty) return _kAlmeriaCenter;
     final lat =
         points.map((p) => p.latitude).reduce((a, b) => a + b) / points.length;
     final lng =
@@ -215,7 +225,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
     for (final albaran in widget.ordered) {
       final meta = widget.metaByDocumentId[albaran.id] ??
           widget.metaByDocumentId[albaran.codigoCliente];
-      if (meta?.lat != null && meta?.lng != null) {
+      if (_isValidSpainLatLng(meta?.lat, meta?.lng)) {
         points.add(LatLng(meta!.lat!, meta.lng!));
       }
     }
@@ -320,7 +330,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
             ),
             SizedBox(height: 10),
             Text(
-              'No hay coordenadas GPS para estas paradas',
+              'Sin GPS fiable para estas paradas',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppTheme.textPrimary,
@@ -329,7 +339,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
             ),
             SizedBox(height: 6),
             Text(
-              'Puedes ordenar la lista manualmente o usar la propuesta basada en horarios.',
+              'Muchos clientes no tienen coordenadas o estaban en África por error y ya se filtran.\n\nPuedes ordenar manualmente o usar la propuesta por horarios (sin GPS).\nAvisa al comercial para dar de alta GPS correcto desde ficha cliente.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
@@ -353,7 +363,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
           options: MapOptions(
             initialCenter: _center,
             initialZoom: points.length <= 1 ? 12 : 11,
-            initialRotation: -12,
+            initialRotation: -8,
             minZoom: 5,
             maxZoom: 18,
           ),
@@ -379,8 +389,8 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
                   if (_pointFor(widget.ordered[i]) != null)
                     Marker(
                       point: _pointFor(widget.ordered[i])!,
-                      width: 36,
-                      height: 36,
+                      width: 48,
+                      height: 48,
                       child: GestureDetector(
                         onTap: () =>
                             widget.onStopSelected?.call(widget.ordered[i].id),
@@ -406,7 +416,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
   LatLng? _pointFor(AlbaranEntrega albaran) {
     final meta = widget.metaByDocumentId[albaran.id] ??
         widget.metaByDocumentId[albaran.codigoCliente];
-    if (meta?.lat == null || meta?.lng == null) return null;
+    if (!_isValidSpainLatLng(meta?.lat, meta?.lng)) return null;
     return LatLng(meta!.lat!, meta.lng!);
   }
 }
@@ -429,7 +439,7 @@ class _RouteWhyCard extends StatelessWidget {
           children: [
             const Row(
               children: [
-                Icon(Icons.route, size: 16, color: AppColors.teal),
+                Icon(Icons.route, size: 18, color: AppColors.teal),
                 SizedBox(width: 6),
                 Text(
                   'Por qué esta ruta',
@@ -457,7 +467,7 @@ class _RouteWhyCard extends StatelessWidget {
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
-                children: explanation.factors.take(3).map((f) {
+                children: explanation.factors.map((f) {
                   return Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -556,7 +566,7 @@ class _StopDetailCard extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
-                      fontSize: 12,
+                      fontSize: 14,
                     ),
                   ),
                 ),
@@ -634,6 +644,31 @@ class _StopDetailCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (_isValidSpainLatLng(meta?.lat, meta?.lng)) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final lat = meta!.lat!;
+                    final lng = meta!.lng!;
+                    final url = Uri.parse(
+                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+                    try {
+                      await launchUrl(url,
+                          mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                  },
+                  icon: const Icon(Icons.navigation, size: 20),
+                  label: const Text('Navegar con Maps',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  style: FilledButton.styleFrom(
+                      minimumSize: Size.fromHeight(48),
+                      backgroundColor: AppColors.info),
+                ),
+              ),
+            ],
             if (reason != null && reason.trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(
@@ -670,7 +705,7 @@ class _StopDetailCard extends StatelessWidget {
 
   Widget _chip(IconData icon, String label, String value) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.softPanel,
         borderRadius: BorderRadius.circular(10),
@@ -679,7 +714,7 @@ class _StopDetailCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: AppColors.teal),
+          Icon(icon, size: 16, color: AppColors.teal),
           const SizedBox(width: 5),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

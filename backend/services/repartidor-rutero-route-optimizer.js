@@ -14,6 +14,7 @@ function resolveDepartureMinute(options = {}) {
   return Number.isInteger(minute) && minute >= 0 && minute < 1440 ? minute : null;
 }
 function validCoordinate(value, min, max) { return Number.isFinite(Number(value)) && Number(value) >= min && Number(value) <= max; }
+function isValidSpain(lat,lng){ return Number.isFinite(lat) && Number.isFinite(lng) && lat>=27 && lat<=44 && lng>=-18 && lng<=5; }
 function normalizeOrigin(origin) {
   if (!origin || !validCoordinate(origin.lat, -90, 90) || !validCoordinate(origin.lng, -180, 180)) return null;
   return { lat: Number(origin.lat), lng: Number(origin.lng) };
@@ -42,7 +43,7 @@ function makeStop(stop, originalIndex, dateYmd, windowsByCliente, geoByCliente) 
   const cliente = String(stop?.cliente || stop?.clienteCodigo || stop?.codigoCliente || '').trim();
   const window = windowsByCliente.get(cliente) || stop?.window || null;
   const geo = geoForStop({ ...stop, cliente }, geoByCliente);
-  return { documentId: String(stop?.documentId || stop?.id || '').trim(), cliente: cliente || null, originalIndex, geo, lat: geo?.lat ?? null, lng: geo?.lng ?? null, hasGps: Boolean(geo), closedDay: isClosedOnDate(window, dateYmd), startMinute: preferredStartMinute(window), endMinute: parseCrutHour(window?.horaRepartoHasta ?? window?.HORAREPARTOHASTA), preferredMinute: preferredStartMinute(window), windowLabel: buildWindowLabel(window), observaciones: String(window?.observacionesReparto || window?.OBSERVACIONESREPARTO || stop?.observaciones || '').trim() || null };
+  return { documentId: String(stop?.documentId || stop?.id || '').trim(), cliente: cliente || null, originalIndex, geo, lat: geo?.lat ?? null, lng: geo?.lng ?? null, hasGps: Boolean(geo) && isValidSpain(geo?.lat, geo?.lng), closedDay: isClosedOnDate(window, dateYmd), startMinute: preferredStartMinute(window), endMinute: parseCrutHour(window?.horaRepartoHasta ?? window?.HORAREPARTOHASTA), preferredMinute: preferredStartMinute(window), windowLabel: buildWindowLabel(window), observaciones: String(window?.observacionesReparto || window?.OBSERVACIONESREPARTO || stop?.observaciones || '').trim() || null };
 }
 function project(stop, state, options) {
   const distanceKm = state.cursor && stop.geo ? haversineKm(state.cursor.lat, state.cursor.lng, stop.geo.lat, stop.geo.lng) : null;
@@ -84,6 +85,55 @@ function finalize(row, posicion, options) {
   const { _nextClock, ...visible } = row;
   return { ...visible, posicion, departureMinute: options.departureMinute, departureLabel: formatMinuteLabel(options.departureMinute), reason: reason(visible, posicion, options) };
 }
+
+function totalDistanceKm(orden, origin){
+  let total=0; let prev=origin;
+  for(const r of orden){
+    if(prev && r.geo) { const d=haversineKm(prev.lat, prev.lng, r.geo.lat, r.geo.lng); if(d!=null) total+=d; prev=r.geo; }
+    else if(r.geo) prev=r.geo;
+  }
+  return total;
+}
+function twoOpt(orden, options){
+  if(orden.length < 4) return orden;
+  let best=[...orden];
+  let improved=true; let iter=0;
+  while(improved && iter<2){
+    improved=false; iter++;
+    const baseDist=totalDistanceKm(best, options.origin);
+    const baseLates=best.filter(r=>r.late).length;
+    for(let i=0;i<best.length-2;i++){
+      for(let k=i+2;k<best.length;k++){
+        if(best[i].closedDay || best[k].closedDay) continue;
+        const cand=[...best];
+        const segment=cand.slice(i+1,k+1).reverse();
+        cand.splice(i+1, k-i, ...segment);
+        // Recompute timeline for candidate to validate windows
+        let state={cursor: options.origin, clock: options.departureMinute};
+        let candLate=0; let candDist=0; let prev=options.origin;
+        let feasible=true;
+        for(const r of cand){
+          if(r.closedDay) continue;
+          const dist= prev && r.geo ? haversineKm(prev.lat, prev.lng, r.geo.lat, r.geo.lng) : null;
+          const travel=estimateTravelMinutes(dist, options.avgKmh);
+          const eta= state.clock!==null && travel!==null ? state.clock+travel : null;
+          const lateMin= eta!==null && r.endMinute!==null ? Math.max(0, eta - r.endMinute) : 0;
+          if(lateMin>0) candLate++;
+          if(dist!=null) candDist+=dist;
+          const wait= eta!==null && r.startMinute!==null ? Math.max(0, r.startMinute-eta) : 0;
+          state={cursor: r.geo || state.cursor, clock: eta===null?null:eta+wait+options.serviceMinutes};
+          if(r.geo) prev=r.geo;
+        }
+        if(candLate <= baseLates && candDist < baseDist - 0.05){
+          best=cand; improved=true; break;
+        }
+      }
+      if(improved) break;
+    }
+  }
+  return best;
+}
+
 function optimizeStopsHybrid(stops, dateYmd, windowsByCliente = new Map(), rawOptions = {}) {
   const strategy = STRATEGIES.has(rawOptions.strategy) ? rawOptions.strategy : 'balanced';
   const options = optionsFor(rawOptions);
@@ -120,7 +170,9 @@ function buildRouteExplanation(orden, rawOptions = {}) {
   const estimatedKm = Math.round(orden.reduce((sum, row) => sum + (row.distanceKmFromPrev || 0), 0) * 100) / 100;
   const estimatedEnd = [...orden].reverse().find((row) => row.etaMinute !== null)?.etaMinute ?? null;
   const conflicts = orden.filter((row) => row.conflict).length;
-  return { summary: 'Sugerencia calculada con ventanas de entrega, cierres y distancia disponible.', strategy: rawOptions.strategy || 'balanced', originKnown: Boolean(normalizeOrigin(rawOptions.origin)), departureMinute: resolveDepartureMinute(rawOptions), departureLabel: formatMinuteLabel(resolveDepartureMinute(rawOptions)), factors: [`${total} paradas; ${withGps} con GPS`, conflicts ? `${conflicts} incidencias de ventana/cierre para revisar` : 'Sin conflictos de ventana estimados', normalizeOrigin(rawOptions.origin) ? 'Origen indicado por el usuario' : 'Falta punto de salida: no se inventan ETAs'], estimatedKm, estimatedEnd, estimatedEndLabel: formatMinuteLabel(estimatedEnd), total, withGps, missingGps: total - withGps, windowed: orden.filter((row) => row.startMinute !== null || row.endMinute !== null).length, conflicts };
+  const missingMsg= total-withGps>0 ? `${total-withGps} sin GPS (revisa direcciones, pide alta)` : 'Todas con GPS';
+  const stratLabel= rawOptions.strategy==='distance_first' ? 'Prioridad: menos km' : rawOptions.strategy==='windows_first' ? 'Prioridad: horarios cliente' : 'Equilibrada: horario + distancia';
+  return { summary: `Ruta sugerida: ${total} paradas · ${estimatedKm} km estimados` + (estimatedEnd? ` · fin aprox ${formatMinuteLabel(estimatedEnd)}` : ''), strategy: rawOptions.strategy || 'balanced', originKnown: Boolean(normalizeOrigin(rawOptions.origin)), departureMinute: resolveDepartureMinute(rawOptions), departureLabel: formatMinuteLabel(resolveDepartureMinute(rawOptions)), factors: [`${total} paradas: ${withGps} con GPS · ${missingMsg}`, `${stratLabel} · ${orden.filter((r)=>r.windowLabel).length} con ventana horaria`, conflicts ? `${conflicts} avisos: revisa cierres o llegadas tardías` : 'Horarios compatibles', normalizeOrigin(rawOptions.origin) ? `Salida: ${rawOptions.origin.lat.toFixed(3)},${rawOptions.origin.lng.toFixed(3)}` : 'Sin salida: fija tu ubicación para ETAs reales'], estimatedKm, estimatedEnd, estimatedEndLabel: formatMinuteLabel(estimatedEnd), total, withGps, missingGps: total - withGps, windowed: orden.filter((row) => row.startMinute !== null || row.endMinute !== null).length, conflicts };
 }
 function optimizeRoutePackage(stops, dateYmd, windowsByCliente = new Map(), options = {}) {
   const orden = optimizeStopsHybrid(stops, dateYmd, windowsByCliente, options);

@@ -234,7 +234,8 @@ async function fetchClientGeo(clientCodes) {
          FROM DSEMOVIL.CLIENTES
          WHERE TRIM(CODIGO) IN (${placeholders})
            AND LATITUD IS NOT NULL AND LONGITUD IS NOT NULL
-           AND ABS(LATITUD) > 0.01 AND ABS(LONGITUD) > 0.01`,
+           AND ABS(LATITUD) > 0.01 AND ABS(LONGITUD) > 0.01
+           AND LATITUD BETWEEN 27 AND 44 AND LONGITUD BETWEEN -18 AND 5`,
         batch,
         false,
         false,
@@ -245,6 +246,7 @@ async function fetchClientGeo(clientCodes) {
         const lat = Number(row.LATITUD ?? row.latitud);
         const lng = Number(row.LONGITUD ?? row.longitud);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        if (lat < 27 || lat > 44 || lng < -18 || lng > 5) continue; // ponytail: Spain bbox rejects Africa/0,0
         byCliente.set(code, { lat, lng, source: 'DSEMOVIL.CLIENTES' });
       }
     } catch (_) {
@@ -260,7 +262,8 @@ async function fetchClientGeo(clientCodes) {
          FROM DSEDAC.LOC
          WHERE TRIM(CODIGOCLIENTE) IN (${missPlaceholders})
            AND LATITUD IS NOT NULL AND LONGITUD IS NOT NULL
-           AND ABS(LATITUD) > 0.01 AND ABS(LONGITUD) > 0.01`,
+           AND ABS(LATITUD) > 0.01 AND ABS(LONGITUD) > 0.01
+           AND LATITUD BETWEEN 27 AND 44 AND LONGITUD BETWEEN -18 AND 5`,
         missing,
         false,
         false,
@@ -271,6 +274,7 @@ async function fetchClientGeo(clientCodes) {
         const lat = Number(row.LATITUD ?? row.latitud);
         const lng = Number(row.LONGITUD ?? row.longitud);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        if (lat < 27 || lat > 44 || lng < -18 || lng > 5) continue;
         byCliente.set(code, { lat, lng, source: 'DSEDAC.LOC' });
       }
     } catch (_) {
