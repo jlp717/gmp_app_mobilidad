@@ -102,6 +102,10 @@ function headerQuery(schema, includeClient) {
       CPC.TERMINALALBARAN,
       CPC.NUMEROALBARAN,
       TRIM(CPC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE,
+      TRIM(CPC.CODIGOFORMAPAGO) AS FORMA_PAGO,
+      TRIM(PC.CODIGO) AS CATALOGO_FORMA_PAGO,
+      TRIM(PC.DEBE_COBRAR) AS DEBE_COBRAR,
+      TRIM(CLX.COBRORIGUROSOSN) AS COBRO_RIGUROSO,
       TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, CPC.CODIGOCLIENTEALBARAN)) AS NOMBRECLIENTE,
       TRIM(OPP.CODIGOREPARTIDOR) AS CODIGOREPARTIDOR,
       CPC.EJERCICIOPEDIDO,
@@ -115,6 +119,11 @@ function headerQuery(schema, includeClient) {
       AND TRIM(OPP.SUBEMPRESA) = TRIM(CPC.SUBEMPRESAPEDIDO)
     LEFT JOIN ${schema}.CLI CLI
       ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+    LEFT JOIN JAVIER.PAYMENT_CONDITIONS PC
+      ON TRIM(PC.CODIGO) = TRIM(CPC.CODIGOFORMAPAGO)
+      AND PC.ACTIVO = 'S'
+    LEFT JOIN ${schema}.CLX CLX
+      ON TRIM(CLX.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
     LEFT JOIN ${schema}.CAC CAC
       ON CAC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
       AND CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
@@ -271,6 +280,8 @@ function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
   const subempresa = text(row, 'SUBEMPRESA');
   const codigoCliente = text(row, 'CODIGOCLIENTE');
   const repartidorId = text(row, 'CODIGOREPARTIDOR');
+  const formaPago = text(row, 'FORMA_PAGO');
+  const catalogoFormaPago = text(row, 'CATALOGO_FORMA_PAGO');
   const ejercicio = number(row, 'EJERCICIOALBARAN');
   const terminal = number(row, 'TERMINALALBARAN');
   const numero = number(row, 'NUMEROALBARAN');
@@ -280,6 +291,11 @@ function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
     || !Number.isInteger(terminal) || !Number.isInteger(numero) || importeTotal == null) {
     throw new RepartoPlannedDeliveryError('La cabecera planificada no tiene los datos requeridos', {
       code: 'DELIVERY_SOURCE_INCONSISTENT', statusCode: 409,
+    });
+  }
+  if (formaPago && !catalogoFormaPago) {
+    throw new RepartoPlannedDeliveryError('La forma de pago del albaran no figura en el catalogo autorizado', {
+      code: 'PAYMENT_CATALOG_UNAVAILABLE', statusCode: 503,
     });
   }
   return Object.freeze({
@@ -293,6 +309,8 @@ function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
     importeTotal,
     amountSource: resolvedAmount.source,
     pricingState: resolvedAmount.pricingState,
+    formaPago,
+    cobroObligatorio: text(row, 'DEBE_COBRAR') === 'S' || text(row, 'COBRO_RIGUROSO') === 'S',
     importePendiente: financial.importePendiente,
     financialDocumentState: financial.state,
     financialDocument: financial.document,

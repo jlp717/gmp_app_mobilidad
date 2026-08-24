@@ -284,6 +284,20 @@ function assertPayment(planned, command, actualLines, document) {
 }
 
 
+function assertPaymentRequired(planned, command) {
+  if (command.cobro
+    || !planned.cobroObligatorio
+    || !['ENTREGADO', 'PARCIAL'].includes(command.delivery.status)
+    || !(Number(planned.importePendiente) > 0)) {
+    return;
+  }
+
+  throw new RepartoPersistenceError('El documento exige registrar un cobro antes de confirmar la entrega', {
+    code: 'PAYMENT_REQUIRED',
+    statusCode: 422,
+  });
+}
+
 function buildReceiptProof(planned, actualLines, payment, status) {
   const plannedImporteTotal = Number(planned.importeTotal);
   const plannedLineCount = Array.isArray(planned.lineas) ? planned.lineas.length : null;
@@ -369,6 +383,7 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
           },
         );
       }
+      assertPaymentRequired(planned, command);
       const actualLines = assertPlannedDelivery(planned, command);
       const evidenceRequirements = [
         ...(command.delivery.firma ? [{

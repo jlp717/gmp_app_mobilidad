@@ -10,6 +10,7 @@ function header(overrides = {}) {
   return {
     SUBEMPRESA: 'GMP', EJERCICIOALBARAN: 2026, SERIEALBARAN: 'A', TERMINALALBARAN: 2,
     NUMEROALBARAN: 42, CODIGOCLIENTE: 'CLI-01', NOMBRECLIENTE: 'Cliente uno', CODIGOREPARTIDOR: 'REP-1',
+    FORMA_PAGO: '02', CATALOGO_FORMA_PAGO: '02', DEBE_COBRAR: 'N', COBRO_RIGUROSO: 'N',
     EJERCICIOPEDIDO: 2026, NUMEROPEDIDO: 77, IMPORTETOTAL: '13.50', ...overrides,
   };
 }
@@ -76,10 +77,20 @@ describe('DB2 planned delivery read port', () => {
       documentId: '2026-A-2-42-CLI-01', repartidorId: 'REP-1', importeTotal: 13.5, importePendiente: 12.5,
       cliente: { codigo: 'CLI-01', nombre: 'Cliente uno' },
       document: { subempresa: 'GMP', ejercicio: 2026, serie: 'A', terminal: 2, numero: 42 },
+      formaPago: '02', cobroObligatorio: false,
       financialDocumentState: 'AVAILABLE',
       financialDocument: { tipo: 'FRA', origen: 'C', subempresa: 'GMP', ejercicio: 2026, serie: 'A', terminal: 2, numero: 42, xde: 3, dex: 7 },
       lineas: [{ lineaId: '1', codigoArticulo: 'ART-1', descripcion: 'Articulo', cantidadPedida: 3, cantidadEnvases: 1, unidadMedida: 'UNIDADES', precioUnitario: 4.5, importeLinea: 13.5 }],
     }));
+  });
+
+  test('maps a mandatory payment condition from the ERP header catalog join', async () => {
+    const port = createRepartoPlannedDeliveryDb2Port();
+    const planned = await port.forConnection(connection({
+      headers: [header({ FORMA_PAGO: 'C5', CATALOGO_FORMA_PAGO: 'C5', DEBE_COBRAR: 'S' })],
+    })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
+
+    expect(planned).toMatchObject({ formaPago: 'C5', cobroObligatorio: true });
   });
 
   test('marks missing and ambiguous CVC documents as non-payable without choosing one', async () => {

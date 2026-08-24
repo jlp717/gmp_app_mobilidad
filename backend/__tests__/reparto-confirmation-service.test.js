@@ -245,6 +245,18 @@ describe('transactional reparto confirmation service', () => {
     expect(snapshot.events).toEqual(['confirmation', 'lines', 'evidence', 'idempotency']);
   });
 
+  test('rejects an unpaid confirmation when the planned delivery requires collection', async () => {
+    const repository = createFakeRepository({ planned: plannedDelivery({ cobroObligatorio: true }) });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+
+    await expect(service.confirm(command())).rejects.toMatchObject({
+      code: 'PAYMENT_REQUIRED',
+      statusCode: 422,
+    });
+    expect(repository.snapshot().confirmations.size).toBe(0);
+    expect(repository.snapshot().cobros).toHaveLength(0);
+  });
+
   test('confirms a prepaid zero-importe delivery with no planned lines', async () => {
     const repository = createFakeRepository({
       planned: plannedDelivery({
