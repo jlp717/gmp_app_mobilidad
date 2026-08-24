@@ -1364,7 +1364,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
         add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
         add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
         add('OPERADOR', input.operador || 'unknown');
-        add('OBSERVACIONES', input.notas || null);
+        add('OBSERVACIONES', input.notas || '');
       } else {
         add('CODIGO_CLIENTE', input.codigoCliente);
         add('NOMBRE_CLIENTE', input.nombreCliente || '');
@@ -1384,7 +1384,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
         add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
         add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
         add('OPERADOR', input.operador || 'unknown');
-        add('NOTAS', input.notas || null);
+        add('NOTAS', input.notas || '');
       }
 
       await runOn(conn, `
