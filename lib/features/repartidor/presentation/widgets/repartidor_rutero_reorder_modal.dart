@@ -517,10 +517,10 @@ class _RepartidorRuteroReorderModalState
             children: [
               Expanded(
                 child: Text(
-                  'Arrastra libremente · $_dateYmd',
+                  'Arrastra con el dedo: mantén el asa ⋮⋮ y suelta · $_dateYmd',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 12,
+                    fontSize: 13,
                   ),
                 ),
               ),
@@ -684,14 +684,14 @@ class _RepartidorRuteroReorderModalState
           child: ListTile(
             onTap: () => _selectStop(a.id),
             leading: CircleAvatar(
-              radius: 14,
+              radius: 20,
               backgroundColor: closed
                   ? AppTheme.warning.withValues(alpha: 0.25)
                   : seqColor.withValues(alpha: 0.22),
               child: Text(
                 '${index + 1}',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 14,
                   color: closed ? AppTheme.warning : seqColor,
                   fontWeight: FontWeight.bold,
                 ),
@@ -727,16 +727,19 @@ class _RepartidorRuteroReorderModalState
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppTheme.textSecondary.withValues(alpha: 0.9),
-                      fontSize: 11,
+                      fontSize: 14,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
               ],
             ),
             isThreeLine: obs.isNotEmpty,
-            trailing: const Icon(
-              Icons.drag_handle,
-              color: AppTheme.textSecondary,
+            trailing: Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: AppTheme.softPanel, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.borderColor)),
+              child: const Icon(Icons.drag_handle, color: AppTheme.textSecondary, size: 28),
             ),
           ),
         );
