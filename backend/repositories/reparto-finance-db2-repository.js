@@ -1171,7 +1171,10 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async beginWork(conn) {
-      await conn.query('BEGIN WORK');
+      // IBM i ODBC rejects BEGIN WORK with SQLSTATE 42000 / SQL0104.
+      // Setting the isolation level starts the explicit unit of work while
+      // keeping COMMIT/ROLLBACK available for the caller's atomic operation.
+      await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     },
 
     async commit(conn) {
