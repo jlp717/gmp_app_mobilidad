@@ -52,6 +52,11 @@ describe('reparto-variance-notification-service', () => {
     const messageIds = sendEmail.mock.calls.map(([message]) => message.messageId);
     expect(new Set(messageIds).size).toBe(3);
     expect(messageIds.every((id) => /^<gmp-reparto-cobro-/.test(id))).toBe(true);
+    expect(sendEmail.mock.calls.every(([message]) => (
+      Buffer.isBuffer(message.pdfBuffer)
+      && message.pdfFilename.startsWith('RECIBO_COBRO_')
+      && message.pdfFilename.endsWith('.pdf')
+    ))).toBe(true);
     expect(result).toEqual({ skipped: false, attempted: 3, sent: 2, failed: 1, allSucceeded: false });
   });
 

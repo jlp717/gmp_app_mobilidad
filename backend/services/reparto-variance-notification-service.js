@@ -10,6 +10,7 @@ const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const logger = require('../middleware/logger');
 const { sendHtmlEmail, sendEmailWithPdf } = require('./emailPdfService');
 const { buildVariancePdfBuffer } = require('./reparto-variance-pdf-service');
+const { buildCobroPdfBuffer, buildCobroPdfFileName } = require('./reparto-cobro-pdf-service');
 const {
   resolveDeliveryVarianceRecipients,
   resolveLiquidacionRecipients,
@@ -355,7 +356,7 @@ async function notifyAfterCobro({
 } = {}, {
   query = queryWithParams,
   env = process.env,
-  sendEmail = sendHtmlEmail,
+  sendEmail = sendEmailWithPdf,
   resolveRecipients = resolveLiquidacionRecipients,
 } = {}) {
   if (!result?.created || !cobro) {
@@ -391,25 +392,35 @@ async function notifyAfterCobro({
 
     const amount = Number(cobro.importeCobrado);
     const payload = {
+      cobroId: identity,
       documento: cobroDocumentLabel(cobro),
       codigoCliente: normalizeText(cobro.codigoCliente),
       nombreCliente: normalizeText(cobro.nombreCliente),
       repartidorId,
       importe: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
+      pendiente: Number.isFinite(Number(cobro.importePendiente))
+        ? Number(cobro.importePendiente).toFixed(2)
+        : '0.00',
       formaPago: normalizeText(cobro.formaPago),
       origen: normalizeText(cobro.pantallaOrigen) || 'RUTERO',
+      registradoAt: new Date().toISOString(),
+      notas: normalizeText(cobro.notas),
     };
     const subject = `Cobro ${payload.documento} - ${payload.importe} EUR`;
     const htmlBody = buildCobroEmailHtml(payload);
     const textBody = [
-      `Documento: ${payload.documento}`,
-      `Cliente: ${payload.codigoCliente} ${payload.nombreCliente}`.trim(),
-      `Repartidor: ${payload.repartidorId}`,
-      `Importe: ${payload.importe} EUR`,
-      `Forma de pago: ${payload.formaPago}`,
-      `Origen: ${payload.origen}`,
+      'ID de cobro: ' + payload.cobroId,
+      'Documento: ' + payload.documento,
+      ('Cliente: ' + payload.codigoCliente + ' ' + payload.nombreCliente).trim(),
+      'Repartidor: ' + payload.repartidorId,
+      'Importe: ' + payload.importe + ' EUR',
+      'Pendiente tras el cobro: ' + payload.pendiente + ' EUR',
+      'Forma de pago: ' + payload.formaPago,
+      'Origen: ' + payload.origen,
     ].join('\n');
 
+    const pdfBuffer = await buildCobroPdfBuffer(payload);
+    const pdfFilename = buildCobroPdfFileName(payload);
     const results = [];
     for (const to of delivery.effectiveRecipients) {
       try {
@@ -418,6 +429,8 @@ async function notifyAfterCobro({
           subject,
           htmlBody,
           textBody,
+          pdfBuffer,
+          pdfFilename,
           messageId: buildRepartoMessageId({
             kind: 'cobro',
             identity,

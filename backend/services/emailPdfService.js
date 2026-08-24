@@ -174,6 +174,10 @@ function corporateShellHtml({ title, accentFrom, accentTo, bodyHtml }) {
   `;
 }
 
+function htmlUsesBrandLogo(html) {
+  return typeof html === 'string' && html.includes('cid:' + LOGO_CID);
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // INICIALIZACIÓN Y HEALTH CHECK
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -347,13 +351,16 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
                 `,
             });
 
-            const logoAttachment = getBrandLogoAttachment();
+            const effectiveHtml = htmlBody || defaultHtml;
+            const logoAttachment = htmlUsesBrandLogo(effectiveHtml)
+                ? getBrandLogoAttachment()
+                : null;
             const mailOptions = {
                 from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
                 replyTo: REPLY_TO,
                 to: to,
                 subject: subject || `Documento - ${FROM_NAME}`,
-                html: htmlBody || defaultHtml,
+                html: effectiveHtml,
                 text: textBody || [
                     `${FROM_NAME}`,
                     '',
@@ -485,7 +492,7 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
                 ? getTransporter()
                 : nodemailer.createTransport(buildFallbackConfig(currentPort));
 
-            const logoAttachment = getBrandLogoAttachment();
+            const logoAttachment = htmlUsesBrandLogo(htmlBody) ? getBrandLogoAttachment() : null;
             const mailOptions = {
                 from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
                 replyTo: REPLY_TO,

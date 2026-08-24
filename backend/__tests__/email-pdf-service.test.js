@@ -117,4 +117,23 @@ describe('Email PDF Service', () => {
         expect(withCustom).toContain('Hola &lt;b&gt;x&lt;/b&gt;');
         expect(withCustom).not.toContain('<b>x</b>');
     });
+    test('does not expose an unused logo as an attachment for custom HTML', async () => {
+        const sendMail = jest.fn().mockResolvedValue({ messageId: 'message-3' });
+        const { service } = loadService(sendMail);
+
+        await service.sendEmailWithPdf({
+            to: 'javier@example.com',
+            subject: 'Recibo de cobro',
+            htmlBody: '<p>Cobro registrado</p>',
+            pdfBuffer: Buffer.from('%PDF-1.4'),
+            pdfFilename: 'RECIBO_COBRO_81.pdf',
+        });
+
+        const attachments = sendMail.mock.calls[0][0].attachments;
+        expect(attachments).toHaveLength(1);
+        expect(attachments[0]).toEqual(expect.objectContaining({
+            filename: 'RECIBO_COBRO_81.pdf',
+            contentType: 'application/pdf',
+        }));
+    });
 });
