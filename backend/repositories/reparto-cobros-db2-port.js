@@ -282,7 +282,7 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
       async insertCobro(input) {
         const payment = normalizePayment(input, now());
         const replayRows = await rows(connection,
-          `SELECT ${LEDGER_COLUMNS.join(', ')} FROM ${runtime.tables.finance.cobros} WHERE IDEMPOTENCY_TOKEN = ? FOR UPDATE WITH RS FETCH FIRST 2 ROWS ONLY`,
+          `SELECT ${LEDGER_COLUMNS.join(', ')} FROM ${runtime.tables.finance.cobros} WHERE IDEMPOTENCY_TOKEN = ? FETCH FIRST 2 ROWS ONLY FOR UPDATE WITH RS`,
           [payment.idempotencyToken]);
         if (replayRows.length > 1) {
           throw new RepartoCobrosCapabilityError('El ledger contiene tokens de cobro ambiguos');

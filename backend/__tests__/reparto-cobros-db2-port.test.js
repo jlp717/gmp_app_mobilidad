@@ -185,6 +185,9 @@ describe('reparto cobros DB2 transaction-bound port', () => {
     const port = createRepartoCobrosDb2Port({ runtime: runtime() });
     await port.assertCapabilities(exact.connection);
     await expect(port.forConnection(exact.connection).insertCobro(payment())).resolves.toEqual({ id: '91', created: false });
+    const replaySelect = exact.calls.find((call) => call.sql.includes('WHERE IDEMPOTENCY_TOKEN = ?'));
+    expect(replaySelect.sql).toMatch(/FETCH FIRST 2 ROWS ONLY[\s\S]*FOR UPDATE WITH RS/);
+    expect(replaySelect.sql).not.toMatch(/FOR UPDATE WITH RS[\s\S]*FETCH FIRST 2 ROWS ONLY/);
     expect(exact.calls.some((call) => call.sql.startsWith('INSERT INTO'))).toBe(false);
 
     const conflict = fakeConnection({ replay: [replayRow({ IMPORTEVENCIMIENTO: 11 })] });
