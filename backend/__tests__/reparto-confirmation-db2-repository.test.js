@@ -45,7 +45,7 @@ function duplicateKeyError() {
 
 function fakeConnection({
   missingTable, missingColumn, replay, rawReplay, replayAfterFirstLookup = false, prior, catalogError, uniqueFailures = 0, queryOnly = false,
-  transactionMethods = true, commitError, failWriteAt, cobrosCapabilityError,
+  transactionMethods = true, commitError, rollbackError, closeError, failWriteAt, cobrosCapabilityError,
   receiverNameLength = 100, receiverNameDataType = 'VARCHAR',
   tables = QUALIFIED_TABLES,
 } = {}) {
@@ -119,12 +119,16 @@ function fakeConnection({
     };
     connection.rollback = async () => {
       calls.push({ sql: 'ROLLBACK_TRANSACTION', params: [] });
+      if (rollbackError) throw rollbackError;
       stagedWrites = [];
       stagedEvidenceStatus = null;
       transactionActive = false;
     };
   }
-  connection.close = async () => { closed = true; };
+  connection.close = async () => {
+    closed = true;
+    if (closeError) throw closeError;
+  };
   return {
     connection,
     calls,
@@ -173,13 +177,14 @@ function repository(factory, tables = QUALIFIED_TABLES) {
   factory.ports = {
     plannedDeliveryPort, evidenceOwnershipPort, cobrosPort, plannedBound, evidenceBound, cobrosBound,
   };
+  factory.logger = { error: jest.fn(), warn: jest.fn() };
   return createRepartoConfirmationDb2Repository({
     tables,
     connectionFactory: async () => factory.connection,
     plannedDeliveryPort,
     evidenceOwnershipPort,
     cobrosPort,
-    logger: { error: jest.fn() },
+    logger: factory.logger,
   });
 }
 
@@ -241,6 +246,50 @@ describe('DB2 reparto confirmation repository', () => {
       .toContain('DATA_TYPE, LENGTH');
     expect(factory.calls.filter((call) => call.sql === 'BEGIN_TRANSACTION')).toHaveLength(1);
     expect(factory.isClosed()).toBe(true);
+  });
+
+  test('returns the committed confirmation when connection close fails', async () => {
+    const factory = fakeConnection({
+      closeError: Object.assign(new Error('socket already closed'), { code: '08003' }),
+    });
+
+    await expect(repository(factory).withTransaction(async (tx) => {
+      await tx.insertConfirmation(confirmationRecord());
+      return 'committed';
+    })).resolves.toBe('committed');
+
+    expect(factory.calls.map((call) => call.sql)).toContain('COMMIT_TRANSACTION');
+    expect(factory.persistedWrites()).toBe(1);
+    expect(factory.isClosed()).toBe(true);
+    expect(factory.logger.warn).toHaveBeenCalledWith(
+      'reparto confirmation connection close failed',
+      { code: '08003' },
+    );
+  });
+
+  test('keeps the primary write error when rollback and close also fail', async () => {
+    const factory = fakeConnection({
+      failWriteAt: 1,
+      rollbackError: Object.assign(new Error('rollback transport failed'), { code: 'HYT00' }),
+      closeError: Object.assign(new Error('close transport failed'), { code: '08003' }),
+    });
+
+    await expect(repository(factory).withTransaction((tx) =>
+      tx.insertConfirmation(confirmationRecord())))
+      .rejects.toMatchObject({
+        code: 'REPARTO_DB2_PERSISTENCE_FAILED',
+        statusCode: 503,
+      });
+
+    expect(factory.calls.map((call) => call.sql)).toEqual(expect.arrayContaining([
+      'BEGIN_TRANSACTION', 'ROLLBACK_TRANSACTION',
+    ]));
+    expect(factory.calls.map((call) => call.sql)).not.toContain('COMMIT_TRANSACTION');
+    expect(factory.isClosed()).toBe(true);
+    expect(factory.logger.error).toHaveBeenCalledWith(
+      'reparto confirmation rollback failed',
+      { code: 'HYT00' },
+    );
   });
 
   test('fails closed before any transaction when a table or column is absent', async () => {

@@ -182,10 +182,11 @@ class RepartidorFinanzasService {
     required int limit,
     String? cursor,
     String? clientCode,
+    String? search,
     String? estado,
   }) =>
       '${_prefix}_vencimientos_${repartidorId}_${from}_$to'
-      '_${clientCode ?? 'all'}_${estado ?? 'all'}_${limit}_'
+      '_${clientCode ?? 'all'}_${search ?? 'all'}_${estado ?? 'all'}_${limit}_'
       '${cursor ?? 'first'}';
 
   static String evolutionCacheKey(String repartidorId) =>
@@ -682,6 +683,7 @@ class RepartidorFinanzasService {
     required DateTime from,
     required DateTime to,
     String? clientCode,
+    String? search,
     String? estado,
     String? cursor,
     int limit = 50,
@@ -702,6 +704,7 @@ class RepartidorFinanzasService {
         if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
         if (clientCode != null && clientCode.isNotEmpty)
           'clientCode': clientCode,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (estado != null && estado.isNotEmpty) 'estado': estado,
       },
       cacheKey: vencimientosCacheKey(
@@ -711,6 +714,7 @@ class RepartidorFinanzasService {
         limit: boundedLimit,
         cursor: cursor,
         clientCode: clientCode,
+        search: search,
         estado: estado,
       ),
       cacheTTL: const Duration(minutes: 2),

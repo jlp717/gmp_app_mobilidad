@@ -1818,6 +1818,12 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
           );
         }
+        if (label == 'Cobros') {
+          return RepartidorVencimientosPage(
+            repartidorId: effectiveRepartidorId,
+            title: 'Cobros',
+          );
+        }
         if (label == 'Evolución') {
           return RepartidorEvolutionPage(
             repartidorId: effectiveRepartidorId,

@@ -225,6 +225,33 @@ void main() {
     expect(find.text('Cliente futuro'), findsNothing);
   });
 
+  test('cobros search matches client and document', () {
+    const items = [
+      VencimientoItem(
+        cliente: 'Cliente Norte',
+        codigoCliente: '4300001119',
+        nombreCliente: 'Cliente Norte',
+        documento: 'E 2026-B-A-001-000123-01',
+        fecha: null,
+        importe: 10,
+        estado: VencimientoEstado.vencido,
+      ),
+      VencimientoItem(
+        cliente: 'Cliente Sur',
+        codigoCliente: '4300002228',
+        nombreCliente: 'Cliente Sur',
+        documento: 'E 2026-B-A-001-000456-01',
+        fecha: null,
+        importe: 20,
+        estado: VencimientoEstado.proximo,
+      ),
+    ];
+
+    expect(filterVencimientosBySearch(items, '4300002228'), hasLength(1));
+    expect(filterVencimientosBySearch(items, '000123'), hasLength(1));
+    expect(filterVencimientosBySearch(items, 'cliente'), hasLength(2));
+  });
+
   testWidgets('repartidor vencimientos exposes abonar action', (tester) async {
     final now = DateTime.now();
     final from = DateTime(now.year, now.month, now.day).subtract(
@@ -238,6 +265,7 @@ void main() {
       from: from,
       to: to,
       clientCode: null as String?,
+      search: null as String?,
       estado: null as String?,
       cursor: null as String?,
       limit: 100,

@@ -56,12 +56,28 @@ enum VencimientosFiltro {
   proximos,
 }
 
+List<VencimientoItem> filterVencimientosBySearch(
+  Iterable<VencimientoItem> items,
+  String query,
+) {
+  final normalized = query.trim().toLowerCase();
+  if (normalized.isEmpty) return items.toList();
+  return items.where((item) {
+    return item.cliente.toLowerCase().contains(normalized) ||
+        item.codigoCliente.toLowerCase().contains(normalized) ||
+        item.nombreCliente.toLowerCase().contains(normalized) ||
+        item.documento.toLowerCase().contains(normalized);
+  }).toList();
+}
+
 class VencimientosPage extends StatefulWidget {
   const VencimientosPage({
     super.key,
+    this.title = 'Vencimientos',
     this.vencimientos = const [],
     this.initialFiltro = VencimientosFiltro.todos,
     this.onFiltroChanged,
+    this.onSearchSubmitted,
     this.onItemTap,
     this.total,
     this.hasMore = false,
@@ -69,9 +85,11 @@ class VencimientosPage extends StatefulWidget {
     this.onLoadMore,
   });
 
+  final String title;
   final List<VencimientoItem> vencimientos;
   final VencimientosFiltro initialFiltro;
   final ValueChanged<VencimientosFiltro>? onFiltroChanged;
+  final ValueChanged<String>? onSearchSubmitted;
   final ValueChanged<VencimientoItem>? onItemTap;
   final int? total;
   final bool hasMore;
@@ -84,6 +102,7 @@ class VencimientosPage extends StatefulWidget {
 
 class _VencimientosPageState extends State<VencimientosPage> {
   late VencimientosFiltro _filtro = widget.initialFiltro;
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -96,9 +115,23 @@ class _VencimientosPageState extends State<VencimientosPage> {
         children: [
           _FinanceHeader(
             icon: Icons.event_available,
-            title: 'Vencimientos',
+            title: widget.title,
             subtitle:
                 '${visible.length} documentos - ${_money(_total(visible))}',
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: TextField(
+              onChanged: (value) => setState(() => _searchQuery = value),
+              onSubmitted: widget.onSearchSubmitted,
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: const InputDecoration(
+                labelText: 'Buscar cliente o albarán',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
           ),
           _FilterStrip(
             selected: _filtro,
@@ -154,14 +187,15 @@ class _VencimientosPageState extends State<VencimientosPage> {
   }
 
   List<VencimientoItem> _filteredItems() {
-    return widget.vencimientos.where((item) {
+    final byEstado = widget.vencimientos.where((item) {
       return switch (_filtro) {
         VencimientosFiltro.todos => true,
         VencimientosFiltro.vencidos => item.estado == VencimientoEstado.vencido,
         VencimientosFiltro.hoy => item.estado == VencimientoEstado.hoy,
         VencimientosFiltro.proximos => item.estado == VencimientoEstado.proximo,
       };
-    }).toList()
+    });
+    return filterVencimientosBySearch(byEstado, _searchQuery)
       ..sort((a, b) {
         if (a.fecha == null) return b.fecha == null ? 0 : 1;
         if (b.fecha == null) return -1;
@@ -188,9 +222,11 @@ class RepartidorVencimientosPage extends ConsumerStatefulWidget {
   const RepartidorVencimientosPage({
     required this.repartidorId,
     super.key,
+    this.title = 'Vencimientos',
   });
 
   final String repartidorId;
+  final String title;
 
   @override
   ConsumerState<RepartidorVencimientosPage> createState() =>
@@ -205,6 +241,7 @@ class _RepartidorVencimientosPageState
   late DateTime _from;
   late DateTime _to;
   String? _nextCursor;
+  String _serverSearch = '';
   Object? _error;
   int _total = 0;
   int _generation = 0;
@@ -242,6 +279,16 @@ class _RepartidorVencimientosPageState
     return _loadPage(reset: false);
   }
 
+  void _submitSearch(String value) {
+    final normalized = value.trim();
+    if (_serverSearch == normalized) {
+      _loadFirstPage(forceRefresh: true);
+      return;
+    }
+    setState(() => _serverSearch = normalized);
+    _loadFirstPage(forceRefresh: true);
+  }
+
   Future<void> _loadPage({
     required bool reset,
     bool forceRefresh = false,
@@ -264,6 +311,7 @@ class _RepartidorVencimientosPageState
       from: _from,
       to: _to,
       clientCode: null as String?,
+      search: _serverSearch.isEmpty ? null : _serverSearch,
       estado: null as String?,
       cursor: reset ? null : _nextCursor,
       limit: _pageSize,
@@ -289,6 +337,64 @@ class _RepartidorVencimientosPageState
         _isLoadingMore = false;
       });
     }
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final initialDate = isFrom ? _from : _to;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+    );
+    if (picked == null || !mounted) return;
+    if (isFrom && picked.isAfter(_to)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La fecha inicial no puede superar la final'),
+        ),
+      );
+      return;
+    }
+    if (!isFrom && picked.isBefore(_from)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La fecha final no puede ser anterior a la inicial'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      if (isFrom) {
+        _from = picked;
+      } else {
+        _to = picked;
+      }
+    });
+    await _loadFirstPage(forceRefresh: true);
+  }
+
+  Widget _buildDateFilters() {
+    final format = DateFormat('dd/MM/yyyy');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => _pickDate(isFrom: true),
+            icon: const Icon(Icons.calendar_today, size: 16),
+            label: Text('Desde ${format.format(_from)}'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _pickDate(isFrom: false),
+            icon: const Icon(Icons.event, size: 16),
+            label: Text('Hasta ${format.format(_to)}'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -334,19 +440,28 @@ class _RepartidorVencimientosPageState
         ),
       );
     }
-    return VencimientosPage(
-      vencimientos: _items.map(_mapVencimiento).toList(),
-      total: _total,
-      hasMore: _nextCursor != null,
-      isLoadingMore: _isLoadingMore,
-      onLoadMore: _loadMore,
-      onItemTap: (item) => _showDetail(
-        context,
-        ref,
-        widget.repartidorId,
-        item,
-        onSaved: () => _loadFirstPage(forceRefresh: true),
-      ),
+    return Column(
+      children: [
+        _buildDateFilters(),
+        Expanded(
+          child: VencimientosPage(
+            title: widget.title,
+            vencimientos: _items.map(_mapVencimiento).toList(),
+            total: _total,
+            hasMore: _nextCursor != null,
+            isLoadingMore: _isLoadingMore,
+            onLoadMore: _loadMore,
+            onSearchSubmitted: _submitSearch,
+            onItemTap: (item) => _showDetail(
+              context,
+              ref,
+              widget.repartidorId,
+              item,
+              onSaved: () => _loadFirstPage(forceRefresh: true),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

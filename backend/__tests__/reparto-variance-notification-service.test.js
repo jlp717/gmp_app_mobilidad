@@ -2,11 +2,75 @@
 
 const {
   detectVarianceLines,
+  notifyAfterCobro,
   notifyAfterConfirm,
   buildVarianceEmailHtml,
 } = require('../services/reparto-variance-notification-service');
 
 describe('reparto-variance-notification-service', () => {
+  test('notifyAfterCobro sends once to each resolved recipient and contains SMTP failure', async () => {
+    const sendEmail = jest.fn(async ({ to }) => {
+      if (to === 'carlos@example.test') throw Object.assign(new Error('smtp down'), { code: 'SMTP_DOWN' });
+      return { success: true };
+    });
+    const resolveRecipients = jest.fn(async () => ({
+      emails: [
+        'driver@example.test',
+        'javier@example.test',
+        'carlos@example.test',
+        'DRIVER@example.test',
+      ],
+      details: [],
+      missingRequired: [],
+    }));
+
+    const result = await notifyAfterCobro({
+      cobro: {
+        codigoRepartidor: '94',
+        codigoCliente: '4300001',
+        nombreCliente: 'Cliente Demo',
+        entregaId: '2026-S-10-404-4300001',
+        importeCobrado: 25.5,
+        formaPago: 'EFECTIVO',
+        pantallaOrigen: 'VENCIMIENTOS',
+        idempotencyToken: 'cobro-notify-0001',
+      },
+      result: { created: true, id: '81' },
+    }, {
+      env: {},
+      query: jest.fn(),
+      sendEmail,
+      resolveRecipients,
+    });
+
+    expect(resolveRecipients).toHaveBeenCalledWith({ repartidorId: '94' }, expect.any(Object));
+    expect(sendEmail.mock.calls.map(([message]) => message.to).sort()).toEqual([
+      'carlos@example.test',
+      'driver@example.test',
+      'javier@example.test',
+    ]);
+    const messageIds = sendEmail.mock.calls.map(([message]) => message.messageId);
+    expect(new Set(messageIds).size).toBe(3);
+    expect(messageIds.every((id) => /^<gmp-reparto-cobro-/.test(id))).toBe(true);
+    expect(result).toEqual({ skipped: false, attempted: 3, sent: 2, failed: 1, allSucceeded: false });
+  });
+
+  test('notifyAfterCobro skips idempotent replay before resolving recipients', async () => {
+    const resolveRecipients = jest.fn();
+    const sendEmail = jest.fn();
+
+    await expect(notifyAfterCobro({
+      cobro: { codigoRepartidor: '94', idempotencyToken: 'cobro-notify-0001' },
+      result: { created: false, id: '81' },
+    }, { resolveRecipients, sendEmail })).resolves.toEqual({
+      skipped: true,
+      reason: 'not_created',
+    });
+
+    expect(resolveRecipients).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   test('detectVarianceLines catches delivered != ordered', () => {
     const lines = detectVarianceLines([
       {

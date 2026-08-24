@@ -98,6 +98,22 @@ describe('staff-email-directory-service', () => {
     );
   });
 
+  test('preserves required roles when the role catalog query fails', async () => {
+    const query = jest.fn(async (sql) => {
+      if (sql.includes('ROLE_TARGETS')) throw new Error('DB2 unavailable');
+      return [];
+    });
+
+    const roles = await resolveRoleEmails(['CARLOS_CORBALAN', 'JAVIER_LACAL'], {
+      query,
+      env: isolatedEnv,
+    });
+
+    expect(roles).toEqual([
+      expect.objectContaining({ roleKey: 'CARLOS_CORBALAN', email: null }),
+      expect.objectContaining({ roleKey: 'JAVIER_LACAL', email: null }),
+    ]);
+  });
   test('resolveRoleEmails maps role keys to live vendor emails', async () => {
     const query = jest.fn(async (sql, params) => {
       if (sql.includes('NOTIFICATION_ROLE_TARGETS') || sql.includes('TEST_NOTIFICATION_ROLE_TARGETS')) {

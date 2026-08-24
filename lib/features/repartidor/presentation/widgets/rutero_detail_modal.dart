@@ -1875,8 +1875,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           '_journalFingerprint': prepared.fingerprint,
           '_journalIdempotencyKey': prepared.idempotencyKey,
         },
-        receiveTimeout: const Duration(seconds: 15),
-        maxRetries: 0,
+        // Idempotency token is stable in the journal, so a transient response
+        // loss can be retried without creating a second delivery/cobro.
+        receiveTimeout: const Duration(seconds: 30),
+        maxRetries: 1,
       );
       if (response['queued'] == true) {
         SyncQueueService.confirmDeliveryReconciler ??=

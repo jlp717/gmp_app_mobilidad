@@ -12,6 +12,7 @@ const { sendHtmlEmail, sendEmailWithPdf } = require('./emailPdfService');
 const { buildVariancePdfBuffer } = require('./reparto-variance-pdf-service');
 const {
   resolveDeliveryVarianceRecipients,
+  resolveLiquidacionRecipients,
   normalizeVendorCode,
 } = require('./staff-email-directory-service');
 const {
@@ -312,6 +313,137 @@ async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWit
     }
   }
   return { sent: results.filter((r) => r.success).length, results };
+}
+
+function cobroDocumentLabel(cobro = {}) {
+  const direct = normalizeText(cobro.documento || cobro.entregaId);
+  if (direct) return direct;
+  return [
+    cobro.tipoDocumento,
+    cobro.ejercicioDocumento,
+    cobro.serieDocumento,
+    cobro.terminalDocumento,
+    cobro.numeroDocumento,
+  ].map(normalizeText).filter(Boolean).join('-') || 'documento';
+}
+
+function buildCobroEmailHtml(payload) {
+  return `
+  <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;">
+    <div style="background:#003d7a;padding:18px 22px;border-radius:12px 12px 0 0;">
+      <h1 style="margin:0;color:#fff;font-size:20px;">Cobro registrado por repartidor</h1>
+    </div>
+    <div style="background:#f8f9fa;padding:20px 22px;border-radius:0 0 12px 12px;color:#333;">
+      <p><strong>Documento:</strong> ${escapeHtml(payload.documento)}</p>
+      <p><strong>Cliente:</strong> ${escapeHtml(payload.codigoCliente)} ${escapeHtml(payload.nombreCliente)}</p>
+      <p><strong>Repartidor:</strong> ${escapeHtml(payload.repartidorId)}</p>
+      <p><strong>Importe:</strong> ${escapeHtml(payload.importe)} EUR</p>
+      <p><strong>Forma de pago:</strong> ${escapeHtml(payload.formaPago)}</p>
+      <p><strong>Origen:</strong> ${escapeHtml(payload.origen)}</p>
+      <p style="margin-top:16px;font-size:11px;color:#888;">Aviso automatico - no responder a este correo.</p>
+    </div>
+  </div>`;
+}
+
+/**
+ * After a newly created cobro: notify the driver and liquidacion recipients.
+ * Replays and every directory/policy/SMTP failure are non-blocking.
+ */
+async function notifyAfterCobro({
+  cobro,
+  result,
+} = {}, {
+  query = queryWithParams,
+  env = process.env,
+  sendEmail = sendHtmlEmail,
+  resolveRecipients = resolveLiquidacionRecipients,
+} = {}) {
+  if (!result?.created || !cobro) {
+    return { skipped: true, reason: 'not_created' };
+  }
+
+  try {
+    const repartidorId = normalizeText(cobro.codigoRepartidor || cobro.repartidorId);
+    const identity = normalizeText(
+      result.id || result.cobroId || cobro.idempotencyToken,
+    );
+    if (!repartidorId || !identity) {
+      return { skipped: true, reason: 'invalid_identity' };
+    }
+
+    const resolution = await resolveRecipients({ repartidorId }, { query, env });
+    if ((resolution?.missingRequired || []).length > 0) {
+      logger.warn('[cobro-notify] delivery deferred: unresolved required DB recipient');
+      return { skipped: true, reason: 'unresolved_recipients' };
+    }
+
+    let delivery;
+    try {
+      delivery = resolveRepartoEmailDelivery({
+        recipients: resolution?.emails || [],
+        env,
+        mode: 'automatic',
+      });
+    } catch (error) {
+      logger.warn(`[cobro-notify] delivery policy rejected message: ${error.code || 'POLICY_REJECTED'}`);
+      return { skipped: true, reason: 'policy_rejected' };
+    }
+
+    const amount = Number(cobro.importeCobrado);
+    const payload = {
+      documento: cobroDocumentLabel(cobro),
+      codigoCliente: normalizeText(cobro.codigoCliente),
+      nombreCliente: normalizeText(cobro.nombreCliente),
+      repartidorId,
+      importe: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
+      formaPago: normalizeText(cobro.formaPago),
+      origen: normalizeText(cobro.pantallaOrigen) || 'RUTERO',
+    };
+    const subject = `Cobro ${payload.documento} - ${payload.importe} EUR`;
+    const htmlBody = buildCobroEmailHtml(payload);
+    const textBody = [
+      `Documento: ${payload.documento}`,
+      `Cliente: ${payload.codigoCliente} ${payload.nombreCliente}`.trim(),
+      `Repartidor: ${payload.repartidorId}`,
+      `Importe: ${payload.importe} EUR`,
+      `Forma de pago: ${payload.formaPago}`,
+      `Origen: ${payload.origen}`,
+    ].join('\n');
+
+    const results = [];
+    for (const to of delivery.effectiveRecipients) {
+      try {
+        await sendEmail({
+          to,
+          subject,
+          htmlBody,
+          textBody,
+          messageId: buildRepartoMessageId({
+            kind: 'cobro',
+            identity,
+            recipient: to,
+            env,
+          }),
+        });
+        results.push({ to, success: true });
+      } catch (error) {
+        logger.error('[cobro-notify] email failed', {
+          code: normalizeText(error?.code) || 'SMTP_FAILURE',
+        });
+        results.push({ success: false });
+      }
+    }
+
+    return {
+      skipped: false,
+      ...redactDeliverySummary(results),
+    };
+  } catch (error) {
+    logger.warn('[cobro-notify] notification failed', {
+      code: normalizeText(error?.code) || 'NOTIFICATION_FAILURE',
+    });
+    return { skipped: true, reason: 'notification_failed' };
+  }
 }
 
 /**
@@ -627,6 +759,7 @@ module.exports = {
   buildDigestEmailHtml,
   previousMadridIsoDate,
   resolveDocumentComercialCode,
+  notifyAfterCobro,
   notifyAfterConfirm,
   sendDailyVarianceDigest,
   enqueueVarianceOutbox,

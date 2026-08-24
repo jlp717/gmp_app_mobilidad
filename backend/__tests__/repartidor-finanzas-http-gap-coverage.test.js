@@ -43,6 +43,7 @@ jest.mock('../middleware/auth', () => ({
 
 const routes = require('../routes/repartidor-finanzas');
 const financeService = require('../services/repartidor-finance-service');
+const repartoVarianceNotificationService = require('../services/reparto-variance-notification-service');
 
 function app() {
   const instance = express();
@@ -113,11 +114,13 @@ describe('repartidor finance HTTP guard coverage', () => {
     expectNoInfrastructure(spy);
   });
 
-  test('cobros delegates a valid authenticated command without touching DB2 in the route', async () => {
+  test('cobros returns success without coupling the HTTP response to email resolution', async () => {
     const spy = jest.spyOn(financeService, 'registerCobro').mockResolvedValue({ created: true, cobro: { id: '1' } });
+    const notifySpy = jest.spyOn(repartoVarianceNotificationService, 'notifyAfterCobro').mockResolvedValue({ skipped: false, attempted: 0 });
     const response = await request(server).post('/finanzas/cobros').send(validCobro());
     expect(response.status).toBe(201);
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ codigoRepartidor: '94', operador: '94' }));
+    expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({ result: expect.objectContaining({ created: true }) }));
     expect(mockQuery).not.toHaveBeenCalled();
   });
 

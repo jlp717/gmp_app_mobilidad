@@ -513,7 +513,7 @@ describe('Repartidor finanzas routes', () => {
 
     const res = await request(app)
       .get('/finanzas/vencimientos/94')
-      .query({ from: '2026-04-01', to: '2026-04-30', limit: 25 });
+      .query({ from: '2026-04-01', to: '2026-04-30', limit: 25, search: 'MECA' });
 
     expect(res.status).toBe(200);
     expect(res.body.vencimientos[0]).toMatchObject({
@@ -531,7 +531,8 @@ describe('Repartidor finanzas routes', () => {
     expect(sql).not.toContain('FECHAVENCIMIENTO');
     expect(sql).toContain('CLCL1.DIASLIMITECREDITO');
     expect(sql).toContain('CLCL1.DIASLIMITECREDITOCONFECHAALB');
-    expect(params).toEqual(['94', 20260401, 20260430, 0, 25]);
+    expect(sql).toContain('CLI.NOMBRECLIENTE');
+    expect(params).toEqual(['94', 20260401, 20260430, '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', 0, 25]);
     expect(res.body.pagination).toEqual({
       total: 1,
       limit: 25,

@@ -116,6 +116,12 @@ class NavigationConfigService {
       color: AppTheme.warning,
     ),
     NavItem(
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments,
+      label: 'Cobros',
+      color: AppTheme.success,
+    ),
+    NavItem(
       icon: Icons.show_chart_outlined,
       selectedIcon: Icons.show_chart,
       label: 'Evolución',

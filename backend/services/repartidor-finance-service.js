@@ -1184,8 +1184,8 @@ function financeCursorSecret() {
   return secret;
 }
 
-function vencimientosCursorFingerprint({ repartidorId, from, to, clientCode, estado, todayYmd }) {
-  return [repartidorId, from, to, clientCode || '', estado || 'todos', todayYmd].join('|');
+function vencimientosCursorFingerprint({ repartidorId, from, to, clientCode, search, estado, todayYmd }) {
+  return [repartidorId, from, to, clientCode || '', search || '', estado || 'todos', todayYmd].join('|');
 }
 
 function cursorSignature(encodedPayload) {
@@ -1255,11 +1255,11 @@ function encodeVencimientosCursor(offset, fingerprint, todayYmd) {
   return `${encodedPayload}.${cursorSignature(encodedPayload)}`;
 }
 
-async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, estado }) {
+async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, search, estado }) {
   const ids = codeList(repartidorId);
   const pageLimit = Math.min(Math.max(toInt(limit), 1), 100);
   const cursorState = decodeVencimientosCursor(cursor, {
-    repartidorId: ids.join(','), from, to, clientCode, estado,
+    repartidorId: ids.join(','), from, to, clientCode, search, estado,
   });
   const { offset, todayYmd, fingerprint } = cursorState;
   const info = await getFinanceSchemaInfo();
@@ -1272,6 +1272,7 @@ async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCo
     fromYmd,
     toYmd,
     clientCode,
+    search,
     estado,
     todayYmd,
     offset,

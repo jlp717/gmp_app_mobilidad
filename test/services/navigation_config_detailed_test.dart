@@ -29,13 +29,13 @@ void main() {
         showCommissions: true,
       );
 
-      expect(items.length, 8);
+      expect(items.length, 9);
       expect(items.any((i) => i.label == 'Panel'), false);
       expect(items[0].label, 'Clientes');
       expect(items.any((i) => i.label == 'Liquidación'), true);
       expect(items.any((i) => i.label == 'Vencimientos'), true);
       expect(items.any((i) => i.label == 'Comisiones'), true);
-      expect(items.any((i) => i.label == 'Cobros'), false);
+      expect(items.any((i) => i.label == 'Cobros'), true);
     });
 
     test('Repartidor (jefe) has Panel as first item', () {
@@ -46,7 +46,7 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 8);
+      expect(items.length, 9);
       expect(items.any((i) => i.label == 'Comisiones'), false);
       expect(items[0].label, 'Panel');
     });

@@ -1017,7 +1017,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async selectVencimientosPage({
-      info, ids, fromYmd, toYmd, clientCode, estado, todayYmd, offset, pageLimit,
+      info, ids, fromYmd, toYmd, clientCode, search, estado, todayYmd, offset, pageLimit,
     }) {
       const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
       const dueYmd = vencimientosDueYmdExpression();
@@ -1027,6 +1027,19 @@ function createRepartoFinanceDb2Repository(options = {}) {
       if (clientCode) {
         clientFilter = ' AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?';
         params.push(clientCode.trim());
+      }
+      let searchFilter = '';
+      if (search && search.trim()) {
+        const term = `%${search.trim()}%`;
+        searchFilter = ' AND ('
+          + 'UPPER(TRIM(CVC.CODIGOCLIENTEALBARAN)) LIKE UPPER(?)'
+          + ' OR UPPER(TRIM(CLI.NOMBRECLIENTE)) LIKE UPPER(?)'
+          + ' OR UPPER(TRIM(CLI.NOMBREALTERNATIVO)) LIKE UPPER(?)'
+          + ' OR UPPER(TRIM(CVC.TIPODOCUMENTO)) LIKE UPPER(?)'
+          + ' OR UPPER(TRIM(CVC.SERIEDOCUMENTO)) LIKE UPPER(?)'
+          + ' OR TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) LIKE ?'
+          + ')';
+        params.push(term, term, term, term, term, term);
       }
       let stateFilter = '';
       if (estado === 'vencido' || estado === 'pendiente') {
@@ -1138,6 +1151,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
           AND COALESCE(CVC.ANULADOSN, '') <> 'S'
           AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
           ${clientFilter}
+          ${searchFilter}
       ) BASE
       WHERE BASE.IMPORTEPENDIENTE <> 0
         ${stateFilter}

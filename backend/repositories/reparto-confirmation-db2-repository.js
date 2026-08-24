@@ -316,7 +316,22 @@ function createRepartoConfirmationDb2Repository({
         }
       }
     } finally {
-      if (typeof connection.close === 'function') await connection.close();
+      if (typeof connection.close === 'function') {
+        try {
+          await connection.close();
+        } catch (closeError) {
+          // Closing happens after COMMIT/ROLLBACK. A transport failure here
+          // must never turn an already committed confirmation into a client
+          // error or hide the primary persistence failure.
+          try {
+            logger.warn?.('reparto confirmation connection close failed', {
+              code: closeError?.code || null,
+            });
+          } catch (_) {
+            // Logging is also best-effort on this post-transaction path.
+          }
+        }
+      }
     }
   }
 

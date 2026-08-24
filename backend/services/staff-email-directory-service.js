@@ -248,7 +248,14 @@ async function resolveRoleEmails(roleKeys, {
     rows = await query(sql, keys);
   } catch (error) {
     logger.warn(`[staff-email] role targets query failed: ${error.message}`);
-    return cacheSet(cacheKey, []);
+    return cacheSet(cacheKey, keys.map((roleKey) => ({
+      roleKey,
+      vendorCode: '',
+      email: null,
+      nombre: null,
+      nameMatch: null,
+      resolvedVia: null,
+    })));
   }
 
   const byRole = new Map();

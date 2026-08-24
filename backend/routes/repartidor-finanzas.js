@@ -6,9 +6,7 @@ const { z } = require('zod');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const financeService = require('../services/repartidor-finance-service');
-const {
-  notifyAfterConfirm,
-} = require('../services/reparto-variance-notification-service');
+const repartoVarianceNotificationService = require('../services/reparto-variance-notification-service');
 const {
   processLiquidacionOutboxIntent,
   requeueFailedLiquidacionOutbox,
@@ -302,6 +300,7 @@ const vencimientosQuerySchema = z.object({
   ).default(50),
   cursor: z.string().trim().min(1).max(512).optional(),
   clientCode: z.string().trim().max(20).optional(),
+  search: z.string().trim().max(80).optional(),
   estado: z.enum(['pendiente', 'vencido']).optional(),
 }).refine((query) => query.from <= query.to, {
   path: ['to'],
@@ -693,12 +692,13 @@ router.get('/vencimientos/:repartidorId', verifyToken, requireFinanceRepartidorS
       limit: query.limit,
       cursor: query.cursor,
       clientCode: query.clientCode,
+      search: query.search,
       estado: query.estado,
     });
     return res.json({
       success: true,
       repartidorId: params.repartidorId,
-      range: { from: query.from, to: query.to, limit: query.limit },
+      range: { from: query.from, to: query.to, limit: query.limit, search: query.search ?? null },
       vencimientos: page.items,
       pagination: {
         total: page.total,
@@ -721,6 +721,15 @@ router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.co
       operador,
     });
     await invalidateFinanceCaches(body.codigoRepartidor);
+    if (result.created) {
+      Promise.resolve()
+        .then(() => repartoVarianceNotificationService.notifyAfterCobro({ cobro: body, result }))
+        .catch((notifyError) => {
+          logger.warn('[cobro-notify] post-register notify failed', {
+            code: notifyError?.code || 'NOTIFICATION_FAILURE',
+          });
+        });
+    }
     return res.status(result.created ? 201 : 200).json({
       success: true,
       ...result,
@@ -1104,9 +1113,27 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfi
     await canonicalConfirmationRuntime.catalogService.validateConfirmation(command);
     const result = await canonicalConfirmationRuntime.confirmationService.confirm(command);
     await invalidateFinanceCaches(command.delivery.repartidorId);
+    if (result.created && command.cobro && result.cobroId != null) {
+      Promise.resolve()
+        .then(() => repartoVarianceNotificationService.notifyAfterCobro({
+          cobro: {
+            ...command.cobro,
+            codigoRepartidor: command.delivery.repartidorId || command.actor?.repartidorId,
+            documento: command.delivery.itemId,
+            idempotencyToken: command.idempotencyKey,
+            pantallaOrigen: 'RUTERO',
+          },
+          result,
+        }))
+        .catch((notifyError) => {
+          logger.warn('[cobro-notify] post-confirm notify failed', {
+            code: notifyError?.code || 'NOTIFICATION_FAILURE',
+          });
+        });
+    }
     if (result.created) {
       Promise.resolve()
-        .then(() => notifyAfterConfirm({ command, result }))
+        .then(() => repartoVarianceNotificationService.notifyAfterConfirm({ command, result }))
         .catch((notifyError) => {
           logger.warn(`[variance] post-confirm notify failed: ${notifyError?.message || notifyError}`);
         });
