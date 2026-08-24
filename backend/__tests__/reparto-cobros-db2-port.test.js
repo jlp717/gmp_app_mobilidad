@@ -180,6 +180,15 @@ describe('reparto cobros DB2 transaction-bound port', () => {
     expect(insert.params).not.toContain('must-not-be-persisted');
   });
 
+  test('uses an empty observation instead of NULL for IBM i not-null ledgers', async () => {
+    const fake = fakeConnection();
+    const port = createRepartoCobrosDb2Port({ runtime: runtime() });
+    await port.assertCapabilities(fake.connection);
+    await expect(port.forConnection(fake.connection).insertCobro(payment({ notas: undefined }))).resolves.toEqual({ id: '91', created: true });
+    const insert = fake.calls.find((call) => call.sql.startsWith('INSERT INTO'));
+    expect(insert.params.at(-1)).toBe('');
+  });
+
   test('returns an exact replay and rejects a changed payload without inserting', async () => {
     const exact = fakeConnection({ replay: [replayRow()] });
     const port = createRepartoCobrosDb2Port({ runtime: runtime() });

@@ -164,7 +164,7 @@ function normalizePayment(input, now) {
     idempotencyToken: normalizeText(input.idempotencyToken),
     pantallaOrigen: normalizeText(input.pantallaOrigen) || 'RUTERO',
     operador: normalizeText(input.operador),
-    notas: input.notas == null ? null : normalizeText(input.notas),
+    notas: input.notas == null ? '' : normalizeText(input.notas),
     diaCobro: now.getDate(),
     mesCobro: now.getMonth() + 1,
     anoCobro: now.getFullYear(),
