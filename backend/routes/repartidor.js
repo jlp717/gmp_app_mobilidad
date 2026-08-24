@@ -411,6 +411,10 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, invoicePar
 router.post('/document/send-email', verifyToken, validateDocumentEmailRequest, documentBodyOwnership);
 router.post('/document/share/whatsapp', verifyToken, documentBodyOwnership);
 
+// NOTE: the guarded GET/POST registrations above are middleware-only chains;
+// each one calls next() into its terminal handler further below in this file.
+// They look duplicated but are intentional ownership gates. Do not remove.
+
 // Commission configuration (30% threshold for repartidores)
 const REPARTIDOR_CONFIG = {
     threshold: 30.0, // 30% minimum to earn commission
