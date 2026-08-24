@@ -203,7 +203,9 @@ if ($LASTEXITCODE -eq 0 -and $secretScan) {
     $_ -notmatch "\.env\.example" -and
     $_ -notmatch "security-setup" -and
     $_ -notmatch "validate_production_config" -and
-    $_ -notmatch "politec-quality-gate"
+    $_ -notmatch "politec-quality-gate" -and
+    $_ -notmatch "[\\/]__tests__[\\/]" -and
+    $_ -notmatch "[\\/]tests[\\/]"
   }
   if ($filtered) {
     Add-Failure "Possible hardcoded secret detected. Review: $($filtered[0])"

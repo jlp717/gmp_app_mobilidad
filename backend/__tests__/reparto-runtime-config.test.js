@@ -203,7 +203,7 @@ describe('central reparto runtime configuration', () => {
     ['extra key', (finance) => ({ ...finance, shadow: 'JAVIER.TEST_SHADOW' }), 'keys do not match the exact allowlist'],
     ['non-canonical identifier', (finance) => ({ ...finance, liquidationOps: 'JAVIER.test_ops' }), 'not a canonical qualified identifier'],
     ['unexpected isolated identifier', (finance) => ({ ...finance, liquidationOps: 'JAVIER.TEST_OTHER_OPS' }), 'does not match the versioned isolated_test mapping'],
-    ['non-test isolated table', (finance) => ({ ...finance, liquidationOps: 'JAVIER.REPARTIDOR_LIQUIDACION_OPS' }), 'must use JAVIER.TEST_* in isolated_test'],
+    ['non-test isolated table', (finance) => ({ ...finance, liquidationOps: 'DSEDAC.LQD' }), 'must use JAVIER.TEST_* in isolated_test'],
   ])('rejects isolated finance mapping with %s', (_label, mutateFinance, expectedError) => {
     const { resolveRepartoRuntime, validateFinanceTableMapping } = loadResolver();
     const runtime = resolveRepartoRuntime(validTestEnv());
@@ -219,8 +219,23 @@ describe('central reparto runtime configuration', () => {
     const runtime = resolveRepartoRuntime(validProductionEnv());
 
     expect(runtime.valid).toBe(true);
+    expect(runtime.tables.finance.liquidationOps).toBe('JAVIER.LQD');
     expect(validateFinanceTableMapping(runtime)).toEqual({ valid: true, errors: [] });
 
+  });
+
+  test('D-G4-2 catalog mapping is DSEDAC.LQD / VDD without LIQDIACUE or VDD saldo', () => {
+    const { G4_DSEDAC_ERP_MAPPING } = loadResolver();
+    expect(G4_DSEDAC_ERP_MAPPING).toEqual({
+      tableSet: 'production',
+      testmovil: 'ANULADO',
+      deudaRead: 'DSEDAC.LQD.IMPORTESALDOACTUAL',
+      closeWrite: 'JAVIER.LQD',
+      vendedores: 'DSEDAC.VDD',
+      vendedoresSaldoColumn: null,
+      formLines: 'DSEDAC.LQDL1',
+      liqdiacue: null,
+    });
   });
   test.each([
     ['production schema alias', (finance) => ({ ...finance, liquidationOps: 'DSEDAC.REPARTIDOR_LIQUIDACION_OPS' })],
@@ -233,5 +248,31 @@ describe('central reparto runtime configuration', () => {
 
     expect(validation.valid).toBe(false);
     expect(validation.errors.join(' ')).toContain('does not match the versioned production mapping');
+  });
+
+  test('G4 testmovil write path is TESTMOVIL only and blocks JAVIER OPS', () => {
+    const { resolveRepartoRuntime, validateFinanceTableMapping } = loadResolver();
+    const runtime = resolveRepartoRuntime(validTestEnv({
+      REPARTO_TABLE_SET: 'testmovil',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'TESTMOVIL',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'TESTMOVIL',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'TESTMOVIL',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'true',
+    }));
+    expect(runtime.valid).toBe(true);
+    expect(runtime.tableSet).toBe('testmovil');
+    expect(runtime.tables.finance.liquidationOps).toBe('TESTMOVIL.LIQUIDIARI');
+    expect(runtime.tables.finance.balances).toBe('TESTMOVIL.VENDEDORES');
+    expect(runtime.tables.finance.liquidationOps).not.toBe('JAVIER.TEST_REPARTIDOR_LIQUIDACION_OPS');
+    expect(validateFinanceTableMapping(runtime)).toEqual({ valid: true, errors: [] });
+
+    const blocked = resolveRepartoRuntime(validTestEnv({
+      REPARTO_TABLE_SET: 'testmovil',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+    }));
+    expect(blocked.valid).toBe(false);
+    expect(blocked.errors.join(' ')).toMatch(/TESTMOVIL|JAVIER|DSEDAC/);
   });
 });

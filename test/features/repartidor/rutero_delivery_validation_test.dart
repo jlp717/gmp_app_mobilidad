@@ -111,13 +111,15 @@ void main() {
 
   test('each blocking field maps to its tab scroll pane', () {
     expect(ruteroScrollPaneForField('items'), RuteroScrollPane.products);
-    expect(ruteroScrollPaneForField('productsStatus'), RuteroScrollPane.products);
+    expect(
+        ruteroScrollPaneForField('productsStatus'), RuteroScrollPane.products);
     expect(ruteroScrollPaneForField('pago'), RuteroScrollPane.payment);
     expect(ruteroScrollPaneForField('importe'), RuteroScrollPane.payment);
     expect(ruteroScrollPaneForField('nombre'), RuteroScrollPane.finalize);
     expect(ruteroScrollPaneForField('apellidos'), RuteroScrollPane.finalize);
     expect(ruteroScrollPaneForField('dni'), RuteroScrollPane.finalize);
-    expect(ruteroScrollPaneForField('observaciones'), RuteroScrollPane.finalize);
+    expect(
+        ruteroScrollPaneForField('observaciones'), RuteroScrollPane.finalize);
     expect(ruteroScrollPaneForField('firma'), RuteroScrollPane.finalize);
   });
 

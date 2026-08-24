@@ -42,7 +42,6 @@ class LiquidacionPdfBuilder {
     final pdf = pw.Document();
     final dateLabel = DateFormat('yyyy-MM-dd HH:mm:ss').format(date);
     final displayNumber = gmpNumber(repartidorId, date);
-    final diferencia = summary.totalAIngresar - summary.ingresoBanco;
 
     pdf.addPage(
       pw.MultiPage(
@@ -152,8 +151,6 @@ class LiquidacionPdfBuilder {
                     _treasuryRow('Total a ingresar', summary.totalAIngresar,
                         green: true),
                     _treasuryRow('Ingreso en banco', summary.ingresoBanco),
-                    _treasuryRow('Diferencia', diferencia,
-                        warn: diferencia.abs() >= 0.01),
                   ],
                 ),
               ),

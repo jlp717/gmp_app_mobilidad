@@ -31,7 +31,7 @@ void main() {
     bankDepositsTotal: 0,
   );
 
-  testWidgets('liquidacion diaria renders financial totals and inputs',
+  testWidgets('liquidacion diaria renders executive ERP layout',
       (tester) async {
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
@@ -61,6 +61,19 @@ void main() {
               gastos: 0,
               totalAIngresar: 227.60,
               cobrosCount: 2,
+              cobros: const [
+                RepartidorCobroDia(
+                  fecha: '2026-04-24',
+                  codigoCliente: '4300001119',
+                  nombreCliente: 'CARNICERIA MECA',
+                  tipoCobro: 'E',
+                  tipoDocumento: 'FAC',
+                  documento: 'FAC-001',
+                  importe: 100,
+                  cobrado: 100,
+                  pendiente: 0,
+                ),
+              ],
             ),
           ),
           repartidorLiquidacionLedgerProvider((
@@ -72,10 +85,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Liquidacion Diaria'), findsOneWidget);
-    expect(find.text('Efectivo'), findsWidgets);
-    expect(find.text('Ingreso banco'), findsOneWidget);
-    expect(find.textContaining('Entregado'), findsOneWidget);
+    expect(find.text('Liquidación Diaria'), findsOneWidget);
+    expect(find.text('COBROS DE LA LIQUIDACIÓN'), findsOneWidget);
+    expect(find.text('RESUMEN TESORERÍA'), findsOneWidget);
+    expect(find.text('Total Efectivo'), findsOneWidget);
+    expect(find.text('Ingreso en Banco'), findsOneWidget);
+    expect(find.text('TOTAL'), findsOneWidget);
+    expect(find.text('Cerrar día y grabar liquidación'), findsOneWidget);
+    expect(find.text('Cliente'), findsWidgets);
   });
 
   testWidgets('liquidacion diaria validates required money fields',
@@ -169,8 +186,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Selecciona un repartidor para liquidar'), findsNothing);
-    expect(find.text('Liquidacion Diaria'), findsOneWidget);
-    expect(find.text('Grabar Liquidacion'), findsNothing);
+    expect(find.text('Liquidación Diaria'), findsOneWidget);
+    expect(find.text('Cerrar día y grabar liquidación'), findsNothing);
   });
 
   testWidgets('vencimientos can be filtered by group', (tester) async {

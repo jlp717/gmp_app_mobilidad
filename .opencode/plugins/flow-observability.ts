@@ -82,7 +82,8 @@ export function buildOtlpTracePayload(otel: {
   name: string
   attributes: Record<string, unknown>
 }) {
-  const attrs = Object.entries(otel.attributes)
+  const safeAttrs = (otel.attributes ?? {}) as Record<string, unknown>
+  const attrs = Object.entries(safeAttrs)
     .map(([key, value]) => {
       const any = toOtlpAnyValue(value)
       return any ? { key, value: any } : null
@@ -114,7 +115,7 @@ export function buildOtlpTracePayload(otel: {
                 endTimeUnixNano: endTime.toString(),
                 attributes: attrs,
                 status: {
-                  code: otel.attributes["gmp.status"] === "error" ? 2 : 1,
+                  code: (otel.attributes || {})["gmp.status"] === "error" ? 2 : 1,
                 },
               },
             ],

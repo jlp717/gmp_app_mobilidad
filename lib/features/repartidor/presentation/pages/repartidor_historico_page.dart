@@ -2337,96 +2337,200 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   void _showShareOptions(_DocumentItem doc) {
+    final isFactura = doc.type == _DocType.factura;
+    final commercialLabel =
+        isFactura ? 'Factura / albarán ERP' : 'Albarán ERP (con firma)';
+    final hasDeliveryNote = (doc.confirmationId?.trim() ?? '').isNotEmpty;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => RepartidorExecutiveSheet(
         accentColor: AppTheme.accentIndigo,
         child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Text(
-                  'Compartir Documento',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12, top: 8),
+                  child: Text(
+                    'Compartir documentos',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'NOTA DE ENTREGA',
+                      style: TextStyle(
+                        color: AppTheme.success.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 0.6,
                       ),
+                    ),
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF25D366),
-                  child: Icon(Icons.chat, color: Colors.white, size: 20),
-                ),
-                title: const Text(
-                  'Enviar por WhatsApp',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: const Text(
-                  'Prepara el PDF y abre la conversación de WhatsApp',
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareLocalDocument(doc);
-                },
-              ),
-              if (widget.canEmailDocuments)
                 ListTile(
-                  key: const ValueKey('history-email-action'),
+                  enabled: hasDeliveryNote,
+                  leading: CircleAvatar(
+                    backgroundColor: hasDeliveryNote
+                        ? const Color(0xFF25D366)
+                        : AppTheme.mutedPanel,
+                    child:
+                        const Icon(Icons.chat, color: Colors.white, size: 20),
+                  ),
+                  title: Text(
+                    'WhatsApp · nota de entrega',
+                    style: TextStyle(
+                      color: hasDeliveryNote
+                          ? Colors.white
+                          : AppTheme.textSecondary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    hasDeliveryNote
+                        ? 'PDF firmado de la entrega'
+                        : 'Sin confirmación canónica en histórico',
+                  ),
+                  onTap: hasDeliveryNote
+                      ? () {
+                          Navigator.pop(context);
+                          _shareDeliveryNoteWhatsApp(doc);
+                        }
+                      : null,
+                ),
+                if (widget.canEmailDocuments)
+                  ListTile(
+                    enabled: hasDeliveryNote,
+                    leading: CircleAvatar(
+                      backgroundColor:
+                          hasDeliveryNote ? AppTheme.info : AppTheme.mutedPanel,
+                      child: const Icon(
+                        Icons.email_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Email · nota de entrega',
+                      style: TextStyle(
+                        color: hasDeliveryNote
+                            ? Colors.white
+                            : AppTheme.textSecondary,
+                      ),
+                    ),
+                    onTap: hasDeliveryNote
+                        ? () {
+                            Navigator.pop(context);
+                            _emailHistoryDeliveryNote(doc);
+                          }
+                        : null,
+                  ),
+                ListTile(
+                  enabled: hasDeliveryNote,
+                  leading: CircleAvatar(
+                    backgroundColor: hasDeliveryNote
+                        ? AppTheme.success
+                        : AppTheme.mutedPanel,
+                    child: const Icon(
+                      Icons.download_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Guardar · nota de entrega',
+                    style: TextStyle(
+                      color: hasDeliveryNote
+                          ? Colors.white
+                          : AppTheme.textSecondary,
+                    ),
+                  ),
+                  onTap: hasDeliveryNote
+                      ? () {
+                          Navigator.pop(context);
+                          _downloadDeliveryNote(doc);
+                        }
+                      : null,
+                ),
+                const Divider(height: 24),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      commercialLabel.toUpperCase(),
+                      style: TextStyle(
+                        color: AppTheme.info.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ),
+                ),
+                ListTile(
                   leading: const CircleAvatar(
-                    backgroundColor: AppTheme.info,
+                    backgroundColor: Color(0xFF25D366),
+                    child: Icon(Icons.chat, color: Colors.white, size: 20),
+                  ),
+                  title: const Text(
+                    'WhatsApp · documento comercial',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text('Albarán o factura del ERP'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _shareCommercialWhatsApp(doc);
+                  },
+                ),
+                if (widget.canEmailDocuments)
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: AppTheme.info,
+                      child: Icon(
+                        Icons.email_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    title: const Text(
+                      'Email · documento comercial',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _emailCommercialDocument(doc);
+                    },
+                  ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppTheme.success,
                     child: Icon(
-                      Icons.email_outlined,
+                      Icons.download_rounded,
                       color: Colors.white,
                       size: 20,
                     ),
                   ),
                   title: const Text(
-                    'Email',
+                    'Guardar · documento comercial',
                     style: TextStyle(color: Colors.white),
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    _emailDocument(doc);
+                    _downloadCommercialDocument(doc);
                   },
                 ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppTheme.success,
-                  child: Icon(
-                    Icons.download_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                title: const Text(
-                  'Descargar / Guardar',
-                  style: TextStyle(color: Colors.white),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadDocument(doc);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppTheme.mutedPanel,
-                  child: Icon(Icons.share, color: Colors.white, size: 20),
-                ),
-                title: const Text(
-                  'Más opciones...',
-                  style: TextStyle(color: Colors.white),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareSystemDocument(doc);
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
@@ -2514,9 +2618,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Future<void> _previewDeliveryNote(_DocumentItem doc) async {
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      // Historical documents remain viewable even when their old delivery
-      // has no canonical confirmation record.
-      await _previewDocument(doc);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
       return;
     }
     final owner = _documentOwner(doc);
@@ -2559,20 +2668,19 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       );
     } catch (e) {
-      // A canonical receipt may be unavailable for migrated data. The
-      // document endpoint has its own ownership guard and is the safe read
-      // fallback; this is not a delivery confirmation operation.
       modal.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'La nota firmada no está disponible; se abre el albarán ERP.',
+              _sanitizedDocumentActionError(
+                e,
+                fallback: 'No se pudo cargar la nota de entrega.',
+              ),
             ),
-            backgroundColor: AppTheme.warning,
+            backgroundColor: AppTheme.error,
           ),
         );
-        await _previewDocument(doc);
       }
     }
   }
@@ -2641,7 +2749,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 : null,
             onWhatsAppTap: () {
               Navigator.pop(context);
-              _shareLocalDocument(doc);
+              _shareCommercialWhatsApp(doc);
             },
           ),
         ),
@@ -2656,7 +2764,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
   }
 
-  Future<void> _downloadDocument(_DocumentItem doc) async {
+  Future<void> _downloadCommercialDocument(_DocumentItem doc) async {
     final owner = _documentOwner(doc);
     if (owner == null) {
       _showDocumentOwnerRequired();
@@ -2670,32 +2778,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
     try {
       final isFactura = doc.type == _DocType.factura;
+      final typeLabel = isFactura ? 'Factura' : 'Albaran';
       final downloader =
           widget.documentDownloader ?? RepartidorDataService.downloadDocument;
-      final bytes = await downloader(
-        year: isFactura
-            ? (doc.ejercicioFactura ?? doc.ejercicio)
-            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
-        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
-        number: isFactura
-            ? (doc.facturaNumber ?? doc.number)
-            : (doc.albaranNumber ?? doc.number),
-        terminal: doc.terminal,
-        type: isFactura ? 'factura' : 'albaran',
-        facturaNumber: doc.facturaNumber,
-        serieFactura: doc.serieFactura,
-        ejercicioFactura: doc.ejercicioFactura,
-        albaranNumber: doc.albaranNumber ?? doc.number,
-        albaranSerie: doc.serie,
-        albaranTerminal: doc.terminal,
-        albaranYear: doc.ejercicio,
-        repartidorId: owner,
+      final bytes = await _downloadCommercialPdfBytes(
+        doc: doc,
+        owner: owner,
+        downloader: downloader,
       );
       modal.close();
 
       final tempDir = await getTemporaryDirectory();
-
-      final typeLabel = isFactura ? 'Factura' : 'Albaran';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
       final fileName = '${typeLabel}_${docRef}_$timestamp.pdf';
@@ -3012,25 +3105,97 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
   }
 
-  Future<void> _shareLocalDocument(_DocumentItem doc) async {
-    await _runShareAction(() => _shareLocalDocumentUnlocked(doc));
-  }
-
-  Future<List<int>> _downloadDocumentForAction(
-    _DocumentItem doc,
-    String owner,
-  ) async {
-    final isFactura = doc.type == _DocType.factura;
+  Future<void> _downloadDeliveryNote(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
     final confirmationId = doc.confirmationId?.trim() ?? '';
-    if (!isFactura && confirmationId.isNotEmpty) {
-      return RepartidorDataService.downloadDeliveryNotePdf(
+    if (confirmationId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+    if (_isDownloadingDocument) return;
+    _isDownloadingDocument = true;
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando nota de entrega...',
+    );
+    try {
+      final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
         confirmationId: confirmationId,
         repartidorId: owner,
       );
+      modal.close();
+      final tempDir = await getTemporaryDirectory();
+      final docRef =
+          '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+      final fileName =
+          'Nota_entrega_${docRef}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+      if (!mounted) return;
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
+              width: 1,
+              height: 1,
+            )
+          : null;
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Nota de entrega $docRef',
+        sharePositionOrigin: origin,
+      );
+    } catch (e) {
+      modal.close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_downloadErrorMessage(e)),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      _isDownloadingDocument = false;
     }
-    final downloader =
-        widget.documentDownloader ?? RepartidorDataService.downloadDocument;
-    return downloader(
+  }
+
+  Future<List<int>> _downloadCommercialPdfBytes({
+    required _DocumentItem doc,
+    required String owner,
+    Future<List<int>> Function({
+      required int year,
+      required String serie,
+      required int number,
+      required String type,
+      int terminal,
+      int? facturaNumber,
+      String? serieFactura,
+      int? ejercicioFactura,
+      int? albaranNumber,
+      String? albaranSerie,
+      int? albaranTerminal,
+      int? albaranYear,
+      required String repartidorId,
+    })? downloader,
+  }) async {
+    final isFactura = doc.type == _DocType.factura;
+    final load = downloader ?? RepartidorDataService.downloadDocument;
+    return load(
       year: isFactura
           ? (doc.ejercicioFactura ?? doc.ejercicio)
           : (doc.ejercicio > 0 ? doc.ejercicio : doc.date!.year),
@@ -3051,7 +3216,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
   }
 
-  Future<void> _shareLocalDocumentUnlocked(_DocumentItem doc) async {
+  Future<void> _shareCommercialWhatsApp(_DocumentItem doc) async {
+    await _runShareAction(() => _shareCommercialWhatsAppUnlocked(doc));
+  }
+
+  Future<void> _shareDeliveryNoteWhatsApp(_DocumentItem doc) async {
+    await _runShareAction(() => _shareDeliveryNoteWhatsAppUnlocked(doc));
+  }
+
+  Future<void> _shareCommercialWhatsAppUnlocked(_DocumentItem doc) async {
     final owner = _documentOwner(doc);
     if (owner == null) {
       _showDocumentOwnerRequired();
@@ -3120,7 +3293,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         );
       }
 
-      final bytes = await _downloadDocumentForAction(doc, owner);
+      final bytes = await _downloadCommercialPdfBytes(
+        doc: doc,
+        owner: owner,
+        downloader: widget.documentDownloader,
+      );
       final tempDir = await getTemporaryDirectory();
       final fileName = '${typeLabel}_${doc.number}.pdf';
       final file = File('${tempDir.path}/$fileName');
@@ -3173,6 +3350,86 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
   }
 
+  Future<void> _shareDeliveryNoteWhatsAppUnlocked(_DocumentItem doc) async {
+    final owner = _documentOwner(doc);
+    if (owner == null) {
+      _showDocumentOwnerRequired();
+      return;
+    }
+    final confirmationId = doc.confirmationId?.trim() ?? '';
+    if (confirmationId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+    final clientName = _selectedClientName ?? 'Cliente';
+    final docRef =
+        '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+    final result = await WhatsAppFormModal.show(
+      context,
+      defaultMessage:
+          'Hola $clientName, adjunto la nota de entrega $docRef.\n\n'
+          'Saludos - Granja Mari Pepa',
+    );
+    if (result == null || !mounted) return;
+
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando nota de entrega...',
+    );
+    try {
+      final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+        confirmationId: confirmationId,
+        repartidorId: owner,
+      );
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/Nota_entrega_$docRef.pdf');
+      await file.writeAsBytes(bytes);
+      modal.close();
+      if (!mounted) return;
+
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: result.message,
+        subject: 'Nota de entrega $docRef',
+        sharePositionOrigin: origin,
+      );
+    } catch (e) {
+      modal.close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _sanitizedDocumentActionError(
+                e,
+                fallback: 'No se pudo compartir la nota de entrega.',
+              ),
+            ),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _shareSystemDocument(_DocumentItem doc) async {
     await _runShareAction(() => _shareSystemDocumentUnlocked(doc));
   }
@@ -3189,7 +3446,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
     try {
       final isFactura = doc.type == _DocType.factura;
-      final bytes = await _downloadDocumentForAction(doc, owner);
+      final bytes = await _downloadCommercialPdfBytes(
+        doc: doc,
+        owner: owner,
+        downloader: widget.documentDownloader,
+      );
       modal.close();
 
       final tempDir = await getTemporaryDirectory();

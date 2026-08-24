@@ -1,0 +1,27 @@
+# Definicion de Hecho por Dominio — Sec 9
+version: 1
+
+backend:
+  requiere:
+    - contrato_openapi_actualizado_si_cambio
+    - tests_unitarios_e_integracion_verdes
+    - security_sin_critico_alto # OWASP API Top 10 + ASVS
+    - sin_secretos_ni_deps_vulnerables_nuevos
+    - p95_p99_dentro_presupuesto
+    - migraciones_expand_contract_reversibles_un_paso
+  no_aplica: "marcar explicito, nunca omitir en silencio"
+
+frontend:
+  requiere:
+    - axe_lighthouse_sin_regresion_wcag22
+    - teclado_y_lectores_verificados_no_solo_visual
+    - core_web_vitals: { LCP: "<=2.5s", INP: "<=200ms", CLS: "<=0.1", medido: RUM }
+    - csp_sin_unsafe_inline # nonces
+    - revision_humana_registrada_incluso_codigo_equipo
+  no_aplica: "marcar explicito"
+
+cualquier_feature:
+  requiere:
+    - docs_actualizados: [spec, CONTENIDO, README, ADR]
+    - si_5_15_activa: audit_trail_12_campos_por_decision_IA_con_efecto_persona
+  regla: "Si punto no aplica, marcar 'no aplica' explicito"

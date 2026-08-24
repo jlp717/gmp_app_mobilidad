@@ -7,15 +7,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/liquidacion_pdf_builder.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/liquidacion_diaria_view.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/repartidor_monthly_summary_bar.dart';
 import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -48,13 +51,11 @@ class _RepartidorLiquidacionDiariaPageState
   final Map<String, String> _entryTokens = <String, String>{};
   RepartidorLiquidacionResult? _closedResult;
   final _ingresoBancoController = TextEditingController();
-  final _entregadoController = TextEditingController();
   bool _seededClassicFields = false;
 
   @override
   void dispose() {
     _ingresoBancoController.dispose();
-    _entregadoController.dispose();
     super.dispose();
   }
 
@@ -108,11 +109,11 @@ class _RepartidorLiquidacionDiariaPageState
         : ref.watch(repartidorLiquidacionLedgerProvider(ledgerArgs));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE6E6E6),
+      backgroundColor: AppColors.inkSurface,
       body: asyncSummary.when(
         data: (summary) => _buildForm(summary, asyncLedger, ledgerArgs),
         loading: () => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF43A047)),
+          child: CircularProgressIndicator(color: AppColors.info),
         ),
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
@@ -137,247 +138,82 @@ class _RepartidorLiquidacionDiariaPageState
     final closed = _closedResult != null;
     if (!_seededClassicFields) {
       _ingresoBancoController.text = _classicMoney(summary.ingresoBanco);
-      _entregadoController.text = _classicMoney(summary.entregado);
       _seededClassicFields = true;
     }
-    return Column(
-      children: [
-        Material(
-          color: const Color(0xFF43A047),
-          child: SafeArea(
-            bottom: false,
-            child: SizedBox(
-              height: 48,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                      child: const Text(
-                        'Volver',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+    final gmpRef = LiquidacionPdfBuilder.gmpNumber(
+      widget.repartidorId,
+      _sessionDate,
+    );
+    return LiquidacionDiariaScreen(
+      gmpRef: gmpRef,
+      repartidorId: widget.repartidorId,
+      sessionDate: _sessionDate,
+      summary: summary,
+      ingresoBancoController: _ingresoBancoController,
+      isClosed: closed,
+      isAggregate: isAggregate,
+      isSaving: _saving,
+      canCreateAdjustments: widget.canCreateAdjustments,
+      isSubmittingEntry: _submittingEntry,
+      closedResult: _closedResult,
+      onBack: Navigator.of(context).canPop()
+          ? () => Navigator.of(context).pop()
+          : null,
+      onSave: () => _save(summary, asyncLedger?.valueOrNull),
+      onExpense: () => unawaited(_showEntryDialog(_EntryKind.expense)),
+      onBankDeposit: () => unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
+      onAdjustment: () => unawaited(_showEntryDialog(_EntryKind.adjustment)),
+      onPreviewPdf:
+          closed ? () => unawaited(_generatePdf(_closedResult!)) : null,
+      onSharePdf: closed ? () => unawaited(_sharePdf(_closedResult!)) : null,
+      cobrosPanel: summary.cobros.isEmpty
+          ? RepartidorExecutivePanel(
+              accentColor: AppColors.textSecondary,
+              child: Text(
+                'Sin cobros en el periodo (${summary.cobrosCount}).',
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+            )
+          : _CobrosPreview(
+              cobros: summary.cobros,
+              canReverseCobros: summary.canReverseCobros,
+              repartidorId: widget.repartidorId,
+              onReversed: () => ref.invalidate(
+                repartidorDailySummaryProvider((
+                  repartidorId: widget.repartidorId,
+                  date: _sessionDate,
+                  forceRefresh: true,
+                )),
+              ),
+              useErpTable: true,
+            ),
+      ledgerPanel: asyncLedger == null
+          ? null
+          : asyncLedger.when(
+              data: (ledger) => _LiquidacionLedgerPanel(
+                ledger: AsyncValue.data(ledger),
+                onRetry: () => ref.invalidate(
+                  repartidorLiquidacionLedgerProvider(ledgerArgs),
+                ),
+              ),
+              loading: () => const RepartidorExecutivePanel(
+                accentColor: AppColors.info,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: LinearProgressIndicator(color: AppColors.info),
+                ),
+              ),
+              error: (error, _) => RepartidorExecutivePanel(
+                accentColor: AppColors.error,
+                child: Text(
+                  financeErrorMessage(
+                    error,
+                    'No se pudo cargar el desglose de liquidación.',
                   ),
-                  const Text(
-                    'Liquidación Diaria',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+                  style: const TextStyle(color: AppColors.error),
+                ),
               ),
             ),
-          ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              _ClassicReadRow(
-                label: 'Total efectivo',
-                value: summary.totalEfectivo,
-                striped: false,
-                valueColor: const Color(0xFF067A58),
-              ),
-              _ClassicReadRow(
-                label: 'Total cheques / cartera',
-                value: summary.totalCheques,
-                striped: true,
-                subtitle: 'No ingreso banco',
-              ),
-              _ClassicReadRow(
-                label: 'Total tarjeta',
-                value: summary.totalTarjeta,
-                striped: false,
-                subtitle: 'No ingreso banco (TPV)',
-              ),
-              _ClassicReadRow(
-                label: 'Total postdatados',
-                value: summary.totalPostdatados,
-                striped: true,
-                subtitle: 'No ingreso banco',
-              ),
-              _ClassicReadRow(
-                label: 'Total cobros del día',
-                value: summary.totalCobrosDia,
-                striped: false,
-              ),
-              _ClassicReadRow(
-                label: 'Saldo actual (deuda)',
-                value: summary.saldoActual,
-                striped: true,
-                valueColor:
-                    summary.saldoActual < 0 ? const Color(0xFFC62828) : null,
-                subtitle: 'Arrastre liquidación anterior',
-              ),
-              _ClassicReadRow(
-                label: 'Gastos',
-                value: summary.gastos,
-                striped: false,
-              ),
-              if (summary.ajustes != 0)
-                _ClassicReadRow(
-                  label: 'Ajustes',
-                  value: summary.ajustes,
-                  striped: true,
-                ),
-              _ClassicReadRow(
-                label: 'Total a ingresar',
-                value: summary.totalAIngresar,
-                striped: summary.ajustes == 0,
-                valueColor: const Color(0xFFC62828),
-                subtitle: 'Efectivo + deuda − gastos ± ajustes',
-              ),
-              _ClassicInputRow(
-                label: 'Ingreso en banco',
-                controller: _ingresoBancoController,
-                striped: true,
-                enabled: !closed && !isAggregate,
-                subtitle: 'Solo efectivo depositado',
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Text(
-                  'Fórmula: total a ingresar = efectivo + saldo − gastos ± ajustes. '
-                  'Nuevo saldo = total a ingresar − ingreso banco.',
-                  style: TextStyle(
-                    color: Colors.grey.shade700,
-                    fontSize: 11,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-              if (!closed && !isAggregate) ...[
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: _LiquidacionEntryActions(
-                    isSubmitting: _submittingEntry,
-                    canCreateAdjustments: widget.canCreateAdjustments,
-                    onExpense: () =>
-                        unawaited(_showEntryDialog(_EntryKind.expense)),
-                    onBankDeposit: () =>
-                        unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
-                    onAdjustment: () =>
-                        unawaited(_showEntryDialog(_EntryKind.adjustment)),
-                  ),
-                ),
-              ],
-              if (asyncLedger != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                  child: asyncLedger.when(
-                    data: (ledger) => _LiquidacionLedgerPanel(
-                      ledger: AsyncValue.data(ledger),
-                      onRetry: () => ref.invalidate(
-                        repartidorLiquidacionLedgerProvider(ledgerArgs),
-                      ),
-                    ),
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: LinearProgressIndicator(),
-                    ),
-                    error: (error, _) => Text(
-                      financeErrorMessage(
-                        error,
-                        'No se pudo cargar el desglose de liquidación.',
-                      ),
-                      style: const TextStyle(color: Color(0xFFC62828)),
-                    ),
-                  ),
-                ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Divider(color: Colors.black, thickness: 3, height: 8),
-              ),
-              _ClassicReadRow(
-                label: 'Total efectivo (control)',
-                value: summary.totalEfectivo,
-                striped: false,
-              ),
-              _ClassicInputRow(
-                label: 'Entregado',
-                controller: _entregadoController,
-                striped: true,
-                enabled: !closed && !isAggregate,
-                subtitle: 'Solo informativo; no se envía al cierre',
-              ),
-              if (closed)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: _LiquidacionClosedState(
-                    result: _closedResult!,
-                    onPreview: () => unawaited(_generatePdf(_closedResult!)),
-                    onShare: () => unawaited(_sharePdf(_closedResult!)),
-                  ),
-                ),
-              const SizedBox(height: 24),
-              if (!isAggregate)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Material(
-                      color: closed
-                          ? const Color(0xFF9E9E9E)
-                          : const Color(0xFF43A047),
-                      borderRadius: BorderRadius.circular(8),
-                      child: InkWell(
-                        onTap: _saving || closed
-                            ? null
-                            : () => _save(summary, asyncLedger?.valueOrNull),
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 92,
-                          height: 92,
-                          child: _saving
-                              ? const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.check,
-                                      color: Colors.white,
-                                      size: 36,
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'Grabar',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -392,11 +228,35 @@ class _RepartidorLiquidacionDiariaPageState
   bool _canUseOfflinePdfFallback(Object error) =>
       error is ApiException && error.statusCode == 0;
 
+  Future<void> _openClosedLiquidacionPreview({
+    required Uint8List bytes,
+    required String fileName,
+    required String title,
+  }) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PdfPreviewScreen(
+          pdfBytes: bytes,
+          title: title,
+          fileName: fileName,
+        ),
+      ),
+    );
+  }
+
   Future<void> _previewOfflinePdfFallback(
     RepartidorLiquidacionResult liquidacion,
   ) async {
     try {
-      await CanonicalLiquidacionPdfBuilder.preview(liquidacion: liquidacion);
+      final bytes = await CanonicalLiquidacionPdfBuilder.buildBytes(
+        liquidacion: liquidacion,
+      );
+      await _openClosedLiquidacionPreview(
+        bytes: bytes,
+        fileName: 'Liquidacion_${liquidacion.id}.pdf',
+        title: 'Liquidación diaria ${liquidacion.repartidorId}',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -456,7 +316,11 @@ class _RepartidorLiquidacionDiariaPageState
             liquidacion: liquidacion,
             idempotencyToken: _idempotencyToken,
           );
-      await Printing.layoutPdf(onLayout: (_) async => pdf.bytes);
+      await _openClosedLiquidacionPreview(
+        bytes: pdf.bytes,
+        fileName: pdf.fileName,
+        title: 'Liquidación diaria ${liquidacion.repartidorId}',
+      );
     } catch (error, stackTrace) {
       if (_canUseOfflinePdfFallback(error)) {
         await _previewOfflinePdfFallback(liquidacion);
@@ -853,64 +717,6 @@ class _LiquidacionEntryDialogState extends State<_LiquidacionEntryDialog> {
       );
 }
 
-class _LiquidacionEntryActions extends StatelessWidget {
-  const _LiquidacionEntryActions({
-    required this.isSubmitting,
-    required this.canCreateAdjustments,
-    required this.onExpense,
-    required this.onBankDeposit,
-    required this.onAdjustment,
-  });
-
-  final bool isSubmitting;
-  final bool canCreateAdjustments;
-  final VoidCallback onExpense;
-  final VoidCallback onBankDeposit;
-  final VoidCallback onAdjustment;
-
-  @override
-  Widget build(BuildContext context) {
-    return RepartidorExecutivePanel(
-      accentColor: AppColors.info,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text('Registrar movimiento',
-              style: TextStyle(
-                  color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          const Text('Los importes se validan y calculan en el servidor.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                  onPressed: isSubmitting ? null : onExpense,
-                  icon: const Icon(Icons.receipt_long),
-                  label: const Text('Gasto')),
-              OutlinedButton.icon(
-                  onPressed: isSubmitting ? null : onBankDeposit,
-                  icon: const Icon(Icons.account_balance),
-                  label: const Text('Ingreso banco')),
-              if (canCreateAdjustments)
-                OutlinedButton.icon(
-                    onPressed: isSubmitting ? null : onAdjustment,
-                    icon: const Icon(Icons.tune),
-                    label: const Text('Ajuste')),
-            ],
-          ),
-          if (isSubmitting) ...[
-            const SizedBox(height: 12),
-            const LinearProgressIndicator(),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _LiquidacionLedgerPanel extends StatelessWidget {
   const _LiquidacionLedgerPanel({required this.ledger, required this.onRetry});
   final AsyncValue<RepartidorLiquidacionLedger> ledger;
@@ -1270,18 +1076,14 @@ class _CobrosPreview extends ConsumerWidget {
     required this.canReverseCobros,
     this.repartidorId,
     this.onReversed,
+    this.useErpTable = false,
   });
 
   final List<RepartidorCobroDia> cobros;
-
-  /// Capability explícita del backend. La ausencia mantiene la UI bloqueada.
   final bool canReverseCobros;
-
-  /// Repartidor activo. Necesario para autorizar la anulación.
   final String? repartidorId;
-
-  /// Callback opcional para refrescar la pantalla tras una anulación.
   final VoidCallback? onReversed;
+  final bool useErpTable;
 
   void _showCobroDetail(
     BuildContext context,
@@ -1533,6 +1335,12 @@ class _CobrosPreview extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (useErpTable) {
+      return LiquidacionCobrosTable(
+        cobros: cobros,
+        onCobroTap: (cobro) => _showCobroDetail(context, ref, cobro),
+      );
+    }
     return RepartidorExecutivePanel(
       accentColor: AppColors.success,
       padding: EdgeInsets.zero,
@@ -1804,59 +1612,109 @@ String _money(double value, {bool symbol = true}) {
   return symbol ? '$fixed EUR' : fixed;
 }
 
-class _ClassicReadRow extends StatelessWidget {
-  const _ClassicReadRow({
-    required this.label,
-    required this.value,
-    required this.striped,
-    this.valueColor,
-    this.subtitle,
+class _LiquidacionCorporateHeader extends StatelessWidget {
+  const _LiquidacionCorporateHeader({
+    required this.gmpRef,
+    required this.repartidorId,
+    required this.date,
+    this.onBack,
   });
 
-  final String label;
-  final double value;
-  final bool striped;
-  final Color? valueColor;
-  final String? subtitle;
+  final String gmpRef;
+  final String repartidorId;
+  final DateTime date;
+  final VoidCallback? onBack;
+
+  static const _navy = Color(0xFF003D7A);
+  static const _green = Color(0xFF00A878);
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: striped ? const Color(0xFFD8D8D8) : const Color(0xFFE6E6E6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+    final dateLabel = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_navy, Color(0xFF1A5490)],
+        ),
+        border: Border(
+          bottom: BorderSide(color: _green, width: 3),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (onBack != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: onBack,
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    label: const Text(
+                      'Volver',
+                      style: TextStyle(color: Colors.white),
                     ),
                   ),
-                  if (subtitle != null && subtitle!.isNotEmpty)
-                    Text(
-                      subtitle!,
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        fontSize: 11,
-                      ),
+                ),
+              Text(
+                'Liquidación Diaria',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
                     ),
-                ],
               ),
+              const SizedBox(height: 4),
+              Text(
+                gmpRef,
+                style: const TextStyle(
+                  color: Color(0xFFD7ECFF),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _MetaLine(label: 'Fecha', value: dateLabel),
+              _MetaLine(label: 'Vendedor', value: repartidorId),
+              _MetaLine(label: 'Usuario', value: repartidorId),
+              _MetaLine(
+                label: 'Jornada',
+                value: DateFormat('EEEE, d MMMM yyyy', 'es_ES').format(date),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: Color(0xFF9EC5EA), fontSize: 12),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-            Text(
-              '${value.toStringAsFixed(2)} €',
-              style: TextStyle(
-                color: valueColor ?? const Color(0xFF1565C0),
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(color: Colors.white),
             ),
           ],
         ),
@@ -1865,89 +1723,123 @@ class _ClassicReadRow extends StatelessWidget {
   }
 }
 
-class _ClassicInputRow extends StatelessWidget {
-  const _ClassicInputRow({
+class _TreasuryLine extends StatelessWidget {
+  const _TreasuryLine({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final double value;
+  final Color? valueColor;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = emphasized ? const Color(0xFF067A58) : AppColors.info;
+    return RepartidorExecutivePanel(
+      accentColor: accent,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
+                fontSize: emphasized ? 13 : 12,
+              ),
+            ),
+          ),
+          Text(
+            _money(value, symbol: false),
+            style: TextStyle(
+              color: valueColor ?? AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: emphasized ? 15 : 14,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'EUR',
+            style: TextStyle(
+              color: AppColors.textSecondary.withValues(alpha: 0.8),
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModernMoneyInput extends StatelessWidget {
+  const _ModernMoneyInput({
     required this.label,
     required this.controller,
-    required this.striped,
     required this.enabled,
-    this.subtitle,
   });
 
   final String label;
   final TextEditingController controller;
-  final bool striped;
   final bool enabled;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: striped ? const Color(0xFFD8D8D8) : const Color(0xFFE6E6E6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 160,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (subtitle != null && subtitle!.isNotEmpty)
-                    Text(
-                      subtitle!,
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        fontSize: 11,
-                      ),
-                    ),
-                ],
+    return RepartidorExecutivePanel(
+      accentColor: AppColors.info,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            enabled: enabled,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: AppColors.softPanel,
+              suffixText: 'EUR',
+              suffixStyle: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                borderSide: const BorderSide(color: AppColors.borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                borderSide: const BorderSide(color: AppColors.borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                borderSide: const BorderSide(color: AppColors.info, width: 1.5),
               ),
             ),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                enabled: enabled,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  suffixText: '€',
-                  suffixStyle: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(2),
-                    borderSide: const BorderSide(color: Color(0xFFBDBDBD)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(2),
-                    borderSide: const BorderSide(color: Color(0xFFBDBDBD)),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

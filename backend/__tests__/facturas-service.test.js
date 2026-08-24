@@ -277,6 +277,38 @@ describe('facturas service fiscal totals', () => {
     expect(facturas[0].numero).toBe(1);
   });
 
+  test('getFacturasRaw includes owned empty-vendor CFC invoices for scoped vendors', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    await facturasService.getFacturasRaw({
+      vendedorCodes: '93,97',
+      year: 2026,
+      documentType: 'factura',
+    });
+
+    const sql = mockQueryWithParams.mock.calls[0][0];
+    const params = mockQueryWithParams.mock.calls[0][1];
+    expect(sql).toMatch(/TRIM\(CFC\.CODIGOVENDEDOR\) IN \(\?,\?\)/);
+    expect(sql).toMatch(/CFC\.CODIGOVENDEDOR IS NULL OR TRIM\(CFC\.CODIGOVENDEDOR\) = ''/);
+    expect(sql).toMatch(/SELECT DISTINCT TRIM\(OWN\.CODIGOCLIENTE\)/);
+    expect(sql).toMatch(/OWN\.EJERCICIOFACTURA = \?/);
+    expect(params).toEqual(expect.arrayContaining(['93', '97', 2026]));
+  });
+
+  test('getFacturasRaw keeps strict vendor filter for albaranes', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    await facturasService.getFacturasRaw({
+      vendedorCodes: '93',
+      year: 2026,
+      documentType: 'albaran',
+    });
+
+    const sql = mockQueryWithParams.mock.calls[0][0];
+    expect(sql).toMatch(/TRIM\(CAC\.CODIGOVENDEDOR\) IN \(\?\)/);
+    expect(sql).not.toMatch(/SELECT DISTINCT TRIM\(OWN\.CODIGOCLIENTE\)/);
+  });
+
   test('getSummary totals base and IVA from CFC official totals', async () => {
     mockQueryWithParams.mockResolvedValueOnce([
       {
@@ -304,7 +336,7 @@ describe('facturas service fiscal totals', () => {
       totalIva: 316.41,
     });
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
-    expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v3:/);
+    expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v4:/);
   });
 
   test('getSummary totals albaran base and all IVA slots from CAC', async () => {

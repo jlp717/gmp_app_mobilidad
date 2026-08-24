@@ -26,7 +26,7 @@ function boundedIntFromEnv(name, defaultValue, minValue, maxValue) {
 }
 
 const BATCH_SIZE = 15;
-const FACTURA_CACHE_VERSION = 'v3';
+const FACTURA_CACHE_VERSION = 'v4';
 const FACTURAS_LIST_BATCH_CONCURRENCY = boundedIntFromEnv('FACTURAS_LIST_BATCH_CONCURRENCY', 2, 1, 2);
 const FACTURAS_SUMMARY_BATCH_CONCURRENCY = boundedIntFromEnv('FACTURAS_SUMMARY_BATCH_CONCURRENCY', 1, 1, 2);
 const IN_FLIGHT_LIMIT = 200;
@@ -96,6 +96,36 @@ function normalizeSearchValue(value) {
         .replace(/[\u0000-\u001f\u007f]/g, '')
         .slice(0, 80)
         .toUpperCase();
+}
+
+function resolveOwnershipYear({ year, dateFromInt, dateFilterApplied }) {
+    if (dateFilterApplied && dateFromInt) {
+        return Math.floor(dateFromInt / 10000);
+    }
+    const parsed = parseInt(year, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return new Date().getFullYear();
+}
+
+function appendCfcVendorScopeFilter(sql, queryParams, vendorBatch, ownershipYear) {
+    if (!vendorBatch.length) return sql;
+    const placeholders = vendorBatch.map(() => '?').join(',');
+    sql += ` AND (
+      TRIM(CFC.CODIGOVENDEDOR) IN (${placeholders})
+      OR (
+        (CFC.CODIGOVENDEDOR IS NULL OR TRIM(CFC.CODIGOVENDEDOR) = '')
+        AND TRIM(CFC.CODIGOCLIENTE) IN (
+          SELECT DISTINCT TRIM(OWN.CODIGOCLIENTE)
+          FROM DSEDAC.CFC OWN
+          WHERE TRIM(OWN.CODIGOVENDEDOR) IN (${placeholders})
+            AND OWN.NUMEROFACTURA > 0
+            AND OWN.NUMEROFACTURA < 900000
+            AND OWN.EJERCICIOFACTURA = ?
+        )
+      )
+    )`;
+    queryParams.push(...vendorBatch, ...vendorBatch, ownershipYear);
+    return sql;
 }
 
 function buildClientSearchFilter(value, clientColumn) {
@@ -303,6 +333,7 @@ class FacturasService {
         const dateFilterApplied = dateFrom && dateTo;
         const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
         const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
+        const ownershipYear = resolveOwnershipYear({ year: currentYear, dateFromInt, dateFilterApplied });
 
         function buildSqlForVendors(vendorBatch, offsetValue = rowsOffset, limitValue = rowsLimit) {
             let sql = `
@@ -327,9 +358,7 @@ class FacturasService {
             const queryParams = [];
 
             if (vendorBatch.length > 0) {
-                const placeholders = vendorBatch.map(() => '?').join(',');
-                sql += ` AND TRIM(CFC.CODIGOVENDEDOR) IN (${placeholders})`;
-                queryParams.push(...vendorBatch);
+                sql = appendCfcVendorScopeFilter(sql, queryParams, vendorBatch, ownershipYear);
             }
 
             if (dateFilterApplied && dateFromInt && dateToInt) {
@@ -456,6 +485,7 @@ class FacturasService {
         const dateFilterApplied = dateFrom && dateTo;
         const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
         const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
+        const ownershipYear = resolveOwnershipYear({ year: currentYear, dateFromInt, dateFilterApplied });
 
         function applyCommonFilters(sql, queryParams, {
             vendorBatch,
@@ -467,11 +497,16 @@ class FacturasService {
             clientFilterBuilder,
             docFilterBuilder,
             genericFilterBuilder,
+            includeOwnedEmptyVendor = false,
         }) {
             if (vendorBatch.length > 0) {
-                const placeholders = vendorBatch.map(() => '?').join(',');
-                sql += ` AND TRIM(${vendorColumn}) IN (${placeholders})`;
-                queryParams.push(...vendorBatch);
+                if (includeOwnedEmptyVendor) {
+                    sql = appendCfcVendorScopeFilter(sql, queryParams, vendorBatch, ownershipYear);
+                } else {
+                    const placeholders = vendorBatch.map(() => '?').join(',');
+                    sql += ` AND TRIM(${vendorColumn}) IN (${placeholders})`;
+                    queryParams.push(...vendorBatch);
+                }
             }
 
             if (dateFilterApplied && dateFromInt && dateToInt) {
@@ -539,6 +574,7 @@ class FacturasService {
                 clientFilterBuilder: buildInvoiceClientSearchFilter,
                 docFilterBuilder: buildInvoiceDocSearchFilter,
                 genericFilterBuilder: buildInvoiceSearchFilter,
+                includeOwnedEmptyVendor: true,
             });
             sql += ` ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC
                      OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
@@ -817,6 +853,7 @@ class FacturasService {
         const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
         const useYearFilter = !dateFilterApplied && (year || month);
         const currentYear = year || new Date().getFullYear();
+        const ownershipYear = resolveOwnershipYear({ year: currentYear, dateFromInt, dateFilterApplied });
 
         async function runSummaryBatch(batchVendors) {
             let sql = `
@@ -832,9 +869,7 @@ class FacturasService {
             const queryParams = [];
 
             if (batchVendors.length > 0) {
-                const placeholders = batchVendors.map(() => '?').join(',');
-                sql += ` AND TRIM(CFC.CODIGOVENDEDOR) IN (${placeholders})`;
-                queryParams.push(...batchVendors);
+                sql = appendCfcVendorScopeFilter(sql, queryParams, batchVendors, ownershipYear);
             }
 
             if (dateFilterApplied && dateFromInt && dateToInt) {
@@ -922,6 +957,7 @@ class FacturasService {
         const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
         const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
         const currentYear = year || new Date().getFullYear();
+        const ownershipYear = resolveOwnershipYear({ year: currentYear, dateFromInt, dateFilterApplied });
 
         function applySummaryFilters(sql, queryParams, {
             batchVendors,
@@ -933,11 +969,16 @@ class FacturasService {
             clientFilterBuilder,
             docFilterBuilder,
             genericFilterBuilder,
+            includeOwnedEmptyVendor = false,
         }) {
             if (batchVendors.length > 0) {
-                const placeholders = batchVendors.map(() => '?').join(',');
-                sql += ` AND TRIM(${vendorColumn}) IN (${placeholders})`;
-                queryParams.push(...batchVendors);
+                if (includeOwnedEmptyVendor) {
+                    sql = appendCfcVendorScopeFilter(sql, queryParams, batchVendors, ownershipYear);
+                } else {
+                    const placeholders = batchVendors.map(() => '?').join(',');
+                    sql += ` AND TRIM(${vendorColumn}) IN (${placeholders})`;
+                    queryParams.push(...batchVendors);
+                }
             }
 
             if (dateFilterApplied && dateFromInt && dateToInt) {
@@ -995,6 +1036,7 @@ class FacturasService {
                 clientFilterBuilder: buildInvoiceClientSearchFilter,
                 docFilterBuilder: buildInvoiceDocSearchFilter,
                 genericFilterBuilder: buildInvoiceSearchFilter,
+                includeOwnedEmptyVendor: true,
             });
             return queryWithParams(sql, queryParams);
         }

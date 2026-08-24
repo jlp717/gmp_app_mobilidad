@@ -189,12 +189,10 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                           final facturaSerie =
                               (a['serieFactura'] ?? '').toString().trim();
                           final facturaYear = _asInt(a['ejercicioFactura']);
-                          final albaranRef = (a['albaranRef'] ?? '')
-                              .toString()
-                              .trim();
-                          final facturaRef = (a['facturaRef'] ?? '')
-                              .toString()
-                              .trim();
+                          final albaranRef =
+                              (a['albaranRef'] ?? '').toString().trim();
+                          final facturaRef =
+                              (a['facturaRef'] ?? '').toString().trim();
                           final hasFactura = facturaNum > 0 &&
                               facturaSerie.isNotEmpty &&
                               facturaYear > 0;

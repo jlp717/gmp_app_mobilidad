@@ -70,4 +70,37 @@ describe('closed liquidation PDF snapshot', () => {
     await expect(buildClosedLiquidacionPdf({ idempotencyToken: 'liquidacion-pdf-token-0001', repartidorId: '94' }))
       .rejects.toMatchObject({ code: 'LIQUIDACION_PDF_UNAVAILABLE', statusCode: 503 });
   });
+
+  test('replays JAVIER.LQD shadow row without OPS JSON or STATUS', async () => {
+    mockRepository.selectLiquidacionByToken.mockResolvedValue([{
+      ID: 1, CODIGOVENDEDOR: '56', IDMARCALIQUIDACION: 'G4DG43SMOKE01',
+      ANOLIQUIDACION: 2026, MESLIQUIDACION: 8, DIALIQUIDACION: 23,
+      SERIELIQUIDACION: 'A', NUMEROLIQUIDACION: 1,
+      IMPORTESALDOACTUAL: 26.12, IMPORTEEFECTIVO: 0, IMPORTECHEQUES: 0,
+      IMPORTETARJETA: 0, IMPORTEPOSTDATADOS: 0, IMPORTEGASTOS: 0,
+      IMPORTEINGRESOENBANCO: 0,
+    }]);
+    const result = await buildClosedLiquidacionPdf({
+      idempotencyToken: 'G4DG43SMOKE01', repartidorId: '56',
+    });
+    expect(result.status).toBe('CLOSED');
+    expect(result.date).toBe('2026-08-23');
+    expect(mockBuildPdf).toHaveBeenCalled();
+  });
+
+  test('owner mismatch does not enumerate the token', async () => {
+    mockRepository.selectLiquidacionByToken.mockResolvedValue([{
+      ID: 1, CODIGOVENDEDOR: '56', IDMARCALIQUIDACION: 'G4DG43SMOKE01',
+      ANOLIQUIDACION: 2026, MESLIQUIDACION: 8, DIALIQUIDACION: 23,
+      IMPORTESALDOACTUAL: 0,
+    }]);
+    await expect(buildClosedLiquidacionPdf({
+      idempotencyToken: 'G4DG43SMOKE01', repartidorId: '99',
+    })).rejects.toMatchObject({
+      message: 'No existe la liquidacion solicitada',
+      code: 'LIQUIDACION_NOT_FOUND',
+      statusCode: 404,
+    });
+    expect(mockBuildPdf).not.toHaveBeenCalled();
+  });
 });

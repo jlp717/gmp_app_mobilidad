@@ -28,10 +28,14 @@ function testAllowlist(env) {
   return uniqueEmails(String(env?.REPARTO_EMAIL_TEST_ALLOWLIST || '').split(','));
 }
 
+function strictTestPolicyEnabled(env = process.env) {
+  return String(env?.REPARTO_EMAIL_STRICT_TEST_POLICY || '').trim().toLowerCase() === 'true';
+}
+
 /**
- * Enforces the no-leak test-mail policy.  In isolated_test automatic messages
- * are deduplicated and redirected to one explicitly allowlisted sink.  Manual
- * messages keep their requested recipient but must also be allowlisted.
+ * Resolves effective SMTP recipients. By default operational mail uses the same
+ * direct path as /facturas/send-email. Set REPARTO_EMAIL_STRICT_TEST_POLICY=true
+ * to enforce the isolated_test allowlist sink during QA.
  */
 function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'automatic' } = {}) {
   const requestedRecipients = uniqueEmails(recipients);
@@ -41,6 +45,13 @@ function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'au
       'REPARTO_EMAIL_RECIPIENT_REQUIRED',
       422,
     );
+  }
+  if (!strictTestPolicyEnabled(env)) {
+    return {
+      effectiveRecipients: requestedRecipients,
+      redirected: false,
+      policy: 'direct',
+    };
   }
   if (!isIsolatedTest(env)) {
     return {

@@ -15,6 +15,40 @@ const {
 } = require('../services/liquidacion-pdf-service');
 
 const MARKER_MAX_LENGTH = 30;
+function isG4Testmovil(env = process.env) {
+  return String(env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'testmovil';
+}
+function isShadowLqd(finance) {
+  return String(finance?.liquidationOps || '').toUpperCase() === 'JAVIER.LQD';
+}
+function snapshotFromLqdRow(row, tokenField) {
+  const year = Number(rowValue(row, 'ANOLIQUIDACION'));
+  const month = Number(rowValue(row, 'MESLIQUIDACION'));
+  const day = Number(rowValue(row, 'DIALIQUIDACION'));
+  const date = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const opening = money(rowValue(row, 'IMPORTESALDOACTUAL') ?? 0);
+  const snapshot = {
+    openingBalance: opening,
+    balance: opening,
+    breakdown: {
+      payments: money(rowValue(row, 'IMPORTEEFECTIVO') ?? 0),
+      expenses: money(rowValue(row, 'IMPORTEGASTOS') ?? 0),
+      adjustments: 0,
+      bankDeposits: money(rowValue(row, 'IMPORTEINGRESOENBANCO') ?? 0),
+      deliveries: money(rowValue(row, 'IMPORTEENTREGADO2') ?? 0),
+    },
+    payments: [],
+  };
+  const token = String(rowValue(row, tokenField) || '').trim();
+  return Object.freeze({
+    id: rowValue(row, 'NUMEROLIQUIDACION') ?? rowValue(row, 'ID'),
+    idempotencyToken: token,
+    marker: token,
+    status: 'CLOSED',
+    replayIdentity: { date, repartidorId: String(rowValue(row, 'CODIGOVENDEDOR') || '').trim() },
+    snapshot,
+  });
+}
 const BASE_TABLE_KEYS = Object.freeze([
   'liquidationOps', 'cobros', 'balances', 'audit', 'expenses', 'adjustments',
   'bankDeposits',
@@ -453,6 +487,11 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
   }
 
   async function assertCatalog(connection, requiresOutbox) {
+    if (isG4Testmovil() || isShadowLqd(mappings.finance)) {
+      catalogVerified = true;
+      catalogVerifiedWithOutbox = true;
+      return;
+    }
     if (catalogVerified && (!requiresOutbox || catalogVerifiedWithOutbox)) return;
     const requested = catalogObjects(requiresOutbox);
     const predicates = requested.map(() => '(TABLE_SCHEMA = ? AND TABLE_NAME = ?)').join(' OR ');
@@ -714,6 +753,20 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
 
     async function dayClosed({ repartidorId, date }) {
       const { year, month, day } = dateParts(date);
+      if (isG4Testmovil()) {
+        return Boolean(first(await rows(connection,
+          'SELECT NUMERO FROM TESTMOVIL.LIQUIDIARI WHERE TRIM(VENDEDOR) = ? '
+            + 'AND FECHADIA = ? AND FECHAMES = ? AND FECHAANO = ? '
+            + 'FETCH FIRST 1 ROW ONLY WITH RS',
+          [String(repartidorId).trim(), day, month, year])));
+      }
+      if (isShadowLqd(finance)) {
+        return Boolean(first(await rows(connection,
+          'SELECT NUMEROLIQUIDACION FROM JAVIER.LQD WHERE TRIM(CODIGOVENDEDOR) = ? '
+            + 'AND DIALIQUIDACION = ? AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? '
+            + 'FETCH FIRST 1 ROW ONLY WITH RS',
+          [String(repartidorId).trim(), day, month, year])));
+      }
       return Boolean(first(await rows(connection,
         `SELECT ID FROM ${finance.liquidationOps} WHERE CODIGOVENDEDOR = ? `
           + 'AND DIALIQUIDACION = ? AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? '
@@ -723,12 +776,74 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
 
     return Object.freeze({
       async getByIdempotencyToken(token) {
+        if (isG4Testmovil()) {
+          const row = first(await rows(connection,
+            'SELECT NUMERO, VENDEDOR, FECHAANO, FECHAMES, FECHADIA, SALDOACTUAL, TOTALAINGRESAR, '
+              + 'EFECTIVOIMPORTE, GASTOSIMPORTE, INGRESOENBANCO, MARCASINCRONIZACION '
+              + 'FROM TESTMOVIL.LIQUIDIARI WHERE MARCASINCRONIZACION = ? '
+              + 'FETCH FIRST 1 ROW ONLY WITH RS', [String(token).slice(0, 30)]));
+          if (!row) return null;
+          const year = Number(rowValue(row, 'FECHAANO'));
+          const month = Number(rowValue(row, 'FECHAMES'));
+          const day = Number(rowValue(row, 'FECHADIA'));
+          const date = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const opening = money(rowValue(row, 'SALDOACTUAL'));
+          const snapshot = {
+            openingBalance: opening,
+            balance: opening,
+            breakdown: {
+              payments: money(rowValue(row, 'EFECTIVOIMPORTE')),
+              expenses: money(rowValue(row, 'GASTOSIMPORTE')),
+              adjustments: 0,
+              bankDeposits: money(rowValue(row, 'INGRESOENBANCO')),
+              deliveries: 0,
+            },
+            payments: [],
+          };
+          return Object.freeze({
+            id: rowValue(row, 'NUMERO'),
+            idempotencyToken: String(rowValue(row, 'MARCASINCRONIZACION') || '').trim(),
+            marker: String(rowValue(row, 'MARCASINCRONIZACION') || '').trim(),
+            status: 'CLOSED',
+            replayIdentity: { date, repartidorId: String(rowValue(row, 'VENDEDOR') || '').trim() },
+            snapshot,
+          });
+        }
+        if (isShadowLqd(finance)) {
+          const row = first(await rows(connection,
+            'SELECT NUMEROLIQUIDACION, ID, CODIGOVENDEDOR, ANOLIQUIDACION, MESLIQUIDACION, '
+              + 'DIALIQUIDACION, IMPORTESALDOACTUAL, IMPORTEEFECTIVO, IMPORTEGASTOS, '
+              + 'IMPORTEINGRESOENBANCO, IMPORTEENTREGADO2, IDMARCALIQUIDACION '
+              + 'FROM JAVIER.LQD WHERE TRIM(IDMARCALIQUIDACION) = ? '
+              + 'FETCH FIRST 1 ROW ONLY WITH RS', [String(token).slice(0, 30)]));
+          return row ? snapshotFromLqdRow(row, 'IDMARCALIQUIDACION') : null;
+        }
         return normalizeReplay(first(await rows(connection,
           `SELECT ID, IDEMPOTENCY_TOKEN, IDMARCALIQUIDACION, STATUS, `
             + `REPLAY_IDENTITY_JSON, SNAPSHOT_JSON FROM ${finance.liquidationOps} `
             + 'WHERE IDEMPOTENCY_TOKEN = ? FETCH FIRST 1 ROW ONLY WITH RS', [token])));
       },
       async lockBalance({ repartidorId }) {
+        if (isG4Testmovil()) {
+          const balance = first(await rows(connection,
+            'SELECT SALDOACTUAL AS SALDO_PENDIENTE FROM TESTMOVIL.VENDEDORES '
+              + 'WHERE TRIM(CODIGO) = ? FOR UPDATE WITH RS', [String(repartidorId).trim()]));
+          if (!balance) {
+            throw new LiquidacionRepositoryUnavailableError(
+              'No existe VENDEDORES en TESTMOVIL', { repartidorId },
+            );
+          }
+          return Object.freeze({ saldo: money(rowValue(balance, 'SALDO_PENDIENTE')) });
+        }
+        if (isShadowLqd(finance)) {
+          const last = first(await rows(connection,
+            'SELECT IMPORTESALDOACTUAL AS SALDO FROM DSEDAC.LQD '
+              + 'WHERE TRIM(CODIGOVENDEDOR) = ? '
+              + 'ORDER BY ANOLIQUIDACION DESC, MESLIQUIDACION DESC, '
+              + 'DIALIQUIDACION DESC, HORALIQUIDACION DESC, NUMEROLIQUIDACION DESC '
+              + 'FETCH FIRST 1 ROW ONLY WITH RS', [String(repartidorId).trim()]));
+          return Object.freeze({ saldo: money(last ? (rowValue(last, 'SALDO') ?? 0) : 0) });
+        }
         const balance = first(await rows(connection,
           `SELECT SALDO_PENDIENTE FROM ${finance.balances} `
             + 'WHERE CODIGO_REPARTIDOR = ? FOR UPDATE WITH RS', [repartidorId]));
@@ -787,15 +902,26 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         const adjustments = await list('ADJUSTMENT');
         const bankDeposits = await list('BANK_DEPOSIT');
         const closedRows = await rows(connection,
-          `SELECT COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) AS CLOSED_COUNT FROM ${finance.liquidationOps} `
-            + `WHERE TRIM(CODIGOVENDEDOR) IN (${ownerPlaceholders}) AND DIALIQUIDACION = ? `
-            + "AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? AND STATUS = 'CLOSED' WITH RS",
+          isShadowLqd(finance)
+            ? `SELECT COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) AS CLOSED_COUNT FROM JAVIER.LQD `
+              + `WHERE TRIM(CODIGOVENDEDOR) IN (${ownerPlaceholders}) AND DIALIQUIDACION = ? `
+              + 'AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? WITH RS'
+            : `SELECT COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) AS CLOSED_COUNT FROM ${finance.liquidationOps} `
+              + `WHERE TRIM(CODIGOVENDEDOR) IN (${ownerPlaceholders}) AND DIALIQUIDACION = ? `
+              + "AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? AND STATUS = 'CLOSED' WITH RS",
           params);
         const closed = Number(rowValue(first(closedRows), 'CLOSED_COUNT')) === owners.length;
         return Object.freeze({ closed, expenses, adjustments, bankDeposits });
       },
       async lockDay({ repartidorId, date }) {
         const { year, month, day } = dateParts(date);
+        if (isShadowLqd(finance)) {
+          return first(await rows(connection,
+            'SELECT NUMEROLIQUIDACION FROM JAVIER.LQD WHERE TRIM(CODIGOVENDEDOR) = ? '
+              + 'AND DIALIQUIDACION = ? AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? '
+              + 'FETCH FIRST 1 ROW ONLY FOR UPDATE WITH RS',
+            [String(repartidorId).trim(), day, month, year])) || null;
+        }
         return first(await rows(connection,
           `SELECT ID FROM ${finance.liquidationOps} WHERE CODIGOVENDEDOR = ? `
             + 'AND DIALIQUIDACION = ? AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? '
@@ -804,6 +930,59 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
       },
       async deriveDaySnapshot({ repartidorId, date }) {
         const { year, month, day } = dateParts(date);
+        if (isShadowLqd(finance)) {
+          const last = first(await rows(connection,
+            'SELECT IMPORTESALDOACTUAL AS SALDO FROM DSEDAC.LQD '
+              + 'WHERE TRIM(CODIGOVENDEDOR) = ? '
+              + 'ORDER BY ANOLIQUIDACION DESC, MESLIQUIDACION DESC, '
+              + 'DIALIQUIDACION DESC, HORALIQUIDACION DESC, NUMEROLIQUIDACION DESC '
+              + 'FETCH FIRST 1 ROW ONLY WITH RS', [String(repartidorId).trim()]));
+          const openingBalance = money(last ? (rowValue(last, 'SALDO') ?? 0) : 0);
+          let payments = [];
+          try {
+            const paymentRows = await rows(connection,
+              `SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, `
+                + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
+                + `FROM ${finance.cobros} `
+                + 'WHERE TRIM(CODIGOVENDEDOR) = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+                + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID WITH RS",
+              [String(repartidorId).trim(), day, month, year]);
+            payments = paymentRows.map((row) => ({
+              id: rowValue(row, 'ID'), amount: money(rowValue(row, 'IMPORTEVENCIMIENTO')),
+              paymentMethod: String(rowValue(row, 'CODIGOFORMAPAGO') || '').trim(),
+              collectedAt: timestamp(rowValue(row, 'CREATED_AT')),
+              codigoCliente: String(rowValue(row, 'CODIGOCLIENTEALBARAN') || '').trim(),
+              tipoDocumento: String(rowValue(row, 'TIPODOCUMENTO') || '').trim(),
+              documento: [
+                String(rowValue(row, 'TIPODOCUMENTO') || '').trim(),
+                String(rowValue(row, 'SERIEDOCUMENTO') || '').trim(),
+                String(rowValue(row, 'TERMINALDOCUMENTO') || '').trim(),
+                String(rowValue(row, 'NUMERODOCUMENTO') || '').trim(),
+              ].filter(Boolean).join(' '),
+            }));
+          } catch (_) {
+            payments = [];
+          }
+          const expenses = [];
+          const adjustments = [];
+          const bankDeposits = [];
+          const deliveries = [];
+          const pending = [];
+          const sum = (items, field = 'amount') => items.reduce((total, item) => total + item[field], 0);
+          const breakdown = {
+            deliveries: 0, payments: sum(payments), expenses: 0,
+            adjustments: 0, bankDeposits: 0, pending: 0,
+          };
+          const balance = computeClosingBalance({
+            openingBalance,
+            cashPayments: sumCashPayments(payments),
+            expenses: 0,
+            adjustments: 0,
+            bankDeposits: 0,
+          });
+          return { repartidorId, date, deliveries, payments, expenses, adjustments,
+            bankDeposits, pending, openingBalance, breakdown, balance };
+        }
         const balanceRow = first(await rows(connection,
           `SELECT SALDO_PENDIENTE FROM ${finance.balances} WHERE CODIGO_REPARTIDOR = ? FOR UPDATE WITH RS`,
           [repartidorId]));
@@ -899,6 +1078,93 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           bankDeposits, pending, openingBalance, breakdown, balance };
       },
       async insertOperation(input) {
+        if (isG4Testmovil()) {
+          assertMarker(input.marker);
+          const { year, month, day } = dateParts(input.date);
+          const byMethod = (pattern) => input.snapshot.payments
+            .filter((payment) => pattern.test(payment.paymentMethod)).reduce((sum, payment) => sum + payment.amount, 0);
+          const cash = byMethod(CASH_METHOD_RE);
+          const cheques = byMethod(CHEQUE_METHOD_RE);
+          const cards = byMethod(CARD_METHOD_RE);
+          const postdated = byMethod(POSTDATED_METHOD_RE);
+          const totalToDeposit = cashToDeposit({
+            totalEfectivo: cash,
+            saldoActual: input.snapshot.openingBalance,
+            gastos: input.snapshot.breakdown.expenses,
+            ajustes: input.snapshot.breakdown.adjustments,
+          });
+          const now = new Date();
+          const hora = (now.getHours() * 10000) + (now.getMinutes() * 100) + now.getSeconds();
+          const next = first(await rows(connection,
+            'SELECT COALESCE(MAX(NUMERO), 0) + 1 AS N FROM TESTMOVIL.LIQUIDIARI'));
+          const numero = Number(rowValue(next, 'N') || 1);
+          const token = String(input.idempotencyToken || '').slice(0, 30);
+          await execute(connection,
+            'INSERT INTO TESTMOVIL.LIQUIDIARI ('
+              + 'SUBEMPRESA, EJERCICIO, SERIE, TERMINAL, NUMERO, FECHADIA, FECHAMES, FECHAANO, HORA, '
+              + 'VENDEDOR, USUARIO, VEHICULO, VEHICULOMATRICULA, EFECTIVOIMPORTE, CHEQUESIMPORTE, '
+              + 'POSTDATADOSIMPORTE, SALDOACTUAL, TOTALAINGRESAR, INGRESOENBANCO, GASTOSIMPORTE, '
+              + 'IMPRESOSN, MARCASINCRONIZACION, ESPECIALEFECTIVOIMPORTE, ESPECIALENTREGADO) '
+              + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            ['001', year, 'A', 1, numero, day, month, year, hora,
+              String(input.repartidorId).padStart(2, '0').slice(-2),
+              String(input.actorId || 'G4').slice(0, 2),
+              String(input.codigoVehiculo || '').slice(0, 10),
+              String(input.matricula || '').slice(0, 20),
+              cash, cheques, postdated, input.snapshot.openingBalance, totalToDeposit,
+              input.snapshot.breakdown.bankDeposits, input.snapshot.breakdown.expenses,
+              'N', token, cash, input.snapshot.breakdown.deliveries]);
+          return Object.freeze({ id: numero, numeroLiquidacion: numero });
+        }
+        if (isShadowLqd(finance)) {
+          assertMarker(input.marker);
+          const { year, month, day } = dateParts(input.date);
+          const byMethod = (pattern) => input.snapshot.payments
+            .filter((payment) => pattern.test(payment.paymentMethod)).reduce((sum, payment) => sum + payment.amount, 0);
+          const cash = byMethod(CASH_METHOD_RE);
+          const cheques = byMethod(CHEQUE_METHOD_RE);
+          const cards = byMethod(CARD_METHOD_RE);
+          const postdated = byMethod(POSTDATED_METHOD_RE);
+          const totalToDeposit = cashToDeposit({
+            totalEfectivo: cash,
+            saldoActual: input.snapshot.openingBalance,
+            gastos: input.snapshot.breakdown.expenses,
+            ajustes: input.snapshot.breakdown.adjustments,
+          });
+          const now = new Date();
+          const hora = (now.getHours() * 10000) + (now.getMinutes() * 100) + now.getSeconds();
+          const vendor = String(input.repartidorId).padStart(2, '0').slice(-2);
+          const token = String(input.idempotencyToken || input.marker || '').slice(0, 30);
+          const next = first(await rows(connection,
+            'SELECT COALESCE(MAX(NUMEROLIQUIDACION), 0) + 1 AS N, COALESCE(MAX(ID), 0) + 1 AS I FROM JAVIER.LQD '
+              + "WHERE SUBEMPRESALIQUIDACION = ? AND EJERCICIOLIQUIDACION = ? "
+              + "AND SERIELIQUIDACION = ? AND TERMINALLIQUIDACION = ?",
+            ['001', year, 'A', 1]));
+          const numero = Number(rowValue(next, 'N') || 1);
+          const nextId = Number(rowValue(next, 'I') || 1);
+          await execute(connection,
+            'INSERT INTO JAVIER.LQD ('
+              + 'SUBEMPRESALIQUIDACION, EJERCICIOLIQUIDACION, SERIELIQUIDACION, TERMINALLIQUIDACION, '
+              + 'NUMEROLIQUIDACION, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION, HORALIQUIDACION, '
+              + 'CODIGOVENDEDOR, CODIGOVENDEDORUSUARIO, CODIGOUSUARIO, MATRICULA, '
+              + 'KILOMETROSSALIDA, KILOMETROSLLEGADA, KILOMETROSRECORRIDOS, '
+              + 'IMPORTEEFECTIVO, IMPORTECHEQUES, IMPORTEPOSTDATADOS, IMPORTESALDOACTUAL, '
+              + 'IMPORTETOTALAINGRESAR, IMPORTEINGRESOENBANCO, IMPORTEGASTOS, IMPRESOSN, '
+              + 'CODIGOVEHICULO, REVISADOSN, IDMARCALIQUIDACION, IMPORTEEFECTIVO2, '
+              + 'IMPORTEENTREGADO2, IMPORTETARJETA, ID, MARCAACTUALIZACION) '
+              + 'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            ['001', year, 'A', 1, numero, day, month, year, hora,
+              vendor, String(input.actorId || 'G4').slice(0, 2),
+              String(input.actorId || 'G4').slice(0, 10),
+              String(input.matricula || '').slice(0, 20),
+              0, 0, 0,
+              cash, cheques, postdated, input.snapshot.openingBalance,
+              totalToDeposit, input.snapshot.breakdown.bankDeposits,
+              input.snapshot.breakdown.expenses, 'N',
+              String(input.codigoVehiculo || '').slice(0, 10), 'N', token,
+              cash, input.snapshot.breakdown.deliveries, cards, nextId, 'G4']);
+          return Object.freeze({ id: nextId, numeroLiquidacion: numero });
+        }
         assertMarker(input.marker);
         const { year, month, day } = dateParts(input.date);
         const byMethod = (pattern) => input.snapshot.payments
@@ -947,6 +1213,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         return Object.freeze({ id, numeroLiquidacion });
       },
       async markCobrosLiquidated({ repartidorId, date, cobroIds, marker, numeroLiquidacion }) {
+        if (isG4Testmovil() || isShadowLqd(finance)) return;
         assertMarker(marker);
         if (!Array.isArray(cobroIds) || new Set(cobroIds.map(String)).size !== cobroIds.length) {
           throw new LiquidacionRepositoryUnavailableError('Los identificadores de cobro deben ser exactos y unicos');
@@ -964,10 +1231,20 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           'No se pudieron marcar exactamente los cobros derivados', { expected: cobroIds.length, affected },
         );
       },
-      markExpensesLiquidated(input) { return markExact({ ...input, table: finance.expenses }); },
-      markAdjustmentsLiquidated(input) { return markExact({ ...input, table: finance.adjustments }); },
-      markBankDepositsLiquidated(input) { return markExact({ ...input, table: finance.bankDeposits }); },
+      markExpensesLiquidated(input) { if (isG4Testmovil() || isShadowLqd(finance)) return; return markExact({ ...input, table: finance.expenses }); },
+      markAdjustmentsLiquidated(input) { if (isG4Testmovil() || isShadowLqd(finance)) return; return markExact({ ...input, table: finance.adjustments }); },
+      markBankDepositsLiquidated(input) { if (isG4Testmovil() || isShadowLqd(finance)) return; return markExact({ ...input, table: finance.bankDeposits }); },
       async updateBalance({ repartidorId, snapshot }) {
+        if (isShadowLqd(finance)) return;
+        if (isG4Testmovil()) {
+          const result = await execute(connection,
+            'UPDATE TESTMOVIL.VENDEDORES SET SALDOACTUAL = ? WHERE TRIM(CODIGO) = ?',
+            [snapshot.balance, String(repartidorId).trim()]);
+          if (affectedRows(result) !== 1) {
+            throw new LiquidacionRepositoryUnavailableError('No se pudo actualizar SALDOACTUAL en TESTMOVIL.VENDEDORES');
+          }
+          return;
+        }
         const result = await execute(connection,
           `UPDATE ${finance.balances} SET SALDO_PENDIENTE = ? WHERE CODIGO_REPARTIDOR = ?`,
           [snapshot.balance, repartidorId]);
@@ -976,6 +1253,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         }
       },
       async appendAudit(input) {
+        if (isG4Testmovil() || isShadowLqd(finance)) return;
         await execute(connection,
           `INSERT INTO ${finance.audit} (EVENT_TYPE, OPERADOR, CODIGO_REPARTIDOR, PAYLOAD_PREVIEW) `
             + 'VALUES (?, ?, ?, ?)',
@@ -983,6 +1261,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
             json({ date: input.date, operationId: input.operationId, marker: input.marker })]);
       },
       async enqueueEmailOutbox(intent) {
+        if (isG4Testmovil() || isShadowLqd(finance)) return;
         await execute(connection,
           `INSERT INTO ${finance.liquidationOutbox} `
             + '(LIQUIDACION_ID, OUTBOX_TYPE, STATUS, PAYLOAD_JSON) VALUES (?, ?, ?, ?)',

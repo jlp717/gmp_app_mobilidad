@@ -495,10 +495,12 @@ async function buildClosedLiquidacionPdf({ idempotencyToken, repartidorId }) {
     });
   }
   const persistedOwner = normalizeText(value(row, 'CODIGOVENDEDOR'));
-  const status = normalizeText(value(row, 'STATUS')).toUpperCase();
+  const shadowLqd = !normalizeText(value(row, 'SNAPSHOT_JSON'))
+    && value(row, 'IDMARCALIQUIDACION') != null;
+  const status = shadowLqd ? 'CLOSED' : normalizeText(value(row, 'STATUS')).toUpperCase();
   if (persistedOwner !== owner) {
-    throw new LiquidacionPdfReadError('La liquidacion no pertenece al repartidor seleccionado', {
-      code: 'LIQUIDACION_OWNER_MISMATCH', statusCode: 403,
+    throw new LiquidacionPdfReadError('No existe la liquidacion solicitada', {
+      code: 'LIQUIDACION_NOT_FOUND', statusCode: 404,
     });
   }
   if (status !== 'CLOSED') {
@@ -506,8 +508,37 @@ async function buildClosedLiquidacionPdf({ idempotencyToken, repartidorId }) {
       code: 'LIQUIDACION_NOT_CLOSED', statusCode: 409,
     });
   }
-  const replayIdentity = parseLiquidacionSnapshot(value(row, 'REPLAY_IDENTITY_JSON'), 'REPLAY_IDENTITY_JSON');
-  const snapshot = parseLiquidacionSnapshot(value(row, 'SNAPSHOT_JSON'), 'SNAPSHOT_JSON');
+  let replayIdentity;
+  let snapshot;
+  if (shadowLqd) {
+    const year = toInt(value(row, 'ANOLIQUIDACION'));
+    const month = toInt(value(row, 'MESLIQUIDACION'));
+    const day = toInt(value(row, 'DIALIQUIDACION'));
+    const date = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const opening = roundMoney(value(row, 'IMPORTESALDOACTUAL', 0));
+    const paymentsTotal = roundMoney(
+      toNumber(value(row, 'IMPORTEEFECTIVO', 0))
+      + toNumber(value(row, 'IMPORTECHEQUES', 0))
+      + toNumber(value(row, 'IMPORTETARJETA', 0))
+      + toNumber(value(row, 'IMPORTEPOSTDATADOS', 0)),
+    );
+    replayIdentity = { repartidorId: persistedOwner, date };
+    snapshot = {
+      repartidorId: persistedOwner,
+      date,
+      openingBalance: opening,
+      breakdown: {
+        payments: paymentsTotal,
+        expenses: roundMoney(value(row, 'IMPORTEGASTOS', 0)),
+        adjustments: 0,
+        bankDeposits: roundMoney(value(row, 'IMPORTEINGRESOENBANCO', 0)),
+      },
+      payments: [],
+    };
+  } else {
+    replayIdentity = parseLiquidacionSnapshot(value(row, 'REPLAY_IDENTITY_JSON'), 'REPLAY_IDENTITY_JSON');
+    snapshot = parseLiquidacionSnapshot(value(row, 'SNAPSHOT_JSON'), 'SNAPSHOT_JSON');
+  }
   const date = normalizeText(replayIdentity.date);
   if (normalizeText(replayIdentity.repartidorId) !== owner || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)
       || normalizeText(snapshot.repartidorId) !== owner || normalizeText(snapshot.date) !== date
@@ -996,7 +1027,17 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
     ]);
 
   const totals = firstRow(totalsRows);
-  const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+  let saldoActual = 0;
+  try {
+    const lqdRows = await Promise.all(ids.map((id) => financeRepo.selectLastLqdSaldo(id)));
+    saldoActual = roundMoney(lqdRows.reduce((sum, rows) => {
+      if (!rows || !rows.length) return sum;
+      return sum + Number(value(rows[0], 'SALDO', 0) || 0);
+    }, 0));
+  } catch (error) {
+    logger.warn(`[REPARTIDOR_FINANZAS] daily-summary DSEDAC.LQD saldo: ${error.message}`);
+    saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+  }
   const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
   const gastos = roundMoney(structured.gastos);
   const ingresoBanco = roundMoney(structured.ingresoBanco);
@@ -1806,6 +1847,10 @@ async function getDetalleVencimiento(docKey) {
 async function getSaldoActual(repartidorId) {
   const rep = normalizeText(repartidorId);
   if (!rep) return 0;
+  try {
+    const lqd = await financeRepo.selectLastLqdSaldo(rep);
+    if (lqd && lqd.length > 0) return roundMoney(value(lqd[0], 'SALDO'));
+  } catch (_) { /* DSEDAC.LQD no disponible */ }
   const info = await getFinanceSchemaInfo();
   try {
     const rows = await financeRepo.selectSaldoFromBalances(rep);

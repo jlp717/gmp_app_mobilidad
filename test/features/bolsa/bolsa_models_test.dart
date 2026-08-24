@@ -72,8 +72,18 @@ void main() {
         'ejercicio': 2026,
         'mes': 6,
         'vendedores': [
-          {'vendedor': '01', 'ejercicio': 2026, 'mes': 6, 'saldoDisponible': 50},
-          {'vendedor': '02', 'ejercicio': 2026, 'mes': 6, 'saldoDisponible': 75},
+          {
+            'vendedor': '01',
+            'ejercicio': 2026,
+            'mes': 6,
+            'saldoDisponible': 50
+          },
+          {
+            'vendedor': '02',
+            'ejercicio': 2026,
+            'mes': 6,
+            'saldoDisponible': 75
+          },
         ],
         'totals': {
           'saldoDisponible': 125,

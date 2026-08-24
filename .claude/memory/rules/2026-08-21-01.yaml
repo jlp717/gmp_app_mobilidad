@@ -1,0 +1,9 @@
+id: 2026-08-21-01
+trigger: "no usar VENDEDOR=''ALL'' - usar batch all vendors"
+scope: backend-engineer
+captured_from: corrections.jsonl:1
+check: "grep -q \"VENDEDOR=.ALL\" backend/routes/* && exit 2"
+curated: true
+conflicts_with: null
+expires: null
+compiled_to: .claude/hooks/validate-prod.mjs

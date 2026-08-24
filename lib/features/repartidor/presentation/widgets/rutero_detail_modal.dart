@@ -2996,14 +2996,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return file;
   }
 
-  Future<File> _prepareAlbaranPdfFile() async {
-    // Prefer nota when available; otherwise commercial ERP PDF.
-    try {
-      return await _prepareDeliveryNotePdfFile();
-    } catch (_) {
-      return _prepareCommercialPdfFile();
-    }
-  }
+  Future<File> _prepareAlbaranPdfFile() => _prepareCommercialPdfFile();
 
   Rect? _shareOrigin() {
     final renderBox = context.findRenderObject() as RenderBox?;
@@ -3053,15 +3046,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'La nota de entrega aún no está disponible. Se abre el documento comercial.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-      await _previewCommercialPdf();
+      _showConfirmationError(repartoConfirmationErrorPresentation(
+        error: const RepartoReceiptUnavailableException(),
+        acknowledged: _isAcknowledgedTombstone,
+      ));
     } catch (error) {
       modal.error(
         repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
@@ -3093,15 +3081,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'La nota aún no está lista. Se comparte el albarán/factura.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-      await _shareCommercialLocally();
+      _showConfirmationError(repartoConfirmationErrorPresentation(
+        error: const RepartoReceiptUnavailableException(),
+        acknowledged: _isAcknowledgedTombstone,
+      ));
     } catch (_) {
       modal.close();
       if (mounted) {
@@ -3169,15 +3152,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'La nota aún no está lista. Se envía el documento comercial.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-      await _shareCommercialViaWhatsApp(prefilled: form);
+      _showConfirmationError(repartoConfirmationErrorPresentation(
+        error: const RepartoReceiptUnavailableException(),
+        acknowledged: _isAcknowledgedTombstone,
+      ));
     } catch (_) {
       modal.close();
       if (mounted) {

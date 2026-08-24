@@ -86,7 +86,6 @@ class CanonicalLiquidacionPdfBuilder {
     const primary = PdfColor.fromInt(0xff003d7a);
     const green = PdfColor.fromInt(0xff067a58);
     const light = PdfColor.fromInt(0xffeef6ff);
-    const amber = PdfColor.fromInt(0xfffff6e0);
     pw.Widget amountRow(String label, double amount, {bool emphasis = false}) =>
         pw.Container(
           margin: const pw.EdgeInsets.only(bottom: 6),
@@ -161,19 +160,6 @@ class CanonicalLiquidacionPdfBuilder {
           amountRow('Ajustes cerrados', snapshot.adjustments),
           amountRow('Ingresos bancarios cerrados', snapshot.bankDeposits),
           amountRow('Saldo de cierre', snapshot.balance, emphasis: true),
-          pw.SizedBox(height: 14),
-          pw.Container(
-            padding: const pw.EdgeInsets.all(12),
-            decoration: pw.BoxDecoration(
-              color: amber,
-              borderRadius: pw.BorderRadius.circular(6),
-            ),
-            child: pw.Text(
-              'Saldo de cierre = saldo inicial + cobros - gastos + ajustes - ingresos bancarios.\n'
-              'El PDF se genera exclusivamente desde la instantanea persistida al cerrar.',
-              style: const pw.TextStyle(fontSize: 10),
-            ),
-          ),
         ],
       ),
     );

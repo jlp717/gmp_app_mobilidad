@@ -580,6 +580,7 @@ app.get('/api/live', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+app.use('/api/health-check-e2e', require('./routes/health-check-e2e'));
 
 // Health check (public minimal; SRE/internal gets detailed diagnostics)
 app.get('/api/health', async (req, res) => {

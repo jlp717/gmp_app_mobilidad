@@ -111,13 +111,39 @@ function skipIsolatedTestFinanceSeed(env = process.env) {
   return Boolean(env.JEST_WORKER_ID);
 }
 
-function assertIsolatedTestWriteTable(table) {
+const TESTMOVIL_WRITE_TABLES = Object.freeze(new Set([
+  'TESTMOVIL.LIQUIDIARI',
+  'TESTMOVIL.VENDEDORES',
+  'TESTMOVIL.LIQDIACUE',
+  'TESTMOVIL.COBROCABEC',
+]));
+
+function assertIsolatedTestWriteTable(table, env = process.env) {
   const identifier = String(table || '').trim().toUpperCase();
+  const tableSet = String(env.REPARTO_TABLE_SET || '').trim().toLowerCase();
+  if (tableSet === 'testmovil') {
+    if (identifier.startsWith('JAVIER.') || identifier.startsWith('DSEDAC.')) {
+      throw new FinanceRepoSchemaError(
+        `G4 write path blocks JAVIER/DSEDAC: ${identifier || '(empty)'}`,
+      );
+    }
+    if (!TESTMOVIL_WRITE_TABLES.has(identifier)) {
+      throw new FinanceRepoSchemaError(
+        `Refusing non-TESTMOVIL finance write target: ${identifier || '(empty)'}`,
+      );
+    }
+    return;
+  }
   if (!identifier.startsWith('JAVIER.TEST_')) {
     throw new FinanceRepoSchemaError(
       `Refusing non-TEST finance write target: ${identifier || '(empty)'}`,
     );
   }
+}
+
+function liquidacionErpRelation(erpDataSchema) {
+  const schema = String(erpDataSchema || '').trim().toUpperCase() || 'DSEDAC';
+  return `${schema}.LQD`;
 }
 
 function cobroKeyExcludeSql(prodAlias, testTable, info) {
@@ -430,12 +456,21 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async selectLiquidacionByToken(idempotencyToken) {
+      const token = String(idempotencyToken || '').trim();
+      if (String(tables.liquidationOps || '').toUpperCase() === 'JAVIER.LQD') {
+        return run(`
+    SELECT LQD.*
+    FROM JAVIER.LQD LQD
+    WHERE TRIM(LQD.IDMARCALIQUIDACION) = ?
+    FETCH FIRST 1 ROW ONLY
+  `, [token.slice(0, 30)]);
+      }
       return run(`
     SELECT OPS.*
     FROM ${tables.liquidationOps} OPS
     WHERE OPS.IDEMPOTENCY_TOKEN = ?
     FETCH FIRST 1 ROW ONLY
-  `, [idempotencyToken]);
+  `, [token]);
     },
 
     async selectDailyTotalsLegacy({ repartidorId, dateYmd, dateCol }) {
@@ -559,6 +594,57 @@ function createRepartoFinanceDb2Repository(options = {}) {
     ) AS SALDO_PENDIENTE
     FROM SYSIBM.SYSDUMMY1
   `, [...testFilter.params, ...prodFilter.params]);
+    },
+
+    /**
+     * Ensures TEST balance rows exist by reading the latest ERP LQD saldo per vendor.
+     * Read-only against DSEDAC; writes only to isolated test balances table.
+     */
+    async selectLastLqdSaldo(repartidorId) {
+      const rows = await run(`
+        SELECT LQD.IMPORTESALDOACTUAL AS SALDO
+          FROM DSEDAC.LQD LQD
+         WHERE TRIM(LQD.CODIGOVENDEDOR) = ?
+         ORDER BY LQD.ANOLIQUIDACION DESC, LQD.MESLIQUIDACION DESC,
+                  LQD.DIALIQUIDACION DESC, LQD.HORALIQUIDACION DESC,
+                  LQD.NUMEROLIQUIDACION DESC
+         FETCH FIRST 1 ROW ONLY
+      `, [String(repartidorId || '').trim()]);
+      return rows;
+    },
+
+    async ensureVendorBalancesFromErpLqd(ids = []) {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return Object.freeze({ upserted: 0, skipped: true, reason: 'empty_scope' });
+      }
+      if (String(process.env.REPARTO_TABLE_SET || '').toLowerCase() === 'testmovil') {
+        return Object.freeze({ upserted: 0, skipped: true, reason: 'g4_uses_vendedores' });
+      }
+      assertIsolatedTestWriteTable(tables.balances);
+      const vendorFilter = inClause('TRIM(LQD.CODIGOVENDEDOR)', ids);
+      await run(`
+        INSERT INTO ${tables.balances} (CODIGO_REPARTIDOR, SALDO_PENDIENTE)
+        SELECT TRIM(X.CODIGOVENDEDOR),
+               (COALESCE(X.IMPORTETOTALAINGRESAR, 0) - COALESCE(X.IMPORTEINGRESOENBANCO, 0))
+          FROM (
+            SELECT LQD.CODIGOVENDEDOR, LQD.IMPORTESALDOACTUAL,
+                   LQD.IMPORTETOTALAINGRESAR, LQD.IMPORTEINGRESOENBANCO,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY TRIM(LQD.CODIGOVENDEDOR)
+                     ORDER BY LQD.ANOLIQUIDACION DESC, LQD.MESLIQUIDACION DESC,
+                              LQD.DIALIQUIDACION DESC, LQD.HORALIQUIDACION DESC,
+                              LQD.NUMEROLIQUIDACION DESC
+                   ) AS RN
+              FROM ${liquidacionErpRelation(erpDataSchema)} LQD
+             WHERE ${vendorFilter.sql}
+          ) X
+         WHERE X.RN = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM ${tables.balances} DST
+              WHERE TRIM(DST.CODIGO_REPARTIDOR) = TRIM(X.CODIGOVENDEDOR)
+           )
+      `, vendorFilter.params);
+      return Object.freeze({ upserted: 1, skipped: false });
     },
 
     async selectDailyStructuredSums({ ids, dateYmd }) {
@@ -711,7 +797,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
                    LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION,
                    LQD.${column}, CAST(0 AS DECIMAL(15,2)), '${forma}',
                    ${token}, 'SEED_LQD', 'SYSTEM', 'ERP DSEDAC.LQD', 'N'
-              FROM ${erpDataSchema}.LQD LQD
+              FROM ${liquidacionErpRelation(erpDataSchema)} LQD
              WHERE ${lqdVendor.sql}
                AND LQD.ANOLIQUIDACION = ?
                AND LQD.MESLIQUIDACION = ?
@@ -734,7 +820,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
           SELECT 'SEED-LQD-GAS-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd})),
                  TRIM(LQD.CODIGOVENDEDOR), LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION,
                  LQD.IMPORTEGASTOS, 'ERP', 'ERP DSEDAC.LQD', 'PENDING', 'SEED', 'SYSTEM'
-            FROM ${erpDataSchema}.LQD LQD
+            FROM ${liquidacionErpRelation(erpDataSchema)} LQD
            WHERE ${lqdStructVendor.sql}
              AND LQD.ANOLIQUIDACION = ? AND LQD.MESLIQUIDACION = ? AND LQD.DIALIQUIDACION = ?
              AND LQD.IMPORTEGASTOS > 0
@@ -751,7 +837,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
           SELECT 'SEED-LQD-ING-' CONCAT TRIM(LQD.CODIGOVENDEDOR) CONCAT '-' CONCAT TRIM(VARCHAR(${dateYmd})),
                  TRIM(LQD.CODIGOVENDEDOR), LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION,
                  LQD.IMPORTEINGRESOENBANCO, 'ERP-LQD', 'ERP DSEDAC.LQD', 'PENDING', 'SEED', 'SYSTEM'
-            FROM ${erpDataSchema}.LQD LQD
+            FROM ${liquidacionErpRelation(erpDataSchema)} LQD
            WHERE ${lqdStructVendor.sql}
              AND LQD.ANOLIQUIDACION = ? AND LQD.MESLIQUIDACION = ? AND LQD.DIALIQUIDACION = ?
              AND LQD.IMPORTEINGRESOENBANCO > 0
@@ -762,8 +848,9 @@ function createRepartoFinanceDb2Repository(options = {}) {
         `, [...lqdStructVendor.params, year, month, day]);
         await run(`
           INSERT INTO ${tables.balances} (CODIGO_REPARTIDOR, SALDO_PENDIENTE)
-          SELECT TRIM(LQD.CODIGOVENDEDOR), LQD.IMPORTESALDOACTUAL
-            FROM ${erpDataSchema}.LQD LQD
+          SELECT TRIM(LQD.CODIGOVENDEDOR),
+                 (COALESCE(LQD.IMPORTETOTALAINGRESAR, 0) - COALESCE(LQD.IMPORTEINGRESOENBANCO, 0))
+            FROM ${liquidacionErpRelation(erpDataSchema)} LQD
            WHERE ${lqdStructVendor.sql}
              AND LQD.ANOLIQUIDACION = ? AND LQD.MESLIQUIDACION = ? AND LQD.DIALIQUIDACION = ?
              AND NOT EXISTS (

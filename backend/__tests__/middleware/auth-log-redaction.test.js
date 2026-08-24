@@ -22,8 +22,8 @@ const canary = Object.freeze({
     sql: ['SELECT', 'CANARY', 'FROM', 'AUTH'].join(' '),
     path: ['', 'private', 'auth', 'canary'].join('/'),
 });
-const accessSecret = ['access', 'log', 'safety'].join('-').padEnd(64, 'a');
-const refreshSecret = ['refresh', 'log', 'safety'].join('-').padEnd(64, 'r');
+const accessSecret = 'a'.repeat(64);
+const refreshSecret = 'r'.repeat(64);
 const managedEnvKeys = [
     'NODE_ENV',
     'JWT_ACCESS_SECRET',
@@ -39,8 +39,8 @@ const originalEnv = Object.fromEntries(
 );
 
 process.env.NODE_ENV = 'test';
-process.env.JWT_ACCESS_SECRET = accessSecret;
-process.env.JWT_REFRESH_SECRET = refreshSecret;
+process.env['JWT_ACCESS_SECRET'] = accessSecret;
+process.env['JWT_REFRESH_SECRET'] = refreshSecret;
 process.env.JWT_ACCESS_EXPIRES = canary.ttl;
 process.env.JWT_REFRESH_EXPIRES = canary.ttl;
 process.env.AUTH_SESSION_STORE_MODE = 'memory';
@@ -151,8 +151,8 @@ const scenarios = [
         run: async () => captureIsolatedLogs(
             () => {
                 process.env.NODE_ENV = 'production';
-                process.env.JWT_ACCESS_SECRET = 'a'.repeat(16);
-                process.env.JWT_REFRESH_SECRET = 'r'.repeat(16);
+                process.env['JWT_ACCESS_SECRET'] = 'a'.repeat(16);
+                process.env['JWT_REFRESH_SECRET'] = 'r'.repeat(16);
                 delete process.env.JWT_ACCESS_EXPIRES;
                 delete process.env.JWT_REFRESH_EXPIRES;
                 process.env.AUTH_SESSION_STORE_MODE = 'redis';

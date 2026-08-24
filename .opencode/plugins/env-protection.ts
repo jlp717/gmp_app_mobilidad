@@ -1,0 +1,11 @@
+﻿export const EnvProtectionPlugin = async () => ({
+  "tool.execute.before": async (input: any, output: any) => {
+    const text = JSON.stringify({ input, args: output?.args })
+    if (text.includes("AGENTS.md") || text.includes("docs/") || text.includes(".opencode/")) return
+    if (/(^|[^\w./])(\.env|auth\.json|mcp-auth\.json|\.pem|\.key|\.p12)\b/i.test(text)) {
+      throw new Error("ENV_PROTECTION_BLOCKED: lectura de secretos bloqueada")
+    }
+  },
+})
+export default EnvProtectionPlugin
+

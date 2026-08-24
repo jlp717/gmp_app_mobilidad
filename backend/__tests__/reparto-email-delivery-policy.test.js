@@ -10,9 +10,22 @@ const {
 describe('reparto email delivery policy', () => {
   const isolatedEnv = {
     REPARTO_TABLE_SET: 'isolated_test',
+    REPARTO_EMAIL_STRICT_TEST_POLICY: 'true',
     REPARTO_EMAIL_TEST_ALLOWLIST: 'sink@example.test, auditor@example.test',
     REPARTO_EMAIL_TEST_SINK: 'sink@example.test',
   };
+
+  test('direct delivery is default outside strict test policy', () => {
+    expect(resolveRepartoEmailDelivery({
+      recipients: ['cliente@empresa.com'],
+      env: { REPARTO_TABLE_SET: 'isolated_test' },
+      mode: 'manual',
+    })).toEqual({
+      effectiveRecipients: ['cliente@empresa.com'],
+      redirected: false,
+      policy: 'direct',
+    });
+  });
 
   test('automatic isolated messages preserve all allowlisted DB-resolved recipients', () => {
     expect(resolveRepartoEmailDelivery({
@@ -26,7 +39,13 @@ describe('reparto email delivery policy', () => {
   });
 
   test('isolated test fails closed without an explicit allowlist', () => {
-    expect(() => resolveRepartoEmailDelivery({ recipients: ['x@example.test'], env: { REPARTO_TABLE_SET: 'isolated_test' } }))
+    expect(() => resolveRepartoEmailDelivery({
+      recipients: ['x@example.test'],
+      env: {
+        REPARTO_TABLE_SET: 'isolated_test',
+        REPARTO_EMAIL_STRICT_TEST_POLICY: 'true',
+      },
+    }))
       .toThrow(RepartoEmailDeliveryPolicyError);
   });
 

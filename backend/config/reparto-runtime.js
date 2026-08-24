@@ -1,8 +1,8 @@
 'use strict';
 
 const ALLOWED_ENVIRONMENTS = new Set(['test', 'staging', 'production']);
-const ALLOWED_SCHEMAS = new Set(['DSEDAC', 'JAVIER']);
-const ALLOWED_TABLE_SETS = new Set(['isolated_test', 'production']);
+const ALLOWED_SCHEMAS = new Set(['DSEDAC', 'JAVIER', 'TESTMOVIL']);
+const ALLOWED_TABLE_SETS = new Set(['isolated_test', 'production', 'testmovil']);
 const SAFE_DSN_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
 
 const TABLE_MAPPINGS = Object.freeze({
@@ -49,7 +49,7 @@ const TABLE_MAPPINGS = Object.freeze({
       commissionTiers: 'JAVIER.REPARTIDOR_COMMISSION_TIERS',
       balances: 'JAVIER.REPARTIDOR_FINANCIAL_BALANCES',
       liquidationEmails: 'JAVIER.REPARTIDOR_LIQUIDACION_EMAILS',
-      liquidationOps: 'JAVIER.REPARTIDOR_LIQUIDACION_OPS',
+      liquidationOps: 'JAVIER.LQD',
       expenses: 'JAVIER.REPARTIDOR_LIQUIDACION_GASTOS',
       adjustments: 'JAVIER.REPARTIDOR_LIQUIDACION_AJUSTES',
       bankDeposits: 'JAVIER.REPARTIDOR_LIQUIDACION_INGRESOS',
@@ -66,6 +66,49 @@ const TABLE_MAPPINGS = Object.freeze({
       deliveryStatus: 'JAVIER.DELIVERY_STATUS',
     }),
   }),
+  testmovil: Object.freeze({
+    confirmation: Object.freeze({
+      confirmations: 'TESTMOVIL.LIQDIACUE',
+      lines: 'TESTMOVIL.LIQDIACUE',
+      evidences: 'TESTMOVIL.LIQDIACUE',
+      confirmationEvidences: 'TESTMOVIL.LIQDIACUE',
+    }),
+    finance: Object.freeze({
+      cobros: 'TESTMOVIL.COBROCABEC',
+      audit: 'TESTMOVIL.LIQDIACUE',
+      commissionTiers: 'TESTMOVIL.LIQDIACUE',
+      balances: 'TESTMOVIL.VENDEDORES',
+      liquidationEmails: 'TESTMOVIL.LIQDIACUE',
+      liquidationOps: 'TESTMOVIL.LIQUIDIARI',
+      expenses: 'TESTMOVIL.LIQDIACUE',
+      adjustments: 'TESTMOVIL.LIQDIACUE',
+      bankDeposits: 'TESTMOVIL.LIQDIACUE',
+      liquidationOutbox: 'TESTMOVIL.LIQDIACUE',
+      liquidationSequence: 'TESTMOVIL.LIQDIACUE',
+      commercialCobros: 'TESTMOVIL.COBROCABEC',
+    }),
+    routing: Object.freeze({
+      order: 'TESTMOVIL.LIQUIDIARI',
+    }),
+    notifications: Object.freeze({
+      roleTargets: 'TESTMOVIL.LIQDIACUE',
+      varianceOutbox: 'TESTMOVIL.LIQDIACUE',
+      deliveryStatus: 'TESTMOVIL.LIQDIACUE',
+    }),
+  }),
+});
+
+// D-G4-2 (2026-08-23): founder cancelled TESTMOVIL. Long names LIQUIDIARI/VENDEDORES/LIQDIACUE
+// do not exist in DSEDAC. Catalog (DSN=GMP): DSEDAC.LQD, DSEDAC.VDD (no SALDOACTUAL), no LIQDIACUE.
+const G4_DSEDAC_ERP_MAPPING = Object.freeze({
+  tableSet: 'production',
+  testmovil: 'ANULADO',
+  deudaRead: 'DSEDAC.LQD.IMPORTESALDOACTUAL',
+  closeWrite: 'JAVIER.LQD',
+  vendedores: 'DSEDAC.VDD',
+  vendedoresSaldoColumn: null,
+  formLines: 'DSEDAC.LQDL1',
+  liqdiacue: null,
 });
 
 const FINANCE_TABLE_KEYS = Object.freeze([
@@ -110,11 +153,14 @@ function validateConfirmationTableMapping(runtime) {
     if (identifier !== expected[key]) {
       errors.push(`confirmation.${key} does not match the versioned ${runtime.tableSet} mapping`);
     }
-    if (!identifier.startsWith('JAVIER.')) {
+    if (runtime.tableSet !== 'testmovil' && !identifier.startsWith('JAVIER.')) {
       errors.push(`confirmation.${key} must use the JAVIER application schema`);
     }
     if (runtime.tableSet === 'isolated_test' && !identifier.startsWith('JAVIER.TEST_')) {
       errors.push(`confirmation.${key} must use JAVIER.TEST_* in isolated_test`);
+    }
+    if (runtime.tableSet === 'testmovil' && !identifier.startsWith('TESTMOVIL.')) {
+      errors.push(`confirmation.${key} must use TESTMOVIL.* in testmovil`);
     }
   }
   return Object.freeze({ valid: errors.length === 0, errors: Object.freeze(errors) });
@@ -144,6 +190,12 @@ function validateFinanceTableMapping(runtime) {
     }
     if (runtime.tableSet === 'isolated_test' && !identifier.startsWith('JAVIER.TEST_')) {
       errors.push(`finance.${key} must use JAVIER.TEST_* in isolated_test`);
+    }
+    if (runtime.tableSet === 'testmovil' && !identifier.startsWith('TESTMOVIL.')) {
+      errors.push(`finance.${key} must use TESTMOVIL.* in testmovil`);
+    }
+    if (runtime.tableSet === 'testmovil' && identifier === 'JAVIER.TEST_REPARTIDOR_LIQUIDACION_OPS') {
+      errors.push('JAVIER.TEST_REPARTIDOR_LIQUIDACION_OPS is BLOCK for G4 testmovil');
     }
   }
   return Object.freeze({ valid: errors.length === 0, errors: Object.freeze(errors) });
@@ -217,7 +269,7 @@ function resolveRepartoRuntime(env = {}) {
 
   const tableSet = clean(env.REPARTO_TABLE_SET).toLowerCase();
   if (!ALLOWED_TABLE_SETS.has(tableSet)) {
-    errors.push('REPARTO_TABLE_SET must be explicitly isolated_test or production');
+    errors.push('REPARTO_TABLE_SET must be explicitly isolated_test, production, or testmovil');
   }
   if (clean(env.REPARTO_CONFIRMATION_TABLE_SET)) {
     errors.push('REPARTO_CONFIRMATION_TABLE_SET is retired; use only REPARTO_TABLE_SET');
@@ -291,17 +343,26 @@ function resolveRepartoRuntime(env = {}) {
   if (appSchema === 'DSEDAC') {
     errors.push('DSEDAC is never an allowed reparto application write schema');
   }
-  if ((environment === 'test' || environment === 'staging') && tableSet !== 'isolated_test') {
-    errors.push(`${environment} reparto requires REPARTO_TABLE_SET=isolated_test`);
+  if ((environment === 'test' || environment === 'staging') && tableSet !== 'isolated_test' && tableSet !== 'testmovil') {
+    errors.push(`${environment} reparto requires REPARTO_TABLE_SET=isolated_test or testmovil`);
   }
-  if ((environment === 'test' || environment === 'staging') && appSchema !== 'JAVIER') {
-    errors.push(`${environment} reparto requires JAVIER app schema`);
-  }
-  if ((environment === 'test' || environment === 'staging') && erpSchema !== 'JAVIER') {
-    errors.push(`${environment} reparto cannot write DSEDAC ERP tables`);
-  }
-  if (readSchema !== 'DSEDAC') {
-    errors.push('reparto reads always require DSEDAC; JAVIER is write/app buffers only');
+  if (tableSet === 'testmovil') {
+    if (appSchema !== 'TESTMOVIL' || erpSchema !== 'TESTMOVIL' || readSchema !== 'TESTMOVIL') {
+      errors.push('testmovil G4 requires REPARTIDOR_FINANCE_*_SCHEMA=TESTMOVIL');
+    }
+    if (appSchema === 'JAVIER' || erpSchema === 'JAVIER' || erpSchema === 'DSEDAC' || appSchema === 'DSEDAC') {
+      errors.push('testmovil write path cannot use JAVIER or DSEDAC');
+    }
+  } else {
+    if ((environment === 'test' || environment === 'staging') && appSchema !== 'JAVIER') {
+      errors.push(`${environment} reparto requires JAVIER app schema`);
+    }
+    if ((environment === 'test' || environment === 'staging') && erpSchema !== 'JAVIER') {
+      errors.push(`${environment} reparto cannot write DSEDAC ERP tables`);
+    }
+    if (readSchema !== 'DSEDAC') {
+      errors.push('reparto reads always require DSEDAC; JAVIER is write/app buffers only');
+    }
   }
   if (environment === 'production' && tableSet !== 'production') {
     errors.push('production reparto requires REPARTO_TABLE_SET=production');
@@ -325,8 +386,11 @@ function resolveRepartoRuntime(env = {}) {
   if (financeCapabilityRequested && !writesRequested) {
     errors.push('REPARTO_FINANCE_DB2_CAPABILITY_APPROVED requires REPARTO_WRITES_ENABLED=true');
   }
-  if (financeCapabilityRequested && environment !== 'production' && tableSet !== 'isolated_test') {
-    errors.push('REPARTO_FINANCE_DB2_CAPABILITY_APPROVED requires isolated_test outside production');
+  if (financeCapabilityRequested && environment !== 'production' && tableSet !== 'isolated_test' && tableSet !== 'testmovil') {
+    errors.push('REPARTO_FINANCE_DB2_CAPABILITY_APPROVED requires isolated_test or testmovil outside production');
+  }
+  if (confirmationCapabilityApproved && tableSet === 'testmovil') {
+    errors.push('testmovil G4 blocks confirmation writes');
   }
   if (financeCapabilityRequested && environment === 'production' && tableSet !== 'production') {
     errors.push('REPARTO_FINANCE_DB2_CAPABILITY_APPROVED requires production table set in production');
@@ -508,6 +572,7 @@ function createRepartoWriteGuard(runtime, options = {}) {
 
 module.exports = {
   TABLE_MAPPINGS,
+  G4_DSEDAC_ERP_MAPPING,
   FINANCE_TABLE_KEYS,
   FINANCE_WRITE_TABLE_KEYS,
   CONFIRMATION_TABLE_KEYS,
