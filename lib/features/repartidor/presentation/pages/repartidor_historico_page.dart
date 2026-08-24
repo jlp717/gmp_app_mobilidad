@@ -2779,12 +2779,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     try {
       final isFactura = doc.type == _DocType.factura;
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
-      final downloader =
-          widget.documentDownloader ?? RepartidorDataService.downloadDocument;
       final bytes = await _downloadCommercialPdfBytes(
         doc: doc,
         owner: owner,
-        downloader: downloader,
+        downloader: widget.documentDownloader,
       );
       modal.close();
 
@@ -3177,21 +3175,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Future<List<int>> _downloadCommercialPdfBytes({
     required _DocumentItem doc,
     required String owner,
-    Future<List<int>> Function({
-      required int year,
-      required String serie,
-      required int number,
-      required String type,
-      int terminal,
-      int? facturaNumber,
-      String? serieFactura,
-      int? ejercicioFactura,
-      int? albaranNumber,
-      String? albaranSerie,
-      int? albaranTerminal,
-      int? albaranYear,
-      required String repartidorId,
-    })? downloader,
+    RepartidorHistoryDocumentDownloader? downloader,
   }) async {
     final isFactura = doc.type == _DocType.factura;
     final load = downloader ?? RepartidorDataService.downloadDocument;
