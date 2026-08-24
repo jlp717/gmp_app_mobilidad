@@ -837,7 +837,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         }
         if (isShadowLqd(finance)) {
           const last = first(await rows(connection,
-            'SELECT IMPORTESALDOACTUAL AS SALDO FROM DSEDAC.LQD '
+            `SELECT IMPORTESALDOACTUAL AS SALDO FROM ${finance.liquidationOps} `
               + 'WHERE TRIM(CODIGOVENDEDOR) = ? '
               + 'ORDER BY ANOLIQUIDACION DESC, MESLIQUIDACION DESC, '
               + 'DIALIQUIDACION DESC, HORALIQUIDACION DESC, NUMEROLIQUIDACION DESC '
@@ -932,7 +932,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         const { year, month, day } = dateParts(date);
         if (isShadowLqd(finance)) {
           const last = first(await rows(connection,
-            'SELECT IMPORTESALDOACTUAL AS SALDO FROM DSEDAC.LQD '
+            `SELECT IMPORTESALDOACTUAL AS SALDO FROM ${finance.liquidationOps} `
               + 'WHERE TRIM(CODIGOVENDEDOR) = ? '
               + 'ORDER BY ANOLIQUIDACION DESC, MESLIQUIDACION DESC, '
               + 'DIALIQUIDACION DESC, HORALIQUIDACION DESC, NUMEROLIQUIDACION DESC '
@@ -1096,7 +1096,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           const now = new Date();
           const hora = (now.getHours() * 10000) + (now.getMinutes() * 100) + now.getSeconds();
           const next = first(await rows(connection,
-            'SELECT COALESCE(MAX(NUMERO), 0) + 1 AS N FROM TESTMOVIL.LIQUIDIARI'));
+            'SELECT COALESCE(NUMERO, 0) + 1 AS N FROM TESTMOVIL.LIQUIDIARI ORDER BY NUMERO DESC FETCH FIRST 1 ROW ONLY WITH RS'));
           const numero = Number(rowValue(next, 'N') || 1);
           const token = String(input.idempotencyToken || '').slice(0, 30);
           await execute(connection,
@@ -1136,9 +1136,9 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           const vendor = String(input.repartidorId).padStart(2, '0').slice(-2);
           const token = String(input.idempotencyToken || input.marker || '').slice(0, 30);
           const next = first(await rows(connection,
-            'SELECT COALESCE(MAX(NUMEROLIQUIDACION), 0) + 1 AS N, COALESCE(MAX(ID), 0) + 1 AS I FROM JAVIER.LQD '
+            `SELECT COALESCE(NUMEROLIQUIDACION, 0) + 1 AS N, COALESCE(ID, 0) + 1 AS I FROM ${finance.liquidationOps} `
               + "WHERE SUBEMPRESALIQUIDACION = ? AND EJERCICIOLIQUIDACION = ? "
-              + "AND SERIELIQUIDACION = ? AND TERMINALLIQUIDACION = ?",
+              + "AND SERIELIQUIDACION = ? AND TERMINALLIQUIDACION = ?" + " ORDER BY NUMEROLIQUIDACION DESC, ID DESC FETCH FIRST 1 ROW ONLY WITH RS",
             ['001', year, 'A', 1]));
           const numero = Number(rowValue(next, 'N') || 1);
           const nextId = Number(rowValue(next, 'I') || 1);

@@ -181,6 +181,19 @@ describe('Repartidor finanzas routes', () => {
     }
   });
 
+  test('legacy LQD PDF reconstruction preserves each payment method', () => {
+    expect(financeService.shadowLiquidacionPayments({
+      IMPORTEEFECTIVO: '100.25',
+      IMPORTECHEQUES: '20',
+      IMPORTETARJETA: '30.50',
+      IMPORTEPOSTDATADOS: '4.25',
+    }, '2026-08-15')).toEqual([
+      expect.objectContaining({ id: 'LQD-EFECTIVO', amount: 100.25, paymentMethod: 'EFECTIVO' }),
+      expect.objectContaining({ id: 'LQD-CHEQUE', amount: 20, paymentMethod: 'CHEQUE' }),
+      expect.objectContaining({ id: 'LQD-TARJETA', amount: 30.5, paymentMethod: 'TARJETA' }),
+      expect.objectContaining({ id: 'LQD-POSTDATADO', amount: 4.25, paymentMethod: 'POSTDATADO' }),
+    ]);
+  });
   test('GET /daily-summary uses repartidor cobros and balance to build the liquidation form', async () => {
      mockQueryWithParams
        .mockResolvedValueOnce(alignedSchemaRows)

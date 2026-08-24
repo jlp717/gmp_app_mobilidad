@@ -480,6 +480,23 @@ function liquidacionPdfPaymentTotals(payments) {
   return Object.fromEntries(Object.entries(totals).map(([key, amount]) => [key, roundMoney(amount)]));
 }
 
+function shadowLiquidacionPayments(row, date) {
+  const entries = [
+    ['IMPORTEEFECTIVO', 'EFECTIVO'],
+    ['IMPORTECHEQUES', 'CHEQUE'],
+    ['IMPORTETARJETA', 'TARJETA'],
+    ['IMPORTEPOSTDATADOS', 'POSTDATADO'],
+  ];
+  return entries
+    .map(([field, paymentMethod]) => ({
+      id: `LQD-${paymentMethod}`,
+      amount: roundMoney(value(row, field, 0)),
+      paymentMethod,
+      collectedAt: `${date}T00:00:00.000Z`,
+    }))
+    .filter((payment) => payment.amount > 0);
+}
+
 async function buildClosedLiquidacionPdf({ idempotencyToken, repartidorId }) {
   const token = normalizeText(idempotencyToken);
   const owner = normalizeText(repartidorId);
@@ -533,7 +550,7 @@ async function buildClosedLiquidacionPdf({ idempotencyToken, repartidorId }) {
         adjustments: 0,
         bankDeposits: roundMoney(value(row, 'IMPORTEINGRESOENBANCO', 0)),
       },
-      payments: [],
+      payments: shadowLiquidacionPayments(row, date),
     };
   } else {
     replayIdentity = parseLiquidacionSnapshot(value(row, 'REPLAY_IDENTITY_JSON'), 'REPLAY_IDENTITY_JSON');
@@ -1030,10 +1047,18 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   let saldoActual = 0;
   try {
     const lqdRows = await Promise.all(ids.map((id) => financeRepo.selectLastLqdSaldo(id)));
-    saldoActual = roundMoney(lqdRows.reduce((sum, rows) => {
-      if (!rows || !rows.length) return sum;
-      return sum + Number(value(rows[0], 'SALDO', 0) || 0);
-    }, 0));
+    const hasLqdSnapshot = lqdRows.some((rows) => Array.isArray(rows) && rows.length > 0);
+    if (hasLqdSnapshot) {
+      saldoActual = roundMoney(lqdRows.reduce((sum, rows) => {
+        if (!rows || !rows.length) return sum;
+        return sum + Number(value(rows[0], 'SALDO', 0) || 0);
+      }, 0));
+    } else {
+      // A test copy can be isolated from DSEDAC.LQD. In that case the
+      // explicitly maintained isolated balance is the authoritative opening
+      // balance; an empty LQD result must not silently become zero.
+      saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+    }
   } catch (error) {
     logger.warn(`[REPARTIDOR_FINANZAS] daily-summary DSEDAC.LQD saldo: ${error.message}`);
     saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
@@ -1960,6 +1985,7 @@ module.exports = {
   buildClosedLiquidacionPdf,
   formatGmpLiquidacionDisplay,
   cashToDeposit,
+  shadowLiquidacionPayments,
   // Error classes (Req #16: facilita catch tipado en routes)
   AlreadyDeliveredError,
   IdempotencyConflictError,

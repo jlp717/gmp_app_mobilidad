@@ -89,6 +89,8 @@ void main() {
     expect(find.text('COBROS DE LA LIQUIDACIÓN'), findsOneWidget);
     expect(find.text('RESUMEN TESORERÍA'), findsOneWidget);
     expect(find.text('Total Efectivo'), findsOneWidget);
+    expect(find.text('Total repartido'), findsOneWidget);
+    expect(find.text('Deuda pendiente'), findsOneWidget);
     expect(find.text('Ingreso en Banco'), findsOneWidget);
     expect(find.text('TOTAL'), findsOneWidget);
     expect(find.text('Cerrar día y grabar liquidación'), findsOneWidget);

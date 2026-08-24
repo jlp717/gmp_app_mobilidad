@@ -551,6 +551,11 @@ class _LiquidacionTreasuryFields {
             accent: LiquidacionBrand.greenDark,
             emphasized: true,
           ),
+          const SizedBox(height: 8),
+          _TreasuryMetricCard(
+            label: 'Total repartido',
+            value: summary.entregado,
+          ),
         ],
       );
 
@@ -560,6 +565,12 @@ class _LiquidacionTreasuryFields {
             label: 'Saldo actual',
             value: summary.saldoActual,
             accent: summary.saldoActual < 0 ? AppColors.error : null,
+          ),
+          const SizedBox(height: 8),
+          _TreasuryMetricCard(
+            label: 'Deuda pendiente',
+            value: summary.deudaPendiente,
+            accent: summary.deudaPendiente > 0 ? AppColors.error : null,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(label: 'Gastos', value: summary.gastos),
