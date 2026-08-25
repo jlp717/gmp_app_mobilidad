@@ -17,6 +17,7 @@ const repartidorDb = require('../repositories/repartidor-route-db2-repository');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const { redisCache, TTL } = require('../services/redis-cache');
 const whatsappGateway = require('../services/whatsappGatewayService');
 const {
     RepartoEmailDeliveryPolicyError,
@@ -32,7 +33,8 @@ const repartidorBreaker = new RepartidorCircuitBreaker({
     successThreshold: 2,
     timeout: 10000
 });
-const REPARTIDOR_PDF_CACHE_VERSION = 'v2';
+const REPARTIDOR_PDF_CACHE_VERSION = 'v3';
+const REPARTIDOR_DOCUMENT_PDF_CACHE_TTL = Number(TTL?.REALTIME) || 60;
 const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
 const facturasService = require('../services/facturas.service');
 const pdfService = require('../services/pdf.service');
@@ -1636,6 +1638,31 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
 
         logger.info(`[PDF] Generating Albaran PDF: ${parsedYear}-${serie}-${parsedTerminal}-${parsedNumber}`);
 
+        const documentPdfCacheKey = req.documentOwnerId
+            ? 'repartidor:document-pdf:' + REPARTIDOR_PDF_CACHE_VERSION + ':albaran:' + parsedYear + ':' + serie + ':' + parsedTerminal + ':' + parsedNumber
+                + ':owner:' + String(req.documentOwnerId).replace(/[^A-Za-z0-9_-]/g, '')
+            : null;
+        const sendPdf = (pdfBuffer, fileName) => {
+            res.set({
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+                'Content-Length': pdfBuffer.length,
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
+            return res.send(pdfBuffer);
+        };
+        if (documentPdfCacheKey && typeof redisCache?.get === 'function') {
+            try {
+                const cached = await redisCache.get('document', documentPdfCacheKey);
+                if (cached?.pdfBase64 && cached.fileName) {
+                    return sendPdf(Buffer.from(cached.pdfBase64, 'base64'), cached.fileName);
+                }
+            } catch (_cacheError) {
+                logger.warn('[PDF] Albaran cache read unavailable');
+            }
+        }
+
         // 1. Fetch Header from CAC + IVA breakdown from CPC
         const headers = await repartidorDb.getAlbaranPdfHeader(parsedNumber, serie, parsedYear, parsedTerminal);
 
@@ -1781,14 +1808,17 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
         });
 
         const safeFilename = `Albaran_${parsedYear}_${serie}_${parsedNumber}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
-        res.set({
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
-            'Content-Length': buffer.length,
-            'Accept-Ranges': 'bytes',
-            'Cache-Control': 'no-cache, no-store, must-revalidate'
-        });
-        res.send(buffer);
+        if (documentPdfCacheKey && typeof redisCache?.set === 'function') {
+            try {
+                await redisCache.set('document', documentPdfCacheKey, {
+                    pdfBase64: buffer.toString('base64'),
+                    fileName: safeFilename,
+                }, REPARTIDOR_DOCUMENT_PDF_CACHE_TTL);
+            } catch (_cacheError) {
+                logger.warn('[PDF] Albaran cache write unavailable');
+            }
+        }
+        return sendPdf(buffer, safeFilename);
 
     } catch (e) {
         logger.error('[PDF] Albaran generation failed');

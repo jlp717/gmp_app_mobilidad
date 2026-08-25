@@ -2,6 +2,8 @@
 
 const crypto = require('crypto');
 const { allowsEmptyPlannedLines, PRICING_STATE } = require('./delivery-amount-resolver');
+const { invalidateCachePattern } = require('./redis-cache');
+const logger = require('../middleware/logger');
 
 class RepartoPersistenceError extends Error {
   constructor(message, { code, statusCode = 409, details } = {}) {
@@ -341,12 +343,31 @@ function buildPersistedConfirmation({ command, planned, actualLines, documentSna
   };
 }
 
+function buildDocumentPdfInvalidationPattern(itemId, repartidorId) {
+  const match = /^(\d{4})-([A-Za-z0-9]{1,3})-(\d+)-(\d+)$/.exec(String(itemId || '').trim());
+  const owner = String(repartidorId || '').trim().replace(/[^A-Za-z0-9_-]/g, '');
+  if (!match || !owner) return null;
+  return `document:repartidor:document-pdf:*:albaran:${match[1]}:${match[2].toUpperCase()}:${Number(match[3])}:${Number(match[4])}:owner:${owner}`;
+}
+
+async function invalidateRepartidorDocumentPdfCache(itemId, repartidorId) {
+  const pattern = buildDocumentPdfInvalidationPattern(itemId, repartidorId);
+  if (!pattern || typeof invalidateCachePattern !== 'function') return;
+  try {
+    await invalidateCachePattern(pattern);
+  } catch (_error) {
+    logger.warn('[REPARTO_CONFIRMATION] Document PDF cache invalidation failed', {
+      code: 'DOCUMENT_PDF_CACHE_INVALIDATION_FAILED',
+    });
+  }
+}
+
 function createRepartoConfirmationService({ repository, now = () => new Date() }) {
   assertRepository(repository);
 
   async function confirm(command) {
     const fingerprint = confirmationFingerprint(command);
-    return repository.withTransaction(async (tx) => {
+    const result = await repository.withTransaction(async (tx) => {
       const replay = await tx.getByIdempotencyKey(command.idempotencyKey);
       if (replay) {
         if (replay.fingerprint !== fingerprint) {
@@ -446,6 +467,10 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
       });
       return result;
     });
+    if (result?.created) {
+      await invalidateRepartidorDocumentPdfCache(command.delivery.itemId, command.actor.repartidorId);
+    }
+    return result;
   }
 
   return Object.freeze({ confirm });
