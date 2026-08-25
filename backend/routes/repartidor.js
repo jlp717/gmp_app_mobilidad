@@ -24,7 +24,22 @@ const {
     resolveRepartoEmailDelivery,
     buildRepartoMessageId,
 } = require('../services/reparto-email-delivery-policy');
-const { verifyToken, requireJefeVentas } = require('../middleware/auth');
+const {
+    verifyToken,
+    requireJefeVentas: importedRequireJefeVentas,
+} = require('../middleware/auth');
+
+// Keep the router fail-closed when a reduced integration harness (or a
+// partially loaded auth module) omits the privileged middleware. Production
+// auth always supplies the real guard; the fallback only prevents Express
+// from mounting a route with an undefined callback.
+const requireJefeVentas = typeof importedRequireJefeVentas === 'function'
+    ? importedRequireJefeVentas
+    : (_req, res) => res.status(503).json({
+        success: false,
+        code: 'AUTH_GUARD_UNAVAILABLE',
+        error: 'El guard de autorizacion no esta disponible',
+    });
 const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
 
 const repartidorBreaker = new RepartidorCircuitBreaker({

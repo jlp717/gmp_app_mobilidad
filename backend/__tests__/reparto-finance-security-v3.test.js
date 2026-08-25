@@ -249,7 +249,7 @@ test('receipt email returns 200 only after provider messageId and DOCUMENT_EMAIL
     success: true, messageId: 'smtp-1', ledgerWritten: true,
   });
   expect(mockRecordDocumentEmailLedger).toHaveBeenCalledWith({
-    operatorId: '94', ownerId: '94', payloadPreview: 'receipt=7;messageId=smtp-1',
+    operatorId: '94', ownerId: '94', payloadPreview: 'logicalKey=receipt:7;messageId=smtp-1',
   });
 });
 

@@ -25,6 +25,7 @@ function repository({ manager, driver = false }) {
     getVendorVisibilityScope: jest.fn(async (code, { role }) => (
       role === 'JEFE_VENTAS' ? [code, '051'] : [code]
     )),
+    listRepartidorFleet: jest.fn(async () => [{ code: '050' }, { code: '051' }]),
   };
 }
 

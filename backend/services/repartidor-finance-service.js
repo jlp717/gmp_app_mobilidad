@@ -1005,6 +1005,13 @@ async function getDailySummary({ repartidorId, date }) {
           'El catálogo DB2 de reparto no coincide con las columnas necesarias',
         );
       }
+      if (error?.code === 'REPARTO_SCHEMA_UNAVAILABLE'
+        || error?.name === 'FinanceSchemaUnavailableError'
+        || error?.name === 'FinanceRepoSchemaError') {
+        throw new FinanceSchemaUnavailableError(
+          'El catálogo DB2 de reparto no está disponible',
+        );
+      }
       throw error; // Non-column error, propagate
     }
   }

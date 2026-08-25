@@ -29,7 +29,7 @@ jest.mock('../middleware/logger', () => ({
 
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR' };
+    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['05', '08'] };
     next();
   },
 }));

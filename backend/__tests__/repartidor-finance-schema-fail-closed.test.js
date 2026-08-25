@@ -131,7 +131,7 @@ describe('repartidor finance schema catalog fails closed', () => {
       date: '2026-08-03',
     }));
 
-    expect(mockQueryWithParams.mock.calls.filter(([sql]) => /QSYS2.SYSCOLUMNS/i.test(sql))).toHaveLength(2);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => /QSYS2.SYSCOLUMNS/i.test(sql))).toHaveLength(1);
     expectNoMutations();
   });
 

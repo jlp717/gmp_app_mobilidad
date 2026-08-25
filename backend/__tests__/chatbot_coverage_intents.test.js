@@ -547,7 +547,7 @@ describe('chatbot coverage intents', () => {
       'mi ruta hoy',
       ['80'],
       null,
-      { ...context, userCode: '80', vendorScope: ['80'], isJefeVentas: false, role: 'REPARTIDOR' }
+      { ...context, userCode: '80', vendorScope: ['80'], repartidorScope: ['80'], isJefeVentas: false, role: 'REPARTIDOR' }
     );
 
     expect(repartidorTools.getRepartidorDeliveries).toHaveBeenCalled();

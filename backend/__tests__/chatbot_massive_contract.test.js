@@ -579,6 +579,7 @@ const repartidorContext = {
   role: 'REPARTIDOR',
   isJefeVentas: false,
   vendorScope: ['80'],
+  repartidorScope: ['80'],
   richResponses: true,
 };
 

@@ -1211,8 +1211,12 @@ if (MEMORY_LOG_INTERVAL_MS > 0) {
   }, MEMORY_LOG_INTERVAL_MS).unref();
 }
 
-startServer().catch((err) => {
-  logger.error(`🔥 Failed to start server: ${err.message}`);
-  process.exit(1);
-});
+module.exports = app;
+
+if (require.main === module) {
+  startServer().catch((err) => {
+    logger.error(`🔥 Failed to start server: ${err.message}`);
+    process.exit(1);
+  });
+}
 

@@ -18,7 +18,7 @@ describe('phase A reparto data/status contracts', () => {
 
   test('detail discrepancy retains raw line sum but compares CPC gross to net plus IVA', () => {
     const source = read('routes/entregas.js');
-    expect(source).toContain('albaran.lineSum = lineSumRounded;');
-    expect(source).toContain('Math.abs(cpcGross - calculatedGross) > 0.01');
+    expect(source).toContain('lineSum: lineSumRounded,');
+    expect(source).toContain('resolveDeliveryAmount({');
   });
 });

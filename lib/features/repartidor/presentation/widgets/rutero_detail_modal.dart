@@ -1738,7 +1738,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   SnackBar(
                     content: Text(
                       repartidorSafeOperationMessage(
-                        error: error,
+                        error: error is Object
+                            ? error
+                            : StateError('PDF viewer returned an empty error'),
                         operation: 'technicalSheet',
                       ),
                     ),

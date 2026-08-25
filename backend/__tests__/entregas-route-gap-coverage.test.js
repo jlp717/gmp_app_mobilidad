@@ -165,8 +165,8 @@ describe('entregas route coverage gaps', () => {
     const overlaySql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
       .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
-    expect(overlaySql).toContain('TRIM(DOCUMENT_ID) IN');
-    expect(overlaySql).toContain('TRIM(REPARTIDOR_ID) IN');
+    expect(overlaySql).toContain('TRIM(C.DOCUMENT_ID) IN');
+    expect(overlaySql).toContain('TRIM(C.REPARTIDOR_ID) IN');
   });
 
   test('returns a typed redacted error when the authorized pending query fails', async () => {

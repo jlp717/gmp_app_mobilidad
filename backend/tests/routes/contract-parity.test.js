@@ -68,14 +68,20 @@ describe('contrato /rutero/week (post-refactor)', () => {
     test('cache hit => payload con week/todayName/role/totalUniqueClients/weekProgress', async () => {
         laclae.getWeekCountsFromCache.mockReturnValueOnce({ lunes: 2, martes: 4 });
         laclae.getTotalClientsFromCache.mockReturnValueOnce(6);
-        // Sin entregas hoy (martes 25 ago 2026): repo devuelve 0 por mocks de db
         const res = await request(app).get('/rutero/week?vendedorCodes=101&role=jefe').expect(200);
+        const expectedToday = new Intl.DateTimeFormat('es-ES', {
+            weekday: 'long',
+            timeZone: 'Europe/Madrid',
+        }).format(new Date()).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const expectedProgress = Object.hasOwn({ lunes: 2, martes: 4 }, expectedToday)
+            ? { [expectedToday]: { total: { lunes: 2, martes: 4 }[expectedToday], delivered: 0, percentage: 0 } }
+            : {};
         expect(res.body).toEqual({
             week: { lunes: 2, martes: 4 },
-            todayName: 'martes',
+            todayName: expectedToday,
             role: 'jefe',
             totalUniqueClients: 6,
-            weekProgress: { martes: { total: 4, delivered: 0, percentage: 0 } },
+            weekProgress: expectedProgress,
         });
         expect(laclae.getWeekCountsFromCache).toHaveBeenCalledWith('101', 'jefe', false);
     });

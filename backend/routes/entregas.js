@@ -65,8 +65,8 @@ function parseRepartidorSelector(value, { single = false } = {}) {
 }
 
 function actorRepartidorCodes(user) {
-    return [...new Set((Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
-        .map(canonicalRepartidorCode).filter(Boolean))];
+    const declaredCodes = Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : (normalizeCode(user?.role).toUpperCase() === 'REPARTIDOR' ? [user?.code] : []);
+    return [...new Set((declaredCodes).map(canonicalRepartidorCode).filter(Boolean))];
 }
 
 function canAccessRepartidor(req, repartidorId) {
@@ -102,7 +102,7 @@ function requireConcreteAlbaranOwner(req, res) {
         res.status(403).json({ success: false, code: 'REPARTO_MODE_REQUIRED', error: 'Activa el Perfil Reparto para consultar entregas' });
         return { allowed: false, hintedOwner: null };
     }
-    const selected = parseRepartidorSelector(req.query?.repartidorId, { single: true });
+    const selected = parseRepartidorSelector(req.query?.repartidorId, { single: true }) || (role === 'REPARTIDOR' ? parseRepartidorSelector(req.user?.code, { single: true }) : null);
     if (!selected) {
         res.status(422).json({ success: false, code: 'REPARTIDOR_ID_REQUIRED', error: 'Selecciona un unico repartidor concreto' });
         return { allowed: false, hintedOwner: null };
