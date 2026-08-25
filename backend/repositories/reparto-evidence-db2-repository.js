@@ -176,9 +176,11 @@ async function readBlobViaHex(connection, table, evidenceId, expectedBytes, sign
     throw new RepartoEvidenceRepositoryError('DB2 devolvió contenido de evidencia inválido');
   }
   const plan = hexChunkPlan(size);
-  const values = plan.map(() => '(?, ?, ?)').join(', ');
-  const params = plan.flatMap(({ ordinal, offset, length }) => [ordinal, offset, length]);
-  params.push(evidenceId);
+  // Db2 for IBM i rejects parameter markers inside VALUES table constructors
+  // (SQLSTATE HY000 / native -584). The plan contains only validated integers;
+  // the evidence identifier remains a bound parameter.
+  const values = plan.map((chunk) => '(' + chunk.ordinal + ', ' + chunk.offset + ', ' + chunk.length + ')').join(', ');
+  const params = [evidenceId];
   // ODBC cannot reliably materialize DB2 BLOB columns directly. Keep each
   // HEX fragment below the driver character limit, but fetch all fragments
   // in one ordered, set-based query rather than one round trip per chunk.

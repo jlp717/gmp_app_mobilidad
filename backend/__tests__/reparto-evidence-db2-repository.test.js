@@ -54,11 +54,11 @@ function fakeConnection({
       }
       if (sql.includes('WHERE EVIDENCE_ID IN (')) return ownershipRows || [];
       if (sql.includes('HEX(SUBSTR(E.CONTENT_BLOB')) {
-        const valuesParams = params.slice(0, -1);
-        const plan = [];
-        for (let index = 0; index < valuesParams.length; index += 3) {
-          plan.push({ ordinal: valuesParams[index], offset: valuesParams[index + 1], length: valuesParams[index + 2] });
-        }
+        const plan = [...sql.matchAll(/\((\d+),\s*(\d+),\s*(\d+)\)/g)].map((match) => ({
+          ordinal: Number(match[1]),
+          offset: Number(match[2]),
+          length: Number(match[3]),
+        }));
         if (hexRow) return plan.map(({ ordinal }) => ({ ORDINAL: ordinal, ...hexRow }));
         return Buffer.isBuffer(linkedRow?.CONTENT_BLOB)
           ? plan.map(({ ordinal, offset, length }) => ({
@@ -342,7 +342,8 @@ describe('DB2 reparto evidence repository', () => {
     expect(blobReads).toHaveLength(1);
     expect(blobReads[0].sql).toContain('WITH CHUNKS (ORDINAL, BYTE_OFFSET, BYTE_LENGTH) AS (VALUES');
     expect(blobReads[0].sql).toContain('ORDER BY C.ORDINAL');
-    expect(blobReads[0].params).toHaveLength((Math.ceil(signature.length / 16000) * 3) + 1);
+    expect(blobReads[0].sql).not.toMatch(/VALUES[^S]*\?/);
+    expect(blobReads[0].params).toEqual([item.evidenceId]);
   });
 
   test('rejects incomplete or malformed set-based BLOB fragments', async () => {
