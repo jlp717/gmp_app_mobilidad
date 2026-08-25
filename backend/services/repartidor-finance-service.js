@@ -1032,8 +1032,9 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   }
 
   const dateYmd = compactDate(date);
+  const isolatedTestBalances = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
 
-  const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows] =
+  const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows, closedRows] =
     await Promise.all([
       financeRepo.selectDailyTotals({ info, ids, dateYmd }),
       financeRepo.selectBalanceSum({ info, ids }),
@@ -1041,11 +1042,15 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       financeRepo.selectDailyStructuredSums({ ids, dateYmd }),
       financeRepo.selectDeliveredAmount({ ids, fromYmd: dateYmd, toYmd: dateYmd }),
       financeRepo.selectDailyErpDebt({ ids, dateYmd }),
+      isolatedTestBalances && ids.length === 1 && typeof financeRepo.selectClosedLiquidacion === 'function'
+        ? financeRepo.selectClosedLiquidacion({ info, ids, dateYmd })
+        : Promise.resolve([]),
     ]);
 
   const totals = firstRow(totalsRows);
+  const closedRow = firstRow(closedRows);
+  const isClosed = Boolean(closedRow && Object.keys(closedRow).length > 0);
   let saldoActual = 0;
-  const isolatedTestBalances = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
   if (isolatedTestBalances) {
     // TEST liquidations serialize the day against TEST_REPARTIDOR_FINANCIAL_BALANCES.
     // DSEDAC.LQD is an ERP read model and may contain a different production
@@ -1069,24 +1074,56 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
     }
   }
-  const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
-  const gastos = roundMoney(structured.gastos);
-  const ingresoBanco = roundMoney(structured.ingresoBanco);
-  const entregado = roundMoney(value(firstRow(deliveredRows), 'TOTAL_REPARTIDO', 0));
+  let totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
+  let gastos = roundMoney(structured.gastos);
+  let ingresoBanco = roundMoney(structured.ingresoBanco);
+  let entregado = roundMoney(value(firstRow(deliveredRows), 'TOTAL_REPARTIDO', 0));
   const deudaPendiente = roundMoney(value(firstRow(debtRows), 'DEUDA_PENDIENTE', 0));
 
-  const totalEfectivo = roundMoney(value(totals, 'TOTAL_EFECTIVO'));
-  const totalCheques = roundMoney(value(totals, 'TOTAL_CHEQUES'));
-  const totalTarjeta = roundMoney(value(totals, 'TOTAL_TARJETA'));
-  const totalPostdatados = roundMoney(value(totals, 'TOTAL_POSTDATADOS'));
-  const ajustes = roundMoney(structured.ajustes);
-  const totalAIngresar = cashToDeposit({
+  let totalEfectivo = roundMoney(value(totals, 'TOTAL_EFECTIVO'));
+  let totalCheques = roundMoney(value(totals, 'TOTAL_CHEQUES'));
+  let totalTarjeta = roundMoney(value(totals, 'TOTAL_TARJETA'));
+  let totalPostdatados = roundMoney(value(totals, 'TOTAL_POSTDATADOS'));
+  let ajustes = roundMoney(structured.ajustes);
+  let totalAIngresar = cashToDeposit({
     totalEfectivo,
     saldoActual,
     gastos,
     ajustes,
   });
   const cobrosCount = toInt(value(totals, 'COBROS_COUNT'));
+  if (isClosed) {
+    let closedAdjustments = 0;
+    try {
+      const rawSnapshot = value(closedRow, 'SNAPSHOT_JSON');
+      const snapshot = typeof rawSnapshot === 'string'
+        ? JSON.parse(rawSnapshot)
+        : rawSnapshot;
+      closedAdjustments = roundMoney(snapshot?.breakdown?.adjustments);
+    } catch (_) {
+      // The persisted numeric columns remain authoritative if the snapshot
+      // cannot be decoded for a legacy closed row.
+    }
+    saldoActual = roundMoney(value(closedRow, 'IMPORTESALDOACTUAL', saldoActual));
+    totalEfectivo = roundMoney(value(closedRow, 'IMPORTEEFECTIVO', totalEfectivo));
+    totalCheques = roundMoney(value(closedRow, 'IMPORTECHEQUES', totalCheques));
+    totalTarjeta = roundMoney(value(closedRow, 'IMPORTETARJETA', totalTarjeta));
+    totalPostdatados = roundMoney(value(closedRow, 'IMPORTEPOSTDATADOS', totalPostdatados));
+    totalCobrosDia = roundMoney(value(
+      closedRow,
+      'TOTAL_COBROS_DIA',
+      totalEfectivo + totalCheques + totalTarjeta + totalPostdatados,
+    ));
+    gastos = roundMoney(value(closedRow, 'IMPORTEGASTOS', gastos));
+    ingresoBanco = roundMoney(value(closedRow, 'IMPORTEINGRESOENBANCO', ingresoBanco));
+    entregado = roundMoney(value(closedRow, 'IMPORTEENTREGADO2', entregado));
+    ajustes = closedAdjustments;
+    totalAIngresar = roundMoney(value(
+      closedRow,
+      'IMPORTETOTALAINGRESAR',
+      cashToDeposit({ totalEfectivo, saldoActual, gastos, ajustes }),
+    ));
+  }
 
   // camelCase = contrato Flutter actual; UPPER = alias legacy APK/parsers.
   const summary = {
@@ -1116,6 +1153,7 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
     TOTAL_REPARTIDO: entregado,
     DEUDA_PENDIENTE: deudaPendiente,
     COBROS_COUNT: cobrosCount,
+    status: isClosed ? 'CLOSED' : 'OPEN',
   };
 
   return {

@@ -704,6 +704,27 @@ function createRepartoFinanceDb2Repository(options = {}) {
       });
     },
 
+    async selectClosedLiquidacion({ info, ids, dateYmd }) {
+      const year = Math.trunc(dateYmd / 10000);
+      const month = Math.trunc((dateYmd % 10000) / 100);
+      const day = dateYmd % 100;
+      const ownerFilter = inClause(`TRIM(${liquidacionCodeColumn(info, 'OPS')})`, ids);
+      const statusFilter = info.has('REPARTIDOR_LIQUIDACION_OPS', 'STATUS')
+        ? "AND OPS.STATUS = 'CLOSED'"
+        : '';
+      return run(`
+    SELECT OPS.*
+      FROM ${tables.liquidationOps} OPS
+     WHERE ${ownerFilter.sql}
+       AND OPS.DIALIQUIDACION = ?
+       AND OPS.MESLIQUIDACION = ?
+       AND OPS.ANOLIQUIDACION = ?
+       ${statusFilter}
+     ORDER BY OPS.ID DESC
+     FETCH FIRST 1 ROW ONLY
+  `, [...ownerFilter.params, day, month, year]);
+    },
+
     async seedIsolatedTestFinanceFromProduction({ info, ids, dateYmd, force = false } = {}) {
       // Population belongs exclusively to copy-javier-prod-to-test.js and an
       // explicit operator --apply. Runtime reads, including GET handlers, must
