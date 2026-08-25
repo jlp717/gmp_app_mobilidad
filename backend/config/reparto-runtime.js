@@ -1,6 +1,8 @@
 'use strict';
 
 const ALLOWED_ENVIRONMENTS = new Set(['test', 'staging', 'production']);
+
+const { G4_DSEDAC_ERP_MAPPING } = require('./g4-dsedac-erp-mapping');
 const ALLOWED_SCHEMAS = new Set(['DSEDAC', 'JAVIER', 'TESTMOVIL']);
 const ALLOWED_TABLE_SETS = new Set(['isolated_test', 'production', 'testmovil']);
 const SAFE_DSN_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -49,7 +51,7 @@ const TABLE_MAPPINGS = Object.freeze({
       commissionTiers: 'JAVIER.REPARTIDOR_COMMISSION_TIERS',
       balances: 'JAVIER.REPARTIDOR_FINANCIAL_BALANCES',
       liquidationEmails: 'JAVIER.REPARTIDOR_LIQUIDACION_EMAILS',
-      liquidationOps: 'JAVIER.LQD',
+      liquidationOps: 'JAVIER.REPARTIDOR_LIQUIDACION_OPS',
       expenses: 'JAVIER.REPARTIDOR_LIQUIDACION_GASTOS',
       adjustments: 'JAVIER.REPARTIDOR_LIQUIDACION_AJUSTES',
       bankDeposits: 'JAVIER.REPARTIDOR_LIQUIDACION_INGRESOS',
@@ -96,19 +98,6 @@ const TABLE_MAPPINGS = Object.freeze({
       deliveryStatus: 'TESTMOVIL.LIQDIACUE',
     }),
   }),
-});
-
-// D-G4-2 (2026-08-23): founder cancelled TESTMOVIL. Long names LIQUIDIARI/VENDEDORES/LIQDIACUE
-// do not exist in DSEDAC. Catalog (DSN=GMP): DSEDAC.LQD, DSEDAC.VDD (no SALDOACTUAL), no LIQDIACUE.
-const G4_DSEDAC_ERP_MAPPING = Object.freeze({
-  tableSet: 'production',
-  testmovil: 'ANULADO',
-  deudaRead: 'DSEDAC.LQD.IMPORTESALDOACTUAL',
-  closeWrite: 'JAVIER.LQD',
-  vendedores: 'DSEDAC.VDD',
-  vendedoresSaldoColumn: null,
-  formLines: 'DSEDAC.LQDL1',
-  liqdiacue: null,
 });
 
 const FINANCE_TABLE_KEYS = Object.freeze([

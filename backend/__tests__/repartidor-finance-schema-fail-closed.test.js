@@ -194,8 +194,11 @@ describe('repartidor finance destructive cleanup is retired', () => {
   });
 
   test('canonical finance runtime has no LQD mapping or DSEDAC LQD dependency', () => {
-    expect(source).not.toMatch(/(?:FINANCE_TABLES\.)?lqd\b|DSEDAC\.LQD/i);
-    expect(runtimeSource).not.toMatch(/(?:lqd\s*:|TEST_LQD|DSEDAC\.LQD)/i);
+    // Contrato: cero mapeos/escrituras LQD. Lecturas shadow del read-model ERP
+    // (selectLastLqdSaldo, comentarios D-G4-2) si son legitimas.
+    expect(source).not.toMatch(/FINANCE_TABLES\.\s*lqd\b|lqd\s*[:,]/i);
+    expect(source).not.toMatch(/(?:DELETE|UPDATE|INSERT\s+INTO|MERGE)\s+[^\n;]*\bLQD\b/i);
+    expect(runtimeSource).not.toMatch(/lqd\s*:|TEST_LQD|DSEDAC\.LQD/i);
   });
 
   test.each(['test', 'production'])('%s cleanup fails closed before every query or connection', async (environment) => {

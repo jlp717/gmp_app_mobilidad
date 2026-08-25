@@ -219,7 +219,7 @@ describe('central reparto runtime configuration', () => {
     const runtime = resolveRepartoRuntime(validProductionEnv());
 
     expect(runtime.valid).toBe(true);
-    expect(runtime.tables.finance.liquidationOps).toBe('JAVIER.LQD');
+    expect(runtime.tables.finance.liquidationOps).toBe('JAVIER.REPARTIDOR_LIQUIDACION_OPS');
     expect(validateFinanceTableMapping(runtime)).toEqual({ valid: true, errors: [] });
 
   });

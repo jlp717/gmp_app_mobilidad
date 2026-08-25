@@ -54,19 +54,16 @@ const REPARTO_BOOLEAN_FLAGS = Object.freeze([
     'REPARTO_PRODUCTION_CONFIRMATION_APPROVED',
     'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED',
 ]);
-
-// Perfil operativo gmp-api (decision Javier 2026-08-24): leer SIEMPRE ERP
-// produccion (DSEDAC) y escribir TODO en buffers isolated_test (JAVIER.TEST_*).
-// Solo las escrituras estan activas por defecto; los approvals de produccion
-// real siguen en false. Para ir a produccion 100% definir en .env/shell:
-//   REPARTO_ENVIRONMENT=production + REPARTO_TABLE_SET=production
-//   + REPARTO_PRODUCTION_WRITES_APPROVED=true (+ ERP/confirmation)
+// Contrato fail-closed (tests ecosystem-reparto-fail-closed + reparto-runtime-production):
+// el baseline PM2 es produccion con TODOS los approvals en false. Cualquier
+// perfil staging/isolated_test se define explicitamente en el fichero de
+// entorno del backend o en shell ANTES del recycle (REPARTO_ENVIRONMENT,
+// REPARTO_TABLE_SET, approvals en true solo tras gates humanos: staging+QA+
+// AppSec+SRE+Javier). Valores invalidos se preservan para que
+// resolveRepartoRuntime rechace el arranque.
 function explicitRepartoBoolean(name) {
-    const defaultTrue = name === 'REPARTO_WRITES_ENABLED'
-        || name === 'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED'
-        || name === 'REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED';
     const value = process.env[name];
-    if (value === undefined || value === '') return defaultTrue ? 'true' : 'false';
+    if (value === undefined || value === '') return 'false';
     const normalized = String(value).trim().toLowerCase();
     // Preserve invalid explicit values so resolveRepartoRuntime rejects the
     // process at startup instead of silently changing an approval decision.
@@ -87,8 +84,8 @@ const repartoConfiguredBooleans = Object.freeze(
 // applied when those values are already present in the PM2/shell environment
 // (sourced from backend/.env) before an env-updating process recycle.
 const repartoFailClosedEnv = Object.freeze({
-    REPARTO_ENVIRONMENT: explicitRepartoValue('REPARTO_ENVIRONMENT', 'staging'),
-    REPARTO_TABLE_SET: explicitRepartoValue('REPARTO_TABLE_SET', 'isolated_test'),
+    REPARTO_ENVIRONMENT: explicitRepartoValue('REPARTO_ENVIRONMENT', 'production'),
+    REPARTO_TABLE_SET: explicitRepartoValue('REPARTO_TABLE_SET', 'production'),
     REPARTO_EVIDENCE_PENDING_TTL_HOURS: explicitRepartoValue('REPARTO_EVIDENCE_PENDING_TTL_HOURS', '24'),
     ...repartoConfiguredBooleans,
     REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',

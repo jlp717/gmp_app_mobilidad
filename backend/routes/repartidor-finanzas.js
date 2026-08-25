@@ -6,6 +6,11 @@ const { z } = require('zod');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const financeService = require('../services/repartidor-finance-service');
+const {
+  dailySummaryController,
+  vencimientosController,
+  commissionsSummaryController,
+} = require('../src/controllers/repartidorFinanzas.controller');
 const repartoVarianceNotificationService = require('../services/reparto-variance-notification-service');
 const {
   processLiquidacionOutboxIntent,
@@ -652,19 +657,7 @@ async function invalidateFinanceCaches(repartidorId) {
   }
 }
 
-router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
-  try {
-    const params = listParamsSchema.parse(req.params);
-    const query = dailySummaryQuerySchema.parse(req.query);
-    const result = await financeService.getDailySummary({
-      repartidorId: params.repartidorId,
-      date: query.date,
-    });
-    return res.json({ success: true, ...result, canReverseCobros: false });
-  } catch (error) {
-    return sendError(res, error, { action: 'GET /daily-summary', params: req.params, query: req.query });
-  }
-});
+router.get('/daily-summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), (req, res, next) => dailySummaryController(req, res, next));
 
 router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
   try {
@@ -681,37 +674,7 @@ router.get('/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelect
   }
 });
 
-router.get('/vencimientos/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
-  try {
-    const params = listParamsSchema.parse(req.params);
-    assertExplicitRepartidorSelector(params.repartidorId);
-    const query = vencimientosQuerySchema.parse(req.query);
-    const page = await financeService.getVencimientos({
-      repartidorId: params.repartidorId,
-      from: query.from,
-      to: query.to,
-      limit: query.limit,
-      cursor: query.cursor,
-      clientCode: query.clientCode,
-      search: query.search,
-      estado: query.estado,
-    });
-    return res.json({
-      success: true,
-      repartidorId: params.repartidorId,
-      range: { from: query.from, to: query.to, limit: query.limit, search: query.search ?? null },
-      vencimientos: page.items,
-      pagination: {
-        total: page.total,
-        limit: query.limit,
-        hasMore: page.hasMore,
-        nextCursor: page.nextCursor,
-      },
-    });
-  } catch (error) {
-    return sendError(res, error, { action: 'GET /vencimientos', params: req.params, query: req.query });
-  }
-});
+router.get('/vencimientos/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), (req, res, next) => vencimientosController(req, res, next));
 
 router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.codigoRepartidor), async (req, res) => {
   try {
@@ -1486,21 +1449,7 @@ router.put('/commissions/tiers', verifyToken, requireFinanceManagementRole, asyn
   }
 });
 
-router.get('/commissions/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), async (req, res) => {
-  try {
-    const params = listParamsSchema.parse(req.params);
-    assertExplicitRepartidorSelector(params.repartidorId);
-    const query = rangeQuerySchema.parse(req.query);
-    const summary = await financeService.getCommissionSummary({
-      repartidorId: params.repartidorId,
-      from: query.from,
-      to: query.to,
-    });
-    return res.json({ success: true, ...summary });
-  } catch (error) {
-    return sendError(res, error, { action: 'GET /commissions/summary', params: req.params, query: req.query });
-  }
-});
+router.get('/commissions/summary/:repartidorId', verifyToken, requireFinanceRepartidorSelector, requireRepartidorAccess((req) => req.params.repartidorId, { allowMultiple: true }), (req, res, next) => commissionsSummaryController(req, res, next));
 
 router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireFinanceManagementRole, async (req, res) => {
   try {
