@@ -1,0 +1,49 @@
+config/db.js(21,12): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(38,11): error TS2339: Property 'code' does not exist on type 'Error'.
+config/db.js(39,11): error TS2339: Property 'statusCode' does not exist on type 'Error'.
+config/db.js(105,23): error TS2339: Property 'code' does not exist on type 'Error'.
+config/db.js(146,15): error TS2339: Property 'code' does not exist on type 'Error'.
+config/db.js(147,15): error TS2339: Property 'statusCode' does not exist on type 'Error'.
+config/db.js(155,20): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(167,20): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(209,24): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(211,24): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(230,24): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(253,32): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(345,16): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(367,11): error TS2339: Property 'code' does not exist on type 'Error'.
+config/db.js(368,11): error TS2339: Property 'fatalConnection' does not exist on type 'Error'.
+config/db.js(426,16): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(428,16): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(442,20): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(444,20): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(465,20): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(470,20): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(488,15): error TS2339: Property 'code' does not exist on type 'Error'.
+config/db.js(489,15): error TS2339: Property 'statusCode' does not exist on type 'Error'.
+config/db.js(512,16): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(528,16): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(533,16): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(657,16): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(663,16): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(676,20): error TS2339: Property 'debug' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(695,16): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(756,24): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(776,24): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(778,24): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(781,24): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(842,24): error TS2339: Property 'info' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(864,24): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(866,24): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/db.js(869,24): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+config/reparto-runtime.js(551,46): error TS2550: Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+repositories/reparto-finance-db2-repository.js(529,50): error TS2554: Expected 0-1 arguments, but got 2.
+repositories/reparto-finance-db2-repository.js(579,50): error TS2554: Expected 0-1 arguments, but got 2.
+repositories/reparto-finance-db2-repository.js(652,50): error TS2554: Expected 0-1 arguments, but got 2.
+repositories/reparto-finance-db2-repository.js(708,51): error TS2339: Property 'info' does not exist on type '{ force?: boolean; }'.
+repositories/reparto-finance-db2-repository.js(708,57): error TS2339: Property 'ids' does not exist on type '{ force?: boolean; }'.
+repositories/reparto-finance-db2-repository.js(708,62): error TS2339: Property 'dateYmd' does not exist on type '{ force?: boolean; }'.
+repositories/reparto-finance-db2-repository.js(715,50): error TS2554: Expected 0-1 arguments, but got 2.
+repositories/reparto-finance-db2-repository.js(912,16): error TS2339: Property 'warn' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.
+repositories/reparto-finance-db2-repository.js(918,50): error TS2554: Expected 0-1 arguments, but got 2.
+src/core/infrastructure/database/db2-connection-pool.js(63,16): error TS2339: Property 'error' does not exist on type 'typeof import("C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/middleware/logger")'.

@@ -1,0 +1,1555 @@
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 820 files tracked by git with 1074 Code rules:
+                                                                                                                        
+  Language      Rules   Files          Origin      Rules                                                                
+ ─────────────────────────────        ───────────────────                                                               
+  <multilang>      47     820          Community    1074                                                                
+  js              153     611                                                                                           
+  ts              163      89                                                                                           
+  bash              4      19                                                                                           
+  json              4      16                                                                                           
+  python          243       2                                                                                           
+  dockerfile        6       2                                                                                           
+  yaml             35       1                                                                                           
+                                                                                                                        
+Warning: 1 timeout error(s) in backend\routes\commissions.js when running the following rules:
+[javascript.express.security.audit.express-ssrf.express-ssrf]
+Warning: 2 timeout error(s) in backend\routes\objectives.js when running the following rules:
+[javascript.browser.security.raw-html-concat.raw-html-concat, javascript.express.security.audit.express-ssrf.express-
+ssrf]
+Warning: 1 timeout error(s) in backend\routes\repartidor.js when running the following rules:
+[javascript.express.security.audit.express-ssrf.express-ssrf]
+Warning: 3 timeout error(s) in backend\services\pedidos.service.js when running the following rules:
+[javascript.express.security.audit.express-ssrf.express-ssrf, javascript.lang.security.audit.path-traversal.path-join-
+resolve-traversal.path-join-resolve-traversal, typescript.react.security.audit.react-unsanitized-method.react-
+unsanitized-method]
+Semgrep stopped running rules on backend\services\pedidos.service.js after 3 timeout error(s). See `--timeout-threshold`
+for more info.
+Warning: 3 timeout error(s) in backend\src\shared\routes\ddd-adapters.js when running the following rules:
+[javascript.aws-lambda.security.tainted-html-string.tainted-html-string, javascript.express.security.audit.express-
+ssrf.express-ssrf, javascript.express.security.audit.xss.direct-response-write.direct-response-write]
+Semgrep stopped running rules on backend\src\shared\routes\ddd-adapters.js after 3 timeout error(s). See `--timeout-
+threshold` for more info.
+                     
+                     
+┌───────────────────┐
+│ 172 Code Findings │
+└───────────────────┘
+                                                 
+    backend\__tests__\auth-warehouse-mode.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           44┆ const app = express();
+            ⋮┆----------------------------------------
+           64┆ const app = express();
+                                  
+    backend\__tests__\auth.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          128┆ app = express();
+                                                   
+    backend\__tests__\bolsa_route_contracts.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           43┆ const app = express();
+                                                     
+    backend\__tests__\chatbot_route_contracts.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           30┆ const app = express();
+                                                     
+    backend\__tests__\clients_route_contracts.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           44┆ const app = express();
+                                           
+    backend\__tests__\cobros-legacy.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           35┆ const app = express();
+                                                    
+    backend\__tests__\cobros_route_contracts.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           40┆ const app = express();
+                                                         
+    backend\__tests__\commission-payment-settotal.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           97┆ const app = express();
+                                                 
+    backend\__tests__\ddd-auth-repartidor.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           76┆ const instance = express();
+            ⋮┆----------------------------------------
+           82┆ const instance = express();
+                                                 
+    backend\__tests__\ddd_route_contracts.test.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `maxLen` function argument, this might allow an attacker to cause a Regular  
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+            9┆ const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`,
+               'i').test(String(sql || ''));                                             
+   
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          131┆ const app = express();
+                                                      
+    backend\__tests__\demo-regression-hotfixes.test.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `maxLen` function argument, this might allow an attacker to cause a Regular  
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+           16┆ const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`,
+               'i').test(String(sql || ''));                                             
+   
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           64┆ const app = express();
+                                                    
+    backend\__tests__\entregas-bola-security.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           34┆ const value = express();
+                                                         
+    backend\__tests__\entregas-contract-hardening.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           40┆ const instance = express();
+                                                  
+    backend\__tests__\entregas-email-route.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           87┆ const app = express();
+                                                         
+    backend\__tests__\entregas-route-gap-coverage.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           44┆ const instance = express();
+                                                      
+    backend\__tests__\entregas-upload-security.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           96┆ const app = express();
+                                               
+    backend\__tests__\evolution.service.test.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `maxLen` function argument, this might allow an attacker to cause a Regular  
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+           10┆ const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`,
+               'i').test(String(sql || ''));                                             
+                                                  
+    backend\__tests__\facturas-email-route.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           55┆ const app = express();
+                                                 
+    backend\__tests__\kpi-dashboard-route.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           69┆ const app = express();
+                                                     
+    backend\__tests__\metrics-health-security.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          102┆ const app = express();
+                                                            
+    backend\__tests__\pedidos-db2-22001-param-length.test.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `maxLen` function argument, this might allow an attacker to cause a Regular  
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+           24┆ const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`,
+               'i').test(String(sql || ''));                                             
+   
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          108┆ const app = express();
+            ⋮┆----------------------------------------
+          116┆ const app = express();
+                                               
+    backend\__tests__\pedidos_contracts.test.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `maxLen` function argument, this might allow an attacker to cause a Regular  
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+            6┆ const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`,
+               'i').test(String(sql || ''));                                             
+   
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          1030┆ const app = express();
+            ⋮┆----------------------------------------
+          1094┆ const app = express();
+            ⋮┆----------------------------------------
+          1222┆ const app = express();
+                                                 
+    backend\__tests__\pedidos_idempotency.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          388┆ const app = express();
+                                                           
+    backend\__tests__\pedidos_stock_route_contracts.test.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `maxLen` function argument, this might allow an attacker to cause a Regular  
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+            9┆ const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`,
+               'i').test(String(sql || ''));                                             
+   
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           56┆ const app = express();
+                                                   
+    backend\__tests__\planner-authorization.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           66┆ const app = express();
+                                                
+    backend\__tests__\planner-rutero-day.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           59┆ const app = express();
+                                                         
+    backend\__tests__\planner-rutero-gap-coverage.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           66┆ const app = express();
+                                                      
+    backend\__tests__\products_route_contracts.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           20┆ const app = express();
+                                                    
+    backend\__tests__\query-optimizer-compat.test.js
+    ❯❱ javascript.lang.security.audit.incomplete-sanitization.incomplete-sanitization
+          ❰❰ Blocking ❱❱
+          `invalidationPattern.replace` method will only replace the first occurrence when used with a string
+          argument ('*'). If this method is used for escaping of dangerous data then there is a possibility  
+          for a bypass. Try to use sanitization library instead or use a Regex with a global flag.           
+          Details: https://sg.run/1GbQ                                                                       
+                                                                                                             
+          169┆ expect(cachedKey.startsWith(invalidationPattern.replace('*', ''))).toBe(true);
+                                                                   
+    backend\__tests__\repartidor-finanzas-http-gap-coverage.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           49┆ const instance = express();
+                                                 
+    backend\__tests__\repartidor-finanzas.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           69┆ const app = express();
+                                                                  
+    backend\__tests__\repartidor-history-finance-hardening.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           61┆ const instance = express();
+                                                             
+    backend\__tests__\repartidor-legacy-read-security.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          130┆ const app = express();
+                                                              
+    backend\__tests__\repartidor-liquidacion-pdf-route.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           20┆ const value = express();
+                                                          
+    backend\__tests__\repartidor-liquidacion-route.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           33┆ const app = express();
+                                                          
+    backend\__tests__\repartidor-objectives-detail.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           79┆ const app = express();
+                                                     
+    backend\__tests__\repartidor-route-params.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           74┆ const app = express();
+            ⋮┆----------------------------------------
+           81┆ const app = express();
+                                                     
+    backend\__tests__\repartidor-rutero-orden.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           75┆ const app = express();
+                                                          
+    backend\__tests__\repartidor-week-gap-coverage.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           53┆ const app = express();
+                                                          
+    backend\__tests__\reparto-canonical-route-auth.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           19┆ const value = express();
+                                                                 
+    backend\__tests__\reparto-canonical-route-integration.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           24┆ const value = express();
+                                                           
+    backend\__tests__\reparto-confirmacion-contract.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           89┆ const app = express();
+                                                             
+    backend\__tests__\reparto-confirmacion-validation.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           39┆ const app = express();
+                                                    
+    backend\__tests__\reparto-evidence-route.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           24┆ const value = express();
+                                                                 
+    backend\__tests__\reparto-finance-fleet-authorization.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           29┆ const instance = express();
+                                                         
+    backend\__tests__\reparto-finance-security-v3.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           47┆ const value = express();
+                                                         
+    backend\__tests__\reparto-isolated-ddl-runner.test.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           12┆ return fs.readFileSync(path.join(sqlDirectory, entry.file), 'utf8');
+                                                         
+    backend\__tests__\reparto-phase-a-data-status.test.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+            7┆ const read = (relative) => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
+                                                        
+    backend\__tests__\reparto-receipt-route-http.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           25┆ function app() { const value = express(); value.use(express.json()); value.use('/finanzas',
+               routes); return value; }                                                                   
+            ⋮┆----------------------------------------
+           26┆ function productionMountedApp() { const value = express(); value.use(networkOptimizer);    
+               value.use(responseCoalescing); value.use('/api/repartidor-finanzas', routes); return value;
+               }                                                                                          
+                                                          
+    backend\__tests__\reparto-route-error-security.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           27┆ const value = express();
+                                                  
+    backend\__tests__\reparto-route-mounts.test.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+           29┆ const preflightApp = express();
+                                        
+    backend\app\services\emailService.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
+          ❰❰ Blocking ❱❱
+          Checks for setting the environment variable NODE_TLS_REJECT_UNAUTHORIZED to 0, which disables TLS   
+          verification. This should only be used for debugging purposes. Setting the option rejectUnauthorized
+          to false bypasses verification against the list of trusted CAs, which also leads to insecure        
+          transport. These options lead to vulnerability to MTM attacks, and should not be used.              
+          Details: https://sg.run/9oxr                                                                        
+                                                                                                              
+           22┆ tls: {
+           23┆     rejectUnauthorized: false
+           24┆ },
+                              
+    backend\config\load-env.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           30┆ : path.resolve(baseDir, envFile);
+                                  
+    backend\kpi\docker-compose.yml
+    ❯❱ yaml.docker-compose.security.no-new-privileges.no-new-privileges
+          ❰❰ Blocking ❱❱
+          Service 'postgres' allows for privilege escalation via setuid or setgid binaries. Add 'no-new-
+          privileges:true' in 'security_opt' to prevent this.                                           
+          Details: https://sg.run/0n8q                                                                  
+                                                                                                        
+            5┆ postgres:
+   
+    ❯❱ yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service
+          ❰❰ Blocking ❱❱
+          Service 'postgres' is running with a writable root filesystem. This may allow malicious applications
+          to download and run additional payloads, or modify container files. If an application inside a      
+          container has to save something temporarily consider using a tmpfs. Add 'read_only: true' to this   
+          service to prevent this.                                                                            
+          Details: https://sg.run/e4JE                                                                        
+                                                                                                              
+            5┆ postgres:
+   
+    ❯❱ yaml.docker-compose.security.no-new-privileges.no-new-privileges
+          ❰❰ Blocking ❱❱
+          Service 'redis' allows for privilege escalation via setuid or setgid binaries. Add 'no-new-
+          privileges:true' in 'security_opt' to prevent this.                                        
+          Details: https://sg.run/0n8q                                                               
+                                                                                                     
+           23┆ redis:
+   
+    ❯❱ yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service
+          ❰❰ Blocking ❱❱
+          Service 'redis' is running with a writable root filesystem. This may allow malicious applications to
+          download and run additional payloads, or modify container files. If an application inside a         
+          container has to save something temporarily consider using a tmpfs. Add 'read_only: true' to this   
+          service to prevent this.                                                                            
+          Details: https://sg.run/e4JE                                                                        
+                                                                                                              
+           23┆ redis:
+                                     
+    backend\kpi\migrations\migrate.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
+          ❰❰ Blocking ❱❱
+          Checks for setting the environment variable NODE_TLS_REJECT_UNAUTHORIZED to 0, which disables TLS   
+          verification. This should only be used for debugging purposes. Setting the option rejectUnauthorized
+          to false bypasses verification against the list of trusted CAs, which also leads to insecure        
+          transport. These options lead to vulnerability to MTM attacks, and should not be used.              
+          Details: https://sg.run/9oxr                                                                        
+                                                                                                              
+           10┆ ssl: process.env.KPI_DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+                                              
+    backend\kpi\services\email_notification.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
+          ❰❰ Blocking ❱❱
+          Checks for setting the environment variable NODE_TLS_REJECT_UNAUTHORIZED to 0, which disables TLS   
+          verification. This should only be used for debugging purposes. Setting the option rejectUnauthorized
+          to false bypasses verification against the list of trusted CAs, which also leads to insecure        
+          transport. These options lead to vulnerability to MTM attacks, and should not be used.              
+          Details: https://sg.run/9oxr                                                                        
+                                                                                                              
+           19┆ tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2' },
+                                            
+    backend\kpi\services\etl_orchestrator.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+          357┆ fs.unlinkSync(path.join(dirPath, file));
+            ⋮┆----------------------------------------
+          357┆ fs.unlinkSync(path.join(dirPath, file));
+                                       
+    backend\kpi\services\sftp_client.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           78┆ const localPath = path.join(downloadDir, expectedFile);
+            ⋮┆----------------------------------------
+          127┆ const localPath = path.join(localDir, expectedFile);
+                              
+    backend\routes\products.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+          367┆ const folder = path.join(IMAGES_BASE, code);
+            ⋮┆----------------------------------------
+          376┆ const resolved = path.resolve(path.join(baseDir, best));
+            ⋮┆----------------------------------------
+          390┆ try { return f.toUpperCase().startsWith('FOTO') && fs.statSync(path.join(folder,
+               f)).isDirectory(); }                                                            
+            ⋮┆----------------------------------------
+          390┆ try { return f.toUpperCase().startsWith('FOTO') && fs.statSync(path.join(folder,
+               f)).isDirectory(); }                                                            
+            ⋮┆----------------------------------------
+          394┆ const subFiles = fs.readdirSync(path.join(folder, fotosDir));
+            ⋮┆----------------------------------------
+          394┆ const subFiles = fs.readdirSync(path.join(folder, fotosDir));
+            ⋮┆----------------------------------------
+          399┆ if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, fotosDir));
+            ⋮┆----------------------------------------
+          399┆ if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, fotosDir));
+            ⋮┆----------------------------------------
+          404┆ try { return !f.toUpperCase().startsWith('FOTO') && fs.statSync(path.join(folder,
+               f)).isDirectory(); }                                                             
+            ⋮┆----------------------------------------
+          404┆ try { return !f.toUpperCase().startsWith('FOTO') && fs.statSync(path.join(folder,
+               f)).isDirectory(); }                                                             
+            ⋮┆----------------------------------------
+          409┆ const subFiles = fs.readdirSync(path.join(folder, dir));
+            ⋮┆----------------------------------------
+          409┆ const subFiles = fs.readdirSync(path.join(folder, dir));
+            ⋮┆----------------------------------------
+          411┆ if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, dir));
+            ⋮┆----------------------------------------
+          411┆ if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, dir));
+            ⋮┆----------------------------------------
+          421┆ const folder = path.join(IMAGES_BASE, code);
+            ⋮┆----------------------------------------
+          430┆ const full = path.join(folder, f);
+            ⋮┆----------------------------------------
+          430┆ const full = path.join(folder, f);
+            ⋮┆----------------------------------------
+          442┆ const subFiles = fs.readdirSync(path.join(folder, dir));
+            ⋮┆----------------------------------------
+          447┆ const resolved = path.resolve(path.join(folder, dir, best));
+            ⋮┆----------------------------------------
+          455┆ const full = path.join(folder, f);
+            ⋮┆----------------------------------------
+          455┆ const full = path.join(folder, f);
+            ⋮┆----------------------------------------
+          462┆ const resolved = path.resolve(path.join(folder, best));
+   
+    ❯❱ javascript.express.security.audit.express-res-sendfile.express-res-sendfile
+          ❰❰ Blocking ❱❱
+          The application processes user-input, this is passed to res.sendFile which can allow an attacker to
+          arbitrarily read files on the system through path traversal. It is recommended to perform input    
+          validation in addition to canonicalizing the path. This allows you to validate the path against the
+          intended directory it should be accessing.                                                         
+          Details: https://sg.run/7DJk                                                                       
+                                                                                                             
+          532┆ return res.sendFile(localPath);
+   
+    ❯❱ javascript.express.security.audit.xss.direct-response-write.direct-response-write
+          ❰❰ Blocking ❱❱
+          Detected directly writing to a Response object from user-defined input. This bypasses any HTML      
+          escaping and may expose your application to a Cross-Site-scripting (XSS) vulnerability. Instead, use
+          'resp.render()' to render safely escaped HTML.                                                      
+          Details: https://sg.run/vzGl                                                                        
+                                                                                                              
+          543┆ return res.send(result.data);
+   
+    ❯❱ javascript.express.security.audit.express-res-sendfile.express-res-sendfile
+          ❰❰ Blocking ❱❱
+          The application processes user-input, this is passed to res.sendFile which can allow an attacker to
+          arbitrarily read files on the system through path traversal. It is recommended to perform input    
+          validation in addition to canonicalizing the path. This allows you to validate the path against the
+          intended directory it should be accessing.                                                         
+          Details: https://sg.run/7DJk                                                                       
+                                                                                                             
+          565┆ return res.sendFile(localPath);
+                                   
+    backend\scripts\_login-probe.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+            5┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api/auth/login',
+               method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length':    
+               Buffer.byteLength(d) } }, (res) => {                                                
+            6┆   let b = '';
+            7┆   res.on('data', (c) => (b += c));
+            8┆   res.on('end', () => console.log(JSON.stringify({ status: res.statusCode, body:
+               JSON.parse(b) }, null, 2)));                                                    
+            9┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            5┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api/auth/login',
+               method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length':    
+               Buffer.byteLength(d) } }, (res) => {                                                
+                                             
+    backend\scripts\_repartidor-flag-probe.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           10┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+           11┆   let b = '';
+           12┆   res.on('data', (c) => (b += c));
+           13┆   res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(b || '{}') }));
+           14┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           10┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+                                        
+    backend\scripts\_server-gap-check.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           11┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+           12┆   let b = '';
+           13┆   res.on('data', (c) => (b += c));
+           14┆   res.on('end', () => {
+           15┆     let parsed = {};
+           16┆     try { parsed = JSON.parse(b || '{}'); } catch (_) { parsed = { raw: b }; }
+           17┆     resolve({ status: res.statusCode, body: parsed });
+           18┆   });
+           19┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           11┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+                                              
+    backend\scripts\audit-api-live-readonly.js
+     ❱ javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+          ❰❰ Blocking ❱❱
+          Detected string concatenation with a non-literal variable in a util.format / console.log function.
+          If an attacker injects a format specifier in the string, it will forge the log message. Try to use
+          constant values for the format string.                                                            
+          Details: https://sg.run/7Y5R                                                                      
+                                                                                                            
+           49┆ console.log(`[${pass ? 'PASS' : 'FAIL'}] ${name}`, detail ? JSON.stringify(detail).slice(0,
+               400) : '');                                                                                
+                                          
+    backend\scripts\benchmark-endpoints.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+          131┆ http.get(url, (res) => {
+                                         
+    backend\scripts\cert-mandate-probe.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           45┆ const req = http.request({ hostname: HOST, port: PORT, path: `/api${path}`, method, headers
+               }, (res) => {                                                                              
+                                        
+    backend\scripts\cert-matrix-audit.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           33┆ const req = http.request({ hostname: '127.0.0.1', port: PORT, path: `/api${bustPath}`,
+               method, headers }, (res) => {                                                         
+           34┆   let raw = '';
+           35┆   res.on('data', (c) => { raw += c; });
+           36┆   res.on('end', () => {
+           37┆     let parsed = {};
+           38┆     try { parsed = JSON.parse(raw || '{}'); } catch { parsed = { raw: raw.slice(0, 200) };
+               }                                                                                         
+           39┆     resolve({ status: res.statusCode, body: parsed, ms: Date.now() - t0 });
+           40┆   });
+           41┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           33┆ const req = http.request({ hostname: '127.0.0.1', port: PORT, path: `/api${bustPath}`,
+               method, headers }, (res) => {                                                         
+                                                    
+    backend\scripts\certify-reparto-confirm-local.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+          118┆ const req = http.request({
+                                                   
+    backend\scripts\commercial-readiness-battery.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           56┆ const req = http.request({ hostname: HOST, port: PORT, path: `/api${path}`, method, headers
+               }, (res) => {                                                                              
+                                                        
+    backend\scripts\generate-pedidos-schema-align-sql.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+          391┆ const absolutePath = path.resolve(sourceReportPath);
+            ⋮┆----------------------------------------
+          423┆ const jsonPath = path.join(OUTPUT_DIR, `pedidos-javier-dsedac-align-${stamp}.json`);
+            ⋮┆----------------------------------------
+          424┆ const sqlPath = path.join(OUTPUT_DIR, `pedidos-javier-dsedac-align-${stamp}.sql`);
+                                                      
+    backend\scripts\javier-pre-ds-functional-verify.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           23┆ const req = http.request({ hostname: '127.0.0.1', port: 3335, path: BASE + path, method,
+               headers }, (res) => {                                                                   
+           24┆   let raw = '';
+           25┆   res.on('data', (c) => (raw += c));
+           26┆   res.on('end', () => {
+           27┆     let parsed = raw;
+           28┆     try { parsed = JSON.parse(raw); } catch (_) {}
+           29┆     resolve({ status: res.statusCode, body: parsed, raw });
+           30┆   });
+           31┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           23┆ const req = http.request({ hostname: '127.0.0.1', port: 3335, path: BASE + path, method,
+               headers }, (res) => {                                                                   
+                                            
+    backend\scripts\mandato-v5-api-verify.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           22┆ const req = http.request(
+           23┆   { hostname: '127.0.0.1', port: 3335, path: BASE + path, method, headers },
+           24┆   (res) => {
+           25┆     let raw = '';
+           26┆     res.on('data', (c) => (raw += c));
+           27┆     res.on('end', () => {
+           28┆       let parsed = raw;
+           29┆       try { parsed = JSON.parse(raw); } catch (_) {}
+           30┆       resolve({ status: res.statusCode, body: parsed, raw });
+           31┆     });
+             [hid 2 additional lines, adjust with --max-lines-per-finding] 
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           22┆ const req = http.request(
+                                              
+    backend\scripts\mandato-v5-check-orders.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            4┆ function get(p,t){return new                                                      
+               Promise(r=>{http.get({hostname:'127.0.0.1',port:3335,path:'/api'+p,headers:{'User-
+               Agent':UA,Authorization:'Bearer '+t}},res=>{let                                   
+               b='';res.on('data',c=>b+=c);res.on('end',()=>r(JSON.parse(b)));});});}            
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+            5┆ function post(p,b){return new Promise(r=>{const d=JSON.stringify(b);const                 
+               q=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+p,method:'POST',headers:{'User-
+               Agent':UA,'Content-Type':'application/json','Content-Length':d.length}},res=>{let         
+               x='';res.on('data',c=>x+=c);res.on('end',()=>r(JSON.parse(x)));});q.write(d);q.end();});} 
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            5┆ function post(p,b){return new Promise(r=>{const d=JSON.stringify(b);const                 
+               q=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+p,method:'POST',headers:{'User-
+               Agent':UA,'Content-Type':'application/json','Content-Length':d.length}},res=>{let         
+               x='';res.on('data',c=>x+=c);res.on('end',()=>r(JSON.parse(x)));});q.write(d);q.end();});} 
+                                                
+    backend\scripts\mandato-v5-cpc-cols-probe.js
+     ❱ javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+          ❰❰ Blocking ❱❱
+          Detected string concatenation with a non-literal variable in a util.format / console.log function.
+          If an attacker injects a format specifier in the string, it will forge the log message. Try to use
+          constant values for the format string.                                                            
+          Details: https://sg.run/7Y5R                                                                      
+                                                                                                            
+           53┆ console.log(`  alt for ${col}:`, like.map((r) => r.COLUMN_NAME));
+                                       
+    backend\scripts\mandato-v5-debug.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+            4┆ function post(path,body){return new Promise((res,rej)=>{const d=JSON.stringify(body);const 
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method:'POST',headers:{'Use
+               r-Agent':UA,'Content-Type':'application/json','Content-Length':d.length}},x=>{let          
+               b='';x.on('data',c=>b+=c);x.on('end',()=>res(JSON.parse(b)));});r.write(d);r.end();});}    
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            4┆ function post(path,body){return new Promise((res,rej)=>{const d=JSON.stringify(body);const 
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method:'POST',headers:{'Use
+               r-Agent':UA,'Content-Type':'application/json','Content-Length':d.length}},x=>{let          
+               b='';x.on('data',c=>b+=c);x.on('end',()=>res(JSON.parse(b)));});r.write(d);r.end();});}    
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+            5┆ function get(path,t){return new Promise((res,rej)=>{const                                  
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method:'GET',headers:{'User
+               -Agent':UA,Authorization:'Bearer '+t}},x=>{let b='';x.on('data',c=>b+=c);x.on('end',()=>res
+               ({s:x.statusCode,b:JSON.parse(b)}));});r.on('error',rej);r.end();});}                      
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            5┆ function get(path,t){return new Promise((res,rej)=>{const                                  
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method:'GET',headers:{'User
+               -Agent':UA,Authorization:'Bearer '+t}},x=>{let b='';x.on('data',c=>b+=c);x.on('end',()=>res
+               ({s:x.statusCode,b:JSON.parse(b)}));});r.on('error',rej);r.end();});}                      
+                                            
+    backend\scripts\mandato-v5-erp-export.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           22┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+           23┆   let b = '';
+           24┆   res.on('data', (c) => (b += c));
+           25┆   res.on('end', () => {
+           26┆     let parsed = {};
+           27┆     try { parsed = JSON.parse(b || '{}'); } catch (_) { parsed = { raw: b.slice(0, 300) };
+               }                                                                                         
+           28┆     resolve({ status: res.statusCode, body: parsed });
+           29┆   });
+           30┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           22┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+                                       
+    backend\scripts\mandato-v5-final.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+            5┆ function call(method,path,body,token,extra={}){return new Promise((res,rej)=>{const        
+               d=body?JSON.stringify(body):null;const h={'User-                                           
+               Agent':UA,...extra};if(token)h.Authorization='Bearer '+token;if(d){h['Content-             
+               Type']='application/json';h['Content-Length']=Buffer.byteLength(d);}const                  
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method,headers:h},x=>{let b
+               ='';x.on('data',c=>b+=c);x.on('end',()=>res({status:x.statusCode,body:JSON.parse(b||'{}')})
+               );});r.on('error',rej);if(d)r.write(d);r.end();});}                                        
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            5┆ function call(method,path,body,token,extra={}){return new Promise((res,rej)=>{const        
+               d=body?JSON.stringify(body):null;const h={'User-                                           
+               Agent':UA,...extra};if(token)h.Authorization='Bearer '+token;if(d){h['Content-             
+               Type']='application/json';h['Content-Length']=Buffer.byteLength(d);}const                  
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method,headers:h},x=>{let b
+               ='';x.on('data',c=>b+=c);x.on('end',()=>res({status:x.statusCode,body:JSON.parse(b||'{}')})
+               );});r.on('error',rej);if(d)r.write(d);r.end();});}                                        
+                                            
+    backend\scripts\mandato-v5-full-audit.js
+     ❱ javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+          ❰❰ Blocking ❱❱
+          Detected string concatenation with a non-literal variable in a util.format / console.log function.
+          If an attacker injects a format specifier in the string, it will forge the log message. Try to use
+          constant values for the format string.                                                            
+          Details: https://sg.run/7Y5R                                                                      
+                                                                                                            
+           27┆ console.log(`[${tag}] ${id}`, detail.ms != null ? `${detail.ms}ms` : '',
+               JSON.stringify(detail).slice(0, 200));                                  
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           41┆ const req = http.request(
+           42┆   { hostname: '127.0.0.1', port: 3335, path: BASE + p, method, headers },
+           43┆   (res) => {
+           44┆     let raw = '';
+           45┆     res.on('data', (c) => (raw += c));
+           46┆     res.on('end', () => {
+           47┆       let parsed = raw;
+           48┆       try { parsed = JSON.parse(raw); } catch (_) {}
+           49┆       resolve({ status: res.statusCode, body: parsed, ms: Date.now() - start });
+           50┆     });
+             [hid 2 additional lines, adjust with --max-lines-per-finding] 
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           41┆ const req = http.request(
+                                        
+    backend\scripts\mandato-v5-pedido.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+            4┆ function call(method,path,body,token,extra={}){return new Promise((res,rej)=>{const        
+               d=body?JSON.stringify(body):null;const h={'User-                                           
+               Agent':UA,...extra};if(token)h.Authorization='Bearer '+token;if(d){h['Content-             
+               Type']='application/json';h['Content-Length']=Buffer.byteLength(d);}const                  
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method,headers:h},x=>{let b
+               ='';x.on('data',c=>b+=c);x.on('end',()=>res({status:x.statusCode,body:JSON.parse(b||'{}')})
+               );});r.on('error',rej);if(d)r.write(d);r.end();});}                                        
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+            4┆ function call(method,path,body,token,extra={}){return new Promise((res,rej)=>{const        
+               d=body?JSON.stringify(body):null;const h={'User-                                           
+               Agent':UA,...extra};if(token)h.Authorization='Bearer '+token;if(d){h['Content-             
+               Type']='application/json';h['Content-Length']=Buffer.byteLength(d);}const                  
+               r=http.request({hostname:'127.0.0.1',port:3335,path:'/api'+path,method,headers:h},x=>{let b
+               ='';x.on('data',c=>b+=c);x.on('end',()=>res({status:x.statusCode,body:JSON.parse(b||'{}')})
+               );});r.on('error',rej);if(d)r.write(d);r.end();});}                                        
+                                            
+    backend\scripts\mandato-v5-stock-race.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           14┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+           15┆   let b = '';
+           16┆   res.on('data', (c) => (b += c));
+           17┆   res.on('end', () => {
+           18┆     let parsed = {};
+           19┆     try { parsed = JSON.parse(b || '{}'); } catch (_) { parsed = { raw: b.slice(0, 200) };
+               }                                                                                         
+           20┆     resolve({ status: res.statusCode, body: parsed });
+           21┆   });
+           22┆ });
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           14┆ const r = http.request({ hostname: '127.0.0.1', port: 3335, path: '/api' + path, method,
+               headers: h }, (res) => {                                                                
+                                                  
+    backend\scripts\reparto-isolated-ddl-runner.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+          827┆ const nominalPath = path.join(sqlDirectory, entry.file);
+            ⋮┆----------------------------------------
+          827┆ const nominalPath = path.join(sqlDirectory, entry.file);
+            ⋮┆----------------------------------------
+          845┆ const nominalPath = path.join(repositoryDirectory, manifest.repositoryCatalog.file);
+                                                    
+    backend\scripts\reparto-production-ddl-runner.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           73┆ const nominalPath = path.join(sqlDirectory, FILES[migration]);
+                                          
+    backend\scripts\scan_product_assets.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           53┆ if (fs.statSync(path.join(folder, f)).isDirectory()) {
+            ⋮┆----------------------------------------
+           53┆ if (fs.statSync(path.join(folder, f)).isDirectory()) {
+            ⋮┆----------------------------------------
+           54┆ const sub = fs.readdirSync(path.join(folder, f));
+            ⋮┆----------------------------------------
+           54┆ const sub = fs.readdirSync(path.join(folder, f));
+            ⋮┆----------------------------------------
+           70┆ const full = path.join(folder, f);
+            ⋮┆----------------------------------------
+           70┆ const full = path.join(folder, f);
+            ⋮┆----------------------------------------
+           78┆ if (fs.statSync(path.join(folder, f)).isDirectory()) {
+            ⋮┆----------------------------------------
+           78┆ if (fs.statSync(path.join(folder, f)).isDirectory()) {
+            ⋮┆----------------------------------------
+           79┆ const sub = fs.readdirSync(path.join(folder, f));
+            ⋮┆----------------------------------------
+           79┆ const sub = fs.readdirSync(path.join(folder, f));
+                                            
+    backend\scripts\smoke-repartidor-tabs.js
+     ❱ javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+          ❰❰ Blocking ❱❱
+          Detected string concatenation with a non-literal variable in a util.format / console.log function.
+          If an attacker injects a format specifier in the string, it will forge the log message. Try to use
+          constant values for the format string.                                                            
+          Details: https://sg.run/7Y5R                                                                      
+                                                                                                            
+           58┆ console.log(`${ok ? 'OK' : 'FAIL'}`.padEnd(4), String(res.status).padStart(3),
+               `${ms}ms`.padStart(7), label, path);                                          
+                     
+    backend\server.js
+     ❱ javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+          ❰❰ Blocking ❱❱
+          A CSRF middleware was not detected in your express application. Ensure you are either using one such
+          as `csurf` or `csrf` (see rule references) and/or you are properly doing CSRF validation in your    
+          routes with a token or cookies.                                                                     
+          Details: https://sg.run/BxzR                                                                        
+                                                                                                              
+          268┆ const app = express();
+   
+     ❱ javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+          ❰❰ Blocking ❱❱
+          Detected string concatenation with a non-literal variable in a util.format / console.log function.
+          If an attacker injects a format specifier in the string, it will forge the log message. Try to use
+          constant values for the format string.                                                            
+          Details: https://sg.run/7Y5R                                                                      
+                                                                                                            
+          1067┆ console.error(`ðŸ”¥ UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
+                                       
+    backend\services\emailPdfService.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
+          ❰❰ Blocking ❱❱
+          Checks for setting the environment variable NODE_TLS_REJECT_UNAUTHORIZED to 0, which disables TLS   
+          verification. This should only be used for debugging purposes. Setting the option rejectUnauthorized
+          to false bypasses verification against the list of trusted CAs, which also leads to insecure        
+          transport. These options lead to vulnerability to MTM attacks, and should not be used.              
+          Details: https://sg.run/9oxr                                                                        
+                                                                                                              
+           43┆ tls: {
+           44┆     rejectUnauthorized: false
+           45┆ },
+                                    
+    backend\services\emailService.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
+          ❰❰ Blocking ❱❱
+          Checks for setting the environment variable NODE_TLS_REJECT_UNAUTHORIZED to 0, which disables TLS   
+          verification. This should only be used for debugging purposes. Setting the option rejectUnauthorized
+          to false bypasses verification against the list of trusted CAs, which also leads to insecure        
+          transport. These options lead to vulnerability to MTM attacks, and should not be used.              
+          Details: https://sg.run/9oxr                                                                        
+                                                                                                              
+           17┆ tls: {
+           18┆     rejectUnauthorized: false
+           19┆ },
+                                   
+    backend\services\redis-cache.js
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `pattern` function argument, this might allow an attacker to cause a Regular 
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+          185┆ const regex = new RegExp(`^${escaped}$`);
+                                                              
+    backend\src\core\infrastructure\security\path-sanitizer.js
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           15┆ const resolved = path.resolve(allowedPrefix, userPath);
+            ⋮┆----------------------------------------
+           15┆ const resolved = path.resolve(allowedPrefix, userPath);
+            ⋮┆----------------------------------------
+           16┆ const allowedResolved = path.resolve(allowedPrefix);
+                                            
+    backend\src\services\entregas.service.ts
+    ❯❱ javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+          ❰❰ Blocking ❱❱
+          Detected possible user input going into a `path.join` or `path.resolve` function. This could   
+          possibly lead to a path traversal vulnerability,  where the attacker can access arbitrary files
+          stored in the file system. Instead, be sure to sanitize or validate user input first.          
+          Details: https://sg.run/OPqk                                                                   
+                                                                                                         
+           90┆ const fullPath = path.join(this.uploadsPath, dir);
+            ⋮┆----------------------------------------
+          336┆ const destPath = path.join(this.uploadsPath, 'photos', filename);
+            ⋮┆----------------------------------------
+          362┆ const destPath = path.join(this.uploadsPath, 'signatures', filename);
+                                    
+    backend\src\utils\query-cache.ts
+    ❯❱ javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+          ❰❰ Blocking ❱❱
+          RegExp() called with a `pattern` function argument, this might allow an attacker to cause a Regular 
+          Expression Denial-of-Service (ReDoS) within your application as RegExP blocks the main thread. For  
+          this reason, it is recommended to use hardcoded regexes instead. If your regex is run on user-      
+          controlled input, consider performing input validation or use a regex checking/sanitization library 
+          such as https://www.npmjs.com/package/recheck to verify that the regex does not appear vulnerable to
+          ReDoS.                                                                                              
+          Details: https://sg.run/gr65                                                                        
+                                                                                                              
+           77┆ const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+            ⋮┆----------------------------------------
+          256┆ const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+                        
+    backend\test-perf.js
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           15┆ const req = http.get(`http://localhost:3197${path}`, (res) => {
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           34┆ const loginReq = http.request({
+           35┆     hostname: 'localhost',
+           36┆     port: 3197,
+           37┆     path: '/api/auth/login',
+           38┆     method: 'POST',
+           39┆     headers: { 'Content-Type': 'application/json' }
+           40┆ }, (res) => {
+           41┆     let data = '';
+           42┆     res.on('data', chunk => data += chunk);
+           43┆     res.on('end', () => {
+             [hid 12 additional lines, adjust with --max-lines-per-finding] 
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           34┆ const loginReq = http.request({
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.http-request.http-request
+          ❰❰ Blocking ❱❱
+          Checks for requests sent to http:// URLs. This is dangerous as the server is attempting to connect
+          to a website that does not encrypt traffic with TLS. Instead, only send requests to https:// URLs.
+          Details: https://sg.run/N4Qy                                                                      
+                                                                                                            
+           66┆ const req = http.request({
+           67┆     hostname: 'localhost',
+           68┆     port: 3197,
+           69┆     path: '/api/dashboard/metrics?year=2026&month=4',
+           70┆     method: 'GET',
+           71┆     headers: { 'Authorization': `Bearer ${token}` }
+           72┆ }, (res) => {
+           73┆     let data = '';
+           74┆     res.on('data', chunk => data += chunk);
+           75┆     res.on('end', () => {
+             [hid 4 additional lines, adjust with --max-lines-per-finding] 
+   
+    ❯❱ problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
+          ❰❰ Blocking ❱❱
+          Checks for any usage of http servers instead of https servers. Encourages the usage of https       
+          protocol instead of http, which does not have TLS and is therefore unencrypted. Using http can lead
+          to man-in-the-middle attacks in which the attacker is able to read sensitive information.          
+          Details: https://sg.run/x1zL                                                                       
+                                                                                                             
+           66┆ const req = http.request({
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 172 (172 blocking)
+ • Rules run: 497
+ • Targets scanned: 820
+ • Parsed lines: ~99.9%
+ • Scan skipped: 
+   ◦ Files matching .semgrepignore patterns: 14
+ • Scan was limited to files tracked by git
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 497 rules on 820 files: 172 findings.
+
+📢 Too many findings? Try Semgrep Pro for more powerful queries and less noise.
+   See https://sg.run/false-positives.
+

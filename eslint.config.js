@@ -31,7 +31,22 @@ module.exports = [
       '.venv/**',
       'ipex_ollama/**',
       'pixel-agents/**',
+      '.obsidian/**',
+      '.codex/**',
+      '.claude/**',
+      '.continue/**',
+      '.cursor/**',
+      '.qoder/**',
+      '.trae/**',
+      '.windsurf/**',
+      '.omo/**',
+      '.openclaw/**',
+      '.remember/**',
+      '.swarm/**',
+      'skills/**',
+      'assets/load_planner/lib/**',
       '**/*.min.js',
+      '**/*.global.js',
     ],
   },
   {
@@ -81,6 +96,13 @@ module.exports = [
       'prefer-spread': 'error',
       radix: 'error',
       yoda: 'error',
+    },
+  },
+  {
+    // .mjs = ESM; el resto del repo es CommonJS
+    files: ['*/*.mjs*'],
+    languageOptions: {
+      sourceType: 'module',
     },
   },
 ];

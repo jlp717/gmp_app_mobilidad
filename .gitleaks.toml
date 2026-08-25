@@ -1,0 +1,14 @@
+# Gitleaks — configuracion del repo (v8).
+# Se fusiona con las reglas por defecto; aqui solo anadimos excepciones
+# justificadas y acotadas por ruta. Cualquier nueva excepcion debe documentar:
+# que detecta, por que es falso positivo, y quien la aprobo.
+
+[allowlist]
+description = "Fixtures de test con tokens sinteticos (idempotencyToken 'a'.repeat, TRX-9, etc.)"
+# docs/quality-baseline/eslint-baseline.json: inventario historico de warnings
+# eslint donde el scanner generic-api-key matchea tokens de idempotencia de
+# fixtures (valores no secretos: cadenas generadas en test). Ver
+# docs/audits/2026-08-25-repo-hygiene-audit.md section 6.
+paths = [
+  '''docs/quality-baseline/''',
+]

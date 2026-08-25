@@ -346,3 +346,5 @@ docs/opencode-agent-governance/evals/canary-markers/
 .fvm/
 .husky/_/
 !backend/.env.example
+.semgrep/
+backend/.eslintrc-complexity.cjs
