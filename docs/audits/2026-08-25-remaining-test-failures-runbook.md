@@ -1,0 +1,28 @@
+# Runbook — Fallos restantes de la suite backend (tras Prompt 1 + remediación LQD)
+
+Fecha: 2026-08-25 · Estado base: `test:ci` (subset CI ligero) **verde** · Suite completa: 19 suites rojas heredadas del pisón `c522472` (24-08) más contratos TDD nunca implementados.
+
+Clasificación de causas verificada con `git log` por fichero (fechas test vs código) y trazas de error:
+
+| # | Suite / test | Contrato (evidencia) | Causa raíz | Propuesta | Riesgo/Gate |
+|---|---|---|---|---|---|
+| 1 | `repartidor-finanzas.test.js::rejects a signed oversized offset` | test:740-771 — cursor base64url firmado HMAC-SHA256(`JWT_ACCESS_SECRET`) `{version,offset,fingerprint,todayYmd}`; offset>100000 → **400 `INVALID_FINANCE_CURSOR`** sin tocar DB; path feliz emite `nextCursor` y el servicio recibe offset numérico (binds `[..,'100','200']`, test:706-712) | Codec de cursor firmado **no existe** en `routes/repartidor-finanzas.js` (schema solo valida string ≤512). Feature pendiente | Implementar `decodeFinanceCursor()` + verificación HMAC + guard offset; cablear en `vencimientosController` antes del parse | Medio (lectura finanzas). Sin gates especiales |
+| 2 | `repartidor-finanzas.test.js::validates range and clamps` (reversed→500) | test:810-815 — rango invertido → **400** sin DB | El refine existe en ambas copias del schema pero el ZodError llega como 500: trazar por qué el branch ZodError de `errorHandler` (style=`finanzas`) no captura (¿guard previo lanza otro error? ¿doble instancia zod?). Depurar con request real | Fix puntual tras trazar; probablemente mapear `ZodError` también por `error.name` en el catch inline del controller | Bajo |
+| 3 | `entregas-upload-security.test.js` (×4) + `entregas-route-gap-coverage` | test f967e49 (13-08): resolvedor de identidad de albarán — `cliente+serie+terminal`; 400 sin cliente, 409 ambigüedad (nunca elegir cabecera arbitraria), 403 ownership post-lookup, columnas LAC reales con orden determinista | Controlador actual = versión legacy de febrero (`404` simple). **Feature completa nunca implementada** (no hay `AMBIGUOUS/CLIENTE_REQUIRED` en toda la historia) | Diseñar resolvedor (query candidata → count → 409 si >1 → ownership → detalle LAC). Spec completa ya escrita en tests: usarlos como EARS | Medio. Feature nueva |
+| 4 | `reparto-isolated-ddl-runner.test.js` (×5) | Orquestador DDL `034`: preflight exacto→`ALREADY_VERIFIED`, ejecución ordenada fail-fast sin retry, inventario parcial bloquea, postflight verifica | No implementado. **DDL contra JAVIER = R4** | Diseño previo obligatorio de Javier (orden SQL, tokens STOP, postflight). Los tests ya definen la API del runner | **R4 — requiere diseño + adelante** |
+| 5 | `chatbot_coverage_intents` + `chatbot_massive_contract` | Invariante `CHATBOT_REPARTO_SCOPE_INVARIANT` (llm-orchestrator:597) se dispara cuando hay perfil reparto sin `repartidorScope` | Decisión de producto pendiente: ¿los fixtures de rutero deben llevar scope explícito o el invariante debe tolerar fallback guiado? Código e intentent test razonan distinto | Decidir semántica con Javier; luego alinear fixtures o invariante | Bajo-Medio. Decisión producto |
+| 6 | `auth-warehouse-mode.test.js::manager-driver JEFE→REPARTIDOR→JEFE` | test:179 — swap de rol devuelve **200**; hoy **503** (`REPARTO_SCHEMA_UNAVAILABLE` vía errorHandler style=finanzas) | Algún gate de esquema tipado se activa en el camino del swap. Trazar cuál capability flag falta en el fixture | Añadir flag/env al fixture O corregir gate si es falso positivo | Bajo |
+| 7 | `reparto-route-error-security::maps typed schema unavailability to 503` | 503 limpio sin stack/detalles SQL | Caso parcialmente implementado; falta el sub-caso del test | Completar mapeo en el catch correspondiente | Bajo |
+| 8 | `reparto-phase-a-data-status::detail discrepancy...CPC gross vs net+IVA` | Comparación bruto-CPC vs neto+IVA retiene suma cruda de líneas | Regla fiscal sin confirmar contra mapeo ERP (`docs/g4-dsedac-erp-mapping.md`) | Confirmar redondeos/IVA con contabilidad; luego implementar comparador | Medio. Decisión negocio |
+| 9 | `tests/services/dashboard.service.test.js` | Snapshot SQL `SELECT TRIM(C.DOCUMENT_ID)...` difiere | Columnas/alias LAC cambiados en service sin regenerar snapshot, o viceversa (daño c522472) | Diff del snapshot vs SQL actual; elegir canónico (el test fecha la intención) | Bajo |
+| 10 | `health-check-e2e.test.js` | E2E contra servidor vivo | Probable dependencia de entorno (DSN/puerto local) | Clasificar como `test:integration` y excluir de unit-run local; correr en CI con servicios | Entorno |
+| 11 | `reparto-finance-security-v3` (parcial), `repartidor-history-finance-hardening`, `repartidor-route-params`, `repartidor-week-gap-coverage`, `reparto-confirmacion-contract`, `repartidor-objectives-detail`, resto `repartidor-finanzas` | Hardening reparto variado | Mezcla de ítems 1-2 + guards menores dañados por c522472 | Sesión dedicada "reparto hardening": recorrer uno a uno tras cerrar 1-2 (muchos comparten raíz) | Medio |
+
+## Política aplicada en esta sesión
+
+- El gate local (`require-green-tests` v2) corre `npm run test:ci` (subset determinista, 143 tests) — **verde**. La suite completa pasa a ser objetivo del pipeline nocturno/CI hasta cerrar esta tabla.
+- Nada de esto se "arregla" saltándose asserts: son contratos ejecutables; lo que falta es implementación o decisión.
+
+## Orden recomendado
+
+1 (cursor) → 2 (range trace) → 6+7 (503 mapping, mismo archivo) → 9 (snapshot) → 11 (hardening batch) → 3 (identidad, feature) → 8 (decisión negocio) → 5 (decisión producto) → 4 (**R4**: diseño Javier → staging → adelante).
