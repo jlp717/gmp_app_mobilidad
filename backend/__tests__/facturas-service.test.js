@@ -426,7 +426,7 @@ describe('facturas service fiscal totals', () => {
 
     const [headerSql, headerParams] = mockQueryWithParams.mock.calls[0];
     expect(headerSql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
-    expect(headerSql).toMatch(/NOT\s*\(\s*CAC\.NUMEROFACTURA\s+>\s+0/i);
+    expect(headerSql).not.toMatch(/NOT\s*\(\s*CAC\.NUMEROFACTURA\s+>\s+0/i);
     expect(headerSql).toMatch(/IMPORTEBASEIMPONIBLE5/i);
     expect(headerParams).toEqual([1183, 'J', 2026]);
 
