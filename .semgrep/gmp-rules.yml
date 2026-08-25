@@ -1,0 +1,72 @@
+rules:
+  # (a) SQL/ODBC con concatenacion de strings en vez de parametros
+  - id: gmp.sql-string-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      SQL construido por concatenacion de strings: riesgo de inyeccion.
+      Usar queries parametrizadas con placeholders (?, :param) y pasar valores
+      como array/objeto de parametros a odbc.
+    patterns:
+      - pattern-either:
+          - pattern-regex: (?i)['"`](\s*)(select|insert\s+into|update|delete\s+from|merge\s+into)[^'"`]{0,400}?['"`]\s*\+\s*[a-zA-Z_$][\w.$]*
+          - pattern-regex: (?i)\+\s*['"`](select|insert\s+into|update|delete\s+from|merge\s+into)[^'"`]{0,400}['"`]
+
+  - id: gmp.sql-template-interpolation
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Template literal con ${...} dentro de SQL: interpolacion directa de
+      valores en la query. Usar placeholders parametrizados (?, :param).
+    pattern-regex: (?is)`[^`]{0,2000}?(select\s|insert\s+into\s|update\s|delete\s+from\s|merge\s+into\s)[^`]{0,2000}?\$\{[^}]+\}[^`]*`
+
+  # (b) jwt.decode sin jwt.verify cerca — decision de auth sobre payload no verificado
+  - id: gmp.jwt-decode-unverified
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      jwt.decode() NO verifica firma ni expiracion. Para decisiones de auth
+      usar jwt.verify(). jwt.decode solo para inspeccion no-confiable.
+    pattern-either:
+      - pattern: $JWT.decode($PAYLOAD)
+      - pattern: jwt.decode($PAYLOAD)
+    metavariable-regex:
+      metavariable: $JWT
+      regex: ^(jwt|jsonwebtoken)$
+
+  # (c) Escritura contra esquema DSEDAC (produccion solo-lectura)
+  - id: gmp.dsedac-write
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Operacion de ESCRITURA contra el esquema DSEDAC. DSEDAC es produccion
+      SOLO-LECTURA; escrituras van al schema JAVIER (test). Requiere aprobacion
+      explicita de Javier y gate R4.
+    pattern-regex: (?i)\b(insert\s+into|update|delete\s+from|merge\s+into|alter\s+table|create\s+table|drop\s+table)\s+(dsedac\s*\.\s*|\[dsedac\]\s*\.\s*)[a-zA-Z0-9_@#$]+
+
+  - id: gmp.dsedac-write-sql
+    languages: [generic]
+    severity: ERROR
+    message: >
+      Escritura DSEDAC en fichero SQL/generico. DSEDAC es produccion
+      SOLO-LECTURA. Gate R4 + aprobacion de Javier obligatorios.
+    pattern-regex: (?i)\b(insert\s+into|update|delete\s+from|merge\s+into|alter\s+table|create\s+table|drop\s+table)\s+(dsedac\s*\.\s*|\[dsedac\]\s*\.\s*)[a-zA-Z0-9_@#$]+
+
+  # (d) console.log de posibles secretos (tokens, passwords, credenciales)
+  - id: gmp.console-log-secrets
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      console.* con variable que parece contener token/password/secreto/jwt.
+      Usar logger estructurado con redaccion de secretos; nunca imprimir
+      credenciales.
+    pattern-regex: (?i)console\s*\.\s*(log|info|debug|warn|error)\s*\([^)]{0,300}(token|password|passwd|secret|credential|jwt|apikey|api_key|authorization)[^)]{0,300}\)
+
+  # Extra: eval / new Function (ejecucion dinamica)
+  - id: gmp.dynamic-exec
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: eval()/new Function() ejecutan codigo arbitrario. Eliminar.
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: new Function($X)
