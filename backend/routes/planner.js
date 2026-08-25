@@ -28,6 +28,7 @@ const {
     laclaeCacheLastLoadTime
 } = require('../services/laclae');
 const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
+const { ruteroWeekController } = require('../src/controllers/planner.controller');
 
 const DAY_NAMES = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 const RUTERO_WEEKDAY_INDEX = {

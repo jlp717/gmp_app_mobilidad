@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -15,7 +15,7 @@ const manifest = {
   confirmation: 'JAVIER_TEST_DDL',
   repositoryCatalog: {
     file: 'repartidor-liquidacion-db2-repository.js',
-    sha256: '4BA598649F0617CE4B0F251E42F32813DD4F534B7D4B7502BA37AA56F7D37694',
+    sha256: '1F4B028B60473DCC2570E5C9B10454EF50A831A0571BBF354940FCAC508E0199',
     tableKeys: {
       TEST_REPARTIDOR_LIQUIDACION_OPS: 'liquidationOps',
       TEST_REPARTIDOR_COBROS: 'cobros',

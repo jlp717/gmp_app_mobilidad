@@ -558,6 +558,11 @@ async function notifyAfterConfirm({
       logger.warn(`[variance] client resolve error: ${error.message}`);
     }
   }
+  // An incident notification must remain deliverable even when the ERP document
+  // cannot resolve its client row (for example NO_ENTREGADO without lines).
+  // Keep the missing identity explicit instead of dropping the durable alert.
+  if (!clienteCodigo && !clienteNombre) clienteCodigo = 'NO DISPONIBLE';
+
   const payload = {
     confirmationId: String(result.confirmationId),
     documentId,
