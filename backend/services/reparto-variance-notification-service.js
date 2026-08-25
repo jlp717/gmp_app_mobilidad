@@ -228,6 +228,47 @@ async function resolveDocumentComercialCode(documentId, { query = queryWithParam
   }
 }
 
+/**
+ * Resolve client identity for canonical rutero confirmations. The command only
+ * carries client fields for cobro flows; plain delivery confirmations need the
+ * authoritative ERP document lookup so variance PDFs are complete.
+ */
+async function resolveDocumentClient(documentId, { query = queryWithParams } = {}) {
+  const identity = parseDocumentIdentity(documentId);
+  if (!identity) return { codigo: '', nombre: '' };
+
+  const params = [identity.ejercicio, identity.serie, identity.terminal, identity.numero];
+  let sql = `
+    SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+           TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''),
+                         NULLIF(TRIM(CLI.NOMBRECLIENTE), ''),
+                         TRIM(CPC.CODIGOCLIENTEALBARAN))) AS NOMBRE_CLIENTE
+      FROM DSEDAC.CPC CPC
+      LEFT JOIN DSEDAC.CLI CLI
+        ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+     WHERE CPC.EJERCICIOALBARAN = ?
+       AND TRIM(CPC.SERIEALBARAN) = ?
+       AND CPC.TERMINALALBARAN = ?
+       AND CPC.NUMEROALBARAN = ?
+  `;
+  if (identity.cliente) {
+    sql += ' AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?';
+    params.push(identity.cliente);
+  }
+  sql += ' FETCH FIRST 1 ROW ONLY';
+
+  try {
+    const rows = await query(sql, params);
+    const row = rows?.[0] || {};
+    return {
+      codigo: normalizeText(row.CLIENTE || row.cliente),
+      nombre: normalizeText(row.NOMBRE_CLIENTE || row.nombre_cliente),
+    };
+  } catch (error) {
+    logger.warn(`[variance] client lookup failed for ${documentId}: ${error.message}`);
+    return { codigo: '', nombre: '' };
+  }
+}
 async function enqueueVarianceOutbox(row, { query = queryWithParams, env = process.env } = {}) {
   const tables = notificationTables(env);
   const sql = `
@@ -289,6 +330,12 @@ async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWit
     }
   }
 
+  if (!pdfBuffer) {
+    return {
+      sent: 0,
+      results: recipients.map((to) => ({ to, success: false, error: 'pdf unavailable' })),
+    };
+  }
   const results = [];
   for (const to of recipients) {
     try {
@@ -472,6 +519,7 @@ async function notifyAfterConfirm({
   sendEmail = sendEmailWithPdf,
   resolveRecipients = resolveDeliveryVarianceRecipients,
   resolveComercial = resolveDocumentComercialCode,
+  resolveClient = resolveDocumentClient,
 } = {}) {
   if (!result?.created || !command?.delivery) {
     return { skipped: true, reason: 'not_created' };
@@ -499,13 +547,24 @@ async function notifyAfterConfirm({
   const fecha = normalizeText(command.delivery.occurredAt).slice(0, 10)
     || new Date().toISOString().slice(0, 10);
 
+  let clienteCodigo = normalizeText(command.cobro?.codigoCliente);
+  let clienteNombre = normalizeText(command.cobro?.nombreCliente);
+  if (!clienteCodigo || !clienteNombre) {
+    try {
+      const resolvedClient = await resolveClient(documentId, { query });
+      clienteCodigo = clienteCodigo || normalizeText(resolvedClient?.codigo || resolvedClient?.code);
+      clienteNombre = clienteNombre || normalizeText(resolvedClient?.nombre || resolvedClient?.name);
+    } catch (error) {
+      logger.warn(`[variance] client resolve error: ${error.message}`);
+    }
+  }
   const payload = {
     confirmationId: String(result.confirmationId),
     documentId,
     documentoTipo: 'ALBARAN',
     fecha,
-    clienteCodigo: normalizeText(command.cobro?.codigoCliente) || '',
-    clienteNombre: normalizeText(command.cobro?.nombreCliente) || '',
+    clienteCodigo,
+    clienteNombre,
     repartidorId,
     comercialCode,
     deliveryStatus: normalizeText(result.deliveryStatus || command.delivery.status),
@@ -772,6 +831,7 @@ module.exports = {
   buildDigestEmailHtml,
   previousMadridIsoDate,
   resolveDocumentComercialCode,
+  resolveDocumentClient,
   notifyAfterCobro,
   notifyAfterConfirm,
   sendDailyVarianceDigest,

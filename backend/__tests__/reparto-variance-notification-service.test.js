@@ -2,6 +2,7 @@
 
 const {
   detectVarianceLines,
+  resolveDocumentClient,
   notifyAfterCobro,
   notifyAfterConfirm,
   buildVarianceEmailHtml,
@@ -172,6 +173,52 @@ describe('reparto-variance-notification-service', () => {
     expect(result).toEqual({ skipped: true, reason: 'no_variance' });
   });
 
+  test('resolveDocumentClient uses the canonical ERP document and client tables', async () => {
+    const query = jest.fn(async () => [{ CLIENTE: '4300001', NOMBRE_CLIENTE: 'Cliente ERP' }]);
+    await expect(resolveDocumentClient('2026-A-1-100-4300001', { query })).resolves.toEqual({
+      codigo: '4300001',
+      nombre: 'Cliente ERP',
+    });
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('FROM DSEDAC.CPC CPC'), [2026, 'A', 1, 100, '4300001']);
+    expect(query.mock.calls[0][0]).toContain('LEFT JOIN DSEDAC.CLI CLI');
+  });
+
+  test('notifyAfterConfirm resolves client for plain rutero confirmations before building the PDF', async () => {
+    const query = jest.fn(async () => []);
+    const sendEmail = jest.fn(async () => ({ success: true }));
+    const resolveClient = jest.fn(async () => ({ codigo: '4300001', nombre: 'Cliente ERP' }));
+    const resolveRecipients = jest.fn(async () => ({
+      emails: ['driver@example.test'], details: [], missingRequired: [],
+    }));
+    const env = {
+      NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'test', REPARTO_TABLE_SET: 'isolated_test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'driver@example.test', ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC', REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER', REPARTO_WRITES_ENABLED: 'false',
+      REPARTO_PRODUCTION_WRITES_APPROVED: 'false', REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false', REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false', REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    };
+
+    const result = await notifyAfterConfirm({
+      command: {
+        delivery: {
+          itemId: '2026-A-1-100-4300001', status: 'PARCIAL',
+          lineas: [{ lineaId: '1', codigoArticulo: 'SKU1', cantidadPedida: 2, cantidadEntregada: 1 }],
+        },
+        actor: { repartidorId: '94' },
+      },
+      result: { created: true, confirmationId: '88', deliveryStatus: 'PARCIAL' },
+    }, { query, env, sendEmail, resolveClient, resolveRecipients, resolveComercial: jest.fn(async () => '15') });
+
+    expect(resolveClient).toHaveBeenCalledWith('2026-A-1-100-4300001', expect.any(Object));
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      pdfBuffer: expect.any(Buffer), htmlBody: expect.stringContaining('Cliente ERP'),
+    }));
+    const insert = query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO'));
+    expect(JSON.parse(insert[1][4])).toMatchObject({ clienteCodigo: '4300001', clienteNombre: 'Cliente ERP' });
+    expect(result.sent).toBe(1);
+  });
   test('notifyAfterConfirm enqueues and emails on variance', async () => {
     const query = jest.fn(async () => []);
     const sendEmail = jest.fn(async () => ({ success: true, messageId: 'm1' }));
