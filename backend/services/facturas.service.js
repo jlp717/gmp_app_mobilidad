@@ -36,6 +36,9 @@ const MAX_LIST_LIMIT = 500;
 const MAX_LIST_OFFSET = 5000;
 const facturasListInFlight = new Map();
 const facturasSummaryInFlight = new Map();
+const facturaDetailInFlight = new Map();
+const albaranDetailInFlight = new Map();
+const DOCUMENT_DETAIL_CACHE_VERSION = 'v1';
 
 async function withInFlight(map, key, loader) {
     const existing = map.get(key);
@@ -252,6 +255,22 @@ function parseDocumentNumber(value) {
         return null;
     }
     return parsed;
+}
+
+function buildDocumentDetailCacheKey(type, serie, numero, ejercicio, terminal = null) {
+    const cleanSerie = normalizeSerieForLookup(serie);
+    const cleanNumero = parseDocumentNumber(numero);
+    const cleanEjercicio = parseInt(ejercicio, 10);
+    const cleanTerminal = terminal === null || terminal === undefined || terminal === ''
+        ? null
+        : parseInt(terminal, 10);
+    if (!cleanSerie || !cleanNumero || !Number.isFinite(cleanEjercicio) || cleanEjercicio <= 0
+        || (terminal !== null && terminal !== undefined && terminal !== ''
+            && (!Number.isFinite(cleanTerminal) || cleanTerminal < 0))) {
+        return null;
+    }
+    const terminalKey = cleanTerminal === null ? 'ALL' : String(cleanTerminal);
+    return 'facturas:document:' + DOCUMENT_DETAIL_CACHE_VERSION + ':' + type + ':' + cleanEjercicio + ':' + cleanSerie + ':' + terminalKey + ':' + cleanNumero;
 }
 
 function buildIvaBreakdown(header) {
@@ -1140,6 +1159,20 @@ class FacturasService {
     }
 
     async getFacturaDetail(serie, numero, ejercicio) {
+        const cacheKey = buildDocumentDetailCacheKey('factura', serie, numero, ejercicio);
+        if (!cacheKey) return this._getFacturaDetailUncached(serie, numero, ejercicio);
+        const cached = await redisCache.get('document', cacheKey);
+        if (cached !== null) return cached;
+        return withInFlight(facturaDetailInFlight, cacheKey, async () => {
+            const secondCache = await redisCache.get('document', cacheKey);
+            if (secondCache !== null) return secondCache;
+            const result = await this._getFacturaDetailUncached(serie, numero, ejercicio);
+            await redisCache.set('document', cacheKey, result, TTL.REALTIME);
+            return result;
+        });
+    }
+
+    async _getFacturaDetailUncached(serie, numero, ejercicio) {
         // AUDIT FIX: Block sentinel invoice numbers
         if (numero >= 900000 || numero <= 0) {
             throw new Error('Factura no encontrada');
@@ -1275,6 +1308,20 @@ class FacturasService {
     }
 
     async getAlbaranDetailForPdf(serie, numero, ejercicio, terminal = null) {
+        const cacheKey = buildDocumentDetailCacheKey('albaran', serie, numero, ejercicio, terminal);
+        if (!cacheKey) return this._getAlbaranDetailForPdfUncached(serie, numero, ejercicio, terminal);
+        const cached = await redisCache.get('document', cacheKey);
+        if (cached !== null) return cached;
+        return withInFlight(albaranDetailInFlight, cacheKey, async () => {
+            const secondCache = await redisCache.get('document', cacheKey);
+            if (secondCache !== null) return secondCache;
+            const result = await this._getAlbaranDetailForPdfUncached(serie, numero, ejercicio, terminal);
+            await redisCache.set('document', cacheKey, result, TTL.REALTIME);
+            return result;
+        });
+    }
+
+    async _getAlbaranDetailForPdfUncached(serie, numero, ejercicio, terminal = null) {
         const cleanSerie = normalizeSerieForLookup(serie);
         const cleanNumero = parseDocumentNumber(numero);
         const cleanEjercicio = parseInt(ejercicio, 10);

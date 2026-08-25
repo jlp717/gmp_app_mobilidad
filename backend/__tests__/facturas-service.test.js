@@ -15,7 +15,7 @@ jest.mock('../services/redis-cache', () => ({
     get: (...args) => mockRedisGet(...args),
     set: (...args) => mockRedisSet(...args),
   },
-  TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+  TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600, REALTIME: 60 },
 }));
 
 jest.mock('../middleware/logger', () => ({
@@ -435,6 +435,31 @@ describe('facturas service fiscal totals', () => {
     expect(lineParams).toEqual([2026, 'J', 93, 1183]);
   });
 
+  test('getAlbaranDetailForPdf coalesces concurrent misses and serves normalized detail from cache', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      if (/FROM\s+DSEDAC\.CAC\s+CAC/i.test(sql)) return [j1183AlbaranHeader];
+      if (/FROM\s+DSEDAC\.LAC\s+LAC/i.test(sql)) return [];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+
+    const [first, second] = await Promise.all([
+      facturasService.getAlbaranDetailForPdf(' j ', '001183', '2026', '093'),
+      facturasService.getAlbaranDetailForPdf('J', 1183, 2026, 93),
+    ]);
+
+    expect(first).toEqual(second);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
+    expect(mockRedisSet).toHaveBeenCalledTimes(1);
+    expect(mockRedisSet.mock.calls[0][0]).toBe('document');
+    expect(mockRedisSet.mock.calls[0][1]).toBe('facturas:document:v1:albaran:2026:J:93:1183');
+    expect(mockRedisSet.mock.calls[0][3]).toBe(60);
+
+    mockRedisGet.mockResolvedValue(first);
+    await facturasService.getAlbaranDetailForPdf('J', 1183, 2026, 93);
+
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
+  });
   test('getAlbaranDetailForPdf can constrain by terminal when caller provides it', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM\s+DSEDAC\.CAC\s+CAC/i.test(sql)) return [j1183AlbaranHeader];
