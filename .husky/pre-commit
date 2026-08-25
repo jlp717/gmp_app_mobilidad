@@ -4,12 +4,24 @@ if command -v gitleaks >/dev/null 2>&1; then
 elif [ -f ".claude/hooks/validate-secrets.mjs" ]; then
   node .claude/hooks/validate-secrets.mjs || exit 1
 else
-  echo "[pre-commit] AVISO: ni gitleaks ni fallback de secretos disponibles; instalalo con 'npx gitleaks'" >&2
+  echo "[pre-commit] AVISO: ni gitleaks ni fallback de secretos disponibles" >&2
 fi
 
-# 2) Formato/sintaxis solo si hay ficheros staged (<10s objetivo)
-if [ -n "$(git diff --cached --name-only)" ] && [ -x "./node_modules/.bin/lint-staged" ]; then
-  ./node_modules/.bin/lint-staged
-elif [ -n "$(git diff --cached --name-only)" ]; then
-  echo "[pre-commit] AVISO: falta tooling raiz. Ejecuta 'npm install' en la raiz del repo." >&2
+# 2) Checks rapidos e identicos a lint-staged, invocados directo (<10s objetivo).
+#    lint-staged sigue instalado y configurado (package.json) para uso manual/CI.
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+
+DART_FILES=$(echo "$STAGED" | grep '\.dart$' || true)
+if [ -n "$DART_FILES" ]; then
+  echo "$DART_FILES" | xargs dart format --output=none --set-exit-if-changed || {
+    echo "[pre-commit] dart format fallo. Ejecuta: dart format ." >&2; exit 1; }
 fi
+
+JS_FILES=$(echo "$STAGED" | grep -E '\.(js|cjs|mjs)$' || true)
+if [ -n "$JS_FILES" ]; then
+  echo "$JS_FILES" | xargs -I{} node --check {} || {
+    echo "[pre-commit] sintaxis JS invalida" >&2; exit 1; }
+fi
+
+exit 0
