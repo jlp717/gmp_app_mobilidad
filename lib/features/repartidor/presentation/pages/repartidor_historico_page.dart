@@ -1878,6 +1878,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
 
     final isFactura = doc.type == _DocType.factura;
+    final documentColor =
+        isFactura ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8);
+    final documentIcon =
+        isFactura ? Icons.receipt_long : Icons.description_outlined;
     final hasAnySignature = doc.hasSignature || doc.hasLegacySignature;
 
     return GestureDetector(
@@ -1887,7 +1891,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         padding: EdgeInsets.all(
           Responsive.padding(context, small: 10, large: 12),
         ),
-        accentColor: statusColor,
+        accentColor: documentColor,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1900,19 +1904,24 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: isFactura
-                        ? AppTheme.accentIndigo.withValues(alpha: 0.2)
-                        : AppTheme.info.withValues(alpha: 0.2),
+                    color: documentColor.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    isFactura ? 'FAC' : 'ALB',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0,
-                      color: isFactura ? AppTheme.accentIndigo : AppTheme.info,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(documentIcon, size: 11, color: documentColor),
+                      const SizedBox(width: 3),
+                      Text(
+                        isFactura ? 'FAC' : 'ALB',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0,
+                          color: documentColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2621,7 +2630,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
           ),
           backgroundColor: AppTheme.warning,
         ),
@@ -2947,7 +2956,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
           ),
           backgroundColor: AppTheme.warning,
         ),
@@ -2961,13 +2970,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
     final email = await _askEmailAddress();
     if (email == null || email.isEmpty || !mounted) return;
-    final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
     if (!isValidRepartoReceiptEmailAddress(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid email address.')),
       );
       return;
     }
+    final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
     try {
       await RepartidorDataService.emailDeliveryNote(
         confirmationId: confirmationId,
@@ -3114,7 +3123,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
           ),
           backgroundColor: AppTheme.warning,
         ),
@@ -3345,7 +3354,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Esta entrega no tiene nota canónica. Confírmala desde el rutero.',
+            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
           ),
           backgroundColor: AppTheme.warning,
         ),
@@ -3368,6 +3377,25 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       text: 'Preparando nota de entrega...',
     );
     try {
+      final whatsapp = await RepartidorDataService.shareDeliveryNoteViaWhatsApp(
+        confirmationId: confirmationId,
+        telefono: result.phone,
+        repartidorId: owner,
+        clienteNombre: clientName,
+        mensaje: result.message,
+      );
+      if (whatsapp.deliveredByBot) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nota de entrega enviada por WhatsApp con su PDF.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+        return;
+      }
+
       final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
         confirmationId: confirmationId,
         repartidorId: owner,
@@ -3396,6 +3424,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         subject: 'Nota de entrega $docRef',
         sharePositionOrigin: origin,
       );
+      final url = whatsapp.whatsappUrl;
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.tryParse(url);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
     } catch (e) {
       modal.close();
       if (mounted) {

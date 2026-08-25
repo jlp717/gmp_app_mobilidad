@@ -2151,7 +2151,12 @@ async function main() {
     if (APPLY && sequenceBlocks.length) {
       throw new Error(sequenceBlocks.join('; '));
     }
-    const tablePairs = pairs.filter((pair) => pair.objectType === 'TABLE');
+    // ERP-seeded finance tables deliberately have an operational TEST shape:
+    // LQD is transformed into TEST_REPARTIDOR_* by the seed functions below,
+    // so comparing its columns as an isomorphic production pair creates a
+    // false preflight block (the TEST-only audit/status columns are expected).
+    // Keep the strict metadata gate for every true production -> TEST copy.
+    const tablePairs = pairs.filter((pair) => pair.objectType === 'TABLE' && !pair.erpSeeded);
     if (RECONCILE_TEST_SCHEMA) {
       const schemaPreview = await reconcileMappingPairs(tablePairs, {
         apply: false,

@@ -220,6 +220,47 @@ void main() {
     expect(result.messageId, 'wamid.ABC');
   });
 
+  test('canonical delivery-note WhatsApp carries confirmation and owner',
+      () async {
+    Map<String, dynamic>? capturedBody;
+    String? capturedPath;
+    ApiClient.dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          capturedPath = options.path;
+          capturedBody = Map<String, dynamic>.from(options.data as Map);
+          handler.resolve(
+            Response<Map<String, dynamic>>(
+              requestOptions: options,
+              statusCode: 200,
+              data: const {
+                'success': true,
+                'localShare': true,
+                'sent': false,
+                'whatsappUrl': 'https://wa.me/34600000000',
+              },
+            ),
+          );
+        },
+      ),
+    );
+
+    final result = await RepartidorDataService.shareDeliveryNoteViaWhatsApp(
+      confirmationId: '7',
+      telefono: '+34600000000',
+      repartidorId: '08',
+      clienteNombre: 'Cliente test',
+      mensaje: 'Nota lista',
+    );
+
+    expect(result.localShare, isTrue);
+    expect(result.sent, isFalse);
+    expect(capturedPath, contains('/confirmations/7/receipt/whatsapp'));
+    expect(capturedBody, containsPair('repartidorId', '08'));
+    expect(capturedBody, containsPair('telefono', '+34600000000'));
+    expect(capturedBody, containsPair('mensaje', 'Nota lista'));
+  });
+
   test('history and signature carry owner in URL and isolate cache keys',
       () async {
     final requests = <RequestOptions>[];

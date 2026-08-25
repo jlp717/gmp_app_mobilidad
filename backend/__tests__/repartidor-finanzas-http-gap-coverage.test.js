@@ -229,10 +229,12 @@ describe('repartidor finance HTTP guard coverage', () => {
     expectNoInfrastructure(spy);
 
     response = await request(server).post('/finanzas/liquidaciones/resend-gap-0001/resend-emails');
-    expect(response.status).toBe(503);
-    expect(response.body.code).toBe('LIQUIDACION_OUTBOX_RESEND_UNAVAILABLE');
+    // A well-formed token with no outbox row is a domain 404. Infrastructure
+    // unavailability remains a 503 and is covered by the positive resend tests.
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('LIQUIDACION_OUTBOX_NOT_FOUND');
     expect(spy).not.toHaveBeenCalled();
-    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQuery).toHaveBeenCalledTimes(1);
   });
 
   test('commission tiers permit authenticated reads, restrict writes by role, and validate writes first', async () => {

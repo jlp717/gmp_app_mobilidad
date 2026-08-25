@@ -10,6 +10,13 @@ jest.mock('../services/emailPdfService', () => ({
   sendEmailWithPdf: jest.fn().mockResolvedValue({ messageId: 'm1' }),
   generateDeliveryEmailHtml: jest.fn().mockReturnValue('<p>nota</p>'),
 }));
+jest.mock('../services/whatsappGatewayService', () => ({
+  isBotConfigured: jest.fn().mockReturnValue(false),
+  isBotReady: jest.fn().mockReturnValue(false),
+  sendDocumentFromBot: jest.fn(),
+  baileys: { isConfigured: jest.fn().mockReturnValue(false) },
+  cloud: { isConfigured: jest.fn().mockReturnValue(false) },
+}));
 jest.mock('../middleware/auth', () => ({ verifyToken: (req, _res, next) => { req.user = mockUser; next(); }, requireRoles: () => (_req, _res, next) => next() }));
 jest.mock('../services/repartidor-finance-service', () => ({}));
 jest.mock('../services/redis-cache', () => ({ deleteCachePattern: jest.fn(), invalidateCache: jest.fn() }));
@@ -114,6 +121,30 @@ test('production mount keeps every receipt outcome private no-store and outside 
   expect(render).toHaveBeenCalledTimes(2);
 });
 
+
+test('POST receipt WhatsApp returns a local share intent with the canonical PDF', async () => {
+  const render = jest.fn().mockResolvedValue({ pdf: Buffer.from('%PDF-1.4'), fileName: 'NOTA_ENTREGA_7.pdf' });
+  inject({ render });
+  const res = await request(app())
+    .post('/finanzas/rutero/confirmations/7/receipt/whatsapp')
+    .send({ telefono: '+34 600 123 456', mensaje: 'Entrega confirmada' });
+  expect(res.status).toBe(200);
+  expect(res.body).toMatchObject({ success: true, localShare: true, sent: false, fileName: 'NOTA_ENTREGA_7.pdf' });
+  expect(res.body.whatsappUrl).toContain('https://wa.me/34600123456');
+  expect(res.body.whatsappUrl).toContain(encodeURIComponent('Entrega confirmada'));
+  expect(render).toHaveBeenCalled();
+});
+
+test('POST receipt WhatsApp rejects an invalid phone before rendering', async () => {
+  const render = jest.fn();
+  inject({ render });
+  const res = await request(app())
+    .post('/finanzas/rutero/confirmations/7/receipt/whatsapp')
+    .send({ telefono: 'abc' });
+  expect(res.status).toBe(422);
+  expect(res.body.code).toBe('PHONE_INVALID');
+  expect(render).not.toHaveBeenCalled();
+});
 test('POST receipt email rejects invalid destinatario before rendering', async () => {
   const emailPdf = require('../services/emailPdfService');
   inject();

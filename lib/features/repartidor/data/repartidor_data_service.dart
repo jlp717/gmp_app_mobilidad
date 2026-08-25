@@ -1121,6 +1121,76 @@ class RepartidorDataService {
     }
   }
 
+  /// Requests WhatsApp delivery of the canonical delivery-note PDF.
+  /// A local result means the caller must attach the PDF and open [whatsappUrl].
+  static Future<LocalDocumentShare> shareDeliveryNoteViaWhatsApp({
+    required String confirmationId,
+    required String telefono,
+    required String repartidorId,
+    String? clienteNombre,
+    String? mensaje,
+  }) async {
+    final owner = repartidorId.trim();
+    final confirmation = confirmationId.trim();
+    if (!isValidRepartoOwnerId(owner) ||
+        !isValidRepartoServerId(confirmation)) {
+      throw const RepartidorDataException(
+        'La entrega no tiene una identidad canónica válida.',
+        statusCode: 422,
+        code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
+      );
+    }
+    try {
+      final response = await ApiClient.post(
+        '/repartidor-finanzas/rutero/confirmations/$confirmation/receipt/whatsapp',
+        {
+          'telefono': telefono,
+          'repartidorId': owner,
+          if (clienteNombre != null) 'clienteNombre': clienteNombre,
+          if (mensaje != null && mensaje.trim().isNotEmpty)
+            'mensaje': mensaje.trim(),
+        },
+      );
+      final localShare = response['localShare'] == true;
+      final sent = response['sent'] == true;
+      if (response['success'] == true && sent && !localShare) {
+        return LocalDocumentShare(
+          localShare: false,
+          sent: true,
+          shareMode: response['shareMode']?.toString() ?? 'BOT_GATEWAY',
+          messageId: response['messageId']?.toString(),
+        );
+      }
+      if (response['success'] == true && localShare && !sent) {
+        final url = response['whatsappUrl']?.toString().trim();
+        return LocalDocumentShare(
+          localShare: true,
+          sent: false,
+          whatsappUrl: url == null || url.isEmpty ? null : url,
+          shareMode: response['shareMode']?.toString() ?? 'LOCAL_USER_ACTION',
+        );
+      }
+      throw const RepartidorDataException(
+        'No se pudo preparar el envío de la nota por WhatsApp.',
+      );
+    } on RepartidorDataException {
+      rethrow;
+    } on ApiException catch (error) {
+      if (error.code == 'WHATSAPP_BAILEYS_NOT_PAIRED') {
+        throw const RepartidorDataException(
+          'WhatsApp corporativo no vinculado. Un jefe debe emparejar el móvil de empresa (QR).',
+          statusCode: 503,
+          code: 'WHATSAPP_BAILEYS_NOT_PAIRED',
+        );
+      }
+      throw RepartidorDataException(
+        'No se pudo preparar el envío de la nota por WhatsApp.',
+        statusCode: error.statusCode,
+        code: error.code,
+      );
+    }
+  }
+
   /// Requests WhatsApp delivery.
   /// When Cloud API is configured server-side, returns [LocalDocumentShare.deliveredByBot].
   /// Otherwise returns a local share intent (OS sheet) — never implies GMP sent the message.

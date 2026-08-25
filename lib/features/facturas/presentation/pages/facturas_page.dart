@@ -908,40 +908,38 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       ),
                 ),
               ),
-              if (factura.isFactura) ...[
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFF25D366),
-                    child: Icon(Icons.chat, color: Colors.white, size: 20),
-                  ),
-                  title: const Text(
-                    'WhatsApp',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _whatsAppFactura(factura);
-                  },
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF25D366),
+                  child: Icon(Icons.chat, color: Colors.white, size: 20),
                 ),
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: AppTheme.info,
-                    child: Icon(
-                      Icons.email_outlined,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  title: const Text(
-                    'Email',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _emailFactura(factura);
-                  },
+                title: const Text(
+                  'WhatsApp',
+                  style: TextStyle(color: Colors.white),
                 ),
-              ],
+                onTap: () {
+                  Navigator.pop(context);
+                  _whatsAppFactura(factura);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.info,
+                  child: Icon(
+                    Icons.email_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Email',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _emailFactura(factura);
+                },
+              ),
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Colors.grey,
@@ -966,22 +964,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Future<void> _emailFactura(Factura factura) async {
-    if (factura.isAlbaran) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Para albaranes usa Compartir > Sistema.'),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-      return;
-    }
-
+    final documentLabel = factura.isAlbaran ? 'Albarán' : 'Factura';
     final result = await EmailFormModal.show(
       context,
       defaultSubject:
-          'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
+          '$documentLabel ${factura.numeroFormateado} - ${factura.clienteNombre}',
       defaultBody: 'Hola ${factura.clienteNombre},\n\n'
-          'Adjunto le remitimos su factura ${factura.numeroFormateado} '
+          'Adjunto le remitimos su ${documentLabel.toLowerCase()} ${factura.numeroFormateado} '
           'por importe de ${factura.total.toStringAsFixed(2)} €.\n\n'
           'Muchas gracias por su confianza.\n\n'
           'Atentamente,\n'
@@ -1000,6 +989,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         asunto: result.subject,
         cuerpo: result.body,
         clienteNombre: factura.clienteNombre,
+        documentType: factura.isAlbaran ? 'albaran' : 'factura',
+        terminal: factura.isAlbaran ? factura.terminal : null,
       );
       modal.success('✓ Email enviado a ${result.email}');
     } catch (e) {
@@ -1011,19 +1002,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Future<void> _whatsAppFactura(Factura factura) async {
-    if (factura.isAlbaran) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Para albaranes usa Compartir > Sistema.'),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-      return;
-    }
-
+    final documentLabel = factura.isAlbaran ? 'albarán' : 'factura';
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Hola ${factura.clienteNombre}, le adjunto su factura '
+      defaultMessage:
+          'Hola ${factura.clienteNombre}, le adjunto su ${documentLabel} '
           '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). \n\n'
           'Gracias por su confianza - Granja Mari Pepa',
     );
@@ -1036,11 +1019,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
     try {
       // Download PDF
-      final file = await FacturasService.downloadFacturaPdf(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
-      );
+      final file = await FacturasService.downloadDocumentoPdf(factura);
 
       // Get WhatsApp URL from backend
       final whatsappUrl = await FacturasService.shareWhatsApp(
@@ -1049,6 +1028,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ejercicio: factura.ejercicio,
         telefono: result.phone,
         clienteNombre: factura.clienteNombre,
+        documentType: factura.isAlbaran ? 'albaran' : 'factura',
+        terminal: factura.isAlbaran ? factura.terminal : null,
       );
 
       modal.close();

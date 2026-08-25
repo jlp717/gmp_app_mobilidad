@@ -3142,6 +3142,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       text: 'Preparando nota de entrega para WhatsApp...',
     );
     try {
+      final confirmationId = await _resolveReceiptConfirmationId();
+      final whatsapp = await RepartidorDataService.shareDeliveryNoteViaWhatsApp(
+        confirmationId: confirmationId,
+        telefono: form.phone,
+        repartidorId: owner,
+        clienteNombre: widget.albaran.nombreCliente,
+        mensaje: form.message,
+      );
+      if (whatsapp.deliveredByBot) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nota de entrega enviada por WhatsApp con su PDF.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+        return;
+      }
+
       final file = await _prepareDeliveryNotePdfFile();
       modal.close();
       if (!mounted) return;
@@ -3151,6 +3171,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         subject: 'Nota de entrega',
         sharePositionOrigin: _shareOrigin(),
       );
+      final url = whatsapp.whatsappUrl;
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.tryParse(url);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
@@ -3158,10 +3185,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         error: const RepartoReceiptUnavailableException(),
         acknowledged: _isAcknowledgedTombstone,
       ));
-    } catch (_) {
+    } catch (error) {
       modal.close();
       if (mounted) {
-        _showError('No se pudo preparar la nota de entrega para WhatsApp.');
+        _showError(repartidorSafeOperationMessage(
+          error: error,
+          operation: 'receiptWhatsApp',
+        ));
       }
     }
   }

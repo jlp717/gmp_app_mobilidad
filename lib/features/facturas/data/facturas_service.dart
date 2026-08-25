@@ -606,6 +606,8 @@ class FacturasService {
     required int ejercicio,
     required String telefono,
     String? clienteNombre,
+    String? documentType,
+    int? terminal,
   }) async {
     try {
       final response = await ApiClient.post('/facturas/share/whatsapp', {
@@ -614,6 +616,8 @@ class FacturasService {
         'ejercicio': ejercicio,
         'telefono': telefono,
         'clienteNombre': clienteNombre,
+        'documentType': documentType,
+        'terminal': terminal,
       });
 
       if (response['success'] == true && response['whatsappUrl'] != null) {
@@ -740,6 +744,8 @@ class FacturasService {
     String? asunto,
     String? cuerpo,
     String? clienteNombre,
+    String? documentType,
+    int? terminal,
   }) async {
     try {
       final response = await ApiClient.post('/facturas/send-email', {
@@ -750,6 +756,8 @@ class FacturasService {
         'asunto': asunto,
         'cuerpo': cuerpo,
         'clienteNombre': clienteNombre,
+        'documentType': documentType,
+        'terminal': terminal,
       });
 
       if (response['success'] == true) {

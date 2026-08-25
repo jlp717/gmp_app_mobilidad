@@ -1956,7 +1956,7 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
         };
 
         // Get monthly sales for current and previous year
-        const monthlySales = await queryWithParams(`
+        const monthlySalesPromise = queryWithParams(`
             SELECT 
                 L.LCYEAB as YEAR,
                 L.LCMMDC as MONTH,
@@ -1971,6 +1971,30 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
             ORDER BY L.LCYEAB DESC, L.LCMMDC ASC
         `, [clientCode, currentYear, previousYear], false, false);
 
+        // These three read-only aggregates are independent. Start them together
+        // to avoid making the historical detail latency the sum of all DB2 waits.
+        const yearlyHistoryPromise = queryWithParams(`
+            SELECT
+                L.LCYEAB as YEAR,
+                SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB >= ?
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY L.LCYEAB
+            ORDER BY L.LCYEAB DESC
+        `, [clientCode, currentYear - 5], false, false);
+        const frequencyResultPromise = queryWithParams(`
+            SELECT
+                COUNT(DISTINCT L.LCDIDL || '-' || L.LCMIDL || '-' || L.LCAIDL) as ORDER_COUNT,
+                COUNT(*) as LINE_COUNT,
+                MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
+            FROM DSED.LACLAE L
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB = ?
+              AND ${LACLAE_SALES_FILTER}
+        `, [clientCode, currentYear], false, false);
+        const monthlySales = await monthlySalesPromise;
         // Group by month and calculate comparisons
         const monthMap = {};
         for (let m = 1; m <= 12; m++) {
@@ -2017,17 +2041,8 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
         const isNewClient = totalLastYear < 0.01 && totalCurrentYear > 0;
 
         // Get multi-year history
-        const yearlyHistory = await queryWithParams(`
-            SELECT 
-                L.LCYEAB as YEAR,
-                SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCCDCL = ?
-              AND L.LCYEAB >= ?
-              AND ${LACLAE_SALES_FILTER}
-            GROUP BY L.LCYEAB
-            ORDER BY L.LCYEAB DESC
-        `, [clientCode, currentYear - 5], false, false);
+
+        const yearlyHistory = await yearlyHistoryPromise;
         const yearlyTotals = yearlyHistory.map(row => ({
             year: row.YEAR,
             sales: formatCurrencyLocal(row.SALES),
@@ -2035,16 +2050,8 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
         }));
 
         // Calculate purchase frequency (orders in current year)
-        const frequencyResult = await queryWithParams(`
-            SELECT 
-                COUNT(DISTINCT L.LCDIDL || '-' || L.LCMIDL || '-' || L.LCAIDL) as ORDER_COUNT,
-                COUNT(*) as LINE_COUNT,
-                MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
-            FROM DSED.LACLAE L
-            WHERE L.LCCDCL = ?
-              AND L.LCYEAB = ?
-              AND ${LACLAE_SALES_FILTER}
-        `, [clientCode, currentYear], false, false);
+
+        const frequencyResult = await frequencyResultPromise;
         const freq = frequencyResult[0] || {};
         const orderCount = parseInt(freq.ORDER_COUNT) || 0;
         const monthsWithData = monthlyData.filter(m => m.currentYear > 0).length;

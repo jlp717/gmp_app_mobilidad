@@ -25,6 +25,7 @@ const {
 } = require('../services/delivery-evidence-service');
 const { deleteCachePattern, invalidateCache } = require('../services/redis-cache');
 const { sendEmailWithPdf, generateDeliveryEmailHtml } = require('../services/emailPdfService');
+const whatsappGateway = require('../services/whatsappGatewayService');
 const {
   RepartoEmailDeliveryPolicyError,
   resolveRepartoEmailDelivery,
@@ -1100,6 +1101,111 @@ router.post(
   },
 );
 
+router.post(
+  '/rutero/confirmations/:confirmationId/receipt/whatsapp',
+  verifyToken,
+  requireCanonicalConfirmationRole,
+  async (req, res) => {
+    const parsed = z.object({
+      telefono: z.string().trim().min(7).max(20),
+      repartidorId: z.string().trim().optional(),
+      mensaje: z.string().trim().max(900).optional(),
+      clienteNombre: z.string().trim().max(180).optional(),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(422).json({
+        success: false,
+        code: 'PHONE_INVALID',
+        error: 'Telefono o mensaje de WhatsApp invalido',
+      });
+    }
+    const phone = parsed.data.telefono.replace(/\D/g, '');
+    if (!/^\d{7,15}$/.test(phone)) {
+      return res.status(422).json({
+        success: false,
+        code: 'PHONE_INVALID',
+        error: 'Telefono de WhatsApp invalido',
+      });
+    }
+    try {
+      const { receipt, rendered } = await renderCanonicalReceipt(
+        req, { confirmationId: req.params.confirmationId }, parsed.data.repartidorId,
+      );
+      const numero = receipt.documento?.numero || receipt.confirmationId;
+      const serie = receipt.documento?.serie || '';
+      const clienteNombre = parsed.data.clienteNombre || receipt.cliente?.nombre || receipt.clienteNombre || '';
+      const caption = parsed.data.mensaje
+        || `Granja Mari Pepa\n\nNota de entrega: ${serie}-${numero}\nCliente: ${clienteNombre}`;
+      const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
+      const fileName = rendered.fileName || `nota_entrega_${numero}.pdf`;
+
+      if (!whatsappGateway.isBotConfigured()) {
+        return res.status(200).json({
+          success: true,
+          localShare: true,
+          sent: false,
+          deliveryConfirmed: false,
+          shareMode: 'LOCAL_USER_ACTION',
+          whatsappUrl,
+          message: caption,
+          fileName,
+          mimeType: 'application/pdf',
+        });
+      }
+      if (!whatsappGateway.isBotReady()
+          && whatsappGateway.baileys.isConfigured()
+          && !whatsappGateway.cloud.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          code: 'WHATSAPP_BAILEYS_NOT_PAIRED',
+          error: 'WhatsApp corporativo no esta vinculado',
+        });
+      }
+
+      const result = await whatsappGateway.sendDocumentFromBot({
+        telefono: phone,
+        pdfBuffer: rendered.pdf,
+        filename: fileName,
+        caption,
+        bodyParams: [String(numero), clienteNombre || 'Cliente'],
+      });
+      return res.status(200).json({
+        success: true,
+        localShare: false,
+        sent: true,
+        deliveryConfirmed: true,
+        shareMode: 'BOT_GATEWAY',
+        provider: result.provider,
+        mode: result.mode,
+        messageId: result.messageId,
+        fileName,
+        mimeType: 'application/pdf',
+      });
+    } catch (error) {
+      if (error instanceof EvidenceError || isEvidenceTimeout(error)) {
+        return sendEvidenceError(res, error, 'POST canonical receipt whatsapp');
+      }
+      if (error instanceof RepartoPersistenceError) {
+        const safeMessage = error.statusCode >= 500
+          ? 'Servicio temporalmente no disponible'
+          : error.message;
+        return res.status(error.statusCode).json({
+          success: false,
+          code: error.code,
+          error: safeMessage,
+        });
+      }
+      if (error?.code === 'WHATSAPP_BAILEYS_NOT_PAIRED') {
+        return res.status(503).json({
+          success: false,
+          code: error.code,
+          error: 'WhatsApp corporativo no esta vinculado',
+        });
+      }
+      return sendError(res, error, { action: 'POST canonical receipt whatsapp' });
+    }
+  },
+);
 router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
   try {
     const command = buildConfirmationCommand({
