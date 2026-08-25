@@ -1,0 +1,31 @@
+{
+  "name": "gmp-app-mobilidad",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tooling DX del monorepo GMP App Movilidad: hooks git (gitleaks + lint-staged), commitlint (Conventional Commits). El codigo de producto vive en lib/ (Flutter) y backend/ (Node/Express).",
+  "scripts": {
+    "prepare": "husky",
+    "test": "cd backend && npm run test:ci",
+    "postinstall": "echo \"[setup] Recuerda: cd backend && npm ci\" "
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "lint-staged": {
+    "*.dart": [
+      "dart format --output=none --set-exit-if-changed"
+    ],
+    "*.{js,cjs,mjs}": [
+      "node --check"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.0",
+    "@commitlint/config-conventional": "^19.6.0",
+    "eslint": "^9.15.0",
+    "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.3.0"
+  }
+}

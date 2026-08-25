@@ -1,0 +1,6 @@
+# Conventional Commits obligatorio (tipos cerrados, ver commitlint.config.js)
+if [ ! -x "./node_modules/.bin/commitlint" ]; then
+  echo "[commit-msg] Falta tooling: ejecuta 'npm install' en la raiz del repo" >&2
+  exit 1
+fi
+exec ./node_modules/.bin/commitlint --edit "$1"

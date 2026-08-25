@@ -1,0 +1,12 @@
+# Propietarios de codigo — revisión obligatoria según path.
+# Sintaxis: https://docs.github.com/es/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*                       @jlp717
+
+# Producto
+/lib/                   @jlp717
+/backend/               @jlp717
+
+# Decisiones de arquitectura (ADRs) e infraestructura de repo
+/docs/adr/              @jlp717
+/.github/               @jlp717

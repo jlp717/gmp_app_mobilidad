@@ -152,11 +152,8 @@ install_cmake.bat
 run_app.bat
 update_ip_config.ps1
 
-# Root-level node artifacts (backend has its own)
-/node_modules/
-/package.json
-/package-lock.json
-
+# Node (raiz = tooling DX versionado e intencional; backend tiene el suyo)
+node_modules/
 # Environment files (keep .env.example)
 .env
 !.env.example
@@ -341,3 +338,11 @@ acouz/
 
 docs/opencode-agent-governance/evals/last-validation.json
 docs/opencode-agent-governance/evals/canary-markers/
+
+# Higiene repo 2026-08-25 (Prompt 1): locales que nunca se versionan
+/uploads/
+/logs/
+/database_backup_*/
+.fvm/
+.husky/_/
+!backend/.env.example

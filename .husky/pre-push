@@ -1,0 +1,4 @@
+# Push rapido (<10s): solo whitespace errors.
+# La suite pesada (tests, lint, build) la ejecuta GitHub Actions (.github/workflows/ci-cd.yml).
+git diff --check || exit 1
+echo "[pre-push] OK (rapido). Tests/lint/build completos los corre CI en GitHub."
