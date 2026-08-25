@@ -870,6 +870,70 @@ function contentHashProjection(columns, { lobLengths = null } = {}) {
   });
 }
 
+function contentHashChunkProjection(column, index, chunk) {
+  const nullAlias = `H${index}_NULL`;
+  const lengthAlias = `H${index}_LENGTH`;
+  const chunkLengthAlias = `H${index}_C${chunk.index}_LENGTH`;
+  const chunkValueAlias = `H${index}_C${chunk.index}_VALUE`;
+  const columnName = column.name;
+  const effectiveLength = `CASE WHEN LENGTH(${columnName}) <= ${chunk.offset - 1} THEN 0 `
+    + `WHEN LENGTH(${columnName}) - ${chunk.offset - 1} > ${chunk.length} THEN ${chunk.length} `
+    + `ELSE LENGTH(${columnName}) - ${chunk.offset - 1} END`;
+  const value = String(column.dataType || '').toUpperCase() === 'BLOB'
+    ? `HEX(SUBSTR(${columnName}, ${chunk.offset}, ${chunk.length}))`
+    : `RTRIM(CAST(SUBSTR(${columnName}, ${chunk.offset}, ${chunk.length}) AS VARCHAR(${LOB_HASH_CHUNK_CHARS})))`;
+  return [
+    `CASE WHEN ${columnName} IS NULL THEN 1 ELSE 0 END AS ${nullAlias}`,
+    `COALESCE(LENGTH(${columnName}), 0) AS ${lengthAlias}`,
+    `CASE WHEN ${columnName} IS NULL THEN NULL ELSE ${effectiveLength} END AS ${chunkLengthAlias}`,
+    `CASE WHEN ${columnName} IS NULL THEN NULL ELSE ${value} END AS ${chunkValueAlias}`,
+  ];
+}
+
+async function contentHashOfLargeBlobSafely(schemaTable, columns, lobLengths, queryFn) {
+  const nonLobColumns = columns.filter((column) => !isLobColumn(column));
+  const baseRows = nonLobColumns.length
+    ? await queryFn(`SELECT ${contentHashProjection(nonLobColumns).join(', ')} FROM ${schemaTable}`)
+    : [];
+  const baseHashes = (baseRows || []).map((row) => crypto.createHash('sha256').update(
+    nonLobColumns.map((column, index) => canonicalBackupValueForColumn(
+      projectedHashValue(row, `H${index}_VALUE`, column.name),
+      column,
+    )).join('\u001f'),
+  ).digest('hex')).sort();
+  const lobHashes = [];
+  for (const [index, column] of columns.entries()) {
+    if (!isLobColumn(column)) continue;
+    const maximumLength = lobLengths.get(index);
+    for (const chunk of lobChunkPlan(column, maximumLength)) {
+      const projection = contentHashChunkProjection(column, index, chunk);
+      const rows = await queryFn(`SELECT ${projection.join(', ')} FROM ${schemaTable}`);
+      const chunkValues = (rows || []).map((row) => {
+        const nullMarker = projectedHashValue(row, `H${index}_NULL`, column.name);
+        if (String(nullMarker) === '1') return '<NULL>';
+        if (String(nullMarker) !== '0') {
+          throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid LOB null marker`);
+        }
+        const totalLength = Number(projectedHashValue(row, `H${index}_LENGTH`, column.name));
+        const length = Number(projectedHashValue(row, `H${index}_C${chunk.index}_LENGTH`, column.name));
+        const value = projectedHashValue(row, `H${index}_C${chunk.index}_VALUE`, column.name);
+        if (!Number.isSafeInteger(totalLength) || totalLength < 0 || totalLength > maximumLength
+          || !Number.isSafeInteger(length) || length < 0 || length > chunk.length
+          || value === null || value === undefined) {
+          throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid LOB chunk ${chunk.index}`);
+        }
+        const text = String(value);
+        if (String(column.dataType || '').toUpperCase() === 'BLOB' && !/^[A-Fa-f0-9]*$/.test(text)) {
+          throw new Error(`BACKUP HASH BLOCK ${schemaTable}.${column.name}: invalid BLOB chunk ${chunk.index}`);
+        }
+        return `${totalLength}:${length}:${canonicalBackupValue(text)}`;
+      }).sort();
+      lobHashes.push(crypto.createHash('sha256').update(chunkValues.join('\n')).digest('hex'));
+    }
+  }
+  return crypto.createHash('sha256').update(JSON.stringify({ baseHashes, lobHashes })).digest('hex');
+}
+
 function canonicalLobProjection(row, column, index, schemaTable, maximumLength = column.length) {
   const nullMarker = projectedHashValue(row, `H${index}_NULL`, column.name);
   if (String(nullMarker) === '1') return '<NULL>';
@@ -906,6 +970,15 @@ async function contentHashOf(schemaTable, columns, { queryFn = query } = {}) {
   const names = columns.map((column) => column.name);
   if (!names.length) throw new Error(`BACKUP HASH BLOCK ${schemaTable}: no columns`);
   const lobLengths = await actualLobLengthsOf(schemaTable, columns, { queryFn });
+  // IBM i/node-odbc rejects one result row containing all chunks of a large
+  // BLOB (DB2 -101), although each bounded chunk is valid. Split only the
+  // live driver path; unit-test query doubles keep the compact projection.
+  const hasLargeBlob = [...lobLengths.entries()].some(([index, length]) => (
+    String(columns[index]?.dataType || '').toUpperCase() === 'BLOB' && Number(length) > 65536
+  ));
+  if (hasLargeBlob && queryFn === query) {
+    return contentHashOfLargeBlobSafely(schemaTable, columns, lobLengths, queryFn);
+  }
   const rows = await queryFn(`SELECT ${contentHashProjection(columns, { lobLengths }).join(', ')} FROM ${schemaTable}`);
   // DB2 does not guarantee scan order (and CTAS may choose a different access
   // path). Hash the row multiset, never the result-set order, so the durable
