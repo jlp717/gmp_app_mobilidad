@@ -1045,23 +1045,29 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
 
   const totals = firstRow(totalsRows);
   let saldoActual = 0;
-  try {
-    const lqdRows = await Promise.all(ids.map((id) => financeRepo.selectLastLqdSaldo(id)));
-    const hasLqdSnapshot = lqdRows.some((rows) => Array.isArray(rows) && rows.length > 0);
-    if (hasLqdSnapshot) {
-      saldoActual = roundMoney(lqdRows.reduce((sum, rows) => {
-        if (!rows || !rows.length) return sum;
-        return sum + Number(value(rows[0], 'SALDO', 0) || 0);
-      }, 0));
-    } else {
-      // A test copy can be isolated from DSEDAC.LQD. In that case the
-      // explicitly maintained isolated balance is the authoritative opening
-      // balance; an empty LQD result must not silently become zero.
+  const isolatedTestBalances = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
+  if (isolatedTestBalances) {
+    // TEST liquidations serialize the day against TEST_REPARTIDOR_FINANCIAL_BALANCES.
+    // DSEDAC.LQD is an ERP read model and may contain a different production
+    // snapshot, so mixing it here would make Daily Summary disagree with the
+    // exact balance used by closeDay().
+    saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+  } else {
+    try {
+      const lqdRows = await Promise.all(ids.map((id) => financeRepo.selectLastLqdSaldo(id)));
+      const hasLqdSnapshot = lqdRows.some((rows) => Array.isArray(rows) && rows.length > 0);
+      if (hasLqdSnapshot) {
+        saldoActual = roundMoney(lqdRows.reduce((sum, rows) => {
+          if (!rows || !rows.length) return sum;
+          return sum + Number(value(rows[0], 'SALDO', 0) || 0);
+        }, 0));
+      } else {
+        saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+      }
+    } catch (error) {
+      logger.warn(`[REPARTIDOR_FINANZAS] daily-summary DSEDAC.LQD saldo: ${error.message}`);
       saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
     }
-  } catch (error) {
-    logger.warn(`[REPARTIDOR_FINANZAS] daily-summary DSEDAC.LQD saldo: ${error.message}`);
-    saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
   }
   const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
   const gastos = roundMoney(structured.gastos);

@@ -253,6 +253,35 @@ describe('Repartidor finanzas routes', () => {
     const totalsCall = mockQueryWithParams.mock.calls.find(c => c[1] && c[1][0] === '94');
     expect(totalsCall[1]).toEqual(['94', 20260423]);
   });
+  test('GET /daily-summary in isolated test uses the isolated balance over ERP LQD', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
+        TOTAL_EFECTIVO: '10',
+        TOTAL_CHEQUES: '0',
+        TOTAL_TARJETA: '0',
+        TOTAL_POSTDATADOS: '0',
+        TOTAL_COBROS_DIA: '10',
+        COBROS_COUNT: '1',
+      }])
+      .mockResolvedValueOnce([{ SALDO_PENDIENTE: '70.04' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ TOTAL: '2.50' }])
+      .mockResolvedValueOnce([{ TOTAL: '1.25' }])
+      .mockResolvedValueOnce([{ TOTAL: '-0.75' }])
+      .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '0' }])
+      .mockResolvedValueOnce([{ DEUDA_PENDIENTE: '0' }]);
+
+    const res = await request(app)
+      .get('/finanzas/daily-summary/94')
+      .query({ date: '2026-08-25' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.summary.saldoActual).toBe(70.04);
+    expect(res.body.summary.totalAIngresar).toBe(76.79);
+    const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
+    expect(sqlText).not.toContain('FROM DSEDAC.LQD');
+  });
 
   test('GET /daily-summary includes signed adjustments in totalAIngresar', async () => {
     mockQueryWithParams
