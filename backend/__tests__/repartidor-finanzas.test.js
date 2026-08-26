@@ -1525,7 +1525,7 @@ describe('Repartidor finanzas routes', () => {
 
     expect(res.status).toBe(201);
     const logs = logger.warn.mock.calls;
-    expect(logs).toHaveLength(3);
+    expect(logs).toHaveLength(4);
     logs.forEach(([message, extra]) => {
       expect(message).toBe('[REPARTIDOR_FINANZAS] Cache invalidation failed');
       expect(extra).toEqual({ code: 'FINANCE_CACHE_INVALIDATION_FAILED' });

@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const logger = require('../middleware/logger');
 const { getPool, query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
-const { TTL, deleteCachePattern } = require('../services/redis-cache');
+const { TTL, deleteCachePattern, redisCache } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -41,6 +41,9 @@ const RUTERO_WEEKDAY_INDEX = {
     domingo: 6
 };
 const ORDER_STATUS_EMPTY_LABEL = 'SIN VENTA';
+const RUTERO_DAY_BATCH_SIZE = 200;
+const RUTERO_DAY_CACHE_TTL = TTL.REALTIME;
+const RUTERO_DAY_BATCH_CONCURRENCY = 4;
 
 function dateParts(dateValue) {
     const year = dateValue.getFullYear();
@@ -124,6 +127,89 @@ function normalizePlannerVendorCode(value) {
 
 function plannerCodesMatch(left, right) {
     return normalizePlannerVendorCode(left) === normalizePlannerVendorCode(right);
+}
+
+function splitRuteroDayBatches(values, size = RUTERO_DAY_BATCH_SIZE) {
+    const batches = [];
+    for (let index = 0; index < values.length; index += size) {
+        batches.push(values.slice(index, index + size));
+    }
+    return batches;
+}
+
+function ruteroBatchHash(values) {
+    return crypto.createHash('md5').update(values.join(',')).digest('hex');
+}
+
+function buildRuteroDayPayloadCacheKey({
+    day,
+    vendedorCodes,
+    role,
+    year,
+    month,
+    week,
+    date,
+    ignoreOverrides,
+}) {
+    const scope = String(vendedorCodes || '')
+        .split(',')
+        .map((code) => code.trim())
+        .filter(Boolean)
+        .sort()
+        .join(',');
+    const identity = JSON.stringify({
+        day: String(day || '').toLowerCase(),
+        scope,
+        role: String(role || 'comercial').toLowerCase(),
+        year: String(year || ''),
+        month: String(month || ''),
+        week: String(week || ''),
+        date: String(date || ''),
+        ignoreOverrides: Boolean(ignoreOverrides),
+    });
+    return `rutero:day:payload:v3:${crypto.createHash('sha256').update(identity).digest('hex').slice(0, 32)}`;
+}
+
+async function readRuteroDayPayload(cacheKey) {
+    if (!redisCache || typeof redisCache.get !== 'function') return null;
+    try {
+        const value = await redisCache.get('query', cacheKey);
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    } catch (error) {
+        logger.debug(`[RUTERO DAY] Shared cache read skipped: ${error.message}`);
+        return null;
+    }
+}
+
+function writeRuteroDayPayload(cacheKey, payload) {
+    if (!redisCache || typeof redisCache.set !== 'function') return;
+    void redisCache.set('query', cacheKey, payload, RUTERO_DAY_CACHE_TTL).catch((error) => {
+        logger.debug(`[RUTERO DAY] Shared cache write skipped: ${error.message}`);
+    });
+}
+
+async function runBatchedRuteroQuery({ batches, buildSql, buildParams, buildCacheKey, ttl }) {
+    const results = await mapRuteroBatches(batches, (batch) => cachedQuery(
+        queryWithParams,
+        buildSql(batch),
+        buildCacheKey(batch),
+        ttl,
+        buildParams(batch),
+    ));
+    return results.flatMap((result) => Array.isArray(result) ? result : []);
+}
+
+async function mapRuteroBatches(batches, mapper, concurrency = RUTERO_DAY_BATCH_CONCURRENCY) {
+    const results = new Array(batches.length);
+    let nextIndex = 0;
+    async function worker() {
+        while (nextIndex < batches.length) {
+            const index = nextIndex++;
+            results[index] = await mapper(batches[index]);
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker));
+    return results;
 }
 
 const PLANNER_SCOPE_SENTINELS = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0']);
@@ -308,7 +394,14 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     ];
 
     try {
-        const rows = await queryWithParams(sql, params, false, false);
+        const orderCacheKey = `rutero:orders:v2:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
+        const rows = await cachedQuery(
+            queryWithParams,
+            sql,
+            orderCacheKey,
+            TTL.REALTIME,
+            params,
+        );
         (rows || []).forEach((row) => {
             const code = (row.CODE ?? row.code ?? '').toString().trim();
             if (!code) return;
@@ -336,6 +429,16 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
 }
 
 // =============================================================================
+async function getBatchedRuteroOrderStatusMap(batches, options) {
+    const results = await mapRuteroBatches(batches, (batch) => getRuteroOrderStatusMap(batch, options));
+    const statusMap = new Map();
+    let degraded = false;
+    results.forEach((result) => {
+        result?.statusMap?.forEach((value, key) => statusMap.set(key, value));
+        degraded = degraded || result?.degraded === true;
+    });
+    return { statusMap, degraded };
+}
 // ROUTER CALENDAR
 // =============================================================================
 router.get('/router/calendar', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
@@ -630,6 +733,7 @@ router.post('/rutero/move_clients', requirePlannerVendorScope({ location: 'body'
             await deleteCachePattern(`query:rutero:details:v3:*`);
             await deleteCachePattern(`query:rutero:sales:*`);
             await deleteCachePattern(`query:rutero:gps:*`);
+            await deleteCachePattern('query:rutero:day:payload:*');
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
@@ -728,6 +832,7 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
             await deleteCachePattern(`query:rutero:details:v3:*`);
             await deleteCachePattern(`query:rutero:sales:*`);
             await deleteCachePattern(`query:rutero:gps:*`);
+            await deleteCachePattern('query:rutero:day:payload:*');
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
@@ -829,6 +934,7 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
             await deleteCachePattern(`query:rutero:details:v3:*`);
             await deleteCachePattern(`query:rutero:sales:*`);
             await deleteCachePattern(`query:rutero:gps:*`);
+            await deleteCachePattern('query:rutero:day:payload:*');
             logger.info(`♻️ Cache invalidated for pattern: ${cachePattern} and query caches`);
         } catch (cacheErr) {
             logger.warn(`Cache invalidation failed: ${cacheErr.message}`);
@@ -1074,12 +1180,9 @@ router.get('/rutero/day-direct/:day', requirePlannerVendorScope({ location: 'que
             return res.json({ clients: [], count: 0, day, cacheStatus: 'fresh' });
         }
 
-        const batchSize = 200;
-        const clientBatch = dayClientCodes.slice(0, batchSize);
-
-        // SECURITY: Use parameterized query to prevent SQL injection
-        const placeholders = clientBatch.map(() => '?').join(',');
-        const clientDetailsSql = `
+        // Keep refreshes complete too; the former slice silently dropped clients > 200.
+        const clientBatches = splitRuteroDayBatches(dayClientCodes);
+        const clientDetailsSql = (batch) => `
             SELECT
                 CODIGOCLIENTE as CODE,
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
@@ -1088,10 +1191,13 @@ router.get('/rutero/day-direct/:day', requirePlannerVendorScope({ location: 'que
                 TELEFONO1 as PHONE,
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
-            WHERE CODIGOCLIENTE IN (${placeholders})
+            WHERE CODIGOCLIENTE IN (${batch.map(() => '?').join(',')})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
-        const clientDetails = await queryWithParams(clientDetailsSql, clientBatch, false, false);
+        const clientDetails = (await mapRuteroBatches(
+            clientBatches,
+            (batch) => queryWithParams(clientDetailsSql(batch), batch, false, false),
+        )).flatMap((rows) => Array.isArray(rows) ? rows : []);
 
         // Get RUTERO_CONFIG order for sorting
         // For multi-vendor (comma-separated), only query first vendor's order (most common use case)
@@ -1199,6 +1305,26 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             normalizedDay,
             now
         });
+
+        const forceRefresh = req.query.forceRefresh != null
+            || req.query.refresh != null
+            || req.query._ts != null
+            || ['true', '1', 'yes'].includes(String(req.headers['x-force-refresh'] || '').toLowerCase());
+        const dayPayloadCacheKey = buildRuteroDayPayloadCacheKey({
+            day: normalizedDay,
+            vendedorCodes,
+            role,
+            year: currentYear,
+            month,
+            week,
+            date: orderDate.iso,
+            ignoreOverrides: shouldIgnoreOverrides,
+
+        });
+        if (!forceRefresh) {
+            const cachedPayload = await readRuteroDayPayload(dayPayloadCacheKey);
+            if (cachedPayload) return res.json({ ...cachedPayload, cacheStatus: 'hit' });
+        }
 
         // Determine the reference date (The "End Date" for calculation)
         // IMPORTANT: We want to compare COMPLETED weeks only.
@@ -1322,19 +1448,15 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             });
         }
 
-// Limit clients for safety
-        const batchSize = 200;
-        const clientBatch = dayClientCodes.slice(0, batchSize);
-
-        // SECURITY: Use parameterized query to prevent SQL injection
-        const clientPlaceholders = clientBatch.map(() => '?').join(',');
-        const clientsHash = crypto.createHash('md5').update(clientBatch.join(',')).digest('hex');
+        // Keep DB2 statements bounded, but never drop clients from a manager's route.
+        const clientBatches = splitRuteroDayBatches(dayClientCodes);
         const cacheTTL = TTL.MEDIUM; // 5 minutes
 
         // --- 2. Heavy Queries with Caching ---
-        // Parallelize all heavy queries for maximum performance
-        const detailsSql = `
-            SELECT 
+        // Keep each DB2 statement bounded while processing every route client.
+        const batchPlaceholders = (batch) => batch.map(() => '?').join(',');
+        const detailsSql = (batch) => `
+            SELECT
                 CODIGOCLIENTE as CODE,
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
                 DIRECCION as ADDRESS,
@@ -1342,53 +1464,53 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
                 TELEFONO1 as PHONE,
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
-            WHERE CODIGOCLIENTE IN (${clientPlaceholders})
+            WHERE CODIGOCLIENTE IN (${batchPlaceholders(batch)})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
-        const currentSalesSql = `
-            SELECT 
+        const currentSalesSql = (batch) => `
+            SELECT
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${clientPlaceholders})
+            WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
             GROUP BY L.LCCDCL
         `;
-        const prevSalesSql = endMonthPrevious > 0 ? `
-            SELECT 
+        const prevSalesSql = endMonthPrevious > 0 ? (batch) => `
+            SELECT
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${clientPlaceholders})
+            WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
             GROUP BY L.LCCDCL
         ` : null;
-        const prevYearTotalSql = `
-            SELECT 
+        const prevYearTotalSql = (batch) => `
+            SELECT
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${clientPlaceholders})
+            WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL
         `;
-        const gpsSql = `
+        const gpsSql = (batch) => `
             SELECT CODIGO, LATITUD, LONGITUD
             FROM DSEMOVIL.CLIENTES
-            WHERE CODIGO IN (${clientPlaceholders})
+            WHERE CODIGO IN (${batchPlaceholders(batch)})
               AND LATITUD IS NOT NULL AND LATITUD <> 0
         `;
-        const notesSql = `
+        const notesSql = (batch) => `
             SELECT CLIENT_CODE, OBSERVACIONES, MODIFIED_BY
             FROM JAVIER.CLIENT_NOTES
-            WHERE CLIENT_CODE IN (${clientPlaceholders})
+            WHERE CLIENT_CODE IN (${batchPlaceholders(batch)})
         `;
 
         const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
@@ -1410,14 +1532,50 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             orderStatusResult,
             configRows,
         ] = await Promise.all([
-            cachedQuery(queryWithParams, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG, clientBatch),
-            cachedQuery(queryWithParams, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL, [...clientBatch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent]),
-            prevSalesSql ? cachedQuery(queryWithParams, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL, [...clientBatch, previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious]) : Promise.resolve([]),
-            cachedQuery(queryWithParams, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG, [...clientBatch, previousYear]),
-            cachedQuery(queryWithParams, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG, clientBatch).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
-            cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
-            getRuteroOrderStatusMap(clientBatch, { vendedorCodes, orderDate }),
-            configRowsPromise
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: detailsSql,
+                buildParams: (batch) => batch,
+                buildCacheKey: (batch) => `rutero:details:v3:${ruteroBatchHash(batch)}`,
+                ttl: TTL.LONG,
+            }),
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: currentSalesSql,
+                buildParams: (batch) => [...batch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent],
+                buildCacheKey: (batch) => `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${ruteroBatchHash(batch)}`,
+                ttl: cacheTTL,
+            }),
+            prevSalesSql ? runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: prevSalesSql,
+                buildParams: (batch) => [...batch, previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious],
+                buildCacheKey: (batch) => `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${ruteroBatchHash(batch)}`,
+                ttl: cacheTTL,
+            }) : Promise.resolve([]),
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: prevYearTotalSql,
+                buildParams: (batch) => [...batch, previousYear],
+                buildCacheKey: (batch) => `rutero:sales:total:${previousYear}:${ruteroBatchHash(batch)}`,
+                ttl: TTL.LONG,
+            }),
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: gpsSql,
+                buildParams: (batch) => batch,
+                buildCacheKey: (batch) => `rutero:gps:v3:${ruteroBatchHash(batch)}`,
+                ttl: TTL.LONG,
+            }).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: notesSql,
+                buildParams: (batch) => batch,
+                buildCacheKey: (batch) => `rutero:notes:v1:${ruteroBatchHash(batch)}`,
+                ttl: TTL.SHORT,
+            }).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
+            getBatchedRuteroOrderStatusMap(clientBatches, { vendedorCodes, orderDate }),
+            configRowsPromise,
         ]);
         const orderStatusMap = orderStatusResult?.statusMap instanceof Map
             ? orderStatusResult.statusMap
@@ -1578,7 +1736,7 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             return (a.name || '').localeCompare(b.name || '');
         });
 
-        res.json({
+        const responsePayload = {
             clients,
             count: clients.length,
             day,
@@ -1591,7 +1749,9 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
                 current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
                 previous: completedWeeks > 0 && endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Sin comparación'
             }
-        });
+        };
+        writeRuteroDayPayload(dayPayloadCacheKey, responsePayload);
+        return res.json(responsePayload);
 
     } catch (error) {
         return handleRouteError(error, res, 'Error obteniendo rutero diario', 500);

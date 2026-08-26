@@ -38,7 +38,7 @@ class RuteroPage extends ConsumerStatefulWidget {
 }
 
 class _RuteroPageState extends ConsumerState<RuteroPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // Data state
   Map<String, int> _weekData = {};
   int _totalUniqueClients =
@@ -81,6 +81,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       'comercial'; // 'comercial' (visita) or 'repartidor' (reparto)
   String _selectedDay = 'lunes';
   String _todayName = 'lunes';
+  bool _followToday = true;
 
   late TabController _tabController;
 
@@ -143,6 +144,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
     _initToday();
     _isInitialized = true;
     _loadWeekData();
@@ -199,6 +201,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _vendorSubscription?.close();
     _retryTimer?.cancel();
     _tabController.dispose();
@@ -206,8 +209,26 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted || !_followToday) return;
+    final today = DateTime.now();
+    final todayIso = _dateIso(today);
+    if (_selectedRouteDateIso() == todayIso) return;
+    _initToday();
+    _cacheRetryCount = 0;
+    unawaited(_loadWeekData());
+  }
+
+  String _dateIso(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
   void _initToday() {
     final now = DateTime.now();
+    _followToday = true;
     _selectedYear = now.year;
     _selectedMonth = now.month;
     final dayOfWeek = now.weekday; // 1=Monday, 7=Sunday
@@ -269,6 +290,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   void _changeMonth(int delta) {
+    _followToday = false;
     setState(() {
       _selectedMonth += delta;
       if (_selectedMonth < 1) {
@@ -285,15 +307,31 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   void _changeWeek(int delta) {
-    setState(() {
-      _selectedWeek += delta;
-      if (_selectedWeek < 1) {
-        _changeMonth(-1);
-        _selectedWeek = _weeksInMonth;
-      } else if (_selectedWeek > _weeksInMonth) {
-        _changeMonth(1);
-        _selectedWeek = 1;
+    _followToday = false;
+    _loadGeneration++;
+    var nextMonth = _selectedMonth;
+    var nextYear = _selectedYear;
+    var nextWeek = _selectedWeek + delta;
+    if (nextWeek < 1) {
+      nextMonth--;
+      if (nextMonth < 1) {
+        nextMonth = 12;
+        nextYear--;
       }
+      nextWeek = _getWeeksInMonth(nextYear, nextMonth);
+    } else if (nextWeek > _weeksInMonth) {
+      nextMonth++;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextYear++;
+      }
+      nextWeek = 1;
+    }
+    setState(() {
+      _selectedYear = nextYear;
+      _selectedMonth = nextMonth;
+      _weeksInMonth = _getWeeksInMonth(nextYear, nextMonth);
+      _selectedWeek = nextWeek;
     });
     _loadWeekData();
   }
@@ -484,10 +522,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         _kpiFilteredCodes = {};
       }
 
-      // Use direct endpoint when refreshing to bypass cache
-      final endpoint = useDirectEndpoint
-          ? '${ApiConfig.ruteroDay}-direct/$_selectedDay'
-          : '${ApiConfig.ruteroDay}/$_selectedDay';
+      // The normal endpoint now supports bounded batches and shared caching.
+      // One complete request is faster and avoids direct + enrichment double loads.
+      final endpoint = '${ApiConfig.ruteroDay}/$_selectedDay';
       final routeDateIso = _selectedRouteDateIso();
 
       final result = await OfflineAwareApi.get(
@@ -533,12 +570,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
       // If the backend cache is still warming OR data is empty, retry
       final dayCacheStatus = response['cacheStatus'] as String?;
-      final hasAnySales = _dayClients.any((client) {
-        final status = client['status'] as Map<String, dynamic>?;
-        final ytdSales = (status?['ytdSales'] as num?)?.toDouble() ?? 0;
-        return ytdSales > 0.01;
-      });
-
       // Only retry while the backend cache is still warming up.
       final isBackendCacheLoading = dayCacheStatus == 'loading';
       if (isBackendCacheLoading && _cacheRetryCount < _maxCacheRetries) {
@@ -559,18 +590,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           _isCacheLoading = false;
           _cacheRetryCount = 0;
         });
-
-        // day-direct is intentionally fast and can omit sales KPIs.
-        // Enrich once from the cached endpoint, but do not enter a retry loop.
-        if (useDirectEndpoint &&
-            _dayClients.isNotEmpty &&
-            !hasAnySales &&
-            mounted) {
-          debugPrint(
-            '[Rutero] Day-direct returned clients without sales. Fetching sales data from normal endpoint...',
-          );
-          await _enrichWithSalesData(generation: currentGeneration);
-        }
       }
     } on OfflineException catch (e) {
       if (!mounted || currentGeneration != _loadGeneration) return;
@@ -588,81 +607,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
   }
 
-  /// Fetch sales data from normal endpoint and merge into existing clients
-  Future<void> _enrichWithSalesData({required int generation}) async {
-    try {
-      final activeVendedorCode = _activeVendedorCode;
-      final cacheScope = _ruteroCacheScopeFor(activeVendedorCode);
-      final routeDateIso = _selectedRouteDateIso();
-      final result = await OfflineAwareApi.get(
-        '${ApiConfig.ruteroDay}/$_selectedDay',
-        queryParameters: {
-          'vendedorCodes': activeVendedorCode,
-          'role': _selectedRole,
-          'year': _selectedYear,
-          'month': _selectedMonth,
-          'week': _selectedWeek,
-          'date': routeDateIso,
-          'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
-        },
-        cacheKey: [
-          'rutero_day_enrich',
-          cacheScope,
-          _selectedRole,
-          _selectedDay,
-          routeDateIso,
-          _selectedYear,
-          _selectedMonth,
-          _selectedWeek,
-          _sortMode,
-        ].join('_'),
-        forceRefresh: true,
-      );
-
-      final normalResponse = result.data;
-      if (!mounted || generation != _loadGeneration) return;
-
-      final enrichedClients =
-          (normalResponse['clients'] ?? <dynamic>[]) as List;
-      if (enrichedClients.isEmpty) return;
-
-      // Merge sales data into existing clients
-      final salesMap = <String, Map<String, dynamic>>{};
-      final orderStatusMap = <String, Map<String, dynamic>>{};
-      for (final item in enrichedClients) {
-        final client = item as Map<String, dynamic>;
-        final code = client['code'] as String?;
-        final status = client['status'] as Map<String, dynamic>?;
-        final orderStatus = client['orderStatus'] as Map<String, dynamic>?;
-        if (code != null && status != null) {
-          salesMap[code] = status;
-        }
-        if (code != null && orderStatus != null) {
-          orderStatusMap[code] = orderStatus;
-        }
-      }
-
-      // Update existing clients with sales data
-      setState(() {
-        for (var i = 0; i < _dayClients.length; i++) {
-          final code = _dayClients[i]['code'] as String?;
-          if (code != null && salesMap.containsKey(code)) {
-            _dayClients[i]['status'] = salesMap[code];
-          }
-          if (code != null && orderStatusMap.containsKey(code)) {
-            _dayClients[i]['orderStatus'] = orderStatusMap[code];
-          }
-        }
-      });
-
-      debugPrint('[Rutero] Sales data enriched for ${salesMap.length} clients');
-    } catch (e) {
-      debugPrint('[Rutero] Failed to enrich with sales data: $e');
-    }
-  }
-
   void _onDaySelected(String day) {
     if (day != _selectedDay) {
+      _followToday = false;
       _cacheRetryCount = 0; // Reset retry counter when changing day
       setState(() => _selectedDay = day);
       _loadDayClients();

@@ -5,6 +5,9 @@ const express = require('express');
 
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
+const mockGetClientsForDay = jest.fn();
+const mockRedisGet = jest.fn();
+const mockRedisSet = jest.fn();
 
 jest.mock('../middleware/logger', () => ({
   info: jest.fn(),
@@ -27,6 +30,10 @@ jest.mock('../services/query-optimizer', () => ({
 jest.mock('../services/redis-cache', () => ({
   TTL: { SHORT: 60, MEDIUM: 300, LONG: 1800, REALTIME: 60 },
   deleteCachePattern: jest.fn(),
+  redisCache: {
+    get: (...args) => mockRedisGet(...args),
+    set: (...args) => mockRedisSet(...args),
+  },
 }));
 
 jest.mock('../services/laclae', () => ({
@@ -40,7 +47,7 @@ jest.mock('../services/laclae', () => ({
     domingo: 0,
   })),
   getTotalClientsFromCache: jest.fn(() => 2),
-  getClientsForDay: jest.fn(() => ['4300000001', '4300000002']),
+  getClientsForDay: (...args) => mockGetClientsForDay(...args),
   reloadRuteroConfig: jest.fn(),
   loadLaclaeCache: jest.fn(),
   getClientCurrentDay: jest.fn(),
@@ -77,6 +84,9 @@ describe('Planner rutero/day route', () => {
     jest.clearAllMocks();
 
     mockQuery.mockResolvedValue([]);
+    mockGetClientsForDay.mockReturnValue(['4300000001', '4300000002']);
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisSet.mockResolvedValue(true);
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (sql.includes('FROM DSEDAC.CLI')) {
         return [
@@ -149,5 +159,63 @@ describe('Planner rutero/day route', () => {
     expect(orderStatusQueries).toHaveLength(1);
     expect(orderStatusQueries[0]).toContain('GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)');
     expect(executedSql.some(sql => sql.includes('PEDIDOS_CAB'))).toBe(false);
+  });
+
+  test('GET /rutero/day/:day keeps every manager client beyond the 200-row batch', async () => {
+    const clientCodes = Array.from({ length: 201 }, (_, index) =>
+      'C' + String(index + 1).padStart(9, '0')
+    );
+    mockGetClientsForDay.mockReturnValue(clientCodes);
+    mockQueryWithParams.mockImplementation(async (sql, params = []) => {
+      if (sql.includes('FROM DSEDAC.CLI')) {
+        return params.map((code) => ({
+          CODE: code,
+          NAME: 'Cliente ' + code,
+          ADDRESS: 'Calle de prueba',
+          CITY: 'Madrid',
+          PHONE: '',
+          PHONE2: '',
+        }));
+      }
+      if (sql.includes('FROM JAVIER.RUTERO_CONFIG')) return [];
+      if (sql.includes('FROM DSEDAC.CPC')) return [];
+      return [];
+    });
+
+    const res = await request(app)
+      .get('/rutero/day/martes')
+      .query({
+        vendedorCodes: '02',
+        role: 'comercial',
+        year: '2026',
+        month: '4',
+        week: '4',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(201);
+    expect(new Set(res.body.clients.map((client) => client.code)).size).toBe(201);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CLI'))).toHaveLength(2);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CPC'))).toHaveLength(2);
+  });
+
+  test('GET /rutero/day/:day serves the complete payload from shared cache', async () => {
+    mockRedisGet.mockResolvedValue({
+      clients: [{ code: '4300000001', name: 'Cliente cacheado' }],
+      count: 1,
+      day: 'martes',
+      orderStatusDegraded: false,
+    });
+
+    const res = await request(app)
+      .get('/rutero/day/martes')
+      .query({ vendedorCodes: '02', role: 'comercial', year: '2026', month: '4', week: '4' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cacheStatus).toBe('hit');
+    expect(res.body.count).toBe(1);
+    expect(res.body.clients[0].name).toBe('Cliente cacheado');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(mockRedisGet).toHaveBeenCalledWith('query', expect.stringContaining('rutero:day:payload:v3:'));
   });
 });
