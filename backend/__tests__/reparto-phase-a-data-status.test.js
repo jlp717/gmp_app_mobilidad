@@ -6,9 +6,9 @@ const path = require('path');
 describe('phase A reparto data/status contracts', () => {
   const read = (relative) => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
 
-  test('collections are bounded to twenty drivers and report partial batches', () => {
+  test('collections are bounded to ten drivers and report partial batches', () => {
     const source = read('repositories/repartidor-route-db2-repository.js');
-    expect(source).toContain('const COLLECTION_DRIVER_BATCH_SIZE = 20;');
+    expect(source).toContain('const COLLECTION_DRIVER_BATCH_SIZE = 10;');
     expect(source).toContain('Promise.allSettled(batches.map((batch) => load(batch)))');
   });
 
