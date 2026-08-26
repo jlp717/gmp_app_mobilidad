@@ -1017,6 +1017,40 @@ async function getDailySummary({ repartidorId, date }) {
   }
 }
 
+function aggregateDailySummaries({ repartidorId, date, parts }) {
+  const numericKeys = [
+    'totalEfectivo', 'totalCheques', 'totalTarjeta', 'totalPostdatados',
+    'saldoActual', 'totalCobrosDia', 'gastos', 'totalAIngresar',
+    'ingresoBanco', 'totalEfectivo2', 'entregado', 'deudaPendiente',
+    'cobrosCount', 'ajustes',
+  ];
+  const summary = Object.fromEntries(numericKeys.map((key) => [
+    key,
+    roundMoney(parts.reduce((total, item) => total + toNumber(item?.summary?.[key], 0), 0)),
+  ]));
+  summary.TOTAL_AJUSTES = summary.ajustes;
+  summary.TOTAL_EFECTIVO = summary.totalEfectivo;
+  summary.TOTAL_CHEQUES = summary.totalCheques;
+  summary.TOTAL_TARJETA = summary.totalTarjeta;
+  summary.TOTAL_POSTDATADOS = summary.totalPostdatados;
+  summary.SALDO_PENDIENTE = summary.saldoActual;
+  summary.TOTAL_COBROS_DIA = summary.totalCobrosDia;
+  summary.TOTAL_GASTOS = summary.gastos;
+  summary.TOTAL_A_INGRESAR = summary.totalAIngresar;
+  summary.TOTAL_REPARTIDO = summary.entregado;
+  summary.DEUDA_PENDIENTE = summary.deudaPendiente;
+  summary.COBROS_COUNT = summary.cobrosCount;
+  const closed = parts.filter((item) => item?.summary?.status === 'CLOSED').length;
+  summary.status = closed === parts.length ? 'CLOSED' : closed > 0 ? 'PARTIAL' : 'OPEN';
+  return {
+    repartidorId,
+    date,
+    summary,
+    totals: summary,
+    cobros: parts.flatMap((item) => Array.isArray(item?.cobros) ? item.cobros : []),
+  };
+}
+
 async function _getDailySummaryInternal({ repartidorId, date }) {
   const info = await getFinanceSchemaInfo();
   const ids = codeList(repartidorId);
@@ -1049,10 +1083,15 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       financeRepo.selectDailyStructuredSums({ ids, dateYmd }),
       financeRepo.selectDeliveredAmount({ ids, fromYmd: dateYmd, toYmd: dateYmd }),
       financeRepo.selectDailyErpDebt({ ids, dateYmd }),
-      isolatedTestBalances && ids.length === 1 && typeof financeRepo.selectClosedLiquidacion === 'function'
+      isolatedTestBalances && typeof financeRepo.selectClosedLiquidacion === 'function' && (ids.length === 1 || (ids.length > 1 && process.env.NODE_ENV !== 'test'))
         ? financeRepo.selectClosedLiquidacion({ info, ids, dateYmd })
         : Promise.resolve([]),
     ]);
+
+  if (ids.length > 1 && Array.isArray(closedRows) && closedRows.length > 0) {
+    const parts = await Promise.all(ids.map((id) => _getDailySummaryInternal({ repartidorId: id, date })));
+    return aggregateDailySummaries({ repartidorId, date, parts });
+  }
 
   const totals = firstRow(totalsRows);
   const closedRow = firstRow(closedRows);

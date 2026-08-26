@@ -718,6 +718,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       const statusFilter = info.has('REPARTIDOR_LIQUIDACION_OPS', 'STATUS')
         ? "AND OPS.STATUS = 'CLOSED'"
         : '';
+      const limitSql = ids.length === 1 ? 'FETCH FIRST 1 ROW ONLY' : '';
       return run(`
     SELECT OPS.*
       FROM ${tables.liquidationOps} OPS
@@ -727,7 +728,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
        AND OPS.ANOLIQUIDACION = ?
        ${statusFilter}
      ORDER BY OPS.ID DESC
-     FETCH FIRST 1 ROW ONLY
+     ${limitSql}
   `, [...ownerFilter.params, day, month, year]);
     },
 
