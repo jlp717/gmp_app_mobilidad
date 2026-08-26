@@ -1456,7 +1456,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       const repFilter = ids.length === 1
         ? inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids)
         : {
-          sql: ids.map(() => 'TRIM(OPP.CODIGOREPARTIDOR) = ?').join(' OR '),
+          sql: '(' + ids.map(() => 'TRIM(OPP.CODIGOREPARTIDOR) = ?').join(' OR ') + ')',
           params: ids,
         };
       return run(`
