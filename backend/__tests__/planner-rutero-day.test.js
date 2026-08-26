@@ -216,6 +216,32 @@ describe('Planner rutero/day route', () => {
     expect(res.body.count).toBe(1);
     expect(res.body.clients[0].name).toBe('Cliente cacheado');
     expect(mockQueryWithParams).not.toHaveBeenCalled();
-    expect(mockRedisGet).toHaveBeenCalledWith('query', expect.stringContaining('rutero:day:payload:v3:'));
+    expect(mockRedisGet).toHaveBeenCalledWith('query', expect.stringContaining('rutero:day:payload:v4:'));
+  });
+
+  test('GET /rutero/day/:day separates reversed manager scopes with different primary vendors', async () => {
+    const cacheKeys = [];
+    mockRedisGet.mockImplementation(async (_namespace, cacheKey) => {
+      cacheKeys.push(cacheKey);
+      return null;
+    });
+
+    for (const vendedorCodes of ['02,03', '03,02']) {
+      const res = await request(app)
+        .get('/rutero/day/martes')
+        .query({
+          vendedorCodes,
+          role: 'JEFE_VENTAS',
+          year: '2026',
+          month: '4',
+          week: '4',
+        });
+      expect(res.status).toBe(200);
+    }
+
+    expect(cacheKeys).toHaveLength(2);
+    expect(cacheKeys[0]).toContain('scope:2,3:primary:2:');
+    expect(cacheKeys[1]).toContain('scope:2,3:primary:3:');
+    expect(cacheKeys[0]).not.toBe(cacheKeys[1]);
   });
 });

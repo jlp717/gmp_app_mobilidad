@@ -1369,7 +1369,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     // Show FULL list in reorder dialog to ensure consistency
     final clientsToOrder = List<Map<String, dynamic>>.from(_dayClients);
 
-    final result = await showDialog<List<Map<String, dynamic>>>(
+    final result = await showDialog<ReorderDialogResult>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => ReorderDialog(
@@ -1379,8 +1379,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       ),
     );
 
-    if (result != null) {
-      await _saveNewOrder(result);
+    if (result?.order != null) {
+      await _saveNewOrder(result!.order!);
+    } else if (result?.didMoveClient == true) {
+      await _refreshDataAndCounts();
     }
   }
 
@@ -1485,6 +1487,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 }
 
+class ReorderDialogResult {
+  const ReorderDialogResult({this.order, this.didMoveClient = false});
+
+  final List<Map<String, dynamic>>? order;
+  final bool didMoveClient;
+}
+
 class ReorderDialog extends StatefulWidget {
   const ReorderDialog({
     required this.clients,
@@ -1503,6 +1512,7 @@ class ReorderDialog extends StatefulWidget {
 class _ReorderDialogState extends State<ReorderDialog> {
   late List<Map<String, dynamic>> _items;
   final ScrollController _scrollController = ScrollController();
+  bool _didPersistMove = false;
   bool _hasChanges = false; // Track if order has changed
   List<String> _originalOrder = []; // Store original order to detect changes
   final Map<String, int> _originalPositions =
@@ -1666,6 +1676,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
         },
         syncType: 'rutero_move',
       );
+      _didPersistMove = true;
 
       // Cerrar loading
       if (mounted) Navigator.pop(context);
@@ -1705,7 +1716,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
   Future<void> _confirmSave() async {
     if (!_hasChanges && _items.length == widget.clients.length) {
       // No hay cambios de orden
-      Navigator.pop(context);
+      Navigator.pop(context, const ReorderDialogResult());
       return;
     }
 
@@ -1728,7 +1739,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       }).toList();
       Navigator.pop(
         context,
-        itemsWithOriginalPos,
+        ReorderDialogResult(order: itemsWithOriginalPos),
       ); // Retornar items con posición original
     }
   }
@@ -1780,7 +1791,12 @@ class _ReorderDialogState extends State<ReorderDialog> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
-          await _confirmDiscard();
+          if (await _confirmDiscard() && mounted) {
+            Navigator.pop(
+              context,
+              ReorderDialogResult(didMoveClient: _didPersistMove),
+            );
+          }
         }
       },
       child: Dialog(
@@ -1819,7 +1835,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
                     icon: const Icon(Icons.close),
                     onPressed: () async {
                       if (await _confirmDiscard()) {
-                        Navigator.pop(context);
+                        Navigator.pop(
+                            context,
+                            ReorderDialogResult(
+                                didMoveClient: _didPersistMove));
                       }
                     },
                   ),

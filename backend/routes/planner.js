@@ -144,6 +144,7 @@ function ruteroBatchHash(values) {
 function buildRuteroDayPayloadCacheKey({
     day,
     vendedorCodes,
+    primaryVendor,
     role,
     year,
     month,
@@ -153,13 +154,16 @@ function buildRuteroDayPayloadCacheKey({
 }) {
     const scope = String(vendedorCodes || '')
         .split(',')
-        .map((code) => code.trim())
+        .map((code) => normalizePlannerVendorCode(code))
         .filter(Boolean)
         .sort()
         .join(',');
+    const normalizedPrimaryVendor = normalizePlannerVendorCode(primaryVendor);
+    const scopeKey = scope || 'ALL';
     const identity = JSON.stringify({
         day: String(day || '').toLowerCase(),
         scope,
+        primaryVendor: normalizedPrimaryVendor,
         role: String(role || 'comercial').toLowerCase(),
         year: String(year || ''),
         month: String(month || ''),
@@ -167,7 +171,25 @@ function buildRuteroDayPayloadCacheKey({
         date: String(date || ''),
         ignoreOverrides: Boolean(ignoreOverrides),
     });
-    return `rutero:day:payload:v3:${crypto.createHash('sha256').update(identity).digest('hex').slice(0, 32)}`;
+    return `rutero:day:payload:v4:scope:${scopeKey}:primary:${normalizedPrimaryVendor || 'ALL'}:${crypto.createHash('sha256').update(identity).digest('hex').slice(0, 32)}`;
+}
+
+function ruteroDayPayloadInvalidationPatterns(vendedor) {
+    const code = normalizePlannerVendorCode(vendedor);
+    if (!code || code === '0') return [];
+    const prefix = 'query:rutero:day:payload:v4:scope:';
+    return [
+        `${prefix}${code}:primary:*`,
+        `${prefix}${code},*:primary:*`,
+        `${prefix}*,${code},*:primary:*`,
+        `${prefix}*,${code}:primary:*`,
+    ];
+}
+
+async function invalidateRuteroDayPayloadsForVendor(vendedor) {
+    for (const pattern of ruteroDayPayloadInvalidationPatterns(vendedor)) {
+        await deleteCachePattern(pattern);
+    }
 }
 
 async function readRuteroDayPayload(cacheKey) {
@@ -733,7 +755,7 @@ router.post('/rutero/move_clients', requirePlannerVendorScope({ location: 'body'
             await deleteCachePattern(`query:rutero:details:v3:*`);
             await deleteCachePattern(`query:rutero:sales:*`);
             await deleteCachePattern(`query:rutero:gps:*`);
-            await deleteCachePattern('query:rutero:day:payload:*');
+            await invalidateRuteroDayPayloadsForVendor(vendedor);
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
@@ -832,7 +854,7 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
             await deleteCachePattern(`query:rutero:details:v3:*`);
             await deleteCachePattern(`query:rutero:sales:*`);
             await deleteCachePattern(`query:rutero:gps:*`);
-            await deleteCachePattern('query:rutero:day:payload:*');
+            await invalidateRuteroDayPayloadsForVendor(vendedor);
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
@@ -934,7 +956,7 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
             await deleteCachePattern(`query:rutero:details:v3:*`);
             await deleteCachePattern(`query:rutero:sales:*`);
             await deleteCachePattern(`query:rutero:gps:*`);
-            await deleteCachePattern('query:rutero:day:payload:*');
+            await invalidateRuteroDayPayloadsForVendor(vendedor);
             logger.info(`♻️ Cache invalidated for pattern: ${cachePattern} and query caches`);
         } catch (cacheErr) {
             logger.warn(`Cache invalidation failed: ${cacheErr.message}`);
@@ -1288,6 +1310,7 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             return res.status(400).json({ error: 'Día inválido', day });
         }
         
+        const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
         const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
 
         if (shouldIgnoreOverrides) {
@@ -1313,6 +1336,7 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
         const dayPayloadCacheKey = buildRuteroDayPayloadCacheKey({
             day: normalizedDay,
             vendedorCodes,
+            primaryVendor,
             role,
             year: currentYear,
             month,
@@ -1513,7 +1537,6 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             WHERE CLIENT_CODE IN (${batchPlaceholders(batch)})
         `;
 
-        const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
         const configRowsPromise = primaryVendor && !shouldIgnoreOverrides
             ? queryWithParams(`
                 SELECT CLIENTE, ORDEN
