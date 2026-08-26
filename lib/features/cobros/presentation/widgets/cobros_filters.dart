@@ -97,7 +97,8 @@ class _CobrosFiltersState extends State<CobrosFilters> {
               decoration: InputDecoration(
                 hintText: 'Buscar cliente...',
                 hintStyle: TextStyle(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                ),
                 prefixIcon: Icon(
                   Icons.manage_search_rounded,
                   color: AppTheme.accentIndigo.withValues(alpha: 0.82),

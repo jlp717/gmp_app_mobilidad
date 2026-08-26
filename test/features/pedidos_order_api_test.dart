@@ -8,7 +8,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 void main() {
   group('PedidosOrderApi', () {
     test('PedidosServiceOrderApi implements PedidosOrderApi', () {
-      final api = PedidosServiceOrderApi();
+      const api = PedidosServiceOrderApi();
       expect(api, isA<PedidosOrderApi>());
     });
   });

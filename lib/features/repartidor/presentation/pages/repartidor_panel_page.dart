@@ -11,9 +11,9 @@ import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 
 typedef RepartidorDeliverySummaryLoader = Future<Map<String, dynamic>>
     Function({

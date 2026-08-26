@@ -68,7 +68,7 @@ void main() {
     });
 
     testWidgets('calls onPressed when tapped', (tester) async {
-      bool pressed = false;
+      var pressed = false;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -86,14 +86,14 @@ void main() {
     });
 
     testWidgets('does not call onPressed when disabled', (tester) async {
-      bool pressed = false;
+      const pressed = false;
 
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: AccessibleButton(
               onPressed: null,
-              child: const Text('Disabled Button'),
+              child: Text('Disabled Button'),
             ),
           ),
         ),
@@ -162,7 +162,7 @@ void main() {
     });
 
     testWidgets('calls onChanged when text changes', (tester) async {
-      String changedValue = '';
+      var changedValue = '';
 
       await tester.pumpWidget(
         MaterialApp(
@@ -223,11 +223,11 @@ void main() {
 
     testWidgets('applies custom style', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: AccessibleText(
               'Styled Text',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: Colors.blue,
@@ -313,7 +313,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) {
-              final scaled = TextScalingHelper.getScaledFontSize(context, 10.0);
+              final scaled = TextScalingHelper.getScaledFontSize(context, 10);
               expect(scaled, greaterThan(0));
               return Text('Scaled: $scaled');
             },
@@ -327,8 +327,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) {
-              final scaled =
-                  TextScalingHelper.getScaledFontSize(context, 100.0);
+              final scaled = TextScalingHelper.getScaledFontSize(context, 100);
               expect(scaled, lessThanOrEqualTo(130.0));
               return Text('Scaled: $scaled');
             },

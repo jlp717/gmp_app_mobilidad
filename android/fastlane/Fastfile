@@ -1,0 +1,42 @@
+fastlane_require "fastlane/plugin/firebase_app_distribution"
+
+require "tempfile"
+
+default_platform(:android)
+
+platform :android do
+  desc "Distribuye el APK ya construido al grupo comerciales de Firebase"
+  lane :firebase do
+    # ponytail: reutiliza artefacto CI y no recompila. upgrade: compilar aquí si lane se ejecuta fuera de CI.
+    firebase_app_distribution(
+      app: ENV.fetch("FIREBASE_APP_ID"),
+      firebase_cli_token: ENV.fetch("FIREBASE_CLI_TOKEN"),
+      android_artifact_type: "APK",
+      android_artifact_path: "../build/app/outputs/flutter-apk/app-release.apk",
+      groups: "comerciales",
+      release_notes: ENV.fetch("RELEASE_NOTES", "")
+    )
+  end
+
+  desc "Canal alternativo: sube el AAB existente al track interno de Google Play"
+  lane :internal do
+    play_key = Tempfile.new(["play-service-account", ".json"])
+    begin
+      play_key.write(ENV.fetch("PLAY_SERVICE_ACCOUNT_JSON"))
+      play_key.close
+
+      # ponytail: solo binario, sin metadata de tienda. upgrade: añadir metadata si Play pasa a canal primario.
+      upload_to_play_store(
+        track: "internal",
+        aab: "../build/app/outputs/bundle/release/app-release.aab",
+        json_key: play_key.path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true
+      )
+    ensure
+      play_key.close unless play_key.closed?
+      play_key.unlink
+    end
+  end
+end

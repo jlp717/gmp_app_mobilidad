@@ -141,9 +141,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           }
         },
         child: Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppTheme.raisedSurface,
-            border: const Border(
+            border: Border(
               bottom: BorderSide(color: AppTheme.borderColor),
             ),
           ),
@@ -206,7 +206,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.info.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
@@ -268,8 +270,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     );
   }
 
-  Widget _buildNavButton(
-      {required IconData icon, required VoidCallback onTap}) {
+  Widget _buildNavButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -573,7 +577,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   }
 
   void _showDayTooltip(
-      BuildContext context, Map<String, dynamic> dayData, DateTime date) {
+    BuildContext context,
+    Map<String, dynamic> dayData,
+    DateTime date,
+  ) {
     final status = (dayData['status'] as String?) ?? 'none';
     final count = (dayData['clients'] as int?) ?? 0;
 

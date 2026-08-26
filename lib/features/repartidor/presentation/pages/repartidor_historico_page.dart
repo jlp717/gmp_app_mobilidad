@@ -57,16 +57,27 @@ typedef RepartidorHistoryClientsLoader = Future<List<HistoryClient>> Function({
 typedef RepartidorHistoryClientsPageLoader = Future<HistoryClientsPage>
     Function({
   required String repartidorId,
-  String? search,
   required int limit,
   required int offset,
   required bool forceRefresh,
+  String? search,
 });
 
 typedef RepartidorHistoryDocumentsLoader = Future<List<HistoryDocument>>
     Function({
   required String clientId,
   required String repartidorId,
+  String? dateFrom,
+  String? dateTo,
+  int? year,
+});
+
+typedef RepartidorHistoryDocumentsPageLoader = Future<HistoryDocumentsPage>
+    Function({
+  required String clientId,
+  required String repartidorId,
+  required int limit,
+  required int offset,
   String? dateFrom,
   String? dateTo,
   int? year,
@@ -107,6 +118,7 @@ class RepartidorHistoricoPage extends StatefulWidget {
     this.clientsLoader,
     this.clientsPageLoader,
     this.documentsLoader,
+    this.documentsPageLoader,
     this.documentDownloader,
     this.signatureLoader,
     this.canEmailDocuments = false,
@@ -118,6 +130,7 @@ class RepartidorHistoricoPage extends StatefulWidget {
   final RepartidorHistoryClientsLoader? clientsLoader;
   final RepartidorHistoryClientsPageLoader? clientsPageLoader;
   final RepartidorHistoryDocumentsLoader? documentsLoader;
+  final RepartidorHistoryDocumentsPageLoader? documentsPageLoader;
   final RepartidorHistoryDocumentDownloader? documentDownloader;
   final RepartidorHistorySignatureLoader? signatureLoader;
 
@@ -145,6 +158,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   List<_ClientItem> _clients = [];
   List<_DocumentItem> _documents = [];
   bool _hasMoreClients = false;
+  bool _hasMoreDocuments = false;
+  bool _isLoadingMoreDocuments = false;
+  String? _documentsLoadMoreError;
   int _clientRequestGeneration = 0;
   int _clientRowsConsumed = 0;
   int _documentsRequestGeneration = 0;
@@ -154,6 +170,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   CancelToken? _activeClientSearchCancelToken;
 
   static const _clientPageSize = 100;
+  static const _documentPageSize = 50;
   static const _clientSearchDebounceDuration = Duration(milliseconds: 300);
 
   // Advanced Filters
@@ -205,10 +222,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // DATA LOADING
   // ==========================================================================
 
-  Future<void> _loadClients(
-      [String? search,
-      bool loadMore = false,
-      bool forceRefresh = false]) async {
+  Future<void> _loadClients([
+    String? search,
+    bool loadMore = false,
+    bool forceRefresh = false,
+  ]) async {
     final normalizedSearch = search?.trim();
     if (loadMore && _isLoadingMoreClients) return;
     final queryChanged = normalizedSearch != _clientsQuery;
@@ -308,16 +326,21 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           _selectedClientRepartidorId == null &&
           _documents.isEmpty) {
         final matches = ordered
-            .where((client) =>
-                client.id == _selectedClientId &&
-                isValidRepartoOwnerId(client.repartidorId ?? ''))
+            .where(
+              (client) =>
+                  client.id == _selectedClientId &&
+                  isValidRepartoOwnerId(client.repartidorId ?? ''),
+            )
             .toList(growable: false);
         if (matches.length == 1) {
           final client = matches.single;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            _loadClientDocuments(client.id, client.name,
-                repartidorId: client.repartidorId);
+            _loadClientDocuments(
+              client.id,
+              client.name,
+              repartidorId: client.repartidorId,
+            );
           });
         }
       }
@@ -346,28 +369,44 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     String clientId,
     String clientName, {
     String? repartidorId,
+    bool loadMore = false,
   }) async {
+    if (loadMore && (!_hasMoreDocuments || _isLoadingMoreDocuments)) return;
+
     final owner = resolveRepartoDocumentOwner(
       documentOwner: repartidorId ?? _selectedClientRepartidorId,
       selectedOwner: widget.repartidorId,
     );
-    final requestGeneration = ++_documentsRequestGeneration;
+    final requestGeneration =
+        loadMore ? _documentsRequestGeneration : ++_documentsRequestGeneration;
     final selectedYear = _selectedYear;
     final dateFrom = _dateFrom;
     final dateTo = _dateTo;
+    final offset = loadMore ? _documents.length : 0;
+
     setState(() {
-      _isLoading = true;
-      _documentsError = null;
-      _selectedClientId = clientId;
-      _selectedClientName = clientName;
-      _selectedClientRepartidorId = owner;
+      if (loadMore) {
+        _isLoadingMoreDocuments = true;
+        _documentsLoadMoreError = null;
+      } else {
+        _isLoading = true;
+        _documentsError = null;
+        _documentsLoadMoreError = null;
+        _hasMoreDocuments = false;
+        _selectedClientId = clientId;
+        _selectedClientName = clientName;
+        _selectedClientRepartidorId = owner;
+      }
     });
+
     if (owner == null) {
-      setState(() {
-        _isLoading = false;
-        _documents = const [];
-        _documentsError = 'Selecciona una ficha con un repartidor concreto.';
-      });
+      if (!loadMore) {
+        setState(() {
+          _isLoading = false;
+          _documents = const [];
+          _documentsError = 'Selecciona una ficha con un repartidor concreto.';
+        });
+      }
       return;
     }
 
@@ -379,26 +418,47 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           ? '${dateTo.year}-${dateTo.month.toString().padLeft(2, '0')}-${dateTo.day.toString().padLeft(2, '0')}'
           : null;
 
-      final loader = widget.documentsLoader;
-      final docs = loader != null
-          ? await loader(
-              clientId: clientId,
-              repartidorId: owner,
-              dateFrom: dateFromStr,
-              dateTo: dateToStr,
-              year: selectedYear,
-            )
-          : await RepartidorDataService.getClientDocuments(
-              clientId: clientId,
-              repartidorId: owner,
-              dateFrom: dateFromStr,
-              dateTo: dateToStr,
-              year: selectedYear,
-            );
+      final pageLoader = widget.documentsPageLoader;
+      late final HistoryDocumentsPage page;
+      if (pageLoader != null) {
+        page = await pageLoader(
+          clientId: clientId,
+          repartidorId: owner,
+          limit: _documentPageSize,
+          offset: offset,
+          dateFrom: dateFromStr,
+          dateTo: dateToStr,
+          year: selectedYear,
+        );
+      } else if (loadMore) {
+        return;
+      } else {
+        final loader = widget.documentsLoader;
+        if (loader != null) {
+          final docs = await loader(
+            clientId: clientId,
+            repartidorId: owner,
+            dateFrom: dateFromStr,
+            dateTo: dateToStr,
+            year: selectedYear,
+          );
+          page = (documents: docs, hasMore: false);
+        } else {
+          page = await RepartidorDataService.getClientDocumentsPage(
+            clientId: clientId,
+            repartidorId: owner,
+            dateFrom: dateFromStr,
+            dateTo: dateToStr,
+            year: selectedYear,
+            limit: _documentPageSize,
+            offset: offset,
+          );
+        }
+      }
 
       if (!mounted || requestGeneration != _documentsRequestGeneration) return;
 
-      final mappedDocuments = docs.map((d) {
+      final mappedDocuments = page.documents.map((d) {
         _DeliveryStatus status;
         switch (d.status) {
           case 'delivered':
@@ -412,7 +472,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           case 'rejected':
             status = _DeliveryStatus.notDelivered;
           case 'pending':
-            status = _DeliveryStatus.pending;
           default:
             status = _DeliveryStatus.pending;
         }
@@ -456,21 +515,50 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             selectedOwner: owner,
           ),
         );
-      }).toList();
+      }).toList(growable: false);
+
       setState(() {
-        _documents = mappedDocuments;
+        _documents = loadMore
+            ? <_DocumentItem>[..._documents, ...mappedDocuments]
+            : mappedDocuments;
+        _hasMoreDocuments = page.hasMore;
+        _documentsLoadMoreError = null;
+        _isLoadingMoreDocuments = false;
         _documentsError = null;
       });
     } catch (e) {
       if (!mounted || requestGeneration != _documentsRequestGeneration) return;
       setState(() {
-        _documentsError = e is RepartidorDataException
-            ? e.message
-            : 'No se pudo cargar el historial de documentos';
+        if (loadMore) {
+          _isLoadingMoreDocuments = false;
+          _documentsLoadMoreError = e is RepartidorDataException
+              ? e.message
+              : 'No se pudo cargar la siguiente página';
+        } else {
+          _documentsError = e is RepartidorDataException
+              ? e.message
+              : 'No se pudo cargar el historial de documentos';
+          _isLoading = false;
+        }
       });
+      return;
     }
+
     if (!mounted || requestGeneration != _documentsRequestGeneration) return;
-    setState(() => _isLoading = false);
+    if (!loadMore) setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadMoreDocuments() async {
+    final clientId = _selectedClientId;
+    if (clientId == null || !_hasMoreDocuments || _isLoadingMoreDocuments) {
+      return;
+    }
+    await _loadClientDocuments(
+      clientId,
+      _selectedClientName ?? clientId,
+      repartidorId: _selectedClientRepartidorId,
+      loadMore: true,
+    );
   }
 
   void _onClientSearchChanged(String value) {
@@ -531,7 +619,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     substitutions.forEach((source, replacement) {
       normalized = normalized.replaceAll(source, replacement);
     });
-    return normalized.replaceAll(RegExp(r'[^A-Z0-9]+'), ' ').trim();
+    return normalized.replaceAll(RegExp('[^A-Z0-9]+'), ' ').trim();
   }
 
   bool _isOrderedSubsequence(String token, String value) {
@@ -560,18 +648,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       doc.terminal.toString(),
       doc.preparationOrderNumber?.toString() ?? '',
       doc.preparationOrderYear?.toString() ?? '',
-      doc.type == _DocType.factura ? 'factura' : 'albaran',
+      if (doc.type == _DocType.factura) 'factura' else 'albaran',
       _statusLabel(doc.status),
       doc.deliveryObs ?? '',
       doc.date?.toIso8601String() ?? '',
       _selectedClientId ?? '',
       _selectedClientName ?? '',
     ].map(_normalizeFlexibleSearch).toList(growable: false);
-    return tokens.every((token) => values.any(
-          (value) =>
-              value.contains(token) ||
-              (token.length >= 4 && _isOrderedSubsequence(token, value)),
-        ));
+    return tokens.every(
+      (token) => values.any(
+        (value) =>
+            value.contains(token) ||
+            (token.length >= 4 && _isOrderedSubsequence(token, value)),
+      ),
+    );
   }
 
   List<_DocumentItem> get _filteredDocuments {
@@ -802,8 +892,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       onSelected: (selectionKey) {
         final client =
             _clients.firstWhere((c) => c.selectionKey == selectionKey);
-        _loadClientDocuments(client.id, client.name,
-            repartidorId: client.repartidorId);
+        _loadClientDocuments(
+          client.id,
+          client.name,
+          repartidorId: client.repartidorId,
+        );
       },
     );
   }
@@ -864,9 +957,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         Icons.clear,
                         color: AppTheme.textSecondary,
                       ),
-                      onPressed: () {
-                        _clearClientSearch();
-                      },
+                      onPressed: _clearClientSearch,
                     )
                   : null,
               filled: true,
@@ -1017,8 +1108,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Widget _buildClientCard(_ClientItem client) {
     return GestureDetector(
-      onTap: () => _loadClientDocuments(client.id, client.name,
-          repartidorId: client.repartidorId),
+      onTap: () => _loadClientDocuments(
+        client.id,
+        client.name,
+        repartidorId: client.repartidorId,
+      ),
       child: RepartidorExecutivePanel(
         margin: const EdgeInsets.only(bottom: 10),
         padding: EdgeInsets.all(
@@ -1843,8 +1937,34 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       color: AppTheme.accentIndigo,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        itemCount: docs.length,
-        itemBuilder: (context, index) => _buildDocumentCard(docs[index]),
+        itemCount: docs.length + (_hasMoreDocuments ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index < docs.length) return _buildDocumentCard(docs[index]);
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: _isLoadingMoreDocuments
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
+                    children: [
+                      if (_documentsLoadMoreError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _documentsLoadMoreError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppTheme.warning),
+                          ),
+                        ),
+                      OutlinedButton.icon(
+                        key: const ValueKey('history-documents-load-more'),
+                        onPressed: _loadMoreDocuments,
+                        icon: const Icon(Icons.expand_more),
+                        label: const Text('Cargar más documentos'),
+                      ),
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }
@@ -2217,7 +2337,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           const SizedBox(height: 4),
                           Text(
                             [
-                              doc.cobroParcial ? 'Cobro parcial' : 'Cobrado',
+                              if (doc.cobroParcial)
+                                'Cobro parcial'
+                              else
+                                'Cobrado',
                               CurrencyFormatter.format(doc.importeCobrado!),
                               if ((doc.formaPagoCobro ?? '').trim().isNotEmpty)
                                 doc.formaPagoCobro!.trim(),
@@ -2660,19 +2783,21 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
       final docRef =
           '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PdfPreviewScreen(
-            pdfBytes: pdfBytes,
-            title: 'Nota de entrega $docRef',
-            fileName: 'Nota_entrega_${docRef}_$safeClientName.pdf',
-            onEmailTap: widget.canEmailDocuments
-                ? () {
-                    Navigator.pop(context);
-                    _emailHistoryDeliveryNote(doc);
-                  }
-                : null,
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PdfPreviewScreen(
+              pdfBytes: pdfBytes,
+              title: 'Nota de entrega $docRef',
+              fileName: 'Nota_entrega_${docRef}_$safeClientName.pdf',
+              onEmailTap: widget.canEmailDocuments
+                  ? () {
+                      Navigator.pop(context);
+                      _emailHistoryDeliveryNote(doc);
+                    }
+                  : null,
+            ),
           ),
         ),
       );
@@ -2743,23 +2868,25 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
       final fileName = '${typeLabel}_${docRef}_$safeClientName.pdf';
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PdfPreviewScreen(
-            pdfBytes: pdfBytes,
-            title: '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
-            fileName: fileName,
-            onEmailTap: widget.canEmailDocuments
-                ? () {
-                    Navigator.pop(context);
-                    _emailDocument(doc);
-                  }
-                : null,
-            onWhatsAppTap: () {
-              Navigator.pop(context);
-              _shareCommercialWhatsApp(doc);
-            },
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PdfPreviewScreen(
+              pdfBytes: pdfBytes,
+              title: '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
+              fileName: fileName,
+              onEmailTap: widget.canEmailDocuments
+                  ? () {
+                      Navigator.pop(context);
+                      _emailDocument(doc);
+                    }
+                  : null,
+              onWhatsAppTap: () {
+                Navigator.pop(context);
+                _shareCommercialWhatsApp(doc);
+              },
+            ),
           ),
         ),
       );
@@ -2938,10 +3065,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_sanitizedDocumentActionError(
-            error,
-            fallback: 'No se pudo enviar el documento.',
-          )),
+          content: Text(
+            _sanitizedDocumentActionError(
+              error,
+              fallback: 'No se pudo enviar el documento.',
+            ),
+          ),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -2994,10 +3123,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_sanitizedDocumentActionError(
-            error,
-            fallback: 'No se pudo enviar la nota de entrega.',
-          )),
+          content: Text(
+            _sanitizedDocumentActionError(
+              error,
+              fallback: 'No se pudo enviar la nota de entrega.',
+            ),
+          ),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -3090,10 +3221,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_sanitizedDocumentActionError(
-            error,
-            fallback: 'No se pudo imprimir la nota de entrega.',
-          )),
+          content: Text(
+            _sanitizedDocumentActionError(
+              error,
+              fallback: 'No se pudo imprimir la nota de entrega.',
+            ),
+          ),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -3572,7 +3705,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       });
       // Re-fetch with date range from backend
       if (_selectedClientId != null) {
-        _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+        unawaited(
+          _loadClientDocuments(_selectedClientId!, _selectedClientName ?? ''),
+        );
       }
     }
   }
@@ -4108,7 +4243,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.gesture,
                               size: 48,
                               color: AppTheme.textSecondary,

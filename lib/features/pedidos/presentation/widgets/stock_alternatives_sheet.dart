@@ -1067,8 +1067,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildQtyButton(Icons.remove, qty <= 1,
-                        () => _changeQty(code, -1, stockEnv)),
+                    _buildQtyButton(
+                      Icons.remove,
+                      qty <= 1,
+                      () => _changeQty(code, -1, stockEnv),
+                    ),
                     Container(
                       width: 40,
                       alignment: Alignment.center,
@@ -1084,8 +1087,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         ),
                       ),
                     ),
-                    _buildQtyButton(Icons.add, qty >= stockEnv,
-                        () => _changeQty(code, 1, stockEnv)),
+                    _buildQtyButton(
+                      Icons.add,
+                      qty >= stockEnv,
+                      () => _changeQty(code, 1, stockEnv),
+                    ),
                   ],
                 ),
               ),
@@ -1103,13 +1109,17 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                       color: AppTheme.success.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: AppTheme.success.withValues(alpha: 0.4)),
+                        color: AppTheme.success.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.add_shopping_cart,
-                            color: AppTheme.success, size: 16),
+                        Icon(
+                          Icons.add_shopping_cart,
+                          color: AppTheme.success,
+                          size: 16,
+                        ),
                         SizedBox(width: 4),
                         Text(
                           'Añadir',
@@ -1137,7 +1147,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   .map(
                     (r) => Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.inkSurface,
                         borderRadius: BorderRadius.circular(4),

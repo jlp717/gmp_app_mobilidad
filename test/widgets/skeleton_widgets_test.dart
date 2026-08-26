@@ -6,11 +6,11 @@ void main() {
   group('ShimmerLoading Widget Tests', () {
     testWidgets('renders child when isLoading is false', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ShimmerLoading(
               isLoading: false,
-              child: const Text('Loaded Content'),
+              child: Text('Loaded Content'),
             ),
           ),
         ),
@@ -21,11 +21,11 @@ void main() {
 
     testWidgets('shows shimmer effect when isLoading is true', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ShimmerLoading(
               isLoading: true,
-              child: const Text('Loading...'),
+              child: Text('Loading...'),
             ),
           ),
         ),
@@ -36,11 +36,11 @@ void main() {
 
     testWidgets('animation repeats indefinitely', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ShimmerLoading(
               isLoading: true,
-              child: const Text('Test'),
+              child: Text('Test'),
             ),
           ),
         ),
@@ -54,11 +54,11 @@ void main() {
 
     testWidgets('child is visible when isLoading is false', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ShimmerLoading(
               isLoading: false,
-              child: const Text('Visible Child'),
+              child: Text('Visible Child'),
             ),
           ),
         ),

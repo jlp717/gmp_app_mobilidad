@@ -13,6 +13,8 @@ const {
     requiresPartialPaymentObservaciones,
 } = require('../utils/commission-snapshot');
 const { verifyToken } = require('../middleware/auth');
+const { validateQuery, validateBody } = require('../middleware/security');
+const { authorizeVendorScope, isFinancialRole } = require('../middleware/vendor-scope');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 const {
     isTeamLeader,
@@ -25,6 +27,36 @@ const {
 } = require('../services/team-commission.service');
 
 const router = express.Router();
+
+// ASVS V2: esquemas strict — rechazan campos no esperados (anti mass-assignment).
+const { z } = require('zod');
+
+const summaryQuerySchema = z.object({
+    vendedorCode: z.string().min(1).max(60),
+    year: z.string().regex(/^[0-9]+(,[0-9]+)*$/).max(40).optional(),
+    forceRefresh: z.enum(['true', 'false', '1', '0']).optional(),
+    limit: z.string().regex(/^\d{1,5}$/).optional(),
+    offset: z.string().regex(/^\d{1,7}$/).optional(),
+}).strict();
+
+const teamQuerySchema = z.object({
+    year: z.string().regex(/^\d{4}$/).optional(),
+}).strict();
+
+const payBodySchema = z.object({
+    vendedorCode: z.string().min(1).max(10),
+    year: z.union([z.number().int(), z.string().regex(/^\d{4}$/)]),
+    month: z.union([z.number().int(), z.string()]).optional(),
+    quarter: z.union([z.number().int(), z.string()]).nullable().optional(),
+    amount: z.union([z.number(), z.string()]),
+    generatedAmount: z.union([z.number(), z.string()]).optional(),
+    concept: z.string().max(200).optional(),
+    observaciones: z.string().max(500).nullable().optional(),
+    objetivoMes: z.union([z.number(), z.string()]).optional(),
+    ventaActual: z.union([z.number(), z.string()]).optional(),
+    ventasSobreObjetivo: z.union([z.number(), z.string()]).optional(),
+    setTotal: z.union([z.boolean(), z.number(), z.string()]).optional(),
+}).strict();
 
 // =============================================================================
 // ROUTES & HELPER FUNCTIONS
@@ -167,8 +199,24 @@ function aggregateScopedTeamMonths(vendorResults, selectedYear, config) {
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
 // Uses DIRECT pool connections to avoid query() retry/pool-recreation logic.
+// This helper is intentionally fail-closed: it is never allowed to mutate a
+// production or shared schema from a running API process.
 // =============================================================================
+function assertCommissionInitializationTestOnly(env = process.env) {
+    const environment = String(env.REPARTO_ENVIRONMENT || '').trim().toLowerCase();
+    const tableSet = String(env.REPARTO_TABLE_SET || '').trim().toLowerCase();
+    const approval = String(env.REPARTO_MIGRATION_APPROVAL || '').trim();
+    if (!['test', 'staging'].includes(environment)
+        || tableSet !== 'isolated_test'
+        || approval !== 'TEST_ONLY') {
+        const error = new Error('Commission table initialization requires an isolated TEST runtime and explicit TEST_ONLY approval');
+        error.code = 'COMMISSION_INIT_TEST_GATE_REQUIRED';
+        throw error;
+    }
+}
+
 async function initCommissionTables() {
+    assertCommissionInitializationTestOnly();
     const pool = getPool();
     if (!pool) { logger.warn('⚠️ Commission init: no DB pool'); return; }
     let conn;
@@ -382,23 +430,6 @@ async function invalidateCommissionPaymentCaches(vendorCode, year) {
     for (const pattern of uniquePatterns) {
         await invalidateCachePattern(pattern);
     }
-}
-
-function buildCommissionVendorFilter(vendedorCodes, selectedYear, tableAlias = 'L') {
-    if (!vendedorCodes || vendedorCodes === 'ALL') return '';
-
-    const vendorColumnExpr = getCommissionVendorColumnExprForYear(selectedYear, tableAlias);
-    const validCodes = [...new Set(
-        String(vendedorCodes)
-            .split(',')
-            .flatMap(getCodeVariants)
-            .filter(Boolean)
-    )]
-        .map(code => `'${code}'`)
-        .join(',');
-
-    if (!validCodes) return 'AND 1=0';
-    return `AND TRIM(${vendorColumnExpr}) IN (${validCodes})`;
 }
 
 /**
@@ -1845,7 +1876,7 @@ async function calculateGroupedVendorSummary(vendorCodes, year, config) {
 // ROUTES
 // =============================================================================
 
-router.get('/summary', verifyToken, async (req, res) => {
+router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (req, res) => {
     try {
         const { vendedorCode, year, forceRefresh, limit, offset } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
@@ -1907,6 +1938,20 @@ router.get('/summary', verifyToken, async (req, res) => {
                 quarters: [],
                 payments: { monthly: {}, quarterly: {}, details: {}, total: 0 },
             });
+        }
+        // ASVS V8 / BOLA (H-01): solo codigos dentro del alcance firmado del usuario.
+        if (safeVendorCode === 'ALL') {
+            const allAllowed = isFinancialRole(req.user) || isScopedTeamAllRequest(userCode, 'ALL');
+            if (!allAllowed) {
+                logger.warn(`[COMMISSIONS] Forbidden ALL summary: user=${userCode || 'unknown'}`);
+                return res.status(403).json({ success: false, error: 'Forbidden: ALL requiere rol financiero' });
+            }
+        } else {
+            const scopeCheck = authorizeVendorScope(req, requestedVendorCodes);
+            if (!scopeCheck.ok) {
+                logger.warn(`[COMMISSIONS] Forbidden summary request: user=${userCode || 'unknown'} denied=${(scopeCheck.denied || []).join(',')}`);
+                return res.status(403).json({ success: false, error: 'Forbidden: vendedor fuera de tu alcance', denied: scopeCheck.denied });
+            }
         }
         const scopedTeamAll = isScopedTeamAllRequest(userCode, safeVendorCode);
         const groupHash = requestedVendorCodes.length > 0
@@ -2343,7 +2388,7 @@ router.get('/summary', verifyToken, async (req, res) => {
 // FIX #5: Endpoint to register a payment (Restricted to ADMIN users via TIPOVENDEDOR lookup)
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
 // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
-router.post('/pay', verifyToken, async (req, res) => {
+router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) => {
     const {
         vendedorCode,
         year,
@@ -3094,12 +3139,18 @@ router.get('/pdf', verifyToken, async (req, res) => {
 });
 
 // FIX #1: Route to get excluded vendor codes (for frontend dynamic loading)
-router.get('/team/:leaderCode', verifyToken, async (req, res) => {
+router.get('/team/:leaderCode', verifyToken, validateQuery(teamQuerySchema), async (req, res) => {
     try {
         const leaderCode = (req.params.leaderCode || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
         const year = parseInt(req.query.year, 10) || new Date().getFullYear();
         if (!leaderCode || !isTeamLeader(leaderCode)) {
             return res.status(400).json({ success: false, error: 'Lider de equipo no valido' });
+        }
+        // ASVS V8 / BOLA (H-02): solo el lider propietario o un rol financiero.
+        const actorCode = String(req.user?.code || '').replace(/^0+/, '');
+        if (actorCode !== leaderCode.replace(/^0+/, '') && !isFinancialRole(req.user)) {
+            logger.warn(`[COMMISSIONS] Forbidden team access: user=${req.user?.code || 'unknown'} leader=${leaderCode}`);
+            return res.status(403).json({ success: false, error: 'Forbidden: equipo fuera de tu alcance' });
         }
         if (isCommercial80User(req.user?.code || '')) {
             logger.info('[COMMISSIONS] Hidden team commission for authenticated commercial 80');

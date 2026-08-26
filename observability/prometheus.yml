@@ -1,0 +1,20 @@
+# Prometheus self-hosted en 192.168.1.230 (binario nativo, sin Docker).
+# Scrapes la API GMP (PM2 cluster, puerto 3335) y a si mismo.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: gmp-api
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    static_configs:
+      - targets: ['localhost:3335']
+        labels:
+          service: gmp-api
+          env: production
+
+  - job_name: prometheus-self
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,42 @@
+name: API Docs
+
+on:
+  push:
+    branches: [test, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  openapi-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Spectral lint OpenAPI spec
+        run: npx --yes @stoplight/spectral-cli@6 lint docs/openapi/openapi.yaml --fail-severity=warn
+
+  contract-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+      - name: Run OpenAPI contract tests
+        run: npm test -- openapi-contract
+      - name: Check Postman collection drift
+        working-directory: ${{ github.workspace }}
+        run: node scripts/generate-postman-collection.js && git diff --exit-code docs/postman/gmp-api.postman_collection.json

@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.nyc_output
+data
+tmp
+backend/tmp
+.hotfix-backups
+.validation-baselines
+.git
+.gitignore
+Dockerfile*
+docker-compose*.yml

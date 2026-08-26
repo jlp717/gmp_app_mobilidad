@@ -128,7 +128,8 @@ class _SignatureModalState extends State<SignatureModal> {
           // Header (responsive padding)
           Padding(
             padding: EdgeInsets.all(
-                Responsive.padding(context, small: 12, large: 20)),
+              Responsive.padding(context, small: 12, large: 20),
+            ),
             child: Column(
               children: [
                 Row(
@@ -227,7 +228,8 @@ class _SignatureModalState extends State<SignatureModal> {
           // Action Buttons (responsive padding)
           Padding(
             padding: EdgeInsets.all(
-                Responsive.padding(context, small: 12, large: 20)),
+              Responsive.padding(context, small: 12, large: 20),
+            ),
             child: Row(
               children: [
                 // Cancel button

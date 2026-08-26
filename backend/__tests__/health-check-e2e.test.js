@@ -14,7 +14,7 @@ Object.assign(process.env, {
   REPARTIDOR_FINANCE_ERP_SCHEMA: "JAVIER",
 });
 const request = require("supertest");
-const app = require("../server");
+const { app } = require("../server");
 describe("GET /api/health-check-e2e", () => {
   it("WHEN GET SHALL 200 {ok:true}", async () => {
     const res = await request(app).get("/api/health-check-e2e").set("User-Agent", "GMP-SRE-HealthCheck/1.0");

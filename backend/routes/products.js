@@ -64,7 +64,6 @@ if (accessMode !== 'file') {
     '/opt/gmp-api/assets/imagenes',
     '/srv/www/movilidad/ImagenesGestorDocumentalNuevo',
     '/data/movilidad/ImagenesGestorDocumentalNuevo',
-    '\\\\192.168.1.191\\acisa\\xampp\\htdocs\\movilidad\\ImagenesGestorDocumentalNuevo',
   ];
   for (const p of defaultPaths) {
     try {

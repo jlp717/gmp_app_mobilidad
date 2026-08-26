@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/comisiones_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/vencimientos_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
@@ -76,10 +76,12 @@ void main() {
               ],
             ),
           ),
-          repartidorLiquidacionLedgerProvider((
-            repartidorId: '94',
-            date: date,
-          )).overrideWith((ref) async => openLedger),
+          repartidorLiquidacionLedgerProvider(
+            (
+              repartidorId: '94',
+              date: date,
+            ),
+          ).overrideWith((ref) async => openLedger),
         ],
       ),
     );
@@ -134,10 +136,12 @@ void main() {
               cobrosCount: 0,
             ),
           ),
-          repartidorLiquidacionLedgerProvider((
-            repartidorId: '94',
-            date: date,
-          )).overrideWith((ref) async => openLedger),
+          repartidorLiquidacionLedgerProvider(
+            (
+              repartidorId: '94',
+              date: date,
+            ),
+          ).overrideWith((ref) async => openLedger),
         ],
       ),
     );
@@ -422,37 +426,41 @@ void main() {
   });
 
   test('ledger accepts JS timestamps and skips a bad entry', () {
-    final ledger = RepartidorLiquidacionLedger.fromJson({
-      'repartidorId': '44',
-      'date': '2026-08-14',
-      'status': 'OPEN',
-      'extra': true,
-      'expenses': [
-        {
-          'id': 12,
-          'type': 'EXPENSE',
-          'repartidorId': '44',
-          'date': '2026-08-14',
-          'amount': 8.25,
-          'category': 'PEAJE',
-          'status': 'PENDING',
-          'createdAt': '2026-08-14T10:00:00.456Z',
-        },
-        {
-          'id': 'bad',
-          'type': 'EXPENSE',
-          'repartidorId': '44',
-          'date': '2026-08-14',
-          'amount': 1,
-          'category': 'PEAJE',
-          'status': 'PENDING',
-          'createdAt': 'not-a-date',
-        },
-      ],
-      'adjustments': [],
-      'bankDeposits': [],
-      'totals': {'expenses': 99, 'adjustments': 0, 'bankDeposits': 0},
-    }, expectedRepartidorId: '44', expectedDate: '2026-08-14');
+    final ledger = RepartidorLiquidacionLedger.fromJson(
+      {
+        'repartidorId': '44',
+        'date': '2026-08-14',
+        'status': 'OPEN',
+        'extra': true,
+        'expenses': [
+          {
+            'id': 12,
+            'type': 'EXPENSE',
+            'repartidorId': '44',
+            'date': '2026-08-14',
+            'amount': 8.25,
+            'category': 'PEAJE',
+            'status': 'PENDING',
+            'createdAt': '2026-08-14T10:00:00.456Z',
+          },
+          {
+            'id': 'bad',
+            'type': 'EXPENSE',
+            'repartidorId': '44',
+            'date': '2026-08-14',
+            'amount': 1,
+            'category': 'PEAJE',
+            'status': 'PENDING',
+            'createdAt': 'not-a-date',
+          },
+        ],
+        'adjustments': [],
+        'bankDeposits': [],
+        'totals': {'expenses': 99, 'adjustments': 0, 'bankDeposits': 0},
+      },
+      expectedRepartidorId: '44',
+      expectedDate: '2026-08-14',
+    );
 
     expect(ledger.status, 'OPEN');
     expect(ledger.expenses, hasLength(1));

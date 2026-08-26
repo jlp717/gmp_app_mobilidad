@@ -16,13 +16,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Objectives Page - Track sales goals with multi-select filters
 class ObjectivesPage extends ConsumerStatefulWidget {
-  const ObjectivesPage(
-      {required this.employeeCode,
-      super.key,
-      this.isJefeVentas = false,
-      this.vendorSelectorCodes,
-      this.includeAllVendorOption = true,
-      this.forceShowVendorSelector = false});
+  const ObjectivesPage({
+    required this.employeeCode,
+    super.key,
+    this.isJefeVentas = false,
+    this.vendorSelectorCodes,
+    this.includeAllVendorOption = true,
+    this.forceShowVendorSelector = false,
+  });
   final String employeeCode;
   final bool isJefeVentas;
   final List<String>? vendorSelectorCodes;
@@ -59,7 +60,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     9,
     10,
     11,
-    12
+    12,
   }; // Full year by default
   int? _touchedIndex; // For manual tooltip control
   String?
@@ -250,8 +251,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
           for (var m = 1; m <= 12; m++) {
             final monthData = monthlyEvolution.firstWhere(
-                (e) => (e['month'] as num?)?.toInt() == m,
-                orElse: () => {});
+              (e) => (e['month'] as num?)?.toInt() == m,
+              orElse: () => {},
+            );
             final sales = (monthData[salesField] as num?)?.toDouble() ?? 0;
             final objective = (monthData['objective'] as num?)?.toDouble() ?? 0;
             yearTotalSales += sales;
@@ -291,11 +293,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       });
     } catch (e) {
       debugPrint('Error loading objectives: $e');
-      if (mounted && generation == _loadGeneration)
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
         });
+      }
     }
   }
 
@@ -567,9 +570,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         border: Border.all(color: Colors.white10),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -578,30 +582,42 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Ventas Totales',
-                  style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text(
+                'Ventas Totales',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: progressColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text('${progress.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                        color: progressColor, fontWeight: FontWeight.bold)),
+                child: Text(
+                  '${progress.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: progressColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(_formatCurrency(current),
-              style: TextStyle(
-                  fontSize: Responsive.isSmall(context) ? 22 : 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
-          Text('Objetivo Mensual: ${_formatCurrency(target)}',
-              style: TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: Responsive.isSmall(context) ? 11 : 13)),
+          Text(
+            _formatCurrency(current),
+            style: TextStyle(
+              fontSize: Responsive.isSmall(context) ? 22 : 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            'Objetivo Mensual: ${_formatCurrency(target)}',
+            style: TextStyle(
+              color: AppTheme.textTertiary,
+              fontSize: Responsive.isSmall(context) ? 11 : 13,
+            ),
+          ),
 
           const SizedBox(height: 16),
 
@@ -632,18 +648,22 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           ? 'Objetivo Cierre (Calculado)'
                           : 'Ritmo Diario (Días trabajados)',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
                 if (!isFinished)
-                  Text('${paceProgress.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                          color: paceColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13)),
+                  Text(
+                    '${paceProgress.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color: paceColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -658,10 +678,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                         ? 'Objetivo Cumplido'
                         : 'Objetivo No Alcanzado',
                     style: TextStyle(
-                        color: current >= target
-                            ? AppTheme.success
-                            : AppTheme.error,
-                        fontSize: 12),
+                      color:
+                          current >= target ? AppTheme.success : AppTheme.error,
+                      fontSize: 12,
+                    ),
                   )
                 else
                   Text(
@@ -671,9 +691,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     style: TextStyle(color: paceColor, fontSize: 12),
                   ),
 
-                Text('Obj. Pace: ${_formatCurrency(paceTarget)}',
-                    style: const TextStyle(
-                        color: AppTheme.textTertiary, fontSize: 12)),
+                Text(
+                  'Obj. Pace: ${_formatCurrency(paceTarget)}',
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
 
@@ -696,8 +720,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
   // FIXED: Properly return a widget for Metric Card
   Widget _buildMetricCard(
-      String title, Map<String, dynamic>? data, IconData icon, Color color,
-      {bool isCurrency = true}) {
+    String title,
+    Map<String, dynamic>? data,
+    IconData icon,
+    Color color, {
+    bool isCurrency = true,
+  }) {
     final current = (data?['current'] as num?)?.toDouble() ?? 0;
     final target = (data?['target'] as num?)?.toDouble() ?? 0;
     final progress = (data?['progress'] as num?)?.toDouble() ?? 0;
@@ -719,27 +747,33 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 8),
               Expanded(
-                  child: Text(title,
-                      style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          overflow: TextOverflow.ellipsis))),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             isCurrency ? _formatCurrency(current) : current.toInt().toString(),
             style: TextStyle(
-                fontSize: Responsive.isSmall(context) ? 18 : 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white),
+              fontSize: Responsive.isSmall(context) ? 18 : 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             'Obj: ${isCurrency ? _formatCurrency(target) : target.toInt()}',
             style: TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: Responsive.isSmall(context) ? 10 : 11),
+              color: AppTheme.textTertiary,
+              fontSize: Responsive.isSmall(context) ? 10 : 11,
+            ),
           ),
           const SizedBox(height: 12),
           ClipRRect(
@@ -757,9 +791,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             child: Text(
               '${progress.toStringAsFixed(1)}%',
               style: TextStyle(
-                  color: progressColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold),
+                color: progressColor,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -792,20 +827,26 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Filtrar por Período',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Filtrar por Período',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx)),
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
 
                 // Year selector (multi-select)
-                const Text('Años (selecciona varios)',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                const Text(
+                  'Años (selecciona varios)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -836,31 +877,53 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Meses',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500)),
+                    const Text(
+                      'Meses',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     Row(
                       children: [
                         TextButton(
-                          onPressed: () => setModalState(() => _selectedMonths =
-                              {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}),
-                          child: const Text('TODO',
-                              style: TextStyle(fontSize: 10)),
+                          onPressed: () => setModalState(
+                            () => _selectedMonths = {
+                              1,
+                              2,
+                              3,
+                              4,
+                              5,
+                              6,
+                              7,
+                              8,
+                              9,
+                              10,
+                              11,
+                              12,
+                            },
+                          ),
+                          child: const Text(
+                            'TODO',
+                            style: TextStyle(fontSize: 10),
+                          ),
                         ),
                         TextButton(
-                          onPressed: () => setModalState(() =>
-                              _selectedMonths = {
-                                for (var i = 1; i <= DateTime.now().month; i++)
-                                  i
-                              }),
+                          onPressed: () => setModalState(
+                            () => _selectedMonths = {
+                              for (var i = 1; i <= DateTime.now().month; i++) i,
+                            },
+                          ),
                           child:
                               const Text('YTD', style: TextStyle(fontSize: 10)),
                         ),
                         TextButton(
                           onPressed: () =>
                               setModalState(() => _selectedMonths = {}),
-                          child: const Text('NINGUNO',
-                              style: TextStyle(fontSize: 10)),
+                          child: const Text(
+                            'NINGUNO',
+                            style: TextStyle(fontSize: 10),
+                          ),
                         ),
                       ],
                     ),
@@ -873,8 +936,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   children: List.generate(
                     12,
                     (i) => FilterChip(
-                      label: Text(_monthNamesShort[i],
-                          style: const TextStyle(fontSize: 11)),
+                      label: Text(
+                        _monthNamesShort[i],
+                        style: const TextStyle(fontSize: 11),
+                      ),
                       selected: _selectedMonths.contains(i + 1),
                       onSelected: (s) {
                         setModalState(() {
@@ -906,9 +971,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       setState(() {});
                       _loadData();
                     },
-                    child: const Text('Aplicar Filtros',
-                        style: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Aplicar Filtros',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -921,16 +990,18 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   }
 
   String get _periodLabel {
-    if (_selectedMonths.isEmpty || _selectedYears.isEmpty)
+    if (_selectedMonths.isEmpty || _selectedYears.isEmpty) {
       return 'Sin selección';
+    }
 
     final yearsStr = _selectedYears.length == 1
         ? '${_selectedYears.first}'
         : _selectedYears.toList().join(', ');
 
     if (_selectedMonths.length == 12) return 'Todo $yearsStr';
-    if (_selectedMonths.length == 1)
+    if (_selectedMonths.length == 1) {
       return '${_monthNames[_selectedMonths.first - 1]} $yearsStr';
+    }
 
     final sorted = _selectedMonths.toList()..sort();
     // Check if consecutive
@@ -969,11 +1040,16 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           color: AppTheme.raisedSurface,
           child: Row(
             children: [
-              const Icon(Icons.track_changes,
-                  color: AppTheme.accentIndigo, size: 20),
+              const Icon(
+                Icons.track_changes,
+                color: AppTheme.accentIndigo,
+                size: 20,
+              ),
               const SizedBox(width: 8),
-              const Text('Objetivos',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                'Objetivos',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const Spacer(),
               // Filter button (replaces arrows)
               InkWell(
@@ -986,14 +1062,19 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: AppTheme.accentIndigo.withValues(alpha: 0.5)),
+                      color: AppTheme.accentIndigo.withValues(alpha: 0.5),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_periodLabel,
-                          style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text(
+                        _periodLabel,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(width: 4),
                       const Icon(Icons.arrow_drop_down, size: 18),
                     ],
@@ -1085,7 +1166,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       contentPadding:
                           const EdgeInsets.symmetric(horizontal: 12),
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     style: const TextStyle(fontSize: 13),
                     textInputAction: TextInputAction.search,
@@ -1204,11 +1286,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                         initialValue: _currentSort,
                         items: const [
                           DropdownMenuItem(
-                              value: 'objective_desc',
-                              child: Text('Mayor Objetivo')),
+                            value: 'objective_desc',
+                            child: Text('Mayor Objetivo'),
+                          ),
                           DropdownMenuItem(
-                              value: 'sales_desc',
-                              child: Text('Mayor Recaudado')),
+                            value: 'sales_desc',
+                            child: Text('Mayor Recaudado'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _currentSort = val);
@@ -1270,7 +1354,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                 backgroundColor: AppTheme.accentIndigo,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () => _loadData(),
+                              onPressed: _loadData,
                               child: const Text('Aplicar Filtros'),
                             ),
                           ),
@@ -1336,8 +1420,11 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       ),
       child: Row(
         children: [
-          Icon(isOnTrack ? Icons.emoji_events : Icons.trending_up,
-              color: color, size: 28),
+          Icon(
+            isOnTrack ? Icons.emoji_events : Icons.trending_up,
+            color: color,
+            size: 28,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1354,14 +1441,16 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     return 'Acumulado $year ($effectiveMonthCount meses)';
                   }(),
                   style: TextStyle(
-                      fontSize: Responsive.isSmall(context) ? 10 : 11,
-                      fontWeight: FontWeight.w500),
+                    fontSize: Responsive.isSmall(context) ? 10 : 11,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   '${_formatCurrency(ytdSales)} de ${_formatCurrency(ytdObjective)}',
                   style: TextStyle(
-                      fontSize: Responsive.isSmall(context) ? 9 : 10,
-                      color: AppTheme.textSecondary),
+                    fontSize: Responsive.isSmall(context) ? 9 : 10,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -1375,7 +1464,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             child: Text(
               '${ytdProgress.toStringAsFixed(1)}%',
               style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.bold, color: color),
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -1412,27 +1504,38 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Objetivo $year',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-                Text(_formatCurrency(yearObj),
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.accentIndigo)),
+                Text(
+                  'Objetivo $year',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  _formatCurrency(yearObj),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.accentIndigo,
+                  ),
+                ),
               ],
             ),
             subtitle: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Venta Actual',
-                    style:
-                        TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                Text(_formatCurrency(yearSales),
-                    style: const TextStyle(
-                        fontSize: 11, color: AppTheme.textSecondary)),
+                const Text(
+                  'Venta Actual',
+                  style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                ),
+                Text(
+                  _formatCurrency(yearSales),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
             children: [
@@ -1445,8 +1548,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               ...List.generate(12, (index) {
                 final m = index + 1;
                 final yearData = _yearlyData[year.toString()] ?? [];
-                final monthData = yearData.firstWhere((e) => e['month'] == m,
-                    orElse: () => {});
+                final monthData = yearData.firstWhere(
+                  (e) => e['month'] == m,
+                  orElse: () => {},
+                );
                 final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
                 final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
 
@@ -1468,9 +1573,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     children: [
                       SizedBox(
                         width: 30,
-                        child: Text(_monthNamesShort[index],
-                            style: const TextStyle(
-                                fontSize: 11, color: AppTheme.textSecondary)),
+                        child: Text(
+                          _monthNamesShort[index],
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
                       ),
                       Expanded(
                         child: Row(
@@ -1481,29 +1590,38 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               Text(
                                 _formatCurrency(sales),
                                 style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: color),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: color,
+                                ),
                               )
                             else
-                              const Text('-',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.textTertiary)),
+                              const Text(
+                                '-',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textTertiary,
+                                ),
+                              ),
 
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 4),
-                              child: Text('/',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: AppTheme.textTertiary)),
+                              child: Text(
+                                '/',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.textTertiary,
+                                ),
+                              ),
                             ),
 
                             // Target
                             Text(
                               _formatCurrency(obj),
                               style: const TextStyle(
-                                  fontSize: 11, color: Colors.white70),
+                                fontSize: 11,
+                                color: Colors.white70,
+                              ),
                             ),
                           ],
                         ),
@@ -1517,8 +1635,11 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           color: color,
                         )
                       else
-                        const Icon(Icons.circle_outlined,
-                            size: 12, color: AppTheme.textTertiary),
+                        const Icon(
+                          Icons.circle_outlined,
+                          size: 12,
+                          color: AppTheme.textTertiary,
+                        ),
                     ],
                   ),
                 );
@@ -1556,10 +1677,11 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             color: AppTheme.raisedSurface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: isAchieved
-                    ? AppTheme.success.withValues(alpha: 0.5)
-                    : Colors.transparent,
-                width: 2),
+              color: isAchieved
+                  ? AppTheme.success.withValues(alpha: 0.5)
+                  : Colors.transparent,
+              width: 2,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1569,13 +1691,17 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 children: [
                   const Icon(Icons.euro, size: 20, color: AppTheme.info),
                   const SizedBox(width: 6),
-                  const Text('VENTAS',
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'VENTAS',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
                   const Spacer(),
                   if (isAchieved)
-                    const Icon(Icons.check_circle,
-                        color: AppTheme.success, size: 18),
+                    const Icon(
+                      Icons.check_circle,
+                      color: AppTheme.success,
+                      size: 18,
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -1592,7 +1718,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     color: AppTheme.accentIndigo.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: AppTheme.accentIndigo.withValues(alpha: 0.3)),
+                      color: AppTheme.accentIndigo.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Theme(
                     data: Theme.of(context)
@@ -1606,16 +1733,22 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       title: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Objetivo ${_selectedYears.first}',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
-                          Text(_formatCurrency(annualObj),
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.accentIndigo)),
+                          Text(
+                            'Objetivo ${_selectedYears.first}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            _formatCurrency(annualObj),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.accentIndigo,
+                            ),
+                          ),
                         ],
                       ),
                       children: [
@@ -1623,7 +1756,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           height: 1,
                           color: AppTheme.accentIndigo.withValues(alpha: 0.2),
                           margin: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
                         ),
                         // List monthly objectives
                         ...List.generate(12, (index) {
@@ -1632,8 +1767,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               _yearlyData[_selectedYears.first.toString()] ??
                                   [];
                           final monthData = yearData.firstWhere(
-                              (e) => e['month'] == m,
-                              orElse: () => {});
+                            (e) => e['month'] == m,
+                            orElse: () => {},
+                          );
                           final obj =
                               (monthData['objective'] as num?)?.toDouble() ?? 0;
                           final sales =
@@ -1654,15 +1790,20 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
                           return Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 6), // More padding
+                              horizontal: 16,
+                              vertical: 6,
+                            ), // More padding
                             child: Row(
                               children: [
                                 SizedBox(
                                   width: 30,
-                                  child: Text(_monthNamesShort[index],
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.textSecondary)),
+                                  child: Text(
+                                    _monthNamesShort[index],
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
                                 ),
                                 Expanded(
                                   child: Row(
@@ -1673,31 +1814,39 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                         Text(
                                           _formatCurrency(sales),
                                           style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: color),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: color,
+                                          ),
                                         )
                                       else
-                                        const Text('-',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: AppTheme.textTertiary)),
+                                        const Text(
+                                          '-',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: AppTheme.textTertiary,
+                                          ),
+                                        ),
 
                                       const Padding(
                                         padding:
                                             EdgeInsets.symmetric(horizontal: 4),
-                                        child: Text('/',
-                                            style: TextStyle(
-                                                fontSize: 10,
-                                                color: AppTheme.textTertiary)),
+                                        child: Text(
+                                          '/',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: AppTheme.textTertiary,
+                                          ),
+                                        ),
                                       ),
 
                                       // Target
                                       Text(
                                         _formatCurrency(obj),
                                         style: const TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.white70),
+                                          fontSize: 11,
+                                          color: Colors.white70,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1713,8 +1862,11 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                     color: color,
                                   )
                                 else
-                                  const Icon(Icons.circle_outlined,
-                                      size: 12, color: AppTheme.textTertiary),
+                                  const Icon(
+                                    Icons.circle_outlined,
+                                    size: 12,
+                                    color: AppTheme.textTertiary,
+                                  ),
                               ],
                             ),
                           );
@@ -1765,30 +1917,42 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('VENDIDO',
-                          style: TextStyle(
-                              fontSize: Responsive.isSmall(context) ? 8 : 9,
-                              color: AppTheme.textSecondary)),
-                      Text(_formatCurrency(current),
-                          style: TextStyle(
-                              fontSize: Responsive.isSmall(context) ? 18 : 22,
-                              fontWeight: FontWeight.bold,
-                              color: progressColor)),
+                      Text(
+                        'VENDIDO',
+                        style: TextStyle(
+                          fontSize: Responsive.isSmall(context) ? 8 : 9,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        _formatCurrency(current),
+                        style: TextStyle(
+                          fontSize: Responsive.isSmall(context) ? 18 : 22,
+                          fontWeight: FontWeight.bold,
+                          color: progressColor,
+                        ),
+                      ),
                     ],
                   ),
                   const Spacer(),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('${progress.toStringAsFixed(1)}%',
-                          style: TextStyle(
-                              fontSize: Responsive.isSmall(context) ? 15 : 18,
-                              fontWeight: FontWeight.bold,
-                              color: progressColor)),
-                      Text('cumplido',
-                          style: TextStyle(
-                              fontSize: Responsive.isSmall(context) ? 8 : 9,
-                              color: AppTheme.textSecondary)),
+                      Text(
+                        '${progress.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: Responsive.isSmall(context) ? 15 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: progressColor,
+                        ),
+                      ),
+                      Text(
+                        'cumplido',
+                        style: TextStyle(
+                          fontSize: Responsive.isSmall(context) ? 8 : 9,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -1857,15 +2021,18 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                   ? 'Resultado del Periodo'
                                   : 'Ritmo Diario',
                               style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: paceColor),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: paceColor,
+                              ),
                             ),
                             const Spacer(),
                             // Days badge
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white10,
                                 borderRadius: BorderRadius.circular(12),
@@ -1873,9 +2040,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               child: Text(
                                 '$daysPassed / $workingDays días',
                                 style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -1900,22 +2068,29 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.assignment_outlined,
-                                            size: 12, color: Colors.white70),
+                                        Icon(
+                                          Icons.assignment_outlined,
+                                          size: 12,
+                                          color: Colors.white70,
+                                        ),
                                         SizedBox(width: 4),
-                                        Text('Necesitas/día',
-                                            style: TextStyle(
-                                                fontSize: 9,
-                                                color: Colors.white70)),
+                                        Text(
+                                          'Necesitas/día',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       _formatCurrency(dailyTarget),
                                       style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1930,7 +2105,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                   color: paceColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                      color: paceColor.withValues(alpha: 0.5)),
+                                    color: paceColor.withValues(alpha: 0.5),
+                                  ),
                                 ),
                                 child: Column(
                                   children: [
@@ -1939,24 +2115,30 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                           MainAxisAlignment.center,
                                       children: [
                                         Icon(
-                                            isOnTrack
-                                                ? Icons.check_circle_outline
-                                                : Icons.warning_amber_outlined,
-                                            size: 12,
-                                            color: paceColor),
+                                          isOnTrack
+                                              ? Icons.check_circle_outline
+                                              : Icons.warning_amber_outlined,
+                                          size: 12,
+                                          color: paceColor,
+                                        ),
                                         const SizedBox(width: 4),
-                                        Text('Vendes/día',
-                                            style: TextStyle(
-                                                fontSize: 9, color: paceColor)),
+                                        Text(
+                                          'Vendes/día',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: paceColor,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       _formatCurrency(dailyActual),
                                       style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: paceColor),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: paceColor,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1971,7 +2153,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                              vertical: 6, horizontal: 10),
+                            vertical: 6,
+                            horizontal: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: paceColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -1996,9 +2180,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                         ? 'Vas ${((dailyActual / dailyTarget - 1) * 100).toStringAsFixed(2)}% por ENCIMA del ritmo'
                                         : 'Vas ${((1 - dailyActual / dailyTarget) * 100).toStringAsFixed(2)}% por DEBAJO del ritmo'),
                                 style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: paceColor),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: paceColor,
+                                ),
                               ),
                             ],
                           ),
@@ -2027,7 +2212,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               ? 'Vendido: ${_formatCurrency(current)} de ${_formatCurrency(periodTarget)}'
                               : 'A día de hoy deberías llevar ${_formatCurrency(paceTarget)} y llevas ${_formatCurrency(current)}',
                           style: const TextStyle(
-                              fontSize: 9, color: Colors.white54),
+                            fontSize: 9,
+                            color: Colors.white54,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -2043,20 +2230,18 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 Row(
                   children: [
                     Icon(
-                        variation >= 0
-                            ? Icons.trending_up
-                            : Icons.trending_down,
-                        size: 14,
-                        color:
-                            variation >= 0 ? AppTheme.success : AppTheme.error),
+                      variation >= 0 ? Icons.trending_up : Icons.trending_down,
+                      size: 14,
+                      color: variation >= 0 ? AppTheme.success : AppTheme.error,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${variation >= 0 ? '+' : ''}${variation.toStringAsFixed(1)}% vs año anterior',
                       style: TextStyle(
-                          fontSize: 10,
-                          color: variation >= 0
-                              ? AppTheme.success
-                              : AppTheme.error),
+                        fontSize: 10,
+                        color:
+                            variation >= 0 ? AppTheme.success : AppTheme.error,
+                      ),
                     ),
                   ],
                 ),
@@ -2119,12 +2304,16 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.bar_chart,
-                  size: 48,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+              Icon(
+                Icons.bar_chart,
+                size: 48,
+                color: AppTheme.textSecondary.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 8),
-              const Text('Sin datos para mostrar',
-                  style: TextStyle(color: AppTheme.textSecondary)),
+              const Text(
+                'Sin datos para mostrar',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
             ],
           ),
         ),
@@ -2158,8 +2347,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     for (final year in sortedYears) {
       final data = _yearlyData[year.toString()] ?? [];
       for (final m in data) {
-        if (!sortedMonths.contains(m['month']))
+        if (!sortedMonths.contains(m['month'])) {
           continue; // Only check selected months
+        }
         final sales = (m['sales'] as num?)?.toDouble() ?? 0;
         final obj = (m['objective'] as num?)?.toDouble() ?? 0;
         final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
@@ -2181,14 +2371,14 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     }
 
     // Round maxY to nearest nice ceiling for clean axis
-    double baseInterval = maxY > 0 ? maxY / 4 : 25000.0;
+    var baseInterval = maxY > 0 ? maxY / 4 : 25000.0;
     // Round interval to nearest 5000 or 10000
     if (baseInterval > 10000) {
       baseInterval = ((baseInterval / 10000).ceil() * 10000).toDouble();
     } else {
       baseInterval = ((baseInterval / 1000).ceil() * 1000).toDouble();
     }
-    double roundedMaxY = baseInterval * 5; // Ensure 5 steps
+    var roundedMaxY = baseInterval * 5; // Ensure 5 steps
     if (roundedMaxY < maxY) roundedMaxY += baseInterval;
 
     // Build chart data
@@ -2212,7 +2402,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         final monthData =
             data.firstWhere((e) => e['month'] == m, orElse: () => {});
         return FlSpot(
-            (m - 1).toDouble(), (monthData['sales'] as num?)?.toDouble() ?? 0);
+          (m - 1).toDouble(),
+          (monthData['sales'] as num?)?.toDouble() ?? 0,
+        );
       }).toList();
 
       if (salesSpots.isNotEmpty) {
@@ -2238,7 +2430,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               gradient: LinearGradient(
                 colors: [
                   color.withValues(alpha: 0.2),
-                  color.withValues(alpha: 0)
+                  color.withValues(alpha: 0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -2298,9 +2490,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -2313,12 +2506,17 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Evolución de Ventas',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  Text('Sólida: Venta  |  Discontinua: Obj.',
-                      style: TextStyle(
-                          fontSize: 10, color: AppTheme.textSecondary)),
+                  Text(
+                    'Evolución de Ventas',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Sólida: Venta  |  Discontinua: Obj.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                 ],
               ),
               // Legend
@@ -2333,12 +2531,18 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                              color: yearColors[year], shape: BoxShape.circle),
+                            color: yearColors[year],
+                            shape: BoxShape.circle,
+                          ),
                         ),
                         const SizedBox(width: 4),
-                        Text('$year',
-                            style: const TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.bold)),
+                        Text(
+                          '$year',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                 ],
@@ -2356,7 +2560,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 maxY: roundedMaxY,
                 gridData: FlGridData(
                   drawVerticalLine: false,
-                  horizontalInterval: baseInterval.toDouble(),
+                  horizontalInterval: baseInterval,
                   getDrawingHorizontalLine: (value) => FlLine(
                     color: AppTheme.borderColor.withValues(alpha: 0.1),
                     strokeWidth: 1,
@@ -2371,14 +2575,15 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       showTitles: true,
                       reservedSize:
                           80, // Increased from 50 to prevent "200.000 €" wrapping
-                      interval: baseInterval.toDouble(),
+                      interval: baseInterval,
                       getTitlesWidget: (value, meta) {
                         if (value % 1 == 0) {
                           return Text(
                             CurrencyFormatter.format(value.round().toDouble()),
                             style: const TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 10), // Increased font slightly
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
+                            ), // Increased font slightly
                           );
                         }
                         return const SizedBox.shrink();
@@ -2392,8 +2597,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
                         if (idx >= 0 && idx < 12) {
-                          if (!_selectedMonths.contains(idx + 1))
+                          if (!_selectedMonths.contains(idx + 1)) {
                             return const SizedBox.shrink();
+                          }
                           return Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
@@ -2419,7 +2625,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                         .withValues(alpha: 0.95), // Premium dark blue
                     tooltipRoundedRadius: 12,
                     tooltipPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     tooltipBorder:
                         BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                     getTooltipItems: (touchedSpots) {
@@ -2479,13 +2687,18 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-                color: color, borderRadius: BorderRadius.circular(2))),
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
         const SizedBox(width: 4),
-        Text(label,
-            style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+        ),
       ],
     );
   }
@@ -2502,35 +2715,45 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           colors: isAchieved
               ? [
                   AppTheme.success.withValues(alpha: 0.2),
-                  AppTheme.success.withValues(alpha: 0.1)
+                  AppTheme.success.withValues(alpha: 0.1),
                 ]
               : [
                   AppTheme.accentIndigo.withValues(alpha: 0.2),
-                  AppTheme.accentIndigo.withValues(alpha: 0.1)
+                  AppTheme.accentIndigo.withValues(alpha: 0.1),
                 ],
         ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          Icon(isAchieved ? Icons.emoji_events : Icons.timeline,
-              size: 32,
-              color: isAchieved ? AppTheme.success : AppTheme.accentIndigo),
+          Icon(
+            isAchieved ? Icons.emoji_events : Icons.timeline,
+            size: 32,
+            color: isAchieved ? AppTheme.success : AppTheme.accentIndigo,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Período: $_periodLabel',
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.bold)),
                 Text(
-                    'Real: ${_formatCurrency((sales['current'] as num?)?.toDouble() ?? 0)}',
-                    style: const TextStyle(fontSize: 11)),
+                  'Período: $_periodLabel',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Text(
-                    'Objetivo: ${_formatCurrency((sales['target'] as num?)?.toDouble() ?? 0)}',
-                    style: const TextStyle(
-                        fontSize: 10, color: AppTheme.textSecondary)),
+                  'Real: ${_formatCurrency((sales['current'] as num?)?.toDouble() ?? 0)}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                Text(
+                  'Objetivo: ${_formatCurrency((sales['target'] as num?)?.toDouble() ?? 0)}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2540,11 +2763,14 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               color: isAchieved ? AppTheme.success : AppTheme.accentIndigo,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Text('${progress.toStringAsFixed(0)}%',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14)),
+            child: Text(
+              '${progress.toStringAsFixed(0)}%',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
           ),
         ],
       ),
@@ -2621,20 +2847,45 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _statusFilterChip(null, 'Todos', Icons.list,
-                    AppTheme.textSecondary, _clientsObjectives.length),
+                _statusFilterChip(
+                  null,
+                  'Todos',
+                  Icons.list,
+                  AppTheme.textSecondary,
+                  _clientsObjectives.length,
+                ),
                 const SizedBox(width: 6),
-                _statusFilterChip('achieved', 'Conseguido', Icons.check_circle,
-                    Colors.green, statusCounts['achieved']!),
+                _statusFilterChip(
+                  'achieved',
+                  'Conseguido',
+                  Icons.check_circle,
+                  Colors.green,
+                  statusCounts['achieved']!,
+                ),
                 const SizedBox(width: 6),
-                _statusFilterChip('ontrack', 'En camino', Icons.trending_up,
-                    Colors.blue, statusCounts['ontrack']!),
+                _statusFilterChip(
+                  'ontrack',
+                  'En camino',
+                  Icons.trending_up,
+                  Colors.blue,
+                  statusCounts['ontrack']!,
+                ),
                 const SizedBox(width: 6),
-                _statusFilterChip('atrisk', 'En riesgo', Icons.warning,
-                    AppTheme.warning, statusCounts['atrisk']!),
+                _statusFilterChip(
+                  'atrisk',
+                  'En riesgo',
+                  Icons.warning,
+                  AppTheme.warning,
+                  statusCounts['atrisk']!,
+                ),
                 const SizedBox(width: 6),
-                _statusFilterChip('critical', 'Crítico', Icons.error,
-                    Colors.red, statusCounts['critical']!),
+                _statusFilterChip(
+                  'critical',
+                  'Crítico',
+                  Icons.error,
+                  Colors.red,
+                  statusCounts['critical']!,
+                ),
               ],
             ),
           ),
@@ -2679,7 +2930,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   }
 
   Widget _statusFilterChip(
-      String? status, String label, IconData icon, Color color, int count) {
+    String? status,
+    String label,
+    IconData icon,
+    Color color,
+    int count,
+  ) {
     final isSelected = _selectedStatusFilter == status;
     return GestureDetector(
       onTap: () => setState(() => _selectedStatusFilter = status),
@@ -2691,13 +2947,18 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               : AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color: isSelected ? color : Colors.transparent, width: 1.5),
+            color: isSelected ? color : Colors.transparent,
+            width: 1.5,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 14, color: isSelected ? color : AppTheme.textSecondary),
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? color : AppTheme.textSecondary,
+            ),
             const SizedBox(width: 4),
             Text(
               '$label ($count)',
@@ -2721,8 +2982,8 @@ class _ObjectiveCard extends StatelessWidget {
     required this.target,
     required this.current,
     required this.progress,
-    this.variation,
     // this.format, // REMOVED
+    this.variation,
     this.isCount = false,
     this.compact = false,
     this.subtitle,
@@ -2756,10 +3017,11 @@ class _ObjectiveCard extends StatelessWidget {
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isAchieved
-                ? AppTheme.success.withValues(alpha: 0.5)
-                : Colors.transparent,
-            width: 2),
+          color: isAchieved
+              ? AppTheme.success.withValues(alpha: 0.5)
+              : Colors.transparent,
+          width: 2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2768,33 +3030,44 @@ class _ObjectiveCard extends StatelessWidget {
             children: [
               Icon(icon, size: compact ? 16 : 20, color: progressColor),
               const SizedBox(width: 6),
-              Text(title,
-                  style: TextStyle(
-                      fontSize: compact ? 11 : 13,
-                      fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: compact ? 11 : 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const Spacer(),
               if (isAchieved)
-                const Icon(Icons.check_circle,
-                    color: AppTheme.success, size: 16),
+                const Icon(
+                  Icons.check_circle,
+                  color: AppTheme.success,
+                  size: 16,
+                ),
             ],
           ),
           SizedBox(height: compact ? 6 : 10),
-          Text(formatValue(current),
-              style: TextStyle(
-                  fontSize:
-                      compact ? (Responsive.isSmall(context) ? 16 : 18) : 24,
-                  fontWeight: FontWeight.bold)),
+          Text(
+            formatValue(current),
+            style: TextStyle(
+              fontSize: compact ? (Responsive.isSmall(context) ? 16 : 18) : 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text('Objetivo: ${formatValue(target)}',
-              style: TextStyle(
-                  fontSize:
-                      compact ? (Responsive.isSmall(context) ? 8 : 9) : 10,
-                  color: AppTheme.textSecondary)),
+          Text(
+            'Objetivo: ${formatValue(target)}',
+            style: TextStyle(
+              fontSize: compact ? (Responsive.isSmall(context) ? 8 : 9) : 10,
+              color: AppTheme.textSecondary,
+            ),
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
-            Text(subtitle!,
-                style:
-                    const TextStyle(fontSize: 9, color: AppTheme.accentIndigo)),
+            Text(
+              subtitle!,
+              style: const TextStyle(fontSize: 9, color: AppTheme.accentIndigo),
+            ),
           ],
           SizedBox(height: compact ? 6 : 10),
           ClipRRect(
@@ -2810,30 +3083,32 @@ class _ObjectiveCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${progress.toStringAsFixed(0)}%',
-                  style: TextStyle(
-                      color: progressColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11)),
+              Text(
+                '${progress.toStringAsFixed(0)}%',
+                style: TextStyle(
+                  color: progressColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
               if (variation != null)
                 Row(
                   children: [
                     Icon(
-                        variation! >= 0
-                            ? Icons.trending_up
-                            : Icons.trending_down,
-                        size: 12,
-                        color: variation! >= 0
-                            ? AppTheme.success
-                            : AppTheme.error),
+                      variation! >= 0 ? Icons.trending_up : Icons.trending_down,
+                      size: 12,
+                      color:
+                          variation! >= 0 ? AppTheme.success : AppTheme.error,
+                    ),
                     const SizedBox(width: 2),
                     Text(
-                        '${variation! >= 0 ? '+' : ''}${variation!.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: variation! >= 0
-                                ? AppTheme.success
-                                : AppTheme.error)),
+                      '${variation! >= 0 ? '+' : ''}${variation!.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color:
+                            variation! >= 0 ? AppTheme.success : AppTheme.error,
+                      ),
+                    ),
                   ],
                 ),
             ],
@@ -2889,9 +3164,11 @@ class _ClientCard extends StatelessWidget {
     // Always add fallback with address/name
     if (searchQuery.isNotEmpty) {
       urls.add(
-          'geo:0,0?q=$encodedQuery'); // Geo intent - opens default maps app
+        'geo:0,0?q=$encodedQuery',
+      ); // Geo intent - opens default maps app
       urls.add(
-          'https://www.google.com/maps/dir/?api=1&destination=$encodedQuery');
+        'https://www.google.com/maps/dir/?api=1&destination=$encodedQuery',
+      );
       urls.add('https://www.google.com/maps/search/?api=1&query=$encodedQuery');
     }
 
@@ -2917,8 +3194,9 @@ class _ClientCard extends StatelessWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('No se puede abrir el mapa. Instala Google Maps.'),
-            backgroundColor: AppTheme.error),
+          content: Text('No se puede abrir el mapa. Instala Google Maps.'),
+          backgroundColor: AppTheme.error,
+        ),
       );
     }
   }
@@ -2968,8 +3246,9 @@ class _ClientCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       color: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: statusColor.withValues(alpha: 0.3))),
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -2985,13 +3264,21 @@ class _ClientCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name,
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis),
-                        Text('Cód: $code',
-                            style: const TextStyle(
-                                fontSize: 9, color: AppTheme.textSecondary)),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Cód: $code',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2999,13 +3286,17 @@ class _ClientCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Text(statusText,
-                        style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: statusColor)),
+                      color: statusColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -3016,26 +3307,35 @@ class _ClientCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                      color: AppTheme.inkSurface.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(6)),
+                    color: AppTheme.inkSurface.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_on,
-                          size: 14, color: AppTheme.info),
+                      const Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: AppTheme.info,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (address.isNotEmpty)
-                              Text(address,
-                                  style: const TextStyle(fontSize: 10),
-                                  overflow: TextOverflow.ellipsis),
+                              Text(
+                                address,
+                                style: const TextStyle(fontSize: 10),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             if (city.isNotEmpty || postalCode.isNotEmpty)
-                              Text('$postalCode $city'.trim(),
-                                  style: const TextStyle(
-                                      fontSize: 9,
-                                      color: AppTheme.textSecondary)),
+                              Text(
+                                '$postalCode $city'.trim(),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -3043,19 +3343,28 @@ class _ClientCard extends StatelessWidget {
                         Container(
                           margin: const EdgeInsets.only(right: 4),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                              color:
-                                  AppTheme.accentIndigo.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4)),
-                          child: Text('Ruta $route',
-                              style: const TextStyle(
-                                  fontSize: 8, fontWeight: FontWeight.w500)),
+                            color: AppTheme.accentIndigo.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Ruta $route',
+                            style: const TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       if (hasAddress)
                         IconButton(
-                          icon: const Icon(Icons.map,
-                              size: 18, color: AppTheme.info),
+                          icon: const Icon(
+                            Icons.map,
+                            size: 18,
+                            color: AppTheme.info,
+                          ),
                           onPressed: () => _openInMaps(context),
                           padding: EdgeInsets.zero,
                           constraints:
@@ -3068,14 +3377,23 @@ class _ClientCard extends StatelessWidget {
 
               if (phone.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Row(children: [
-                  const Icon(Icons.phone,
-                      size: 12, color: AppTheme.textSecondary),
-                  const SizedBox(width: 4),
-                  Text(phone,
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.phone,
+                      size: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      phone,
                       style: const TextStyle(
-                          fontSize: 10, color: AppTheme.textSecondary))
-                ]),
+                        fontSize: 10,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ],
 
               const SizedBox(height: 8),
@@ -3084,83 +3402,124 @@ class _ClientCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
+                  gradient: LinearGradient(
+                    colors: [
                       statusColor.withValues(alpha: 0.1),
-                      statusColor.withValues(alpha: 0.05)
-                    ]),
-                    borderRadius: BorderRadius.circular(8)),
+                      statusColor.withValues(alpha: 0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('OBJETIVO',
-                                  style: TextStyle(
-                                      fontSize: 8,
-                                      color: AppTheme.textSecondary)),
-                              Text(_formatCurrency(objective),
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500))
-                            ]),
-                        Column(children: [
-                          const Text('VENDIDO',
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'OBJETIVO',
                               style: TextStyle(
-                                  fontSize: 8, color: AppTheme.textSecondary)),
-                          Text(_formatCurrency(current),
+                                fontSize: 8,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              _formatCurrency(objective),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          children: [
+                            const Text(
+                              'VENDIDO',
                               style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: statusColor))
-                        ]),
+                                fontSize: 8,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              _formatCurrency(current),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ],
+                        ),
                         if (showMargin)
                           Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                const Text('MARGEN',
-                                    style: TextStyle(
-                                        fontSize: 8,
-                                        color: AppTheme.textSecondary)),
-                                Text(_formatCurrency(margin),
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500))
-                              ]),
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text(
+                                'MARGEN',
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                _formatCurrency(margin),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                     const SizedBox(height: 6),
                     ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                            value: (progress / 100).clamp(0.0, 1.0),
-                            backgroundColor: statusColor.withValues(alpha: 0.2),
-                            valueColor: AlwaysStoppedAnimation(statusColor),
-                            minHeight: 6)),
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (progress / 100).clamp(0.0, 1.0),
+                        backgroundColor: statusColor.withValues(alpha: 0.2),
+                        valueColor: AlwaysStoppedAnimation(statusColor),
+                        minHeight: 6,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Progreso',
-                              style: TextStyle(
-                                  fontSize: 9, color: AppTheme.textSecondary)),
-                          Text('${progress.toStringAsFixed(1)}%',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: statusColor))
-                        ]),
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Progreso',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '${progress.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 6),
-              const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text('Ver historial de compras',
-                    style: TextStyle(fontSize: 9, color: AppTheme.info)),
-                Icon(Icons.chevron_right, size: 14, color: AppTheme.info)
-              ]),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Ver historial de compras',
+                    style: TextStyle(fontSize: 9, color: AppTheme.info),
+                  ),
+                  Icon(Icons.chevron_right, size: 14, color: AppTheme.info),
+                ],
+              ),
             ],
           ),
         ),

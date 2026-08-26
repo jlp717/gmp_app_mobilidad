@@ -14,8 +14,8 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
@@ -24,16 +24,16 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/client_search_dialog.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotions_list_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/complementary_products.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/add_to_order_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/albaran_info_dialog.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/complementary_products.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/drafts_bottom_sheet.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/mis_pedidos_yoy_bar.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_card.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_detail_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_empty_state.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_filters_bar.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/mis_pedidos_yoy_bar.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_kpi_dashboard.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_status_badge.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_summary_widget.dart';
@@ -637,10 +637,6 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       }
     }
 
-    if (product == null) {
-      return 'No se pudo cargar el articulo ${fallbackName.isNotEmpty ? fallbackName : productCode}';
-    }
-
     final unit = product.availableUnits.contains('CAJAS')
         ? 'CAJAS'
         : product.availableUnits.first;
@@ -810,8 +806,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       ),
                     ),
                   IconButton(
-                    icon: const Icon(Icons.save_outlined,
-                        color: AppTheme.textSecondary),
+                    icon: const Icon(
+                      Icons.save_outlined,
+                      color: AppTheme.textSecondary,
+                    ),
                     tooltip: 'Guardar como borrador manual',
                     onPressed: () async {
                       await prov.saveDraft(
@@ -840,8 +838,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.drafts_outlined,
-                        color: AppTheme.textSecondary),
+                    icon: const Icon(
+                      Icons.drafts_outlined,
+                      color: AppTheme.textSecondary,
+                    ),
                     tooltip: 'Borradores guardados',
                     onPressed: () => _showDraftsDialog(prov),
                   ),
@@ -1491,8 +1491,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.inventory_2_outlined,
-                color: AppTheme.textTertiary, size: 48),
+            const Icon(
+              Icons.inventory_2_outlined,
+              color: AppTheme.textTertiary,
+              size: 48,
+            ),
             const SizedBox(height: 12),
             Text(
               'No se encontraron productos',
@@ -2048,8 +2051,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 64, color: AppTheme.textPrimary.withValues(alpha: 0.28)),
+            Icon(
+              icon,
+              size: 64,
+              color: AppTheme.textPrimary.withValues(alpha: 0.28),
+            ),
             const SizedBox(height: 16),
             Text(
               title,
@@ -2604,7 +2610,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               final salesB = (ruteroMap[b.clienteCode]?['status']
                       as Map<String, dynamic>?)?['ytdSales'] as num? ??
                   0;
-              return (salesB as num).compareTo(salesA as num);
+              return salesB.compareTo(salesA);
             case 'sales_asc':
               final salesA = (ruteroMap[a.clienteCode]?['status']
                       as Map<String, dynamic>?)?['ytdSales'] as num? ??
@@ -2612,7 +2618,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               final salesB = (ruteroMap[b.clienteCode]?['status']
                       as Map<String, dynamic>?)?['ytdSales'] as num? ??
                   0;
-              return (salesA as num).compareTo(salesB as num);
+              return salesA.compareTo(salesB);
             case 'route':
             default:
               return 0; // Keep API order
@@ -2735,8 +2741,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           children: [
             Icon(Icons.check_circle_outline, color: AppTheme.success, size: 22),
             SizedBox(width: 8),
-            Text('Pedido confirmado',
-                style: TextStyle(color: AppTheme.textPrimary)),
+            Text(
+              'Pedido confirmado',
+              style: TextStyle(color: AppTheme.textPrimary),
+            ),
           ],
         ),
         content: Text(
@@ -2748,8 +2756,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'Cerrar',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           if (orderId != null)
             FilledButton.icon(
@@ -2817,8 +2827,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               size: 22,
             ),
             SizedBox(width: 8),
-            Text('Confirmar borrador',
-                style: TextStyle(color: AppTheme.textPrimary)),
+            Text(
+              'Confirmar borrador',
+              style: TextStyle(color: AppTheme.textPrimary),
+            ),
           ],
         ),
         content: Text(
@@ -2828,8 +2840,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -2886,8 +2900,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
             SizedBox(width: 8),
-            Text('Eliminar borrador',
-                style: TextStyle(color: AppTheme.textPrimary)),
+            Text(
+              'Eliminar borrador',
+              style: TextStyle(color: AppTheme.textPrimary),
+            ),
           ],
         ),
         content: Text(
@@ -2897,8 +2913,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),

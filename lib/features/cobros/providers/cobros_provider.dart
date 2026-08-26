@@ -591,7 +591,7 @@ class CobrosProvider extends ChangeNotifier {
       formaPago.trim().toUpperCase(),
       tipoVenta.code,
       tipoModo.code,
-      isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
+      if (isRepartidor) 'REPARTIDOR' else 'COMERCIAL',
     ].join('|');
   }
 
@@ -651,9 +651,11 @@ class CobrosProvider extends ChangeNotifier {
       });
       if (response['success'] == true) {
         await CacheService.invalidateByPrefix(
-            'cobros:pendientes:$codigoCliente');
+          'cobros:pendientes:$codigoCliente',
+        );
         await CacheService.invalidateByPrefix(
-            'cobros:historico:$codigoCliente');
+          'cobros:historico:$codigoCliente',
+        );
         await CacheService.invalidateByPrefix('cobros:estado:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:pending-summary:');
         if (reloadAfter) {

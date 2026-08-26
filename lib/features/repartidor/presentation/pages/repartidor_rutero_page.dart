@@ -233,7 +233,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   void _onDaySelected(DateTime date) {
-    HapticFeedback.selectionClick();
+    unawaited(HapticFeedback.selectionClick());
     setState(() => _selectedDate = date);
 
     final entregas = ref.read(entregasProvider.notifier);
@@ -281,7 +281,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         currentName = 'Todos los repartidores';
       } else {
         final selectedName = widget.repartidorNames?[scopedId]?.trim();
-        currentName = selectedName?.isNotEmpty == true
+        currentName = selectedName?.isNotEmpty ?? false
             ? selectedName!
             : 'Repartidor $scopedId';
       }
@@ -401,8 +401,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       ),
       child: Row(
         children: [
-          const Icon(Icons.person_off_outlined,
-              color: AppTheme.error, size: 18),
+          const Icon(
+            Icons.person_off_outlined,
+            color: AppTheme.error,
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -570,7 +573,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               color: AppTheme.obligatorio,
               icon: Icons.euro,
               onTap: () {
-                HapticFeedback.selectionClick();
+                unawaited(HapticFeedback.selectionClick());
                 ref.read(entregasProvider.notifier).setFilterDebeCobrar(
                       filterDebeCobrar == 'S' ? '' : 'S',
                     );
@@ -585,7 +588,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               color: AppTheme.credito,
               icon: Icons.credit_card,
               onTap: () {
-                HapticFeedback.selectionClick();
+                unawaited(HapticFeedback.selectionClick());
                 ref.read(entregasProvider.notifier).setFilterTipoPago(
                       filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
                     );
@@ -618,7 +621,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       child: Text(
                         'â†• Orden',
                         style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 11),
+                          color: AppTheme.textPrimary,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                     DropdownMenuItem(
@@ -626,7 +631,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       child: Text(
                         'â†“ Mayor â‚¬',
                         style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 11),
+                          color: AppTheme.textPrimary,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                     DropdownMenuItem(
@@ -634,13 +641,15 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       child: Text(
                         'â†‘ Menor â‚¬',
                         style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 11),
+                          color: AppTheme.textPrimary,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
                   onChanged: (val) {
                     if (val != null) {
-                      HapticFeedback.selectionClick();
+                      unawaited(HapticFeedback.selectionClick());
                       ref.read(entregasProvider.notifier).setSortBy(val);
                     }
                   },
@@ -686,7 +695,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     String repartidorId,
     List<AlbaranEntrega> albaranes,
   ) async {
-    HapticFeedback.selectionClick();
+    unawaited(HapticFeedback.selectionClick());
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -697,7 +706,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         ),
       ),
     );
-    if (saved == true && mounted) {
+    if (saved ?? false && mounted) {
       await _loadData(forceRefresh: true);
     }
   }

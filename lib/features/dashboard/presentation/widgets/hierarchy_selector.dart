@@ -85,9 +85,10 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               const Text(
                 'Arrastra para ordenar',
                 style: TextStyle(
-                    color: Colors.white30,
-                    fontSize: 10,
-                    fontStyle: FontStyle.italic),
+                  color: Colors.white30,
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ),
@@ -169,11 +170,17 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isActive)
-                  const Icon(Icons.drag_indicator,
-                      size: 16, color: Colors.white30),
+                  const Icon(
+                    Icons.drag_indicator,
+                    size: 16,
+                    color: Colors.white30,
+                  ),
                 if (isActive) const SizedBox(width: 8),
-                Icon(_dimensionIcons[dim],
-                    size: 16, color: isActive ? AppTheme.info : Colors.white30),
+                Icon(
+                  _dimensionIcons[dim],
+                  size: 16,
+                  color: isActive ? AppTheme.info : Colors.white30,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   _dimensionLabels[dim]!,

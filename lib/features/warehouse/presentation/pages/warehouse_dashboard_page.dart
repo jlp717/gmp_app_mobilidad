@@ -140,7 +140,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                 ),
                 Text(
                   '${_trucks.length} camiones · ${_trucks.fold<int>(0, (s, t) => s + t.orderCount)} pedidos',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
                   ),
@@ -375,7 +375,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                         ),
                         Text(
                           truck.matricula,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: AppTheme.textTertiary,
                             fontSize: 11,
                           ),
@@ -392,7 +392,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                 truck.description.isNotEmpty
                     ? truck.description
                     : 'Sin descripción',
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
@@ -404,7 +404,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
               // Driver
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.person_outline_rounded,
                     color: AppTheme.success,
                     size: 14,
@@ -415,7 +415,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                       truck.driverName.isNotEmpty
                           ? truck.driverName
                           : truck.driverCode,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.success,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -520,7 +520,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
     final totalPedidos = _trucks.fold(0, (s, t) => s + t.orderCount);
     final totalLineas = _trucks.fold(0, (s, t) => s + t.lineCount);
     final totalCamiones = _trucks.length;
-    final totalPeso = _trucks.fold(0.0, (s, t) => s + t.maxPayloadKg);
+    final totalPeso = _trucks.fold<double>(0.0, (s, t) => s + t.maxPayloadKg);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -546,14 +546,19 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(value,
-            style: TextStyle(
-                color: color,
-                fontSize: Responsive.fontSize(context, small: 14, large: 18),
-                fontWeight: FontWeight.w800)),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: Responsive.fontSize(context, small: 14, large: 18),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label,
-            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9),
+        ),
       ],
     );
   }
@@ -589,7 +594,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
   }
 
   Widget _buildEmpty() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -598,10 +603,10 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
             color: AppTheme.textTertiary,
             size: 64,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             'Sin expediciones para esta fecha',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 16,
             ),

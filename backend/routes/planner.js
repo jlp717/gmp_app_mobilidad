@@ -1391,7 +1391,15 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             WHERE CLIENT_CODE IN (${clientPlaceholders})
         `;
 
-        // Execute all queries in parallel
+        const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
+        const configRowsPromise = primaryVendor && !shouldIgnoreOverrides
+            ? queryWithParams(`
+                SELECT CLIENTE, ORDEN
+                FROM JAVIER.RUTERO_CONFIG
+                WHERE VENDEDOR = ? AND DIA = ?
+            `, [primaryVendor, normalizedDay], false, false)
+            : Promise.resolve([]);
+        // perf: parallelized independent IO (pool-per-call).
         const [
             clientDetailsRows,
             currentSalesRows,
@@ -1399,7 +1407,8 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             prevYearTotalRows,
             gpsResult,
             notesResult,
-            orderStatusResult
+            orderStatusResult,
+            configRows,
         ] = await Promise.all([
             cachedQuery(queryWithParams, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG, clientBatch),
             cachedQuery(queryWithParams, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL, [...clientBatch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent]),
@@ -1407,7 +1416,8 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             cachedQuery(queryWithParams, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG, [...clientBatch, previousYear]),
             cachedQuery(queryWithParams, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG, clientBatch).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
             cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
-            getRuteroOrderStatusMap(clientBatch, { vendedorCodes, orderDate })
+            getRuteroOrderStatusMap(clientBatch, { vendedorCodes, orderDate }),
+            configRowsPromise
         ]);
         const orderStatusMap = orderStatusResult?.statusMap instanceof Map
             ? orderStatusResult.statusMap
@@ -1475,25 +1485,13 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             };
         });
 
-        // Retrieve custom order from cache if possible, or query
-        const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
-        let orderMap = new Map();
-
-        // Only load custom order if NOT ignoring overrides
+        // Retrieve custom order already loaded with independent route data.
+        const orderMap = new Map();
         if (primaryVendor && !shouldIgnoreOverrides) {
-            // SECURITY: Use parameterized query to prevent SQL injection
-            const configRows = await queryWithParams(`
-                SELECT CLIENTE, ORDEN 
-                FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = ? AND DIA = ?
-            `, [primaryVendor, normalizedDay], false, false); // false = no debug log clutter
-
             configRows.forEach(r => {
                 const clienteCode = (r.CLIENTE ?? r.cliente ?? '').toString().trim();
                 const orden = parseInt(r.ORDEN ?? r.orden) || 0;
-                if (clienteCode && orden >= 0) {
-                    orderMap.set(clienteCode, orden);
-                }
+                if (clienteCode && orden >= 0) orderMap.set(clienteCode, orden);
             });
             logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${normalizedDay}`);
         }

@@ -1,14 +1,7 @@
+import 'dart:convert';
+
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-typedef SecureSessionWrite = Future<void> Function(String key, String value);
-typedef SecureSessionDelete = Future<void> Function(String key);
-typedef PreferenceStringWrite = Future<void> Function(String key, String value);
-typedef PreferenceStringListWrite = Future<void> Function(
-  String key,
-  List<String> value,
-);
-typedef PreferenceDelete = Future<void> Function(String key);
 
 /// Complete local projection of one canonical backend authentication session.
 class CanonicalLocalAuthSession {
@@ -31,62 +24,33 @@ class CanonicalLocalAuthSession {
 
 /// Persists a rotated session as one fail-closed local transaction.
 ///
-/// Secure storage and preferences do not provide a cross-store transaction.
-/// Therefore any failed write deletes every session fragment and forces a new
-/// login. The application must never continue with mixed old/new credentials.
+/// Every session fragment lives in flutter_secure_storage (Android Keystore /
+/// iOS Keychain). SharedPreferences holds no authentication data anymore;
+/// legacy keys written by older builds are migrated on first read and deleted.
 class AuthSessionPersistence {
-  AuthSessionPersistence({
-    required SecureSessionWrite writeSecure,
-    required SecureSessionDelete deleteSecure,
-    required PreferenceStringWrite writeString,
-    required PreferenceStringListWrite writeStringList,
-    required PreferenceDelete deletePreference,
-  })  : _writeSecure = writeSecure,
-        _deleteSecure = deleteSecure,
-        _writeString = writeString,
-        _writeStringList = writeStringList,
-        _deletePreference = deletePreference;
+  const AuthSessionPersistence();
 
-  factory AuthSessionPersistence.secure() {
-    return AuthSessionPersistence(
-      writeSecure: SecureStorage.writeSecureData,
-      deleteSecure: SecureStorage.deleteSecureData,
-      writeString: (key, value) async {
-        final preferences = await SharedPreferences.getInstance();
-        if (!await preferences.setString(key, value)) {
-          throw StateError('Preference write failed: $key');
-        }
-      },
-      writeStringList: (key, value) async {
-        final preferences = await SharedPreferences.getInstance();
-        if (!await preferences.setStringList(key, value)) {
-          throw StateError('Preference write failed: $key');
-        }
-      },
-      deletePreference: (key) async {
-        final preferences = await SharedPreferences.getInstance();
-        await preferences.remove(key);
-      },
-    );
-  }
-
-  final SecureSessionWrite _writeSecure;
-  final SecureSessionDelete _deleteSecure;
-  final PreferenceStringWrite _writeString;
-  final PreferenceStringListWrite _writeStringList;
-  final PreferenceDelete _deletePreference;
+  static const String _kToken = 'user_token';
+  static const String _kRefresh = 'refresh_token';
+  static const String _kUser = 'user_data';
+  static const String _kExpiresAt = 'session_expires_at';
+  static const String _kVendedorCodes = 'vendedor_codes';
+  static const String _kActiveMode = 'auth_active_mode';
 
   Future<void> commit(CanonicalLocalAuthSession session) async {
     try {
-      await _writeSecure('user_token', session.accessToken);
-      await _writeSecure('refresh_token', session.refreshToken);
-      await _writeSecure('user_data', session.userJson);
-      await _writeSecure(
-        'session_expires_at',
+      await SecureStorage.writeSecureData(_kToken, session.accessToken);
+      await SecureStorage.writeSecureData(_kRefresh, session.refreshToken);
+      await SecureStorage.writeSecureData(_kUser, session.userJson);
+      await SecureStorage.writeSecureData(
+        _kExpiresAt,
         session.expiresAt.millisecondsSinceEpoch.toString(),
       );
-      await _writeStringList('vendedor_codes', session.vendedorCodes);
-      await _writeString('auth_active_mode', session.activeMode);
+      await SecureStorage.writeSecureData(
+        _kVendedorCodes,
+        jsonEncode(session.vendedorCodes),
+      );
+      await SecureStorage.writeSecureData(_kActiveMode, session.activeMode);
     } catch (error) {
       await clear();
       throw AuthSessionPersistenceException(error);
@@ -95,20 +59,69 @@ class AuthSessionPersistence {
 
   Future<void> clear() async {
     for (final key in const [
-      'user_token',
-      'refresh_token',
-      'user_data',
-      'session_expires_at',
+      _kToken,
+      _kRefresh,
+      _kUser,
+      _kExpiresAt,
+      _kVendedorCodes,
+      _kActiveMode,
     ]) {
-      await _bestEffort(() => _deleteSecure(key));
+      await _bestEffort(() => SecureStorage.deleteSecureData(key));
     }
-    for (final key in const [
-      'vendedor_codes',
-      'auth_active_mode',
-      'global_filter_vendor',
-    ]) {
-      await _bestEffort(() => _deletePreference(key));
+    // Remove legacy SharedPreferences fragments from older installs.
+    await _bestEffort(() async {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.remove(_kVendedorCodes);
+      await preferences.remove(_kActiveMode);
+    });
+  }
+
+  /// Reads vendor codes, migrating the legacy SharedPreferences copy once.
+  static Future<List<String>> readVendedorCodes() async {
+    final raw = await SecureStorage.readSecureData(_kVendedorCodes);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded.map((entry) => entry.toString()).toList();
+        }
+      } catch (_) {
+        // Corrupt payload falls through to legacy migration below.
+      }
     }
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final legacy = preferences.getStringList(_kVendedorCodes);
+      if (legacy != null && legacy.isNotEmpty) {
+        await SecureStorage.writeSecureData(
+          _kVendedorCodes,
+          jsonEncode(legacy),
+        );
+        await preferences.remove(_kVendedorCodes);
+        return legacy;
+      }
+    } catch (_) {
+      // Migration is best-effort; an empty list forces re-login upstream.
+    }
+    return const <String>[];
+  }
+
+  /// Reads the saved UI mode, migrating the legacy SharedPreferences copy once.
+  static Future<String?> readActiveMode() async {
+    final saved = await SecureStorage.readSecureData(_kActiveMode);
+    if (saved != null && saved.isNotEmpty) return saved;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final legacy = preferences.getString(_kActiveMode);
+      if (legacy != null && legacy.isNotEmpty) {
+        await SecureStorage.writeSecureData(_kActiveMode, legacy);
+        await preferences.remove(_kActiveMode);
+        return legacy;
+      }
+    } catch (_) {
+      // Best-effort migration only.
+    }
+    return null;
   }
 
   Future<void> _bestEffort(Future<void> Function() operation) async {

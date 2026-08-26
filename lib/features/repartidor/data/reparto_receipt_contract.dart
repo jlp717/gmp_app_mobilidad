@@ -10,9 +10,6 @@ class RepartoConfirmationAcknowledgement {
     this.cobroId,
   });
 
-  final String confirmationId;
-  final String? cobroId;
-
   factory RepartoConfirmationAcknowledgement.fromResponse(
     Map<String, dynamic> response,
   ) {
@@ -29,6 +26,9 @@ class RepartoConfirmationAcknowledgement {
       cobroId: cobroId,
     );
   }
+
+  final String confirmationId;
+  final String? cobroId;
 }
 
 bool isValidRepartoOwnerId(String value) {
@@ -79,8 +79,6 @@ class RepartoCanonicalReceiptRequest {
 class RepartoReceiptPdf {
   const RepartoReceiptPdf(this.base64);
 
-  final String base64;
-
   factory RepartoReceiptPdf.fromResponse(Map<String, dynamic> response) {
     final pdf = response['pdfBase64'];
     if (response['success'] != true || pdf is! String || pdf.isEmpty) {
@@ -96,6 +94,8 @@ class RepartoReceiptPdf {
     }
     return RepartoReceiptPdf(pdf);
   }
+
+  final String base64;
 
   /// This checks only a lightweight transport envelope; rendering or fully
   /// parsing an untrusted PDF belongs to the platform viewer, not here.
@@ -123,8 +123,11 @@ class RepartoReceiptPdf {
       bytes[7] >= 0x30 &&
       bytes[7] <= 0x39;
 
-  static bool _startsWith(List<int> bytes, List<int> expected,
-      [int offset = 0]) {
+  static bool _startsWith(
+    List<int> bytes,
+    List<int> expected, [
+    int offset = 0,
+  ]) {
     if (offset < 0 || bytes.length - offset < expected.length) return false;
     for (var index = 0; index < expected.length; index++) {
       if (bytes[offset + index] != expected[index]) return false;

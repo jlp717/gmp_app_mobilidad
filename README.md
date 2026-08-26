@@ -92,6 +92,16 @@ dart run build_runner build --delete-conflicting-outputs
 
 Los hooks locales ejecutan además: gitleaks (secretos staged), `dart format --set-exit-if-changed` y `node --check` solo sobre lo staged (<10s), y commitlint sobre el mensaje.
 
+## Verificación local (= CI)
+
+```bash
+flutter analyze
+dart format --set-exit-if-changed lib test tool
+flutter test
+```
+
+El gate de formato se limita a `lib`, `test` y `tool`; excluye `build/` porque contiene artefactos generados. Devuelve código distinto de cero si encuentra fuentes sin formatear.
+
 ## Despliegue (producción)
 
 Whitelist única, nada más sin aprobación explícita de Javier:
@@ -117,7 +127,7 @@ Prohibido sin gate humano: `pm2 set/save/start/reload`, editar el fichero de ent
 └── package.json         # SOLO tooling DX — código de producto NO vive aquí
 ```
 
-Convenciones de código y reglas del equipo de agentes OpenCode: [`AGENTS.md`](AGENTS.md). Cómo contribuir y política de tamaño de PR: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Convenciones de código y reglas del equipo de agentes OpenCode: [`AGENTS.md`](AGENTS.md). Cómo contribuir y política de tamaño de PR: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
 
 ## A quién preguntar
 

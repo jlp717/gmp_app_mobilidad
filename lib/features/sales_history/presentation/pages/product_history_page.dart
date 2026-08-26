@@ -8,8 +8,8 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
-import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
@@ -420,7 +420,9 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                       Text(
                         item.productCode,
                         style: const TextStyle(
-                            color: Colors.white30, fontSize: 10),
+                          color: Colors.white30,
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                   ),
@@ -476,11 +478,11 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
     showDialog<void>(
       context: ctx,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (_) => const AlertDialog(
         backgroundColor: AppColors.cardColor,
         content: Row(
           children: [
-            const SizedBox(
+            SizedBox(
               width: 24,
               height: 24,
               child: CircularProgressIndicator(
@@ -488,7 +490,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 color: AppColors.primary,
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
             Text(
               'Descargando ficha técnica...',
               style: TextStyle(color: AppColors.textSecondary),

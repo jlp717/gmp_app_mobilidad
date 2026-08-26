@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class NavigationConfigService {

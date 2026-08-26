@@ -70,7 +70,7 @@ void main() {
     });
 
     testWidgets('calls onSync when sync button tapped', (tester) async {
-      bool syncCalled = false;
+      var syncCalled = false;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -89,7 +89,7 @@ void main() {
     });
 
     testWidgets('does not call onSync when loading', (tester) async {
-      bool syncCalled = false;
+      var syncCalled = false;
 
       await tester.pumpWidget(
         MaterialApp(

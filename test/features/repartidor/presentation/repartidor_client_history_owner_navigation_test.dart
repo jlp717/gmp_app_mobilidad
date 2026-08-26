@@ -65,10 +65,10 @@ void main() {
           initialRepartidorId: '08',
           clientsPageLoader: ({
             required repartidorId,
-            search,
             required limit,
             required offset,
             required forceRefresh,
+            search,
           }) async =>
               (clients: const <HistoryClient>[], hasMore: false),
           documentsLoader: ({
@@ -99,10 +99,10 @@ void main() {
           repartidorId: '08',
           clientsPageLoader: ({
             required repartidorId,
-            search,
             required limit,
             required offset,
             required forceRefresh,
+            search,
           }) async {
             calls.add((search: search, offset: offset));
             return (
@@ -139,5 +139,75 @@ void main() {
       (search: 'ACME', offset: 0),
     ]);
     expect(find.text('Cliente ACME'), findsOneWidget);
+  });
+
+  testWidgets('documents paginate and expose a retryable load-more action',
+      (tester) async {
+    final offsets = <int>[];
+
+    HistoryDocument document(String id, int number) => HistoryDocument(
+          id: id,
+          type: 'albaran',
+          number: number,
+          date: '2026-08-26',
+          amount: 10,
+          pending: 0,
+          status: 'delivered',
+          hasSignature: false,
+          serie: 'A',
+          ejercicio: 2026,
+          terminal: 1,
+          deliveryRepartidor: '08',
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepartidorHistoricoPage(
+          repartidorId: 'ALL',
+          initialClientId: 'C1',
+          initialClientName: 'Cliente 1',
+          initialRepartidorId: '08',
+          clientsPageLoader: ({
+            required repartidorId,
+            required limit,
+            required offset,
+            required forceRefresh,
+            search,
+          }) async =>
+              (clients: const <HistoryClient>[], hasMore: false),
+          documentsPageLoader: ({
+            required clientId,
+            required repartidorId,
+            required limit,
+            required offset,
+            dateFrom,
+            dateTo,
+            year,
+          }) async {
+            offsets.add(offset);
+            return (
+              documents: [document('D$offset', offset + 1)],
+              hasMore: offset == 0,
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(offsets, [0]);
+    expect(
+      find.byKey(const ValueKey('history-documents-load-more')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('history-documents-load-more')));
+    await tester.pumpAndSettle();
+
+    expect(offsets, [0, 1]);
+    expect(
+      find.byKey(const ValueKey('history-documents-load-more')),
+      findsNothing,
+    );
   });
 }

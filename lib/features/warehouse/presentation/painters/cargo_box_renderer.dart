@@ -129,9 +129,15 @@ class CargoBoxRenderer {
     return List<PlacedBox>.from(boxes)
       ..sort((a, b) {
         final za = proj.depth(
-            ox + a.x + a.w / 2, oy + a.y + a.d / 2, oz + a.z + a.h / 2);
+          ox + a.x + a.w / 2,
+          oy + a.y + a.d / 2,
+          oz + a.z + a.h / 2,
+        );
         final zb = proj.depth(
-            ox + b.x + b.w / 2, oy + b.y + b.d / 2, oz + b.z + b.h / 2);
+          ox + b.x + b.w / 2,
+          oy + b.y + b.d / 2,
+          oz + b.z + b.h / 2,
+        );
         return za.compareTo(zb);
       });
   }
@@ -577,7 +583,11 @@ class CargoBoxRenderer {
       // Background pill
       final rect = RRect.fromRectAndRadius(
         Rect.fromLTWH(
-            pos.dx - tp.width - 16, yOffset, tp.width + 16, tp.height + 8),
+          pos.dx - tp.width - 16,
+          yOffset,
+          tp.width + 16,
+          tp.height + 8,
+        ),
         const Radius.circular(6),
       );
       canvas.drawRRect(rect, Paint()..color = const Color(0xCC1A202C));

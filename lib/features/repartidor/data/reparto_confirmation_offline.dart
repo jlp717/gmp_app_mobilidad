@@ -6,9 +6,9 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_
 Future<void> defaultConfirmDeliveryReconciler({
   required String deliveryId,
   required String confirmationId,
-  String? cobroId,
   required String fingerprint,
   required String idempotencyKey,
+  String? cobroId,
 }) async {
   final journal = RepartoConfirmationJournal(
     HiveRepartoConfirmationJournalStore(),

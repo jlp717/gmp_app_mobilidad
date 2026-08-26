@@ -314,7 +314,9 @@ class AlbaranCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.success,
                             borderRadius: BorderRadius.circular(12),

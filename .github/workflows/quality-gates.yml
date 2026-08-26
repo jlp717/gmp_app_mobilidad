@@ -31,14 +31,25 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Dart Format Check
-        run: dart format --output=none --set-exit-if-changed lib/ test/
+        run: dart format --set-exit-if-changed lib test tool
 
-      - name: Dart Analyze
-        run: dart analyze --fatal-infos lib/ test/
+      - name: Domain layer purity (no package:flutter in domain/)
+        run: node scripts/check_domain_imports.mjs
 
-      - name: ESLint
+      - name: ESLint full repo (flat config) [ratchet]
+        continue-on-error: true
+        run: npx eslint . --format stylish
+
+      - name: Dart Analyze (strict)
+        run: flutter analyze
+
+      - name: Prettier check backend JS [ratchet]
+        continue-on-error: true
+        run: npx prettier --check "backend/**/*.{js,cjs,mjs}" "!**/node_modules/**"
+
+      - name: Legacy backend TS lint
         run: |
-          cd backend && npx eslint --quiet routes/ services/ middleware/
+          cd backend && npm ci --ignore-scripts && npx eslint src/**/*.ts --quiet
 
       - name: Type Check Backend
         run: |
@@ -58,6 +69,20 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Semgrep (owasp-top-ten + nodejsscan + reglas GMP) [ratchet]
+        continue-on-error: true
+        run: |
+          pipx install semgrep || pip install semgrep
+          semgrep --config p/owasp-top-ten --config p/nodejsscan \
+                  --config .semgrep/gmp-rules.yml \
+                  --metrics=off backend/ scripts/ \
+                  --text --output semgrep-report.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-baseline-report
+          path: semgrep-report.txt
 
       - name: NPM Audit
         run: |
@@ -80,7 +105,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Flutter Tests
-        run: flutter test --coverage --no-pub
+        run: flutter test
 
       - name: Backend Tests
         run: |

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -11,10 +11,11 @@ import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/app_version_badge.dart';
-import 'package:gmp_app_mobilidad/features/chatbot/presentation/pages/chatbot_page.dart';
-import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_shell_navigation.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/presentation/pages/bolsa_page.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/presentation/pages/chatbot_page.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_shell_navigation.dart';
 import 'package:gmp_app_mobilidad/features/clients/presentation/pages/simple_client_list_page.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobros_page.dart';
 import 'package:gmp_app_mobilidad/features/commissions/presentation/pages/commissions_page.dart';
@@ -22,9 +23,8 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboar
 import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart';
-import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/client_evolution_page.dart';
-import 'package:gmp_app_mobilidad/features/bolsa/presentation/pages/bolsa_page.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_clientes_page.dart';
@@ -129,7 +129,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final authState = ref.read(authProvider).value;
     if (_forceRepartidorMode) return true;
     if (_forceAlmacenMode) return false;
-    final mode = authState?.activeMode?.toString().trim().toUpperCase();
+    final mode = authState?.activeMode.trim().toUpperCase();
     if (mode == 'REPARTIDOR') return true;
     return authState?.user?.isRepartidor ?? false;
   }
@@ -141,7 +141,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool _isEffectiveRepartidorJefe(UserModel user, Object? activeMode) {
     final mode = activeMode?.toString().trim().toUpperCase();
-    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = user.code.replaceFirst(RegExp('^0+'), '');
     final hasJefeAuthorization =
         user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
     return mode == 'REPARTIDOR' &&
@@ -151,14 +151,14 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
     // Commercial 80 (Almeria lead) gets team view access
-    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = user.code.replaceFirst(RegExp('^0+'), '');
     if (normalizedCode == '80' && vendorCodes.length > 1) return true;
     return !user.isJefeVentas && vendorCodes.length > 1;
   }
 
   String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
     // Commercial 80 (Almeria lead) defaults to ALL team members
-    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = user.code.replaceFirst(RegExp('^0+'), '');
     if (normalizedCode == '80') return 'ALL';
     final ownCode = user.vendedorCode ?? user.code;
     if (vendorCodes.contains(ownCode)) return ownCode;
@@ -278,7 +278,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (user != null) {
       if (_isEffectiveRepartidorJefe(user, authState?.activeMode)) {
         // Fetch repartidores
-        _fetchRepartidores();
+        await _fetchRepartidores();
       } else {
         // Non-Jefe starts at first available section (Clientes)
         setState(() {
@@ -319,7 +319,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       });
       return;
     }
-    final mode = authState!.activeMode.toString().trim().toUpperCase();
+    final mode = authState!.activeMode.trim().toUpperCase();
     final cacheKey =
         'auth:repartidores:${user.code.trim()}:claims${user.claimsVersion}:$mode';
 
@@ -374,12 +374,13 @@ class _MainShellState extends ConsumerState<MainShell> {
         _repartidoresError = null;
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoadingRepartidores = false;
           _repartidoresError =
               'No se ha podido cargar la lista de repartidores. Se usan los codigos autorizados disponibles.';
         });
+      }
     }
   }
 
@@ -387,7 +388,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
     final normalizedUserCode =
-        (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+        (user?.code ?? '').replaceFirst(RegExp('^0+'), '');
     final showCommissions =
         (user?.showCommissions ?? false) && normalizedUserCode != '80';
 
@@ -481,7 +482,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       authProvider.select((state) => state.value?.vendedorCodes ?? []),
     );
     _ensureScopedVendorSelection(user, vendedorCodes);
-    final normalizedUserCode = (user.code).replaceFirst(RegExp(r'^0+'), '');
+    final normalizedUserCode = user.code.replaceFirst(RegExp('^0+'), '');
     final isCommercial80 = normalizedUserCode == '80';
     // 80 stays COMERCIAL in nav even if DB has JEFEVENTASSN (avoids Panel index mismatch)
     final navIsJefeVentas = isJefeVentas && !isCommercial80;
@@ -1068,6 +1069,59 @@ class _MainShellState extends ConsumerState<MainShell> {
             side:
                 BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.8)),
           ),
+          itemBuilder: (context) => [
+            if (availableModes.contains('COMERCIAL'))
+              const PopupMenuItem(
+                value: 'VENTAS',
+                child: Row(
+                  children: [
+                    Icon(Icons.store, color: AppTheme.info, size: 18),
+                    SizedBox(width: 12),
+                    Text(
+                      'Perfil Ventas',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            if (availableModes.contains('REPARTIDOR'))
+              const PopupMenuItem(
+                value: 'REPARTO',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.local_shipping,
+                      color: AppTheme.warning,
+                      size: 18,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Perfil Reparto',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            if (availableModes.contains('ALMACEN'))
+              const PopupMenuItem(
+                value: 'ALMACEN',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.inventory_2,
+                      color: AppTheme.accentIndigo,
+                      size: 18,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Perfil Almacén',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          onSelected: _switchMode,
           child: compact
               ? Icon(
                   modeIcon,
@@ -1111,56 +1165,6 @@ class _MainShellState extends ConsumerState<MainShell> {
                     ),
                   ],
                 ),
-          itemBuilder: (context) => [
-            if (availableModes.contains('COMERCIAL'))
-              const PopupMenuItem(
-                value: 'VENTAS',
-                child: Row(
-                  children: [
-                    Icon(Icons.store, color: AppTheme.info, size: 18),
-                    SizedBox(width: 12),
-                    Text(
-                      'Perfil Ventas',
-                      style: TextStyle(color: AppTheme.textPrimary),
-                    ),
-                  ],
-                ),
-              ),
-            if (availableModes.contains('REPARTIDOR'))
-              const PopupMenuItem(
-                value: 'REPARTO',
-                child: Row(
-                  children: [
-                    Icon(Icons.local_shipping,
-                        color: AppTheme.warning, size: 18),
-                    SizedBox(width: 12),
-                    Text(
-                      'Perfil Reparto',
-                      style: TextStyle(color: AppTheme.textPrimary),
-                    ),
-                  ],
-                ),
-              ),
-            if (availableModes.contains('ALMACEN'))
-              const PopupMenuItem(
-                value: 'ALMACEN',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.inventory_2,
-                      color: AppTheme.accentIndigo,
-                      size: 18,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Perfil Almacén',
-                      style: TextStyle(color: AppTheme.textPrimary),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-          onSelected: _switchMode,
         ),
       ),
     );
@@ -1247,7 +1251,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final canUseRepartidorSelector = committedUser != null &&
         _isEffectiveRepartidorJefe(committedUser, authState?.activeMode);
     if (canUseRepartidorSelector) {
-      _fetchRepartidores();
+      await _fetchRepartidores();
     }
 
     setState(() {
@@ -1688,14 +1692,19 @@ class _MainShellState extends ConsumerState<MainShell> {
               padding: const EdgeInsets.only(top: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline,
-                      color: AppTheme.warning, size: 16),
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppTheme.warning,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
                       'Lista no disponible. Usando codigos autorizados.',
                       style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 12),
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   TextButton(
@@ -1914,13 +1923,13 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     // Commercial 80: scoped team from login (auth vendedorCodes), not JEFE_VENTAS
     final normalizedUserCode =
-        (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+        (user?.code ?? '').replaceFirst(RegExp('^0+'), '');
     final isCommercial80 = normalizedUserCode == '80';
     final effectiveVendorCodes = vendedorCodes;
 
     final hasScopedVendorAccess =
         user != null && _hasScopedVendorAccess(user, effectiveVendorCodes);
-    final scopedDefaultCode = hasScopedVendorAccess && user != null
+    final scopedDefaultCode = hasScopedVendorAccess
         ? _defaultScopedVendor(user, effectiveVendorCodes)
         : '';
     final selectedScopedVendor =

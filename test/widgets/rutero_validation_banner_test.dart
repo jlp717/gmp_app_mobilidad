@@ -53,8 +53,8 @@ void main() {
     final container = tester.widget<AnimatedContainer>(
       find.byType(AnimatedContainer),
     );
-    final decoration = container.decoration as BoxDecoration;
+    final decoration = container.decoration! as BoxDecoration;
     expect(decoration.border, isA<Border>());
-    expect((decoration.border as Border).top.width, 2.5);
+    expect((decoration.border! as Border).top.width, 2.5);
   });
 }

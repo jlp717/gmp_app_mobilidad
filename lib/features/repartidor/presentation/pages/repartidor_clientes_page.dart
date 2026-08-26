@@ -198,7 +198,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   }
 
   List<HistoryClient> get _filteredClients {
-    var list = List<HistoryClient>.of(_clients);
+    final list = List<HistoryClient>.of(_clients);
 
     // Sort
     list.sort((a, b) {
@@ -278,7 +278,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                                     return _buildPaginationFooter();
                                   }
                                   return _buildClientCard(
-                                      visibleClients[index]);
+                                    visibleClients[index],
+                                  );
                                 },
                               ),
                       ),
@@ -318,13 +319,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          Responsive.padding(context, small: 12, large: 20),
-          16,
-          Responsive.padding(context, small: 12, large: 20),
-          12),
-      decoration: BoxDecoration(
+        Responsive.padding(context, small: 12, large: 20),
+        16,
+        Responsive.padding(context, small: 12, large: 20),
+        12,
+      ),
+      decoration: const BoxDecoration(
         color: AppTheme.raisedSurface,
-        border: const Border(
+        border: Border(
           bottom: BorderSide(color: AppTheme.borderColor),
         ),
       ),
@@ -332,7 +334,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         children: [
           Container(
             padding: EdgeInsets.all(
-                Responsive.padding(context, small: 8, large: 10)),
+              Responsive.padding(context, small: 8, large: 10),
+            ),
             decoration: BoxDecoration(
               color: AppTheme.success.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
@@ -340,26 +343,34 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                 color: AppTheme.success.withValues(alpha: 0.28),
               ),
             ),
-            child: Icon(Icons.people,
-                color: AppTheme.success,
-                size: Responsive.iconSize(context, phone: 20, desktop: 24)),
+            child: Icon(
+              Icons.people,
+              color: AppTheme.success,
+              size: Responsive.iconSize(context, phone: 20, desktop: 24),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Clientes de Reparto',
-                    style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 14, large: 18),
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary)),
-                Text('${_clients.length} clientes',
-                    style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 10, large: 12),
-                        color: AppTheme.textSecondary)),
+                Text(
+                  'Clientes de Reparto',
+                  style: TextStyle(
+                    fontSize:
+                        Responsive.fontSize(context, small: 14, large: 18),
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Text(
+                  '${_clients.length} clientes',
+                  style: TextStyle(
+                    fontSize:
+                        Responsive.fontSize(context, small: 10, large: 12),
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -385,14 +396,18 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           hintText:
               'Nombre, alias, código, DNI, dirección, población o teléfono...',
           hintStyle: TextStyle(
-              color: AppTheme.textSecondary.withValues(alpha: 0.6),
-              fontSize: 13),
+            color: AppTheme.textSecondary.withValues(alpha: 0.6),
+            fontSize: 13,
+          ),
           prefixIcon:
               const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear,
-                      color: AppTheme.textSecondary, size: 18),
+                  icon: const Icon(
+                    Icons.clear,
+                    color: AppTheme.textSecondary,
+                    size: 18,
+                  ),
                   onPressed: _clearSearch,
                 )
               : null,
@@ -401,12 +416,11 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
         ),
-        onChanged: (v) {
-          _scheduleSearch(v);
-        },
+        onChanged: _scheduleSearch,
       ),
     );
   }
@@ -473,22 +487,28 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-                color: selected
-                    ? AppTheme.info.withValues(alpha: 0.34)
-                    : AppTheme.borderColor),
+              color: selected
+                  ? AppTheme.info.withValues(alpha: 0.34)
+                  : AppTheme.borderColor,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: selected ? AppTheme.info : AppTheme.textSecondary,
-                      fontWeight:
-                          selected ? FontWeight.bold : FontWeight.normal)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: selected ? AppTheme.info : AppTheme.textSecondary,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
               if (selected)
-                Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
-                    size: 10, color: AppTheme.info),
+                Icon(
+                  _sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 10,
+                  color: AppTheme.info,
+                ),
             ],
           ),
         ),
@@ -528,10 +548,11 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   child: Text(
                     client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
                     style: TextStyle(
-                        color: AppTheme.success,
-                        fontSize:
-                            Responsive.fontSize(context, small: 14, large: 18),
-                        fontWeight: FontWeight.bold),
+                      color: AppTheme.success,
+                      fontSize:
+                          Responsive.fontSize(context, small: 14, large: 18),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -544,10 +565,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                     Text(
                       client.name,
                       style: TextStyle(
-                          fontSize: Responsive.fontSize(context,
-                              small: 12, large: 14),
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary),
+                        fontSize: Responsive.fontSize(
+                          context,
+                          small: 12,
+                          large: 14,
+                        ),
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -555,9 +580,10 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                     Text(
                       '${client.id} · ${client.address}',
                       style: TextStyle(
-                          fontSize:
-                              Responsive.fontSize(context, small: 9, large: 11),
-                          color: AppTheme.textSecondary),
+                        fontSize:
+                            Responsive.fontSize(context, small: 9, large: 11),
+                        color: AppTheme.textSecondary,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -566,15 +592,22 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                       spacing: 12,
                       runSpacing: 4,
                       children: [
-                        _clientStat(Icons.receipt,
-                            '${client.totalDocuments} docs', AppTheme.info),
                         _clientStat(
-                            Icons.euro,
-                            CurrencyFormatter.format(client.totalAmount),
-                            AppTheme.success),
+                          Icons.receipt,
+                          '${client.totalDocuments} docs',
+                          AppTheme.info,
+                        ),
+                        _clientStat(
+                          Icons.euro,
+                          CurrencyFormatter.format(client.totalAmount),
+                          AppTheme.success,
+                        ),
                         if (client.lastVisit != null)
-                          _clientStat(Icons.calendar_today, client.lastVisit!,
-                              AppTheme.textSecondary),
+                          _clientStat(
+                            Icons.calendar_today,
+                            client.lastVisit!,
+                            AppTheme.textSecondary,
+                          ),
                         if (widget.isJefeMode &&
                             client.repCode != null &&
                             client.repCode!.isNotEmpty)
@@ -590,8 +623,11 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  color: AppTheme.textSecondary, size: 20),
+              const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textSecondary,
+                size: 20,
+              ),
             ],
           ),
         ),

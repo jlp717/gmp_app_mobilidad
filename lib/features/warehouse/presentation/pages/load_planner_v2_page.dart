@@ -173,7 +173,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.local_shipping_outlined,
                       size: 12,
                       color: AppTheme.info,
@@ -181,7 +181,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                     const SizedBox(width: 4),
                     Text(
                       widget.vehicleCode,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.info,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -285,7 +285,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 width: 120,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
+                  child: const LinearProgressIndicator(
                     backgroundColor: AppTheme.softPanel,
                     color: AppTheme.info,
                     minHeight: 2,

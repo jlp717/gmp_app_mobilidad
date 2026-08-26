@@ -255,7 +255,9 @@ class HNSWVectorStore {
     // Actualizar entry point si es necesario
     if (_entryPoint?.id == id) {
       _entryPoint = _nodes.values.where((n) => n.layer > 0).fold<HNSWNode?>(
-          null, (a, b) => a == null || b.layer > a.layer ? b : a);
+            null,
+            (a, b) => a == null || b.layer > a.layer ? b : a,
+          );
     }
 
     return true;

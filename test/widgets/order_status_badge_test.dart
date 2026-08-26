@@ -106,7 +106,7 @@ void main() {
 
       testWidgets('Empty status maps to Borrador', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: OrderStatusBadge(estado: ''),
             ),
@@ -215,7 +215,7 @@ void main() {
           find.byType(Container).first,
         );
 
-        final decoration = container.decoration as BoxDecoration;
+        final decoration = container.decoration! as BoxDecoration;
         expect(decoration.borderRadius, BorderRadius.circular(20));
       });
 
@@ -232,7 +232,7 @@ void main() {
           find.byType(Container).first,
         );
 
-        final decoration = container.decoration as BoxDecoration;
+        final decoration = container.decoration! as BoxDecoration;
         expect(decoration.gradient, isNull);
         expect(
           decoration.color,
@@ -295,7 +295,9 @@ void main() {
       expect(OrderStatusConfig.getIcon('CONFIRMADO'), Icons.check_circle);
       expect(OrderStatusConfig.getIcon('ENVIADO'), Icons.check_circle);
       expect(
-          OrderStatusConfig.getIcon('PENDIENTE_APROBACION'), Icons.edit_note);
+        OrderStatusConfig.getIcon('PENDIENTE_APROBACION'),
+        Icons.edit_note,
+      );
       expect(OrderStatusConfig.getIcon('ANULADO'), Icons.edit_note);
     });
 

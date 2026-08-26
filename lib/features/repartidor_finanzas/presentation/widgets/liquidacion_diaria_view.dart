@@ -92,7 +92,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
               const SizedBox(height: 10),
               _LiquidacionTotalStrip(amount: summary.totalCobrosDia),
               const SizedBox(height: 24),
-              _LiquidacionSectionHeading(
+              const _LiquidacionSectionHeading(
                 icon: Icons.account_balance_wallet_outlined,
                 label: 'Resumen tesorería',
               ),
@@ -224,8 +224,10 @@ class _LiquidacionHeroHeader extends StatelessWidget {
                   if (onBack != null)
                     IconButton(
                       onPressed: onBack,
-                      icon: const Icon(Icons.arrow_back_rounded,
-                          color: Colors.white),
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: Colors.white,
+                      ),
                       tooltip: 'Volver',
                     ),
                   const RepartidorExecutiveIcon(
@@ -320,8 +322,9 @@ class _MetaChip extends StatelessWidget {
         style: const TextStyle(color: Color(0xFF9EC5EA), fontSize: 11),
         children: [
           TextSpan(
-              text: '$label: ',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+            text: '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           TextSpan(text: value, style: const TextStyle(color: Colors.white)),
         ],
       ),
@@ -396,9 +399,9 @@ class LiquidacionCobrosTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cobros.isEmpty) {
-      return RepartidorExecutivePanel(
+      return const RepartidorExecutivePanel(
         accentColor: AppColors.textSecondary,
-        child: const Text(
+        child: Text(
           'Sin cobros en el periodo.',
           style: TextStyle(color: AppColors.textSecondary),
         ),

@@ -1,8 +1,10 @@
 const odbc = require('odbc');
 const { AsyncLocalStorage } = require('async_hooks');
 const logger = require('../middleware/logger');
+const { assertNoDsedacWrite } = require('../utils/dsedac-write-guard');
 
-require('./load-env').loadEnv(require('path').resolve(__dirname, '..'));
+require('./load-env').loadEnv(require('path').resolve(__dirname, '..'))
+const { withDbSpan } = require('../telemetry/otel');;
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const dbRequestContext = new AsyncLocalStorage();
@@ -725,6 +727,7 @@ function normalizeRowCasing(rows) {
 }
 
 async function query(sql, logQuery = true, logError = true) {
+    if (typeof sql === 'string') assertNoDsedacWrite(sql);
     if (!dbPool) {
         await initDb();
         if (!dbPool) throw new Error('Database pool not initialized and failed to re-init');
@@ -745,7 +748,7 @@ async function query(sql, logQuery = true, logError = true) {
             await ensureUtf8(conn);
 
             const start = Date.now();
-            const result = await queryWithTimeout(conn, sql, undefined, getContextQueryTimeoutMs());
+            const result = await withDbSpan(sql, () => queryWithTimeout(conn, sql, undefined, getContextQueryTimeoutMs()));
             const duration = Date.now() - start;
             dbCircuit.recordSuccess();
             logQueryPerformance({ sql, params: [], duration, rowCount: result.length, paramQuery: false });
@@ -811,6 +814,7 @@ async function query(sql, logQuery = true, logError = true) {
 }
 
 async function queryWithParams(sql, params = [], logQuery = true, logError = true) {
+    if (typeof sql === 'string') assertNoDsedacWrite(sql);
     if (!dbPool) {
         await initDb();
         if (!dbPool) throw new Error('Database pool not initialized');
@@ -831,7 +835,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             await ensureUtf8(conn);
 
             const start = Date.now();
-            const result = await queryWithTimeout(conn, sql, params, getContextQueryTimeoutMs());
+            const result = await withDbSpan(sql, () => queryWithTimeout(conn, sql, params, getContextQueryTimeoutMs()));
             const duration = Date.now() - start;
             dbCircuit.recordSuccess();
             logQueryPerformance({ sql, params, duration, rowCount: result.length, paramQuery: true });

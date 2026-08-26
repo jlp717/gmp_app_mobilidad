@@ -1,12 +1,12 @@
 // GMP App Tests - Core Models
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 
 void main() {
   group('UserModel Tests', () {
     test('UserModel creates with required fields', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test User',
@@ -22,7 +22,7 @@ void main() {
     });
 
     test('UserModel with optional fields', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test User',
@@ -39,7 +39,7 @@ void main() {
     });
 
     test('UserModel isJefeVentas defaults to false', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test',
@@ -51,7 +51,7 @@ void main() {
     });
 
     test('UserModel showCommissions can be set to true', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test',
@@ -68,7 +68,7 @@ void main() {
     });
 
     test('UserModel repartidor code works', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test',
@@ -81,7 +81,7 @@ void main() {
     });
 
     test('UserModel tipoVendedor works', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test',
@@ -94,7 +94,7 @@ void main() {
     });
 
     test('UserModel delegation works', () {
-      final user = UserModel(
+      const user = UserModel(
         id: '1',
         code: '01',
         name: 'Test',
@@ -126,8 +126,10 @@ void main() {
 
     test('EstadoEntrega marks a non-delivery as an operational warning', () {
       expect(EstadoEntrega.noEntregado.color, EstadoEntrega.pendiente.color);
-      expect(EstadoEntrega.noEntregado.color,
-          isNot(EstadoEntrega.entregado.color));
+      expect(
+        EstadoEntrega.noEntregado.color,
+        isNot(EstadoEntrega.entregado.color),
+      );
     });
   });
 }

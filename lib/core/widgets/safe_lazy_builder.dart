@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -123,14 +122,12 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
       final frameDuration = SchedulerBinding.instance.currentFrameTimeStamp;
       const targetDuration = Duration(milliseconds: 16); // 60fps
 
-      if (frameDuration != null) {
-        // Simple jank detection: if frame takes too long
-        _frameDrops++;
+      // Simple jank detection: if frame takes too long
+      _frameDrops++;
 
-        if (_frameDrops > 5 && !_useFallback) {
-          debugPrint('[SafeLazyBuilder] ⚠️ Jank detected, using fallback');
-          _useFallback = true;
-        }
+      if (_frameDrops > 5 && !_useFallback) {
+        debugPrint('[SafeLazyBuilder] ⚠️ Jank detected, using fallback');
+        _useFallback = true;
       }
     });
   }
@@ -172,7 +169,8 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
 
       widget.onLoadComplete?.call(_loadStopwatch.elapsed);
       debugPrint(
-          '[SafeLazyBuilder] ✅ Loaded in ${_loadStopwatch.elapsedMilliseconds}ms');
+        '[SafeLazyBuilder] ✅ Loaded in ${_loadStopwatch.elapsedMilliseconds}ms',
+      );
     } catch (e, stack) {
       _error = e;
       _isLoading = false;
@@ -190,7 +188,7 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
         widget.isolateCompute!,
         widget.isolateMessage,
       );
-      return result as T;
+      return result;
     } catch (e) {
       debugPrint('[SafeLazyBuilder] Isolate error, falling back: $e');
       // Fallback to main thread

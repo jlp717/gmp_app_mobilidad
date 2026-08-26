@@ -3,31 +3,55 @@
 const { RepartidorFinanzasService } = require('../../src/services/repartidorFinanzas.service');
 
 describe('RepartidorFinanzasService: DI y delegacion exacta', () => {
-    test('inyeccion de financeService mock recibe argumentos tal cual', async () => {
-        const financeMock = {
-            getDailySummary: jest.fn(async () => ({ day: {} })),
-            getVencimientos: jest.fn(async () => ({ items: [], total: 0, hasMore: false, nextCursor: null })),
-            getCommissionSummary: jest.fn(async () => ({ tiers: [] })),
+    let financeMock;
+    let svc;
+
+    beforeEach(() => {
+        financeMock = {
+            getDailySummary: jest.fn(),
+            getVencimientos: jest.fn(),
+            getCommissionSummary: jest.fn(),
         };
-        const svc = new RepartidorFinanzasService({ financeService: financeMock });
-
-        await svc.getDailySummary({ repartidorId: '12', date: '2026-08-25' });
-        expect(financeMock.getDailySummary).toHaveBeenCalledWith({ repartidorId: '12', date: '2026-08-25' });
-
-        await svc.getVencimientos({ repartidorId: '12', from: '2026-01-01', to: '2026-02-01', limit: 50, cursor: undefined, clientCode: undefined, search: undefined, estado: 'pendiente' });
-        expect(financeMock.getVencimientos).toHaveBeenCalledWith(expect.objectContaining({ estado: 'pendiente', limit: 50 }));
-
-        await svc.getCommissionSummary({ repartidorId: '30', from: '2026-08-01', to: '2026-08-25' });
-        expect(financeMock.getCommissionSummary).toHaveBeenCalledWith({ repartidorId: '30', from: '2026-08-01', to: '2026-08-25' });
+        svc = new RepartidorFinanzasService({ financeService: financeMock });
     });
 
-    test('sin dependencias construye delegadores (el canonico se valida en su propia suite)', () => {
-        // No invocamos metodos: require del servicio real valida runtime reparto
-        // y su suite dedicada ya cubre comportamiento.
-        const svc = new RepartidorFinanzasService();
-        expect(typeof svc.getDailySummary).toBe('function');
-        expect(typeof svc.getVencimientos).toBe('function');
-        expect(typeof svc.getCommissionSummary).toBe('function');
+    test('getDailySummary delega params exactos y devuelve el resultado canonico', async () => {
+        const params = { repartidorId: '12', date: '2026-08-25' };
+        const expected = { day: { total: 42 } };
+        financeMock.getDailySummary.mockResolvedValue(expected);
+
+        await expect(svc.getDailySummary(params)).resolves.toBe(expected);
+        expect(financeMock.getDailySummary).toHaveBeenCalledTimes(1);
+        expect(financeMock.getDailySummary).toHaveBeenCalledWith(params);
+    });
+
+    test('getVencimientos delega params exactos y devuelve la pagina canonica', async () => {
+        const params = {
+            repartidorId: '12',
+            from: '2026-01-01',
+            to: '2026-02-01',
+            limit: 50,
+            cursor: 'cursor-1',
+            clientCode: 'C001',
+            search: 'cliente',
+            estado: 'pendiente',
+        };
+        const expected = { items: [{ id: 'F-1' }], total: 1, hasMore: false, nextCursor: null };
+        financeMock.getVencimientos.mockResolvedValue(expected);
+
+        await expect(svc.getVencimientos(params)).resolves.toBe(expected);
+        expect(financeMock.getVencimientos).toHaveBeenCalledTimes(1);
+        expect(financeMock.getVencimientos).toHaveBeenCalledWith(params);
+    });
+
+    test('getCommissionSummary delega params exactos y devuelve el resumen canonico', async () => {
+        const params = { repartidorId: '30', from: '2026-08-01', to: '2026-08-25' };
+        const expected = { tiers: [{ rate: 0.03 }] };
+        financeMock.getCommissionSummary.mockResolvedValue(expected);
+
+        await expect(svc.getCommissionSummary(params)).resolves.toBe(expected);
+        expect(financeMock.getCommissionSummary).toHaveBeenCalledTimes(1);
+        expect(financeMock.getCommissionSummary).toHaveBeenCalledWith(params);
     });
 });
 

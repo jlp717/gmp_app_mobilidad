@@ -1,5 +1,3 @@
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
@@ -16,11 +14,11 @@ class AppTheme {
   // RADIUS SYSTEM
   // ===========================================================================
 
-  static const double radiusSm = 6.0;
-  static const double radiusMd = 8.0;
-  static const double radiusLg = 10.0;
-  static const double radiusXl = 12.0;
-  static const double radiusFull = 9999.0;
+  static const double radiusSm = 6;
+  static const double radiusMd = 8;
+  static const double radiusLg = 10;
+  static const double radiusXl = 12;
+  static const double radiusFull = 9999;
 
   // ===========================================================================
   // COLOR PALETTE - legacy aliases retained for compatibility
@@ -430,7 +428,7 @@ class AppTheme {
         prefixIconColor: secondaryText,
         suffixIconColor: secondaryText,
       ),
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.teal,
         foregroundColor: Colors.white,
         elevation: 3,
@@ -438,7 +436,7 @@ class AppTheme {
         hoverElevation: 4,
         highlightElevation: 4,
         disabledElevation: 0,
-        shape: const CircleBorder(),
+        shape: CircleBorder(),
         enableFeedback: true,
       ),
       datePickerTheme: DatePickerThemeData(
@@ -566,7 +564,7 @@ class AppTheme {
           ),
         ),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.teal,
         linearTrackColor: AppColors.mutedPanel,
         circularTrackColor: AppColors.mutedPanel,

@@ -24,8 +24,11 @@ class LiquidacionPdfBuilder {
     decimalDigits: 2,
   );
 
-  static String gmpNumber(String repartidorId, DateTime date,
-      {int sequence = 0}) {
+  static String gmpNumber(
+    String repartidorId,
+    DateTime date, {
+    int sequence = 0,
+  }) {
     final digits = repartidorId.replaceAll(RegExp(r'\D'), '');
     final vendor = (digits.isEmpty ? '0' : digits).padLeft(3, '0');
     final safeVendor =
@@ -80,9 +83,10 @@ class LiquidacionPdfBuilder {
                     (c) => [
                       c.fecha,
                       c.codigoCliente,
-                      c.nombreCliente.isEmpty
-                          ? c.codigoCliente
-                          : c.nombreCliente,
+                      if (c.nombreCliente.isEmpty)
+                        c.codigoCliente
+                      else
+                        c.nombreCliente,
                       c.tipoCobro,
                       c.documento,
                       _money.format(c.importe),
@@ -131,13 +135,19 @@ class LiquidacionPdfBuilder {
               pw.Expanded(
                 child: pw.Column(
                   children: [
-                    _treasuryRow('Total efectivo', summary.totalEfectivo,
-                        green: true),
+                    _treasuryRow(
+                      'Total efectivo',
+                      summary.totalEfectivo,
+                      green: true,
+                    ),
                     _treasuryRow('Total cheques', summary.totalCheques),
                     _treasuryRow('Total tarjeta', summary.totalTarjeta),
                     _treasuryRow('Total postdatados', summary.totalPostdatados),
-                    _treasuryRow('Total cobros día', summary.totalCobrosDia,
-                        green: true),
+                    _treasuryRow(
+                      'Total cobros día',
+                      summary.totalCobrosDia,
+                      green: true,
+                    ),
                   ],
                 ),
               ),
@@ -145,11 +155,17 @@ class LiquidacionPdfBuilder {
               pw.Expanded(
                 child: pw.Column(
                   children: [
-                    _treasuryRow('Saldo actual', summary.saldoActual,
-                        warn: summary.saldoActual < 0),
+                    _treasuryRow(
+                      'Saldo actual',
+                      summary.saldoActual,
+                      warn: summary.saldoActual < 0,
+                    ),
                     _treasuryRow('Gastos', summary.gastos),
-                    _treasuryRow('Total a ingresar', summary.totalAIngresar,
-                        green: true),
+                    _treasuryRow(
+                      'Total a ingresar',
+                      summary.totalAIngresar,
+                      green: true,
+                    ),
                     _treasuryRow('Ingreso en banco', summary.ingresoBanco),
                   ],
                 ),
@@ -235,7 +251,10 @@ class LiquidacionPdfBuilder {
   }
 
   static pw.Widget _header(
-      String displayNumber, String repartidorId, String dateLabel) {
+    String displayNumber,
+    String repartidorId,
+    String dateLabel,
+  ) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 14),
       padding: const pw.EdgeInsets.all(14),
@@ -328,8 +347,10 @@ class LiquidacionPdfBuilder {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label,
-              style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+          ),
           pw.Text(
             _money.format(value),
             style: pw.TextStyle(

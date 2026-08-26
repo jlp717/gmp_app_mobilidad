@@ -310,10 +310,12 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
     try {
       final history = state.messages
           .takeLast(5)
-          .map((m) => {
-                'role': m.isUser ? 'user' : 'assistant',
-                'content': m.content,
-              })
+          .map(
+            (m) => {
+              'role': m.isUser ? 'user' : 'assistant',
+              'content': m.content,
+            },
+          )
           .toList();
 
       final result = await _service.sendMessage(

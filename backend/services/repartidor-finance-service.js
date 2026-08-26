@@ -27,8 +27,21 @@ const {
 } = require('../repositories/reparto-cobros-db2-port');
 // Req #16: Audit-trail para cobros del repartidor (write best-effort)
 const auditLog = require('./audit-log.service');
-const financeRepo = getRepartoFinanceDb2Repository();
-const FINANCE_TABLES = financeRepo.tables;
+let defaultFinanceRepo = null;
+function loadFinanceRepo() {
+  if (!defaultFinanceRepo) defaultFinanceRepo = getRepartoFinanceDb2Repository();
+  return defaultFinanceRepo;
+}
+const financeRepo = new Proxy(Object.create(null), {
+  get(_target, property) {
+    const repository = loadFinanceRepo();
+    const value = repository[property];
+    return typeof value === 'function' ? value.bind(repository) : value;
+  },
+});
+const FINANCE_TABLES = new Proxy(Object.create(null), {
+  get: (_target, property) => loadFinanceRepo().tables[property],
+});
 
 let _financeSchemaInfo = null;
 
@@ -189,23 +202,19 @@ function codeList(raw) {
   return items;
 }
 
-const {
-  cobrosDateFilterColumn,
-  cobrosDateSelectColumns,
-  cobrosDateOrderBy,
-} = financeRepo.helpers;
-
-
-const FINANCE_RUNTIME = financeRepo.bindings.runtime;
+const cobrosDateFilterColumn = (...args) => loadFinanceRepo().helpers.cobrosDateFilterColumn(...args);
+const cobrosDateSelectColumns = (...args) => loadFinanceRepo().helpers.cobrosDateSelectColumns(...args);
+const cobrosDateOrderBy = (...args) => loadFinanceRepo().helpers.cobrosDateOrderBy(...args);
 
 function assertFinanceRuntime() {
-  const mapping = validateFinanceTableMapping(FINANCE_RUNTIME);
-  if (!FINANCE_RUNTIME.valid || !mapping.valid) {
+  const financeRuntime = loadFinanceRepo().bindings.runtime;
+  const mapping = validateFinanceTableMapping(financeRuntime);
+  if (!financeRuntime.valid || !mapping.valid) {
     throw new FinanceSchemaUnavailableError(
       'La configuracion de reparto no permite consultar ni liquidar finanzas',
     );
   }
-  return FINANCE_RUNTIME;
+  return financeRuntime;
 }
 
 function value(row, key, fallback = undefined) {
@@ -1413,6 +1422,11 @@ async function registerCobro(input) {
     throw new FinanceSchemaUnavailableError('La capacidad canonica de cobros no esta autorizada');
   }
 
+  // Resolve the verified schema before opening the write transaction.
+  // Replays are handled from the same locked connection so they remain valid
+  // even if the ERP document is no longer visible.
+  const info = await getFinanceSchemaInfo();
+
   const conn = await financeRepo.connect();
   let begun = false;
   try {
@@ -1421,6 +1435,21 @@ async function registerCobro(input) {
     await port.assertCapabilities(conn);
     await financeRepo.beginWork(conn);
     begun = true;
+    await lockCobrosForPayment(conn);
+    const replayRows = await financeRepo.selectCobroByToken(info, input.idempotencyToken, conn);
+    if (replayRows.length > 1) {
+      throw new RepartoCobrosCapabilityError('El ledger contiene tokens de cobro ambiguos');
+    }
+    if (replayRows.length === 1) {
+      assertCobroPayloadMatchesInput(replayRows[0], input);
+      await financeRepo.commit(conn);
+      begun = false;
+      return { created: false, id: String(value(replayRows[0], 'ID', '')) };
+    }
+
+    const documentRow = await validateCobroDocument(input, conn);
+    await assertPaymentWithinOutstandingBalance(conn, info, input, documentRow);
+    await assertDocumentNotCollectedByCommercial(conn, input);
     const result = await port.forConnection(conn).insertCobro(input);
     await financeRepo.commit(conn);
     begun = false;
@@ -1444,12 +1473,14 @@ async function registerCobro(input) {
 }
 async function validateCobroDocument(input, conn = null) {
   const rows = await financeRepo.validateCobroDocument(input, conn);
-  if (!Array.isArray(rows) || rows.length === 0) {
+  const row = firstRow(rows);
+  const documentRows = Number(value(row, 'ERP_DOCUMENT_ROWS'));
+  if (!row || !Number.isInteger(documentRows) || documentRows < 1) {
     const error = new Error('El documento no pertenece al repartidor o cliente indicado');
     error.code = 'DOCUMENT_NOT_ASSIGNED';
     throw error;
   }
-  return firstRow(rows);
+  return row;
 }
 
 async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {

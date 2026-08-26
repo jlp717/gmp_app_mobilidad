@@ -125,8 +125,10 @@ class NotificationOrchestrator {
     );
     var shown = 0;
     for (final notification in notifications) {
-      if (!settings.isCategoryAllowed(notification.category,
-          now: effectiveNow)) {
+      if (!settings.isCategoryAllowed(
+        notification.category,
+        now: effectiveNow,
+      )) {
         continue;
       }
       if (await _preferences.hasSent(notification.dedupeKey)) continue;

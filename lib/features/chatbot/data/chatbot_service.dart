@@ -43,7 +43,7 @@ class ChatbotService {
       );
 
       return ChatbotMessageResult(response: text, metadata: metadata);
-    } on Exception catch (e) {
+    } on Exception {
       developer.log('CHATBOT_REQUEST_FAILED', name: 'chatbot');
       throw Exception('No se pudo conectar con el asistente.');
     }

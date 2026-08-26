@@ -96,8 +96,9 @@ class _ProductCardState extends State<ProductCard> {
     final unitLabel = Product.unitLabel(primaryUnit);
 
     final hasClientePrice = widget.product.precioCliente > 0;
-    final promoColor =
-        widget.promo?.isGift == true ? AppTheme.success : AppTheme.accentIndigo;
+    final promoColor = widget.promo?.isGift ?? false
+        ? AppTheme.success
+        : AppTheme.accentIndigo;
 
     return Card(
       color: inCart
@@ -507,7 +508,8 @@ class _ProductCardState extends State<ProductCard> {
                       color: AppTheme.info.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                          color: AppTheme.info.withValues(alpha: 0.3)),
+                        color: AppTheme.info.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Text(
                       _buildBoxContentBadge(),
@@ -599,8 +601,11 @@ class _ProductCardState extends State<ProductCard> {
                 ),
               ],
               const SizedBox(width: 2),
-              const Icon(Icons.chevron_right,
-                  color: AppTheme.textTertiary, size: 18),
+              const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textTertiary,
+                size: 18,
+              ),
             ],
           ),
         ),

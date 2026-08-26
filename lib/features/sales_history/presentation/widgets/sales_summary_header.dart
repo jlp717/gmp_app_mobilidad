@@ -117,10 +117,11 @@ class SalesSummaryHeader extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0),
+                  color: Colors.white60,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
+                ),
               ),
             ],
           ),
@@ -128,7 +129,7 @@ class SalesSummaryHeader extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: dataToShow!.map((item) {
+              children: dataToShow.map((item) {
                 final i = item as Map<String, dynamic>;
 
                 // Determine label (Month Name or Year)
@@ -148,7 +149,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     'SEP',
                     'OCT',
                     'NOV',
-                    'DIC'
+                    'DIC',
                   ];
                   label = (monthIndex >= 1 && monthIndex <= 12)
                       ? months[monthIndex - 1]
@@ -229,7 +230,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     gradient: LinearGradient(
                       colors: [
                         AppTheme.raisedSurface.withValues(alpha: 0.5),
-                        cardColor
+                        cardColor,
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -243,47 +244,64 @@ class SalesSummaryHeader extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(label,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: Colors.white)),
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Colors.white,
+                            ),
+                          ),
                           if (statusLabel.isNotEmpty) ...[
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 4, vertical: 2),
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                  color: Colors.blue,
-                                  borderRadius: BorderRadius.circular(4)),
-                              child: Text(statusLabel,
-                                  style: const TextStyle(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white)),
+                                color: Colors.blue,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: const TextStyle(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           ],
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(fmt.format(mainValue),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold)),
+                      Text(
+                        fmt.format(mainValue),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       if (useMonthly && prevValue != null)
                         Text(
                           'vs ${fmt.format(prevValue)}',
                           style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 10),
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 10,
+                          ),
                         ),
                       // Only show aux data if annual
                       if (!useMonthly) ...[
                         const SizedBox(height: 2),
-                        Text('${_formatCompact(u)} Uds',
-                            style: const TextStyle(
-                                color: Colors.white38, fontSize: 10)),
+                        Text(
+                          '${_formatCompact(u)} Uds',
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 10,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -330,16 +348,22 @@ class SalesSummaryHeader extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 6)),
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
         children: [
           // Header con VENTAS principal
           _buildMainSalesSection(
-              context, sales, prevSales, salesGrowth, isNewClient),
+            context,
+            sales,
+            prevSales,
+            salesGrowth,
+            isNewClient,
+          ),
 
           // Separator y UDS muestran si no está en compacto
           if (!Responsive.isLandscapeCompact(context)) ...[
@@ -352,7 +376,7 @@ class SalesSummaryHeader extends StatelessWidget {
                   colors: [
                     Colors.transparent,
                     Colors.white24,
-                    Colors.transparent
+                    Colors.transparent,
                   ],
                 ),
               ),
@@ -403,8 +427,12 @@ class SalesSummaryHeader extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildCompactMarginCard(
-                          context, margin, prevMargin, marginGrowth,
-                          isClientNew: isNewClient),
+                        context,
+                        margin,
+                        prevMargin,
+                        marginGrowth,
+                        isClientNew: isNewClient,
+                      ),
                     ),
                   ],
                 ],
@@ -416,8 +444,13 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildMainSalesSection(BuildContext context, double sales,
-      double prevSales, double salesGrowth, bool isNewClient) {
+  Widget _buildMainSalesSection(
+    BuildContext context,
+    double sales,
+    double prevSales,
+    double salesGrowth,
+    bool isNewClient,
+  ) {
     final isPositive = salesGrowth >= 0;
 
     return Padding(
@@ -454,10 +487,11 @@ class SalesSummaryHeader extends StatelessWidget {
                 Text(
                   'VENTAS',
                   style: TextStyle(
-                      color: AppTheme.success.withValues(alpha: 0.7),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 9,
-                      letterSpacing: 0),
+                    color: AppTheme.success.withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 9,
+                    letterSpacing: 0,
+                  ),
                 ),
               ],
             ),
@@ -473,7 +507,10 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   Widget _buildPreviousYearComparison(
-      double prevSales, double growth, bool isPositive) {
+    double prevSales,
+    double growth,
+    bool isPositive,
+  ) {
     if (isJefeVentas) {
       // Jefe de ventas: muestra "-96% vs 1.655,82 €"
       final growthText =
@@ -503,9 +540,10 @@ class SalesSummaryHeader extends StatelessWidget {
             Text(
               _formatCurrencyDecimals(prevSales),
               style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500),
+                color: Colors.white60,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -523,9 +561,10 @@ class SalesSummaryHeader extends StatelessWidget {
           Text(
             _formatCurrencyDecimals(prevSales),
             style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 16,
-                fontWeight: FontWeight.w600),
+              color: Colors.white60,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       );
@@ -581,7 +620,10 @@ class SalesSummaryHeader extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-                color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 6),
 
@@ -618,9 +660,11 @@ class SalesSummaryHeader extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
       constraints: BoxConstraints(
-          minHeight: 70 *
-              Responsive.landscapeScale(
-                  context)), // Altura mínima uniforme y responsive
+        minHeight: 70 *
+            Responsive.landscapeScale(
+              context,
+            ),
+      ), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -630,11 +674,14 @@ class SalesSummaryHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Value principal
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 2),
           // Label
           Row(
@@ -643,11 +690,14 @@ class SalesSummaryHeader extends StatelessWidget {
             children: [
               Icon(icon, color: iconColor, size: 10),
               const SizedBox(width: 3),
-              Text(label,
-                  style: TextStyle(
-                      color: iconColor.withValues(alpha: 0.8),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 8)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: iconColor.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 8,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -663,9 +713,13 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactMarginCard(BuildContext context, double margin,
-      double prevMargin, double marginGrowth,
-      {bool isClientNew = false}) {
+  Widget _buildCompactMarginCard(
+    BuildContext context,
+    double margin,
+    double prevMargin,
+    double marginGrowth, {
+    bool isClientNew = false,
+  }) {
     final isPositive = marginGrowth >= 0;
     final marginColor = margin >= 15
         ? AppTheme.success
@@ -674,9 +728,11 @@ class SalesSummaryHeader extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
       constraints: BoxConstraints(
-          minHeight: 70 *
-              Responsive.landscapeScale(
-                  context)), // Altura mínima uniforme y responsive
+        minHeight: 70 *
+            Responsive.landscapeScale(
+              context,
+            ),
+      ), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -686,25 +742,34 @@ class SalesSummaryHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Value
-          Text('${margin.toStringAsFixed(1)}%',
-              style: TextStyle(
-                  color: marginColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
+          Text(
+            '${margin.toStringAsFixed(1)}%',
+            style: TextStyle(
+              color: marginColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 2),
           // Label
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.show_chart,
-                  color: AppTheme.accentIndigo, size: 10),
+              const Icon(
+                Icons.show_chart,
+                color: AppTheme.accentIndigo,
+                size: 10,
+              ),
               const SizedBox(width: 3),
-              Text('MARGEN',
-                  style: TextStyle(
-                      color: AppTheme.accentIndigo.withValues(alpha: 0.8),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 8)),
+              Text(
+                'MARGEN',
+                style: TextStyle(
+                  color: AppTheme.accentIndigo.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 8,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -713,7 +778,10 @@ class SalesSummaryHeader extends StatelessWidget {
             _buildMiniStatusBadge('NUEVO', AppColors.info)
           else if (prevMargin > 0)
             _buildCompactComparison(
-                '${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive)
+              '${prevMargin.toStringAsFixed(1)}%',
+              marginGrowth,
+              isPositive,
+            )
           else if (margin > 0)
             _buildMiniStatusBadge('NUEVO', AppColors.info)
           else
@@ -724,26 +792,35 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   Widget _buildCompactComparison(
-      String prevText, double growth, bool isPositive) {
+    String prevText,
+    double growth,
+    bool isPositive,
+  ) {
     if (isJefeVentas) {
       final growthText =
           '${isPositive ? '+' : ''}${growth.toStringAsFixed(0)}%';
       return Text(
         '$growthText vs $prevText',
         style: TextStyle(
-            color: isPositive ? AppColors.success : AppColors.error,
-            fontSize: 9,
-            fontWeight: FontWeight.w500),
+          color: isPositive ? AppColors.success : AppColors.error,
+          fontSize: 9,
+          fontWeight: FontWeight.w500,
+        ),
         overflow: TextOverflow.ellipsis,
       );
     } else {
-      return Text('Ant: $prevText',
-          style: const TextStyle(color: Colors.white38, fontSize: 9));
+      return Text(
+        'Ant: $prevText',
+        style: const TextStyle(color: Colors.white38, fontSize: 9),
+      );
     }
   }
 
   Widget _buildMarginCard(
-      double margin, double prevMargin, double marginGrowth) {
+    double margin,
+    double prevMargin,
+    double marginGrowth,
+  ) {
     final isPositive = marginGrowth >= 0;
     final marginColor = margin >= 15
         ? AppTheme.success
@@ -762,8 +839,11 @@ class SalesSummaryHeader extends StatelessWidget {
           // Header
           Row(
             children: [
-              const Icon(Icons.show_chart,
-                  color: AppTheme.accentIndigo, size: 14),
+              const Icon(
+                Icons.show_chart,
+                color: AppTheme.accentIndigo,
+                size: 14,
+              ),
               const SizedBox(width: 6),
               Text(
                 'MARGEN',
@@ -782,15 +862,21 @@ class SalesSummaryHeader extends StatelessWidget {
           Text(
             '${margin.toStringAsFixed(1)}%',
             style: TextStyle(
-                color: marginColor, fontSize: 20, fontWeight: FontWeight.bold),
+              color: marginColor,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 6),
 
           // Comparison
           if (prevMargin > 0)
             _buildMetricComparison(
-                '${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive,
-                isMargin: true)
+              '${prevMargin.toStringAsFixed(1)}%',
+              marginGrowth,
+              isPositive,
+              isMargin: true,
+            )
           else if (margin > 0)
             _buildMiniStatusBadge('NUEVO', AppColors.info),
         ],
@@ -798,8 +884,12 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildMetricComparison(String prevText, double growth, bool isPositive,
-      {bool isMargin = false}) {
+  Widget _buildMetricComparison(
+    String prevText,
+    double growth,
+    bool isPositive, {
+    bool isMargin = false,
+  }) {
     if (isJefeVentas) {
       // Jefe: muestra % crecimiento vs valor anterior
       final growthText =
@@ -852,10 +942,11 @@ class SalesSummaryHeader extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            fontSize: 10,
-            letterSpacing: 0),
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 10,
+          letterSpacing: 0,
+        ),
       ),
     );
   }
@@ -867,9 +958,14 @@ class SalesSummaryHeader extends StatelessWidget {
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(text,
-          style: TextStyle(
-              color: color, fontWeight: FontWeight.bold, fontSize: 9)),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 9,
+        ),
+      ),
     );
   }
 
@@ -894,7 +990,10 @@ class SalesSummaryHeader extends StatelessWidget {
           Text(
             '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%',
             style: TextStyle(
-                color: color, fontWeight: FontWeight.bold, fontSize: 11),
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
           ),
         ],
       ),
@@ -920,8 +1019,9 @@ class SalesSummaryHeader extends StatelessWidget {
     var formatted = '';
     var count = 0;
     for (var i = intPart.length - 1; i >= 0; i--) {
-      if (count > 0 && count % 3 == 0 && intPart[i] != '-')
+      if (count > 0 && count % 3 == 0 && intPart[i] != '-') {
         formatted = '.$formatted';
+      }
       formatted = intPart[i] + formatted;
       count++;
     }

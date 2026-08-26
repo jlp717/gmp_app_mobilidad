@@ -234,7 +234,7 @@ class NotificationUserProfile {
       'role=${role.trim().toUpperCase()}',
       'jefe=$isJefeVentas',
       'vendors=${normalizedCodes.join(',')}',
-      'delivery=${deliveryCodesCsv}',
+      'delivery=$deliveryCodesCsv',
     ].join('|');
   }
 

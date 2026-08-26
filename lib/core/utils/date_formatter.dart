@@ -38,8 +38,12 @@ class DateFormatter {
   }
 
   /// Format week: "Semana 12 (20-26 Mar)"
-  static String formatWeek(int week,
-      {int? weekStart, int? weekEnd, int? month}) {
+  static String formatWeek(
+    int week, {
+    int? weekStart,
+    int? weekEnd,
+    int? month,
+  }) {
     if (weekStart != null && weekEnd != null && month != null) {
       final monthShort = getMonthName(month, short: true);
       return 'Semana $week ($weekStart-$weekEnd $monthShort)';

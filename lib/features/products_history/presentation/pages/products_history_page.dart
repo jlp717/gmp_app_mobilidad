@@ -354,7 +354,9 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             Row(
               children: [
                 const Expanded(
-                    flex: 2, child: Text('', style: TextStyle(fontSize: 10))),
+                  flex: 2,
+                  child: Text('', style: TextStyle(fontSize: 10)),
+                ),
                 ...sortedYears.asMap().entries.map(
                       (e) => Expanded(
                         child: Text(
@@ -670,7 +672,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
       'Sep',
       'Oct',
       'Nov',
-      'Dic'
+      'Dic',
     ];
     final sortedYears = _selectedYears.toList()..sort((a, b) => a.compareTo(b));
 

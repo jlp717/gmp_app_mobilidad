@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/di/injection.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
@@ -25,6 +26,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  configureDependencies();
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);

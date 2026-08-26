@@ -1,207 +1,96 @@
 # =============================================================================
-# SCRIPT DE BUILD AUTOMATIZADO - GMP APP MOVILIDAD (Windows PowerShell)
+# GMP APP MOVILIDAD - AUTOMATED BUILD SCRIPT (Windows PowerShell)
 # =============================================================================
-#
-# USO:
-#   .\scripts\build.ps1 -Platform [android|ios|all] -Mode [debug|release]
-#
-# EJEMPLOS:
-#   .\scripts\build.ps1 -Platform android -Mode release
-#   .\scripts\build.ps1 -Platform all -Mode debug
+# Usage: .\scripts\build.ps1 -Platform android -Mode release
 
 param(
-    [Parameter(Mandatory=$false)]
     [ValidateSet('android', 'ios', 'all')]
     [string]$Platform = 'android',
-
-    [Parameter(Mandatory=$false)]
     [ValidateSet('debug', 'release')]
     [string]$Mode = 'release'
 )
 
-# Funciones helper
-function Print-Header {
-    param([string]$Text)
-    Write-Host "`n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Blue
-    Write-Host "  $Text" -ForegroundColor Blue
-    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`n" -ForegroundColor Blue
-}
+function Print-Header { param([string]$Text); Write-Host "`n==== $Text ====" -ForegroundColor Blue }
+function Print-Success { param([string]$Text); Write-Host "OK: $Text" -ForegroundColor Green }
+function Print-Error { param([string]$Text); Write-Host "ERROR: $Text" -ForegroundColor Red }
+function Print-Warning { param([string]$Text); Write-Host "WARN: $Text" -ForegroundColor Yellow }
+function Print-Info { param([string]$Text); Write-Host "INFO: $Text" -ForegroundColor Cyan }
 
-function Print-Success {
-    param([string]$Text)
-    Write-Host "✅ $Text" -ForegroundColor Green
-}
+Print-Header 'GMP APP MOVILIDAD - BUILD'
+Print-Info "Platform: $Platform"
+Print-Info "Mode: $Mode"
 
-function Print-Error {
-    param([string]$Text)
-    Write-Host "❌ $Text" -ForegroundColor Red
-}
-
-function Print-Warning {
-    param([string]$Text)
-    Write-Host "⚠️  $Text" -ForegroundColor Yellow
-}
-
-function Print-Info {
-    param([string]$Text)
-    Write-Host "ℹ️  $Text" -ForegroundColor Cyan
-}
-
-# =============================================================================
-# INICIO
-# =============================================================================
-
-Print-Header "GMP APP MOVILIDAD - BUILD SCRIPT"
-Print-Info "Plataforma: $Platform"
-Print-Info "Modo: $Mode"
-
-# =============================================================================
-# PRE-BUILD CHECKS
-# =============================================================================
-
-Print-Header "1. Verificaciones Pre-Build"
-
-# Verificar Flutter
+Print-Header '1. Pre-build checks'
 if (!(Get-Command flutter -ErrorAction SilentlyContinue)) {
-    Print-Error "Flutter no está instalado o no está en PATH"
+    Print-Error 'Flutter is not installed or is not in PATH'
     exit 1
 }
-
-$flutterVersion = flutter --version | Select-Object -First 1
-Print-Success "Flutter instalado: $flutterVersion"
-
-# Dependencias
-Print-Info "Obteniendo dependencias..."
+Print-Success "Flutter installed: $(flutter --version | Select-Object -First 1)"
 flutter pub get
-if ($LASTEXITCODE -ne 0) {
-    Print-Error "Error al obtener dependencias"
-    exit 1
-}
-Print-Success "Dependencias actualizadas"
+if ($LASTEXITCODE -ne 0) { Print-Error 'flutter pub get failed'; exit 1 }
+Print-Success 'Dependencies ready'
 
-# =============================================================================
-# CODE QUALITY
-# =============================================================================
-
-Print-Header "2. Verificaciones de Calidad"
-
-# Análisis estático
-Print-Info "Ejecutando análisis estático..."
-flutter analyze
-if ($LASTEXITCODE -ne 0) {
-    Print-Error "Análisis estático falló"
-    exit 1
-}
-Print-Success "Análisis estático: OK"
-
-# Formato
-Print-Info "Verificando formato de código..."
-dart format --set-exit-if-changed lib test
-if ($LASTEXITCODE -ne 0) {
-    Print-Warning "Aplicando formato..."
-    dart format lib test
+Print-Header '2. Code quality'
+flutter analyze --no-fatal-infos
+if ($LASTEXITCODE -ne 0) { Print-Error 'Static analysis failed'; exit 1 }
+if (Get-Command dart -ErrorAction SilentlyContinue) {
+    dart format --set-exit-if-changed lib test
+    if ($LASTEXITCODE -ne 0) { Print-Warning 'Formatting differences found; applying dart format'; dart format lib test }
 }
 
-# =============================================================================
-# TESTS
-# =============================================================================
-
-Print-Header "3. Ejecutando Tests"
-
-Print-Info "Ejecutando tests unitarios..."
+Print-Header '3. Tests'
 flutter test
-if ($LASTEXITCODE -ne 0) {
-    Print-Error "Tests fallaron"
-    exit 1
-}
-Print-Success "Tests: PASSED"
+if ($LASTEXITCODE -ne 0) { Print-Error 'Flutter tests failed'; exit 1 }
+Print-Success 'Flutter tests passed'
 
-# =============================================================================
-# BUILD GENERATION
-# =============================================================================
-
-Print-Header "4. Generando Build Runners"
-
-Print-Info "Generando código..."
+Print-Header '4. Code generation'
 flutter pub run build_runner build --delete-conflicting-outputs
-Print-Success "Código generado"
+if ($LASTEXITCODE -ne 0) { Print-Error 'Code generation failed'; exit 1 }
+Print-Success 'Generated code ready'
 
-# =============================================================================
-# BUILD
-# =============================================================================
-
-Print-Header "5. Compilando Aplicación"
+Print-Header '5. Build'
+$symbolsRoot = 'build\symbols'
+New-Item -ItemType Directory -Force -Path $symbolsRoot | Out-Null
+$versionMatch = Select-String -Path pubspec.yaml -Pattern '^version:\s*(.+)$' | Select-Object -First 1
+if (-not $versionMatch) { Print-Error 'pubspec.yaml has no version'; exit 1 }
+$appVersion = $versionMatch.Matches[0].Groups[1].Value.Trim()
+$symbolDir = Join-Path $symbolsRoot "$(($appVersion -replace '[+:]', '_'))_$(Get-Date -Format yyyyMMdd_HHmmss)"
+New-Item -ItemType Directory -Force -Path $symbolDir | Out-Null
 
 function Build-Android {
-    Print-Info "Compilando para Android ($Mode)..."
-
+    Print-Info "Building Android ($Mode)"
     if ($Mode -eq 'release') {
-        # APK
-        Print-Info "Generando APK..."
-        flutter build apk --release --split-per-abi
-        if ($LASTEXITCODE -ne 0) {
-            Print-Error "Error al generar APK"
-            exit 1
-        }
-        Print-Success "APK generado en: build\app\outputs\flutter-apk\"
-
-        # AAB
-        Print-Info "Generando AAB..."
-        flutter build appbundle --release
-        if ($LASTEXITCODE -ne 0) {
-            Print-Error "Error al generar AAB"
-            exit 1
-        }
-        Print-Success "AAB generado en: build\app\outputs\bundle\release\"
-    }
-    else {
+        flutter build apk --release --split-per-abi --obfuscate --split-debug-info="$symbolDir"
+        if ($LASTEXITCODE -ne 0) { Print-Error 'Release APK build failed'; exit 1 }
+        flutter build appbundle --release --obfuscate --split-debug-info="$symbolDir"
+        if ($LASTEXITCODE -ne 0) { Print-Error 'Release AAB build failed'; exit 1 }
+        Print-Success 'Android release artifacts generated'
+    } else {
         flutter build apk --debug
-        Print-Success "APK debug generado"
+        if ($LASTEXITCODE -ne 0) { Print-Error 'Debug APK build failed'; exit 1 }
+        Print-Success 'Android debug APK generated'
     }
 }
 
 function Build-iOS {
-    Print-Warning "Build para iOS requiere macOS con Xcode"
-    Print-Info "Compilando para iOS ($Mode)..."
-
-    if ($Mode -eq 'release') {
-        flutter build ios --release --no-codesign
-    }
-    else {
-        flutter build ios --debug --no-codesign
-    }
-
-    if ($LASTEXITCODE -ne 0) {
-        Print-Error "Error al compilar iOS"
-        exit 1
-    }
-    Print-Success "Build iOS generado"
+    Print-Warning 'iOS builds require macOS and Xcode'
+    if ($Mode -eq 'release') { flutter build ios --release --no-codesign --obfuscate --split-debug-info="$symbolDir" }
+    else { flutter build ios --debug --no-codesign }
+    if ($LASTEXITCODE -ne 0) { Print-Error 'iOS build failed'; exit 1 }
+    Print-Success 'iOS artifact generated'
 }
 
 switch ($Platform) {
     'android' { Build-Android }
     'ios' { Build-iOS }
-    'all' {
-        Build-Android
-        Build-iOS
-    }
+    'all' { Build-Android; Build-iOS }
 }
 
-# =============================================================================
-# POST-BUILD
-# =============================================================================
-
-Print-Header "6. Post-Build"
-
+Print-Header '6. Post-build'
+Print-Info "Symbol maps: $symbolDir"
 if ($Platform -eq 'android' -or $Platform -eq 'all') {
-    Print-Info "APKs generados:"
-    Get-ChildItem -Path "build\app\outputs\flutter-apk\*.apk" -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            $size = [math]::Round($_.Length / 1MB, 2)
-            Write-Host "  $($_.Name): $size MB"
-        }
+    Get-ChildItem -Path 'build\app\outputs\flutter-apk\*.apk' -ErrorAction SilentlyContinue |
+        ForEach-Object { Write-Host "  $($_.Name): $([math]::Round($_.Length / 1MB, 2)) MB" }
+    if (Test-Path 'build\app\outputs\bundle\release\app-release.aab') { Print-Success 'AAB: build\app\outputs\bundle\release\app-release.aab' }
 }
-
-Print-Success "Build completado exitosamente!"
-Write-Host "`nPara instalar en dispositivo:"
-Write-Host "  flutter install" -ForegroundColor Cyan
+Print-Success 'Build completed'

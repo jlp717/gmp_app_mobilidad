@@ -33,7 +33,8 @@ void main() {
 
       expect(
         find.text(
-            'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.'),
+          'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
+        ),
         findsOneWidget,
       );
     });

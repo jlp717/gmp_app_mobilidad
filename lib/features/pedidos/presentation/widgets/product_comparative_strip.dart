@@ -14,11 +14,13 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/add_to_order_sheet.dart'
+    show AddToOrderSheet;
 
 class ProductComparativeStrip extends StatefulWidget {
   const ProductComparativeStrip({
-    super.key,
     required this.productCode,
+    super.key,
     this.clientCode,
     this.vendedorCode,
   });

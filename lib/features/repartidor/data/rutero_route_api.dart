@@ -237,8 +237,6 @@ int? _asInt(dynamic value) {
 
 class RuteroOrderState {
   const RuteroOrderState({required this.revision, required this.orden});
-  final String revision;
-  final List<String> orden;
 
   factory RuteroOrderState.fromJson(Map<String, dynamic> json) =>
       RuteroOrderState(
@@ -247,6 +245,8 @@ class RuteroOrderState {
             '',
         orden: _documentIds(json['orden'] ?? json['items']),
       );
+  final String revision;
+  final List<String> orden;
 }
 
 List<String> _documentIds(dynamic raw) {
@@ -300,8 +300,9 @@ class RuteroRouteApi {
             : base.nombreCliente,
       );
       stableMeta[item.id] = updated;
-      if (item.codigoCliente.isNotEmpty)
+      if (item.codigoCliente.isNotEmpty) {
         stableMeta[item.codigoCliente] = updated;
+      }
     }
     return stableMeta;
   }
@@ -340,9 +341,9 @@ class RuteroRouteApi {
     required String repartidorId,
     required String dateYmd,
     required List<Map<String, dynamic>> stops,
+    required int departureMinute,
     RuteroRouteStrategy strategy = RuteroRouteStrategy.balanced,
     RuteroRouteOrigin? origin,
-    required int departureMinute,
   }) async {
     final response = await ApiClient.post(
       '/repartidor/rutero/order/$repartidorId/optimize',

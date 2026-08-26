@@ -20,6 +20,14 @@ module.exports = {
     ],
     moduleFileExtensions: ['js', 'json'],
     collectCoverage: false,
+    coverageThreshold: {
+        global: {
+            statements: 32,
+            branches: 25,
+            functions: 31,
+            lines: 33,
+        },
+    },
     testTimeout: 30000,
     verbose: true,
     forceExit: true,

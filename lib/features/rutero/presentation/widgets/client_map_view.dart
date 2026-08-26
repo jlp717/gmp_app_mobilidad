@@ -152,8 +152,11 @@ class _ClientMapViewState extends State<ClientMapView> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.location_pin,
-                    color: AppTheme.success, size: 20),
+                const Icon(
+                  Icons.location_pin,
+                  color: AppTheme.success,
+                  size: 20,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   '${widget.clients.where((c) => c.latitude != null).length} clientes',
@@ -271,13 +274,17 @@ class _ClientInfoCard extends StatelessWidget {
                       Text(
                         client.city!,
                         style: const TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12),
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     if (client.lastSale != null)
                       Text(
                         'Última venta: €${client.lastSale!.toStringAsFixed(0)}',
                         style: const TextStyle(
-                            color: AppTheme.success, fontSize: 11),
+                          color: AppTheme.success,
+                          fontSize: 11,
+                        ),
                       ),
                   ],
                 ),

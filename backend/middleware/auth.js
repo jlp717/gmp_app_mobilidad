@@ -123,7 +123,8 @@ function parseTtlMs(raw, fallbackMs, label) {
     return fallbackMs;
 }
 
-const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 86_400_000, 'JWT_ACCESS_EXPIRES'); // 24h default
+// ASVS V9 (H-04): acceso corto por defecto (15 min); la sesión la mantiene el refresh rotativo.
+const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 900_000, 'JWT_ACCESS_EXPIRES'); // 15m default
 const REFRESH_TTL_MS = parseTtlMs(process.env.JWT_REFRESH_EXPIRES, 604_800_000, 'JWT_REFRESH_EXPIRES'); // 7d default
 const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10);
 const AUTH_REDIS_TIMEOUT_MS = parseInt(process.env.AUTH_REDIS_TIMEOUT_MS || process.env.REDIS_COMMAND_TIMEOUT_MS || '1000', 10);

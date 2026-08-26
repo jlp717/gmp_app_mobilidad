@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:signature/signature.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_signature.dart';
+import 'package:signature/signature.dart';
 
 class RuteroDetailFinalize extends StatelessWidget {
   const RuteroDetailFinalize({
@@ -154,10 +154,12 @@ class RuteroDetailFinalize extends StatelessWidget {
                         final option = options.elementAt(index);
                         return ListTile(
                           tileColor: AppTheme.softPanel,
-                          title: Text(option,
-                              style: const TextStyle(
-                                color: AppTheme.textPrimary,
-                              )),
+                          title: Text(
+                            option,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
                           onTap: () {
                             onSelected(option);
                           },
@@ -220,10 +222,12 @@ class RuteroDetailFinalize extends StatelessWidget {
                         final option = options.elementAt(index);
                         return ListTile(
                           tileColor: AppTheme.softPanel,
-                          title: Text(option,
-                              style: const TextStyle(
-                                color: AppTheme.textPrimary,
-                              )),
+                          title: Text(
+                            option,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
                           onTap: () {
                             onSelected(option);
                           },

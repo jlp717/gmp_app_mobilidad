@@ -115,8 +115,8 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
         ),
       ]);
 
-      final historyResult = results[0] as Map<String, dynamic>;
-      final summary = results[1] as Map<String, dynamic>;
+      final historyResult = results[0];
+      final summary = results[1];
 
       state = state.copyWith(
         items: historyResult['items'] as List<ProductHistoryItem>,
@@ -134,7 +134,8 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
 
 final salesHistoryProvider =
     NotifierProvider<SalesHistoryNotifier, SalesHistoryState>(
-        SalesHistoryNotifier.new);
+  SalesHistoryNotifier.new,
+);
 
 // ── Selectors ────────────────────────────────────────────────────────────────
 

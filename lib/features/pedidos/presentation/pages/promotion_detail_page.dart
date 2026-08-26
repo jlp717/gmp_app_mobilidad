@@ -185,7 +185,9 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                   Text(
                     'Codigo: ${widget.promoCode}',
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12),
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 if (widget.dateFrom.isNotEmpty || widget.dateTo.isNotEmpty)
                   Padding(
@@ -193,7 +195,9 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     child: Text(
                       'Vigencia: ${widget.dateFrom.isEmpty ? '-' : widget.dateFrom}  ->  ${widget.dateTo.isEmpty ? '-' : widget.dateTo}',
                       style: const TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 11),
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 if (widget.promoType == 'GIFT') ...[

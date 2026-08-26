@@ -3,7 +3,6 @@
 library;
 
 import 'package:dio/dio.dart';
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
@@ -654,15 +653,16 @@ class WarehouseDataService {
     String? email,
   }) async {
     await OfflineAwareApi.post(
-        '/warehouse/personnel',
-        {
-          'nombre': nombre,
-          if (codigoVendedor != null) 'codigoVendedor': codigoVendedor,
-          if (rol != null) 'rol': rol,
-          if (telefono != null) 'telefono': telefono,
-          if (email != null) 'email': email,
-        },
-        syncType: 'warehouse_add_person');
+      '/warehouse/personnel',
+      {
+        'nombre': nombre,
+        if (codigoVendedor != null) 'codigoVendedor': codigoVendedor,
+        if (rol != null) 'rol': rol,
+        if (telefono != null) 'telefono': telefono,
+        if (email != null) 'email': email,
+      },
+      syncType: 'warehouse_add_person',
+    );
   }
 
   /// Actualizar operario
@@ -728,7 +728,7 @@ class WarehouseDataService {
       '/warehouse/articles',
       queryParameters: qp,
       cacheKey:
-          'warehouse_articles_${searchKey}_${onlyWithDimensions == true ? 'dims' : 'all'}_$limit',
+          'warehouse_articles_${searchKey}_${onlyWithDimensions ?? false ? 'dims' : 'all'}_$limit',
       forceRefresh: forceRefresh,
       cancelToken: cancelToken,
     );
@@ -844,15 +844,16 @@ class WarehouseDataService {
     String? vendor,
   }) async {
     await OfflineAwareApi.post(
-        '/warehouse/manual-layout',
-        {
-          'vehicleCode': vehicleCode,
-          'date': date,
-          if (vendor != null) 'vendor': vendor,
-          'layoutJson': layoutJson,
-          'metricsJson': metricsJson ?? {},
-        },
-        syncType: 'warehouse_save_layout');
+      '/warehouse/manual-layout',
+      {
+        'vehicleCode': vehicleCode,
+        'date': date,
+        if (vendor != null) 'vendor': vendor,
+        'layoutJson': layoutJson,
+        'metricsJson': metricsJson ?? {},
+      },
+      syncType: 'warehouse_save_layout',
+    );
   }
 
   /// Optimize load for maximum profit
@@ -863,14 +864,15 @@ class WarehouseDataService {
     required int day,
   }) async {
     final response = await OfflineAwareApi.post(
-        '/warehouse/load-plan/optimize',
-        {
-          'vehicleCode': vehicleCode,
-          'year': year,
-          'month': month,
-          'day': day,
-        },
-        syncType: 'warehouse_optimize');
+      '/warehouse/load-plan/optimize',
+      {
+        'vehicleCode': vehicleCode,
+        'year': year,
+        'month': month,
+        'day': day,
+      },
+      syncType: 'warehouse_optimize',
+    );
     return response;
   }
 
@@ -976,17 +978,18 @@ class WarehouseDataService {
     List<Map<String, dynamic>> overflow = const [],
   }) async {
     await OfflineAwareApi.post(
-        '/warehouse/save-load',
-        {
-          'vehicleCode': vehicleCode,
-          'year': year,
-          'month': month,
-          'day': day,
-          'metrics': metrics,
-          'placed': placed,
-          'overflow': overflow,
-        },
-        syncType: 'warehouse_save_load');
+      '/warehouse/save-load',
+      {
+        'vehicleCode': vehicleCode,
+        'year': year,
+        'month': month,
+        'day': day,
+        'metrics': metrics,
+        'placed': placed,
+        'overflow': overflow,
+      },
+      syncType: 'warehouse_save_load',
+    );
   }
 
   /// Actualizar config camión

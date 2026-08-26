@@ -195,9 +195,10 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
     );
   }
 
-  if (input.status != RepartoDeliveryStatus.noEntregado &&
-      input.isUrgent &&
-      !input.isPaid) {
+  final paymentEligibleStatus =
+      input.status == RepartoDeliveryStatus.entregado ||
+          input.status == RepartoDeliveryStatus.parcial;
+  if (paymentEligibleStatus && input.isUrgent && !input.isPaid) {
     issues.add(
       const RuteroFieldIssue(
         tab: RuteroDeliveryTab.payment,

@@ -50,10 +50,12 @@ void main() {
       testWidgets(
           'shows product name initials in fallback when name is provided',
           (tester) async {
-        await tester.pumpWidget(buildTestWidget(
-          productCode: 'ABC123',
-          productName: 'Test Product',
-        ));
+        await tester.pumpWidget(
+          buildTestWidget(
+            productCode: 'ABC123',
+            productName: 'Test Product',
+          ),
+        );
 
         expect(find.text('TE'), findsOneWidget);
       });
@@ -129,7 +131,8 @@ void main() {
 
       testWidgets('applies custom border radius', (tester) async {
         await tester.pumpWidget(
-            buildTestWidget(borderRadius: BorderRadius.circular(16)));
+          buildTestWidget(borderRadius: BorderRadius.circular(16)),
+        );
 
         final clipRRect = tester.widget<ClipRRect>(
           find

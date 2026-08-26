@@ -684,17 +684,6 @@ async function getVendorName(vendorCode) {
  * @returns {Object} Monthly map { [month]: amount }
  */
 // PERF: In-memory cache for B-Sales (small table, rarely changes)
-const _bSalesCache = new Map();
-const _bSalesCacheTTL = 10 * 60 * 1000; // 10 minutes
-
-function setBoundedBSalesCache(cacheKey, data) {
-    _bSalesCache.set(cacheKey, { data, ts: Date.now() });
-    if (_bSalesCache.size > 500) {
-        const oldest = _bSalesCache.keys().next().value;
-        _bSalesCache.delete(oldest);
-    }
-}
-
 function normalizeSalesVendorCode(vendorCode) {
     const raw = String(vendorCode || '').trim();
     if (!raw) return '';
@@ -727,51 +716,10 @@ function parseSalesVendorCodes(vendorCodes) {
         .filter(Boolean);
 }
 
+// Delegador: logica y acceso DB2 en src/repositories/bSales.repository.js
 async function getBSalesByVendor(year, vendorCodes = []) {
-    const safeYear = parseInt(year, 10);
-    if (!safeYear) return {};
-
-    const parsedCodes = parseSalesVendorCodes(vendorCodes);
-    const codeVariants = [...new Set(parsedCodes.flatMap(getSalesVendorCodeVariants))];
-    const scopeKey = codeVariants.length
-        ? codeVariants.map(normalizeSalesVendorCode).sort().join(',')
-        : 'ALL';
-    const cacheKey = `byVendor:${safeYear}:${scopeKey}`;
-    const cached = _bSalesCache.get(cacheKey);
-    if (cached && Date.now() - cached.ts < _bSalesCacheTTL) return cached.data;
-
-    const params = [safeYear];
-    let vendorFilter = '';
-
-    if (codeVariants.length > 0) {
-        vendorFilter = `AND TRIM(CODIGOVENDEDOR) IN (${codeVariants.map(() => '?').join(',')})`;
-        params.push(...codeVariants);
-    }
-
-    try {
-        const rows = await queryWithParams(`
-            SELECT TRIM(CODIGOVENDEDOR) as CODIGOVENDEDOR, MES, SUM(IMPORTE) as IMPORTE
-            FROM JAVIER.VENTAS_B
-            WHERE EJERCICIO = ?
-              ${vendorFilter}
-            GROUP BY TRIM(CODIGOVENDEDOR), MES
-        `, params, false, false);
-
-        const byVendor = {};
-        rows.forEach(row => {
-            const code = normalizeSalesVendorCode(row.CODIGOVENDEDOR);
-            const month = parseInt(row.MES, 10);
-            const amount = parseFloat(row.IMPORTE) || 0;
-            if (!code || !month) return;
-            if (!byVendor[code]) byVendor[code] = {};
-            byVendor[code][month] = (byVendor[code][month] || 0) + amount;
-        });
-        setBoundedBSalesCache(cacheKey, byVendor);
-        return byVendor;
-    } catch (e) {
-        logger.debug(`getBSalesByVendor: table may not exist for ${year}: ${e.message}`);
-        return {};
-    }
+    const { bSalesRepository } = require('../src/repositories/bSales.repository');
+    return bSalesRepository.getByVendor(year, vendorCodes);
 }
 
 function aggregateBSalesByMonth(bSalesByVendor) {
@@ -787,24 +735,10 @@ function aggregateBSalesByMonth(bSalesByVendor) {
     return monthly;
 }
 
+// Delegador legacy: contrato mensual por vendedor unico.
 async function getBSales(vendorCode, year) {
-    if (!vendorCode || vendorCode === 'ALL') return {};
-
-    const rawCode = vendorCode.trim();
-    const cacheKey = `${rawCode}:${year}`;
-    const cached = _bSalesCache.get(cacheKey);
-    if (cached && Date.now() - cached.ts < _bSalesCacheTTL) return cached.data;
-
-    try {
-        const byVendor = await getBSalesByVendor(year, [rawCode]);
-        const monthlyMap = byVendor[normalizeSalesVendorCode(rawCode)] || {};
-        setBoundedBSalesCache(cacheKey, monthlyMap);
-        return monthlyMap;
-    } catch (e) {
-        // Table might not exist - return empty
-        logger.debug(`getBSales: table may not exist for ${vendorCode}/${year}: ${e.message}`);
-        return {};
-    }
+    const { bSalesRepository } = require('../src/repositories/bSales.repository');
+    return bSalesRepository.getSingle(vendorCode, year);
 }
 
 module.exports = {
@@ -841,6 +775,8 @@ module.exports = {
     getBSales,
     getBSalesByVendor,
     aggregateBSalesByMonth,
+    parseSalesVendorCodes,
+    getSalesVendorCodeVariants,
     normalizeSalesVendorCode,
     sanitizeForSQL,
     sanitizeCodeList,

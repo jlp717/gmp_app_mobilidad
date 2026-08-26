@@ -1,6 +1,4 @@
 import 'dart:developer' as developer;
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
@@ -50,7 +48,7 @@ class CommissionsService {
       );
 
       // Response is { period: {...}, vendedores: [...] }
-      if (result.data is Map && result.data.containsKey('vendedores')) {
+      if (result.data.containsKey('vendedores')) {
         return result.data['vendedores'] as List<dynamic>;
       }
       return [];

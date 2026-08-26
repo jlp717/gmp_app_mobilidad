@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -108,6 +108,38 @@ class _VencimientosPageState extends State<VencimientosPage> {
   Widget build(BuildContext context) {
     final visible = _filteredItems();
     final groups = _groupItems(visible);
+    final rows = <Widget>[
+      for (final entry in groups.entries) ...[
+        _GroupHeader(
+          title: entry.key,
+          count: entry.value.length,
+          amount: _total(entry.value),
+        ),
+        const SizedBox(height: 8),
+        for (final item in entry.value) ...[
+          _VencimientoRow(
+            item: item,
+            onTap: widget.onItemTap == null
+                ? null
+                : () => widget.onItemTap?.call(item),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+      if (widget.hasMore)
+        Center(
+          child: widget.isLoadingMore
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(),
+                )
+              : OutlinedButton.icon(
+                  onPressed: widget.onLoadMore,
+                  icon: const Icon(Icons.expand_more),
+                  label: const Text('Cargar más'),
+                ),
+        ),
+    ];
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
@@ -147,38 +179,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
                   )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                    children: [
-                      for (final entry in groups.entries) ...[
-                        _GroupHeader(
-                          title: entry.key,
-                          count: entry.value.length,
-                          amount: _total(entry.value),
-                        ),
-                        const SizedBox(height: 8),
-                        for (final item in entry.value) ...[
-                          _VencimientoRow(
-                            item: item,
-                            onTap: widget.onItemTap == null
-                                ? null
-                                : () => widget.onItemTap?.call(item),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      ],
-                      if (widget.hasMore)
-                        Center(
-                          child: widget.isLoadingMore
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: CircularProgressIndicator(),
-                                )
-                              : OutlinedButton.icon(
-                                  onPressed: widget.onLoadMore,
-                                  icon: const Icon(Icons.expand_more),
-                                  label: const Text('Cargar más'),
-                                ),
-                        ),
-                    ],
+                    children: rows,
                   ),
           ),
         ],

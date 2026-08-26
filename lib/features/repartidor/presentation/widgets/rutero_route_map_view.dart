@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -8,8 +9,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 /// Sequence color: green (1st) → sky → orange (last).
 Color ruteroStopColor(int index, int total) {
@@ -63,22 +64,25 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
   void initState() {
     super.initState();
     _mapController = MapController();
-    _initWebView();
+    unawaited(_initWebView());
   }
 
   @override
   void didUpdateWidget(covariant RuteroRouteMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _pushRouteToWeb();
+    unawaited(_pushRouteToWeb());
     if (widget.selectedDocumentId != null &&
         widget.selectedDocumentId != oldWidget.selectedDocumentId) {
-      _highlightSelected();
+      unawaited(_highlightSelected());
     }
   }
 
   @override
   void dispose() {
-    _controller?.removeJavaScriptChannel('FlutterMapBridge');
+    unawaited(
+      _controller?.removeJavaScriptChannel('FlutterMapBridge') ??
+          Future<void>.value(),
+    );
     _mapController.dispose();
     super.dispose();
   }
@@ -86,59 +90,64 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
   Future<void> _initWebView() async {
     try {
       final html = await rootBundle.loadString('assets/rutero_map/index.html');
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(AppTheme.inkSurface)
-        ..addJavaScriptChannel(
-          'FlutterMapBridge',
-          onMessageReceived: (message) {
-            try {
-              final data = jsonDecode(message.message) as Map<String, dynamic>;
-              final type = data['type']?.toString();
-              if (type == 'mapReady' || type == 'ready') {
-                setState(() {
-                  _webReady = true;
-                  _loadingHtml = false;
-                });
-                _pushRouteToWeb(force: true);
-              } else if (type == 'markerTap') {
-                final id = data['documentId']?.toString();
-                if (id != null && id.isNotEmpty) {
-                  widget.onStopSelected?.call(id);
-                }
+      final controller = WebViewController();
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setBackgroundColor(AppTheme.inkSurface);
+      await controller.addJavaScriptChannel(
+        'FlutterMapBridge',
+        onMessageReceived: (message) {
+          try {
+            final data = jsonDecode(message.message) as Map<String, dynamic>;
+            final type = data['type']?.toString();
+            if (type == 'mapReady' || type == 'ready') {
+              setState(() {
+                _webReady = true;
+                _loadingHtml = false;
+              });
+              unawaited(_pushRouteToWeb(force: true));
+            } else if (type == 'markerTap') {
+              final id = data['documentId']?.toString();
+              if (id != null && id.isNotEmpty) {
+                widget.onStopSelected?.call(id);
               }
-            } catch (e) {
-              debugPrint('[RuteroMap] bridge parse error: $e');
+            }
+          } catch (e) {
+            debugPrint('[RuteroMap] bridge parse error: $e');
+          }
+        },
+      );
+      await controller.setNavigationDelegate(
+        NavigationDelegate(
+          onWebResourceError: (error) {
+            debugPrint('[RuteroMap] web error: ${error.description}');
+            if (mounted) {
+              setState(() {
+                _useFallback = true;
+                _loadingHtml = false;
+              });
             }
           },
-        )
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onWebResourceError: (error) {
-              debugPrint('[RuteroMap] web error: ${error.description}');
-              if (mounted) {
-                setState(() {
-                  _useFallback = true;
-                  _loadingHtml = false;
-                });
-              }
-            },
-          ),
-        )
-        ..loadHtmlString(html, baseUrl: 'https://local.rutero.map/');
+        ),
+      );
+      await controller.loadHtmlString(
+        html,
+        baseUrl: 'https://local.rutero.map/',
+      );
 
       if (!mounted) return;
       setState(() {
         _controller = controller;
       });
 
-      Future<void>.delayed(const Duration(seconds: 8), () {
-        if (!mounted || _webReady) return;
-        setState(() {
-          _useFallback = true;
-          _loadingHtml = false;
-        });
-      });
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 8), () {
+          if (!mounted || _webReady) return;
+          setState(() {
+            _useFallback = true;
+            _loadingHtml = false;
+          });
+        }),
+      );
     } catch (e) {
       debugPrint('[RuteroMap] html load failed: $e');
       if (mounted) {
@@ -174,7 +183,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
         'lng': _isValidSpainLatLng(meta?.lat, meta?.lng) ? meta?.lng : null,
         'windowLabel': meta?.windowLabel,
         'etaLabel': meta?.etaLabel,
-        'closedDay': meta?.closedDay == true,
+        'closedDay': meta?.closedDay ?? false,
         'docLabel': '${_docTipo(albaran)} · ${_docLabel(albaran)}',
         'reason': meta?.reason,
       };
@@ -604,8 +613,8 @@ class _StopDetailCard extends StatelessWidget {
                 ),
               ],
             ),
-            if ((albaran.direccion).trim().isNotEmpty ||
-                (albaran.poblacion).trim().isNotEmpty) ...[
+            if (albaran.direccion.trim().isNotEmpty ||
+                albaran.poblacion.trim().isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
                 [
@@ -653,19 +662,24 @@ class _StopDetailCard extends StatelessWidget {
                     final lat = meta!.lat!;
                     final lng = meta!.lng!;
                     final url = Uri.parse(
-                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+                      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                    );
                     try {
-                      await launchUrl(url,
-                          mode: LaunchMode.externalApplication);
+                      await launchUrl(
+                        url,
+                        mode: LaunchMode.externalApplication,
+                      );
                     } catch (_) {}
                   },
                   icon: const Icon(Icons.navigation, size: 20),
-                  label: const Text('Navegar con Maps',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  label: const Text(
+                    'Navegar con Maps',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
                   style: FilledButton.styleFrom(
-                      minimumSize: Size.fromHeight(48),
-                      backgroundColor: AppColors.info),
+                    minimumSize: const Size.fromHeight(48),
+                    backgroundColor: AppColors.info,
+                  ),
                 ),
               ),
             ],

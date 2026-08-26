@@ -39,9 +39,9 @@ String createLiquidacionEntryIdempotencyToken(
   String? observation,
   List<int>? entropy,
 }) {
-  final safeId = repartidorId.trim().replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+  final safeId = repartidorId.trim().replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
   final safeType =
-      entryType.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
+      entryType.trim().toLowerCase().replaceAll(RegExp('[^a-z0-9_-]'), '_');
   final normalizedDetail = detail.trim();
   final normalizedObservation = observation?.trim() ?? '';
   if (safeId.isEmpty || safeType.isEmpty || normalizedDetail.isEmpty) {
@@ -1326,7 +1326,7 @@ class RepartidorDailySummary {
       ingresoBanco: money(const [
         'ingresoBanco',
         'TOTAL_INGRESO_BANCO',
-        'IMPORTEINGRESOENBANCO'
+        'IMPORTEINGRESOENBANCO',
       ]),
       cobrosCount: count(const ['cobrosCount', 'COBROS_COUNT']),
       entregado: money(const ['entregado', 'TOTAL_REPARTIDO']),
@@ -1822,7 +1822,8 @@ class RepartidorLiquidacionLedger {
     final status = json['status'] as String;
     final totals = _jsonMap(json['totals']);
     if (totals.keys.toSet().difference(
-            {'expenses', 'adjustments', 'bankDeposits'}).isNotEmpty ||
+          {'expenses', 'adjustments', 'bankDeposits'},
+        ).isNotEmpty ||
         totals.length != 3) {
       throw const RepartidorLiquidacionContractException(
         'LIQUIDACION_LEDGER_TOTALS_INVALID',

@@ -215,8 +215,11 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
         children: [
-          Icon(icon,
-              size: 12, color: AppTheme.textTertiary.withValues(alpha: 0.6)),
+          Icon(
+            icon,
+            size: 12,
+            color: AppTheme.textTertiary.withValues(alpha: 0.6),
+          ),
           const SizedBox(width: 6),
           Text(
             label,
@@ -267,7 +270,11 @@ class _DimensionBars extends StatelessWidget {
         _DimBar(label: 'A', value: d, maxDim: maxDim, color: AppTheme.success),
         const SizedBox(width: 6),
         _DimBar(
-            label: 'H', value: h, maxDim: maxDim, color: AppTheme.accentIndigo),
+          label: 'H',
+          value: h,
+          maxDim: maxDim,
+          color: AppTheme.accentIndigo,
+        ),
       ],
     );
   }

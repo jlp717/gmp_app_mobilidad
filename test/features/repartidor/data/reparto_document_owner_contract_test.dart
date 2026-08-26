@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
@@ -66,12 +66,13 @@ void main() {
     });
 
     expect(
-        prefixes,
-        containsAll(<String>[
-          'repartidor_docs_',
-          'repartidor_clients_',
-          'repartidor_signature_',
-        ]));
+      prefixes,
+      containsAll(<String>[
+        'repartidor_docs_',
+        'repartidor_clients_',
+        'repartidor_signature_',
+      ]),
+    );
   });
 
   test('historical email sends owner and requires messageId plus TEST ledger',
@@ -322,12 +323,14 @@ void main() {
   test('ALL or CSV owner is rejected locally without HTTP', () async {
     var requests = 0;
     ApiClient.dio.interceptors.add(
-      InterceptorsWrapper(onRequest: (options, handler) {
-        requests++;
-        handler.reject(
-          DioException(requestOptions: options),
-        );
-      }),
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requests++;
+          handler.reject(
+            DioException(requestOptions: options),
+          );
+        },
+      ),
     );
 
     await expectLater(
@@ -366,27 +369,29 @@ void main() {
     var requests = 0;
     Map<String, dynamic>? query;
     ApiClient.dio.interceptors.add(
-      InterceptorsWrapper(onRequest: (options, handler) {
-        requests++;
-        query = Map<String, dynamic>.from(options.queryParameters);
-        handler.resolve(
-          Response<Map<String, dynamic>>(
-            requestOptions: options,
-            statusCode: 200,
-            data: const <String, dynamic>{
-              'success': true,
-              'albaran': <String, dynamic>{
-                'id': '2026-A-1-2-C1',
-                'numeroAlbaran': 2,
-                'ejercicio': 2026,
-                'codigoCliente': 'C1',
-                'nombreCliente': 'Cliente',
-                'importeTotal': 10,
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requests++;
+          query = Map<String, dynamic>.from(options.queryParameters);
+          handler.resolve(
+            Response<Map<String, dynamic>>(
+              requestOptions: options,
+              statusCode: 200,
+              data: const <String, dynamic>{
+                'success': true,
+                'albaran': <String, dynamic>{
+                  'id': '2026-A-1-2-C1',
+                  'numeroAlbaran': 2,
+                  'ejercicio': 2026,
+                  'codigoCliente': 'C1',
+                  'nombreCliente': 'Cliente',
+                  'importeTotal': 10,
+                },
               },
-            },
-          ),
-        );
-      }),
+            ),
+          );
+        },
+      ),
     );
     final container = ProviderContainer();
     addTearDown(container.dispose);

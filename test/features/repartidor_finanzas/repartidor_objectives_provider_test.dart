@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 
 Map<String, dynamic> _client(String code, double sales, {String? name}) => {
       'code': code,
@@ -117,8 +117,10 @@ void main() {
 
     state = container.read(repartidorFinanzasProvider);
     expect(fake.calls, [(limit: 2, offset: 0), (limit: 2, offset: 2)]);
-    expect(state.objectivesDetail?.clients.map((client) => client.code),
-        ['A', 'B', 'C']);
+    expect(
+      state.objectivesDetail?.clients.map((client) => client.code),
+      ['A', 'B', 'C'],
+    );
     expect(state.objectivesDetail?.clients[1].name, 'B original');
     expect(state.objectivesDetail?.hasCompleteScopeTotal, isTrue);
   });
@@ -146,7 +148,9 @@ void main() {
 
     fake.nextCompleter!.complete(fake.next);
     await firstRequest;
-    expect(container.read(repartidorFinanzasProvider).isLoadingNextObjectives,
-        isFalse);
+    expect(
+      container.read(repartidorFinanzasProvider).isLoadingNextObjectives,
+      isFalse,
+    );
   });
 }

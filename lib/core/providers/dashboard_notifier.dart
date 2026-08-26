@@ -217,8 +217,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         cacheTTL: CacheService.shortTTL,
         forceRefresh: forceRefresh,
       );
-      if (response == null) return null;
-      return DashboardMetrics.fromJson(response as Map<String, dynamic>);
+      return DashboardMetrics.fromJson(response);
     } catch (e) {
       debugPrint('[DashboardNotifier] metrics error: $e');
       return null;
@@ -238,7 +237,6 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         cacheTTL: const Duration(minutes: 2),
         forceRefresh: forceRefresh,
       );
-      if (response == null) return [];
       final list =
           response['sales'] as List? ?? response['data'] as List? ?? [];
       return list
@@ -263,7 +261,6 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         cacheTTL: CacheService.defaultTTL,
         forceRefresh: forceRefresh,
       );
-      if (response == null) return [];
       final dataList =
           response['evolution'] as List? ?? response['data'] as List? ?? [];
       return dataList
@@ -287,8 +284,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         cacheTTL: CacheService.defaultTTL,
         forceRefresh: forceRefresh,
       );
-      if (response == null) return null;
-      return YoYComparison.fromJson(response as Map<String, dynamic>);
+      return YoYComparison.fromJson(response);
     } catch (e) {
       debugPrint('[DashboardNotifier] yoyComparison error: $e');
       return null;
@@ -308,7 +304,6 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         cacheTTL: CacheService.defaultTTL,
         forceRefresh: forceRefresh,
       );
-      if (response == null) return [];
       final list =
           response['products'] as List? ?? response['data'] as List? ?? [];
       return list
@@ -333,7 +328,6 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         cacheTTL: CacheService.defaultTTL,
         forceRefresh: forceRefresh,
       );
-      if (response == null) return [];
       final list =
           response['clients'] as List? ?? response['data'] as List? ?? [];
       return list

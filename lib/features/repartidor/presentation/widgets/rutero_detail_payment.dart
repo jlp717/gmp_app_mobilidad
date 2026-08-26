@@ -328,7 +328,7 @@ class RuteroDetailPayment extends StatelessWidget {
         controller: importeCobradoController,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+          FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
         ],
         style: const TextStyle(
           color: AppTheme.textPrimary,

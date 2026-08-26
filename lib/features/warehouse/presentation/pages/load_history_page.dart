@@ -124,11 +124,12 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
         dateTo: _dateTo != null ? _dateToStr(_dateTo!) : null,
         forceRefresh: forceRefresh,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _entries = entries;
           _loading = false;
         });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -285,7 +286,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
                 ),
                 Text(
                   '${_entries.length} cargas registradas',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
                   ),
@@ -386,15 +387,18 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
   }
 
   Widget _buildVehicleFilter() {
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si _vehicles crece mucho.
+    final chips = <Widget>[
+      _filterChip('Todos', null),
+      ..._vehicles.map((v) => _filterChip(v.code, v.code)),
+    ];
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       height: 40,
-      child: ListView(
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        children: [
-          _filterChip('Todos', null),
-          ..._vehicles.map((v) => _filterChip(v.code, v.code)),
-        ],
+        itemCount: chips.length,
+        itemBuilder: (_, index) => chips[index],
       ),
     );
   }

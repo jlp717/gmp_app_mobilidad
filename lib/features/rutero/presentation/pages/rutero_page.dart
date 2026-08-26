@@ -2,25 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
-import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_client_list_item.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_dialogs.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_filter_bar.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_header.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_week_summary.dart';
-import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_client_list_item.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -571,7 +567,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             !hasAnySales &&
             mounted) {
           debugPrint(
-              '[Rutero] Day-direct returned clients without sales. Fetching sales data from normal endpoint...');
+            '[Rutero] Day-direct returned clients without sales. Fetching sales data from normal endpoint...',
+          );
           await _enrichWithSalesData(generation: currentGeneration);
         }
       }
@@ -844,10 +841,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             const SizedBox(height: 16),
             Text(
               'Sin clientes para ${_weekdayFullLabels[_selectedDay]}',
-              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+              style:
+                  const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Prueba a cambiar de día o sincronizar',
               style: TextStyle(fontSize: 14, color: AppTheme.textTertiary),
             ),
@@ -951,7 +949,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   ? 'Este día no tiene alertas detectadas'
                   : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              style:
+                  const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 24),
             TextButton.icon(
@@ -982,7 +981,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             const SizedBox(height: 16),
             Text(
               'No se encontró ningún cliente para "$_searchQuery"',
-              style: TextStyle(color: AppTheme.textSecondary),
+              style: const TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             TextButton(
@@ -1200,8 +1199,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textTertiary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
@@ -1246,8 +1247,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textTertiary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
@@ -1503,13 +1506,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           .toList();
 
       await OfflineAwareApi.post(
-          '/rutero/config',
-          {
-            'vendedor': vendedor,
-            'dia': _selectedDay.toLowerCase(),
-            'orden': orderPayload,
-          },
-          syncType: 'rutero_config');
+        '/rutero/config',
+        {
+          'vendedor': vendedor,
+          'dia': _selectedDay.toLowerCase(),
+          'orden': orderPayload,
+        },
+        syncType: 'rutero_config',
+      );
 
       // Refrescar contadores y datos
       await _refreshDataAndCounts();
@@ -1702,21 +1706,22 @@ class _ReorderDialogState extends State<ReorderDialog> {
       }
 
       await OfflineAwareApi.post(
-          '/rutero/move_clients',
-          {
-            'vendedor': widget.activeVendedor,
-            'moves': [
-              {
-                'client': (client['code'] as String?) ?? '',
-                'toDay': toDay.toLowerCase(),
-                'fromDay': widget.currentDay.toLowerCase(),
-                'clientName': (client['name'] as String?) ?? '',
-                'position': targetPosition,
-              }
-            ],
-            'targetPosition': targetPosition,
-          },
-          syncType: 'rutero_move');
+        '/rutero/move_clients',
+        {
+          'vendedor': widget.activeVendedor,
+          'moves': [
+            {
+              'client': (client['code'] as String?) ?? '',
+              'toDay': toDay.toLowerCase(),
+              'fromDay': widget.currentDay.toLowerCase(),
+              'clientName': (client['name'] as String?) ?? '',
+              'position': targetPosition,
+            }
+          ],
+          'targetPosition': targetPosition,
+        },
+        syncType: 'rutero_move',
+      );
 
       // Cerrar loading
       if (mounted) Navigator.pop(context);
@@ -1894,7 +1899,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
             // List
             Expanded(
               child: _items.isEmpty
-                  ? Center(
+                  ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -1903,8 +1908,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
                             size: 48,
                             color: AppTheme.textTertiary,
                           ),
-                          const SizedBox(height: 8),
-                          const Text('No hay clientes en este día'),
+                          SizedBox(height: 8),
+                          Text('No hay clientes en este día'),
                         ],
                       ),
                     )
@@ -1931,8 +1936,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
                               index: index,
                               child: const Padding(
                                 padding: EdgeInsets.all(12),
-                                child: Icon(Icons.drag_handle,
-                                    color: AppTheme.textTertiary),
+                                child: Icon(
+                                  Icons.drag_handle,
+                                  color: AppTheme.textTertiary,
+                                ),
                               ),
                             ),
                             title: Text(

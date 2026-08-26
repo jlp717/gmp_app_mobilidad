@@ -7,7 +7,7 @@ void main() {
     group('Basic rendering', () {
       testWidgets('renders title and value', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -28,7 +28,7 @@ void main() {
 
       testWidgets('renders icon', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -48,7 +48,7 @@ void main() {
 
       testWidgets('renders within a Card widget', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -70,7 +70,7 @@ void main() {
     group('Subtitle and trend indicator', () {
       testWidgets('shows subtitle when provided', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -92,7 +92,7 @@ void main() {
       testWidgets('does not show subtitle container when subtitle is null',
           (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -108,7 +108,7 @@ void main() {
         );
 
         final containers = tester.widgetList<Container>(find.byType(Container));
-        bool hasSubtitleContainer = false;
+        var hasSubtitleContainer = false;
         for (final container in containers) {
           final decoration = container.decoration;
           if (decoration is BoxDecoration &&
@@ -122,7 +122,7 @@ void main() {
 
       testWidgets('positive trend shows success color', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -145,7 +145,7 @@ void main() {
 
       testWidgets('negative trend shows error color', (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -172,7 +172,7 @@ void main() {
         const customColor = Colors.purple;
 
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -197,7 +197,7 @@ void main() {
       testWidgets('has correct number of main structural elements',
           (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -219,7 +219,7 @@ void main() {
       testWidgets('title is in correct position relative to value',
           (tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 200,
@@ -238,8 +238,12 @@ void main() {
         final mainColumn =
             columns.where((c) => c.mainAxisSize == MainAxisSize.max).first;
 
-        final textWidgets = tester.widgetList<Text>(find.descendant(
-            of: find.byWidget(mainColumn), matching: find.byType(Text)));
+        final textWidgets = tester.widgetList<Text>(
+          find.descendant(
+            of: find.byWidget(mainColumn),
+            matching: find.byType(Text),
+          ),
+        );
 
         final textContents = textWidgets.map((t) => t.data).toList();
         expect(textContents, contains('Test Title'));

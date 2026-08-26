@@ -4,7 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 
-RepartidorLiquidacionResult _closedResult() => RepartidorLiquidacionResult(
+RepartidorLiquidacionResult _closedResult() =>
+    const RepartidorLiquidacionResult(
       created: true,
       id: '701',
       marker: 'marker-701',

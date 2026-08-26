@@ -13,9 +13,10 @@ plugins {
 // Load key.properties for signing
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+if (!keystorePropertiesFile.exists()) {
+    throw GradleException("Release signing requires android/key.properties; refusing to use debug signing")
 }
+keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 
 android {
     namespace = "com.maripepa.gmp_mobilidad"
@@ -34,12 +35,10 @@ android {
 
     signingConfigs {
         create("release") {
-            if (keystorePropertiesFile.exists()) {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-            }
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
         }
     }
 
@@ -60,11 +59,7 @@ android {
             // Disabled due to NDK strip issue on Windows - AAB is still valid
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

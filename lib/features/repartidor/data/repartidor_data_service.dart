@@ -9,9 +9,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
-import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
+
+typedef HistoryDocumentsPage = ({
+  List<HistoryDocument> documents,
+  bool hasMore,
+});
 
 class RepartidorDataException implements Exception {
   const RepartidorDataException(
@@ -53,10 +57,11 @@ class LocalDocumentShare {
 }
 
 class RepartoReceiptEmailResult {
-  const RepartoReceiptEmailResult(
-      {required this.success,
-      required this.messageId,
-      required this.ledgerWritten});
+  const RepartoReceiptEmailResult({
+    required this.success,
+    required this.messageId,
+    required this.ledgerWritten,
+  });
   factory RepartoReceiptEmailResult.fromResponse(Map<String, dynamic> json) =>
       RepartoReceiptEmailResult(
         success: json['success'] == true,
@@ -592,7 +597,7 @@ class RepartidorDataService {
       if (forceRefresh) {
         await CacheService.invalidateByPrefix(cachePrefix);
       }
-      final cacheKey = '${cachePrefix}${limit}$offset';
+      final cacheKey = '$cachePrefix$limit$offset';
       final response = await ApiClient.get(
         '/repartidor/history/clients/$normalizedRepartidorId',
         queryParameters: queryParams,
@@ -621,6 +626,28 @@ class RepartidorDataService {
 
   /// Obtener documentos de un cliente
   static Future<List<HistoryDocument>> getClientDocuments({
+    required String clientId,
+    required String repartidorId,
+    String? dateFrom,
+    String? dateTo,
+    int? year,
+    int limit = 50,
+    int offset = 0,
+    CancelToken? cancelToken,
+  }) async =>
+      (await getClientDocumentsPage(
+        clientId: clientId,
+        repartidorId: repartidorId,
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        year: year,
+        limit: limit,
+        offset: offset,
+        cancelToken: cancelToken,
+      ))
+          .documents;
+
+  static Future<HistoryDocumentsPage> getClientDocumentsPage({
     required String clientId,
     required String repartidorId,
     String? dateFrom,
@@ -671,7 +698,9 @@ class RepartidorDataService {
           )
           .toList();
 
-      return docs;
+      final pagination = response['pagination'];
+      final hasMore = pagination is Map && pagination['hasMore'] == true;
+      return (documents: docs, hasMore: hasMore);
     } on ApiException catch (error) {
       if (error.statusCode == 503) {
         throw const RepartidorDataException(
@@ -808,13 +837,16 @@ class RepartidorDataService {
         final fYear = ejercicioFactura ?? year;
         // Build query params for albaran fallback
         final queryParams = <String, String>{};
-        if (albaranNumber != null)
+        if (albaranNumber != null) {
           queryParams['albaranNumber'] = albaranNumber.toString();
+        }
         if (albaranSerie != null) queryParams['albaranSerie'] = albaranSerie;
-        if (albaranTerminal != null)
+        if (albaranTerminal != null) {
           queryParams['albaranTerminal'] = albaranTerminal.toString();
-        if (albaranYear != null)
+        }
+        if (albaranYear != null) {
           queryParams['albaranYear'] = albaranYear.toString();
+        }
         if (ownerHint.isNotEmpty) queryParams['repartidorId'] = ownerHint;
         final qs = queryParams.isNotEmpty
             ? '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}'
@@ -1101,8 +1133,10 @@ class RepartidorDataService {
     if (email.length > 180 ||
         !isValidRepartoReceiptEmailAddress(email) ||
         !isValidRepartoOwnerId(owner)) {
-      throw const RepartidorDataException('Invalid email or delivery owner.',
-          statusCode: 422);
+      throw const RepartidorDataException(
+        'Invalid email or delivery owner.',
+        statusCode: 422,
+      );
     }
     try {
       final response = await ApiClient.post(
@@ -1112,8 +1146,9 @@ class RepartidorDataService {
       final result = RepartoReceiptEmailResult.fromResponse(response);
       if (result.delivered) return result;
       throw const RepartidorDataException(
-          'Receipt email was not fully acknowledged.',
-          code: 'EMAIL_DELIVERY_LEDGER_REQUIRED');
+        'Receipt email was not fully acknowledged.',
+        code: 'EMAIL_DELIVERY_LEDGER_REQUIRED',
+      );
     } on RepartidorDataException {
       rethrow;
     } catch (_) {

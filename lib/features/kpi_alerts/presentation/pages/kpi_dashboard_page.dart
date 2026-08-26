@@ -98,11 +98,13 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         url += '?vendorCode=$vendorCode';
       }
 
-      final data = await ApiClient.get(url,
-          cacheKey: 'kpi_dashboard_${vendorCode ?? "all"}',
-          cacheTTL: const Duration(minutes: 10));
+      final data = await ApiClient.get(
+        url,
+        cacheKey: 'kpi_dashboard_${vendorCode ?? "all"}',
+        cacheTTL: const Duration(minutes: 10),
+      );
       if (!mounted || generation != _loadGeneration) return;
-      if (data != null && data['success'] == true) {
+      if (data['success'] == true) {
         setState(() {
           _data = data;
           _loading = false;
@@ -194,46 +196,50 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
 
     final totalAlerts = (totals['alerts'] as num?)?.toInt() ?? 0;
 
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si clients crece mucho.
+    final children = <Widget>[
+      // Last update banner
+      _buildUpdateBanner(lastLoad, totalAlerts),
+      const SizedBox(height: 16),
+
+      // Summary cards
+      _buildSummaryCards(totals),
+      const SizedBox(height: 20),
+
+      // Type breakdown
+      if (byType.isNotEmpty) ...[
+        _buildSectionTitle('Resumen por tipo de alerta'),
+        const SizedBox(height: 8),
+        ...byType.map((t) => _buildTypeRow(t as Map<String, dynamic>)),
+        const SizedBox(height: 20),
+      ],
+
+      // Clients with alerts
+      if (clients.isNotEmpty) ...[
+        _buildSectionTitle(
+          'Clientes con alertas (${clients.length})',
+        ),
+        const SizedBox(height: 8),
+        ...clients.map(
+          (c) => _buildClientTile(c as Map<String, dynamic>),
+        ),
+      ],
+
+      // Empty state
+      if (totalAlerts == 0)
+        _buildEmptyState(
+          lastLoad?['totalAlerts'] as num?,
+        ),
+
+      const SizedBox(height: 40),
+    ];
+
     return RefreshIndicator(
       onRefresh: _loadDashboard,
-      child: ListView(
+      child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        children: [
-          // Last update banner
-          _buildUpdateBanner(lastLoad, totalAlerts),
-          const SizedBox(height: 16),
-
-          // Summary cards
-          _buildSummaryCards(totals),
-          const SizedBox(height: 20),
-
-          // Type breakdown
-          if (byType.isNotEmpty) ...[
-            _buildSectionTitle('Resumen por tipo de alerta'),
-            const SizedBox(height: 8),
-            ...byType.map((t) => _buildTypeRow(t as Map<String, dynamic>)),
-            const SizedBox(height: 20),
-          ],
-
-          // Clients with alerts
-          if (clients.isNotEmpty) ...[
-            _buildSectionTitle(
-              'Clientes con alertas (${clients.length})',
-            ),
-            const SizedBox(height: 8),
-            ...clients.map(
-              (c) => _buildClientTile(c as Map<String, dynamic>),
-            ),
-          ],
-
-          // Empty state
-          if (totalAlerts == 0)
-            _buildEmptyState(
-              lastLoad?['totalAlerts'] as num?,
-            ),
-
-          const SizedBox(height: 40),
-        ],
+        itemCount: children.length,
+        itemBuilder: (_, index) => children[index],
       ),
     );
   }
@@ -280,7 +286,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
           ),
         ],
@@ -629,7 +636,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           // Summary
           Text(
             summary,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
 
           // Detail (if exists)

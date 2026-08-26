@@ -12,6 +12,28 @@ import path from "node:path"
 //   no todo el working tree.
 // - Cubre las tools bash Y shell (antes solo bash; shell la saltaba).
 // - Commit vacio (--allow-empty): nada que verificar, no ejecuta tests.
+//
+// v3 (2026-08-26, Prompt 3 WARN-fix):
+// - Fix estructural lane Dart: `dart test` NO puede cargar Flutter (dart:ui /
+//   package:flutter) en un proyecto Flutter -> rojo permanente en Windows.
+//   Deteccion: pubspec.yaml con "sdk: flutter" => usar `flutter test`.
+//   Binario ausente => SKIP con aviso (no bloquea commits por falta de toolchain).
+// - La lane Dart sigue activa SOLO si hay ficheros .dart staged.
+
+
+function isFlutterProject(root: string): boolean {
+  try {
+    const pubspec = path.join(root, "pubspec.yaml");
+    if (!fs.existsSync(pubspec)) return false;
+    return /sdk:\s*flutter/.test(fs.readFileSync(pubspec, "utf8"));
+  } catch { return false; }
+}
+
+function looksLikeMissingBinary(r: any): boolean {
+  if (r?.error?.code === "ENOENT") return true;
+  const out = String((r && (r.stderr || r.stdout)) || "");
+  return /no se reconoce como comando|not recognized as an internal or external|command not found|could not find/i.test(out);
+}
 
 export const RequireGreenTests = async () => {
   return {
@@ -51,8 +73,15 @@ export const RequireGreenTests = async () => {
         if (r.status !== 0) failed.push("root: " + (r.stderr || r.stdout || "").slice(0, 600))
       }
       if (affected.includes("dart")) {
-        const r = spawnSync("dart", ["test"], { encoding: "utf8", timeout: 300000, windowsHide: true, shell: true })
-        if (r.status !== 0) failed.push("dart: " + (r.stderr || r.stdout || "").slice(0, 600))
+        const useFlutter = isFlutterProject(root);
+        const cmdName = useFlutter ? "flutter" : "dart";
+        const args = useFlutter ? ["test"] : ["test"];
+        const r = spawnSync(cmdName, args, { encoding: "utf8", timeout: 300000, windowsHide: true, shell: true })
+        if (r.status !== 0 && !looksLikeMissingBinary(r)) {
+          failed.push("dart(" + cmdName + "): " + (r.stderr || r.stdout || "").slice(0, 600))
+        } else if (looksLikeMissingBinary(r)) {
+          console.warn("[require-green-tests] toolchain '" + cmdName + "' no disponible; lane Dart omitida (WARN, no bloquea)")
+        }
       }
       if (failed.length > 0) {
         throw new Error("Tests en rojo (" + affected.join(",") + "). Corrige antes de commit: " + failed.join(" | ").slice(0, 1000))

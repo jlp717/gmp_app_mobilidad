@@ -4,12 +4,12 @@ import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 
 class RuteroHeader extends StatelessWidget {
   const RuteroHeader({
-    super.key,
     required this.selectedRole,
     required this.isJefeVentas,
     required this.isSmallScreen,
     required this.onRoleChanged,
     required this.onSortTap,
+    super.key,
     this.forceShowVendorSelector = false,
   });
 

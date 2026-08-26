@@ -51,9 +51,8 @@ class SmoothScrollView extends StatelessWidget {
 }
 
 class _SmoothScrollBehavior extends ScrollBehavior {
-  final ScrollPhysics physics;
-
   const _SmoothScrollBehavior({required this.physics});
+  final ScrollPhysics physics;
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) {

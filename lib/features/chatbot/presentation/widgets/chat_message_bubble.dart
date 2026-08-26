@@ -86,8 +86,11 @@ class ChatMessageBubble extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.psychology,
-                        color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.psychology,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ],
                 Flexible(
@@ -213,8 +216,11 @@ class ChatMessageBubble extends ConsumerWidget {
                         color: AppTheme.info.withValues(alpha: 0.3),
                       ),
                     ),
-                    child: const Icon(Icons.person,
-                        color: AppTheme.info, size: 18),
+                    child: const Icon(
+                      Icons.person,
+                      color: AppTheme.info,
+                      size: 18,
+                    ),
                   ),
                 ],
               ],
@@ -471,8 +477,11 @@ class ChatMessageBubble extends ConsumerWidget {
                     SnackBar(
                       content: Row(
                         children: [
-                          const Icon(Icons.check_circle,
-                              color: AppColors.success, size: 18),
+                          const Icon(
+                            Icons.check_circle,
+                            color: AppColors.success,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
                           Text('CSV listo: ${exportable.filename}'),
                         ],
@@ -645,7 +654,7 @@ class ChatMessageBubble extends ConsumerWidget {
   String _documentFileName(ChatDocumentReference document) {
     final raw = (document.fileName?.trim().isNotEmpty ?? false)
         ? document.fileName!.trim()
-        : document.title.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
+        : document.title.trim().replaceAll(RegExp('[^A-Za-z0-9._-]+'), '-');
     return raw.toLowerCase().endsWith('.pdf') ? raw : '$raw.pdf';
   }
 
@@ -674,8 +683,10 @@ class ChatMessageBubble extends ConsumerWidget {
               const SizedBox(height: 16),
               ListTile(
                 leading: const Icon(Icons.chat, color: AppColors.success),
-                title: const Text('WhatsApp',
-                    style: TextStyle(color: Colors.white)),
+                title: const Text(
+                  'WhatsApp',
+                  style: TextStyle(color: Colors.white),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   ChatShareActions.shareViaWhatsApp(message);
@@ -702,7 +713,9 @@ class ChatMessageBubble extends ConsumerWidget {
                     ? Text(
                         'Incluye nota sobre ${exportable.rows.length} filas exportables',
                         style: TextStyle(
-                            color: Colors.grey.shade500, fontSize: 11),
+                          color: Colors.grey.shade500,
+                          fontSize: 11,
+                        ),
                       )
                     : null,
                 onTap: () {
@@ -919,11 +932,11 @@ class ChatMessageBubble extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 8),
-        _SkeletonLine(widthFactor: 0.9),
+        const _SkeletonLine(widthFactor: 0.9),
         const SizedBox(height: 6),
-        _SkeletonLine(widthFactor: 0.7),
+        const _SkeletonLine(widthFactor: 0.7),
         const SizedBox(height: 6),
-        _SkeletonLine(widthFactor: 0.5),
+        const _SkeletonLine(widthFactor: 0.5),
       ],
     );
   }
@@ -1023,7 +1036,10 @@ class _ActionChip extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                    fontSize: 11, color: color, fontWeight: FontWeight.w500),
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -1031,7 +1047,7 @@ class _ActionChip extends StatelessWidget {
       ),
     );
     if (tooltip == null || tooltip!.isEmpty) return child;
-    return Tooltip(message: tooltip!, child: child);
+    return Tooltip(message: tooltip, child: child);
   }
 }
 

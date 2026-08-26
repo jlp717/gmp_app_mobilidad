@@ -93,11 +93,12 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   }
 
   Future<void> _retry() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _isLoading = true;
         _hasError = false;
       });
+    }
     await _loadPromotions();
   }
 
@@ -115,12 +116,18 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: AppTheme.warning, size: 18),
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.warning,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             const Expanded(
-                child: Text('No se pudieron cargar las ofertas',
-                    style: TextStyle(fontSize: 13))),
+              child: Text(
+                'No se pudieron cargar las ofertas',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
             TextButton(
               onPressed: _retry,
               child: const Text('Reintentar', style: TextStyle(fontSize: 12)),

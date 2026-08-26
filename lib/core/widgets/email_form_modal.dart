@@ -140,8 +140,11 @@ class _EmailFormModalState extends State<EmailFormModal> {
                       color: AppTheme.info.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.email_rounded,
-                        color: AppTheme.info, size: 22),
+                    child: const Icon(
+                      Icons.email_rounded,
+                      color: AppTheme.info,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -156,8 +159,11 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close,
-                        color: AppTheme.textSecondary, size: 20),
+                    icon: const Icon(
+                      Icons.close,
+                      color: AppTheme.textSecondary,
+                      size: 20,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -219,7 +225,9 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                     ),
                     child: const Text('Cancelar'),
                   ),
@@ -232,7 +240,9 @@ class _EmailFormModalState extends State<EmailFormModal> {
                       backgroundColor: AppTheme.info,
                       foregroundColor: AppTheme.inkSurface,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -259,12 +269,16 @@ class _EmailFormModalState extends State<EmailFormModal> {
     );
   }
 
-  InputDecoration _inputDecoration(
-      {required String hint, required IconData icon}) {
+  InputDecoration _inputDecoration({
+    required String hint,
+    required IconData icon,
+  }) {
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(
-          color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
+        color: AppTheme.textSecondary.withValues(alpha: 0.5),
+        fontSize: 13,
+      ),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.inkSurface,

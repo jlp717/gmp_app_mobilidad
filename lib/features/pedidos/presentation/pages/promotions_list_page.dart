@@ -246,9 +246,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon,
-              size: 14,
-              color: selected ? AppTheme.info : AppTheme.textSecondary),
+          Icon(
+            icon,
+            size: 14,
+            color: selected ? AppTheme.info : AppTheme.textSecondary,
+          ),
           const SizedBox(width: 4),
           Text(label),
         ],
@@ -418,23 +420,33 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               // Footer info
               Row(
                 children: [
-                  Icon(Icons.inventory_2_outlined,
-                      size: 14, color: AppTheme.textTertiary),
+                  const Icon(
+                    Icons.inventory_2_outlined,
+                    size: 14,
+                    color: AppTheme.textTertiary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${group.items.length} producto(s)',
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12),
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                   const Spacer(),
                   if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
-                    Icon(Icons.calendar_today,
-                        size: 12, color: AppTheme.textTertiary),
+                    const Icon(
+                      Icons.calendar_today,
+                      size: 12,
+                      color: AppTheme.textTertiary,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Hasta ${group.dateTo}',
                       style: const TextStyle(
-                          color: AppTheme.textTertiary, fontSize: 11),
+                        color: AppTheme.textTertiary,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ],
@@ -461,7 +473,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                             widget.onProductTap(item.code, item.name),
                         backgroundColor: AppTheme.raisedSurface,
                         side: BorderSide(
-                            color: stockColor.withValues(alpha: 0.45)),
+                          color: stockColor.withValues(alpha: 0.45),
+                        ),
                         avatar: Icon(
                           hasStock == true
                               ? Icons.inventory_2_outlined
@@ -521,8 +534,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.arrow_forward_ios,
-                            size: 10, color: accentColor),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 10,
+                          color: accentColor,
+                        ),
                       ],
                     ),
                   ),

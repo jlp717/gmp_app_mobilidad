@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
 
 /// Date range picker dialog
 class DateRangePicker extends StatelessWidget {
@@ -37,8 +36,10 @@ class DateRangePicker extends StatelessWidget {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           backgroundColor: AppTheme.raisedSurface,
-          title: const Text('Rango de Fechas',
-              style: TextStyle(color: Colors.white)),
+          title: const Text(
+            'Rango de Fechas',
+            style: TextStyle(color: Colors.white),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -101,13 +102,17 @@ class DateRangePicker extends StatelessWidget {
                 onDateRangeSelected(null, null);
                 Navigator.pop(context);
               },
-              child: const Text('Limpiar',
-                  style: TextStyle(color: AppTheme.error)),
+              child: const Text(
+                'Limpiar',
+                style: TextStyle(color: AppTheme.error),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar',
-                  style: TextStyle(color: Colors.white54)),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
             ElevatedButton(
               onPressed: tempStart != null && tempEnd != null
@@ -136,8 +141,12 @@ class DateRangePicker extends StatelessWidget {
     );
   }
 
-  Widget _buildDateButton(BuildContext context, String label, DateTime? date,
-      Function(DateTime?) onDateSelected) {
+  Widget _buildDateButton(
+    BuildContext context,
+    String label,
+    DateTime? date,
+    Function(DateTime?) onDateSelected,
+  ) {
     return OutlinedButton(
       onPressed: () async {
         final picked = await showDatePicker(
@@ -169,8 +178,10 @@ class DateRangePicker extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
           const SizedBox(height: 4),
           Text(
             date != null

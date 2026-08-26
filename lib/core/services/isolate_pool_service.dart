@@ -95,7 +95,8 @@ class IsolatePoolService {
 
     _isInitialized = true;
     debugPrint(
-        '[IsolatePool] ✅ Pool initialized with ${_workers.length} workers');
+      '[IsolatePool] ✅ Pool initialized with ${_workers.length} workers',
+    );
   }
 
   /// Calculate optimal pool size based on platform
@@ -240,7 +241,9 @@ class IsolatePoolService {
 
   /// Execute task on worker
   static Future<void> _executeTask(
-      _IsolateWorker worker, _IsolateTask task) async {
+    _IsolateWorker worker,
+    _IsolateTask task,
+  ) async {
     worker.isBusy = true;
     worker.taskCount++;
     final startTime = DateTime.now();

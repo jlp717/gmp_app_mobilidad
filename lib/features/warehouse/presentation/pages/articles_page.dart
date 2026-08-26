@@ -130,9 +130,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
         title: const Text(
           'RESETEAR TODAS las dimensiones',
           style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w700),
+            color: AppTheme.textPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -149,17 +150,20 @@ class _ArticlesPageState extends State<ArticlesPage> {
             const Text(
               'Esta accion NO se puede deshacer.',
               style: TextStyle(
-                  color: AppTheme.error,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700),
+                color: AppTheme.error,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dCtx, false),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: AppTheme.textTertiary)),
+            child: const Text(
+              'CANCELAR',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dCtx, true),
@@ -167,8 +171,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
               backgroundColor: AppTheme.error.withValues(alpha: 0.14),
               foregroundColor: AppTheme.error,
             ),
-            child: const Text('RESETEAR TODO',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text(
+              'RESETEAR TODO',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -213,12 +219,17 @@ class _ArticlesPageState extends State<ArticlesPage> {
             Expanded(
               child: _loading && _articles.isEmpty
                   ? const Center(
-                      child: CircularProgressIndicator(color: AppTheme.info))
+                      child: CircularProgressIndicator(color: AppTheme.info),
+                    )
                   : _error != null
                       ? Center(
-                          child: Text(_error!,
-                              style: const TextStyle(
-                                  color: AppTheme.textTertiary)))
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                        )
                       : _articles.isEmpty
                           ? Center(
                               child: Text(
@@ -226,7 +237,9 @@ class _ArticlesPageState extends State<ArticlesPage> {
                                     ? 'Cargando articulos...'
                                     : 'Sin resultados',
                                 style: const TextStyle(
-                                    color: AppTheme.textTertiary, fontSize: 13),
+                                  color: AppTheme.textTertiary,
+                                  fontSize: 13,
+                                ),
                               ),
                             )
                           : RefreshIndicator(
@@ -289,9 +302,9 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     letterSpacing: 0,
                   ),
                 ),
-                Text(
+                const Text(
                   'Dimensiones para el planificador 3D',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 10,
                   ),
@@ -305,11 +318,16 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppTheme.error),
+                      strokeWidth: 2,
+                      color: AppTheme.error,
+                    ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.delete_sweep_rounded,
-                        color: AppTheme.error, size: 20),
+                    icon: const Icon(
+                      Icons.delete_sweep_rounded,
+                      color: AppTheme.error,
+                      size: 20,
+                    ),
                     tooltip: 'Resetear TODAS las dimensiones reales',
                     onPressed: _bulkReset,
                     style: WarehouseUi.iconButtonStyle(AppTheme.error),
@@ -319,12 +337,17 @@ class _ArticlesPageState extends State<ArticlesPage> {
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppTheme.success),
+                strokeWidth: 2,
+                color: AppTheme.success,
+              ),
             )
           else
             IconButton(
-              icon: const Icon(Icons.auto_fix_high_rounded,
-                  color: AppTheme.success, size: 20),
+              icon: const Icon(
+                Icons.auto_fix_high_rounded,
+                color: AppTheme.success,
+                size: 20,
+              ),
               tooltip: 'Auto-estimar dimensiones',
               onPressed: _bulkEstimate,
               style: WarehouseUi.iconButtonStyle(AppTheme.success),
@@ -393,12 +416,18 @@ class _ArticlesPageState extends State<ArticlesPage> {
             decoration: InputDecoration(
               hintText: 'Buscar por codigo o nombre...',
               hintStyle: const TextStyle(color: AppTheme.textTertiary),
-              prefixIcon: const Icon(Icons.search_rounded,
-                  color: AppTheme.textTertiary, size: 20),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppTheme.textTertiary,
+                size: 20,
+              ),
               suffixIcon: _searchC.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear_rounded,
-                          size: 18, color: AppTheme.textTertiary),
+                      icon: const Icon(
+                        Icons.clear_rounded,
+                        size: 18,
+                        color: AppTheme.textTertiary,
+                      ),
                       onPressed: () {
                         _debounce?.cancel();
                         _searchC.clear();
@@ -453,8 +482,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
               const SizedBox(width: 6),
               FilterChip(
                 selected: _onlyRecent,
-                label: const Text('En pedidos recientes',
-                    style: TextStyle(fontSize: 10)),
+                label: const Text(
+                  'En pedidos recientes',
+                  style: TextStyle(fontSize: 10),
+                ),
                 onSelected: (v) {
                   setState(() => _onlyRecent = v);
                   _search(_searchC.text);
@@ -799,11 +830,11 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   ),
                 ),
                 if (!a.hasRealDimensions && a.estLargoCm != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
                     child: Text(
                       'Introduce medidas reales verificadas con cinta metrica',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textTertiary,
                         fontSize: 10,
                       ),
@@ -846,13 +877,15 @@ class _ArticlesPageState extends State<ArticlesPage> {
                         builder: (dCtx) => AlertDialog(
                           backgroundColor: AppTheme.raisedSurface,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                           title: const Text(
                             'Confirmar dimensiones REALES',
                             style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700),
+                              color: AppTheme.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           content: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -868,18 +901,20 @@ class _ArticlesPageState extends State<ArticlesPage> {
                               Text(
                                 'Estas medidas se usaran en el planificador 3D. Asegurate de haberlas medido fisicamente.',
                                 style: TextStyle(
-                                    color:
-                                        AppTheme.warning.withValues(alpha: 0.8),
-                                    fontSize: 11),
+                                  color:
+                                      AppTheme.warning.withValues(alpha: 0.8),
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(dCtx, false),
-                              child: const Text('CANCELAR',
-                                  style:
-                                      TextStyle(color: AppTheme.textTertiary)),
+                              child: const Text(
+                                'CANCELAR',
+                                style: TextStyle(color: AppTheme.textTertiary),
+                              ),
                             ),
                             ElevatedButton(
                               onPressed: () => Navigator.pop(dCtx, true),
@@ -888,9 +923,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
                                     AppTheme.success.withValues(alpha: 0.2),
                                 foregroundColor: AppTheme.success,
                               ),
-                              child: const Text('CONFIRMAR',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700)),
+                              child: const Text(
+                                'CONFIRMAR',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
                             ),
                           ],
                         ),
@@ -947,17 +983,19 @@ class _ArticlesPageState extends State<ArticlesPage> {
                           builder: (dCtx) => AlertDialog(
                             backgroundColor: AppTheme.raisedSurface,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                             title: const Text(
                               'Eliminar dimensiones reales',
                               style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700),
+                                color: AppTheme.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                            content: Text(
+                            content: const Text(
                               'Se eliminaran las dimensiones reales guardadas y el articulo volvera a usar dimensiones estimadas automaticamente.',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 13,
                               ),
@@ -965,9 +1003,12 @@ class _ArticlesPageState extends State<ArticlesPage> {
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(dCtx, false),
-                                child: const Text('CANCELAR',
-                                    style: TextStyle(
-                                        color: AppTheme.textTertiary)),
+                                child: const Text(
+                                  'CANCELAR',
+                                  style: TextStyle(
+                                    color: AppTheme.textTertiary,
+                                  ),
+                                ),
                               ),
                               ElevatedButton(
                                 onPressed: () => Navigator.pop(dCtx, true),
@@ -976,9 +1017,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
                                       AppTheme.error.withValues(alpha: 0.2),
                                   foregroundColor: AppTheme.error,
                                 ),
-                                child: const Text('ELIMINAR',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w700)),
+                                child: const Text(
+                                  'ELIMINAR',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
                               ),
                             ],
                           ),
@@ -986,14 +1028,16 @@ class _ArticlesPageState extends State<ArticlesPage> {
                         if (confirm != true) return;
                         try {
                           await WarehouseDataService.deleteArticleDimensions(
-                              a.code);
+                            a.code,
+                          );
                           if (ctx.mounted) Navigator.pop(ctx);
                           _search(_searchC.text, forceRefresh: true);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                    'Dimensiones reales eliminadas, vuelve a estimado'),
+                                  'Dimensiones reales eliminadas, vuelve a estimado',
+                                ),
                                 backgroundColor: AppTheme.warning,
                               ),
                             );
@@ -1013,12 +1057,15 @@ class _ArticlesPageState extends State<ArticlesPage> {
                       label: const Text(
                         'VOLVER A ESTIMADO',
                         style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 12),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.error,
                         side: BorderSide(
-                            color: AppTheme.error.withValues(alpha: 0.3)),
+                          color: AppTheme.error.withValues(alpha: 0.3),
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -1041,7 +1088,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(
+        labelStyle: const TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 11,
         ),

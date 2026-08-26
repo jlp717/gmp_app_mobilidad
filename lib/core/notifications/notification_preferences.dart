@@ -278,7 +278,7 @@ class NotificationPreferencesService {
   Future<List<int>> loadScheduledOrderIds() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getStringList(_scheduledOrderIdsKey) ?? const <String>[])
-        .map((id) => int.tryParse(id))
+        .map(int.tryParse)
         .whereType<int>()
         .toList(growable: false);
   }
@@ -299,7 +299,7 @@ class NotificationPreferencesService {
   Future<List<int>> loadScheduledSmartIds() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getStringList(_scheduledSmartIdsKey) ?? const <String>[])
-        .map((id) => int.tryParse(id))
+        .map(int.tryParse)
         .whereType<int>()
         .toList(growable: false);
   }

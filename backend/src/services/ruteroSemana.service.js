@@ -40,23 +40,20 @@ class RuteroSemanalService {
                 if (cleanCodes.length > 0) {
                     // Enfoque hibrido: ERP (primario) + estado app (suplemento).
                     const now = new Date();
-                    try {
-                        deliveredToday = await this._repo.fetchErpDeliveredCount(cleanCodes, {
+                    // perf: parallelized independent IO (pool-per-call).
+                    const [erpDelivered, appDelivered] = await Promise.all([
+                        this._repo.fetchErpDeliveredCount(cleanCodes, {
                             dia: now.getDate(),
                             mes: now.getMonth() + 1,
                             ano: now.getFullYear(),
-                        });
-                    } catch (erpErr) {
-                        logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
-                    }
-
-                    try {
-                        const appDelivered = await this._repo.fetchAppDeliveredCount(cleanCodes);
-                        // El mayor de los dos evita doble conteo.
-                        deliveredToday = Math.max(deliveredToday, appDelivered);
-                    } catch (dsErr) {
-                        // DELIVERY_STATUS puede no existir: ERP es primario, OK.
-                    }
+                        }).catch((erpErr) => {
+                            logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
+                            return 0;
+                        }),
+                        this._repo.fetchAppDeliveredCount(cleanCodes).catch(() => 0),
+                    ]);
+                    // El mayor de los dos evita doble conteo.
+                    deliveredToday = Math.max(erpDelivered, appDelivered);
                 }
                 weekProgress[todayName] = {
                     total: todayClients,

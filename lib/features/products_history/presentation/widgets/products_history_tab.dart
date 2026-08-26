@@ -489,7 +489,9 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
             Row(
               children: [
                 const Expanded(
-                    flex: 2, child: Text('', style: TextStyle(fontSize: 10))),
+                  flex: 2,
+                  child: Text('', style: TextStyle(fontSize: 10)),
+                ),
                 ...sortedYears.asMap().entries.map(
                       (e) => Expanded(
                         child: Text(
@@ -516,10 +518,10 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                 final yearData = _monthlyByYear
                     .where((m) => m['year'] == year)
                     .fold<double>(
-                        0,
-                        (sum, m) =>
-                            sum +
-                            ((m['totalVendido'] as num?)?.toDouble() ?? 0));
+                      0,
+                      (sum, m) =>
+                          sum + ((m['totalVendido'] as num?)?.toDouble() ?? 0),
+                    );
                 return _fmtMoney(yearData);
               },
             ),
@@ -533,11 +535,11 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                 final yearData = _monthlyByYear
                     .where((m) => m['year'] == year)
                     .fold<double>(
-                        0,
-                        (sum, m) =>
-                            sum +
-                            ((m['totalSinDescuento'] as num?)?.toDouble() ??
-                                0));
+                      0,
+                      (sum, m) =>
+                          sum +
+                          ((m['totalSinDescuento'] as num?)?.toDouble() ?? 0),
+                    );
                 return _fmtMoney(yearData);
               },
             ),
@@ -548,13 +550,13 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
               AppTheme.warning,
               sortedYears,
               (year) {
-                final yearData = _monthlyByYear
-                    .where((m) => m['year'] == year)
-                    .fold<double>(
-                        0,
-                        (sum, m) =>
-                            sum +
-                            ((m['totalDescuento'] as num?)?.toDouble() ?? 0));
+                final yearData =
+                    _monthlyByYear.where((m) => m['year'] == year).fold<double>(
+                          0,
+                          (sum, m) =>
+                              sum +
+                              ((m['totalDescuento'] as num?)?.toDouble() ?? 0),
+                        );
                 return _fmtMoney(yearData);
               },
             ),
@@ -568,10 +570,10 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                 final yearData = _monthlyByYear
                     .where((m) => m['year'] == year)
                     .fold<double>(
-                        0,
-                        (sum, m) =>
-                            sum +
-                            ((m['totalUnidades'] as num?)?.toDouble() ?? 0));
+                      0,
+                      (sum, m) =>
+                          sum + ((m['totalUnidades'] as num?)?.toDouble() ?? 0),
+                    );
                 return yearData.toStringAsFixed(0);
               },
             ),
@@ -582,12 +584,12 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
               Colors.white70,
               sortedYears,
               (year) {
-                final yearData = _monthlyByYear
-                    .where((m) => m['year'] == year)
-                    .fold<int>(
-                        0,
-                        (sum, m) =>
-                            sum + ((m['numLineas'] as num?)?.toInt() ?? 0));
+                final yearData =
+                    _monthlyByYear.where((m) => m['year'] == year).fold<int>(
+                          0,
+                          (sum, m) =>
+                              sum + ((m['numLineas'] as num?)?.toInt() ?? 0),
+                        );
                 return '$yearData';
               },
             ),
@@ -813,7 +815,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
       'Sep',
       'Oct',
       'Nov',
-      'Dic'
+      'Dic',
     ];
     final sortedYears = _selectedYears.toList()..sort((a, b) => a.compareTo(b));
     final numYears = sortedYears.length;
@@ -916,13 +918,15 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                                 return Expanded(
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 0.5),
+                                      horizontal: 0.5,
+                                    ),
                                     child: Container(
                                       height: (h < 2 ? (value > 0 ? 2 : 0) : h)
                                           .toDouble(),
                                       decoration: BoxDecoration(
                                         color: color.withValues(
-                                            alpha: value > 0 ? 0.8 : 0),
+                                          alpha: value > 0 ? 0.8 : 0,
+                                        ),
                                         borderRadius:
                                             const BorderRadius.vertical(
                                           top: Radius.circular(2),

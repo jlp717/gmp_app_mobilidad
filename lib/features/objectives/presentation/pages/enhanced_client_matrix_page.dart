@@ -9,8 +9,8 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
-import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
@@ -236,8 +236,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
     if (products.isEmpty) {
       return const Center(
-        child: Text('No hay productos',
-            style: TextStyle(color: AppTheme.textTertiary)),
+        child: Text(
+          'No hay productos',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
       );
     }
 
@@ -251,7 +253,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   List<Map<String, dynamic>> _collectFlatProductsForCurrentFilters() {
     final fiProducts = _fiHierarchy
         .expand(_collectAllProducts)
-        .map((p) => Map<String, dynamic>.from(p))
+        .map(Map<String, dynamic>.from)
         .toList();
 
     if (fiProducts.isNotEmpty) {
@@ -264,7 +266,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   List<Map<String, dynamic>> _collectLegacyFamilyProducts(
     Map<String, dynamic> family,
   ) {
-    final List<Map<String, dynamic>> results = [];
+    final results = <Map<String, dynamic>>[];
     final subfamilies = family['subfamilies'] as List?;
     if (subfamilies == null) return results;
 
@@ -344,8 +346,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textTertiary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
@@ -510,7 +514,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                                     child: Text(
                                       'Sin datos',
                                       style: TextStyle(
-                                          color: AppTheme.textTertiary),
+                                        color: AppTheme.textTertiary,
+                                      ),
                                     ),
                                   )
                                 : _buildFiHierarchyList()),
@@ -530,8 +535,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
-            bottom:
-                BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3))),
+          bottom:
+              BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
+        ),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -1036,10 +1042,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   ) {
     final raw = comparison['comparisons'];
     if (raw is! List) return const <Map<String, dynamic>>[];
-    return raw
-        .whereType<Map>()
-        .map((entry) => Map<String, dynamic>.from(entry))
-        .toList();
+    return raw.whereType<Map>().map(Map<String, dynamic>.from).toList();
   }
 
   Color _comparisonColorFromName(String? color, {Color? fallback}) {
@@ -1176,8 +1179,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final referenceYear = comparison['referenceYear']?.toString() ?? '—';
     final referenceValue = (comparison['referenceValue'] as num?)?.toDouble() ??
         _numValue(
-            _yearData(_mapFrom(source['byYear']), _selectedYearsDesc.first),
-            'sales');
+          _yearData(_mapFrom(source['byYear']), _selectedYearsDesc.first),
+          'sales',
+        );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
@@ -1366,7 +1370,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   /// Recursively collects all products from any node in the FI hierarchy.
   List<Map<String, dynamic>> _collectAllProducts(Map<String, dynamic> node) {
-    final List<Map<String, dynamic>> results = [];
+    final results = <Map<String, dynamic>>[];
     final products = node['products'] as List?;
     if (products != null) {
       for (final product in products) {
@@ -1390,8 +1394,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     if (allProducts.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(8),
-        child: Text('Sin productos',
-            style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+        child: Text(
+          'Sin productos',
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+        ),
       );
     }
     return Column(children: allProducts.map(_buildFiProduct).toList());
@@ -1405,15 +1411,17 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       'FI1+2',
       'FI1+2+3',
       'FI1+2+3+4',
-      'Todos'
+      'Todos',
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
-            bottom: BorderSide(
-                color: AppTheme.borderColor.withValues(alpha: 0.25))),
+          bottom: BorderSide(
+            color: AppTheme.borderColor.withValues(alpha: 0.25),
+          ),
+        ),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -1479,7 +1487,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-            color: AppTheme.accentIndigo.withValues(alpha: 0.4), width: 2),
+          color: AppTheme.accentIndigo.withValues(alpha: 0.4),
+          width: 2,
+        ),
       ),
       child: Column(
         children: [
@@ -2231,7 +2241,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 color: AppTheme.raisedSurface.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                    color: AppTheme.borderColor.withValues(alpha: 0.2)),
+                  color: AppTheme.borderColor.withValues(alpha: 0.2),
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -2364,7 +2375,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Map<String, dynamic> _productYearData(
-      Map<String, dynamic> product, int year) {
+    Map<String, dynamic> product,
+    int year,
+  ) {
     final data = _yearData(_mapFrom(product['byYear']), year);
     if (data.isNotEmpty || _selectedYearsDesc.length != 1) return data;
 
@@ -2965,7 +2978,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 Text(
                   '${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}',
                   style: const TextStyle(
-                      fontSize: 9, color: AppTheme.textSecondary),
+                    fontSize: 9,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 _buildComparisonBadge(f, compact: true),
@@ -3147,7 +3162,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         borderRadius: BorderRadius.circular(8),
         border: discount
             ? Border.all(
-                color: AppTheme.warning.withValues(alpha: 0.5), width: 1.5)
+                color: AppTheme.warning.withValues(alpha: 0.5),
+                width: 1.5,
+              )
             : null,
       ),
       child: Column(
@@ -3285,7 +3302,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     children: [
                       Text(
                         'PVP/$unitLabel',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 8,
                           color: AppTheme.textSecondary,
                         ),
@@ -3304,7 +3321,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           if (prevYearAvgPrice > 0)
                             Text(
                               ' (${_formatCurrency(prevYearAvgPrice)})',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 8,
                                 color: AppTheme.textTertiary,
                               ),
@@ -3321,14 +3338,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       children: [
                         Text(
                           'Coste/$unitLabel',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 8,
                             color: AppTheme.textSecondary,
                           ),
                         ),
                         Text(
                           _formatCurrency(avgUnitCost),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 10,
                             color: AppTheme.textPrimary,
                           ),
@@ -3343,7 +3360,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       children: [
                         Text(
                           'Margen/$unitLabel',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 8,
                             color: AppTheme.textSecondary,
                           ),
@@ -3367,7 +3384,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     children: [
                       Text(
                         unitLabel,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 8,
                           color: AppTheme.textSecondary,
                         ),
@@ -3388,7 +3405,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           if (prevYearUnits > 0)
                             Text(
                               ' (${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 8,
                                 color: AppTheme.textTertiary,
                               ),
@@ -3437,7 +3454,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         if (prevYearSales > 0)
                           Text(
                             ' (${_formatCurrency(prevYearSales)})',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 9,
                               color: AppTheme.textTertiary,
                             ),
@@ -3557,7 +3574,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           Text(
                             _mNames[m - 1],
                             style: const TextStyle(
-                                fontSize: 8, color: AppTheme.textTertiary),
+                              fontSize: 8,
+                              color: AppTheme.textTertiary,
+                            ),
                           ),
 
                           // SALES DISPLAY
@@ -3581,7 +3600,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             const Text(
                               '-',
                               style: TextStyle(
-                                  fontSize: 8, color: AppTheme.textTertiary),
+                                fontSize: 8,
+                                color: AppTheme.textTertiary,
+                              ),
                             ),
 
                           // VARIATION DISPLAY (Strict Logic)
@@ -3677,11 +3698,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     showDialog<void>(
       context: ctx,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (_) => const AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         content: Row(
           children: [
-            const SizedBox(
+            SizedBox(
               width: 24,
               height: 24,
               child: CircularProgressIndicator(
@@ -3689,7 +3710,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 color: AppTheme.info,
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
             Text(
               'Descargando ficha técnica...',
               style: TextStyle(color: AppTheme.textSecondary),

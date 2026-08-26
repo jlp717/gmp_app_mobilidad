@@ -2,13 +2,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
 class FilterState {
-  final String? selectedVendor;
-  final DateTimeRange? dateRange;
-
   FilterState({
     this.selectedVendor,
     this.dateRange,
   });
+  final String? selectedVendor;
+  final DateTimeRange? dateRange;
 
   FilterState copyWith({
     String? selectedVendor,
@@ -26,9 +25,9 @@ class FilterState {
 }
 
 class DateTimeRange {
+  DateTimeRange({required this.start, required this.end});
   final DateTime start;
   final DateTime end;
-  DateTimeRange({required this.start, required this.end});
 }
 
 void main() {
@@ -47,10 +46,11 @@ void main() {
     test('copyWith preserves unchanged values', () {
       final filter = FilterState(selectedVendor: '01');
       final newFilter = filter.copyWith(
-          dateRange: DateTimeRange(
-        start: DateTime(2024, 1, 1),
-        end: DateTime(2024, 12, 31),
-      ));
+        dateRange: DateTimeRange(
+          start: DateTime(2024, 1, 1),
+          end: DateTime(2024, 12, 31),
+        ),
+      );
 
       expect(newFilter.selectedVendor, '01');
       expect(newFilter.dateRange, isNotNull);

@@ -88,6 +88,29 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final margin = provider.porcentajeMargen;
     final total = provider.totalConIva;
 
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si lines crece mucho.
+    final rows = <Widget>[
+      _buildClientCard(provider),
+      const SizedBox(height: 16),
+      _buildDeliveryCard(),
+      const SizedBox(height: 16),
+      _buildSectionLabel('PRODUCTOS (${lines.length})'),
+      const SizedBox(height: 8),
+      ...lines.asMap().entries.map(
+            (entry) => _buildLineItem(
+              entry.key,
+              entry.value,
+              hasDiscount,
+              provider,
+            ),
+          ),
+      const SizedBox(height: 16),
+      _buildTotalsCard(provider, hasDiscount, total, margin),
+      const SizedBox(height: 16),
+      if (provider.ivaBreakdown.isNotEmpty) _buildIvaBreakdown(provider),
+      const SizedBox(height: 24),
+    ];
+
     return Dialog(
       backgroundColor: AppTheme.inkSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -105,26 +128,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
 
             // ── Scrollable Content ──
             Expanded(
-              child: ListView(
+              child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _buildClientCard(provider),
-                  const SizedBox(height: 16),
-                  _buildDeliveryCard(),
-                  const SizedBox(height: 16),
-                  _buildSectionLabel('PRODUCTOS (${lines.length})'),
-                  const SizedBox(height: 8),
-                  ...lines.asMap().entries.map(
-                        (entry) => _buildLineItem(
-                            entry.key, entry.value, hasDiscount, provider),
-                      ),
-                  const SizedBox(height: 16),
-                  _buildTotalsCard(provider, hasDiscount, total, margin),
-                  const SizedBox(height: 16),
-                  if (provider.ivaBreakdown.isNotEmpty)
-                    _buildIvaBreakdown(provider),
-                  const SizedBox(height: 24),
-                ],
+                itemCount: rows.length,
+                itemBuilder: (_, index) => rows[index],
               ),
             ),
 
@@ -276,7 +283,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 Text(
                   'Código: ${provider.clientCode ?? '-'}',
                   style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 12),
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -292,8 +301,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
               child: Column(
                 children: [
-                  const Text('Saldo Pdte',
-                      style: TextStyle(color: AppTheme.warning, fontSize: 9)),
+                  const Text(
+                    'Saldo Pdte',
+                    style: TextStyle(color: AppTheme.warning, fontSize: 9),
+                  ),
                   Text(
                     PedidosFormatters.money(provider.clientSaldoPendiente),
                     style: const TextStyle(
@@ -326,7 +337,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               options.vehicleDescription,
             if (options.routeCode.isNotEmpty) 'Ruta ${options.routeCode}',
           ].join(' - ');
-    final isValidated = options?.validated == true;
+    final isValidated = options?.validated ?? false;
     final ruleLabel = options == null
         ? 'Cargando reparto'
         : isValidated
@@ -683,7 +694,11 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   }
 
   Widget _buildLineItem(
-      int index, OrderLine line, bool hasDiscount, PedidosProvider provider) {
+    int index,
+    OrderLine line,
+    bool hasDiscount,
+    PedidosProvider provider,
+  ) {
     final effectivePrice = hasDiscount
         ? line.precioVenta * (1 - provider.globalDiscountPct / 100)
         : line.precioVenta;
@@ -735,9 +750,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 Text(
                   line.descripcion,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500),
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -745,7 +761,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 Text(
                   '$qty × ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
                   style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 11),
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
                 ),
                 if (bolsaDelta != 0) ...[
                   const SizedBox(height: 4),
@@ -766,7 +784,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           Text(
             PedidosFormatters.money(lineTotal),
             style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -833,7 +854,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
 
           // Base
           _buildTotalRow(
-              'Base Imponible', PedidosFormatters.money(provider.totalBase)),
+            'Base Imponible',
+            PedidosFormatters.money(provider.totalBase),
+          ),
 
           // IVA
           const SizedBox(height: 4),
@@ -989,7 +1012,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   Text(
                     'IVA $pct%',
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12),
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                   Text(
                     PedidosFormatters.money(e.value),
@@ -1010,7 +1035,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
-            top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2))),
+          top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2)),
+        ),
         boxShadow: [
           BoxShadow(
             color: AppTheme.info.withValues(alpha: 0.1),
@@ -1332,8 +1358,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar',
-                  style: TextStyle(color: Colors.white54)),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
           ],
         ),

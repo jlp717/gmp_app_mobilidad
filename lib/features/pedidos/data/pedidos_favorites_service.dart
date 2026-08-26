@@ -62,7 +62,7 @@ class PedidosFavoritesService {
     final prefix = '$_scope::';
     return box.keys
         .where((key) => key.toString().startsWith(prefix))
-        .map((key) => box.get(key))
+        .map(box.get)
         .whereType<String>()
         .toList(growable: false);
   }

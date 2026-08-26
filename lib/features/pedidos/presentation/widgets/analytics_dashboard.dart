@@ -40,8 +40,9 @@ class AnalyticsDashboard extends StatelessWidget {
           child: Text(
             'Sin datos de analytics aun',
             style: TextStyle(
-                color: Colors.white38,
-                fontSize: Responsive.fontSize(context, small: 14, large: 16)),
+              color: Colors.white38,
+              fontSize: Responsive.fontSize(context, small: 14, large: 16),
+            ),
           ),
         ),
       );
@@ -69,7 +70,9 @@ class AnalyticsDashboard extends StatelessWidget {
   }
 
   Widget _buildKpiCards(
-      BuildContext context, List<Map<String, dynamic>> monthly) {
+    BuildContext context,
+    List<Map<String, dynamic>> monthly,
+  ) {
     final current = monthly.first;
     final previous = monthly.length > 1 ? monthly[1] : null;
 
@@ -130,8 +133,13 @@ class AnalyticsDashboard extends StatelessWidget {
     return ((current - previous) / previous) * 100;
   }
 
-  Widget _kpiCard(BuildContext context, String label, String value,
-      double? trend, IconData icon) {
+  Widget _kpiCard(
+    BuildContext context,
+    String label,
+    String value,
+    double? trend,
+    IconData icon,
+  ) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -195,7 +203,9 @@ class AnalyticsDashboard extends StatelessWidget {
   }
 
   Widget _buildRevenueChart(
-      BuildContext context, List<Map<String, dynamic>> monthly) {
+    BuildContext context,
+    List<Map<String, dynamic>> monthly,
+  ) {
     final reversed = monthly.reversed.toList();
     final maxY = reversed.fold<double>(0, (max, m) {
       final v = (m['totalRevenue'] as num?)?.toDouble() ?? 0;
@@ -237,14 +247,19 @@ class AnalyticsDashboard extends StatelessWidget {
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= reversed.length)
+                        if (idx < 0 || idx >= reversed.length) {
                           return const SizedBox.shrink();
+                        }
                         final m = reversed[idx];
                         return Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text('${m['month']}',
-                              style: const TextStyle(
-                                  color: Colors.white38, fontSize: 10)),
+                          child: Text(
+                            '${m['month']}',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 10,
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -263,7 +278,8 @@ class AnalyticsDashboard extends StatelessWidget {
                         color: AppTheme.info.withValues(alpha: 0.8),
                         width: 16,
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4)),
+                          top: Radius.circular(4),
+                        ),
                       ),
                     ],
                   );
@@ -277,7 +293,9 @@ class AnalyticsDashboard extends StatelessWidget {
   }
 
   Widget _buildStatusCards(
-      BuildContext context, Map<String, dynamic> statusDist) {
+    BuildContext context,
+    Map<String, dynamic> statusDist,
+  ) {
     final statuses = {
       'BORRADOR': (AppTheme.info, Icons.edit_note),
       'CONFIRMADO': (AppTheme.success, Icons.check_circle),
@@ -327,7 +345,9 @@ class AnalyticsDashboard extends StatelessWidget {
   }
 
   Widget _buildTopProducts(
-      BuildContext context, List<Map<String, dynamic>> topProducts) {
+    BuildContext context,
+    List<Map<String, dynamic>> topProducts,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(

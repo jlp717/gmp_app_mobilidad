@@ -1,6 +1,5 @@
 import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
 import 'package:gmp_app_mobilidad/core/memory/reasoning_bank.dart';
-import 'package:gmp_app_mobilidad/core/memory/vector_store_hnsw.dart';
 
 /// **Unified Memory Layer - Capa de Abstracción Unificada**
 ///

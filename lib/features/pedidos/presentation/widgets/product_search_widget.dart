@@ -62,6 +62,118 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     final provider = ref.watch(pedidosProvider);
     final pad = Responsive.contentPadding(context);
 
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si families crece mucho.
+    final chips = <Widget>[
+      // "Solo con stock" chip (Mejora 3)
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: FilterChip(
+          avatar: Icon(
+            Icons.inventory_2_outlined,
+            size: 14,
+            color: provider.onlyWithStock ? AppTheme.success : Colors.white54,
+          ),
+          label: const Text('Solo con stock'),
+          selected: provider.onlyWithStock,
+          selectedColor: AppTheme.success.withValues(alpha: 0.24),
+          backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
+          labelStyle: TextStyle(
+            color: provider.onlyWithStock ? AppTheme.success : Colors.white70,
+            fontSize: Responsive.fontSize(context, small: 11, large: 13),
+          ),
+          side: BorderSide(
+            color: provider.onlyWithStock
+                ? AppTheme.success
+                : AppTheme.activeRing.withValues(alpha: 0.14),
+          ),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) {
+            provider.setStockFilter(!provider.onlyWithStock);
+            provider.loadProducts(
+              vendedorCodes: widget.vendedorCodes,
+              search: _searchController.text.isEmpty
+                  ? null
+                  : _searchController.text,
+              reset: true,
+            );
+          },
+        ),
+      ),
+      // Req #14: chip Nestlé (filtra por prefamilia)
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: FilterChip(
+          avatar: Icon(
+            Icons.star,
+            size: 14,
+            color: provider.selectedPrefamily == 'NESTLE'
+                ? AppTheme.accentAmber
+                : Colors.white54,
+          ),
+          label: const Text('Nestlé'),
+          selected: provider.selectedPrefamily == 'NESTLE',
+          selectedColor: AppTheme.accentAmber.withValues(alpha: 0.26),
+          backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
+          labelStyle: TextStyle(
+            color: provider.selectedPrefamily == 'NESTLE'
+                ? AppTheme.accentAmber
+                : Colors.white70,
+            fontSize: Responsive.fontSize(
+              context,
+              small: 11,
+              large: 13,
+            ),
+            fontWeight: FontWeight.w600,
+          ),
+          side: BorderSide(
+            color: provider.selectedPrefamily == 'NESTLE'
+                ? AppTheme.accentAmber
+                : AppTheme.activeRing.withValues(alpha: 0.14),
+          ),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) {
+            final next =
+                provider.selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
+            provider.setPrefamilyFilter(next);
+            provider.loadProducts(
+              vendedorCodes: widget.vendedorCodes,
+              search: _searchController.text.isEmpty
+                  ? null
+                  : _searchController.text,
+              reset: true,
+            );
+          },
+        ),
+      ),
+      // Family chips
+      ...provider.families.map((family) {
+        final selected = provider.selectedFamily == family;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: FilterChip(
+            label: Text(family),
+            selected: selected,
+            selectedColor: AppTheme.info.withValues(alpha: 0.24),
+            backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
+            labelStyle: TextStyle(
+              color: selected ? AppTheme.info : Colors.white70,
+              fontSize: Responsive.fontSize(context, small: 11, large: 13),
+            ),
+            side: BorderSide(
+              color: selected
+                  ? AppTheme.info
+                  : AppTheme.activeRing.withValues(alpha: 0.14),
+            ),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => _onFamilySelected(provider, family),
+          ),
+        );
+      }),
+    ];
+
     return Container(
       decoration: BoxDecoration(
         gradient: AppTheme.commandGradient,
@@ -141,129 +253,11 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
           // Stock filter chip + Family chips
           SizedBox(
             height: 40,
-            child: ListView(
+            child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(horizontal: pad.left),
-              children: [
-                // "Solo con stock" chip (Mejora 3)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    avatar: Icon(
-                      Icons.inventory_2_outlined,
-                      size: 14,
-                      color: provider.onlyWithStock
-                          ? AppTheme.success
-                          : Colors.white54,
-                    ),
-                    label: const Text('Solo con stock'),
-                    selected: provider.onlyWithStock,
-                    selectedColor: AppTheme.success.withValues(alpha: 0.24),
-                    backgroundColor:
-                        AppTheme.surfaceCommand.withValues(alpha: 0.94),
-                    labelStyle: TextStyle(
-                      color: provider.onlyWithStock
-                          ? AppTheme.success
-                          : Colors.white70,
-                      fontSize:
-                          Responsive.fontSize(context, small: 11, large: 13),
-                    ),
-                    side: BorderSide(
-                      color: provider.onlyWithStock
-                          ? AppTheme.success
-                          : AppTheme.activeRing.withValues(alpha: 0.14),
-                    ),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (_) {
-                      provider.setStockFilter(!provider.onlyWithStock);
-                      provider.loadProducts(
-                        vendedorCodes: widget.vendedorCodes,
-                        search: _searchController.text.isEmpty
-                            ? null
-                            : _searchController.text,
-                        reset: true,
-                      );
-                    },
-                  ),
-                ),
-                // Req #14: chip Nestlé (filtra por prefamilia)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    avatar: Icon(
-                      Icons.star,
-                      size: 14,
-                      color: provider.selectedPrefamily == 'NESTLE'
-                          ? AppTheme.accentAmber
-                          : Colors.white54,
-                    ),
-                    label: const Text('Nestlé'),
-                    selected: provider.selectedPrefamily == 'NESTLE',
-                    selectedColor: AppTheme.accentAmber.withValues(alpha: 0.26),
-                    backgroundColor:
-                        AppTheme.surfaceCommand.withValues(alpha: 0.94),
-                    labelStyle: TextStyle(
-                      color: provider.selectedPrefamily == 'NESTLE'
-                          ? AppTheme.accentAmber
-                          : Colors.white70,
-                      fontSize: Responsive.fontSize(
-                        context,
-                        small: 11,
-                        large: 13,
-                      ),
-                      fontWeight: FontWeight.w600,
-                    ),
-                    side: BorderSide(
-                      color: provider.selectedPrefamily == 'NESTLE'
-                          ? AppTheme.accentAmber
-                          : AppTheme.activeRing.withValues(alpha: 0.14),
-                    ),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (_) {
-                      final next = provider.selectedPrefamily == 'NESTLE'
-                          ? null
-                          : 'NESTLE';
-                      provider.setPrefamilyFilter(next);
-                      provider.loadProducts(
-                        vendedorCodes: widget.vendedorCodes,
-                        search: _searchController.text.isEmpty
-                            ? null
-                            : _searchController.text,
-                        reset: true,
-                      );
-                    },
-                  ),
-                ),
-                // Family chips
-                ...provider.families.map((family) {
-                  final selected = provider.selectedFamily == family;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(family),
-                      selected: selected,
-                      selectedColor: AppTheme.info.withValues(alpha: 0.24),
-                      backgroundColor:
-                          AppTheme.surfaceCommand.withValues(alpha: 0.94),
-                      labelStyle: TextStyle(
-                        color: selected ? AppTheme.info : Colors.white70,
-                        fontSize:
-                            Responsive.fontSize(context, small: 11, large: 13),
-                      ),
-                      side: BorderSide(
-                        color: selected
-                            ? AppTheme.info
-                            : AppTheme.activeRing.withValues(alpha: 0.14),
-                      ),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (_) => _onFamilySelected(provider, family),
-                    ),
-                  );
-                }),
-              ],
+              itemCount: chips.length,
+              itemBuilder: (_, index) => chips[index],
             ),
           ),
           const SizedBox(height: 4),

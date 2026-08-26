@@ -1,20 +1,18 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart'; // Fixed import
-import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 
 /// Servicio de precarga de datos críticos para disponibilidad offline
 ///
 /// Este servicio se encarga de pre-cargar datos esenciales cuando hay conectividad
 /// para garantizar que estén disponibles durante periodos offline
 class DataPreloaderService {
-  static final DataPreloaderService _instance =
-      DataPreloaderService._internal();
   factory DataPreloaderService() => _instance;
   DataPreloaderService._internal();
+  static final DataPreloaderService _instance =
+      DataPreloaderService._internal();
 
   bool _isLoading = false;
   DateTime? _lastFullSync;
@@ -82,7 +80,7 @@ class DataPreloaderService {
   }) async {
     if (_isLoading) {
       debugPrint('[DataPreloader] Preload already in progress, skipping');
-      return PreloadResult(
+      return const PreloadResult(
         success: false,
         message: 'Preload already in progress',
         criticalDataLoaded: false,
@@ -100,7 +98,7 @@ class DataPreloaderService {
       if (ConnectivityService.instance.currentStatus !=
           ConnectivityStatus.online) {
         debugPrint('[DataPreloader] No real connectivity, skipping preload');
-        return PreloadResult(
+        return const PreloadResult(
           success: false,
           message: 'No real connectivity',
           criticalDataLoaded: false,
@@ -108,7 +106,8 @@ class DataPreloaderService {
       }
 
       debugPrint(
-          '[DataPreloader] Starting critical data preload for vendor: $vendorCode');
+        '[DataPreloader] Starting critical data preload for vendor: $vendorCode',
+      );
 
       // Reiniciar contadores
       results.clear();
@@ -168,7 +167,8 @@ class DataPreloaderService {
       final allSuccess = successCount == _criticalEndpoints.length;
 
       debugPrint(
-          '[DataPreloader] Completed: $successCount/${_criticalEndpoints.length} endpoints successful');
+        '[DataPreloader] Completed: $successCount/${_criticalEndpoints.length} endpoints successful',
+      );
 
       return PreloadResult(
         success: allSuccess,
@@ -186,7 +186,9 @@ class DataPreloaderService {
 
   /// Precarga datos relacionados con clientes (créditos, deudas, etc.)
   Future<void> _preloadRelatedClientData(
-      Map<String, dynamic> clientData, String? vendorCode) async {
+    Map<String, dynamic> clientData,
+    String? vendorCode,
+  ) async {
     try {
       final rawClients = clientData['clients'] ?? clientData['data'];
       if (rawClients is List) {
@@ -196,7 +198,8 @@ class DataPreloaderService {
         final sampleClients = clients
             .take(20)
             .where(
-                (client) => (client['codigoCliente'] ?? client['code']) != null)
+              (client) => (client['codigoCliente'] ?? client['code']) != null,
+            )
             .toList();
 
         for (final client in sampleClients) {
@@ -204,9 +207,12 @@ class DataPreloaderService {
               (client['codigoCliente'] ?? client['code']).toString();
 
           // Precargar datos específicos del cliente
-          await Future.wait([
-            _preloadClientSpecificData(clientCode, vendorCode),
-          ], eagerError: true);
+          await Future.wait(
+            [
+              _preloadClientSpecificData(clientCode, vendorCode),
+            ],
+            eagerError: true,
+          );
         }
       }
     } catch (e) {
@@ -216,7 +222,9 @@ class DataPreloaderService {
 
   /// Precarga datos específicos de un cliente
   Future<void> _preloadClientSpecificData(
-      String clientCode, String? vendorCode) async {
+    String clientCode,
+    String? vendorCode,
+  ) async {
     try {
       final endpoints = [
         '/clients/$clientCode',
@@ -281,7 +289,7 @@ class DataPreloaderService {
     final lastSync =
         lastSyncRaw != null ? DateTime.tryParse(lastSyncRaw) : null;
 
-    int validCacheCount = 0;
+    var validCacheCount = 0;
     for (final endpoint in _criticalEndpoints) {
       final cacheKey = _generateCacheKey(endpoint, vendorCode);
       if (CacheService.hasValidCache(cacheKey)) {
@@ -306,13 +314,6 @@ class DataPreloaderService {
 
 /// Resultado de operación de precarga
 class PreloadResult {
-  final bool success;
-  final String message;
-  final bool criticalDataLoaded;
-  final int? successCount;
-  final int? totalCount;
-  final Map<String, bool>? results;
-
   const PreloadResult({
     required this.success,
     required this.message,
@@ -321,19 +322,24 @@ class PreloadResult {
     this.totalCount,
     this.results,
   });
+  final bool success;
+  final String message;
+  final bool criticalDataLoaded;
+  final int? successCount;
+  final int? totalCount;
+  final Map<String, bool>? results;
 }
 
 /// Estadísticas de precarga
 class PreloadStats {
-  final DateTime? lastSync;
-  final int validCacheCount;
-  final int totalEndpoints;
-  final double dataAvailability;
-
   const PreloadStats({
     required this.lastSync,
     required this.validCacheCount,
     required this.totalEndpoints,
     required this.dataAvailability,
   });
+  final DateTime? lastSync;
+  final int validCacheCount;
+  final int totalEndpoints;
+  final double dataAvailability;
 }

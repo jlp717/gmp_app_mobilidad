@@ -3,51 +3,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
 import 'package:intl/intl.dart';
+
+export '../../domain/liquidacion_domain.dart';
 
 final NumberFormat _moneyFormat =
     NumberFormat.currency(locale: 'es_ES', symbol: '€');
-
-class ComercialLiquidacionSummary {
-  const ComercialLiquidacionSummary({
-    this.totalEfectivo = 0,
-    this.totalCheques = 0,
-    this.totalPostdatados = 0,
-    this.saldoActual = 0,
-    double? totalAIngresar,
-  }) : totalAIngresar = totalAIngresar ??
-            totalEfectivo + totalCheques + totalPostdatados + saldoActual;
-
-  final double totalEfectivo;
-  final double totalCheques;
-  final double totalPostdatados;
-  final double saldoActual;
-  final double totalAIngresar;
-}
-
-class ComercialLiquidacionDraft {
-  const ComercialLiquidacionDraft({
-    required this.employeeCode,
-    required this.date,
-    required this.expectedTotal,
-    required this.ingresoBanco,
-    required this.entregado,
-  });
-
-  final String employeeCode;
-  final DateTime date;
-  final double expectedTotal;
-  final double ingresoBanco;
-  final double entregado;
-
-  double get registrado => ingresoBanco + entregado;
-  double get diferencia => expectedTotal - registrado;
-  bool get isBalanced => diferencia.abs() < 0.01;
-}
 
 class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const ComercialLiquidacionDiariaPage({
@@ -120,8 +85,8 @@ class _ComercialLiquidacionDiariaPageState
       _entregadoController.text.trim().isNotEmpty;
 
   bool get _amountsAreValid =>
-      _tryParseAmount(_ingresoBancoController.text) != null &&
-      _tryParseAmount(_entregadoController.text) != null;
+      parseAmount(_ingresoBancoController.text) != null &&
+      parseAmount(_entregadoController.text) != null;
 
   bool get _canSave => _hasInput && _amountsAreValid && !_isSaving;
 
@@ -266,6 +231,20 @@ class _ComercialLiquidacionDiariaPageState
           ),
         ),
       );
+    } catch (error, stackTrace) {
+      debugPrint('Commercial liquidation save failed: $error');
+      debugPrintStack(
+        label: 'Commercial liquidation save stack',
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('No se pudo guardar la liquidación. Inténtalo de nuevo.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -800,10 +779,7 @@ class _MoneyField extends StatelessWidget {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
-      ],
-      validator: _validateAmount,
+      validator: validateAmount,
       style: const TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.w800,
@@ -1055,8 +1031,6 @@ class _MetricData {
   final Color color;
 }
 
-enum _LiquidacionStatusKind { pending, balanced, mismatch, invalid }
-
 class _LiquidacionStatus {
   const _LiquidacionStatus._({
     required this.kind,
@@ -1071,20 +1045,26 @@ class _LiquidacionStatus {
     required bool hasInput,
     required bool amountsAreValid,
   }) {
-    if (!amountsAreValid) return _invalid;
-    if (!hasInput) return _pending;
-    if (draft.isBalanced) return _balanced;
-    return _mismatch;
+    return switch (classifyLiquidacionStatus(
+      draft,
+      hasInput: hasInput,
+      amountsAreValid: amountsAreValid,
+    )) {
+      LiquidacionStatusKind.pending => _pending,
+      LiquidacionStatusKind.balanced => _balanced,
+      LiquidacionStatusKind.mismatch => _mismatch,
+      LiquidacionStatusKind.invalid => _invalid,
+    };
   }
 
-  final _LiquidacionStatusKind kind;
+  final LiquidacionStatusKind kind;
   final String label;
   final String description;
   final Color color;
   final IconData icon;
 
   static const _pending = _LiquidacionStatus._(
-    kind: _LiquidacionStatusKind.pending,
+    kind: LiquidacionStatusKind.pending,
     label: 'Pendiente',
     description: 'Aún no hay importes introducidos.',
     color: AppTheme.textSecondary,
@@ -1092,7 +1072,7 @@ class _LiquidacionStatus {
   );
 
   static const _balanced = _LiquidacionStatus._(
-    kind: _LiquidacionStatusKind.balanced,
+    kind: LiquidacionStatusKind.balanced,
     label: 'Cuadrada',
     description: 'Banco y entregado cuadran con el total a ingresar.',
     color: AppTheme.success,
@@ -1100,7 +1080,7 @@ class _LiquidacionStatus {
   );
 
   static const _mismatch = _LiquidacionStatus._(
-    kind: _LiquidacionStatusKind.mismatch,
+    kind: LiquidacionStatusKind.mismatch,
     label: 'Descuadre',
     description: 'La diferencia queda visible antes de guardar.',
     color: AppTheme.warning,
@@ -1108,7 +1088,7 @@ class _LiquidacionStatus {
   );
 
   static const _invalid = _LiquidacionStatus._(
-    kind: _LiquidacionStatusKind.invalid,
+    kind: LiquidacionStatusKind.invalid,
     label: 'Revisar',
     description: 'Hay un importe con formato no válido.',
     color: AppTheme.error,
@@ -1116,35 +1096,7 @@ class _LiquidacionStatus {
   );
 }
 
-String? _validateAmount(String? value) {
-  final amount = _tryParseAmount(value ?? '');
-  if (amount == null) return 'Introduce un importe válido';
-  if (amount > 999999.99) return 'Importe demasiado alto';
-  return null;
-}
-
-double _amount(String value) => _tryParseAmount(value) ?? 0;
-
-double? _tryParseAmount(String value) {
-  var normalized = value.trim().replaceAll(' ', '');
-  if (normalized.isEmpty) return 0;
-
-  final comma = normalized.lastIndexOf(',');
-  final dot = normalized.lastIndexOf('.');
-  if (comma != -1 && dot != -1) {
-    if (comma > dot) {
-      normalized = normalized.replaceAll('.', '').replaceAll(',', '.');
-    } else {
-      normalized = normalized.replaceAll(',', '');
-    }
-  } else {
-    normalized = normalized.replaceAll(',', '.');
-  }
-
-  final amount = double.tryParse(normalized);
-  if (amount == null || amount < 0) return null;
-  return amount;
-}
+double _amount(String value) => parseAmount(value) ?? 0;
 
 String _money(double value) => _moneyFormat.format(value);
 

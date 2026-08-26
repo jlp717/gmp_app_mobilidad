@@ -122,8 +122,10 @@ void main() {
 
     expect(detail.clients, hasLength(2));
     expect(detail.grandTotal, isNull);
-    expect(detail.scopeTotalAvailability,
-        RepartidorObjectivesScopeTotalAvailability.paged);
+    expect(
+      detail.scopeTotalAvailability,
+      RepartidorObjectivesScopeTotalAvailability.paged,
+    );
     expect(detail.nextOffset, 2);
   });
 

@@ -160,7 +160,7 @@ void main() {
         entityId: 'order_456',
         data: {
           'items': ['item1', 'item2'],
-          'total': 100.0
+          'total': 100.0,
         },
         createdAt: DateTime(2024),
         retryCount: 2,

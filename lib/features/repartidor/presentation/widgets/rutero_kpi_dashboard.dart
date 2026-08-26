@@ -12,7 +12,7 @@ class RuteroKpiDashboard extends StatelessWidget {
     required this.entregasCompletadas,
     required this.montoACobrar,
     required this.montoOpcional,
-    required this.totalMonto, // New field, super.key,, super.key,, super.key,, super.key,
+    required this.totalMonto, // New field, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,, super.key,
     this.montoCobrado = 0,
     this.isLoading = false,
   });
@@ -31,9 +31,13 @@ class RuteroKpiDashboard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 4), // Reduced vertical margin
+        horizontal: 12,
+        vertical: 4,
+      ), // Reduced vertical margin
       padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 12), // Reduced padding
+        horizontal: 12,
+        vertical: 12,
+      ), // Reduced padding
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),

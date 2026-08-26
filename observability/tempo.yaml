@@ -1,0 +1,29 @@
+# Tempo self-hosted en 192.168.1.230 — recibe OTLP del backend gmp-api.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /opt/gmp-observability/tempo/traces
+    wal:
+      path: /opt/gmp-observability/tempo/wal
+
+compactor:
+  compaction:
+    block_retention: 168h  # 7 dias de trazas
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo

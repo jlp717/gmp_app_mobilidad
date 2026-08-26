@@ -46,9 +46,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     )..repeat(reverse: true);
 
     _usernameFocus.addListener(
-        () => setState(() => _isUsernameFocused = _usernameFocus.hasFocus));
+      () => setState(() => _isUsernameFocused = _usernameFocus.hasFocus),
+    );
     _passwordFocus.addListener(
-        () => setState(() => _isPasswordFocused = _passwordFocus.hasFocus));
+      () => setState(() => _isPasswordFocused = _passwordFocus.hasFocus),
+    );
   }
 
   @override
@@ -104,9 +106,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         Future.microtask(() async {
           if (!mounted) return;
           await showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (ctx) => const RoleSelectionDialog());
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => const RoleSelectionDialog(),
+          );
         });
       } else {
         context.go('/dashboard');
@@ -144,12 +147,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   color: AppTheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.error_outline,
-                    color: AppTheme.error, size: 20),
+                child: const Icon(
+                  Icons.error_outline,
+                  color: AppTheme.error,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
-              const Text('Error de acceso',
-                  style: TextStyle(color: AppTheme.error)),
+              const Text(
+                'Error de acceso',
+                style: TextStyle(color: AppTheme.error),
+              ),
             ],
           ),
           content: Text(
@@ -164,10 +172,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('Entendido',
-                  style: TextStyle(color: AppTheme.info)),
+              child: const Text(
+                'Entendido',
+                style: TextStyle(color: AppTheme.info),
+              ),
             ),
           ],
         ),
@@ -269,7 +280,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 20),
-        Text(
+        const Text(
           'Ventas, reparto y almacén coordinados\npara trabajar con precisión en ruta',
           style: TextStyle(
             fontSize: 16,
@@ -307,7 +318,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
+        const Text(
           'Ventas, reparto y almacén',
           style: TextStyle(
             fontSize: 13,
@@ -449,8 +460,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         shape: BoxShape.circle,
                         color: AppTheme.error.withValues(alpha: 0.15),
                       ),
-                      child: const Icon(Icons.error_outline,
-                          color: AppTheme.error, size: 18),
+                      child: const Icon(
+                        Icons.error_outline,
+                        color: AppTheme.error,
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -561,7 +575,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             : [
                                 BoxShadow(
                                   color: AppTheme.info.withValues(
-                                      alpha: _isButtonHovered ? 0.4 : 0.25),
+                                    alpha: _isButtonHovered ? 0.4 : 0.25,
+                                  ),
                                   blurRadius: _isButtonHovered ? 18 : 12,
                                   offset: Offset(0, _isButtonHovered ? 9 : 6),
                                 ),

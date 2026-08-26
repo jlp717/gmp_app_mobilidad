@@ -8,8 +8,8 @@ import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Visual surface aligned with comercial `CommissionsPage` cards.

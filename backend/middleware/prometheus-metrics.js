@@ -50,6 +50,9 @@ const metrics = {
     httpRequestSize: new CircularBuffer(1000),
     httpResponseSize: new CircularBuffer(1000),
 
+    // Per-endpoint latency (RED): key = 'METHOD|path-template'
+    httpEndpointDuration: new Map(),
+
     // Cache metrics
     cacheHits: 0,
     cacheMisses: 0,
@@ -266,8 +269,13 @@ function prometheusMetrics(req, res, next) {
         // Increment request counter
         incrementCounter('http_requests_total', labels);
 
-        // Record durations
+        // Record durations (global + per-endpoint for RED dashboards)
         recordHistogram('httpRequestDuration', durationMs);
+        const endpointKey = labels.method + '|' + labels.path;
+        if (!metrics.httpEndpointDuration.has(endpointKey)) {
+            metrics.httpEndpointDuration.set(endpointKey, new CircularBuffer(500));
+        }
+        metrics.httpEndpointDuration.get(endpointKey).push({ value: durationMs, timestamp: Date.now() });
         recordHistogram('httpResponseSize', responseSize);
 
         // Track active connections
@@ -353,6 +361,24 @@ function getPrometheusMetrics() {
         const sum = durationArr.reduce((acc, v) => acc + v.value, 0);
         lines.push(`http_request_duration_ms_sum ${sum}`);
         lines.push(`http_request_duration_ms_count ${durationArr.length}`);
+    // Per-endpoint RED histograms (ms)
+    lines.push('# HELP http_request_duration_ms_endpoint Endpoint latency in ms');
+    lines.push('# TYPE http_request_duration_ms_endpoint histogram');
+    const EQ = String.fromCharCode(34);
+    for (const [key, buffer] of metrics.httpEndpointDuration) {
+        const arr = buffer.toArray();
+        if (arr.length === 0) continue;
+        const [method, path] = key.split('|');
+        const labels = 'method=' + EQ + method + EQ + ',path=' + EQ + path + EQ;
+        const bucketCfg = CONFIG.durationBuckets.map(b => b * 1000);
+        const buckets = calculateBuckets(arr, bucketCfg);
+        for (const [bucket, count] of Object.entries(buckets)) {
+            lines.push('http_request_duration_ms_endpoint_bucket{' + labels + ',le=' + EQ + bucket + EQ + '} ' + count);
+        }
+        const sum = arr.reduce((acc, v) => acc + v.value, 0);
+        lines.push('http_request_duration_ms_endpoint_sum{' + labels + '} ' + sum);
+        lines.push('http_request_duration_ms_endpoint_count{' + labels + '} ' + arr.length);
+    }
     }
 
     // Cache metrics
@@ -380,6 +406,23 @@ function getPrometheusMetrics() {
     lines.push('# TYPE db_errors_total counter');
     lines.push(`db_errors_total ${metrics.dbErrorsTotal}`);
 
+    // ODBC pool saturation (golden signal)
+    try {
+        const { getPoolMetrics } = require('../config/db');
+        const pm = getPoolMetrics();
+        const max = Number(pm.max) || 0;
+        const active = Number(pm.active) || 0;
+        const utilization = max > 0 ? active / max : 0;
+        lines.push('# HELP odbc_pool_utilization ODBC pool utilization ratio (active/max)');
+        lines.push('# TYPE odbc_pool_utilization gauge');
+        lines.push('odbc_pool_utilization ' + utilization.toFixed(4));
+        lines.push('# HELP odbc_pool_connections ODBC pool connections by state');
+        lines.push('# TYPE odbc_pool_connections gauge');
+        const Q = String.fromCharCode(34);
+        lines.push('odbc_pool_connections{state=' + Q + 'active' + Q + '} ' + active);
+        lines.push('odbc_pool_connections{state=' + Q + 'idle' + Q + '} ' + (Number(pm.idle) || 0));
+        lines.push('odbc_pool_connections{state=' + Q + 'total' + Q + '} ' + (Number(pm.total) || 0));
+    } catch (_) { /* pool not initialized yet */ }
     // Active connections
     lines.push('# HELP http_active_connections Active HTTP connections');
     lines.push('# TYPE http_active_connections gauge');

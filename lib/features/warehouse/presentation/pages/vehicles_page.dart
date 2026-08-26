@@ -39,17 +39,19 @@ class _VehiclesPageState extends State<VehiclesPage> {
       final v = await WarehouseDataService.getVehicles(
         forceRefresh: forceRefresh,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _vehicles = v;
           _loading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 
@@ -161,23 +163,32 @@ class _VehiclesPageState extends State<VehiclesPage> {
                   children: [
                     Row(
                       children: [
-                        Text(v.code,
-                            style: const TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700)),
+                        Text(
+                          v.code,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         if (v.matricula.isNotEmpty)
-                          Text(v.matricula,
-                              style: TextStyle(
-                                  color: AppTheme.textTertiary, fontSize: 11)),
+                          Text(
+                            v.matricula,
+                            style: const TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
                       ],
                     ),
                     if (v.description.isNotEmpty)
                       Text(
                         v.description,
-                        style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 11),
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 11,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -185,26 +196,33 @@ class _VehiclesPageState extends State<VehiclesPage> {
                     Row(
                       children: [
                         _miniKpi(
-                            'Interior',
-                            '${interior.lengthCm.toInt()}x${interior.widthCm.toInt()}x${interior.heightCm.toInt()} cm',
-                            AppTheme.info),
+                          'Interior',
+                          '${interior.lengthCm.toInt()}x${interior.widthCm.toInt()}x${interior.heightCm.toInt()} cm',
+                          AppTheme.info,
+                        ),
                         const SizedBox(width: 12),
                         _miniKpi(
-                            'Carga',
-                            '${v.maxPayloadKg.toStringAsFixed(0)} kg',
-                            AppTheme.success),
+                          'Carga',
+                          '${v.maxPayloadKg.toStringAsFixed(0)} kg',
+                          AppTheme.success,
+                        ),
                         const SizedBox(width: 12),
                         _miniKpi(
-                            'Vol.',
-                            '${v.containerVolumeM3.toStringAsFixed(2)} m³',
-                            AppTheme.warning),
+                          'Vol.',
+                          '${v.containerVolumeM3.toStringAsFixed(2)} m³',
+                          AppTheme.warning,
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
               // Edit indicator
-              Icon(Icons.edit_rounded, color: AppTheme.textTertiary, size: 18),
+              const Icon(
+                Icons.edit_rounded,
+                color: AppTheme.textTertiary,
+                size: 18,
+              ),
             ],
           ),
         ),
@@ -216,11 +234,18 @@ class _VehiclesPageState extends State<VehiclesPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(value,
-            style: TextStyle(
-                color: color, fontSize: 10, fontWeight: FontWeight.w700)),
-        Text(label,
-            style: TextStyle(color: AppTheme.textTertiary, fontSize: 8)),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 8),
+        ),
       ],
     );
   }
@@ -240,13 +265,15 @@ class _VehiclesPageState extends State<VehiclesPage> {
       isScrollControlled: true,
       backgroundColor: AppTheme.raisedSurface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
-            Responsive.padding(ctx, small: 14, large: 20),
-            16,
-            Responsive.padding(ctx, small: 14, large: 20),
-            MediaQuery.of(ctx).viewInsets.bottom + 20),
+          Responsive.padding(ctx, small: 14, large: 20),
+          16,
+          Responsive.padding(ctx, small: 14, large: 20),
+          MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(ctx).height * 0.82,
@@ -273,19 +300,23 @@ class _VehiclesPageState extends State<VehiclesPage> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                Text(v.description,
-                    style: TextStyle(
-                        color: AppTheme.textPrimary.withValues(alpha: 0.4),
-                        fontSize: 12)),
+                Text(
+                  v.description,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary.withValues(alpha: 0.4),
+                    fontSize: 12,
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
-                        child: _field(largoC, 'Largo (cm)', Icons.straighten)),
+                      child: _field(largoC, 'Largo (cm)', Icons.straighten),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
-                        child:
-                            _field(anchoC, 'Ancho (cm)', Icons.width_normal)),
+                      child: _field(anchoC, 'Ancho (cm)', Icons.width_normal),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(child: _field(altoC, 'Alto (cm)', Icons.height)),
                   ],
@@ -312,21 +343,27 @@ class _VehiclesPageState extends State<VehiclesPage> {
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
-                                content: Text('Error: $e'),
-                                backgroundColor: AppTheme.error),
+                              content: Text('Error: $e'),
+                              backgroundColor: AppTheme.error,
+                            ),
                           );
                         }
                       }
                     },
                     icon: const Icon(Icons.save_rounded, size: 18),
-                    label: const Text('GUARDAR',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700, letterSpacing: 0)),
+                    label: const Text(
+                      'GUARDAR',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.info,
                       foregroundColor: AppTheme.textPrimary,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -351,8 +388,9 @@ class _VehiclesPageState extends State<VehiclesPage> {
         filled: true,
         fillColor: AppTheme.softPanel,
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),

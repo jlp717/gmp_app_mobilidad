@@ -32,12 +32,10 @@ class ApiConfig {
   // Accesible desde cualquier lugar con internet
   // -----------------------------------------------------------------------------
   static String _productionUrl = _resolveProductionUrl();
-  static const int _serverPort = 3334;
 
   // -----------------------------------------------------------------------------
   // DESARROLLO (solo para testing en oficina)
   // -----------------------------------------------------------------------------
-  static const String _developmentIp = '192.168.1.52';
 
   // =============================================================================
   // MÉTODOS PÚBLICOS

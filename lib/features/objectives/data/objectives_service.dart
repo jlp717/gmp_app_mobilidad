@@ -2,7 +2,6 @@
 /// Used by objectives_page
 library;
 
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';

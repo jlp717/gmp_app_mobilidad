@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
 class RuteroFilterBar extends StatelessWidget {
   const RuteroFilterBar({
-    super.key,
     required this.searchQuery,
     required this.searchController,
     required this.sortMode,
@@ -14,6 +12,7 @@ class RuteroFilterBar extends StatelessWidget {
     required this.onSortChanged,
     required this.onAlertTypeChanged,
     required this.onOnlyWithAlertsChanged,
+    super.key,
   });
 
   final String searchQuery;

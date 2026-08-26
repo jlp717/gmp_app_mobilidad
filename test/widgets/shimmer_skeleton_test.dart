@@ -6,7 +6,7 @@ void main() {
   group('SkeletonCard Tests', () {
     testWidgets('renders with default height', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonCard(),
           ),
@@ -19,7 +19,7 @@ void main() {
 
     testWidgets('respects custom height', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonCard(height: 200),
           ),
@@ -27,16 +27,18 @@ void main() {
       );
 
       expect(find.byType(SkeletonCard), findsOneWidget);
-      final container = tester.widget<Container>(find.descendant(
-        of: find.byType(SkeletonCard),
-        matching: find.byType(Container).first,
-      ));
+      final container = tester.widget<Container>(
+        find.descendant(
+          of: find.byType(SkeletonCard),
+          matching: find.byType(Container).first,
+        ),
+      );
       expect(container.constraints?.maxHeight, 200);
     });
 
     testWidgets('respects custom width', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonCard(width: 300),
           ),
@@ -48,7 +50,7 @@ void main() {
 
     testWidgets('renders Row with icon placeholder', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonCard(),
           ),
@@ -60,7 +62,7 @@ void main() {
 
     testWidgets('renders Column for content structure', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonCard(),
           ),
@@ -74,7 +76,7 @@ void main() {
   group('SkeletonList Tests', () {
     testWidgets('renders ListView with items', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonList(itemCount: 3),
           ),
@@ -86,7 +88,7 @@ void main() {
 
     testWidgets('respects custom itemCount', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonList(itemCount: 10),
           ),
@@ -110,7 +112,7 @@ void main() {
 
     testWidgets('respects custom itemHeight', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SkeletonList(itemCount: 3, itemHeight: 200),
           ),

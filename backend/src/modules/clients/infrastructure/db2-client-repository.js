@@ -6,7 +6,7 @@ const { ClientRepository } = require('../domain/client-repository');
 const { Client, ClientDetail } = require('../domain/client');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const {
-  sanitizeCodeList,
+  sanitizeCodeListForParams,
   buildClientListVendorSqlFilter,
   getVendorColumnExpr,
   MIN_YEAR,
@@ -133,11 +133,14 @@ class Db2ClientRepository extends ClientRepository {
     if (!client) return null;
 
     const vendorExpr = getVendorColumnExpr('L');
+    const vendorParams = vendedorCodes === 'ALL'
+      ? []
+      : sanitizeCodeListForParams(vendedorCodes, 20);
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${vendorParams.map(() => '?').join(',')})`;
     const yearFilter = year ? `AND L.LCAADC = ?` : `AND L.LCAADC >= ${MIN_YEAR}`;
-    const params = [code];
+    const params = [code, ...vendorParams];
     if (year) params.push(year);
 
     // Sales by month using DSED.LACLAE
@@ -203,12 +206,15 @@ class Db2ClientRepository extends ClientRepository {
 
   async compare(clientCodes, vendedorCodes, year) {
     const vendorExpr = getVendorColumnExpr('L');
+    const vendorParams = vendedorCodes === 'ALL'
+      ? []
+      : sanitizeCodeListForParams(vendedorCodes, 20);
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorExpr} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `${vendorExpr} IN (${vendorParams.map(() => '?').join(',')})`;
     const yearFilter = year ? `AND L.LCAADC = ?` : `AND L.LCAADC >= ${MIN_YEAR}`;
     const placeholders = clientCodes.map(() => '?').join(',');
-    const params = [...clientCodes];
+    const params = [...clientCodes, ...vendorParams];
     if (year) params.push(year);
 
     const sql = `

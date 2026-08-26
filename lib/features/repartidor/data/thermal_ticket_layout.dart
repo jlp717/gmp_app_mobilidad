@@ -12,15 +12,26 @@ class ThermalTicketLayout {
     this.dpi = 203,
   }) : assert(widthMm == 58 || widthMm == 80);
 
+  factory ThermalTicketLayout.forPrinter({
+    String? printerName,
+    int? widthMmOverride,
+    int dpi = 203,
+  }) {
+    final mm = (widthMmOverride == 58 || widthMmOverride == 80)
+        ? widthMmOverride!
+        : inferWidthMm(printerName);
+    return ThermalTicketLayout(widthMm: mm, dpi: dpi);
+  }
+
   final int widthMm;
   final int dpi;
 
   /// Soft inset on every side (~3 mm). Enough to avoid cutter/head clipping.
-  static const double marginMm = 3.0;
+  static const double marginMm = 3;
 
   /// Printable width inside the roll (not the physical media width).
-  static const double printable58Mm = 48.0;
-  static const double printable80Mm = 72.0;
+  static const double printable58Mm = 48;
+  static const double printable80Mm = 72;
 
   /// Infer common mobile printer widths from Bluetooth name.
   static int inferWidthMm(String? printerName) {
@@ -40,17 +51,6 @@ class ThermalTicketLayout {
       if (name.contains(hint)) return 58;
     }
     return 80;
-  }
-
-  factory ThermalTicketLayout.forPrinter({
-    String? printerName,
-    int? widthMmOverride,
-    int dpi = 203,
-  }) {
-    final mm = (widthMmOverride == 58 || widthMmOverride == 80)
-        ? widthMmOverride!
-        : inferWidthMm(printerName);
-    return ThermalTicketLayout(widthMm: mm, dpi: dpi);
   }
 
   int dotsForMm(double mm) => ((mm / 25.4) * dpi).round();
@@ -85,7 +85,9 @@ class ThermalTicketLayout {
 
   /// Keep banner readable but compact (~14–16 mm tall max).
   int get logoMaxHeight => math.min(
-      dotsForMm(16), (logoMaxWidth * 437 / 1542).round().clamp(48, 120));
+        dotsForMm(16),
+        (logoMaxWidth * 437 / 1542).round().clamp(48, 120),
+      );
 
   // Columns: reserve a fixed right pocket for amounts so they never clip.
   int get _amountPocket => math.max(56, (contentWidth * 0.18).round());

@@ -15,8 +15,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class MisPedidosYoYBar extends StatefulWidget {
   const MisPedidosYoYBar({
-    super.key,
     required this.vendedorCodes,
+    super.key,
   });
 
   /// Vendedor(es) a comparar. Lista separada por coma o "ALL".

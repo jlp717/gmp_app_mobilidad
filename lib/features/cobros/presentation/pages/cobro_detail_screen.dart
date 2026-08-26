@@ -150,8 +150,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             value: _tipoDocumento,
             dropdownColor: AppTheme.raisedSurface,
             style: const TextStyle(color: Colors.white, fontSize: 13),
-            hint: const Text('Tipo documento',
-                style: TextStyle(color: Colors.white54)),
+            hint: const Text(
+              'Tipo documento',
+              style: TextStyle(color: Colors.white54),
+            ),
             items: _tipoDocumentoOptions.entries
                 .map(
                   (e) => DropdownMenuItem<String?>(
@@ -350,11 +352,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     setState(() => _isSubmitting = true);
 
-    unawaited(showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    ));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      ),
+    );
 
     for (final entry in selectedEntries) {
       final cobro = pendientesById[entry.key];
@@ -463,7 +467,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('No se registró ningún cobro. Revisa los datos.'),
           backgroundColor: AppTheme.error,
         ),
@@ -487,7 +491,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     // Calcular resumen del cliente solo con documentos cobrables.
     double totalPendiente = 0;
     double totalVencido = 0;
-    int numDocs = 0;
+    var numDocs = 0;
     for (final c in payableCobros) {
       totalPendiente += c.importePendiente;
       numDocs++;
@@ -497,6 +501,42 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final summaryMismatch = summaryPending > 0 &&
         cobros.hasPendingSummaryForClient(widget.codigoCliente) &&
         (summaryPending - totalPendiente).abs() > 0.05;
+
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si los documentos crecen mucho.
+    final detailRows = <Widget>[
+      if (payableCobros.isNotEmpty) ...[
+        _buildSectionHeader(
+          'Pendientes de cobro',
+          'Selecciona solo documentos con saldo real',
+          Icons.payments_outlined,
+          AppTheme.warning,
+        ),
+        const SizedBox(height: 8),
+        ...payableCobros.map(_buildCobroCard),
+      ],
+      if (settledCobros.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        _buildSectionHeader(
+          'Al dia / no cobrables',
+          'Incluye documentos ya registrados o sin saldo',
+          Icons.verified_outlined,
+          AppTheme.success,
+        ),
+        const SizedBox(height: 8),
+        ...settledCobros.map(_buildSettledCobroTile),
+      ],
+      if (historico.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        _buildSectionHeader(
+          'Historial de cobros',
+          'Registros comerciales en DB2',
+          Icons.history,
+          AppTheme.info,
+        ),
+        const SizedBox(height: 8),
+        ...historico.map(_buildHistoricoTile),
+      ],
+    ];
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
@@ -576,8 +616,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline,
-                              color: AppTheme.error),
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppTheme.error,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -683,7 +725,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   if (payableCobros.isNotEmpty && totalAbonar > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -694,7 +738,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                           ),
                           Text(
                             _currencyFormat.format(totalAbonar),
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: AppTheme.success,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -733,42 +777,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                               ],
                             ),
                           )
-                        : ListView(
+                        : ListView.builder(
                             padding: const EdgeInsets.all(16),
-                            children: [
-                              if (payableCobros.isNotEmpty) ...[
-                                _buildSectionHeader(
-                                  'Pendientes de cobro',
-                                  'Selecciona solo documentos con saldo real',
-                                  Icons.payments_outlined,
-                                  AppTheme.warning,
-                                ),
-                                const SizedBox(height: 8),
-                                ...payableCobros.map(_buildCobroCard),
-                              ],
-                              if (settledCobros.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                _buildSectionHeader(
-                                  'Al dia / no cobrables',
-                                  'Incluye documentos ya registrados o sin saldo',
-                                  Icons.verified_outlined,
-                                  AppTheme.success,
-                                ),
-                                const SizedBox(height: 8),
-                                ...settledCobros.map(_buildSettledCobroTile),
-                              ],
-                              if (historico.isNotEmpty) ...[
-                                const SizedBox(height: 16),
-                                _buildSectionHeader(
-                                  'Historial de cobros',
-                                  'Registros comerciales en DB2',
-                                  Icons.history,
-                                  AppTheme.info,
-                                ),
-                                const SizedBox(height: 8),
-                                ...historico.map(_buildHistoricoTile),
-                              ],
-                            ],
+                            itemCount: detailRows.length,
+                            itemBuilder: (_, index) => detailRows[index],
                           ),
                   ),
                   if (payableCobros.isNotEmpty) _buildBottomBar(totalAbonar),
@@ -1160,7 +1172,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
-            top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2))),
+          top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2)),
+        ),
       ),
       child: Row(
         children: [
@@ -1210,7 +1223,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                 : Text(
                     'Cobrar ${_currencyFormat.format(total)}',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
           ),
         ],

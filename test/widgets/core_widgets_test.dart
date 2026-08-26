@@ -1,8 +1,8 @@
 // GMP App Widget Tests - Core Components
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/empty_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 Future<void> pumpStateWidget(WidgetTester tester, Widget child) async {
@@ -30,7 +30,7 @@ void main() {
 
     testWidgets('ErrorStateWidget shows retry button when callback provided',
         (tester) async {
-      bool retried = false;
+      var retried = false;
 
       await pumpStateWidget(
         tester,
@@ -87,7 +87,7 @@ void main() {
 
     testWidgets('EmptyStateWidget shows action button when provided',
         (tester) async {
-      bool actionTriggered = false;
+      var actionTriggered = false;
 
       await pumpStateWidget(
         tester,

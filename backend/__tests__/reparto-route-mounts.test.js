@@ -6,10 +6,10 @@ const cors = require('cors');
 const express = require('express');
 const request = require('supertest');
 
-const serverPath = path.resolve(__dirname, '..', 'server.js');
+const appPath = path.resolve(__dirname, '..', 'app.js');
 
-function loadServerSource() {
-  return fs.readFileSync(serverPath, 'utf8');
+function loadAppSource() {
+  return fs.readFileSync(appPath, 'utf8');
 }
 
 function countOccurrences(source, fragment) {
@@ -18,13 +18,13 @@ function countOccurrences(source, fragment) {
 
 function configuredAllowedHeaders(source) {
   const match = /allowedHeaders:\s*\[([^\]]+)\]/.exec(source);
-  if (!match) throw new Error('server CORS allowedHeaders not found');
+  if (!match) throw new Error('app CORS allowedHeaders not found');
   return [...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
 }
 
-describe('canonical reparto server mounts', () => {
+describe('canonical reparto app mounts', () => {
   test('allows Idempotency-Key in a credentialed confirmation preflight', async () => {
-    const source = loadServerSource();
+    const source = loadAppSource();
     const allowedHeaders = configuredAllowedHeaders(source);
     const preflightApp = express();
     preflightApp.use(cors({
@@ -54,8 +54,17 @@ describe('canonical reparto server mounts', () => {
       .toEqual(['Idempotency-Key']);
   });
 
+  test('mounts docs contracts before legacy path normalization', () => {
+    const source = loadAppSource();
+    const docsMount = 'app.use(docsRoutes);';
+    const normalization = source.indexOf('// Path normalization');
+
+    expect(countOccurrences(source, docsMount)).toBe(1);
+    expect(source.indexOf(docsMount)).toBeLessThan(normalization);
+  });
+
   test('uses the legacy Flutter contracts exactly once in both JavaScript modes', () => {
-    const source = loadServerSource();
+    const source = loadAppSource();
     const plannerMount = "app.use('/api', plannerRoutes);";
     const entregasMount = "app.use('/api/entregas', entregasRoutes);";
     const dddBranch = source.indexOf('if (USE_DDD_ROUTES) {', source.indexOf(plannerMount));
@@ -68,7 +77,7 @@ describe('canonical reparto server mounts', () => {
   });
 
   test('does not apply the reparto write toggle to planner rutero routes', () => {
-    const source = loadServerSource();
+    const source = loadAppSource();
     const plannerMount = "app.use('/api', plannerRoutes);";
 
     expect(source).not.toContain("app.use('/api/rutero', verifyToken, repartoWriteGuard);");
@@ -80,7 +89,7 @@ describe('canonical reparto server mounts', () => {
   });
 
   test('does not instantiate or mount parallel DDD reparto contracts', () => {
-    const source = loadServerSource();
+    const source = loadAppSource();
 
     expect(source).not.toContain('createEntregasRoutes()');
     expect(source).not.toContain('createRuteroRoutes()');
@@ -89,7 +98,7 @@ describe('canonical reparto server mounts', () => {
   });
 
   test('mounts DDD auth only in public routes and preserves legacy fallback', () => {
-    const source = loadServerSource();
+    const source = loadAppSource();
     const dddAuthMount = "app.use('/api/auth', dddAuthRoutes);";
     const legacyAuthMount = "app.use('/api/auth', authRoutes);";
     const protectedRoutes = source.indexOf('// PROTECTED ROUTES (Token Required)');
@@ -101,7 +110,7 @@ describe('canonical reparto server mounts', () => {
   });
 
   test('mounts the canonical finance router exactly once before family selection', () => {
-    const source = loadServerSource();
+    const source = loadAppSource();
     const financeMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
     const firstFamilyBranch = source.indexOf('if (USE_TS_ROUTES && global.__TS_APP__)');
 

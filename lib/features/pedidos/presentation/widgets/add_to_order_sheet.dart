@@ -127,7 +127,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     final initUds = existingLine?.cantidadUnidades ??
         (isDual ? initQty * product.unitsPerBox : 0.0);
 
-    double? selectedTariffUnitPrice = prov.lastPriceForProduct(product.code);
+    var selectedTariffUnitPrice = prov.lastPriceForProduct(product.code);
     if (selectedTariffUnitPrice == null && existingLine != null) {
       selectedTariffUnitPrice =
           selectedUnit == 'CAJAS' && product.unitsPerBox > 0
@@ -405,8 +405,10 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -568,13 +570,15 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 // inmediato al vendedor: "este cliente esta comprando mas/menos
                 // este año que el anterior". Es desplegable: por defecto fila
                 // compacta, al tocar muestra mini-graficos mensuales.
-                Builder(builder: (innerCtx) {
-                  final prov = ref.read(pedidosProvider);
-                  return ProductComparativeStrip(
-                    productCode: product.code,
-                    clientCode: prov.hasClient ? prov.clientCode : null,
-                  );
-                }),
+                Builder(
+                  builder: (innerCtx) {
+                    final prov = ref.read(pedidosProvider);
+                    return ProductComparativeStrip(
+                      productCode: product.code,
+                      clientCode: prov.hasClient ? prov.clientCode : null,
+                    );
+                  },
+                ),
                 if (_showWarehouseStock && _stockByWarehouse.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(
@@ -629,7 +633,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       onTap: () {
                         final prov = ref.read(pedidosProvider);
                         final canSeeMargin = ref.watch(
-                            pedidosProvider.select((p) => p.isMarginVisible));
+                          pedidosProvider.select((p) => p.isMarginVisible),
+                        );
                         ProductDetailSheet.show(
                           ctx,
                           productCode: product.code,
@@ -649,7 +654,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         onTap: () {
                           final prov = ref.read(pedidosProvider);
                           final canSeeMargin = ref.watch(
-                              pedidosProvider.select((p) => p.isMarginVisible));
+                            pedidosProvider.select((p) => p.isMarginVisible),
+                          );
                           ProductHistorySheet.show(
                             ctx,
                             productCode: product.code,
@@ -858,7 +864,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                     controller: _cajasController,
                                     keyboardType:
                                         const TextInputType.numberWithOptions(
-                                            decimal: true),
+                                      decimal: true,
+                                    ),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
                                       color: AppTheme.textPrimary,
@@ -1117,8 +1124,10 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               ),
                             ),
                             // Minimum price for selected unit
-                            if (ref.watch(pedidosProvider
-                                    .select((p) => p.isMarginVisible)) &&
+                            if (ref.watch(
+                                  pedidosProvider
+                                      .select((p) => p.isMarginVisible),
+                                ) &&
                                 minPriceForSelected > 0)
                               Text(
                                 'Precio minimo: ${PedidosFormatters.money(minPriceForSelected, decimals: 3)} €/$selectedLabel',
@@ -1236,7 +1245,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(
-                      color: AppTheme.textPrimary, fontSize: 16),
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                  ),
                   onChanged: (_) => setModalState(() {}),
                   decoration: InputDecoration(
                     labelText: 'Precio',
@@ -1265,7 +1276,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 Row(
                   children: [
                     if (ref.watch(
-                            pedidosProvider.select((p) => p.isMarginVisible)) &&
+                          pedidosProvider.select((p) => p.isMarginVisible),
+                        ) &&
                         product.precioMinimo > 0)
                       Text(
                         'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} €/${Product.unitLabel(_selectedUnit)}',
@@ -1292,7 +1304,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 Consumer(
                   builder: (context, ref, _) {
                     if (!ref.watch(
-                        pedidosProvider.select((p) => p.isMarginVisible))) {
+                      pedidosProvider.select((p) => p.isMarginVisible),
+                    )) {
                       return const SizedBox.shrink();
                     }
                     final costo = product.costForUnit(_selectedUnit);

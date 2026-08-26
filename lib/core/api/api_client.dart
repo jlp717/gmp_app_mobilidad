@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/api/isolate_transformer.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/security/certificate_pinning.dart';
 import 'package:gmp_app_mobilidad/core/services/device_fingerprint.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:sentry_dio/sentry_dio.dart';
@@ -25,6 +26,8 @@ class ApiClient {
   static bool _lastTokenRefreshFailedDueToConnectivity = false;
 
   @visibleForTesting
+
+  /// Overrides secure refresh-token reads in tests.
   static Future<String?> Function()? refreshTokenReaderOverride;
 
   /// Absolute local deadline for the current authenticated session.
@@ -48,7 +51,7 @@ class ApiClient {
   /// Flag to prevent duplicate logout calls
   static bool _isLoggingOut = false;
 
-  /// Flag to suppress 401→logout while a login is in progress.
+  /// Flag to suppress 401â†’logout while a login is in progress.
   /// Prevents stale 401 responses from clearing the new token mid-login.
   static bool _isLoggingIn = false;
 
@@ -60,6 +63,7 @@ class ApiClient {
     'localhost',
   };
 
+  /// Whether debug TLS bypass is allowed for a local [host].
   @visibleForTesting
   static bool shouldBypassInvalidCertificateForHost(
     String host, {
@@ -68,12 +72,12 @@ class ApiClient {
     return debugMode && _debugCertificateBypassHosts.contains(host);
   }
 
-  // ── Connectivity Monitoring ──────────────────────────────────────────
+  // Connectivity monitoring.â”€â”€
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static ConnectivityResult _lastConnectivity = ConnectivityResult.wifi;
   static bool _connectivityMonitoring = false;
 
-  /// Start monitoring network changes (WiFi ↔ mobile data).
+  /// Start monitoring network changes (WiFi â†” mobile data).
   /// Reconnects with appropriate settings on network type change.
   static void startConnectivityMonitoring() {
     if (_connectivityMonitoring) return;
@@ -84,19 +88,19 @@ class ApiClient {
       if (result == ConnectivityResult.none) return; // offline, keep last
       if (result != _lastConnectivity) {
         _lastConnectivity = result;
-        debugPrint('[ApiClient] 🔄 Network changed to: $result');
+        debugPrint('[ApiClient] ðŸ”„ Network changed to: $result');
         // Reset Dio so new connections use optimal settings for current network
         final token = _savedAuthToken;
         _dio = null;
         if (token != null) _savedAuthToken = token;
-        debugPrint('[ApiClient] ✅ Dio reinitialized for network: $result');
+        debugPrint('[ApiClient] âœ… Dio reinitialized for network: $result');
       }
     });
   }
 
   /// Stop connectivity monitoring.
   static void stopConnectivityMonitoring() {
-    _connectivitySub?.cancel();
+    unawaited(_connectivitySub?.cancel());
     _connectivitySub = null;
     _connectivityMonitoring = false;
   }
@@ -112,21 +116,21 @@ class ApiClient {
         final token = _savedAuthToken;
         _dio = null;
         if (token != null) _savedAuthToken = token;
-        debugPrint('[ApiClient] 🔄 Reconnected for network: $result');
+        debugPrint('[ApiClient] ðŸ”„ Reconnected for network: $result');
       }
     } catch (_) {}
   }
 
-  // ── End Connectivity Monitoring ──────────────────────────────────────
+  // End connectivity monitoring.
 
-  /// Call before sending login credentials to block concurrent 401→logout.
+  /// Call before sending login credentials to block concurrent 401â†’logout.
   static void startLogin() {
     _isLoggingIn = true;
     _pendingRequests.clear();
     _authEpoch++;
   }
 
-  /// Call when login completes (success or failure) to re-enable 401→logout.
+  /// Call when login completes (success or failure) to re-enable 401â†’logout.
   static void endLogin() => _isLoggingIn = false;
 
   /// Initialize the API client with automatic server detection
@@ -136,24 +140,22 @@ class ApiClient {
     try {
       // Collect device fingerprint for audit traceability
       await DeviceFingerprint.initialize();
-      // Inicializar NetworkService para detectar servidor automáticamente
+      // Inicializar NetworkService para detectar servidor automÃ¡ticamente
       await ApiConfig.initialize();
       _isInitialized = true;
       debugPrint(
-        '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}',
+        '[ApiClient] âœ… Inicializado con servidor: ${ApiConfig.baseUrl}',
       );
     } catch (_) {
       debugPrint('[ApiClient] Initialization failed; using safe defaults');
-      // Continuar con configuración por defecto
+      // Continuar con configuraciÃ³n por defecto
       _isInitialized = true;
     }
   }
 
   /// Initialize or get Dio instance
   static Dio get dio {
-    if (_dio == null) {
-      _dio = _createDio();
-    }
+    _dio ??= _createDio();
     return _dio!;
   }
 
@@ -180,7 +182,8 @@ class ApiClient {
         isMobileData ? const Duration(seconds: 20) : ApiConfig.connectTimeout;
     final receiveTimeout =
         isMobileData ? const Duration(seconds: 45) : ApiConfig.receiveTimeout;
-    debugPrint('[ApiClient] 📡 Timeouts: connect=${connectTimeout.inSeconds}s, '
+    debugPrint(
+        '[ApiClient] ðŸ“¡ Timeouts: connect=${connectTimeout.inSeconds}s, '
         'receive=${receiveTimeout.inSeconds}s (network=$_lastConnectivity)');
     final dio = Dio(
       BaseOptions(
@@ -198,108 +201,46 @@ class ApiClient {
           // AUDIT: Device fingerprint on every request
           ...DeviceFingerprint.headers,
         },
-        // Only accept 2xx responses as successful — 4xx/5xx trigger DioException
+        // Only accept 2xx responses as successful â€” 4xx/5xx trigger DioException
         validateStatus: (status) =>
             status != null && status >= 200 && status < 300,
       ),
     );
 
-    // Configure certificate handling with SSL pinning support.
+    // Configure TLS handling. Platform chain validation always runs first;
+    // badCertificateCallback adds pinning on top and fails closed.
     if (kIsWeb) {
       return dio;
     }
 
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final client = HttpClient();
+      final client = HttpClient()
+        ..badCertificateCallback =
+            (X509Certificate cert, String host, int port) {
+          // Development/local hosts bypass pinning (debug builds only).
+          if (shouldBypassInvalidCertificateForHost(host)) {
+            if (kDebugMode) {
+              debugPrint('[ApiClient] Dev host bypass - no pinning: $host');
+            }
+            return true;
+          }
 
-      // SECURITY CONFIGURATION:
-      // 1. Pinning is DISABLED by default (PINNED_CERT_HASH = '')
-      //    - Certificate pinning requires the server's certificate hash
-      //    - Dart's X509Certificate provides SHA1, so we use SHA1 for pinning
-      //    - Hash must be provided by your backend/ops team for production
-      //    - Using an incorrect hash will cause ALL connections to fail
-      //
-      // 2. To enable pinning for production:
-      //    - Obtain the server certificate's SHA1 fingerprint:
-      //      openssl s_client -connect yourserver.com:443 </dev/null 2>/dev/null \
-      //        | openssl x509 -fingerprint -sha1 -noout
-      //    - Or compute from the DER bytes (for SHA256):
-      //      openssl s_client -connect yourserver.com:443 </dev/null 2>/dev/null \
-      //        | openssl x509 -outform DER > cert.der
-      //      openssl dgst -sha256 cert.der
-      //
-      // 3. Set the hash below and change PINNED_CERT_ENABLED to true
-      //
-      // SECURITY NOTE: badCertificateCallback is called AFTER the platform
-      // (Android/iOS) has validated the certificate chain. This callback
-      // allows custom pinning logic on top of platform validation.
-
-      // Set to true when hash is configured
-      const pinnedCertEnabled = false;
-
-      // SHA1 hash of the production server certificate (Dart X509Certificate API)
-      // For SHA256, compute from cert.der bytes using crypto package
-      // REPLACE with actual hash from your server certificate
-      const pinnedCertHash = '';
-
-      client.badCertificateCallback =
-          (X509Certificate cert, String host, int port) {
-        // Log certificate details for debugging (only in debug mode)
-        if (kDebugMode) {
-          debugPrint(
-            '[ApiClient] 🔐 Certificate validation for $host:$port',
+          // Fail closed: reject unless a configured pin matches. Pins come from
+          // --dart-define=GMP_TLS_PINS (see TlsPinningConfig and
+          // scripts/security/get-tls-pin.ps1).
+          final pinned = TlsPinning.certificateMatchesPin(
+            cert,
+            TlsPinningConfig.pins,
           );
-          debugPrint('[ApiClient]   Subject: ${cert.subject}');
-          debugPrint('[ApiClient]   Issuer: ${cert.issuer}');
-          debugPrint('[ApiClient]   SHA1: ${cert.sha1}');
-          debugPrint(
-            '[ApiClient]   Valid from: ${cert.startValidity} '
-            'to ${cert.endValidity}',
-          );
-        }
-
-        // Allow development/local hosts without pinning
-        // These IPs are for local development servers (emulator, local backend)
-        if (shouldBypassInvalidCertificateForHost(host)) {
-          if (kDebugMode) {
+          if (!pinned && kDebugMode) {
             debugPrint(
-              '[ApiClient]   ✅ Dev host bypass - no pinning required',
+              '[ApiClient] Certificate rejected for $host:$port '
+              '(pin mismatch or GMP_TLS_PINS not configured)',
             );
           }
-          return true;
+          return pinned;
         }
-
-        // If pinning is enabled, validate against pinned certificate
-        if (pinnedCertEnabled && pinnedCertHash.isNotEmpty) {
-          // Note: Using SHA1 as Dart X509Certificate provides sha1 property
-          // For SHA256, import 'crypto' and compute:
-          //   import 'dart:convert';
-          //   import 'package:crypto/crypto.dart';
-          //   final sha256 = sha256.convert(cert.der).toString();
-          final isPinned = cert.sha1 == pinnedCertHash;
-          if (kDebugMode) {
-            debugPrint(
-              '[ApiClient]   ${isPinned ? "✅" : "❌"} '
-              'Certificate ${isPinned ? "matches pinned hash" : "DOES NOT MATCH pinned hash"}',
-            );
-          }
-          return isPinned;
-        }
-
-        // This callback only runs for certificates rejected by the platform.
-        // If pinning is not configured, fail closed instead of accepting an
-        // invalid production certificate.
-
-        if (kDebugMode) {
-          debugPrint(
-            '[ApiClient]   Invalid certificate rejected for $host',
-          );
-        }
-        return false;
-      };
-
-      // Configure security context options
-      client.connectionTimeout = ApiConfig.connectTimeout;
+        ..connectionTimeout = ApiConfig.connectTimeout;
 
       return client;
     };
@@ -330,7 +271,8 @@ class ApiClient {
                     requestOptions: options,
                     statusCode: 401,
                     data: const {
-                      'error': 'Tu sesión ha expirado. Inicia sesión de nuevo.',
+                      'error':
+                          'Tu sesiÃ³n ha expirado. Inicia sesiÃ³n de nuevo.',
                     },
                   ),
                   type: DioExceptionType.badResponse,
@@ -430,7 +372,7 @@ class ApiClient {
 
   /// Intenta reconectar a otro servidor disponible
   static Future<bool> tryReconnect() async {
-    debugPrint('[ApiClient] 🔄 Intentando reconectar...');
+    debugPrint('[ApiClient] ðŸ”„ Intentando reconectar...');
     try {
       await ApiConfig.refreshConnection();
       reinitialize();
@@ -471,6 +413,7 @@ class ApiClient {
     return !DateTime.now().isBefore(expiresAt);
   }
 
+  /// Whether latest token refresh failed because transport was unavailable.
   static bool get lastTokenRefreshFailedDueToConnectivity =>
       _lastTokenRefreshFailedDueToConnectivity;
 
@@ -486,14 +429,17 @@ class ApiClient {
     }
   }
 
+  /// Clears in-flight request deduplication state.
   static void clearPendingRequests() {
     _pendingRequests.clear();
   }
 
+  /// Stores rotated refresh [token] in secure storage.
   static Future<void> storeRefreshToken(String token) async {
     await SecureStorage.writeSecureData('refresh_token', token);
   }
 
+  /// Removes refresh token from secure storage.
   static Future<void> clearRefreshToken() async {
     await SecureStorage.deleteSecureData('refresh_token');
   }
@@ -524,6 +470,7 @@ class ApiClient {
     }
   }
 
+  /// Refreshes access credentials using single-flight coordination.
   static Future<bool> refreshAccessToken() async {
     final pending = _refreshInFlight;
     if (pending != null) return pending;
@@ -666,10 +613,10 @@ class ApiClient {
 
   static String _normalizeQueryValue(Object? value) {
     if (value == null) return '';
-    if (value is Iterable) {
+    if (value is Iterable<Object?>) {
       return value.map(_normalizeQueryValue).join(',');
     }
-    if (value is Map) {
+    if (value is Map<Object?, Object?>) {
       final entries = value.entries.toList()
         ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
       return entries
@@ -693,17 +640,19 @@ class ApiClient {
     return requestEpoch is int && requestEpoch != _authEpoch;
   }
 
-  /// Recursively converts all nested Map<dynamic,dynamic> to Map<String,dynamic>.
+  /// Converts nested dynamic maps to string-keyed maps recursively.
   /// Hive deserialization returns _Map<dynamic,dynamic> for nested objects;
   /// a shallow Map.from() only fixes the top level.
-  static Map<String, dynamic> _deepCastMap(Map src) {
+  static Map<String, dynamic> _deepCastMap(Map<Object?, Object?> src) {
     return src.map((k, v) => MapEntry(k.toString(), _deepCastValue(v)));
   }
 
-  static dynamic _deepCastValue(dynamic v) {
-    if (v is Map) return _deepCastMap(v);
-    if (v is List) return v.map(_deepCastValue).toList();
-    return v;
+  static Object? _deepCastValue(Object? value) {
+    if (value is Map<Object?, Object?>) return _deepCastMap(value);
+    if (value is List<Object?>) {
+      return value.map(_deepCastValue).toList();
+    }
+    return value;
   }
 
   static Options? _getOptionsForRead({
@@ -726,9 +675,9 @@ class ApiClient {
 
   /// GET request with optional caching
   ///
-  /// [cacheKey] - If provided, response will be cached and returned from cache if valid
-  /// [cacheTTL] - Cache time-to-live, defaults to CacheService.defaultTTL
-  /// [forceRefresh] - If true, bypasses cache and fetches fresh data
+  /// [cacheKey] caches valid responses when provided.
+  /// [cacheTTL] defaults to [CacheService.defaultTTL].
+  /// [forceRefresh] bypasses cache when true.
   static Future<Map<String, dynamic>> get(
     String endpoint, {
     Map<String, dynamic>? queryParameters,
@@ -764,8 +713,8 @@ class ApiClient {
       // Try cache first if cacheKey provided and not forcing refresh
       if (effectiveCacheKey != null && !forceRefresh) {
         try {
-          final cached = CacheService.get(effectiveCacheKey);
-          if (cached != null && cached is Map) {
+          final cached = CacheService.get<Object?>(effectiveCacheKey);
+          if (cached is Map<Object?, Object?>) {
             return _deepCastMap(cached);
           }
         } catch (e) {
@@ -774,7 +723,7 @@ class ApiClient {
       }
 
       try {
-        final response = await dio.get(
+        final response = await dio.get<Object?>(
           endpoint,
           queryParameters: queryParameters,
           cancelToken: cancelToken,
@@ -784,7 +733,7 @@ class ApiClient {
           ),
         );
         final rawData = response.data;
-        if (rawData is! Map) {
+        if (rawData is! Map<Object?, Object?>) {
           if (rawData is List) {
             throw ApiException('Response is a List, use getList() instead');
           }
@@ -806,11 +755,11 @@ class ApiClient {
             allowStale &&
             _isNetworkError(e)) {
           try {
-            final cached = CacheService.getStale(
+            final cached = CacheService.getStale<Object?>(
               effectiveCacheKey,
               maxStale: maxStale,
             );
-            if (cached != null && cached is Map) {
+            if (cached is Map<Object?, Object?>) {
               return _deepCastMap(cached);
             }
           } catch (_) {}
@@ -827,7 +776,7 @@ class ApiClient {
       return await future;
     } finally {
       if (canDeduplicate) {
-        _pendingRequests.remove(requestKey);
+        final _ = _pendingRequests.remove(requestKey);
       }
     }
   }
@@ -867,7 +816,7 @@ class ApiClient {
       // Try cache first if cacheKey provided and not forcing refresh
       if (effectiveCacheKey != null && !forceRefresh) {
         try {
-          final cached = CacheService.get(effectiveCacheKey);
+          final cached = CacheService.get<Object?>(effectiveCacheKey);
           if (cached != null && cached is List) {
             return cached;
           }
@@ -877,7 +826,7 @@ class ApiClient {
       }
 
       try {
-        final response = await dio.get(
+        final response = await dio.get<Object?>(
           endpoint,
           queryParameters: queryParameters,
           cancelToken: cancelToken,
@@ -889,8 +838,15 @@ class ApiClient {
 
         if (data is List) {
           result = data;
-        } else if (data is Map && data.containsKey('data')) {
-          result = data['data'] as List<dynamic>;
+        } else if (data is Map<Object?, Object?>) {
+          final nestedData = data['data'];
+          if (nestedData is! List<Object?>) {
+            throw ApiException(
+              'Expected List in response data but got '
+              '${nestedData.runtimeType}',
+            );
+          }
+          result = List<dynamic>.from(nestedData);
         } else {
           result = [data];
         }
@@ -926,7 +882,7 @@ class ApiClient {
       return await future;
     } finally {
       if (canDeduplicate) {
-        _pendingRequests.remove(requestKey);
+        final _ = _pendingRequests.remove(requestKey);
       }
     }
   }
@@ -938,7 +894,7 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      final response = await dio.get(
+      final response = await dio.get<Object?>(
         endpoint,
         queryParameters: queryParameters,
         options: Options(
@@ -946,13 +902,13 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 60),
         ),
       );
-      return response.data as List<int>;
+      return response.data! as List<int>;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
-  /// Download a file using the shared Dio client, interceptors and error mapping.
+  /// Downloads a file through shared interceptors and error mapping.
   static Future<Response<dynamic>> download(
     String url,
     String savePath, {
@@ -987,7 +943,7 @@ class ApiClient {
     int? maxRetries,
   }) async {
     try {
-      final response = await dio.post(
+      final response = await dio.post<Map<String, dynamic>>(
         endpoint,
         data: data,
         options: Options(
@@ -999,7 +955,7 @@ class ApiClient {
           },
         ),
       );
-      return response.data as Map<String, dynamic>;
+      return response.data!;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -1020,8 +976,9 @@ class ApiClient {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await dio.put(endpoint, data: data);
-      return response.data as Map<String, dynamic>;
+      final response =
+          await dio.put<Map<String, dynamic>>(endpoint, data: data);
+      return response.data!;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -1033,8 +990,9 @@ class ApiClient {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await dio.delete(endpoint, data: data);
-      return response.data as Map<String, dynamic>;
+      final response =
+          await dio.delete<Map<String, dynamic>>(endpoint, data: data);
+      return response.data!;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -1063,7 +1021,8 @@ class ApiClient {
       );
     } else if (e.type == DioExceptionType.connectionTimeout) {
       return ApiException(
-        'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
+        'Timeout de conexiÃ³n. Verifica tu conexiÃ³n a internet e '
+        'intÃ©ntalo de nuevo.',
         statusCode: 0,
       );
     } else if (e.type == DioExceptionType.connectionError) {
@@ -1071,22 +1030,22 @@ class ApiClient {
       if (e.error is SocketException ||
           (e.error?.toString().contains('SocketException') ?? false)) {
         return ApiException(
-          'No hay conexión a internet. Verifica tu WiFi o datos móviles.',
+          'No hay conexiÃ³n a internet. Verifica tu WiFi o datos mÃ³viles.',
           statusCode: 0,
         );
       }
       return ApiException(
-        'Error de conexión. Verifica tu conexión a internet.',
+        'Error de conexiÃ³n. Verifica tu conexiÃ³n a internet.',
         statusCode: 0,
       );
     } else if (e.type == DioExceptionType.receiveTimeout) {
       return ApiException(
-        'El servidor está tardando demasiado. Inténtalo de nuevo.',
+        'El servidor estÃ¡ tardando demasiado. IntÃ©ntalo de nuevo.',
         statusCode: 0,
       );
     } else if (e.type == DioExceptionType.sendTimeout) {
       return ApiException(
-        'Error al enviar datos. Verifica tu conexión.',
+        'Error al enviar datos. Verifica tu conexiÃ³n.',
         statusCode: 0,
       );
     } else if (e.response != null) {
@@ -1129,13 +1088,15 @@ class ApiClient {
           debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();
           // Reset flag after short delay to allow re-login
-          Future.delayed(
-            const Duration(seconds: 2),
-            () => _isLoggingOut = false,
+          unawaited(
+            Future<void>.delayed(
+              const Duration(seconds: 2),
+              () => _isLoggingOut = false,
+            ),
           );
         }
         return ApiException(
-          serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
+          serverMessage ?? 'Credenciales invÃ¡lidas. Verifica usuario y PIN.',
           statusCode: 401,
           code: serverCode,
         );
@@ -1166,7 +1127,7 @@ class ApiClient {
         );
       } else if (statusCode >= 500) {
         return ApiException(
-          'Error del servidor ($statusCode). Inténtalo más tarde.',
+          'Error del servidor ($statusCode). IntÃ©ntalo mÃ¡s tarde.',
           statusCode: statusCode,
           code: serverCode,
         );
@@ -1180,12 +1141,12 @@ class ApiClient {
       final errorMsg = e.error?.toString().toLowerCase() ?? '';
       if (errorMsg.contains('socket')) {
         return ApiException(
-          'No hay conexión a internet. Verifica WiFi o datos móviles.',
+          'No hay conexiÃ³n a internet. Verifica WiFi o datos mÃ³viles.',
           statusCode: 0,
         );
       } else if (errorMsg.contains('ssl') || errorMsg.contains('certificate')) {
         return ApiException(
-          'Error de seguridad. Verifica tu conexión.',
+          'Error de seguridad. Verifica tu conexiÃ³n.',
           statusCode: 0,
         );
       }
@@ -1193,7 +1154,7 @@ class ApiClient {
 
     // Default error
     return ApiException(
-      'Error de conexión. Verifica tu internet e inténtalo de nuevo.',
+      'Error de conexiÃ³n. Verifica tu internet e intÃ©ntalo de nuevo.',
       statusCode: 0,
     );
   }
@@ -1235,7 +1196,9 @@ class _RetryInterceptor extends Interceptor {
 
   @override
   Future<void> onError(
-      DioException err, ErrorInterceptorHandler handler) async {
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
     final shouldRetry = _shouldRetry(err);
     final configuredRetries = err.requestOptions.extra['maxRetries'];
     final retryLimit = configuredRetries is int && configuredRetries >= 0
@@ -1267,7 +1230,7 @@ class _RetryInterceptor extends Interceptor {
 
       try {
         err.requestOptions.extra['retryCount'] = retryCount + 1;
-        final response = await _dio.fetch(err.requestOptions);
+        final response = await _dio.fetch<dynamic>(err.requestOptions);
         handler.resolve(response);
         return;
       } catch (e) {
@@ -1319,19 +1282,25 @@ class _RetryInterceptor extends Interceptor {
   }
 }
 
+/// Typed API failure exposed to application layers.
 class ApiException implements Exception {
+  /// Creates an API failure with optional backend metadata.
   ApiException(
     this.message, {
     this.statusCode,
     this.code,
     this.confirmationId,
   });
+
+  /// User-facing failure description.
   final String message;
+
+  /// HTTP status, or zero/null for transport failures.
   final int? statusCode;
 
-  /// Código semántico devuelto por el backend (por ejemplo
+  /// CÃ³digo semÃ¡ntico devuelto por el backend (por ejemplo
   /// `COBRO_ALREADY_LIQUIDADO`, `PAYMENT_AUTHZ_DENIED`, ...). Permite
-  /// que la UI haga mensaje específico sin parsear el texto humano.
+  /// que la UI haga mensaje especÃ­fico sin parsear el texto humano.
   final String? code;
 
   /// Server-issued confirmation identifier returned by a typed conflict.

@@ -35,10 +35,11 @@ class MatrixNode {
 
   static List<MatrixNode> fromJsonList(dynamic data) {
     if (data == null) return [];
-    if (data is List)
+    if (data is List) {
       return data
           .map((e) => MatrixNode.fromJson(e as Map<String, dynamic>))
           .toList();
+    }
     return [];
   }
 
@@ -107,8 +108,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: Text('No hay datos para esta selección',
-              style: TextStyle(color: Colors.white30)),
+          child: Text(
+            'No hay datos para esta selección',
+            style: TextStyle(color: Colors.white30),
+          ),
         ),
       );
     }
@@ -142,47 +145,65 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
                 border: Border(
-                    bottom: BorderSide(
-                        color: AppTheme.info.withValues(alpha: 0.2))),
+                  bottom: BorderSide(
+                    color: AppTheme.info.withValues(alpha: 0.2),
+                  ),
+                ),
                 color: AppTheme.info.withValues(alpha: 0.06),
               ),
               child: const Row(
                 children: [
                   Expanded(
-                      flex: 5,
-                      child: Text('ITEM',
-                          style: TextStyle(
-                              color: AppTheme.info,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0))),
+                    flex: 5,
+                    child: Text(
+                      'ITEM',
+                      style: TextStyle(
+                        color: AppTheme.info,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
                   Expanded(
-                      flex: 3,
-                      child: Text('VENTA',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              color: AppTheme.info,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0))),
+                    flex: 3,
+                    child: Text(
+                      'VENTA',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: AppTheme.info,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
                   Expanded(
-                      flex: 2,
-                      child: Text('MARG %',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              color: AppTheme.info,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0))),
+                    flex: 2,
+                    child: Text(
+                      'MARG %',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: AppTheme.info,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
                   Expanded(
-                      flex: 2,
-                      child: Text('PEDIDOS',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              color: AppTheme.info,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0))),
+                    flex: 2,
+                    child: Text(
+                      'PEDIDOS',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: AppTheme.info,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -208,7 +229,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
   Widget _buildTotalRow() {
     double totalSales = 0;
     double totalMargin = 0;
-    int totalOrders = 0;
+    var totalOrders = 0;
     for (final node in widget.data) {
       totalSales += node.sales;
       totalMargin += node.margin;
@@ -222,8 +243,11 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       decoration: BoxDecoration(
         color: AppTheme.warning.withValues(alpha: 0.12),
         border: Border(
-            top: BorderSide(
-                color: AppTheme.warning.withValues(alpha: 0.5), width: 2)),
+          top: BorderSide(
+            color: AppTheme.warning.withValues(alpha: 0.5),
+            width: 2,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -233,11 +257,14 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               children: [
                 Icon(Icons.summarize, color: AppTheme.warning, size: 16),
                 SizedBox(width: 6),
-                Text('TOTAL',
-                    style: TextStyle(
-                        color: AppTheme.warning,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  'TOTAL',
+                  style: TextStyle(
+                    color: AppTheme.warning,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
@@ -247,9 +274,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               CurrencyFormatter.format(totalSales),
               textAlign: TextAlign.right,
               style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           // MARG column - show % not €
@@ -268,9 +296,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               totalOrders.toString(),
               textAlign: TextAlign.right,
               style: const TextStyle(
-                  color: AppTheme.warning,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold),
+                color: AppTheme.warning,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -308,7 +337,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       AppTheme.accentIndigo,
       AppTheme.success,
       Colors.teal,
-      Colors.pink
+      Colors.pink,
     ];
     final levelColor = levelColors[level % levelColors.length];
 
@@ -378,8 +407,11 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             else
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Icon(Icons.circle,
-                    size: 6, color: levelColor.withValues(alpha: 0.5)),
+                child: Icon(
+                  Icons.circle,
+                  size: 6,
+                  color: levelColor.withValues(alpha: 0.5),
+                ),
               ),
 
             // Name
@@ -403,8 +435,9 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                     Text(
                       '${node.children.length} items',
                       style: TextStyle(
-                          color: levelColor.withValues(alpha: 0.6),
-                          fontSize: 10),
+                        color: levelColor.withValues(alpha: 0.6),
+                        fontSize: 10,
+                      ),
                     ),
                 ],
               ),

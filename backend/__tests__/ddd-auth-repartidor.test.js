@@ -220,7 +220,7 @@ test('DDD mount order exposes perfil before legacy fallback', () => {
   expect(paths).toEqual(['/login', '/validate', '/perfil']);
   const perfilLayer = createAuthRoutes().stack.find((layer) => layer.route?.path === '/perfil');
   expect(perfilLayer.route.stack[0].handle).toBe(mockVerify);
-  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   const ddd = source.indexOf("app.use('/api/auth', dddAuthRoutes)");
   const legacy = source.indexOf("app.use('/api/auth', authRoutes)", ddd);
   expect(ddd).toBeGreaterThan(-1);

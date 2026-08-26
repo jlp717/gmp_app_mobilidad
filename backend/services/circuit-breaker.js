@@ -1,106 +1,189 @@
-/**
- * Circuit Breaker for DB/ODBC calls
- * P3: Opens fast (<200ms) and falls back to cache
- */
-
 'use strict';
+
 const logger = require('../middleware/logger');
 
-// Circuit breaker states
 const CLOSED = 'closed';
 const OPEN = 'open';
 const HALF_OPEN = 'half_open';
 
+class CircuitOpenError extends Error {
+    constructor(name, code = 'CIRCUIT_OPEN') {
+        super('Circuit breaker open: ' + name);
+        this.name = 'CircuitOpenError';
+        this.code = code;
+        this.statusCode = 503;
+        this.isOperational = true;
+    }
+}
+
+// ponytail: breaker state is per PM2 worker. upgrade: share state only if cross-worker coordination is required.
 class CircuitBreaker {
     constructor(options = {}) {
         this.failureThreshold = options.failureThreshold || 3;
         this.successThreshold = options.successThreshold || 2;
-        this.timeout = options.timeout || 5000; // 5s default
+        this.timeout = options.timeout || 5000;
+        this.resetTimeout = options.resetTimeout || options.timeout || 30000;
+        this.errorThresholdPercentage = options.errorThresholdPercentage || 50;
+        this.rollingWindowSize = options.rollingWindowSize || 20;
+        this.throwOnFailure = options.throwOnFailure === true;
+        this.openErrorCode = options.openErrorCode || 'CIRCUIT_OPEN';
         this.name = options.name || 'circuit';
-        
+        this.shouldCountFailure = typeof options.shouldCountFailure === 'function'
+            ? options.shouldCountFailure
+            : () => true;
+
         this.state = CLOSED;
         this.failures = 0;
         this.successes = 0;
         this.lastFailureTime = 0;
         this.nextAttempt = 0;
+        this.outcomes = [];
+        this.halfOpenProbeInFlight = false;
     }
 
-    async execute(fn, fallbackFn) {
+    async execute(fn, fallbackFn, executionOptions = {}) {
         const now = Date.now();
-
-        // Check if circuit is open
         if (this.state === OPEN) {
             if (now < this.nextAttempt) {
-                logger.warn(`[CircuitBreaker:${this.name}] OPEN - using fallback`);
-                return fallbackFn ? fallbackFn() : null;
+                const error = new CircuitOpenError(this.name, this.openErrorCode);
+                logger.warn('[CircuitBreaker:' + this.name + '] OPEN - using fallback');
+                if (fallbackFn) return fallbackFn(error);
+                if (this.throwOnFailure) throw error;
+                return null;
             }
-            // Try half-open
             this.state = HALF_OPEN;
-            logger.info(`[CircuitBreaker:${this.name}] HALF_OPEN - testing connection`);
+            this.successes = 0;
+            logger.info('[CircuitBreaker:' + this.name + '] HALF_OPEN - testing connection');
         }
 
+        if (this.state === HALF_OPEN && this.halfOpenProbeInFlight) {
+            const error = new CircuitOpenError(this.name, this.openErrorCode);
+            logger.warn('[CircuitBreaker:' + this.name + '] HALF_OPEN probe already running');
+            if (fallbackFn) return fallbackFn(error);
+            if (this.throwOnFailure) throw error;
+            return null;
+        }
+
+        const isHalfOpenProbe = this.state === HALF_OPEN;
+        if (isHalfOpenProbe) this.halfOpenProbeInFlight = true;
+
+        const executionTimeout = executionOptions.timeout || this.timeout;
+        let timer;
         try {
-            // Execute with timeout
-            const result = await Promise.race([
-                fn(),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Circuit breaker timeout')), this.timeout)
-                )
-            ]);
-            
+            const timeoutPromise = new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                    const error = executionOptions.timeoutErrorFactory
+                        ? executionOptions.timeoutErrorFactory(executionTimeout)
+                        : Object.assign(new Error('Circuit breaker timeout'), { code: 'CIRCUIT_TIMEOUT' });
+                    reject(error);
+                    if (executionOptions.onTimeout) {
+                        Promise.resolve()
+                            .then(() => executionOptions.onTimeout())
+                            .catch(() => {});
+                    }
+                }, executionTimeout);
+            });
+            const result = await Promise.race([Promise.resolve().then(fn), timeoutPromise]);
             this.onSuccess();
             return result;
-            
         } catch (error) {
-            this.onFailure();
-            logger.warn(`[CircuitBreaker:${this.name}] Failed: ${error.message} - using fallback`);
-            return fallbackFn ? fallbackFn() : null;
+            const predicate = executionOptions.shouldCountFailure || this.shouldCountFailure;
+            if (predicate(error)) {
+                this.onFailure();
+            } else if (isHalfOpenProbe) {
+                this.onSuccess();
+            }
+            logger.warn('[CircuitBreaker:' + this.name + '] Failed: ' + error.message + ' - using fallback');
+            if (fallbackFn) return fallbackFn(error);
+            if (this.throwOnFailure) throw error;
+            return null;
+        } finally {
+            clearTimeout(timer);
+            if (isHalfOpenProbe) this.halfOpenProbeInFlight = false;
         }
+    }
+
+    recordOutcome(success) {
+        this.outcomes.push(success);
+        if (this.outcomes.length > this.rollingWindowSize) this.outcomes.shift();
+        this.failures = this.outcomes.filter((outcome) => !outcome).length;
     }
 
     onSuccess() {
-        this.failures = 0;
         if (this.state === HALF_OPEN) {
             this.successes++;
             if (this.successes >= this.successThreshold) {
-                this.state = CLOSED;
-                logger.info(`[CircuitBreaker:${this.name}] CLOSED - recovered`);
+                this.close();
+                logger.info('[CircuitBreaker:' + this.name + '] CLOSED - recovered');
             }
+            return;
         }
+        this.recordOutcome(true);
     }
 
     onFailure() {
-        this.failures++;
         this.lastFailureTime = Date.now();
-        
-        if (this.failures >= this.failureThreshold) {
-            this.state = OPEN;
-            this.nextAttempt = Date.now() + this.timeout;
-            this.successes = 0;
-            logger.warn(`[CircuitBreaker:${this.name}] OPEN - too many failures`);
+        if (this.state === HALF_OPEN) {
+            this.open();
+            return;
         }
+
+        this.recordOutcome(false);
+        const errorRate = (this.failures / this.outcomes.length) * 100;
+        if (this.outcomes.length >= this.failureThreshold && errorRate >= this.errorThresholdPercentage) {
+            this.open();
+        }
+    }
+
+    open() {
+        this.state = OPEN;
+        this.nextAttempt = Date.now() + this.resetTimeout;
+        this.successes = 0;
+        logger.warn('[CircuitBreaker:' + this.name + '] OPEN - error threshold reached');
+    }
+
+    close() {
+        this.state = CLOSED;
+        this.failures = 0;
+        this.successes = 0;
+        this.nextAttempt = 0;
+        this.outcomes = [];
     }
 
     getState() {
         return this.state;
     }
+
+    getMetrics() {
+        return {
+            state: this.state,
+            failures: this.failures,
+            sampleSize: this.outcomes.length,
+            errorThresholdPercentage: this.errorThresholdPercentage,
+            resetTimeout: this.resetTimeout,
+            nextAttempt: this.nextAttempt || null,
+        };
+    }
 }
 
-// P3: Create circuit breakers for each dependent service
 const ruteroWeekCircuit = new CircuitBreaker({
     name: 'rutero_week',
     failureThreshold: 2,
-    timeout: 200, // Fast open
+    timeout: 200,
 });
 
 const erpDeliveryCircuit = new CircuitBreaker({
-    name: 'erp_delivery', 
+    name: 'erp_delivery',
     failureThreshold: 3,
     timeout: 3000,
 });
 
 module.exports = {
     CircuitBreaker,
+    CircuitOpenError,
+    CLOSED,
+    OPEN,
+    HALF_OPEN,
     ruteroWeekCircuit,
-    erpDeliveryCircuit
+    erpDeliveryCircuit,
 };

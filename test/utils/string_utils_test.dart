@@ -90,11 +90,11 @@ void main() {
 
   group('StringUtils formatCurrency Tests', () {
     test('formats with default euro symbol', () {
-      expect(StringUtils.formatCurrency(100.0), '100.00 €');
+      expect(StringUtils.formatCurrency(100), '100.00 €');
     });
 
     test('formats with custom symbol', () {
-      expect(StringUtils.formatCurrency(100.0, symbol: '\$'), '100.00 \$');
+      expect(StringUtils.formatCurrency(100, symbol: r'$'), r'100.00 $');
     });
 
     test('formats with 2 decimals', () {
@@ -102,7 +102,7 @@ void main() {
     });
 
     test('formats negative values', () {
-      expect(StringUtils.formatCurrency(-50.0), '-50.00 €');
+      expect(StringUtils.formatCurrency(-50), '-50.00 €');
     });
   });
 

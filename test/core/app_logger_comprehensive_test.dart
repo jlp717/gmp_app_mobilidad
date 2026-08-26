@@ -55,8 +55,12 @@ class TestLogger {
     }
   }
 
-  static void http(String method, String url,
-      {int? statusCode, int? durationMs}) {
+  static void http(
+    String method,
+    String url, {
+    int? statusCode,
+    int? durationMs,
+  }) {
     if (shouldLog(LogLevel.info)) {
       final status = statusCode != null ? '-> $statusCode' : '';
       final duration = durationMs != null ? '(${durationMs}ms)' : '';

@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_models.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_preferences.dart';
+import 'package:gmp_app_mobilidad/core/services/auth_session_persistence.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/services/session_scope.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
@@ -15,7 +16,6 @@ import 'package:gmp_app_mobilidad/features/facturas/data/facturas_service.dart';
 import 'package:gmp_app_mobilidad/features/objectives/data/objectives_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationSessionStore {
   const NotificationSessionStore._();
@@ -61,11 +61,10 @@ class NotificationSessionStore {
     }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
       final user = UserModel.fromJson(
         jsonDecode(userDataStr) as Map<String, dynamic>,
       );
-      final vendedorCodes = prefs.getStringList('vendedor_codes') ?? <String>[];
+      final vendedorCodes = await AuthSessionPersistence.readVendedorCodes();
       ApiClient.setAuthToken(token);
       SessionScope.apply(user, vendedorCodes);
       final profile = fromUser(user, vendedorCodes);
@@ -126,7 +125,7 @@ class NotificationDataRepository {
         canDelivery ? await _loadDeliveries(profile, effectiveNow) : null;
 
     final kpi = canCommercial
-        ? commercialResults[3] as _KpiNotificationBundle
+        ? commercialResults[3]! as _KpiNotificationBundle
         : const _KpiNotificationBundle();
 
     return NotificationSnapshot(
@@ -316,7 +315,7 @@ class NotificationDataRepository {
       );
       final clients = (response['clients'] as List? ?? const [])
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map(Map<String, dynamic>.from)
           .toList(growable: false);
       final sortedBySales = List<Map<String, dynamic>>.from(clients)
         ..sort((a, b) {
@@ -381,11 +380,11 @@ class NotificationDataRepository {
           : <String, dynamic>{};
       final byType = (response['byType'] as List? ?? const [])
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map(Map<String, dynamic>.from)
           .toList(growable: false);
       final clients = (response['clients'] as List? ?? const [])
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map(Map<String, dynamic>.from)
           .toList(growable: false);
 
       var reincorporationCount = 0;
@@ -631,7 +630,7 @@ class NotificationDataRepository {
       if (response['success'] != true) return null;
       final albaranes = (response['albaranes'] as List? ?? const [])
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map(Map<String, dynamic>.from)
           .toList(growable: false);
       final resumen = response['resumen'] is Map
           ? Map<String, dynamic>.from(response['resumen'] as Map)

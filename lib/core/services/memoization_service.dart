@@ -77,7 +77,8 @@ class MemoizationService {
 
       final computeTime = DateTime.now().difference(startTime);
       debugPrint(
-          '[Memoize] 💾 MISS: $key (computed in ${computeTime.inMilliseconds}ms)');
+        '[Memoize] 💾 MISS: $key (computed in ${computeTime.inMilliseconds}ms)',
+      );
 
       // Store in cache
       _set(key, result, ttl);
@@ -156,7 +157,8 @@ class MemoizationService {
     }
 
     debugPrint(
-        '[Memoize] 🧹 Invalidated ${keysToRemove.length} entries matching: $pattern');
+      '[Memoize] 🧹 Invalidated ${keysToRemove.length} entries matching: $pattern',
+    );
   }
 
   /// Clear all cached data
@@ -181,7 +183,8 @@ class MemoizationService {
 
     if (keysToRemove.isNotEmpty) {
       debugPrint(
-          '[Memoize] 🧹 Cleaned up ${keysToRemove.length} expired entries');
+        '[Memoize] 🧹 Cleaned up ${keysToRemove.length} expired entries',
+      );
     }
   }
 
@@ -225,7 +228,8 @@ class MemoizationService {
 
     _evictions += keysToRemove.length;
     debugPrint(
-        '[Memoize] 🧹 Removed ${keysToRemove.length} entries due to memory pressure');
+      '[Memoize] 🧹 Removed ${keysToRemove.length} entries due to memory pressure',
+    );
   }
 
   /// Lock management for thread safety

@@ -14,19 +14,20 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Impor
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends ConsumerStatefulWidget {
-  const SimpleClientListPage(
-      {required this.employeeCode,
-      super.key,
-      this.isJefeVentas = false,
-      this.vendorSelectorCodes,
-      this.includeAllVendorOption = true,
-      this.forceShowVendorSelector = false});
+  const SimpleClientListPage({
+    required this.employeeCode,
+    super.key,
+    this.isJefeVentas = false,
+    this.vendorSelectorCodes,
+    this.includeAllVendorOption = true,
+    this.forceShowVendorSelector = false,
+  });
   final String employeeCode;
   final bool isJefeVentas;
   final List<String>? vendorSelectorCodes;
@@ -189,7 +190,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     if (value is num) return value.toDouble();
     final raw = value?.toString().trim() ?? '';
     if (raw.isEmpty) return 0;
-    var cleaned = raw.replaceAll(RegExp(r'[^0-9,.-]'), '');
+    var cleaned = raw.replaceAll(RegExp('[^0-9,.-]'), '');
     if (cleaned.contains(',') &&
         cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
       cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
@@ -346,17 +347,23 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enviar WhatsApp',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text(
+              'Enviar WhatsApp',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text(
+              'Selecciona el número:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay teléfonos guardados',
-                    style: TextStyle(color: AppTheme.textSecondary)),
+                child: Text(
+                  'No hay teléfonos guardados',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
               ),
             ...phones.map(
               (p) => ListTile(
@@ -660,8 +667,11 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.people_outline,
-                size: 64, color: AppTheme.textSecondary),
+            const Icon(
+              Icons.people_outline,
+              size: 64,
+              color: AppTheme.textSecondary,
+            ),
             const SizedBox(height: 16),
             const Text('No se encontraron clientes'),
             const SizedBox(height: 8),
@@ -917,12 +927,13 @@ class _ClientCountPill extends StatelessWidget {
 }
 
 class _ClientCard extends StatelessWidget {
-  const _ClientCard(
-      {required this.client,
-      this.isJefeVentas = false,
-      this.hasPrefetchedAlerts = false,
-      this.onTap,
-      this.onWhatsAppTap});
+  const _ClientCard({
+    required this.client,
+    this.isJefeVentas = false,
+    this.hasPrefetchedAlerts = false,
+    this.onTap,
+    this.onWhatsAppTap,
+  });
   final Map<String, dynamic> client;
   final bool isJefeVentas;
   final bool hasPrefetchedAlerts;
@@ -1021,8 +1032,11 @@ class _ClientCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.location_on,
-                                size: 14, color: AppTheme.textSecondary),
+                            const Icon(
+                              Icons.location_on,
+                              size: 14,
+                              color: AppTheme.textSecondary,
+                            ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
@@ -1043,8 +1057,11 @@ class _ClientCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Row(
                             children: [
-                              const Icon(Icons.phone,
-                                  size: 14, color: AppTheme.textSecondary),
+                              const Icon(
+                                Icons.phone,
+                                size: 14,
+                                color: AppTheme.textSecondary,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 phone,
@@ -1147,8 +1164,11 @@ class _ClientCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: onWhatsAppTap,
-                      icon: const Icon(Icons.chat,
-                          color: Color(0xFF25D366), size: 24),
+                      icon: const Icon(
+                        Icons.chat,
+                        color: Color(0xFF25D366),
+                        size: 24,
+                      ),
                       tooltip: 'WhatsApp',
                       padding: EdgeInsets.zero,
                       constraints:
@@ -1214,9 +1234,10 @@ class _ClientCard extends StatelessWidget {
                   Text(
                     'Ruta $route',
                     style: const TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.accentIndigo,
-                        fontWeight: FontWeight.w500),
+                      fontSize: 11,
+                      color: AppTheme.accentIndigo,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -1236,15 +1257,19 @@ class _ClientCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today,
-                      size: 12, color: AppTheme.info),
+                  const Icon(
+                    Icons.calendar_today,
+                    size: 12,
+                    color: AppTheme.info,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Visita: $visitDays',
                     style: const TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.info,
-                        fontWeight: FontWeight.w500),
+                      fontSize: 11,
+                      color: AppTheme.info,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -1264,15 +1289,19 @@ class _ClientCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.local_shipping,
-                      size: 12, color: AppTheme.success),
+                  const Icon(
+                    Icons.local_shipping,
+                    size: 12,
+                    color: AppTheme.success,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Reparto: $deliveryDays',
                     style: const TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.success,
-                        fontWeight: FontWeight.w500),
+                      fontSize: 11,
+                      color: AppTheme.success,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),

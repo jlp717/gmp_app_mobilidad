@@ -1,0 +1,50 @@
+name: flutter-tests
+
+on:
+  push:
+    branches: [test, develop, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-widget-tests:
+    # Piramide base: unit + widget + goldens en runner Linux (rapido/barato).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos lib/features/liquidacion_comercial test/features/liquidacion_comercial test/features/repartidor_finanzas/presentation/vencimientos_page_states_test.dart test/features/commissions/presentation test/goldens
+      - name: Tests con cobertura (baseline domain>=50% global>=35%; objetivo 85/60)
+        run: flutter test --coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+
+  integration-tests:
+    # Flujo critico login->rutero->liquidacion. Requiere credenciales staging.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          INTEGRATION_USER: ${{ secrets.INTEGRATION_USER }}
+          INTEGRATION_PASS: ${{ secrets.INTEGRATION_PASS }}
+        with:
+          api-level: 34
+          script: flutter test integration_test/app_flow_test.dart

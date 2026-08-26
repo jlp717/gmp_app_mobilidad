@@ -1,7 +1,5 @@
 // GMP Feature Helpers Tests
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
-import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
 
 void main() {
   group('CurrencyFormatter Tests', () {
@@ -11,7 +9,7 @@ void main() {
     });
 
     test('formats with 2 decimals', () {
-      final formatted = CurrencyFormatter.formatEuro(100.00);
+      final formatted = CurrencyFormatter.formatEuro(100);
       expect(formatted, contains('100'));
     });
   });

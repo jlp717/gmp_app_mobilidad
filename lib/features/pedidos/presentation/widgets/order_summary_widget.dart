@@ -289,8 +289,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.shopping_cart_outlined,
-              color: Colors.white24, size: 56),
+          const Icon(
+            Icons.shopping_cart_outlined,
+            color: Colors.white24,
+            size: 56,
+          ),
           const SizedBox(height: 12),
           Text(
             'Pedido vacio',
@@ -1312,7 +1315,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
   // Show stock alternatives when order is blocked
   void _showStockAlternatives(
-      BuildContext context, Map<String, dynamic> result) {
+    BuildContext context,
+    Map<String, dynamic> result,
+  ) {
     final stockWarnings = result['stockWarnings'] as List? ?? [];
     final alternatives = result['alternatives'] as List? ?? [];
 
@@ -1323,7 +1328,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         alternatives: alternatives,
         onAddToCart: (productCode, productName, quantity, unit) async {
           Navigator.pop(
-              context, {'code': productCode, 'qty': quantity, 'unit': unit});
+            context,
+            {'code': productCode, 'qty': quantity, 'unit': unit},
+          );
         },
       ),
     ).then((selected) async {
@@ -1350,9 +1357,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           if (error != null && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(error,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold)),
+                content: Text(
+                  error,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 backgroundColor: AppTheme.error,
               ),
             );
@@ -1461,13 +1472,15 @@ class _AlternativesDialog extends StatefulWidget {
     required this.stockWarnings,
     required this.alternatives,
     required this.onAddToCart,
-    super.key,
   });
   final List<dynamic> stockWarnings;
   final List<dynamic> alternatives;
   final Function(
-          String productCode, String productName, double quantity, String unit)
-      onAddToCart;
+    String productCode,
+    String productName,
+    double quantity,
+    String unit,
+  ) onAddToCart;
 
   @override
   State<_AlternativesDialog> createState() => _AlternativesDialogState();
@@ -1512,8 +1525,11 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Colors.white, size: 28),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                   SizedBox(width: 12),
                   Text(
                     'Stock Insuficiente',
@@ -1552,12 +1568,16 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                             color: AppTheme.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                                color: AppTheme.error.withValues(alpha: 0.3)),
+                              color: AppTheme.error.withValues(alpha: 0.3),
+                            ),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline,
-                                  color: AppTheme.error, size: 20),
+                              const Icon(
+                                Icons.error_outline,
+                                color: AppTheme.error,
+                                size: 20,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
@@ -1693,7 +1713,9 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                       (prod['precio'] as num).toDouble() > 0)
                                     Padding(
                                       padding: const EdgeInsets.only(
-                                          top: 6, left: 28),
+                                        top: 6,
+                                        left: 28,
+                                      ),
                                       child: Text(
                                         '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} €/caja',
                                         style: const TextStyle(
@@ -1729,7 +1751,9 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                 controller: _qtyController,
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(
-                                    color: Colors.white, fontSize: 16),
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
                                 textAlign: TextAlign.center,
                                 decoration: InputDecoration(
                                   labelText: 'Cajas',
@@ -1740,17 +1764,20 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     borderSide: const BorderSide(
-                                        color: AppTheme.borderColor),
+                                      color: AppTheme.borderColor,
+                                    ),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     borderSide: const BorderSide(
-                                        color: AppTheme.borderColor),
+                                      color: AppTheme.borderColor,
+                                    ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     borderSide: const BorderSide(
-                                        color: AppTheme.success),
+                                      color: AppTheme.success,
+                                    ),
                                   ),
                                 ),
                                 onChanged: (val) {
@@ -1775,13 +1802,18 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                           padding: EdgeInsets.all(32),
                           child: Column(
                             children: [
-                              Icon(Icons.inventory_2_outlined,
-                                  color: Colors.white54, size: 48),
+                              Icon(
+                                Icons.inventory_2_outlined,
+                                color: Colors.white54,
+                                size: 48,
+                              ),
                               SizedBox(height: 16),
                               Text(
                                 'No hay alternativas disponibles',
                                 style: TextStyle(
-                                    color: Colors.white54, fontSize: 14),
+                                  color: Colors.white54,
+                                  fontSize: 14,
+                                ),
                               ),
                             ],
                           ),
@@ -1839,7 +1871,9 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                         label: const Text(
                           'AÑADIR AL CARRITO',
                           style: TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.bold),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.success,

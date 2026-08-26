@@ -333,30 +333,36 @@ router.get('/sales-history', verifyToken, async (req, res) => {
         const vendedorFilter = buildVendedorFilter(vendedorCodes);
 
         let whereClause = `WHERE 1=1 ${vendedorFilter}`;
+        const whereParams = [];
 
         // Filter by Client - safe interpolation
         if (clientCode) {
             const safeClientCode = clientCode.trim().replace(/[^a-zA-Z0-9]/g, '');
-            whereClause += ` AND L.CODIGOCLIENTEALBARAN = '${safeClientCode}'`;
+            whereClause += ' AND L.CODIGOCLIENTEALBARAN = ?';
+            whereParams.push(safeClientCode);
         }
 
         // Filter by Product (Code or Description) or Batch/Reference - safe interpolation
         if (productSearch) {
             const safeTerm = sanitizeForSQL(productSearch.toUpperCase().trim()).replace(/[%_\\]/g, '');
-            whereClause += ` AND (UPPER(L.DESCRIPCION) LIKE '%${safeTerm}%' OR L.CODIGOARTICULO LIKE '%${safeTerm}%' OR L.REFERENCIA LIKE '%${safeTerm}%')`;
+            whereClause += ' AND (UPPER(L.DESCRIPCION) LIKE ? OR L.CODIGOARTICULO LIKE ? OR L.REFERENCIA LIKE ?)';
+            const searchPattern = `%${safeTerm}%`;
+            whereParams.push(searchPattern, searchPattern, searchPattern);
         }
 
         // Filter by Date Range (YYYY-MM-DD)
         if (startDate) {
             const start = new Date(startDate);
             const startNum = start.getFullYear() * 10000 + (start.getMonth() + 1) * 100 + start.getDate();
-            whereClause += ` AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) >= ${startNum}`;
+            whereClause += ' AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) >= ?';
+            whereParams.push(startNum);
         }
 
         if (endDate) {
             const end = new Date(endDate);
             const endNum = end.getFullYear() * 10000 + (end.getMonth() + 1) * 100 + end.getDate();
-            whereClause += ` AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) <= ${endNum}`;
+            whereClause += ' AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) <= ?';
+            whereParams.push(endNum);
         } else {
             whereClause += ` AND L.ANODOCUMENTO >= ${MIN_YEAR}`;
         }
@@ -394,7 +400,7 @@ router.get('/sales-history', verifyToken, async (req, res) => {
     `;
 
         // Detailed history is usually NOT cached due to high filter variability
-        const rows = await query(querySql);
+        const rows = await queryWithParams(querySql, whereParams);
 
         // Format for frontend
         const formattedRows = rows.map(r => ({

@@ -6,7 +6,13 @@
   "scripts": {
     "prepare": "husky",
     "test": "cd backend && npm run test:ci",
-    "postinstall": "echo \"[setup] Recuerda: cd backend && npm ci\" "
+    "lint": "eslint .",
+    "lint:backend-legacy": "cd backend && npx eslint src/**/*.ts --quiet",
+    "format:check": "prettier --check \"**/*.{js,cjs,mjs}\" \"!**/node_modules/**\"",
+    "check:domain": "node scripts/check_domain_imports.mjs",
+    "postinstall": "echo \"[setup] Recuerda: cd backend && npm ci\" ",
+    "docs:postman": "node scripts/generate-postman-collection.js",
+    "lint:openapi": "npx @stoplight/spectral-cli lint docs/openapi/openapi.yaml"
   },
   "engines": {
     "node": ">=20"

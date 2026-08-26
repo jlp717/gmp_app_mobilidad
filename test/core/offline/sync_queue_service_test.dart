@@ -47,9 +47,9 @@ void main() {
       SyncQueueService.confirmDeliveryReconciler = ({
         required String deliveryId,
         required String confirmationId,
-        String? cobroId,
         required String fingerprint,
         required String idempotencyKey,
+        String? cobroId,
       }) async {
         throw StateError('journal unavailable');
       };
@@ -72,9 +72,9 @@ void main() {
       SyncQueueService.confirmDeliveryReconciler = ({
         required String deliveryId,
         required String confirmationId,
-        String? cobroId,
         required String fingerprint,
         required String idempotencyKey,
+        String? cobroId,
       }) async {
         reconciled
           ..['deliveryId'] = deliveryId

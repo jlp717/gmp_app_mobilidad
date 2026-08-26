@@ -26,6 +26,7 @@ enum ConnectivityStatus {
 /// - Captive portals that report "connected" but block traffic
 /// - DNS resolution failures on certain networks
 class ConnectivityService {
+  ConnectivityService._();
   static ConnectivityService? _instance;
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
@@ -36,8 +37,6 @@ class ConnectivityService {
   int _consecutiveFailures = 0;
   static const int _maxFailuresBeforeLimited = 2;
   static const Duration _healthCheckInterval = Duration(seconds: 30);
-
-  ConnectivityService._();
 
   static ConnectivityService get instance {
     _instance ??= ConnectivityService._();
@@ -98,7 +97,8 @@ class ConnectivityService {
     // If VPN and limited, log it for debugging
     if (isVpn && _status == ConnectivityStatus.limited) {
       debugPrint(
-          '[ConnectivityService] ⚠️ VPN interface detected but server unreachable');
+        '[ConnectivityService] ⚠️ VPN interface detected but server unreachable',
+      );
     }
   }
 

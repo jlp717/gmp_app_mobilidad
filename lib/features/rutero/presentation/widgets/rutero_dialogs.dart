@@ -61,8 +61,9 @@ class DaySelectorDialog extends StatelessWidget {
           Text(
             'Código: $clientCode',
             style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary.withValues(alpha: 0.7)),
+              fontSize: 12,
+              color: AppTheme.textSecondary.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -114,8 +115,10 @@ class DaySelectorDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppTheme.textTertiary)),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppTheme.textTertiary),
+          ),
         ),
       ],
     );
@@ -153,11 +156,16 @@ class _DayOption extends StatelessWidget {
                 Text(
                   label.toUpperCase(),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
                 const Spacer(),
-                const Icon(Icons.arrow_forward_ios,
-                    size: 16, color: AppTheme.textTertiary),
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: AppTheme.textTertiary,
+                ),
               ],
             ),
           ),
@@ -248,7 +256,9 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
                 Text(
                   'El ${_getDayLabel(widget.targetDay)} tiene $_totalClients cliente(s).',
                   style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 13),
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -285,8 +295,10 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppTheme.textTertiary)),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppTheme.textTertiary),
+          ),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _selectedPosition),
@@ -359,10 +371,11 @@ class _PositionOption extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              Icon(icon,
-                  color:
-                      isSelected ? AppTheme.accentRose : AppTheme.textTertiary,
-                  size: 24),
+              Icon(
+                icon,
+                color: isSelected ? AppTheme.accentRose : AppTheme.textTertiary,
+                size: 24,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -378,14 +391,19 @@ class _PositionOption extends StatelessWidget {
                     Text(
                       subtitle,
                       style: const TextStyle(
-                          fontSize: 11, color: AppTheme.textSecondary),
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
               if (isSelected)
-                const Icon(Icons.check_circle,
-                    color: AppTheme.accentRose, size: 20),
+                const Icon(
+                  Icons.check_circle,
+                  color: AppTheme.accentRose,
+                  size: 20,
+                ),
             ],
           ),
         ),
@@ -481,8 +499,10 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppTheme.textTertiary)),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppTheme.textTertiary),
+          ),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _value),
@@ -561,8 +581,11 @@ class MoveConfirmationDialog extends StatelessWidget {
                         color: AppTheme.info.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person,
-                          color: AppTheme.info, size: 20),
+                      child: const Icon(
+                        Icons.person,
+                        color: AppTheme.info,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -572,12 +595,16 @@ class MoveConfirmationDialog extends StatelessWidget {
                           Text(
                             clientName,
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           Text(
                             clientCode,
                             style: const TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 12),
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -593,13 +620,19 @@ class MoveConfirmationDialog extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('DE',
-                              style: TextStyle(
-                                  fontSize: 10, color: AppTheme.textTertiary)),
+                          const Text(
+                            'DE',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.error.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -615,18 +648,27 @@ class MoveConfirmationDialog extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward,
-                        color: AppTheme.accentRose, size: 28),
+                    const Icon(
+                      Icons.arrow_forward,
+                      color: AppTheme.accentRose,
+                      size: 28,
+                    ),
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('A',
-                              style: TextStyle(
-                                  fontSize: 10, color: AppTheme.textTertiary)),
+                          const Text(
+                            'A',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.success.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -648,7 +690,9 @@ class MoveConfirmationDialog extends StatelessWidget {
                 Text(
                   'Se insertará ${_getPositionLabel(position)}',
                   style: const TextStyle(
-                      fontSize: 12, color: AppTheme.textSecondary),
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -668,8 +712,10 @@ class MoveConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppTheme.textTertiary)),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppTheme.textTertiary),
+          ),
         ),
         ElevatedButton.icon(
           onPressed: () => Navigator.pop(context, true),
@@ -760,8 +806,10 @@ class ReorderConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppTheme.textTertiary)),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppTheme.textTertiary),
+          ),
         ),
         ElevatedButton.icon(
           onPressed: () => Navigator.pop(context, true),

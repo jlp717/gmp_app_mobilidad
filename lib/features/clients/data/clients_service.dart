@@ -115,11 +115,13 @@ class ClientsService {
         .toList();
     if (isGrouped) {
       return result
-          .map((item) => {
-                ...item,
-                'productName': item['family1'] ?? 'Sin familia',
-                'productCode': '',
-              })
+          .map(
+            (item) => {
+              ...item,
+              'productName': item['family1'] ?? 'Sin familia',
+              'productCode': '',
+            },
+          )
           .toList();
     }
     return result;
@@ -130,9 +132,9 @@ class ClientsService {
     required String clientCode,
     required String vendedorCodes,
     required String family1,
+    required int groupLevel,
     String? family2,
     String? family3,
-    required int groupLevel,
     int limit = 100,
   }) async {
     final params = <String, dynamic>{

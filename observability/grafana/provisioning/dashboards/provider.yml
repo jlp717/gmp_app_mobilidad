@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: gmp-dashboards
+    orgId: 1
+    folder: GMP
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /opt/gmp-observability/grafana/dashboards

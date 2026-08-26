@@ -1,7 +1,6 @@
 // ignore_for_file: argument_type_not_assignable, invalid_assignment, return_of_invalid_type
 import 'dart:math';
 import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
-import 'package:gmp_app_mobilidad/core/memory/vector_store_hnsw.dart';
 
 /// **ReasoningBank - Adaptive Learning System**
 ///
@@ -494,7 +493,9 @@ class ReasoningBank {
     final profile = getUserProfile(userId);
     if (profile == null) return 0;
 
-    final purchasedProducts = profile['productScores']?.keys ?? [];
+    final purchasedProducts =
+        (profile['productScores'] as Map<String, dynamic>?)?.keys ??
+            const <String>[];
 
     double maxSimilarity = 0;
     for (final purchasedCode in purchasedProducts) {

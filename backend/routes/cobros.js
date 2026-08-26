@@ -47,17 +47,21 @@ const router = express.Router();
 
 // Req #19: Rate limiter para POST /cobros/registrar (escritura sensible)
 // 10 cobros/min por IP+usuario para prevenir abuso/duplicados accidentales.
-const registrarCobroLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => {
-        const user = req.user?.codigo || req.user?.codigoVendedor || req.user?.userId || 'anon';
-        return `${req.ip}::${user}`;
-    },
-    message: { success: false, error: 'Demasiados intentos. Espera un minuto antes de registrar más cobros.' }
-});
+let registrarCobroLimiter = null;
+function limitRegistrarCobro(req, res, next) {
+    registrarCobroLimiter ??= rateLimit({
+        windowMs: 60 * 1000,
+        max: 10,
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: (request) => {
+            const user = request.user?.codigo || request.user?.codigoVendedor || request.user?.userId || 'anon';
+            return `${request.ip}::${user}`;
+        },
+        message: { success: false, error: 'Demasiados intentos. Espera un minuto antes de registrar más cobros.' }
+    });
+    return registrarCobroLimiter(req, res, next);
+}
 
 // Helper to sanitize code (kept for non-SQL uses)
 function sanitizeCode(val) {
@@ -855,7 +859,7 @@ function isSameCobroPayload(row, expected) {
  * de red o doble-click. Si el mismo token llega 2 veces con el mismo payload,
  * devolvemos OK sin duplicar. Si llega con payload distinto, 409 conflict.
  */
-router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res) => {
+router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'registrar cobros');

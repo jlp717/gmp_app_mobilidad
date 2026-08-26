@@ -107,7 +107,9 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         margin:
             const EdgeInsets.fromLTRB(12, 2, 12, 4), // Ultra compact margins
         padding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 8), // Minimal padding
+          horizontal: 12,
+          vertical: 8,
+        ), // Minimal padding
         decoration: BoxDecoration(
           color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(14),

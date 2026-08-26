@@ -116,7 +116,7 @@ class RecentSale extends Equatable {
         totalEuros,
         totalMargin,
         totalBoxes,
-        numLines
+        numLines,
       ];
 }
 
@@ -280,7 +280,7 @@ class TopProduct extends Equatable {
         marginPercent,
         totalBoxes,
         totalUnits,
-        numClients
+        numClients,
       ];
 }
 
@@ -331,6 +331,6 @@ class TopClient extends Equatable {
         marginPercent,
         totalBoxes,
         numOrders,
-        numProducts
+        numProducts,
       ];
 }

@@ -13,8 +13,11 @@ class OrderPdfGenerator {
   static const _lightGray = '#E8E8E8';
   static const _ultraLight = '#f8f9fa';
 
-  static Future<void> generateAndShare(BuildContext context, OrderDetail order,
-      {bool isMarginVisible = false}) async {
+  static Future<void> generateAndShare(
+    BuildContext context,
+    OrderDetail order, {
+    bool isMarginVisible = false,
+  }) async {
     final pdf = pw.Document();
     final header = order.header;
     final lines = order.lines;
@@ -292,8 +295,11 @@ class OrderPdfGenerator {
     );
   }
 
-  static pw.Widget _buildTotals(OrderSummary header, List<OrderLine> lines,
-      {bool isMarginVisible = false}) {
+  static pw.Widget _buildTotals(
+    OrderSummary header,
+    List<OrderLine> lines, {
+    bool isMarginVisible = false,
+  }) {
     final totalVenta = lines.fold<double>(0, (s, l) => s + l.importeVenta);
     final totalMargen = lines.fold<double>(0, (s, l) => s + l.importeMargen);
     final pctMargen = totalVenta > 0 ? (totalMargen / totalVenta * 100) : 0;

@@ -36,19 +36,24 @@ class EntregaCard extends StatelessWidget {
                   if (albaran.esCTR)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
                         color: AppTheme.accentAmber.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: AppTheme.accentAmber),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.euro,
-                              size: 12, color: AppTheme.accentAmber),
-                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.euro,
+                            size: 12,
+                            color: AppTheme.accentAmber,
+                          ),
+                          SizedBox(width: 4),
                           Text(
                             'CTR',
                             style: TextStyle(
@@ -147,7 +152,7 @@ class EntregaCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         albaran.direccion,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 13,
                         ),
@@ -168,7 +173,9 @@ class EntregaCard extends StatelessWidget {
                   if (albaran.ruta.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.info.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
@@ -176,11 +183,15 @@ class EntregaCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.route, size: 12, color: AppTheme.info),
+                          const Icon(
+                            Icons.route,
+                            size: 12,
+                            color: AppTheme.info,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             albaran.ruta,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
                               color: AppTheme.info,
                             ),
@@ -194,7 +205,9 @@ class EntregaCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.accentIndigo.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
@@ -202,7 +215,7 @@ class EntregaCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.person,
                             size: 12,
                             color: AppTheme.accentIndigo,
@@ -210,7 +223,7 @@ class EntregaCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             'Com. ${albaran.codigoVendedor}',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
                               color: AppTheme.accentIndigo,
                             ),
@@ -238,7 +251,7 @@ class EntregaCard extends StatelessWidget {
 
               // Indicador de toque
               const SizedBox(height: 8),
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(
@@ -248,7 +261,7 @@ class EntregaCard extends StatelessWidget {
                       color: AppTheme.textSecondary,
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: 4),
                   Icon(
                     Icons.chevron_right,
                     size: 16,

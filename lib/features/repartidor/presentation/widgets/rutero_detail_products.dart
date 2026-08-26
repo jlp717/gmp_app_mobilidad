@@ -1,11 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
@@ -34,7 +30,7 @@ double quantityStepForUnit(String? unit) {
 }
 
 /// Prefer unit; if unit empty but ordered qty is fractional (carne a peso), use 0.1.
-double quantityStepForLine({String? unit, required num cantidadPedida}) {
+double quantityStepForLine({required num cantidadPedida, String? unit}) {
   if (quantityStepForUnit(unit) < 1) return 0.1;
   final ordered = cantidadPedida.toDouble();
   if ((ordered - ordered.roundToDouble()).abs() > 0.0001) return 0.1;
@@ -159,7 +155,9 @@ class RuteroDetailProducts extends StatelessWidget {
                 ),
                 onOpenFicha: () => onOpenFicha(linea),
                 onShowFullscreenImage: () => onShowFullscreenImage(
-                    linea.codigoArticulo, linea.descripcion),
+                  linea.codigoArticulo,
+                  linea.descripcion,
+                ),
               );
             },
           ),
@@ -317,8 +315,11 @@ class RuteroDetailProducts extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.assignment,
-                    color: AppTheme.accentIndigo, size: 18),
+                const Icon(
+                  Icons.assignment,
+                  color: AppTheme.accentIndigo,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Orden de Preparación: $ordenPreparacion',

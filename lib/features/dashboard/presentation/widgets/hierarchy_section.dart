@@ -102,8 +102,10 @@ class HierarchySection extends StatelessWidget {
                     title: title,
                     color: color,
                     onTap: (id, type) {
-                      final node = data.firstWhere((n) => n.id == id,
-                          orElse: () => data[0]);
+                      final node = data.firstWhere(
+                        (n) => n.id == id,
+                        orElse: () => data[0],
+                      );
                       onNodeTap(node);
                     },
                   ),
@@ -114,8 +116,10 @@ class HierarchySection extends StatelessWidget {
                   data: data,
                   periods: periods,
                   onRowTap: (id, type) {
-                    final node = data.firstWhere((n) => n.id == id,
-                        orElse: () => data[0]);
+                    final node = data.firstWhere(
+                      (n) => n.id == id,
+                      orElse: () => data[0],
+                    );
                     onNodeTap(node);
                   },
                   onNodeTap: onNodeTap,

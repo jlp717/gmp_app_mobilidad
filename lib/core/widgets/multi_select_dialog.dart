@@ -83,7 +83,8 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
     return Dialog(
       backgroundColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      ),
       child: Container(
         constraints: BoxConstraints(
           maxWidth: Responsive.clampWidth(context, 420),
@@ -137,11 +138,15 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.info),
+                            strokeWidth: 2,
+                            color: AppTheme.info,
+                          ),
                         ),
                       )
-                    : Icon(Icons.search_rounded,
-                        color: Colors.white.withValues(alpha: 0.3)),
+                    : Icon(
+                        Icons.search_rounded,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
                 filled: true,
                 fillColor: AppTheme.raisedSurface.withValues(alpha: 0.5),
                 border: OutlineInputBorder(
@@ -162,7 +167,8 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                       child: Text(
                         'No se encontraron resultados',
                         style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.25)),
+                          color: Colors.white.withValues(alpha: 0.25),
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -190,18 +196,22 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                   if (isSelected) {
                                     if (item is Map &&
                                         item.containsKey('code')) {
-                                      _tempSelected.removeWhere((e) =>
-                                          e is Map &&
-                                          e['code'] == item['code']);
+                                      _tempSelected.removeWhere(
+                                        (e) =>
+                                            e is Map &&
+                                            e['code'] == item['code'],
+                                      );
                                     } else {
                                       _tempSelected.remove(item);
                                     }
                                   } else {
                                     if (item is Map &&
                                         item.containsKey('code')) {
-                                      _tempSelected.removeWhere((e) =>
-                                          e is Map &&
-                                          e['code'] == item['code']);
+                                      _tempSelected.removeWhere(
+                                        (e) =>
+                                            e is Map &&
+                                            e['code'] == item['code'],
+                                      );
                                     }
                                     _tempSelected.add(item);
                                   }
@@ -211,7 +221,9 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                   BorderRadius.circular(AppTheme.radiusMd),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
                                 child: Row(
                                   children: [
                                     Container(
@@ -232,8 +244,11 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                             : Colors.transparent,
                                       ),
                                       child: isSelected
-                                          ? const Icon(Icons.check_rounded,
-                                              color: AppTheme.info, size: 16)
+                                          ? const Icon(
+                                              Icons.check_rounded,
+                                              color: AppTheme.info,
+                                              size: 16,
+                                            )
                                           : null,
                                     ),
                                     const SizedBox(width: 12),
@@ -269,12 +284,17 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                   onPressed: () => Navigator.pop(context),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    ),
                   ),
-                  child: const Text('Cancelar',
-                      style: TextStyle(color: Colors.white54)),
+                  child: const Text(
+                    'Cancelar',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
@@ -282,14 +302,19 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                     backgroundColor: AppTheme.info,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    ),
                     elevation: 0,
                   ),
                   onPressed: () => Navigator.pop(context, _tempSelected),
-                  child: const Text('Aplicar',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Aplicar',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),

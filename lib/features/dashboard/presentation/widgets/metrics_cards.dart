@@ -110,7 +110,8 @@ class _MetricCard extends StatelessWidget {
             children: [
               Container(
                 padding: EdgeInsets.all(
-                    Responsive.padding(context, small: 8, large: 12)),
+                  Responsive.padding(context, small: 8, large: 12),
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -123,7 +124,8 @@ class _MetricCard extends StatelessWidget {
               ),
 
               SizedBox(
-                  width: Responsive.padding(context, small: 10, large: 16)),
+                width: Responsive.padding(context, small: 10, large: 16),
+              ),
 
               // Información
               Expanded(

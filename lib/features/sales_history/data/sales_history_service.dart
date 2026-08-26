@@ -5,8 +5,6 @@
 library;
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
-import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 
 class SalesHistoryService {
@@ -49,8 +47,9 @@ class SalesHistoryService {
 
       final rowsJson = (response['rows'] as List?) ?? [];
       final items = rowsJson
-          .map((json) =>
-              ProductHistoryItem.fromJson(json as Map<String, dynamic>))
+          .map(
+            (json) => ProductHistoryItem.fromJson(json as Map<String, dynamic>),
+          )
           .toList();
       final count = response['count'] as int? ?? 0;
 

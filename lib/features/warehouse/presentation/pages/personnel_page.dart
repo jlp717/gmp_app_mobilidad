@@ -34,11 +34,12 @@ class _PersonnelPageState extends State<PersonnelPage> {
       final data = await WarehouseDataService.getPersonnel(
         forceRefresh: forceRefresh,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _personnel = data;
           _loading = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
@@ -93,13 +94,21 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   ),
                   items: const [
                     DropdownMenuItem(
-                        value: 'PREPARADOR', child: Text('Preparador')),
+                      value: 'PREPARADOR',
+                      child: Text('Preparador'),
+                    ),
                     DropdownMenuItem(
-                        value: 'SUPERVISOR', child: Text('Supervisor')),
+                      value: 'SUPERVISOR',
+                      child: Text('Supervisor'),
+                    ),
                     DropdownMenuItem(
-                        value: 'CARGADOR', child: Text('Cargador')),
+                      value: 'CARGADOR',
+                      child: Text('Cargador'),
+                    ),
                     DropdownMenuItem(
-                        value: 'EXPEDIDOR', child: Text('Expedidor')),
+                      value: 'EXPEDIDOR',
+                      child: Text('Expedidor'),
+                    ),
                   ],
                   onChanged: (v) => setDialogState(() => selectedRole = v!),
                 ),
@@ -113,9 +122,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(
+              child: const Text(
                 'Cancelar',
-                style: const TextStyle(color: AppTheme.textTertiary),
+                style: TextStyle(color: AppTheme.textTertiary),
               ),
             ),
             ElevatedButton(
@@ -138,8 +147,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                          content: Text('Error: $e'),
-                          backgroundColor: AppTheme.error),
+                        content: Text('Error: $e'),
+                        backgroundColor: AppTheme.error,
+                      ),
                     );
                   }
                 }
@@ -148,7 +158,8 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 backgroundColor: AppTheme.accentIndigo,
                 foregroundColor: AppTheme.textPrimary,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               child: const Text('Añadir'),
             ),
@@ -190,26 +201,33 @@ class _PersonnelPageState extends State<PersonnelPage> {
             Container(
               margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
               padding: EdgeInsets.fromLTRB(
-                  Responsive.padding(context, small: 14, large: 20),
-                  12,
-                  Responsive.padding(context, small: 14, large: 20),
-                  10),
+                Responsive.padding(context, small: 14, large: 20),
+                12,
+                Responsive.padding(context, small: 14, large: 20),
+                10,
+              ),
               decoration:
                   WarehouseUi.headerSurface(accent: AppTheme.accentIndigo),
               child: Row(
                 children: [
                   Container(
                     padding: EdgeInsets.all(
-                        Responsive.padding(context, small: 8, large: 10)),
+                      Responsive.padding(context, small: 8, large: 10),
+                    ),
                     decoration: WarehouseUi.surface(
                       color: AppTheme.accentIndigo.withValues(alpha: 0.15),
                       borderColor: AppTheme.accentIndigo,
                       borderAlpha: 0.3,
                     ),
-                    child: Icon(Icons.groups_rounded,
-                        color: AppTheme.accentIndigo,
-                        size: Responsive.iconSize(context,
-                            phone: 20, desktop: 24)),
+                    child: Icon(
+                      Icons.groups_rounded,
+                      color: AppTheme.accentIndigo,
+                      size: Responsive.iconSize(
+                        context,
+                        phone: 20,
+                        desktop: 24,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -220,8 +238,11 @@ class _PersonnelPageState extends State<PersonnelPage> {
                           'PERSONAL DE ALMACÉN',
                           style: TextStyle(
                             color: AppTheme.accentIndigo,
-                            fontSize: Responsive.fontSize(context,
-                                small: 13, large: 16),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 13,
+                              large: 16,
+                            ),
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0,
                           ),
@@ -283,7 +304,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
               child: _loading
                   ? const SkeletonList(itemCount: 4, itemHeight: 80)
                   : _personnel.isEmpty
-                      ? Center(
+                      ? const Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -292,10 +313,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
                                 color: AppTheme.textTertiary,
                                 size: 48,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
                               Text(
                                 'Sin personal registrado',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textSecondary,
                                 ),
                               ),
@@ -340,10 +361,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
               child: Text(
                 person.name.isNotEmpty ? person.name[0].toUpperCase() : '?',
                 style: TextStyle(
-                    color: roleColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize:
-                        Responsive.fontSize(context, small: 14, large: 18)),
+                  color: roleColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: Responsive.fontSize(context, small: 14, large: 18),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -366,7 +387,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
                       if (!isCustom)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.softPanel,
                             borderRadius: BorderRadius.circular(4),
@@ -387,7 +410,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: roleColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -395,26 +420,35 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         child: Text(
                           person.role,
                           style: TextStyle(
-                              color: roleColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700),
+                            color: roleColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       if (person.phone.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        Icon(Icons.phone_outlined,
-                            color: AppTheme.textTertiary, size: 12),
+                        const Icon(
+                          Icons.phone_outlined,
+                          color: AppTheme.textTertiary,
+                          size: 12,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           person.phone,
                           style: const TextStyle(
-                              color: AppTheme.textSecondary, fontSize: 11),
+                            color: AppTheme.textSecondary,
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                       if (person.email.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        Icon(Icons.email_outlined,
-                            color: AppTheme.textTertiary, size: 12),
+                        const Icon(
+                          Icons.email_outlined,
+                          color: AppTheme.textTertiary,
+                          size: 12,
+                        ),
                       ],
                     ],
                   ),
@@ -422,8 +456,11 @@ class _PersonnelPageState extends State<PersonnelPage> {
               ),
             ),
             if (isCustom)
-              const Icon(Icons.more_vert_rounded,
-                  color: AppTheme.textTertiary, size: 18),
+              const Icon(
+                Icons.more_vert_rounded,
+                color: AppTheme.textTertiary,
+                size: 18,
+              ),
           ],
         ),
       ),
@@ -444,26 +481,35 @@ class _PersonnelPageState extends State<PersonnelPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(person.name,
-                style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              person.name,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.edit_rounded, color: AppTheme.info),
-              title: const Text('Editar',
-                  style: TextStyle(color: AppTheme.textPrimary)),
+              title: const Text(
+                'Editar',
+                style: TextStyle(color: AppTheme.textPrimary),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _showEditDialog(person);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded,
-                  color: AppTheme.error),
-              title: const Text('Eliminar',
-                  style: TextStyle(color: AppTheme.error)),
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppTheme.error,
+              ),
+              title: const Text(
+                'Eliminar',
+                style: TextStyle(color: AppTheme.error),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(person);
@@ -524,13 +570,21 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   ),
                   items: const [
                     DropdownMenuItem(
-                        value: 'PREPARADOR', child: Text('Preparador')),
+                      value: 'PREPARADOR',
+                      child: Text('Preparador'),
+                    ),
                     DropdownMenuItem(
-                        value: 'SUPERVISOR', child: Text('Supervisor')),
+                      value: 'SUPERVISOR',
+                      child: Text('Supervisor'),
+                    ),
                     DropdownMenuItem(
-                        value: 'CARGADOR', child: Text('Cargador')),
+                      value: 'CARGADOR',
+                      child: Text('Cargador'),
+                    ),
                     DropdownMenuItem(
-                        value: 'EXPEDIDOR', child: Text('Expedidor')),
+                      value: 'EXPEDIDOR',
+                      child: Text('Expedidor'),
+                    ),
                   ],
                   onChanged: (v) => setDialogState(() => selectedRole = v!),
                 ),
@@ -544,8 +598,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancelar',
-                  style: const TextStyle(color: AppTheme.textTertiary)),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: AppTheme.textTertiary),
+              ),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -564,8 +620,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                          content: Text('Error: $e'),
-                          backgroundColor: AppTheme.error),
+                        content: Text('Error: $e'),
+                        backgroundColor: AppTheme.error,
+                      ),
                     );
                   }
                 }
@@ -574,7 +631,8 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 backgroundColor: AppTheme.accentIndigo,
                 foregroundColor: AppTheme.textPrimary,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               child: const Text('Guardar'),
             ),
@@ -593,16 +651,21 @@ class _PersonnelPageState extends State<PersonnelPage> {
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           side: const BorderSide(color: AppTheme.borderColor),
         ),
-        title: const Text('Eliminar operario',
-            style:
-                TextStyle(color: AppTheme.error, fontWeight: FontWeight.w700)),
-        content: Text('¿Eliminar a ${person.name}?',
-            style: const TextStyle(color: AppTheme.textSecondary)),
+        title: const Text(
+          'Eliminar operario',
+          style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '¿Eliminar a ${person.name}?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancelar',
-                style: const TextStyle(color: AppTheme.textTertiary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -614,8 +677,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                        content: Text('Error: $e'),
-                        backgroundColor: AppTheme.error),
+                      content: Text('Error: $e'),
+                      backgroundColor: AppTheme.error,
+                    ),
                   );
                 }
               }

@@ -28,7 +28,7 @@ class DashboardHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: AppTheme.glassMorphismPremium(
-        borderRadius: AppTheme.radiusLg.toDouble(),
+        borderRadius: AppTheme.radiusLg,
         glowColor: AppTheme.info,
         glowBlur: 20,
       ),
@@ -87,7 +87,7 @@ class DashboardHeader extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.access_time,
                       size: 13,
                       color: AppTheme.textTertiary,

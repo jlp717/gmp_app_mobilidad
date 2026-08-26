@@ -1,9 +1,7 @@
 // GMP Integration Test - MainShell Navigation
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
-import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 
 void main() {
   group('MainShell Navigation Integration Tests', () {

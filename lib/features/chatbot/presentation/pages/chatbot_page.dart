@@ -1069,7 +1069,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                         label: const Text('Historial'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
-                          side: BorderSide(color: _line),
+                          side: const BorderSide(color: _line),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1225,8 +1225,11 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           ),
                         ),
                       ),
-                      Icon(Icons.arrow_forward_rounded,
-                          size: 15, color: accent),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 15,
+                        color: accent,
+                      ),
                     ],
                   ),
                 ],

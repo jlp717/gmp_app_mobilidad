@@ -149,9 +149,13 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.clientName, style: const TextStyle(fontSize: 16)),
-            Text('Matriz $_selectedYear',
-                style: const TextStyle(
-                    fontSize: 12, color: AppTheme.textSecondary)),
+            Text(
+              'Matriz $_selectedYear',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -215,41 +219,68 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                               scrollDirection: Axis.horizontal,
                               child: Theme(
                                 data: Theme.of(context).copyWith(
-                                    dividerColor: AppTheme.mutedPanel),
+                                  dividerColor: AppTheme.mutedPanel,
+                                ),
                                 child: DataTable(
                                   headingRowColor: WidgetStateProperty.all(
-                                      AppTheme.raisedSurface),
+                                    AppTheme.raisedSurface,
+                                  ),
                                   dataRowColor: WidgetStateProperty.all(
-                                      AppTheme.inkSurface),
+                                    AppTheme.inkSurface,
+                                  ),
                                   columnSpacing: 20,
                                   columns: [
                                     const DataColumn(
-                                        label: Text('Producto',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold))),
+                                      label: Text(
+                                        'Producto',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
                                     const DataColumn(
-                                        label: Text('Lote/Ref',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold))),
+                                      label: Text(
+                                        'Lote/Ref',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
                                     const DataColumn(
-                                        label: Text('Precio',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold))),
+                                      label: Text(
+                                        'Precio',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
                                     const DataColumn(
-                                        label: Text('Total',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold))),
+                                      label: Text(
+                                        'Total',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
                                     for (var m = 1; m <= 12; m++) ...[
                                       DataColumn(
-                                          label: Text('${_monthShort(m)}\n€',
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                  fontSize: 11))),
+                                        label: Text(
+                                          '${_monthShort(m)}\n€',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
                                       DataColumn(
-                                          label: Text('${_monthShort(m)}\nUds',
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                  fontSize: 11))),
+                                        label: Text(
+                                          '${_monthShort(m)}\nUds',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ],
                                   rows: filteredKeys.map((key) {
@@ -265,15 +296,19 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
                                             children: [
-                                              Text(details['name'].toString(),
-                                                  style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500)),
-                                              Text(details['code'].toString(),
-                                                  style: const TextStyle(
-                                                      fontSize: 10,
-                                                      color: AppTheme
-                                                          .textSecondary)),
+                                              Text(
+                                                details['name'].toString(),
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              Text(
+                                                details['code'].toString(),
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -287,27 +322,41 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                               if (details['lote']
                                                   .toString()
                                                   .isNotEmpty)
-                                                Text(details['lote'].toString(),
-                                                    style: const TextStyle(
-                                                        fontSize: 11)),
+                                                Text(
+                                                  details['lote'].toString(),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
                                               if (details['ref']
                                                   .toString()
                                                   .isNotEmpty)
-                                                Text(details['ref'].toString(),
-                                                    style: const TextStyle(
-                                                        fontSize: 10,
-                                                        color: AppTheme
-                                                            .textSecondary)),
+                                                Text(
+                                                  details['ref'].toString(),
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color:
+                                                        AppTheme.textSecondary,
+                                                  ),
+                                                ),
                                             ],
                                           ),
                                         ),
-                                        DataCell(Text(_currencyFormat
-                                            .format(details['price']))),
-                                        DataCell(Text(
+                                        DataCell(
+                                          Text(
+                                            _currencyFormat
+                                                .format(details['price']),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
                                             _currencyFormat.format(totalSales),
                                             style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: AppTheme.info))),
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.info,
+                                            ),
+                                          ),
+                                        ),
                                         for (var m = 1; m <= 12; m++) ...[
                                           DataCell(
                                             Text(
@@ -315,7 +364,8 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                                       null
                                                   ? _currencyFormat.format(
                                                       _pivotedData[key]![m]![
-                                                          'sales'])
+                                                          'sales'],
+                                                    )
                                                   : '-',
                                               style:
                                                   const TextStyle(fontSize: 11),
@@ -330,9 +380,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                                       .toStringAsFixed(0)
                                                   : '-',
                                               style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color:
-                                                      AppTheme.textSecondary),
+                                                fontSize: 11,
+                                                color: AppTheme.textSecondary,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -362,7 +412,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
       'Sep',
       'Oct',
       'Nov',
-      'Dic'
+      'Dic',
     ];
     return months[m - 1];
   }

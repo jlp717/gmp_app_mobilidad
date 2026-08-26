@@ -114,15 +114,15 @@ function buildChunkedClientCodeFilter(column, codes) {
   const cleanCodes = (Array.isArray(codes) ? codes : [])
     .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
     .filter(Boolean);
-  if (!cleanCodes.length) return { clause: '', count: 0, chunks: 0 };
+  if (!cleanCodes.length) return { clause: '', params: [], count: 0, chunks: 0 };
 
   const CHUNK_SIZE = 1000;
   const chunks = [];
   for (let i = 0; i < cleanCodes.length; i += CHUNK_SIZE) {
-    const chunk = cleanCodes.slice(i, i + CHUNK_SIZE).map(code => `'${code}'`).join(',');
-    chunks.push(`${column} IN (${chunk})`);
+    const chunkSize = Math.min(CHUNK_SIZE, cleanCodes.length - i);
+    chunks.push(`${column} IN (${Array(chunkSize).fill('?').join(',')})`);
   }
-  return { clause: `AND (${chunks.join(' OR ')})`, count: cleanCodes.length, chunks: chunks.length };
+  return { clause: `AND (${chunks.join(' OR ')})`, params: cleanCodes, count: cleanCodes.length, chunks: chunks.length };
 }
 
 function buildVendedorParamFilter(vendedorCodes, columnExpr) {
@@ -167,7 +167,7 @@ const getClientsHandler = async (req, res) => {
     const safeSearch = normalizeClientSearch(search);
     const isSearchQuery = safeSearch.length > 0;
     const searchClause = buildClientSearchFilter(safeSearch, 'C');
-    const queryParams = searchClause.params;
+    let clientCodeParams = [];
 
     // OPTIMIZATION v3: Pre-compute allowed client codes from in-memory cache
     // This eliminates expensive NOT EXISTS and subquery route filters
@@ -179,6 +179,7 @@ const getClientsHandler = async (req, res) => {
       if (cachedClientCodes && cachedClientCodes.length > 0) {
         const built = buildChunkedClientCodeFilter('C.CODIGOCLIENTE', cachedClientCodes);
         clientCodesFilter = built.clause;
+        clientCodeParams = built.params;
         logger.info(`[CLIENTS] Using cached client codes: ${built.count} clients (${built.chunks} chunks) for vendor ${vendedorCodes}`);
       }
     }
@@ -189,6 +190,10 @@ const getClientsHandler = async (req, res) => {
     const laclaeBoundedFilter = clientCodesFilter
         ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
         : buildLaclaeBoundedClientCodesSql(vendedorCodes);
+    // Cached-code placeholders occur once in LACLAE_SCOPED and once in the outer CLI filter.
+    const queryParams = clientCodesFilter
+      ? [...clientCodeParams, ...clientCodeParams, ...searchClause.params]
+      : [...searchClause.params];
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
     const cacheKey = `clients:list:v8:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;

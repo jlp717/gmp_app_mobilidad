@@ -116,14 +116,16 @@ class _TabEntrance extends AnimatedWidget {
     final animation = listenable as Animation<double>;
     final curvedValue = Curves.easeOutCubic.transform(animation.value);
 
-    return Opacity(
-      opacity: curvedValue,
-      child: Transform.scale(
-        scale: 0.992 + (0.008 * curvedValue),
-        alignment: Alignment.topCenter,
-        child: Transform.translate(
-          offset: Offset(0, 12 * (1 - curvedValue)),
-          child: child,
+    return RepaintBoundary(
+      child: Opacity(
+        opacity: curvedValue,
+        child: Transform.scale(
+          scale: 0.992 + (0.008 * curvedValue),
+          alignment: Alignment.topCenter,
+          child: Transform.translate(
+            offset: Offset(0, 12 * (1 - curvedValue)),
+            child: child,
+          ),
         ),
       ),
     );

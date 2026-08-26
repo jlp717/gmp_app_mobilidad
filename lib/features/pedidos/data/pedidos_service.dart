@@ -4,8 +4,8 @@
 /// Includes product catalog, stock, pricing, and order CRUD
 library;
 
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
@@ -1024,9 +1024,11 @@ class OrderLine {
           json['autoGift'] == true ||
           json['ISAUTOGIFT'] == true,
       bolsaMovements: rawMovements
-          .map((m) => OrderBolsaMovement.fromJson(
-                Map<String, dynamic>.from(m as Map),
-              ))
+          .map(
+            (m) => OrderBolsaMovement.fromJson(
+              Map<String, dynamic>.from(m as Map),
+            ),
+          )
           .toList(),
       bolsaImpact: rawImpact is Map
           ? OrderBolsaImpact.fromJson(Map<String, dynamic>.from(rawImpact))
@@ -1547,9 +1549,11 @@ class OrderDetail {
           .map((l) => OrderLine.fromJson(l as Map<String, dynamic>))
           .toList(),
       bolsaMovements: rawMovements
-          .map((m) => OrderBolsaMovement.fromJson(
-                Map<String, dynamic>.from(m as Map),
-              ))
+          .map(
+            (m) => OrderBolsaMovement.fromJson(
+              Map<String, dynamic>.from(m as Map),
+            ),
+          )
           .toList(),
       bolsaSummary: rawSummary is Map
           ? OrderBolsaImpact.fromJson(Map<String, dynamic>.from(rawSummary))
@@ -1747,7 +1751,7 @@ class PedidosService {
       family ?? '',
       marca ?? '',
       prefamily ?? '',
-      includeIva ? 'iva' : 'base',
+      if (includeIva) 'iva' else 'base',
       limit,
       offset,
     ].join(':');
@@ -2252,7 +2256,7 @@ class PedidosService {
       return {
         'blocked': false,
         'queued': true,
-        'message': 'Pedido en cola para sincronizar'
+        'message': 'Pedido en cola para sincronizar',
       };
     } on ApiException catch (e) {
       // Capture only stock 409 as blocked. Delivery-date 409 must surface.

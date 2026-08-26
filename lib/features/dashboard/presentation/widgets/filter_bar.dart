@@ -106,9 +106,10 @@ class _FilterBarState extends State<FilterBar> {
               const Text(
                 'Filtros de Búsqueda',
                 style: TextStyle(
-                    color: AppTheme.info,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold),
+                  color: AppTheme.info,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const Spacer(),
               if (_hasActiveFilters)
@@ -116,8 +117,10 @@ class _FilterBarState extends State<FilterBar> {
                   onPressed: _clearAll,
                   icon:
                       const Icon(Icons.clear, size: 16, color: AppTheme.error),
-                  label: const Text('Limpiar',
-                      style: TextStyle(color: AppTheme.error, fontSize: 12)),
+                  label: const Text(
+                    'Limpiar',
+                    style: TextStyle(color: AppTheme.error, fontSize: 12),
+                  ),
                 ),
             ],
           ),

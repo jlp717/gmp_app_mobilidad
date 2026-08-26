@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/data/thermal_ticket_layout.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/thermal_zpl_geometry.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 
@@ -16,13 +15,13 @@ AlbaranEntrega _sampleAlbaran() {
     nombreCliente: 'ENCEBOLLADOS BUTANO RESTURANTE',
     fecha: '2026-08-20',
     importeTotal: 36.40,
-    importeNeto: 35.00,
+    importeNeto: 35,
     direccion: 'CL TENOR GABARRON, ALAMEDA CERVANTES 12',
     formaPagoDesc: 'CREDITO',
     nombreRepartidor: '08 DAVID MUÑOZ RODRIGUEZ',
     ordenPreparacion: 44520,
     ivaBreakdown: [
-      IvaBreakdownItem(base: 35.00, pct: 4, iva: 1.40),
+      IvaBreakdownItem(base: 35, pct: 4, iva: 1.40),
     ],
   );
 }
@@ -35,7 +34,7 @@ List<EntregaItem> _sampleItems() {
       descripcion: 'HUEVOS L MORENOS 63/73 (10)',
       cantidadPedida: 1,
       bultos: 1,
-      precioUnitario: 35.00,
+      precioUnitario: 35,
     ),
     EntregaItem(
       itemId: '2',

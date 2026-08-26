@@ -83,10 +83,12 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   Color get _borderColor {
     if (_isTerminal) return _terminalColor;
-    if (widget.albaran.colorEstado == 'purple' || _isFactura)
+    if (widget.albaran.colorEstado == 'purple' || _isFactura) {
       return AppTheme.accentIndigo;
-    if (widget.albaran.colorEstado == 'red' || _isUrgent)
+    }
+    if (widget.albaran.colorEstado == 'red' || _isUrgent) {
       return AppTheme.obligatorio;
+    }
     return AppTheme.info;
   }
 
@@ -128,7 +130,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(
-          horizontal: 8, vertical: 1), // Compact vertical padding
+        horizontal: 8,
+        vertical: 1,
+      ), // Compact vertical padding
       child: GestureDetector(
         onTapDown: (_) => _animController.forward(),
         onTapUp: (_) => _animController.reverse(),
@@ -403,7 +407,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                                 .containsKey(widget.albaran.codigoRepartidor)
                         ? 'R ${widget.albaran.codigoRepartidor} – ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
                         : 'R ${widget.albaran.codigoRepartidor}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppTheme.warning,
                       fontWeight: FontWeight.bold,
                       fontSize: 10,

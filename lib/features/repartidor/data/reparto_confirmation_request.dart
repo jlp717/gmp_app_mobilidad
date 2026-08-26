@@ -213,8 +213,9 @@ class RepartoConfirmationRequest {
 
   void _validate() {
     if (!_hasText(itemId)) _invalid('itemId es obligatorio');
-    if ((lineas.isEmpty && !allowEmptyLineas) || lineas.length > 250)
+    if ((lineas.isEmpty && !allowEmptyLineas) || lineas.length > 250) {
       _invalid('Debe existir entre una y 250 lineas');
+    }
     if (occurredAt
         .isAfter(DateTime.now().toUtc().add(const Duration(minutes: 5)))) {
       _invalid('occurredAt no puede estar en el futuro');
@@ -255,7 +256,8 @@ class RepartoConfirmationRequest {
         line.cantidadRechazada > 0 || line.cantidadPendiente > 0;
     if (hasDifference != (line.motivoDiferencia != null)) {
       _invalid(
-          'Cada diferencia requiere un motivo y no se permiten motivos sin diferencia');
+        'Cada diferencia requiere un motivo y no se permiten motivos sin diferencia',
+      );
     }
   }
 
@@ -310,13 +312,13 @@ class RepartoConfirmationRequest {
         lineas.fold<num>(0, (sum, line) => sum + line.cantidadPendiente);
     switch (status) {
       case RepartoDeliveryStatus.entregado:
-        if (rejected > 0 || pending > 0)
+        if (rejected > 0 || pending > 0) {
           _invalid('ENTREGADO exige todas las unidades entregadas');
-        break;
+        }
       case RepartoDeliveryStatus.parcial:
-        if (delivered <= 0 || rejected + pending <= 0)
+        if (delivered <= 0 || rejected + pending <= 0) {
           _invalid('PARCIAL exige entrega y diferencia');
-        break;
+        }
       case RepartoDeliveryStatus.noEntregado:
         if (delivered > 0 ||
             rejected > 0 ||
@@ -325,13 +327,13 @@ class RepartoConfirmationRequest {
             incidencia == null ||
             !_hasText(observaciones)) {
           _invalid(
-              'NO_ENTREGADO exige lineas pendientes, incidencia y observaciones, sin receptor ni firma');
+            'NO_ENTREGADO exige lineas pendientes, incidencia y observaciones, sin receptor ni firma',
+          );
         }
-        break;
       case RepartoDeliveryStatus.rechazado:
-        if (delivered > 0 || pending > 0)
+        if (delivered > 0 || pending > 0) {
           _invalid('RECHAZADO exige todas las unidades rechazadas');
-        break;
+        }
     }
   }
 
@@ -341,8 +343,9 @@ class RepartoConfirmationRequest {
         status != RepartoDeliveryStatus.parcial) {
       _invalid('Solo ENTREGADO o PARCIAL permiten cobro');
     }
-    if (cobro!.entregaId != null && cobro!.entregaId!.trim() != itemId.trim())
+    if (cobro!.entregaId != null && cobro!.entregaId!.trim() != itemId.trim()) {
       _invalid('entregaId no coincide con itemId');
+    }
     if (!_hasText(cobro!.formaPago) ||
         cobro!.formaPago.trim().length > 20 ||
         cobro!.importeCobrado <= 0 ||

@@ -1,6 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -89,7 +88,8 @@ class _ClientDetailPageState extends State<ClientDetailPage>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            (_clientData?['client']?['name'] as String?) ?? 'Detalle Cliente'),
+          (_clientData?['client']?['name'] as String?) ?? 'Detalle Cliente',
+        ),
         backgroundColor: AppTheme.raisedSurface,
         actions: [
           IconButton(
@@ -183,8 +183,11 @@ class _ClientDetailPageState extends State<ClientDetailPage>
     );
   }
 
-  Widget _buildClientHeader(Map<String, dynamic> client,
-      Map<String, dynamic> summary, Map<String, dynamic> payments) {
+  Widget _buildClientHeader(
+    Map<String, dynamic> client,
+    Map<String, dynamic> summary,
+    Map<String, dynamic> payments,
+  ) {
     final name = (client['name'] as String?) ?? 'Sin nombre';
     final code = (client['code'] as String?) ?? '';
     final address = (client['address'] as String?) ?? '';
@@ -199,8 +202,9 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
     return Container(
       padding: EdgeInsets.symmetric(
-          horizontal: Responsive.padding(context, small: 12, large: 16),
-          vertical: Responsive.padding(context, small: 6, large: 8)),
+        horizontal: Responsive.padding(context, small: 12, large: 16),
+        vertical: Responsive.padding(context, small: 6, large: 8),
+      ),
       color: AppTheme.raisedSurface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -219,12 +223,16 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   color: AppTheme.warning.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: AppTheme.warning.withValues(alpha: 0.5)),
+                    color: AppTheme.warning.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded,
-                        color: AppTheme.warning, size: 20),
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: AppTheme.warning,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -233,9 +241,10 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                           Text(
                             editableNotes['text'] as String,
                             style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500),
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -243,18 +252,25 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                           Text(
                             'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
                             style: const TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 10),
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.edit,
-                          size: 18, color: AppTheme.warning),
+                      icon: const Icon(
+                        Icons.edit,
+                        size: 18,
+                        color: AppTheme.warning,
+                      ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: () => _showEditNotesDialog(
-                          code, editableNotes['text'] as String?),
+                        code,
+                        editableNotes['text'] as String?,
+                      ),
                     ),
                   ],
                 ),
@@ -279,8 +295,10 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                     children: [
                       Icon(Icons.note_add, size: 16, color: AppTheme.info),
                       SizedBox(width: 6),
-                      Text('Añadir observaciones',
-                          style: TextStyle(color: AppTheme.info, fontSize: 12)),
+                      Text(
+                        'Añadir observaciones',
+                        style: TextStyle(color: AppTheme.info, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -296,10 +314,11 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
                   style: TextStyle(
-                      color: AppTheme.success,
-                      fontSize:
-                          Responsive.fontSize(context, small: 14, large: 18),
-                      fontWeight: FontWeight.bold),
+                    color: AppTheme.success,
+                    fontSize:
+                        Responsive.fontSize(context, small: 14, large: 18),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -310,7 +329,9 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                     Text(
                       name,
                       style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -319,22 +340,29 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                       Text(
                         'Cód: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}',
                         style: const TextStyle(
-                            fontSize: 12, color: AppTheme.textSecondary),
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
                       )
                     else
-                      Text('Cód: $code',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppTheme.textSecondary)),
+                      Text(
+                        'Cód: $code',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
                   ],
                 ),
               ),
               // WhatsApp Button
               if (phones.isNotEmpty)
                 IconButton(
-                  icon: Icon(Icons.chat,
-                      size:
-                          Responsive.iconSize(context, phone: 18, desktop: 20),
-                      color: const Color(0xFF25D366)), // WhatsApp green
+                  icon: Icon(
+                    Icons.chat,
+                    size: Responsive.iconSize(context, phone: 18, desktop: 20),
+                    color: const Color(0xFF25D366),
+                  ), // WhatsApp green
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showWhatsAppDialog(phones),
@@ -343,10 +371,11 @@ class _ClientDetailPageState extends State<ClientDetailPage>
               const SizedBox(width: 8),
               if (phone.isNotEmpty)
                 IconButton(
-                  icon: Icon(Icons.phone,
-                      size:
-                          Responsive.iconSize(context, phone: 18, desktop: 20),
-                      color: AppTheme.success),
+                  icon: Icon(
+                    Icons.phone,
+                    size: Responsive.iconSize(context, phone: 18, desktop: 20),
+                    color: AppTheme.success,
+                  ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _launchPhone(phone),
@@ -363,7 +392,9 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   child: Text(
                     [address, city].where((s) => s.isNotEmpty).join(', '),
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12),
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -392,8 +423,12 @@ class _ClientDetailPageState extends State<ClientDetailPage>
     return Row(
       children: [
         SizedBox(
-            width: Responsive.value(context,
-                phone: 44, desktop: 52)), // Align with avatar
+          width: Responsive.value(
+            context,
+            phone: 44,
+            desktop: 52,
+          ),
+        ), // Align with avatar
         // Route Badge
         if (route.isNotEmpty) ...[
           Container(
@@ -410,9 +445,10 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 Text(
                   routeDesc.isNotEmpty ? routeDesc : 'Ruta $route',
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.accentIndigo,
-                      fontWeight: FontWeight.w500),
+                    fontSize: 11,
+                    color: AppTheme.accentIndigo,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -430,15 +466,19 @@ class _ClientDetailPageState extends State<ClientDetailPage>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.calendar_today,
-                    size: 12, color: AppTheme.info),
+                const Icon(
+                  Icons.calendar_today,
+                  size: 12,
+                  color: AppTheme.info,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   'Visita: $visitDays',
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.info,
-                      fontWeight: FontWeight.w500),
+                    fontSize: 11,
+                    color: AppTheme.info,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -456,15 +496,19 @@ class _ClientDetailPageState extends State<ClientDetailPage>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.local_shipping,
-                    size: 12, color: AppTheme.success),
+                const Icon(
+                  Icons.local_shipping,
+                  size: 12,
+                  color: AppTheme.success,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   'Reparto: $deliveryDays',
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.success,
-                      fontWeight: FontWeight.w500),
+                    fontSize: 11,
+                    color: AppTheme.success,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -509,8 +553,9 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                        content: Text('Error guardando: $e'),
-                        backgroundColor: AppTheme.error),
+                      content: Text('Error guardando: $e'),
+                      backgroundColor: AppTheme.error,
+                    ),
                   );
                 }
               }
@@ -535,11 +580,15 @@ class _ClientDetailPageState extends State<ClientDetailPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enviar WhatsApp',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text(
+              'Enviar WhatsApp',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             const SizedBox(height: 8),
-            const Text('Selecciona el nºmero:',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text(
+              'Selecciona el nºmero:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             ...phones.map(
               (p) => ListTile(
@@ -581,8 +630,11 @@ class _ClientDetailPageState extends State<ClientDetailPage>
     }
   }
 
-  Widget _buildSummaryTab(Map<String, dynamic> summary,
-      Map<String, dynamic> payments, List<Map<String, dynamic>> monthlyTrend) {
+  Widget _buildSummaryTab(
+    Map<String, dynamic> summary,
+    Map<String, dynamic> payments,
+    List<Map<String, dynamic>> monthlyTrend,
+  ) {
     final totalSales = (summary['totalSales'] as num?)?.toDouble() ?? 0;
     final totalMargin = (summary['totalMargin'] as num?)?.toDouble() ?? 0;
     final marginPercent = (summary['marginPercent'] as num?)?.toDouble() ?? 0;
@@ -638,7 +690,8 @@ class _ClientDetailPageState extends State<ClientDetailPage>
           // Payment Status
           Container(
             padding: EdgeInsets.all(
-                Responsive.padding(context, small: 12, large: 16)),
+              Responsive.padding(context, small: 12, large: 16),
+            ),
             decoration: AppTheme.glassMorphism(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,11 +699,13 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Estado de Pagos',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Estado de Pagos',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
                     Icon(
                       pendingCount > 0
                           ? Icons.warning_amber
@@ -670,35 +725,50 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Pagado',
-                              style: TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 12)),
-                          Text(CurrencyFormatter.formatWhole(paid),
-                              style: const TextStyle(
-                                  color: AppTheme.success,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18)),
+                          const Text(
+                            'Pagado',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            CurrencyFormatter.formatWhole(paid),
+                            style: const TextStyle(
+                              color: AppTheme.success,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     Container(
-                        width: 1,
-                        height: 40,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+                      width: 1,
+                      height: 40,
+                      color: AppTheme.textSecondary.withValues(alpha: 0.3),
+                    ),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Pendiente ($pendingCount)',
-                              style: const TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 12)),
-                          Text(CurrencyFormatter.formatWhole(pending),
-                              style: TextStyle(
-                                  color: pending > 0
-                                      ? AppTheme.warning
-                                      : AppTheme.textSecondary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18)),
+                          Text(
+                            'Pendiente ($pendingCount)',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            CurrencyFormatter.formatWhole(pending),
+                            style: TextStyle(
+                              color: pending > 0
+                                  ? AppTheme.warning
+                                  : AppTheme.textSecondary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -711,16 +781,19 @@ class _ClientDetailPageState extends State<ClientDetailPage>
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('Evolución Ventas (12 meses)',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Evolución Ventas (12 meses)',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             Container(
               height: Responsive.value(context, phone: 150, desktop: 200),
               padding: EdgeInsets.all(
-                  Responsive.padding(context, small: 12, large: 16)),
+                Responsive.padding(context, small: 12, large: 16),
+              ),
               decoration: AppTheme.glassMorphism(),
               child: _buildTrendChart(monthlyTrend),
             ),
@@ -737,8 +810,10 @@ class _ClientDetailPageState extends State<ClientDetailPage>
         .map((e) => (e['sales'] as num?)?.toDouble() ?? 0)
         .reduce((a, b) => a > b ? a : b);
     final spots = data.asMap().entries.map((entry) {
-      return FlSpot(entry.key.toDouble(),
-          (entry.value['sales'] as num?)?.toDouble() ?? 0);
+      return FlSpot(
+        entry.key.toDouble(),
+        (entry.value['sales'] as num?)?.toDouble() ?? 0,
+      );
     }).toList();
 
     return LineChart(
@@ -754,12 +829,17 @@ class _ClientDetailPageState extends State<ClientDetailPage>
               interval: 2,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
-                if (idx < 0 || idx >= data.length)
+                if (idx < 0 || idx >= data.length) {
                   return const SizedBox.shrink();
+                }
                 final period = data[idx]['period'] as String? ?? '';
-                return Text(period.length >= 7 ? period.substring(5) : period,
-                    style: const TextStyle(
-                        fontSize: 10, color: AppTheme.textSecondary));
+                return Text(
+                  period.length >= 7 ? period.substring(5) : period,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textSecondary,
+                  ),
+                );
               },
             ),
           ),
@@ -775,7 +855,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
               gradient: LinearGradient(
                 colors: [
                   AppTheme.info.withValues(alpha: 0.3),
-                  AppTheme.info.withValues(alpha: 0)
+                  AppTheme.info.withValues(alpha: 0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -816,24 +896,34 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
-                child: Text('${index + 1}',
-                    style: const TextStyle(
-                        color: AppTheme.accentIndigo,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16)),
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                    color: AppTheme.accentIndigo,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
-            title: Text(name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14)),
-            subtitle: Text('Cód: $code  $timesOrdered ped.  $totalBoxes cj',
-                style: const TextStyle(fontSize: 11)),
-            trailing: Text(CurrencyFormatter.formatWhole(totalSales),
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.success,
-                    fontSize: 13)),
+            title: Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14),
+            ),
+            subtitle: Text(
+              'Cód: $code  $timesOrdered ped.  $totalBoxes cj',
+              style: const TextStyle(fontSize: 11),
+            ),
+            trailing: Text(
+              CurrencyFormatter.formatWhole(totalSales),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.success,
+                fontSize: 13,
+              ),
+            ),
           ),
         );
       },
@@ -845,7 +935,10 @@ class _ClientDetailPageState extends State<ClientDetailPage>
       children: [
         if (_salesSummary != null)
           SalesSummaryHeader(
-              summary: _salesSummary!, showMargin: false, isJefeVentas: false),
+            summary: _salesSummary!,
+            showMargin: false,
+            isJefeVentas: false,
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -875,7 +968,8 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 return const Padding(
                   padding: EdgeInsets.all(20),
                   child: Center(
-                      child: ModernLoading(message: 'Cargando historial...')),
+                    child: ModernLoading(message: 'Cargando historial...'),
+                  ),
                 );
               }
 
@@ -905,7 +999,9 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                       leading: Text(
                         date.length >= 10 ? date.substring(5) : date,
                         style: const TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12),
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                       title: Text(
                         productName,
@@ -916,13 +1012,21 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('$boxes cj',
-                              style: const TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 11)),
+                          Text(
+                            '$boxes cj',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
                           const SizedBox(width: 8),
-                          Text(CurrencyFormatter.formatWhole(amount),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            CurrencyFormatter.formatWhole(amount),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -998,20 +1102,33 @@ class _SummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title,
-                  style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 11)),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
               Icon(icon, color: color, size: 16),
             ],
           ),
           const SizedBox(height: 6),
-          Text(value,
-              style: TextStyle(
-                  color: color, fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
           if (subtitle != null)
-            Text(subtitle!,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 10)),
+            Text(
+              subtitle!,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 10,
+              ),
+            ),
         ],
       ),
     );

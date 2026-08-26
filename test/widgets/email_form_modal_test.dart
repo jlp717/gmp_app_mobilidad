@@ -125,7 +125,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-          find.byType(TextFormField).first, 'test@example.com');
+        find.byType(TextFormField).first,
+        'test@example.com',
+      );
       await tester.tap(find.text('Enviar'));
       await tester.pumpAndSettle();
 

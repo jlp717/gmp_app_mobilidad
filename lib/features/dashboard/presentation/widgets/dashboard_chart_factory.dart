@@ -49,7 +49,7 @@ class DashboardChartFactory extends StatelessWidget {
 
   Widget _buildPieChart(BuildContext context) {
     final topItems = data.take(8).toList();
-    final total = topItems.fold(0.0, (sum, item) => sum + item.sales);
+    final total = topItems.fold<double>(0.0, (sum, item) => sum + item.sales);
 
     return Container(
       height: Responsive.scale(context, 300),
@@ -70,11 +70,14 @@ class DashboardChartFactory extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(title,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
           const SizedBox(height: 20),
           Expanded(
             child: PieChart(
@@ -89,7 +92,8 @@ class DashboardChartFactory extends StatelessWidget {
 
                   // Vary opacity based on index
                   final sectionColor = color.withValues(
-                      alpha: 1.0 - (index * 0.1).clamp(0.0, 0.8));
+                    alpha: 1.0 - (index * 0.1).clamp(0.0, 0.8),
+                  );
 
                   return PieChartSectionData(
                     color: sectionColor,
@@ -97,9 +101,10 @@ class DashboardChartFactory extends StatelessWidget {
                     title: '${(value / total * 100).toStringAsFixed(0)}%',
                     radius: isLarge ? 60 : 50,
                     titleStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   );
                 }).toList(),
                 pieTouchData: PieTouchData(
@@ -130,9 +135,13 @@ class DashboardChartFactory extends StatelessWidget {
                     children: [
                       Container(width: 8, height: 8, color: color),
                       const SizedBox(width: 4),
-                      Text(node.name,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 10)),
+                      Text(
+                        node.name,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                        ),
+                      ),
                     ],
                   ),
                 )

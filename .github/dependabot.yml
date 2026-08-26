@@ -1,13 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: "/backend"
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 5
-    labels: [deps, security]
-  - package-ecosystem: pub
-    directory: "/"
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 5
-    labels: [deps, flutter]
-# SCA en CI (E.5): Dependabot nativo gratis + npm audit en workflow. Ver .github/workflows/ci.yml
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies

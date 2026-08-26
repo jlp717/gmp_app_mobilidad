@@ -26,15 +26,12 @@ import 'package:gmp_app_mobilidad/core/services/auth_session_persistence.dart';
 import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/services/session_scope.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Non-sensitive preference used to restore the authorized UI mode.
 const String authActiveModePreferenceKey = 'auth_active_mode';
 
 final authSessionPersistenceProvider = Provider<AuthSessionPersistence>(
-  (ref) => AuthSessionPersistence.secure(),
+  (ref) => const AuthSessionPersistence(),
 );
 
 /// Returns an allowed UI mode without changing the user's authorization role.
@@ -55,14 +52,8 @@ String authorizedActiveMode(UserModel user, Object? value) {
 }
 
 /// Restores a saved mode and revalidates it against the persisted user claims.
-String restoreAuthorizedActiveMode(
-  SharedPreferences preferences,
-  UserModel user,
-) {
-  return authorizedActiveMode(
-    user,
-    preferences.getString(authActiveModePreferenceKey),
-  );
+String restoreAuthorizedActiveMode(String? savedMode, UserModel user) {
+  return authorizedActiveMode(user, savedMode);
 }
 
 ({UserModel user, String activeMode, List<String> vendedorCodes})
@@ -249,11 +240,11 @@ String restoreAuthorizedActiveMode(
   final normalizedRequest = requestedMode.trim().toUpperCase();
   final responseRole = response['role']?.toString().trim().toUpperCase();
   if (responseRole == null || responseRole.isEmpty) {
-    throw StateError('Respuesta inválida: rol ausente');
+    throw StateError('Respuesta invÃ¡lida: rol ausente');
   }
   final responseMode = response['activeMode']?.toString().trim().toUpperCase();
   if (responseMode == null || responseMode.isEmpty) {
-    throw StateError('Respuesta inválida: modo ausente');
+    throw StateError('Respuesta invÃ¡lida: modo ausente');
   }
 
   final (expectedRole, expectedMode) = switch (normalizedRequest) {
@@ -271,7 +262,7 @@ String restoreAuthorizedActiveMode(
             : 'REPARTIDOR',
         'REPARTIDOR',
       ),
-    _ => throw StateError('Modo solicitado no válido'),
+    _ => throw StateError('Modo solicitado no vÃ¡lido'),
   };
   if (responseRole != expectedRole || responseMode != expectedMode) {
     throw StateError('Respuesta de cambio de modo incoherente');
@@ -299,7 +290,7 @@ String restoreAuthorizedActiveMode(
       accessToken.trim().isEmpty ||
       refreshToken is! String ||
       refreshToken.trim().isEmpty) {
-    throw StateError('Respuesta inválida: rotación de sesión ausente');
+    throw StateError('Respuesta invÃ¡lida: rotaciÃ³n de sesiÃ³n ausente');
   }
   return (
     accessToken: accessToken,
@@ -461,11 +452,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     // Bind global 401 callback
     ApiClient.onUnauthorized = () {
-      debugPrint('[AuthNotifier] 401 detected — logging out');
+      debugPrint('[AuthNotifier] 401 detected â€” logging out');
       unawaited(logout(sessionExpired: true));
     };
     ApiClient.onTokenRefreshed = _applyRefreshedCanonicalSession;
-    ApiClient.onAuthSessionDiverged = () => _forceReloginRequired();
+    ApiClient.onAuthSessionDiverged = _forceReloginRequired;
 
     final visualQaRole = _visualQaRoleOverride();
     if (visualQaRole.isNotEmpty) {
@@ -483,7 +474,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       unawaited(logout(sessionExpired: true));
     };
     ApiClient.onTokenRefreshed = _applyRefreshedCanonicalSession;
-    ApiClient.onAuthSessionDiverged = () => _forceReloginRequired();
+    ApiClient.onAuthSessionDiverged = _forceReloginRequired;
   }
 
   String _visualQaRoleOverride() {
@@ -497,7 +488,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   AuthState _buildVisualQaState(String role) {
     final isRepartidor = role == 'repartidor';
-    final isAlmacen = role == 'almacen' || role == 'almacén';
+    final isAlmacen = role == 'almacen' || role == 'almacÃ©n';
 
     final user = UserModel(
       id: 'visual-qa-$role',
@@ -509,7 +500,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       name: isRepartidor
           ? 'Repartidor QA'
           : isAlmacen
-              ? 'Almacén QA'
+              ? 'AlmacÃ©n QA'
               : 'Comercial QA',
       company: 'GMP',
       role: isRepartidor
@@ -618,7 +609,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     _applySessionDeadline(expiresAt);
   }
 
-  Future<void> _clearStoredSession([SharedPreferences? _]) async {
+  Future<void> _clearStoredSession() async {
     _sessionExpiryTimer?.cancel();
     ApiClient.clearAuthToken();
     ApiClient.authSessionExpiresAt = null;
@@ -745,7 +736,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         }
       } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity) {
         debugPrint(
-            '[AuthNotifier] Resume refresh deferred: network unavailable');
+          '[AuthNotifier] Resume refresh deferred: network unavailable',
+        );
         ApiClient.setAuthToken(token);
       } else {
         return false;
@@ -801,13 +793,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   /// Attempt to restore session from storage
   Future<AuthState> _tryAutoLogin() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       var token = await SecureStorage.readSecureData('user_token');
       var userDataStr = await SecureStorage.readSecureData('user_data');
-      var codes = prefs.getStringList('vendedor_codes');
+      var codes = await AuthSessionPersistence.readVendedorCodes();
+      final savedMode = await AuthSessionPersistence.readActiveMode();
       final expiresAt = await _readSessionExpiresAt();
 
-      if (token != null || userDataStr != null || codes != null) {
+      if (token != null ||
+          userDataStr != null ||
+          codes.isNotEmpty ||
+          expiresAt != null) {
         if (token == null ||
             token.isEmpty ||
             userDataStr == null ||
@@ -816,7 +811,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           debugPrint(
             '[AuthNotifier] Stored session incomplete or expired - clearing session',
           );
-          await _clearStoredSession(prefs);
+          await _clearStoredSession();
           return const AuthState(isInitialized: true);
         }
       }
@@ -831,7 +826,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           token = await SecureStorage.readSecureData('user_token');
           if (refreshed && token != null && token.isNotEmpty) {
             userDataStr = await SecureStorage.readSecureData('user_data');
-            codes = prefs.getStringList('vendedor_codes');
+            codes = await AuthSessionPersistence.readVendedorCodes();
             debugPrint('[AuthNotifier] Stored token refreshed');
           } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity &&
               !_isSessionExpired(expiresAt)) {
@@ -840,18 +835,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             );
           } else {
             debugPrint(
-                '[AuthNotifier] Stored token expired — clearing session');
-            await _clearStoredSession(prefs);
+              '[AuthNotifier] Stored token expired â€” clearing session',
+            );
+            await _clearStoredSession();
             return const AuthState(isInitialized: true);
           }
         }
         // Validate token with server before restoring session.
-        // The server uses ephemeral JWT secrets — a server restart invalidates
+        // The server uses ephemeral JWT secrets â€” a server restart invalidates
         // all stored tokens even if they haven't expired by time.
         // If the server is unreachable (offline), we proceed optimistically.
         final currentToken = token;
         if (currentToken == null || currentToken.isEmpty) {
-          await _clearStoredSession(prefs);
+          await _clearStoredSession();
           return const AuthState(isInitialized: true);
         }
         ApiClient.setAuthToken(currentToken);
@@ -861,28 +857,29 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         } on ApiException catch (e) {
           if (e.statusCode == 401 || e.statusCode == 403) {
             debugPrint(
-              '[AuthNotifier] Server rejected stored token — clearing session',
+              '[AuthNotifier] Server rejected stored token â€” clearing session',
             );
-            await _clearStoredSession(prefs);
+            await _clearStoredSession();
             return const AuthState(isInitialized: true);
           }
         } catch (_) {
-          // Network error — proceed with stored session (offline-tolerant)
+          // Network error â€” proceed with stored session (offline-tolerant)
           debugPrint(
-              '[AuthNotifier] Could not reach server, proceeding offline');
+            '[AuthNotifier] Could not reach server, proceeding offline',
+          );
         } finally {
           ApiClient.endLogin();
         }
         final restoredUserData = userDataStr;
         if (restoredUserData == null) {
-          await _clearStoredSession(prefs);
+          await _clearStoredSession();
           return const AuthState(isInitialized: true);
         }
         final user = UserModel.fromJson(
           jsonDecode(restoredUserData) as Map<String, dynamic>,
         );
-        final vendedorCodes = codes ?? [];
-        final activeMode = restoreAuthorizedActiveMode(prefs, user);
+        final vendedorCodes = codes;
+        final activeMode = restoreAuthorizedActiveMode(savedMode, user);
         _applyCacheScope(user, vendedorCodes);
 
         // Pre-warm cache in background
@@ -941,7 +938,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       state = const AsyncValue.data(
         AuthState(
           isInitialized: true,
-          error: 'Usuario y contraseña requeridos.',
+          error: 'Usuario y contraseÃ±a requeridos.',
         ),
       );
       return false;
@@ -963,7 +960,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       if (response['requiresRoleSelection'] == true && allowRoleSelection) {
         final roles = response['availableRoles'];
         if (roles is! Iterable) {
-          await _setFailedLogin('Respuesta de autenticación inválida.');
+          await _setFailedLogin('Respuesta de autenticaciÃ³n invÃ¡lida.');
           return false;
         }
         const allowedRoles = {
@@ -980,7 +977,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             .toSet()
             .toList(growable: false);
         if (safeRoles.isEmpty) {
-          await _setFailedLogin('Respuesta de autenticación inválida.');
+          await _setFailedLogin('Respuesta de autenticaciÃ³n invÃ¡lida.');
           return false;
         }
         state = AsyncValue.data(
@@ -999,7 +996,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       );
       final authenticated = state.value;
       if (authenticated?.isAuthenticated != true) {
-        await _setFailedLogin('Respuesta de autenticación inválida.');
+        await _setFailedLogin('Respuesta de autenticaciÃ³n invÃ¡lida.');
         return false;
       }
       preWarmAuthenticatedSession(authenticated!);
@@ -1031,15 +1028,15 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   String _safeLoginError(Object error) {
     if (error is ApiException) {
-      if (error.statusCode == 401) return 'Credenciales inválidas.';
+      if (error.statusCode == 401) return 'Credenciales invÃ¡lidas.';
       if (error.statusCode == 429) {
-        return 'Demasiados intentos. Inténtalo más tarde.';
+        return 'Demasiados intentos. IntÃ©ntalo mÃ¡s tarde.';
       }
       if (error.statusCode == 503) {
-        return 'Servicio de autenticación no disponible.';
+        return 'Servicio de autenticaciÃ³n no disponible.';
       }
     }
-    return 'No se pudo iniciar sesión.';
+    return 'No se pudo iniciar sesiÃ³n.';
   }
 
   /// Logout
@@ -1068,7 +1065,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       AuthState(
         isInitialized: true,
         error: sessionExpired
-            ? 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.'
+            ? 'Tu sesiÃ³n ha expirado. Por favor, inicia sesiÃ³n de nuevo.'
             : null,
       ),
     );
@@ -1114,7 +1111,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         },
       );
 
-      if (response == null || response['success'] != true) {
+      if (response['success'] != true) {
         await _forceReloginRequired();
         return false;
       }
@@ -1154,12 +1151,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<void> _checkForUpdates() async {
     try {
       final response = await ApiClient.get('/health/version-check');
-      if (response == null) return;
 
       final currentState = state.value;
       if (currentState == null) return;
 
-      final data = response as Map<String, dynamic>;
+      final data = response;
       state = AsyncValue.data(
         currentState.copyWith(
           updateAvailable: data['updateAvailable'] == true,

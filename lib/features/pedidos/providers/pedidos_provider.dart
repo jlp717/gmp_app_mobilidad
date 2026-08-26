@@ -322,10 +322,12 @@ class PedidosProvider with ChangeNotifier {
   void setUserRole(String? role, {String? code}) {
     final normalized = (role ?? '').trim().toUpperCase();
     final next = normalized == 'JEFE_VENTAS' || normalized == 'ADMIN';
-    final normalizedCode = (code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = (code ?? '').replaceFirst(RegExp('^0+'), '');
     if (next == _isJefeVentas &&
         normalized == _userRole &&
-        normalizedCode == _userCode) return;
+        normalizedCode == _userCode) {
+      return;
+    }
     _isJefeVentas = next;
     _userRole = normalized.isEmpty ? 'COMERCIAL' : normalized;
     _userCode = normalizedCode;
@@ -357,13 +359,13 @@ class PedidosProvider with ChangeNotifier {
         cacheKey: 'pedidos:draft-status:$code',
         cacheTTL: CacheService.realtimeTTL,
       );
-      final data = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+      final data = raw;
       final warning = data['warning'] == true;
       final count = (data['count'] ?? 0) is num
           ? (data['count'] as num).toInt()
           : int.tryParse((data['count'] ?? '0').toString()) ?? 0;
       _accumulatedDraftCount = count;
-      _draftWarningMessage = warning ? (data['message']?.toString()) : null;
+      _draftWarningMessage = warning ? data['message']?.toString() : null;
       notifyListeners();
     } catch (_) {
       // Silencioso: no crítico
@@ -1195,8 +1197,11 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  void _applyGiftPromotionLine(String productCode, PromotionItem promo,
-      {Product? product}) {
+  void _applyGiftPromotionLine(
+    String productCode,
+    PromotionItem promo, {
+    Product? product,
+  }) {
     final promotionCode = _promotionKey(promo);
     final saleLine = _firstManualSaleLine(productCode);
     final saleQty = _manualSaleQuantity(productCode);
@@ -1362,7 +1367,8 @@ class PedidosProvider with ChangeNotifier {
 
       // Step 1: Create the order
       _debugLog(
-          '[confirmOrder] Step 2/3: Calling createOrder API (client=$_clientCode, lines=${linesForSubmit.length})');
+        '[confirmOrder] Step 2/3: Calling createOrder API (client=$_clientCode, lines=${linesForSubmit.length})',
+      );
       final createResult = await _orderApi.createOrder(
         clientCode: _clientCode!,
         clientName: _clientName ?? '',
@@ -1381,7 +1387,7 @@ class PedidosProvider with ChangeNotifier {
         pending['estado'] ??= 'BORRADOR_LOCAL';
         pending['message'] ??=
             'Pedido guardado para sincronizar. No esta confirmado todavia.';
-        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey!);
+        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
         _clearSubmittedCart();
         _activeCheckoutClientRequestId = null;
         return pending;
@@ -1396,7 +1402,8 @@ class PedidosProvider with ChangeNotifier {
       // Step 2: Immediately confirm the order (set to CONFIRMADO)
       final orderId = createResult['id'] as int;
       _debugLog(
-          '[confirmOrder] Step 3/3: Calling confirmOrder API (orderId=$orderId, saleType=$_saleType, deliveryDate=$deliveryDate)');
+        '[confirmOrder] Step 3/3: Calling confirmOrder API (orderId=$orderId, saleType=$_saleType, deliveryDate=$deliveryDate)',
+      );
       final confirmedResult = await _orderApi.confirmOrder(
         orderId,
         _saleType,
@@ -1406,7 +1413,8 @@ class PedidosProvider with ChangeNotifier {
         routeCode: routeCode,
       );
       _debugLog(
-          '[confirmOrder] confirmOrder result keys=${confirmedResult.keys.toList()}');
+        '[confirmOrder] confirmOrder result keys=${confirmedResult.keys.toList()}',
+      );
 
       final result = normalizeConfirmOrderResultForProvider(
         createResult: Map<String, dynamic>.from(createResult),
@@ -1430,8 +1438,9 @@ class PedidosProvider with ChangeNotifier {
       }
 
       _debugLog(
-          '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
-      await PedidosOfflineService.deleteQueuedOrder(queuedSyncKey!);
+        '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}',
+      );
+      await PedidosOfflineService.deleteQueuedOrder(queuedSyncKey);
       _activeCheckoutClientRequestId = null;
       return result;
     } catch (e, st) {
@@ -1968,7 +1977,8 @@ class PedidosProvider with ChangeNotifier {
       }
       _syncAllGiftPromotionLines();
       _debugLog(
-          '[PedidosProvider] Loaded ${_activePromotionsList.length} promotions for $_clientCode');
+        '[PedidosProvider] Loaded ${_activePromotionsList.length} promotions for $_clientCode',
+      );
       _invalidateCache();
       notifyListeners();
     } catch (e, stack) {

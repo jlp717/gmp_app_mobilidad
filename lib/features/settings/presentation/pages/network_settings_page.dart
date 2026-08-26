@@ -55,7 +55,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
+              '✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -139,7 +140,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: EdgeInsets.all(
-                  Responsive.padding(context, small: 16, large: 24)),
+                Responsive.padding(context, small: 16, large: 24),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -231,7 +233,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     color: Colors.grey[400],
                     onPressed: () {
                       Clipboard.setData(
-                          ClipboardData(text: activeServer.baseUrl));
+                        ClipboardData(text: activeServer.baseUrl),
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('URL copiada')),
                       );
@@ -434,7 +437,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                       prefixIcon: const Icon(Icons.link, color: Colors.grey),
                     ),
                     style: const TextStyle(
-                        color: Colors.white, fontFamily: 'monospace'),
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                    ),
                     onSubmitted: (_) => _addCustomServer(),
                   ),
                 ),
@@ -445,7 +450,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     backgroundColor: const Color(0xFFF472B6),
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 20),
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
                   ),
                   child: const Text('Probar'),
                 ),
@@ -490,7 +497,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   color: Colors.grey[400],
                   onPressed: () {
                     Clipboard.setData(
-                        ClipboardData(text: _diagnostics.toString()));
+                      ClipboardData(text: _diagnostics.toString()),
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Diagnóstico copiado')),
                     );
@@ -509,17 +517,25 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _diagRow('Plataforma',
-                      (_diagnostics!['platform'] as String?) ?? 'N/A'),
-                  _diagRow('Inicializado',
-                      _diagnostics!['isInitialized']?.toString() ?? 'N/A'),
-                  _diagRow('Servidor Activo',
-                      (_diagnostics!['activeServer'] as String?) ?? 'N/A'),
+                  _diagRow(
+                    'Plataforma',
+                    (_diagnostics!['platform'] as String?) ?? 'N/A',
+                  ),
+                  _diagRow(
+                    'Inicializado',
+                    _diagnostics!['isInitialized']?.toString() ?? 'N/A',
+                  ),
+                  _diagRow(
+                    'Servidor Activo',
+                    (_diagnostics!['activeServer'] as String?) ?? 'N/A',
+                  ),
                   const Divider(color: Colors.grey),
                   const Text(
                     'Test de Conectividad:',
                     style: TextStyle(
-                        color: Colors.white70, fontWeight: FontWeight.bold),
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   if (_diagnostics!['servers'] != null)

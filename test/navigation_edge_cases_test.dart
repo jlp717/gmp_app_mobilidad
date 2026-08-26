@@ -64,8 +64,11 @@ void main() {
         );
 
         for (final item in items) {
-          expect(item.label.isNotEmpty, true,
-              reason: 'Item with empty label found');
+          expect(
+            item.label.isNotEmpty,
+            true,
+            reason: 'Item with empty label found',
+          );
         }
       }
     });

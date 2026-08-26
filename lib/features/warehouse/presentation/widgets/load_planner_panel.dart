@@ -433,45 +433,53 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
       ..sort((a, b) => b.totalWeight.compareTo(a.totalWeight));
 
     final m = widget.result.metrics;
-    return ListView(
-      padding: const EdgeInsets.all(8),
-      children: [
-        // Summary row
-        Container(
-          padding: const EdgeInsets.all(10),
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: WarehouseUi.executiveSurface(
-            accent: AppTheme.info,
-            borderAlpha: 0.16,
-            accentAlpha: 0.05,
-            elevated: false,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _summaryItem(
-                'Pedidos',
-                '${activeOrders.map((o) => o.orderNumber).toSet().length}',
-                AppTheme.info,
-              ),
-              _summaryItem(
-                'Clientes',
-                '${clients.length}',
-                AppTheme.accentIndigo,
-              ),
-              _summaryItem('Bultos', '${m.placedCount}', AppTheme.success),
-              _summaryItem(
-                'Peso',
-                '${m.totalWeightKg.toStringAsFixed(0)} kg',
-                AppTheme.warning,
-              ),
-              _summaryItem('Valor', '${m.totalImporteEur.toStringAsFixed(0)}€',
-                  AppTheme.success),
-            ],
-          ),
+
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si clients crece mucho.
+    final rows = <Widget>[
+      // Summary row
+      Container(
+        padding: const EdgeInsets.all(10),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: WarehouseUi.executiveSurface(
+          accent: AppTheme.info,
+          borderAlpha: 0.16,
+          accentAlpha: 0.05,
+          elevated: false,
         ),
-        ...clients.map(_clientRow),
-      ],
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _summaryItem(
+              'Pedidos',
+              '${activeOrders.map((o) => o.orderNumber).toSet().length}',
+              AppTheme.info,
+            ),
+            _summaryItem(
+              'Clientes',
+              '${clients.length}',
+              AppTheme.accentIndigo,
+            ),
+            _summaryItem('Bultos', '${m.placedCount}', AppTheme.success),
+            _summaryItem(
+              'Peso',
+              '${m.totalWeightKg.toStringAsFixed(0)} kg',
+              AppTheme.warning,
+            ),
+            _summaryItem(
+              'Valor',
+              '${m.totalImporteEur.toStringAsFixed(0)}€',
+              AppTheme.success,
+            ),
+          ],
+        ),
+      ),
+      ...clients.map(_clientRow),
+    ];
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: rows.length,
+      itemBuilder: (_, index) => rows[index],
     );
   }
 
@@ -790,122 +798,128 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
     final groups = grouped.values.toList()
       ..sort((a, b) => b.totalWeight.compareTo(a.totalWeight));
 
-    return ListView(
-      padding: const EdgeInsets.all(8),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: WarehouseUi.executiveSurface(
-            accent: AppTheme.error,
-            borderAlpha: 0.32,
-            accentAlpha: 0.1,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.warning_rounded,
-                    color: AppTheme.error,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${overflow.length} bultos no caben',
-                      style: const TextStyle(
-                        color: AppTheme.error,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
+    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si groups crece mucho.
+    final rows = <Widget>[
+      Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: WarehouseUi.executiveSurface(
+          accent: AppTheme.error,
+          borderAlpha: 0.32,
+          accentAlpha: 0.1,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.warning_rounded,
+                  color: AppTheme.error,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${overflow.length} bultos no caben',
+                    style: const TextStyle(
+                      color: AppTheme.error,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.result.metrics.overflowWeightKg.toStringAsFixed(0)} kg de exceso de peso',
+              style: TextStyle(
+                color: AppTheme.error.withValues(alpha: 0.7),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 4),
+            ),
+          ],
+        ),
+      ),
+      ...groups.map((g) {
+        var client = g.clientCode;
+        for (final o in widget.allOrders) {
+          if (o.clientCode == g.clientCode && o.clientName.isNotEmpty) {
+            client = o.clientName;
+            break;
+          }
+        }
+        return Container(
+          margin: const EdgeInsets.only(bottom: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.error.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Center(
+                  child: Text(
+                    '${g.count}',
+                    style: const TextStyle(
+                      color: AppTheme.error,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      g.name.isNotEmpty ? g.name : g.code,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      client,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        fontSize: 9,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               Text(
-                '${widget.result.metrics.overflowWeightKg.toStringAsFixed(0)} kg de exceso de peso',
-                style: TextStyle(
-                  color: AppTheme.error.withValues(alpha: 0.7),
-                  fontSize: 10,
+                '${g.totalWeight.toStringAsFixed(1)} kg',
+                style: const TextStyle(
+                  color: AppTheme.error,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-        ),
-        ...groups.map((g) {
-          var client = g.clientCode;
-          for (final o in widget.allOrders) {
-            if (o.clientCode == g.clientCode && o.clientName.isNotEmpty) {
-              client = o.clientName;
-              break;
-            }
-          }
-          return Container(
-            margin: const EdgeInsets.only(bottom: 3),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.error.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppTheme.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${g.count}',
-                      style: const TextStyle(
-                        color: AppTheme.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        g.name.isNotEmpty ? g.name : g.code,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        client,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          fontSize: 9,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${g.totalWeight.toStringAsFixed(1)} kg',
-                  style: const TextStyle(
-                    color: AppTheme.error,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
+        );
+      }),
+    ];
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: rows.length,
+      itemBuilder: (_, index) => rows[index],
     );
   }
 

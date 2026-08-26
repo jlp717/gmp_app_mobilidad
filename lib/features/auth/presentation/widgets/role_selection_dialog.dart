@@ -56,8 +56,11 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                       color: AppTheme.info,
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     ),
-                    child: const Icon(Icons.account_circle_rounded,
-                        color: Colors.white, size: 22),
+                    child: const Icon(
+                      Icons.account_circle_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -123,10 +126,12 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                     },
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusMd)),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      ),
                     ),
                     child: const Text(
                       'Cancelar',
@@ -152,7 +157,9 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                     child: const Text(
                       'Confirmar',
                       style: TextStyle(
-                          fontWeight: FontWeight.w600, letterSpacing: 0),
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
                 ],
@@ -165,7 +172,11 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   }
 
   Widget _buildRoleOption(
-      String role, IconData icon, String label, Color color) {
+    String role,
+    IconData icon,
+    String label,
+    Color color,
+  ) {
     final isSelected = _selectedRole == role;
     return InkWell(
       onTap: () => setState(() => _selectedRole = role),
@@ -204,10 +215,11 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                     .withValues(alpha: isSelected ? 0.15 : 0.06),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
-              child: Icon(icon,
-                  color:
-                      isSelected ? color : Colors.white.withValues(alpha: 0.3),
-                  size: 22),
+              child: Icon(
+                icon,
+                color: isSelected ? color : Colors.white.withValues(alpha: 0.3),
+                size: 22,
+              ),
             ),
             const SizedBox(width: 14),
             Text(
@@ -257,7 +269,8 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
               content: Text('Error: ${error ?? "Failed to switch role"}'),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
             ),
           );
         }
@@ -269,7 +282,8 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
             content: Text('Error: $e'),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            ),
           ),
         );
       }

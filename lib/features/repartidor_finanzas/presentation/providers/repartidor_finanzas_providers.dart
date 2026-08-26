@@ -2,7 +2,11 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repositories/repartidor_finanzas_repository_impl.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repositories/repartidor_finanzas_repository.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/usecases/get_daily_summary_usecase.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/usecases/submit_liquidacion_usecase.dart';
 
 class RepartidorFinanzasFilters {
   const RepartidorFinanzasFilters({
@@ -187,6 +191,8 @@ class RepartidorFinanzasState {
 }
 
 class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
+  int _requestGeneration = 0;
+
   RepartidorFinanzasService get _service {
     return ref.read(repartidorFinanzasServiceProvider);
   }
@@ -226,6 +232,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
   }
 
   Future<void> loadOverview({bool forceRefresh = false}) async {
+    final requestGeneration = ++_requestGeneration;
     final filters = state.filters;
     if (!filters.hasRepartidor) return;
 
@@ -270,6 +277,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         month: filters.month,
         forceRefresh: forceRefresh,
       );
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         collectionSummary: collectionSummary,
         dailyCollections: dailyCollections,
@@ -281,6 +289,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
             : null,
       );
     } catch (_) {
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         collectionSummary: collectionSummary,
         dailyCollections: dailyCollections,
@@ -294,6 +303,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
     String? search,
     bool forceRefresh = false,
   }) async {
+    final requestGeneration = ++_requestGeneration;
     final filters = state.filters;
     if (!filters.hasRepartidor) return;
 
@@ -309,12 +319,14 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         search: search,
         forceRefresh: forceRefresh,
       );
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         clients: clients,
         isLoadingClients: false,
         lastUpdated: DateTime.now(),
       );
     } catch (_) {
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         isLoadingClients: false,
         error: 'No se pudo cargar la lista de clientes.',
@@ -329,6 +341,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
     int? year,
     bool forceRefresh = false,
   }) async {
+    final requestGeneration = ++_requestGeneration;
     final filters = state.filters;
 
     state = state.copyWith(
@@ -352,12 +365,14 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         year: year,
         forceRefresh: forceRefresh,
       );
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         selectedClientDocuments: documents,
         isLoadingDocuments: false,
         lastUpdated: DateTime.now(),
       );
     } catch (_) {
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         isLoadingDocuments: false,
         error: 'No se pudieron cargar los documentos del cliente.',
@@ -371,6 +386,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
     int limit = 100,
     bool forceRefresh = false,
   }) async {
+    final requestGeneration = ++_requestGeneration;
     final filters = state.filters;
     if (!filters.hasRepartidor) return;
 
@@ -403,6 +419,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         ),
       ]);
 
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         monthlyObjectives: results[0] as List<RepartidorMonthlyObjective>,
         objectivesDetail: results[1] as RepartidorObjectivesDetail,
@@ -410,6 +427,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         lastUpdated: DateTime.now(),
       );
     } catch (_) {
+      if (requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         isLoadingObjectives: false,
         error: 'No se pudieron cargar los objetivos.',
@@ -425,6 +443,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
         state.isLoadingNextObjectives) {
       return;
     }
+    final requestGeneration = ++_requestGeneration;
 
     final repartidorId = state.filters.repartidorId;
     final clientId = state.objectivesClientId;
@@ -446,7 +465,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
           state.objectivesClientId == clientId &&
           state.objectivesYear == year &&
           state.objectivesPageLimit == limit;
-      if (!sameScope) return;
+      if (!sameScope || requestGeneration != _requestGeneration) return;
       state = state.copyWith(
         objectivesDetail: current.mergePage(nextPage),
         isLoadingNextObjectives: false,
@@ -456,7 +475,7 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
       final sameScope = state.filters.repartidorId == repartidorId &&
           state.objectivesClientId == clientId &&
           state.objectivesYear == year;
-      if (sameScope) {
+      if (sameScope && requestGeneration == _requestGeneration) {
         state = state.copyWith(
           isLoadingNextObjectives: false,
           error: 'No se pudo cargar la siguiente pagina de objetivos.',
@@ -542,6 +561,26 @@ final repartidorFinanzasServiceProvider =
   return RepartidorFinanzasService();
 });
 
+final repartidorFinanzasRepositoryProvider =
+    Provider<RepartidorFinanzasRepository>((ref) {
+  return RepartidorFinanzasRepositoryImpl(
+    ref.watch(repartidorFinanzasServiceProvider),
+  );
+});
+
+final getDailySummaryUseCaseProvider = Provider<GetDailySummaryUseCase>((ref) {
+  return GetDailySummaryUseCase(
+    ref.watch(repartidorFinanzasRepositoryProvider),
+  );
+});
+
+final submitLiquidacionUseCaseProvider =
+    Provider<SubmitLiquidacionUseCase>((ref) {
+  return SubmitLiquidacionUseCase(
+    ref.watch(repartidorFinanzasRepositoryProvider),
+  );
+});
+
 final repartidorFinanzasProvider =
     NotifierProvider<RepartidorFinanzasNotifier, RepartidorFinanzasState>(
   RepartidorFinanzasNotifier.new,
@@ -612,12 +651,16 @@ typedef CommissionSummaryArgs = ({
 
 final repartidorDailySummaryProvider =
     FutureProvider.family<RepartidorDailySummary, DailySummaryArgs>(
-  (ref, args) {
-    return ref.read(repartidorFinanzasServiceProvider).getDailySummary(
-          repartidorId: args.repartidorId,
-          date: args.date,
-          forceRefresh: args.forceRefresh,
-        );
+  (ref, args) async {
+    final result = await ref.watch(getDailySummaryUseCaseProvider)(
+      repartidorId: args.repartidorId,
+      date: args.date,
+      forceRefresh: args.forceRefresh,
+    );
+    return result.fold(
+      onSuccess: (summary) => summary,
+      onFailure: (failure) => throw failure,
+    );
   },
 );
 
@@ -682,15 +725,18 @@ class RepartidorLiquidacionActions {
     String? codigoVehiculo,
     bool sendEmails = true,
   }) async {
-    final result =
-        await _ref.read(repartidorFinanzasServiceProvider).closeLiquidacion(
-              repartidorId: repartidorId,
-              date: date,
-              idempotencyToken: idempotencyToken,
-              matricula: matricula,
-              codigoVehiculo: codigoVehiculo,
-              sendEmails: sendEmails,
-            );
+    final submission = await _ref.read(submitLiquidacionUseCaseProvider)(
+      repartidorId: repartidorId,
+      date: date,
+      idempotencyToken: idempotencyToken,
+      matricula: matricula,
+      codigoVehiculo: codigoVehiculo,
+      sendEmails: sendEmails,
+    );
+    final result = submission.fold(
+      onSuccess: (value) => value,
+      onFailure: (failure) => throw failure,
+    );
 
     final dailyArgs = (
       repartidorId: repartidorId,
@@ -699,10 +745,14 @@ class RepartidorLiquidacionActions {
     );
     _ref
       ..invalidate(repartidorDailySummaryProvider(dailyArgs))
-      ..invalidate(repartidorLiquidacionLedgerProvider((
-        repartidorId: repartidorId,
-        date: date,
-      )))
+      ..invalidate(
+        repartidorLiquidacionLedgerProvider(
+          (
+            repartidorId: repartidorId,
+            date: date,
+          ),
+        ),
+      )
       ..invalidate(repartidorVencimientosProvider)
       ..invalidate(repartidorCommissionSummaryProvider);
     return result;
@@ -804,10 +854,14 @@ class RepartidorLiquidacionActions {
         (repartidorId: repartidorId, date: date, forceRefresh: false);
     _ref
       ..invalidate(repartidorDailySummaryProvider(dailyArgs))
-      ..invalidate(repartidorLiquidacionLedgerProvider((
-        repartidorId: repartidorId,
-        date: date,
-      )));
+      ..invalidate(
+        repartidorLiquidacionLedgerProvider(
+          (
+            repartidorId: repartidorId,
+            date: date,
+          ),
+        ),
+      );
     return result;
   }
 

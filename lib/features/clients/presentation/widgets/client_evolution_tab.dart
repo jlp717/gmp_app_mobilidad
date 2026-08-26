@@ -1,20 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/modern_loading.dart';
 import 'package:dio/dio.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 class ClientEvolutionTab extends StatefulWidget {
-  final String clientCode;
-  final String vendedorCodes;
-
   const ClientEvolutionTab({
-    Key? key,
     required this.clientCode,
     required this.vendedorCodes,
-  }) : super(key: key);
+    super.key,
+  });
+  final String clientCode;
+  final String vendedorCodes;
 
   @override
   State<ClientEvolutionTab> createState() => _ClientEvolutionTabState();
@@ -103,7 +102,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
     if (value is! List) return <Map<String, dynamic>>[];
     return value
         .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
+        .map(Map<String, dynamic>.from)
         .toList(growable: false);
   }
 
@@ -111,7 +110,8 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(
-          child: ModernLoading(message: 'Cargando evolución...'));
+        child: ModernLoading(message: 'Cargando evolución...'),
+      );
     }
 
     if (_error != null) {
@@ -119,12 +119,14 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 48, color: AppTheme.error),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
             const SizedBox(height: 16),
             Text('Error: $_error'),
             const SizedBox(height: 16),
             ElevatedButton(
-                onPressed: _loadEvolutionData, child: const Text('Reintentar')),
+              onPressed: _loadEvolutionData,
+              child: const Text('Reintentar'),
+            ),
           ],
         ),
       );
@@ -135,11 +137,13 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Evolución Mensual (3 Años)',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Evolución Mensual (3 Años)',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           if (_monthlySales.isNotEmpty)
             Container(
@@ -151,27 +155,32 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
           else
             const Center(child: Text('No hay datos de evolución mensual')),
           const SizedBox(height: 24),
-          Text('Productos M¡s Comprados',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Productos M¡s Comprados',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           if (_topProducts.isNotEmpty)
             _buildTopProductsList()
           else
             const SizedBox(height: 24),
-          Text('Historial de Devoluciones',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Historial de Devoluciones',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           if (_returns.isNotEmpty)
             _buildReturnsList()
           else
             const Center(
-                child: Text('No hay historial de devoluciones reciente')),
+              child: Text('No hay historial de devoluciones reciente'),
+            ),
         ],
       ),
     );
@@ -199,14 +208,19 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               interval: 3,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
-                if (idx < 0 || idx >= _monthlySales.length)
+                if (idx < 0 || idx >= _monthlySales.length) {
                   return const SizedBox.shrink();
+                }
                 final row = _monthlySales[idx];
                 final year = row['year']?.toString() ?? '';
                 final month = row['month']?.toString().padLeft(2, '0') ?? '';
-                return Text('$year-$month',
-                    style:
-                        TextStyle(fontSize: 10, color: AppTheme.textSecondary));
+                return Text(
+                  '$year-$month',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textSecondary,
+                  ),
+                );
               },
             ),
           ),
@@ -223,7 +237,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               gradient: LinearGradient(
                 colors: [
                   AppTheme.info.withValues(alpha: 0.3),
-                  AppTheme.info.withValues(alpha: 0)
+                  AppTheme.info.withValues(alpha: 0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -254,20 +268,29 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             dense: true,
             leading: CircleAvatar(
               backgroundColor: AppTheme.info.withValues(alpha: 0.2),
-              child: Text('${index + 1}',
-                  style: TextStyle(color: AppTheme.info, fontSize: 12)),
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(color: AppTheme.info, fontSize: 12),
+              ),
             ),
-            title: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13)),
-            subtitle: Text('Cód: $code · $units uds',
-                style: const TextStyle(fontSize: 11)),
-            trailing: Text(CurrencyFormatter.formatWhole(sales),
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.success,
-                    fontSize: 13)),
+            title: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
+            ),
+            subtitle: Text(
+              'Cód: $code · $units uds',
+              style: const TextStyle(fontSize: 11),
+            ),
+            trailing: Text(
+              CurrencyFormatter.formatWhole(sales),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.success,
+                fontSize: 13,
+              ),
+            ),
           ),
         );
       },
@@ -298,18 +321,24 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
           child: ListTile(
             dense: true,
             leading: const Icon(Icons.assignment_return, color: AppTheme.error),
-            title: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13)),
+            title: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
+            ),
             subtitle: Text(
-                'Cód: $code • $units uds • ${CurrencyFormatter.formatWhole(amount)}',
-                style: const TextStyle(fontSize: 11)),
-            trailing: Text(CurrencyFormatter.formatWhole(amount),
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.error,
-                    fontSize: 13)),
+              'Cód: $code • $units uds • ${CurrencyFormatter.formatWhole(amount)}',
+              style: const TextStyle(fontSize: 11),
+            ),
+            trailing: Text(
+              CurrencyFormatter.formatWhole(amount),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.error,
+                fontSize: 13,
+              ),
+            ),
           ),
         );
       },

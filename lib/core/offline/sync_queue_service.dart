@@ -26,6 +26,33 @@ class SyncOperation {
     this.sessionScope,
   });
 
+  factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
+        id: json['id'] as String,
+        type: json['type'] as String,
+        endpoint: json['endpoint'] as String,
+        method: json['method'] as String,
+        payload: Map<String, dynamic>.from(json['payload'] as Map),
+        headers: json['headers'] is Map
+            ? Map<String, String>.from(
+                (json['headers'] as Map).map(
+                  (k, v) => MapEntry(k.toString(), v.toString()),
+                ),
+              )
+            : null,
+        attempts: json['attempts'] as int? ?? 0,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : null,
+        lastAttemptAt: json['lastAttemptAt'] != null
+            ? DateTime.parse(json['lastAttemptAt'] as String)
+            : null,
+        lastError: json['lastError'] as String?,
+        failedAt: json['failedAt'] != null
+            ? DateTime.parse(json['failedAt'] as String)
+            : null,
+        sessionScope: json['sessionScope'] as String?,
+      );
+
   final String id;
   final String type; // 'create_cobro', 'confirm_delivery', etc.
   final String endpoint; // '/repartidor-finanzas/cobros'
@@ -55,33 +82,6 @@ class SyncOperation {
         'failedAt': failedAt?.toIso8601String(),
         'sessionScope': sessionScope,
       };
-
-  factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
-        id: json['id'] as String,
-        type: json['type'] as String,
-        endpoint: json['endpoint'] as String,
-        method: json['method'] as String,
-        payload: Map<String, dynamic>.from(json['payload'] as Map),
-        headers: json['headers'] is Map
-            ? Map<String, String>.from(
-                (json['headers'] as Map).map(
-                  (k, v) => MapEntry(k.toString(), v.toString()),
-                ),
-              )
-            : null,
-        attempts: json['attempts'] as int? ?? 0,
-        createdAt: json['createdAt'] != null
-            ? DateTime.parse(json['createdAt'] as String)
-            : null,
-        lastAttemptAt: json['lastAttemptAt'] != null
-            ? DateTime.parse(json['lastAttemptAt'] as String)
-            : null,
-        lastError: json['lastError'] as String?,
-        failedAt: json['failedAt'] != null
-            ? DateTime.parse(json['failedAt'] as String)
-            : null,
-        sessionScope: json['sessionScope'] as String?,
-      );
 }
 
 class SyncProcessResult {
@@ -111,6 +111,7 @@ class _HttpMutationResult {
 /// Queue of offline mutations that are processed when connectivity is restored.
 /// Backed by Hive for persistence across app restarts.
 class SyncQueueService {
+  SyncQueueService._();
   static const String _boxName = 'sync_queue';
   static const int _maxAttempts = SyncMutationPolicy.defaultMaxAttempts;
   static const Duration _maxAge =
@@ -120,8 +121,6 @@ class SyncQueueService {
   static SyncQueueService? _instance;
   Box<String>? _box;
   String _sessionScope = _anonymousScope;
-
-  SyncQueueService._();
 
   static SyncQueueService get instance {
     _instance ??= SyncQueueService._();
@@ -186,8 +185,10 @@ class SyncQueueService {
         .whereType<SyncOperation>()
         .where((operation) => operation.sessionScope == _sessionScope)
         .toList()
-      ..sort((a, b) => (a.createdAt ?? DateTime.now())
-          .compareTo(b.createdAt ?? DateTime.now()));
+      ..sort(
+        (a, b) => (a.createdAt ?? DateTime.now())
+            .compareTo(b.createdAt ?? DateTime.now()),
+      );
   }
 
   /// Process all pending operations.
@@ -398,7 +399,7 @@ class SyncQueueService {
             op.headers == null ? null : Map<String, String>.from(op.headers!),
         extra: <String, dynamic>{
           if (op.type == 'confirm_delivery' ||
-              op.headers?.containsKey('Idempotency-Key') == true)
+              (op.headers?.containsKey('Idempotency-Key') ?? false))
             'idempotent': true,
         },
       );
@@ -410,21 +411,18 @@ class SyncQueueService {
             data: cleanPayload,
             options: options,
           );
-          break;
         case 'PUT':
           response = await ApiClient.dio.put(
             op.endpoint,
             data: cleanPayload,
             options: options,
           );
-          break;
         case 'DELETE':
           response = await ApiClient.dio.delete(
             op.endpoint,
             data: cleanPayload.isNotEmpty ? cleanPayload : null,
             options: options,
           );
-          break;
         default:
           throw UnsupportedError('Method ${op.method} not supported for sync');
       }
@@ -453,7 +451,7 @@ class SyncQueueService {
     final data = e.response?.data;
     String? code;
     String? confirmationId;
-    String message = e.message ?? 'Error de red durante sync';
+    var message = e.message ?? 'Error de red durante sync';
     if (data is Map) {
       code = data['code']?.toString();
       confirmationId = data['confirmationId']?.toString();
@@ -569,9 +567,9 @@ class SyncQueueService {
   static Future<void> Function({
     required String deliveryId,
     required String confirmationId,
-    String? cobroId,
     required String fingerprint,
     required String idempotencyKey,
+    String? cobroId,
   })? confirmDeliveryReconciler;
 
   /// Clear all pending operations.

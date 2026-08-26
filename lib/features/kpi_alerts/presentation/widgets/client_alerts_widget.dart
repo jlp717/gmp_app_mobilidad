@@ -264,13 +264,22 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
           const SizedBox(width: 4),
           if (criticalCount > 0)
             _buildCompactBadge(
-                criticalCount, _severityColor('critical'), Icons.error_rounded),
+              criticalCount,
+              _severityColor('critical'),
+              Icons.error_rounded,
+            ),
           if (warningCount > 0)
-            _buildCompactBadge(warningCount, _severityColor('warning'),
-                Icons.warning_amber_rounded),
+            _buildCompactBadge(
+              warningCount,
+              _severityColor('warning'),
+              Icons.warning_amber_rounded,
+            ),
           if (infoCount > 0)
             _buildCompactBadge(
-                infoCount, _severityColor('info'), Icons.info_rounded),
+              infoCount,
+              _severityColor('info'),
+              Icons.info_rounded,
+            ),
         ],
       ),
     );
@@ -568,7 +577,10 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   // GRUPO de alertas por tipo (Collapsible con ExpansionTile)
   // ============================================================
   Widget _buildAlertGroupCollapsible(
-      String type, List<KpiAlert> alerts, bool isJefe) {
+    String type,
+    List<KpiAlert> alerts,
+    bool isJefe,
+  ) {
     final config = _typeConfig(type);
     final highestSeverity = alerts.fold<String>('info', (prev, a) {
       if (a.severity == 'critical') return 'critical';
@@ -739,8 +751,13 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
     final items = <Widget>[];
 
     if (raw.containsKey('cuotaAnual') && raw['cuotaAnual'] != null) {
-      items.add(_buildFinancialPill(
-          'Cuota', '${_formatNum(raw['cuotaAnual'])}€', AppTheme.info));
+      items.add(
+        _buildFinancialPill(
+          'Cuota',
+          '${_formatNum(raw['cuotaAnual'])}€',
+          AppTheme.info,
+        ),
+      );
     }
     if (raw.containsKey('desviacionEur') && raw['desviacionEur'] != null) {
       final val = (raw['desviacionEur'] as num).toDouble();

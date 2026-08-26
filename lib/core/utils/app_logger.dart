@@ -12,6 +12,18 @@ class AppLogger {
 
   static bool _initialized = false;
 
+  /// Matches JWT-shaped tokens and Bearer headers so they never reach logs.
+  static final RegExp _sensitivePattern = RegExp(
+    r'(?:Bearer\s+)?eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}',
+  );
+
+  /// Masks token-like strings. Public so Sentry beforeSend can reuse it.
+  static String scrubSensitive(Object? value) {
+    final text = value?.toString() ?? '';
+    if (text.isEmpty) return text;
+    return text.replaceAllMapped(_sensitivePattern, (_) => '[REDACTED]');
+  }
+
   static void initialize({LogLevel level = LogLevel.debug}) {
     _currentLevel = level;
     _initialized = true;
@@ -32,9 +44,9 @@ class AppLogger {
   static void debug(String message, {String? tag, Object? data}) {
     if (_shouldLog(LogLevel.debug)) {
       final prefix = tag != null ? '[$tag] ' : '';
-      debugPrint('$prefix$message');
+      debugPrint('$prefix${scrubSensitive(message)}');
       if (data != null) {
-        debugPrint('Data: $data');
+        debugPrint('Data: ${scrubSensitive(data)}');
       }
     }
   }
@@ -42,9 +54,9 @@ class AppLogger {
   static void info(String message, {String? tag, Object? data}) {
     if (_shouldLog(LogLevel.info)) {
       final prefix = tag != null ? '[$tag] ' : '';
-      debugPrint('$prefix$message');
+      debugPrint('$prefix${scrubSensitive(message)}');
       if (data != null) {
-        debugPrint('Data: $data');
+        debugPrint('Data: ${scrubSensitive(data)}');
       }
     }
   }
@@ -52,9 +64,9 @@ class AppLogger {
   static void warn(String message, {String? tag, Object? data}) {
     if (_shouldLog(LogLevel.warn)) {
       final prefix = tag != null ? '[$tag] ' : '';
-      debugPrint('$prefix$message');
+      debugPrint('$prefix${scrubSensitive(message)}');
       if (data != null) {
-        debugPrint('Data: $data');
+        debugPrint('Data: ${scrubSensitive(data)}');
       }
     }
   }
@@ -67,9 +79,9 @@ class AppLogger {
   }) {
     if (_shouldLog(LogLevel.error)) {
       final prefix = tag != null ? '[$tag] ' : '';
-      debugPrint('$prefix$message');
+      debugPrint('$prefix${scrubSensitive(message)}');
       if (error != null) {
-        debugPrint('Error: $error');
+        debugPrint('Error: ${scrubSensitive(error)}');
       }
       if (stackTrace != null) {
         debugPrint('StackTrace: $stackTrace');
@@ -85,7 +97,7 @@ class AppLogger {
   }) {
     if (_shouldLog(LogLevel.info)) {
       debugPrint(
-        '[HTTP] $method $url ${statusCode != null ? '-> $statusCode' : ''} ${durationMs != null ? '(${durationMs}ms)' : ''}',
+        '[HTTP] $method ${scrubSensitive(url)} ${statusCode != null ? '-> $statusCode' : ''} ${durationMs != null ? '(${durationMs}ms)' : ''}',
       );
     }
   }

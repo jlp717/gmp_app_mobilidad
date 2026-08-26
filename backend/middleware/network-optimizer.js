@@ -85,17 +85,29 @@ const MAX_ETAG_BYTES = parseInt(process.env.HTTP_ETAG_MAX_BYTES, 10) || 256 * 10
 const MAX_ETAG_ARRAY_ITEMS = parseInt(process.env.HTTP_ETAG_MAX_ARRAY_ITEMS, 10) || 200;
 const MAX_PENDING_AGE_MS = 60000; // 60s — heavy DB2 queries (commissions ALL, clients) need this
 
-setInterval(() => {
-    const now = Date.now();
-    for (const [sig, entry] of pendingRequests) {
-        if (now - (entry.createdAt || 0) > MAX_PENDING_AGE_MS) {
-            // Suppress unhandled rejection — the .catch() at line 222 handles it
-            entry.promise.catch(() => {});
-            entry.reject(new Error('Coalescing request timed out'));
-            pendingRequests.delete(sig);
+let pendingCleanupTimer = null;
+
+function startNetworkOptimizerCleanup() {
+    if (pendingCleanupTimer) return pendingCleanupTimer;
+    pendingCleanupTimer = setInterval(() => {
+        const now = Date.now();
+        for (const [sig, entry] of pendingRequests) {
+            if (now - (entry.createdAt || 0) > MAX_PENDING_AGE_MS) {
+                entry.promise.catch(() => {});
+                entry.reject(new Error('Coalescing request timed out'));
+                pendingRequests.delete(sig);
+            }
         }
-    }
-}, 10000).unref();
+    }, 10000);
+    pendingCleanupTimer.unref?.();
+    return pendingCleanupTimer;
+}
+
+function stopNetworkOptimizerCleanup() {
+    if (!pendingCleanupTimer) return;
+    clearInterval(pendingCleanupTimer);
+    pendingCleanupTimer = null;
+}
 
 /**
  * Main network optimizer middleware
@@ -490,6 +502,8 @@ function setFeatureFlag(flag, value) {
 module.exports = {
     networkOptimizer,
     responseCoalescing,
+    startNetworkOptimizerCleanup,
+    stopNetworkOptimizerCleanup,
     requestDeduplication,
     compressionStats,
     isJsonCoalescibleRequest,

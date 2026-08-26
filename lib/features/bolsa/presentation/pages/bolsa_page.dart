@@ -10,7 +10,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
-import 'package:intl/intl.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -20,6 +19,7 @@ import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_monthly_chart.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
+import 'package:intl/intl.dart';
 
 /// Formato de moneda con localización española (1.234,56 €).
 final NumberFormat _bolsaMoneyFormat =
@@ -105,7 +105,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
     final fallbackCodes = authVendorCodes.isNotEmpty
         ? authVendorCodes.join(',')
-        : (user.vendedorCode?.trim().isNotEmpty == true
+        : (user.vendedorCode?.trim().isNotEmpty ?? false
             ? user.vendedorCode!.trim()
             : user.code.trim());
     if (hasCommercial80VendorScope(
@@ -172,7 +172,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     final provider = ref.watch(bolsaProvider);
     final authState = ref.watch(authProvider).value;
     final user = authState?.user;
-    final canEdit = user?.isJefeVentas == true;
+    final canEdit = user?.isJefeVentas ?? false;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -199,9 +199,9 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
           children: [
             // Selector "Ver como" para JEFE_VENTAS y perfiles comerciales
             // con alcance de equipo, como Comercial 80.
-            if (user?.isJefeVentas == true || widget.forceShowVendorSelector)
+            if (user?.isJefeVentas ?? false || widget.forceShowVendorSelector)
               GlobalVendorSelector(
-                isJefeVentas: user?.isJefeVentas == true,
+                isJefeVentas: user?.isJefeVentas ?? false,
                 forceShow: widget.forceShowVendorSelector,
               ),
             Expanded(
@@ -238,7 +238,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       }
       return _EmptyVendorView();
     }
-    final months = _MonthNames.full;
+    const months = _MonthNames.full;
     final filtered = provider.filteredMovements;
     final monthLabel = months[(status.mes - 1).clamp(0, 11)];
     final hasChart = provider.history.isNotEmpty;
@@ -424,7 +424,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         );
       },
     );
-    if (result == true) {
+    if (result ?? false) {
       final pct = double.tryParse(
             limitePctCtrl.text.replaceAll(',', '.').trim(),
           ) ??
@@ -433,7 +433,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         limiteImporteCtrl.text.replaceAll(',', '.').trim(),
       );
       final ok = await provider.updateConfig(
-        limitePct: pct.clamp(0.0, 100.0).toDouble(),
+        limitePct: pct.clamp(0.0, 100.0),
         limiteImporte: imp,
       );
       if (!ok && mounted) {
@@ -581,10 +581,12 @@ class _BolsaPeriodSelector extends StatelessWidget {
                   ? null
                   : (month) {
                       if (month == null) return;
-                      unawaited(provider.setPeriod(
-                        year: provider.selectedYear,
-                        month: month,
-                      ));
+                      unawaited(
+                        provider.setPeriod(
+                          year: provider.selectedYear,
+                          month: month,
+                        ),
+                      );
                     },
             ),
           ),
@@ -599,10 +601,12 @@ class _BolsaPeriodSelector extends StatelessWidget {
                   ? null
                   : (year) {
                       if (year == null) return;
-                      unawaited(provider.setPeriod(
-                        year: year,
-                        month: provider.selectedMonth,
-                      ));
+                      unawaited(
+                        provider.setPeriod(
+                          year: year,
+                          month: provider.selectedMonth,
+                        ),
+                      );
                     },
             ),
           ),
@@ -630,7 +634,7 @@ class _PeriodDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       dropdownColor: AppTheme.raisedSurface,
       iconEnabledColor: Colors.white70,

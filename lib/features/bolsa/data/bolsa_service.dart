@@ -78,11 +78,11 @@ class BolsaService {
       year ?? 'all',
       month ?? 'all',
       limit,
-      dateFrom == null ? '' : _dateKey(dateFrom),
-      dateTo == null ? '' : _dateKey(dateTo),
+      if (dateFrom == null) '' else _dateKey(dateFrom),
+      if (dateTo == null) '' else _dateKey(dateTo),
       document ?? '',
       client ?? '',
-      tipo == null ? '' : _tipoKey(tipo),
+      if (tipo == null) '' else _tipoKey(tipo),
     ].join(':');
     try {
       final response = await ApiClient.get(

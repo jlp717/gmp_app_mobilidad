@@ -7,21 +7,23 @@ else
   echo "[pre-commit] AVISO: ni gitleaks ni fallback de secretos disponibles" >&2
 fi
 
-# 2) Checks rapidos e identicos a lint-staged, invocados directo (<10s objetivo).
-#    lint-staged sigue instalado y configurado (package.json) para uso manual/CI.
-
+# 2) Validaciones por archivo para no exceder el limite de comandos de Windows.
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
-
-DART_FILES=$(echo "$STAGED" | grep '\.dart$' || true)
-if [ -n "$DART_FILES" ]; then
-  echo "$DART_FILES" | xargs dart format --output=none --set-exit-if-changed || {
-    echo "[pre-commit] dart format fallo. Ejecuta: dart format ." >&2; exit 1; }
-fi
-
-JS_FILES=$(echo "$STAGED" | grep -E '\.(js|cjs|mjs)$' || true)
-if [ -n "$JS_FILES" ]; then
-  echo "$JS_FILES" | xargs -I{} node --check {} || {
-    echo "[pre-commit] sintaxis JS invalida" >&2; exit 1; }
-fi
+for file in $STAGED; do
+  case "$file" in
+    *.dart)
+      dart format --output=none --set-exit-if-changed "$file" || {
+        echo "[pre-commit] dart format fallo: $file" >&2
+        exit 1
+      }
+      ;;
+    *.js|*.cjs|*.mjs)
+      node --check "$file" || {
+        echo "[pre-commit] sintaxis JS invalida: $file" >&2
+        exit 1
+      }
+      ;;
+  esac
+done
 
 exit 0

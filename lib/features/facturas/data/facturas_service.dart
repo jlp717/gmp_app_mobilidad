@@ -9,7 +9,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
-import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 
@@ -334,12 +333,14 @@ class FacturasService {
     final month = int.tryParse(parts[1]);
     final year = int.tryParse(parts[2]);
     if (day == null || month == null || year == null) return null;
-    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31)
+    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) {
       return null;
+    }
 
     final parsed = DateTime(year, month, day);
-    if (parsed.year != year || parsed.month != month || parsed.day != day)
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
       return null;
+    }
     return parsed;
   }
 
@@ -426,7 +427,8 @@ class FacturasService {
               if (valDate == null) return false;
 
               return valDate.isAfter(
-                      start.subtract(const Duration(milliseconds: 1))) &&
+                    start.subtract(const Duration(milliseconds: 1)),
+                  ) &&
                   valDate.isBefore(end.add(const Duration(milliseconds: 1)));
             }).toList();
           } catch (e) {
@@ -460,7 +462,7 @@ class FacturasService {
       return [];
     } catch (e) {
       debugPrint('Error in getFacturas: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -516,13 +518,16 @@ class FacturasService {
         if (month != null) url += '&month=$month';
       }
 
-      if (search != null && search.isNotEmpty)
+      if (search != null && search.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(search)}';
+      }
       if (clientId != null) url += '&clientId=$clientId';
-      if (clientSearch != null && clientSearch.isNotEmpty)
+      if (clientSearch != null && clientSearch.isNotEmpty) {
         url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
-      if (docSearch != null && docSearch.isNotEmpty)
+      }
+      if (docSearch != null && docSearch.isNotEmpty) {
         url += '&docSearch=${Uri.encodeComponent(docSearch)}';
+      }
       if (documentType != null) {
         url += '&tipoDocumento=${documentType.apiValue}';
       }
@@ -550,7 +555,8 @@ class FacturasService {
 
       if (response['success'] == true && response['summary'] != null) {
         return FacturaSummary.fromJson(
-            response['summary'] as Map<String, dynamic>);
+          response['summary'] as Map<String, dynamic>,
+        );
       }
       return null;
     } catch (e) {
@@ -561,7 +567,10 @@ class FacturasService {
 
   /// Get invoice detail
   static Future<FacturaDetail?> getDetail(
-      String serie, int numero, int ejercicio) async {
+    String serie,
+    int numero,
+    int ejercicio,
+  ) async {
     try {
       final response = await ApiClient.get(
         '/facturas/$serie/$numero/$ejercicio',
@@ -571,7 +580,8 @@ class FacturasService {
 
       if (response['success'] == true && response['factura'] != null) {
         return FacturaDetail.fromJson(
-            response['factura'] as Map<String, dynamic>);
+          response['factura'] as Map<String, dynamic>,
+        );
       }
       return null;
     } catch (e) {
@@ -582,7 +592,10 @@ class FacturasService {
 
   /// Preview PDF (uses Printing package as viewer)
   static Future<void> previewFacturaPdf(
-      String serie, int numero, int ejercicio) async {
+    String serie,
+    int numero,
+    int ejercicio,
+  ) async {
     try {
       final file = await downloadFacturaPdf(serie, numero, ejercicio);
       final bytes = await file.readAsBytes();
@@ -676,8 +689,7 @@ class FacturasService {
     try {
       final bytes = await ApiClient.getBytes(_documentPdfEndpoint(factura));
       final dir = await getTemporaryDirectory();
-      final safeSerie =
-          factura.serie.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+      final safeSerie = factura.serie.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
       final file = File(
         '${dir.path}/${factura.pdfFilePrefix}_${safeSerie}_${factura.numero}_${factura.ejercicio}.pdf',
       );
@@ -700,13 +712,17 @@ class FacturasService {
 
   /// Download PDF
   static Future<File> downloadFacturaPdf(
-      String serie, int numero, int ejercicio) async {
+    String serie,
+    int numero,
+    int ejercicio,
+  ) async {
     try {
       // Use ApiClient to get bytes directly - authentication is handled automatically
       // FIX: Add timestamp to bust Dio HTTP cache on repeated downloads
       final ts = DateTime.now().millisecondsSinceEpoch;
       final bytes = await ApiClient.getBytes(
-          '/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts');
+        '/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts',
+      );
 
       final dir = await getTemporaryDirectory();
       final file =
@@ -721,13 +737,17 @@ class FacturasService {
 
   /// Download PDF as raw bytes (for in-app preview)
   static Future<List<int>> downloadFacturaPdfBytes(
-      String serie, int numero, int ejercicio) async {
+    String serie,
+    int numero,
+    int ejercicio,
+  ) async {
     try {
       // FIX: Add timestamp to bust Dio HTTP cache — without this, second request
       // returns cached response and PDF appears blank/corrupted on re-open
       final ts = DateTime.now().millisecondsSinceEpoch;
       final bytes = await ApiClient.getBytes(
-          '/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts');
+        '/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts',
+      );
       return bytes;
     } catch (e) {
       debugPrint('Error downloading PDF bytes: $e');

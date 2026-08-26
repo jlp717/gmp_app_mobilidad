@@ -1,8 +1,4 @@
-import 'dart:typed_data';
-
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Premium product image widget with elegant fallback.
 /// Memoizes failed URLs with TTL to prevent repeated 404 requests
@@ -10,19 +6,19 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 /// Uses product-code-based gradient for visually distinct placeholders.
 /// Now caches image bytes persistently using CacheService.
 class SmartProductImage extends StatelessWidget {
-  const SmartProductImage(
-      {required this.imageUrl,
-      required this.productCode,
-      super.key,
-      this.productName,
-      this.width = double.infinity,
-      this.height = double.infinity,
-      this.fit = BoxFit.cover,
-      this.borderRadius,
-      this.showCodeOnFallback = true,
-      this.headers,
-      this.forceRetry = false // Nuevo parámetro para forzar reintento
-      });
+  const SmartProductImage({
+    required this.imageUrl,
+    required this.productCode,
+    super.key,
+    this.productName,
+    this.width = double.infinity,
+    this.height = double.infinity,
+    this.fit = BoxFit.cover,
+    this.borderRadius,
+    this.showCodeOnFallback = true,
+    this.headers,
+    this.forceRetry = false, // Nuevo parámetro para forzar reintento
+  });
   final String imageUrl;
   final String productCode;
   final String? productName;

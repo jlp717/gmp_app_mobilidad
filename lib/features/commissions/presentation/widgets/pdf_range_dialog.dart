@@ -63,14 +63,14 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
     setState(() {
       final currentMonth = DateTime.now().month;
       _selectedMonths.clear();
-      for (int i = 1; i <= currentMonth; i++) {
+      for (var i = 1; i <= currentMonth; i++) {
         _selectedMonths.add(i);
       }
     });
   }
 
   void _clearAll() {
-    setState(() => _selectedMonths.clear());
+    setState(_selectedMonths.clear);
   }
 
   String _getSelectedMonthsText() {
@@ -86,8 +86,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
     if (_selectedMonths.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Selecciona al menos un mes'),
-            backgroundColor: AppTheme.warning),
+          content: Text('Selecciona al menos un mes'),
+          backgroundColor: AppTheme.warning,
+        ),
       );
       return;
     }
@@ -106,8 +107,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('PDF generado correctamente'),
-              backgroundColor: Colors.green),
+            content: Text('PDF generado correctamente'),
+            backgroundColor: Colors.green,
+          ),
         );
       },
       onError: (e) {
@@ -136,12 +138,15 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
           Icon(Icons.picture_as_pdf_rounded, color: AppTheme.success, size: 24),
           SizedBox(width: 8),
           Expanded(
-              child: Text('Generar Informe PDF',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ))),
+            child: Text(
+              'Generar Informe PDF',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
       content: SizedBox(
@@ -188,7 +193,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                     subtitle: const Text(
                       'Objetivo, ventas LAC/B, comisiones y totales',
                       style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 10),
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
                     ),
                     activeColor: AppTheme.success,
                   ),
@@ -211,7 +218,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                     subtitle: const Text(
                       'Ventas LAC por cliente del comercial seleccionado',
                       style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 10),
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
                     ),
                     activeColor: AppTheme.info,
                   ),
@@ -254,8 +263,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                 const Text(
                                   'Seleccionar meses',
                                   style: TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 11),
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
@@ -294,7 +304,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                             // Botones de acción rápida
                             Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 8),
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
                               child: Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceEvenly,
@@ -324,7 +336,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                     onTap: () {
                                       setState(() {
                                         _selectedMonths.clear();
-                                        for (int i = 1;
+                                        for (var i = 1;
                                             i <= currentMonth;
                                             i++) {
                                           _selectedMonths.add(i);
@@ -360,7 +372,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                 ),
                                 subtitle: Text(
                                   _getMonthDescription(month),
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 10,
                                   ),
@@ -394,8 +406,11 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle,
-                        color: AppTheme.success, size: 18),
+                    const Icon(
+                      Icons.check_circle,
+                      color: AppTheme.success,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -404,9 +419,10 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                           Text(
                             '${_selectedMonths.length} mes(es) seleccionado(s)',
                             style: const TextStyle(
-                                color: AppTheme.success,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold),
+                              color: AppTheme.success,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -417,7 +433,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                   .join(', ');
                             }(),
                             style: const TextStyle(
-                                color: AppTheme.success, fontSize: 10),
+                              color: AppTheme.success,
+                              fontSize: 10,
+                            ),
                           ),
                         ],
                       ),
@@ -447,8 +465,11 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline,
-                      color: AppTheme.info, size: 16),
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppTheme.info,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -456,7 +477,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                           ? 'El registro de pagos usa ventas LAC por cliente del comercial actual. Requiere un vendedor concreto (no ALL).'
                           : 'El PDF incluirá objetivo, ventas LAC, ventas B, comisiones y totales.\nSolo disponible para DIEGO.',
                       style: const TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 11),
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
@@ -469,8 +492,10 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR',
-              style: TextStyle(color: AppTheme.error, fontSize: 13)),
+          child: const Text(
+            'CANCELAR',
+            style: TextStyle(color: AppTheme.error, fontSize: 13),
+          ),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _generatePdf,
@@ -484,12 +509,18 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-              : const Text('GENERAR PDF',
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text(
+                  'GENERAR PDF',
                   style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13)),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
         ),
       ],
     );
@@ -509,10 +540,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
 }
 
 class _QuickActionButton extends StatelessWidget {
+  const _QuickActionButton({required this.label, required this.onTap});
   final String label;
   final VoidCallback onTap;
-
-  const _QuickActionButton({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

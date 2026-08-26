@@ -1,7 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
@@ -12,9 +13,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
-import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 BoxDecoration _evolutionPanelDecoration({
   Color accent = AppTheme.info,
@@ -242,7 +241,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     if (value is! List) return <Map<String, dynamic>>[];
     return value
         .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
+        .map(Map<String, dynamic>.from)
         .toList(growable: false);
   }
 
@@ -265,7 +264,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   }
 
   String _clientCode(Map<String, dynamic> client) => _clientField(
-      client, ['code', 'CODIGO', 'codigoCliente', 'CODIGOCLIENTE']);
+        client,
+        ['code', 'CODIGO', 'codigoCliente', 'CODIGOCLIENTE'],
+      );
 
   String _clientName(Map<String, dynamic> client) =>
       _clientField(client, ['name', 'NOMBRE', 'nombre', 'clienteNombre']);
@@ -332,25 +333,33 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               },
               child: _isLoading
                   ? const Center(
-                      child: ModernLoading(message: 'Cargando evolución...'))
+                      child: ModernLoading(message: 'Cargando evolución...'),
+                    )
                   : _error != null
                       ? Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(16),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.error_outline,
-                                    color: AppTheme.error, size: 48),
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: AppTheme.error,
+                                  size: 48,
+                                ),
                                 const SizedBox(height: 16),
-                                Text('Error: $_error',
-                                    style: const TextStyle(
-                                        color: AppTheme.textSecondary)),
+                                Text(
+                                  'Error: $_error',
+                                  style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
                                 const SizedBox(height: 16),
                                 ElevatedButton(
                                   onPressed: _selectedClientCode != null
                                       ? () => _loadEvolutionData(
-                                          _selectedClientCode!)
+                                            _selectedClientCode!,
+                                          )
                                       : _loadClients,
                                   child: const Text('Reintentar'),
                                 ),
@@ -389,10 +398,14 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                       color: AppTheme.info.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       border: Border.all(
-                          color: AppTheme.info.withValues(alpha: 0.28)),
+                        color: AppTheme.info.withValues(alpha: 0.28),
+                      ),
                     ),
-                    child: const Icon(Icons.manage_search_outlined,
-                        color: AppTheme.info, size: 18),
+                    child: const Icon(
+                      Icons.manage_search_outlined,
+                      color: AppTheme.info,
+                      size: 18,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   const Expanded(
@@ -516,10 +529,14 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           trailing: selected
-                              ? const Icon(Icons.check_circle,
-                                  color: AppTheme.info)
-                              : const Icon(Icons.chevron_right,
-                                  color: Colors.white24),
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: AppTheme.info,
+                                )
+                              : const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.white24,
+                                ),
                           onTap: () => _selectClient(client),
                         ),
                       );
@@ -540,8 +557,11 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_alt_outlined,
-                size: 48, color: AppTheme.textSecondary),
+            Icon(
+              Icons.people_alt_outlined,
+              size: 48,
+              color: AppTheme.textSecondary,
+            ),
             SizedBox(height: 16),
             Text(
               'Seleccione un cliente para ver su evolución',
@@ -557,8 +577,11 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.show_chart_outlined,
-                size: 48, color: AppTheme.textSecondary),
+            const Icon(
+              Icons.show_chart_outlined,
+              size: 48,
+              color: AppTheme.textSecondary,
+            ),
             const SizedBox(height: 16),
             Text(
               'No hay datos de evolución para $_selectedClientName ($_selectedClientCode)',
@@ -589,7 +612,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             decoration:
                 _evolutionPanelDecoration(accent: AppTheme.accentIndigo),
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -601,7 +624,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                         child: Text(
                           '$_selectedClientName ($_selectedClientCode)',
                           style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -653,7 +678,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             Container(
               decoration: _evolutionPanelDecoration(accent: AppTheme.info),
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: SizedBox(
                   height: 300,
                   child: LineChart(
@@ -707,9 +732,11 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                           ),
                         ),
                         topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false)),
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
                         rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false)),
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
                       ),
                       borderData: FlBorderData(
                         show: true,
@@ -722,8 +749,10 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                       minY: 0,
                       maxY: _monthlySales.isNotEmpty
                           ? (_monthlySales
-                                  .map((e) =>
-                                      (e['sales'] as num?)?.toDouble() ?? 0.0)
+                                  .map(
+                                    (e) =>
+                                        (e['sales'] as num?)?.toDouble() ?? 0.0,
+                                  )
                                   .reduce((a, b) => a > b ? a : b) *
                               1.2)
                           : 1000,
@@ -731,9 +760,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                         LineChartBarData(
                           spots: _monthlySales.asMap().entries.map((entry) {
                             return FlSpot(
-                                entry.key.toDouble(),
-                                (entry.value['sales'] as num?)?.toDouble() ??
-                                    0.0);
+                              entry.key.toDouble(),
+                              (entry.value['sales'] as num?)?.toDouble() ?? 0.0,
+                            );
                           }).toList(),
                           isCurved: true,
                           color: AppTheme.accentIndigo,
@@ -774,7 +803,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             Container(
               decoration: _evolutionPanelDecoration(accent: AppTheme.success),
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   children: _topProducts.take(10).map((product) {
                     return Container(
@@ -795,8 +824,11 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                             borderRadius:
                                 BorderRadius.circular(AppTheme.radiusMd),
                           ),
-                          child: const Icon(Icons.inventory_2_outlined,
-                              color: AppTheme.success, size: 18),
+                          child: const Icon(
+                            Icons.inventory_2_outlined,
+                            color: AppTheme.success,
+                            size: 18,
+                          ),
                         ),
                         title: Text(product['name'] ?? 'Producto desconocido'),
                         subtitle: Text('Código: ${product['code']}'),

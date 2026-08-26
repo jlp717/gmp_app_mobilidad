@@ -573,12 +573,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   /// - "Al dia": solo los que no deben nada
   /// - "Todos": no filtra
   Widget _buildEstadoFilterChips() {
-    final filters = const [
+    const filters = [
       _FilterDef(
-          'pendiente', 'Pendientes', Icons.schedule, AppTheme.accentAmber),
+        'pendiente',
+        'Pendientes',
+        Icons.schedule,
+        AppTheme.accentAmber,
+      ),
       _FilterDef('vencido', 'Vencidos', Icons.error_outline, AppTheme.error),
       _FilterDef(
-          'aldia', 'Al dia', Icons.check_circle_outline, AppTheme.success),
+        'aldia',
+        'Al dia',
+        Icons.check_circle_outline,
+        AppTheme.success,
+      ),
       _FilterDef('todos', 'Todos', Icons.list, Colors.white70),
     ];
     return Container(
@@ -733,9 +741,12 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, código, NIF...',
               hintStyle: TextStyle(
-                  color: AppTheme.textSecondary.withValues(alpha: 0.6)),
-              prefixIcon: Icon(Icons.search,
-                  color: AppTheme.info.withValues(alpha: 0.7)),
+                color: AppTheme.textSecondary.withValues(alpha: 0.6),
+              ),
+              prefixIcon: Icon(
+                Icons.search,
+                color: AppTheme.info.withValues(alpha: 0.7),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide:
@@ -806,7 +817,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                           ? 'Todo al dia'
                           : 'Resumen de cobros no disponible')),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textSecondary,
@@ -831,7 +842,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               const SizedBox(height: 12),
               Text(
                 'Pendiente total: ${_moneyFormat.format(cobros.grandTotal)}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppTheme.warning,
                   fontWeight: FontWeight.w600,
@@ -889,13 +900,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     switch (estado) {
       case 'VENCIDO':
         badgeColor = AppTheme.error;
-        break;
       case 'PENDIENTE':
         badgeColor = AppTheme.warning;
-        break;
       case 'AL_DIA':
         badgeColor = AppTheme.success;
-        break;
       default:
         badgeColor = AppTheme.textSecondary;
     }
@@ -979,8 +987,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                             ? '$docCount documento${docCount == 1 ? '' : 's'} pendiente${docCount == 1 ? '' : 's'}'
                             : 'Sin documentos pendientes',
                         style: TextStyle(
-                          fontSize: Responsive.fontSize(context,
-                              small: 10, large: 12),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 10,
+                            large: 12,
+                          ),
                           color: pending > 0
                               ? badgeColor.withValues(alpha: 0.9)
                               : AppTheme.success.withValues(alpha: 0.8),
@@ -993,12 +1004,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                       const SizedBox(height: 2),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.warning.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Deuda ERP',
                           style: TextStyle(
                             fontSize: 9,
@@ -1046,7 +1059,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                       const SizedBox(height: 4),
                       Text(
                         'Vencido: ${_moneyFormat.format(vencido)}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppTheme.error,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,

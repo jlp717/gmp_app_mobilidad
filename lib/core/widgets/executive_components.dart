@@ -267,8 +267,11 @@ class ExecutiveFilterChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon,
-                  color: selected ? accent : AppTheme.textSecondary, size: 16),
+              Icon(
+                icon,
+                color: selected ? accent : AppTheme.textSecondary,
+                size: 16,
+              ),
               const SizedBox(width: 7),
             ],
             Text(

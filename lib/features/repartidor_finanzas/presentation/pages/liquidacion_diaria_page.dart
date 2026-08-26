@@ -1,7 +1,7 @@
 // ignore_for_file: public_member_api_docs, lines_longer_than_80_chars
 
 import 'dart:async';
-import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,13 +14,12 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/liquidacion_pdf_builder.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/liquidacion_diaria_view.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/repartidor_monthly_summary_bar.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const RepartidorLiquidacionDiariaPage({
@@ -179,41 +178,41 @@ class _RepartidorLiquidacionDiariaPageState
               canReverseCobros: summary.canReverseCobros,
               repartidorId: widget.repartidorId,
               onReversed: () => ref.invalidate(
-                repartidorDailySummaryProvider((
-                  repartidorId: widget.repartidorId,
-                  date: _sessionDate,
-                  forceRefresh: true,
-                )),
+                repartidorDailySummaryProvider(
+                  (
+                    repartidorId: widget.repartidorId,
+                    date: _sessionDate,
+                    forceRefresh: true,
+                  ),
+                ),
               ),
               useErpTable: true,
             ),
-      ledgerPanel: asyncLedger == null
-          ? null
-          : asyncLedger.when(
-              data: (ledger) => _LiquidacionLedgerPanel(
-                ledger: AsyncValue.data(ledger),
-                onRetry: () => ref.invalidate(
-                  repartidorLiquidacionLedgerProvider(ledgerArgs),
-                ),
-              ),
-              loading: () => const RepartidorExecutivePanel(
-                accentColor: AppColors.info,
-                child: Padding(
-                  padding: EdgeInsets.all(12),
-                  child: LinearProgressIndicator(color: AppColors.info),
-                ),
-              ),
-              error: (error, _) => RepartidorExecutivePanel(
-                accentColor: AppColors.error,
-                child: Text(
-                  financeErrorMessage(
-                    error,
-                    'No se pudo cargar el desglose de liquidación.',
-                  ),
-                  style: const TextStyle(color: AppColors.error),
-                ),
-              ),
+      ledgerPanel: asyncLedger?.when(
+        data: (ledger) => _LiquidacionLedgerPanel(
+          ledger: AsyncValue.data(ledger),
+          onRetry: () => ref.invalidate(
+            repartidorLiquidacionLedgerProvider(ledgerArgs),
+          ),
+        ),
+        loading: () => const RepartidorExecutivePanel(
+          accentColor: AppColors.info,
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: LinearProgressIndicator(color: AppColors.info),
+          ),
+        ),
+        error: (error, _) => RepartidorExecutivePanel(
+          accentColor: AppColors.error,
+          child: Text(
+            financeErrorMessage(
+              error,
+              'No se pudo cargar el desglose de liquidación.',
             ),
+            style: const TextStyle(color: AppColors.error),
+          ),
+        ),
+      ),
     );
   }
 
@@ -272,7 +271,9 @@ class _RepartidorLiquidacionDiariaPageState
         SnackBar(
           content: Text(
             financeErrorMessage(
-                error, 'No se pudo generar el PDF sin conexión'),
+              error,
+              'No se pudo generar el PDF sin conexión',
+            ),
           ),
         ),
       );
@@ -299,7 +300,9 @@ class _RepartidorLiquidacionDiariaPageState
         SnackBar(
           content: Text(
             financeErrorMessage(
-                error, 'No se pudo compartir el PDF sin conexión'),
+              error,
+              'No se pudo compartir el PDF sin conexión',
+            ),
           ),
         ),
       );
@@ -502,40 +505,44 @@ class _RepartidorLiquidacionDiariaPageState
       switch (kind) {
         case _EntryKind.expense:
           result = await actions.createExpense(
-              repartidorId: widget.repartidorId,
-              date: _sessionDate,
-              amount: amount,
-              category: detail,
-              idempotencyToken: token,
-              observation: observation);
-          break;
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+            amount: amount,
+            category: detail,
+            idempotencyToken: token,
+            observation: observation,
+          );
         case _EntryKind.bankDeposit:
           result = await actions.createBankDeposit(
-              repartidorId: widget.repartidorId,
-              date: _sessionDate,
-              amount: amount,
-              reference: detail,
-              idempotencyToken: token,
-              observation: observation);
-          break;
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+            amount: amount,
+            reference: detail,
+            idempotencyToken: token,
+            observation: observation,
+          );
         case _EntryKind.adjustment:
           result = await actions.createAdjustment(
-              repartidorId: widget.repartidorId,
-              date: _sessionDate,
-              amount: amount,
-              reason: detail,
-              idempotencyToken: token,
-              observation: observation);
-          break;
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+            amount: amount,
+            reason: detail,
+            idempotencyToken: token,
+            observation: observation,
+          );
       }
       _entryTokens.remove(fingerprint);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.isReplay
-            ? 'Movimiento ya registrado; se recuperó el resultado anterior.'
-            : 'Movimiento creado y verificado por el servidor.'),
-        backgroundColor: AppColors.success,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.isReplay
+                ? 'Movimiento ya registrado; se recuperó el resultado anterior.'
+                : 'Movimiento creado y verificado por el servidor.',
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
@@ -544,34 +551,50 @@ class _RepartidorLiquidacionDiariaPageState
               error.code == 'LIQUIDACION_ENTRY_REPLAY_MISMATCH');
       if (requiresReconciliation) {
         ref
-          ..invalidate(repartidorLiquidacionLedgerProvider((
-            repartidorId: widget.repartidorId,
-            date: _sessionDate,
-          )))
-          ..invalidate(repartidorDailySummaryProvider((
-            repartidorId: widget.repartidorId,
-            date: _sessionDate,
-            forceRefresh: false,
-          )));
+          ..invalidate(
+            repartidorLiquidacionLedgerProvider(
+              (
+                repartidorId: widget.repartidorId,
+                date: _sessionDate,
+              ),
+            ),
+          )
+          ..invalidate(
+            repartidorDailySummaryProvider(
+              (
+                repartidorId: widget.repartidorId,
+                date: _sessionDate,
+                forceRefresh: false,
+              ),
+            ),
+          );
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(requiresReconciliation
-            ? 'El servidor detectó un conflicto. Conservamos este intento; recarga el desglose antes de decidir si reintentas.'
-            : financeErrorMessage(error,
-                'No se pudo registrar la entrada. Reintenta sin cerrar la aplicación.')),
-        backgroundColor: AppColors.error,
-        action: requiresReconciliation
-            ? SnackBarAction(
-                label: 'Recargar',
-                onPressed: () => ref.invalidate(
-                  repartidorLiquidacionLedgerProvider((
-                    repartidorId: widget.repartidorId,
-                    date: _sessionDate,
-                  )),
-                ),
-              )
-            : null,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            requiresReconciliation
+                ? 'El servidor detectó un conflicto. Conservamos este intento; recarga el desglose antes de decidir si reintentas.'
+                : financeErrorMessage(
+                    error,
+                    'No se pudo registrar la entrada. Reintenta sin cerrar la aplicación.',
+                  ),
+          ),
+          backgroundColor: AppColors.error,
+          action: requiresReconciliation
+              ? SnackBarAction(
+                  label: 'Recargar',
+                  onPressed: () => ref.invalidate(
+                    repartidorLiquidacionLedgerProvider(
+                      (
+                        repartidorId: widget.repartidorId,
+                        date: _sessionDate,
+                      ),
+                    ),
+                  ),
+                )
+              : null,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submittingEntry = false);
     }
@@ -701,15 +724,18 @@ class _LiquidacionEntryDialogState extends State<_LiquidacionEntryDialog> {
           FilledButton(
             onPressed: () {
               if (_formKey.currentState?.validate() != true) return;
-              Navigator.pop(context, (
-                amount: double.parse(
-                  _amountController.text.trim().replaceAll(',', '.'),
+              Navigator.pop(
+                context,
+                (
+                  amount: double.parse(
+                    _amountController.text.trim().replaceAll(',', '.'),
+                  ),
+                  detail: _detailController.text.trim(),
+                  observation: _observationController.text.trim().isEmpty
+                      ? null
+                      : _observationController.text.trim(),
                 ),
-                detail: _detailController.text.trim(),
-                observation: _observationController.text.trim().isEmpty
-                    ? null
-                    : _observationController.text.trim(),
-              ));
+              );
             },
             child: const Text('Registrar'),
           ),
@@ -727,47 +753,63 @@ class _LiquidacionLedgerPanel extends StatelessWidget {
         loading: () => const RepartidorExecutivePanel(
           accentColor: AppColors.info,
           child: Center(
-              child: Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(color: AppColors.info))),
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: CircularProgressIndicator(color: AppColors.info),
+            ),
+          ),
         ),
         error: (error, _) => RepartidorExecutivePanel(
           accentColor: AppColors.error,
-          child: Column(children: [
-            const Text(
+          child: Column(
+            children: [
+              const Text(
                 'No se pudo cargar el desglose. No registres movimientos hasta reintentar.',
-                style: TextStyle(color: AppColors.textSecondary)),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar')),
-          ]),
+                label: const Text('Reintentar'),
+              ),
+            ],
+          ),
         ),
         data: (value) => RepartidorExecutivePanel(
           accentColor:
               value.status == 'CLOSED' ? AppColors.success : AppColors.info,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
                 value.status == 'CLOSED'
                     ? 'Liquidación cerrada'
                     : 'Jornada abierta',
                 style: const TextStyle(
-                    color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            _LedgerTotal(label: 'Gastos', value: value.expensesTotal),
-            _LedgerTotal(label: 'Ajustes', value: value.adjustmentsTotal),
-            _LedgerTotal(
-                label: 'Ingresos bancarios', value: value.bankDepositsTotal),
-            if (value.expenses.isEmpty &&
-                value.adjustments.isEmpty &&
-                value.bankDeposits.isEmpty)
-              const Padding(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _LedgerTotal(label: 'Gastos', value: value.expensesTotal),
+              _LedgerTotal(label: 'Ajustes', value: value.adjustmentsTotal),
+              _LedgerTotal(
+                label: 'Ingresos bancarios',
+                value: value.bankDepositsTotal,
+              ),
+              if (value.expenses.isEmpty &&
+                  value.adjustments.isEmpty &&
+                  value.bankDeposits.isEmpty)
+                const Padding(
                   padding: EdgeInsets.only(top: 8),
-                  child: Text('Aún no hay movimientos estructurados.',
-                      style: TextStyle(color: AppColors.textSecondary))),
-          ]),
+                  child: Text(
+                    'Aún no hay movimientos estructurados.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+            ],
+          ),
         ),
       );
 }
@@ -779,14 +821,23 @@ class _LedgerTotal extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(children: [
-          Expanded(
-              child: Text(label,
-                  style: const TextStyle(color: AppColors.textSecondary))),
-          Text(_money(value),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+            Text(
+              _money(value),
               style: const TextStyle(
-                  color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-        ]),
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       );
 }
 

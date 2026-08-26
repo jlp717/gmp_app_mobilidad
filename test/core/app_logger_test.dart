@@ -1,7 +1,6 @@
 // GMP App Core Utilities Test
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/utils/app_logger.dart';
-import 'package:flutter/foundation.dart';
 
 void main() {
   group('AppLogger Tests', () {
@@ -43,8 +42,12 @@ void main() {
     });
 
     test('AppLogger http logs correctly', () {
-      AppLogger.http('GET', 'https://api.test.com/data',
-          statusCode: 200, durationMs: 150);
+      AppLogger.http(
+        'GET',
+        'https://api.test.com/data',
+        statusCode: 200,
+        durationMs: 150,
+      );
       expect(true, isTrue);
     });
   });

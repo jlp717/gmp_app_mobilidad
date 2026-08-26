@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -10,7 +9,6 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
@@ -19,35 +17,32 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
-import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_upload_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_operation_safety.dart';
-import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
-import 'package:intl/intl.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_completed.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_header.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_payment.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_products.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_tab_bar.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_print_preview_dialog.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_printer_config.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import 'rutero_detail_completed.dart';
-import 'rutero_detail_header.dart';
-import 'rutero_detail_payment.dart';
-import 'rutero_detail_products.dart';
-import 'rutero_detail_tab_bar.dart';
-import 'rutero_print_preview_dialog.dart';
-import 'rutero_printer_config.dart';
 
 enum RepartoConfirmationErrorDisposition {
   alreadyConfirmed,
@@ -75,14 +70,16 @@ void scheduleRuteroAcknowledgedRefresh({
   required Future<void> Function() invalidateCaches,
   required Future<void> Function() refreshProviders,
 }) {
-  unawaited(Future<void>(() async {
-    try {
-      await invalidateCaches();
-      await refreshProviders();
-    } catch (_) {
-      // A later resume or pull-to-refresh retries reads without replaying ACK.
-    }
-  }));
+  unawaited(
+    Future<void>(() async {
+      try {
+        await invalidateCaches();
+        await refreshProviders();
+      } catch (_) {
+        // A later resume or pull-to-refresh retries reads without replaying ACK.
+      }
+    }),
+  );
 }
 
 RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
@@ -336,12 +333,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     super.initState();
     _albaran = widget.albaran;
     _confirmationJournal = RepartoConfirmationJournal(
-        widget.confirmationJournalStore ??
-            HiveRepartoConfirmationJournalStore());
+      widget.confirmationJournalStore ?? HiveRepartoConfirmationJournalStore(),
+    );
     _confirmationOperation =
         RepartoPersistentConfirmationOperation(_confirmationJournal);
     _evidenceCoordinator = RepartoEvidenceConfirmationCoordinator(
-        RepartoEvidenceUploadService(), _confirmationJournal);
+      RepartoEvidenceUploadService(),
+      _confirmationJournal,
+    );
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onDeliveryTabChanged);
     _slideController = AnimationController(
@@ -359,18 +358,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
     _loadItems();
     _loadPrinterConfig();
-    unawaited(_restorePendingEvidence().timeout(
-      const Duration(seconds: 3),
-      onTimeout: () {
-        debugPrint('[RUTERO] journal restore timed out, allowing confirm');
-        if (mounted) {
-          setState(() {
-            _isJournalBlocked = false;
-            _isRestoringJournal = false;
-          });
-        }
-      },
-    ));
+    unawaited(
+      _restorePendingEvidence().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          debugPrint('[RUTERO] journal restore timed out, allowing confirm');
+          if (mounted) {
+            setState(() {
+              _isJournalBlocked = false;
+              _isRestoringJournal = false;
+            });
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _restorePendingEvidence() async {
@@ -678,10 +679,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       };
 
   bool get _hasDiscrepancy {
-    final anyQtyModified = _items.any((item) => _quantityDiffers(
-          _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
-          item.cantidadPedida,
-        ));
+    final anyQtyModified = _items.any(
+      (item) => _quantityDiffers(
+        _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
+        item.cantidadPedida,
+      ),
+    );
     final anyUnchecked =
         _items.any((item) => !(_productChecked[ruteroLineKey(item)] ?? false));
     return anyQtyModified || anyUnchecked;
@@ -697,10 +700,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         position: Tween<Offset>(
           begin: const Offset(0, 1),
           end: Offset.zero,
-        ).animate(CurvedAnimation(
-          parent: _slideController,
-          curve: Curves.easeOutCubic,
-        )),
+        ).animate(
+          CurvedAnimation(
+            parent: _slideController,
+            curve: Curves.easeOutCubic,
+          ),
+        ),
         child: RepartidorExecutiveSheet(
           height: Responsive.modalHeight(
             context,
@@ -951,14 +956,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (noEntrega) ...[
-                  RepartidorExecutivePanel(
+                  const RepartidorExecutivePanel(
                     accentColor: AppTheme.warning,
-                    padding: const EdgeInsets.all(14),
-                    child: const Row(
+                    padding: EdgeInsets.all(14),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline,
-                            color: AppTheme.warning, size: 22),
+                        Icon(
+                          Icons.info_outline,
+                          color: AppTheme.warning,
+                          size: 22,
+                        ),
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -1053,91 +1061,100 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return RepartidorExecutivePanel(
       accentColor: hasIncident ? AppTheme.warning : AppTheme.info,
       padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        DropdownButtonFormField<RepartoDeliveryStatus>(
-          value: _deliveryStatus,
-          decoration:
-              const InputDecoration(labelText: 'Resultado de la entrega'),
-          items: RepartoDeliveryStatus.values
-              .map((status) => DropdownMenuItem(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<RepartoDeliveryStatus>(
+            initialValue: _deliveryStatus,
+            decoration:
+                const InputDecoration(labelText: 'Resultado de la entrega'),
+            items: RepartoDeliveryStatus.values
+                .map(
+                  (status) => DropdownMenuItem(
                     value: status,
                     child: Text(status.apiValue.replaceAll('_', ' ')),
-                  ))
-              .toList(growable: false),
-          onChanged: _isSubmitting
-              ? null
-              : (status) {
-                  if (status == null) return;
-                  setState(() {
-                    _deliveryStatus = status;
-                    if (status == RepartoDeliveryStatus.noEntregado ||
-                        status == RepartoDeliveryStatus.rechazado) {
-                      _isPaid = false;
-                    }
-                    if (status == RepartoDeliveryStatus.noEntregado) {
-                      _pagoError = null;
-                      _importeCobradoError = null;
-                      _firmaError = null;
-                      _nombreError = null;
-                      _apellidosError = null;
-                      _dniError = null;
-                      _incidentType = RepartoIncidentType.clienteAusente;
-                      _differenceReason =
-                          RepartoDifferenceReason.clienteAusente;
-                      if (_incidenciaMotivoController.text.trim().isEmpty) {
-                        _incidenciaMotivoController.text =
-                            'Establecimiento cerrado o no disponible';
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: _isSubmitting
+                ? null
+                : (status) {
+                    if (status == null) return;
+                    setState(() {
+                      _deliveryStatus = status;
+                      if (status == RepartoDeliveryStatus.noEntregado ||
+                          status == RepartoDeliveryStatus.rechazado) {
+                        _isPaid = false;
                       }
-                    }
-                  });
-                },
-        ),
-        if (!noDelivery) ...[
-          const SizedBox(height: 12),
-          DropdownButtonFormField<RepartoDifferenceReason>(
-            value: _differenceReason,
-            decoration:
-                const InputDecoration(labelText: 'Motivo de la diferencia'),
-            items: RepartoDifferenceReason.values
-                .map((reason) => DropdownMenuItem(
+                      if (status == RepartoDeliveryStatus.noEntregado) {
+                        _pagoError = null;
+                        _importeCobradoError = null;
+                        _firmaError = null;
+                        _nombreError = null;
+                        _apellidosError = null;
+                        _dniError = null;
+                        _incidentType = RepartoIncidentType.clienteAusente;
+                        _differenceReason =
+                            RepartoDifferenceReason.clienteAusente;
+                        if (_incidenciaMotivoController.text.trim().isEmpty) {
+                          _incidenciaMotivoController.text =
+                              'Establecimiento cerrado o no disponible';
+                        }
+                      }
+                    });
+                  },
+          ),
+          if (!noDelivery) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<RepartoDifferenceReason>(
+              initialValue: _differenceReason,
+              decoration:
+                  const InputDecoration(labelText: 'Motivo de la diferencia'),
+              items: RepartoDifferenceReason.values
+                  .map(
+                    (reason) => DropdownMenuItem(
                       value: reason,
                       child: Text(reason.apiValue.replaceAll('_', ' ')),
-                    ))
-                .toList(growable: false),
-            onChanged: _isSubmitting
-                ? null
-                : (reason) => setState(() {
-                      if (reason != null) _differenceReason = reason;
-                    }),
-          ),
-        ],
-        if (hasIncident) ...[
-          const SizedBox(height: 12),
-          DropdownButtonFormField<RepartoIncidentType>(
-            value: _incidentType,
-            decoration:
-                const InputDecoration(labelText: 'Tipo de incidencia *'),
-            items: RepartoIncidentType.values
-                .map((type) => DropdownMenuItem(
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: _isSubmitting
+                  ? null
+                  : (reason) => setState(() {
+                        if (reason != null) _differenceReason = reason;
+                      }),
+            ),
+          ],
+          if (hasIncident) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<RepartoIncidentType>(
+              initialValue: _incidentType,
+              decoration:
+                  const InputDecoration(labelText: 'Tipo de incidencia *'),
+              items: RepartoIncidentType.values
+                  .map(
+                    (type) => DropdownMenuItem(
                       value: type,
                       child: Text(type.apiValue.replaceAll('_', ' ')),
-                    ))
-                .toList(growable: false),
-            onChanged: _isSubmitting
-                ? null
-                : (type) => setState(() {
-                      if (type != null) _incidentType = type;
-                    }),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _incidenciaMotivoController,
-            enabled: !_isSubmitting,
-            decoration:
-                const InputDecoration(labelText: 'Motivo de la incidencia *'),
-          ),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: _isSubmitting
+                  ? null
+                  : (type) => setState(() {
+                        if (type != null) _incidentType = type;
+                      }),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _incidenciaMotivoController,
+              enabled: !_isSubmitting,
+              decoration:
+                  const InputDecoration(labelText: 'Motivo de la incidencia *'),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 
@@ -1655,7 +1672,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ),
     );
     if (result != null && mounted) {
-      HapticFeedback.selectionClick();
+      unawaited(HapticFeedback.selectionClick());
       setState(() {
         _productQuantities[ruteroLineKey(linea)] = result;
         _cachedPdfBase64 = null;
@@ -1680,27 +1697,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         '${(await getTemporaryDirectory()).path}/${linea.codigoArticulo.trim()}_ficha.pdf';
     if (!mounted) return;
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.raisedSurface,
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.info,
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          backgroundColor: AppTheme.raisedSurface,
+          content: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.info,
+                ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              'Descargando ficha técnica...',
-              style: const TextStyle(color: AppTheme.textSecondary),
-            ),
-          ],
+              SizedBox(width: 16),
+              Text(
+                'Descargando ficha técnica...',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1848,7 +1867,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           : RepartoReceiver(
               nombre: _nombreController.text,
               apellidos: _apellidosController.text,
-              dni: _dniController.text),
+              dni: _dniController.text,
+            ),
       firma:
           _deliveryStatus == RepartoDeliveryStatus.noEntregado ? null : firmaId,
       evidencias: evidenceIds,
@@ -2146,10 +2166,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       loadError: _itemsError,
       allowEmpty: _albaran.isZeroEmpty,
     );
-    final anyQtyModified = _items.any((item) => _quantityDiffers(
-          _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
-          item.cantidadPedida,
-        ));
+    final anyQtyModified = _items.any(
+      (item) => _quantityDiffers(
+        _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida,
+        item.cantidadPedida,
+      ),
+    );
     final anyUnchecked =
         _items.any((item) => !(_productChecked[ruteroLineKey(item)] ?? false));
 
@@ -2229,7 +2251,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               child: Text(
                 noEntrega ? 'Registrar no entrega' : 'Confirmar Entrega',
                 style: const TextStyle(
-                    color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -2258,16 +2282,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.description,
-                          size: 16, color: AppTheme.textTertiary),
+                      const Icon(
+                        Icons.description,
+                        size: 16,
+                        color: AppTheme.textTertiary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         _isFactura
                             ? 'Factura ${widget.albaran.numeroFactura}'
                             : 'Albarán ${widget.albaran.numeroAlbaran}',
                         style: const TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontWeight: FontWeight.w500),
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
@@ -2276,8 +2304,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.notes,
-                            size: 16, color: AppTheme.textTertiary),
+                        const Icon(
+                          Icons.notes,
+                          size: 16,
+                          color: AppTheme.textTertiary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -2285,7 +2316,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 ? _incidenciaMotivoController.text.trim()
                                 : _observacionesController.text.trim(),
                             style: const TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 13),
+                              color: AppTheme.textSecondary,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
@@ -2294,14 +2327,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.person,
-                            size: 16, color: AppTheme.textTertiary),
+                        const Icon(
+                          Icons.person,
+                          size: 16,
+                          color: AppTheme.textTertiary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '${_nombreController.text} (${_dniController.text})',
                             style: const TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 13),
+                              color: AppTheme.textSecondary,
+                              fontSize: 13,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -2311,13 +2349,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Icon(Icons.payment,
-                              size: 16, color: AppTheme.success),
+                          const Icon(
+                            Icons.payment,
+                            size: 16,
+                            color: AppTheme.success,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             'Cobrado: $_selectedPaymentMethod',
                             style: const TextStyle(
-                                color: AppTheme.success, fontSize: 13),
+                              color: AppTheme.success,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -2331,8 +2374,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'CANCELAR',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -2514,16 +2559,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       // Stay on completed view so today's stop keeps both document actions.
       messenger.showSnackBar(
         SnackBar(
-          content: Row(children: [
-            Icon(
-              exceptionSnack ? Icons.warning_amber_rounded : Icons.check_circle,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(snackMessage),
-            ),
-          ]),
+          content: Row(
+            children: [
+              Icon(
+                exceptionSnack
+                    ? Icons.warning_amber_rounded
+                    : Icons.check_circle,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(snackMessage),
+              ),
+            ],
+          ),
           backgroundColor: exceptionSnack ? AppTheme.warning : AppTheme.success,
           duration: const Duration(seconds: 3),
         ),
@@ -2541,13 +2590,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         switch (disposition) {
           case RepartoConfirmationErrorDisposition.alreadyConfirmed:
             _showAlreadyDeliveredDialog();
-            break;
           case RepartoConfirmationErrorDisposition.manualReview:
             _showConfirmationError(presentation);
-            break;
           case RepartoConfirmationErrorDisposition.retryable:
             _showConfirmationError(presentation);
-            break;
         }
       }
     } finally {
@@ -2566,15 +2612,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded,
-                color: AppTheme.warning, size: 28),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.warning,
+              size: 28,
+            ),
             SizedBox(width: 12),
             Text(
               'Entrega ya confirmada',
               style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16),
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
             ),
           ],
         ),
@@ -2648,10 +2698,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } catch (error) {
       modal.close();
       if (mounted) {
-        _showError(repartidorSafeOperationMessage(
-          error: error,
-          operation: 'receiptPrint',
-        ));
+        _showError(
+          repartidorSafeOperationMessage(
+            error: error,
+            operation: 'receiptPrint',
+          ),
+        );
       }
     }
   }
@@ -2880,8 +2932,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             children: [
               Icon(icon, color: color, size: 24),
               const SizedBox(width: 12),
-              Text(label,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: TextStyle(color: color, fontWeight: FontWeight.w600),
+              ),
               const Spacer(),
               Icon(Icons.chevron_right, color: color.withValues(alpha: 0.6)),
             ],
@@ -2908,13 +2962,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final fileName = isFactura
           ? 'Factura_${alb.ejercicio}_${alb.serieFactura}_${alb.numeroFactura}.pdf'
           : 'Albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}.pdf';
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PdfPreviewScreen(
-            pdfBytes: Uint8List.fromList(bytes),
-            title: title,
-            fileName: fileName,
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PdfPreviewScreen(
+              pdfBytes: Uint8List.fromList(bytes),
+              title: title,
+              fileName: fileName,
+            ),
           ),
         ),
       );
@@ -3029,31 +3085,35 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
 
       if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PdfPreviewScreen(
-            pdfBytes: pdfBytes,
-            title: title,
-            fileName: fileName,
-            onEmailTap: () {
-              Navigator.pop(context);
-              _emailReceipt();
-            },
-            onWhatsAppTap: () {
-              Navigator.pop(context);
-              unawaited(_shareDeliveryNoteViaWhatsApp());
-            },
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PdfPreviewScreen(
+              pdfBytes: pdfBytes,
+              title: title,
+              fileName: fileName,
+              onEmailTap: () {
+                Navigator.pop(context);
+                _emailReceipt();
+              },
+              onWhatsAppTap: () {
+                Navigator.pop(context);
+                unawaited(_shareDeliveryNoteViaWhatsApp());
+              },
+            ),
           ),
         ),
       );
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
-      _showConfirmationError(repartoConfirmationErrorPresentation(
-        error: const RepartoReceiptUnavailableException(),
-        acknowledged: _isAcknowledgedTombstone,
-      ));
+      _showConfirmationError(
+        repartoConfirmationErrorPresentation(
+          error: const RepartoReceiptUnavailableException(),
+          acknowledged: _isAcknowledgedTombstone,
+        ),
+      );
     } catch (error) {
       modal.error(
         repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
@@ -3085,10 +3145,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
-      _showConfirmationError(repartoConfirmationErrorPresentation(
-        error: const RepartoReceiptUnavailableException(),
-        acknowledged: _isAcknowledgedTombstone,
-      ));
+      _showConfirmationError(
+        repartoConfirmationErrorPresentation(
+          error: const RepartoReceiptUnavailableException(),
+          acknowledged: _isAcknowledgedTombstone,
+        ),
+      );
     } catch (_) {
       modal.close();
       if (mounted) {
@@ -3183,17 +3245,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } on RepartoReceiptUnavailableException {
       modal.close();
       if (!mounted) return;
-      _showConfirmationError(repartoConfirmationErrorPresentation(
-        error: const RepartoReceiptUnavailableException(),
-        acknowledged: _isAcknowledgedTombstone,
-      ));
+      _showConfirmationError(
+        repartoConfirmationErrorPresentation(
+          error: const RepartoReceiptUnavailableException(),
+          acknowledged: _isAcknowledgedTombstone,
+        ),
+      );
     } catch (error) {
       modal.close();
       if (mounted) {
-        _showError(repartidorSafeOperationMessage(
-          error: error,
-          operation: 'receiptWhatsApp',
-        ));
+        _showError(
+          repartidorSafeOperationMessage(
+            error: error,
+            operation: 'receiptWhatsApp',
+          ),
+        );
       }
     }
   }
@@ -3345,17 +3411,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         );
       }
     } on RepartoReceiptUnavailableException catch (error) {
-      if (mounted)
-        _showConfirmationError(repartoConfirmationErrorPresentation(
-          error: error,
-          acknowledged: _isAcknowledgedTombstone,
-        ));
+      if (mounted) {
+        _showConfirmationError(
+          repartoConfirmationErrorPresentation(
+            error: error,
+            acknowledged: _isAcknowledgedTombstone,
+          ),
+        );
+      }
     } catch (error) {
-      if (mounted)
-        _showError(repartidorSafeOperationMessage(
-          error: error,
-          operation: 'receiptEmail',
-        ));
+      if (mounted) {
+        _showError(
+          repartidorSafeOperationMessage(
+            error: error,
+            operation: 'receiptEmail',
+          ),
+        );
+      }
     } finally {
       modal.close();
     }

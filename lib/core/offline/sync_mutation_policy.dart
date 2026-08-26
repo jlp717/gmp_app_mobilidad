@@ -76,8 +76,8 @@ class SyncMutationPolicy {
   /// Permanent conflict that cannot be auto-reconciled → manual review.
   static bool isHardConflict({
     required int? statusCode,
-    String? code,
     required String type,
+    String? code,
   }) {
     if (statusCode == 412) return true;
     if (statusCode == 409 &&
@@ -94,10 +94,10 @@ class SyncMutationPolicy {
   /// After a failed attempt: should op leave the retry loop for manual review?
   static bool shouldMarkManualReview({
     required int attemptsAfterFailure,
-    int maxAttempts = defaultMaxAttempts,
     required int? statusCode,
-    String? code,
     required String type,
+    int maxAttempts = defaultMaxAttempts,
+    String? code,
   }) {
     if (attemptsAfterFailure >= maxAttempts) return true;
     return isHardConflict(statusCode: statusCode, code: code, type: type);

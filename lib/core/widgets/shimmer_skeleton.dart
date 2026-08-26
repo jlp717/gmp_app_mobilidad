@@ -1,5 +1,3 @@
-library;
-
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -227,8 +225,8 @@ class _SummarySkeletonItem extends StatelessWidget {
 }
 
 Widget _skeletonBox({
-  double? width,
   required double height,
+  double? width,
   double radius = 6,
 }) {
   return Container(

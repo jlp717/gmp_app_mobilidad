@@ -69,7 +69,6 @@ class _RuteroOrderVisualState {
 
 class RuteroClientListItem extends StatelessWidget {
   const RuteroClientListItem({
-    super.key,
     required this.client,
     required this.index,
     required this.formatCurrency,
@@ -77,6 +76,7 @@ class RuteroClientListItem extends StatelessWidget {
     required this.onTap,
     required this.onMapTap,
     required this.onCallTap,
+    super.key,
     this.onWhatsAppTap,
     this.onNotesTap,
     this.showMargin = false,
@@ -199,7 +199,7 @@ class RuteroClientListItem extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          observaciones!['text'] as String,
+                          observaciones['text'] as String,
                           style: const TextStyle(
                             color: Colors.black87,
                             fontSize: 11,
@@ -344,7 +344,7 @@ class RuteroClientListItem extends StatelessWidget {
                 color: AppTheme.error,
               ),
             ),
-            Text(
+            const Text(
               'Este período (acumulativo de semanas)',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -491,7 +491,7 @@ class RuteroClientListItem extends StatelessWidget {
         if (address.isNotEmpty || city.isNotEmpty)
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.place,
                 size: 14,
                 color: AppTheme.textTertiary,
@@ -500,7 +500,7 @@ class RuteroClientListItem extends StatelessWidget {
               Expanded(
                 child: Text(
                   [address, city].where((s) => s.isNotEmpty).join(', '),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: AppTheme.textSecondary,
                   ),
@@ -534,7 +534,7 @@ class RuteroClientListItem extends StatelessWidget {
               : completedWeeks == 1
                   ? 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
                   : 'Sin semanas completadas:',
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 11,
             color: AppTheme.textTertiary,
           ),
@@ -627,7 +627,7 @@ class RuteroClientListItem extends StatelessWidget {
                 ),
                 message:
                     'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
-                child: Icon(
+                child: const Icon(
                   Icons.info_outline,
                   size: 14,
                   color: AppTheme.textTertiary,

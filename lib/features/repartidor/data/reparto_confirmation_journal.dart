@@ -479,7 +479,7 @@ class RepartoConfirmationJournal {
       }
       return;
     }
-    if (confirmationId != null && !isValidRepartoServerId(confirmationId)) {
+    if (!isValidRepartoServerId(confirmationId)) {
       throw const RepartoJournalCorruptionException(
         'La confirmación del servidor no tiene un identificador válido.',
       );

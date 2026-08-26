@@ -166,10 +166,11 @@ class PolyHelper {
         pts3d.map((p) => proj.project(p[0], p[1], p[2], size)).toList();
     final color = Lighting3D.applyLight(base, light, alpha);
     canvas.drawPath(
-        pathOf(offsets),
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.fill);
+      pathOf(offsets),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
   }
 
   /// Fill a face from pre-projected 2D offsets
@@ -336,10 +337,16 @@ class CargoColors {
       return Color.lerp(const Color(0xFF4D96FF), AppTheme.success, t / 0.33)!;
     } else if (t < 0.66) {
       return Color.lerp(
-          AppTheme.success, const Color(0xFFFFE66D), (t - 0.33) / 0.33)!;
+        AppTheme.success,
+        const Color(0xFFFFE66D),
+        (t - 0.33) / 0.33,
+      )!;
     } else {
       return Color.lerp(
-          const Color(0xFFFFE66D), const Color(0xFFFF6B6B), (t - 0.66) / 0.34)!;
+        const Color(0xFFFFE66D),
+        const Color(0xFFFF6B6B),
+        (t - 0.66) / 0.34,
+      )!;
     }
   }
 

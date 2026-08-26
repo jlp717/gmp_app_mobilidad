@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
@@ -272,10 +271,10 @@ class AlbaranEntrega {
     required this.ejercicio,
     required this.codigoCliente,
     required this.nombreCliente,
-    this.nombreComercial,
-    this.nombreFiscal,
     required this.fecha,
     required this.importeTotal,
+    this.nombreComercial,
+    this.nombreFiscal,
     this.serie = '',
     this.terminal = 0,
     this.numeroFactura = 0,
@@ -976,7 +975,8 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
       if (response['success'] == true && response['albaran'] != null) {
         final albaran = AlbaranEntrega.fromJson(
-            response['albaran'] as Map<String, dynamic>);
+          response['albaran'] as Map<String, dynamic>,
+        );
         final patched = state.albaranes.map((existing) {
           if (existing.id != albaran.id) return existing;
           return existing.copyWith(
@@ -1082,9 +1082,9 @@ class EntregasNotifier extends Notifier<EntregasState> {
   /// Remote email is intentionally unavailable until it has a server-owned
   /// recipient contract. Never reconstruct or POST receipt data from here.
   Future<bool> sendReceiptByEmail({
+    required String email,
     AlbaranEntrega? albaran,
     String? confirmationId,
-    required String email,
   }) async {
     state = state.copyWith(
       error: 'El envio por email no esta habilitado para recibos de reparto.',
@@ -1126,9 +1126,6 @@ class EntregasNotifier extends Notifier<EntregasState> {
     String? observaciones,
     String? firma,
     List<String>? fotos,
-    double? latitud,
-    double? longitud,
-    bool forceUpdate = false,
   }) async {
     state = state.copyWith(
       error: 'Confirma la entrega desde el flujo canonico del rutero.',

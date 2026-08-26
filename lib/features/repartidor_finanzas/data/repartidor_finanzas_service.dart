@@ -73,9 +73,7 @@ class RepartidorFinanzasService {
         _enqueueOperation =
             enqueueOperation ?? SyncQueueService.instance.enqueue,
         _liquidacionPost = liquidacionPost ?? _postLiquidacion,
-        _liquidacionGet = liquidacionGet ??
-            ((endpoint, {queryParameters}) =>
-                ApiClient.get(endpoint, queryParameters: queryParameters));
+        _liquidacionGet = liquidacionGet ?? (ApiClient.get);
 
   static const _prefix = 'repartidor_finanzas';
   static const _vencimientoCobroEndpoint = '/repartidor-finanzas/cobros';
@@ -238,10 +236,10 @@ class RepartidorFinanzasService {
 
   static String objectivesDetailCacheKey({
     required String repartidorId,
-    int? year,
-    String? clientId,
     required int limit,
     required int offset,
+    int? year,
+    String? clientId,
   }) =>
       '${_prefix}_objectives_detail_${repartidorId}_${year ?? 'current'}_'
       '${clientId ?? 'all'}_${limit}_$offset';
@@ -347,7 +345,8 @@ class RepartidorFinanzasService {
     );
     if (response.body['queued'] == true) {
       throw const FormatException(
-          'La liquidacion requiere confirmacion del servidor');
+        'La liquidacion requiere confirmacion del servidor',
+      );
     }
 
     _validateLiquidacionTransport(
@@ -447,7 +446,8 @@ class RepartidorFinanzasService {
         final ledger = response['ledger'];
         if (response['success'] != true || ledger is! Map) {
           throw const FormatException(
-              'Respuesta de desglose de liquidacion invalida');
+            'Respuesta de desglose de liquidacion invalida',
+          );
         }
         return RepartidorLiquidacionLedger.fromJson(
           Map<String, dynamic>.from(ledger),

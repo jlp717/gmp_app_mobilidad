@@ -207,7 +207,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               color: AppTheme.textTertiary.withValues(alpha: 0.4),
               fontSize: 12,
             ),
-            prefixIcon: Icon(
+            prefixIcon: const Icon(
               Icons.search_rounded,
               size: 18,
               color: AppTheme.info,
@@ -307,8 +307,10 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               Navigator.pop(ctx);
               action();
             },
-            child: const Text('Confirmar',
-                style: TextStyle(color: AppTheme.error)),
+            child: const Text(
+              'Confirmar',
+              style: TextStyle(color: AppTheme.error),
+            ),
           ),
         ],
       ),

@@ -21,8 +21,11 @@ class _SignaturePadState extends State<SignaturePad> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: Responsive.modalHeight(context,
-          portraitFraction: 0.5, landscapeFraction: 0.8),
+      height: Responsive.modalHeight(
+        context,
+        portraitFraction: 0.5,
+        landscapeFraction: 0.8,
+      ),
       padding:
           EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
@@ -31,8 +34,10 @@ class _SignaturePadState extends State<SignaturePad> {
           // Header
           Row(
             children: [
-              Icon(Icons.draw,
-                  size: Responsive.iconSize(context, phone: 20, desktop: 24)),
+              Icon(
+                Icons.draw,
+                size: Responsive.iconSize(context, phone: 20, desktop: 24),
+              ),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
@@ -60,8 +65,9 @@ class _SignaturePadState extends State<SignaturePad> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: AppTheme.borderColor.withValues(alpha: 0.55),
-                    width: 2),
+                  color: AppTheme.borderColor.withValues(alpha: 0.55),
+                  width: 2,
+                ),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),

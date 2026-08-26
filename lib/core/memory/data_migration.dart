@@ -534,8 +534,10 @@ class MigrationLogger {
     onLog?.call(entry);
 
     // Debug output
-    developer.log('[${entry.timestamp.toIso8601String()}] $level: $message',
-        name: 'data_migration');
+    developer.log(
+      '[${entry.timestamp.toIso8601String()}] $level: $message',
+      name: 'data_migration',
+    );
   }
 
   List<LogEntry> get logs => List.unmodifiable(_logs);

@@ -10,7 +10,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 
 class BolsaMonthlyChart extends StatelessWidget {
-  const BolsaMonthlyChart({super.key, required this.history});
+  const BolsaMonthlyChart({required this.history, super.key});
 
   final List<BolsaMonthlyPoint> history;
 
@@ -172,8 +172,11 @@ class BolsaMonthlyChart extends StatelessWidget {
     );
   }
 
-  Widget _bar(
-      {required double height, required Color color, bool glow = false}) {
+  Widget _bar({
+    required double height,
+    required Color color,
+    bool glow = false,
+  }) {
     final h = height.isFinite && height > 0 ? height : 0.0;
     return Container(
       width: 7,

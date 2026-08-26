@@ -152,12 +152,14 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 borderSide: BorderSide(
-                    color: AppTheme.activeRing.withValues(alpha: 0.14)),
+                  color: AppTheme.activeRing.withValues(alpha: 0.14),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 borderSide: BorderSide(
-                    color: AppTheme.activeRing.withValues(alpha: 0.14)),
+                  color: AppTheme.activeRing.withValues(alpha: 0.14),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),

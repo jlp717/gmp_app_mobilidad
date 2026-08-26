@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
@@ -48,8 +48,8 @@ class OfflineAwareApi {
   /// Returns the data and a source indicator.
   static Future<OfflineResult<Map<String, dynamic>>> get(
     String endpoint, {
-    Map<String, dynamic>? queryParameters,
     required String cacheKey,
+    Map<String, dynamic>? queryParameters,
     Duration? cacheTTL,
     bool forceRefresh = false,
     CancelToken? cancelToken,
@@ -65,7 +65,9 @@ class OfflineAwareApi {
         if (cached != null) {
           debugPrint('[OfflineAware] Cache HIT: $endpoint');
           return OfflineResult(
-              data: _deepCastMap(cached), source: DataSource.cache);
+            data: _deepCastMap(cached),
+            source: DataSource.cache,
+          );
         }
       } catch (_) {}
     }
@@ -121,8 +123,8 @@ class OfflineAwareApi {
   /// GET with offline-first strategy for List responses.
   static Future<OfflineResult<List<dynamic>>> getList(
     String endpoint, {
-    Map<String, dynamic>? queryParameters,
     required String cacheKey,
+    Map<String, dynamic>? queryParameters,
     Duration? cacheTTL,
     bool forceRefresh = false,
     CancelToken? cancelToken,
@@ -208,8 +210,11 @@ class OfflineAwareApi {
         );
         // Update cache if cacheKey provided
         if (cacheKey != null) {
-          await CacheService.set(cacheKey, response,
-              ttl: CacheService.shortTTL);
+          await CacheService.set(
+            cacheKey,
+            response,
+            ttl: CacheService.shortTTL,
+          );
         }
         return response;
       } catch (e) {
@@ -253,8 +258,11 @@ class OfflineAwareApi {
       try {
         final response = await ApiClient.put(endpoint, data: data);
         if (cacheKey != null) {
-          await CacheService.set(cacheKey, response,
-              ttl: CacheService.shortTTL);
+          await CacheService.set(
+            cacheKey,
+            response,
+            ttl: CacheService.shortTTL,
+          );
         }
         return response;
       } catch (e) {

@@ -168,20 +168,20 @@ class ChatHelpSheet extends StatelessWidget {
             style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
           ),
           const SizedBox(height: 12),
-          _HelpTipRow(
+          const _HelpTipRow(
             icon: Icons.wb_sunny_outlined,
             text: 'Resumen del dia: boton flotante o pregunta de briefing.',
           ),
-          _HelpTipRow(
+          const _HelpTipRow(
             icon: Icons.table_chart_outlined,
             text:
                 'Exportar CSV y compartir por WhatsApp o email en cada respuesta.',
           ),
-          _HelpTipRow(
+          const _HelpTipRow(
             icon: Icons.push_pin_outlined,
             text: 'Fija respuestas utiles para consultarlas arriba del chat.',
           ),
-          _HelpTipRow(
+          const _HelpTipRow(
             icon: Icons.open_in_new_rounded,
             text:
                 'Ver en app salta a Facturas, Clientes, Comisiones o Alertas.',

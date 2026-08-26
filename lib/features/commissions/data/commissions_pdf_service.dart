@@ -170,10 +170,12 @@ class CommissionsPdfService {
       // Handle Dio-specific errors
       if (e.type == DioExceptionType.connectionTimeout) {
         throw Exception(
-            'Tiempo de conexión agotado. Verifica tu conexión a internet');
+          'Tiempo de conexión agotado. Verifica tu conexión a internet',
+        );
       } else if (e.type == DioExceptionType.receiveTimeout) {
         throw Exception(
-            'Tiempo de respuesta agotado. El servidor tardó demasiado');
+          'Tiempo de respuesta agotado. El servidor tardó demasiado',
+        );
       } else if (e.type == DioExceptionType.badResponse) {
         if (e.response?.statusCode == 403) {
           throw Exception('Solo DIEGO puede generar este informe');
@@ -183,10 +185,12 @@ class CommissionsPdfService {
           throw Exception('Error del servidor: $details');
         }
         throw Exception(
-            'Error del servidor: ${e.response?.statusCode ?? "desconocido"}');
+          'Error del servidor: ${e.response?.statusCode ?? "desconocido"}',
+        );
       } else if (e.type == DioExceptionType.connectionError) {
         throw Exception(
-            'No se puede conectar al servidor. Verifica tu conexión');
+          'No se puede conectar al servidor. Verifica tu conexión',
+        );
       }
       throw Exception('Error de red: ${e.message ?? "Error desconocido"}');
     } on SocketException {

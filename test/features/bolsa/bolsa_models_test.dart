@@ -1,8 +1,8 @@
-import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 
 void main() {
   group('BolsaMovimiento.fromJson', () {
@@ -76,13 +76,13 @@ void main() {
             'vendedor': '01',
             'ejercicio': 2026,
             'mes': 6,
-            'saldoDisponible': 50
+            'saldoDisponible': 50,
           },
           {
             'vendedor': '02',
             'ejercicio': 2026,
             'mes': 6,
-            'saldoDisponible': 75
+            'saldoDisponible': 75,
           },
         ],
         'totals': {
@@ -126,17 +126,21 @@ void main() {
               return;
             }
             if (options.path.endsWith('/movements')) {
-              handler.resolve(Response<Map<String, dynamic>>(
-                requestOptions: options,
-                data: const {'movements': []},
-              ));
+              handler.resolve(
+                Response<Map<String, dynamic>>(
+                  requestOptions: options,
+                  data: const {'movements': []},
+                ),
+              );
               return;
             }
             if (options.path.endsWith('/history')) {
-              handler.resolve(Response<Map<String, dynamic>>(
-                requestOptions: options,
-                data: const {'points': []},
-              ));
+              handler.resolve(
+                Response<Map<String, dynamic>>(
+                  requestOptions: options,
+                  data: const {'points': []},
+                ),
+              );
               return;
             }
           }

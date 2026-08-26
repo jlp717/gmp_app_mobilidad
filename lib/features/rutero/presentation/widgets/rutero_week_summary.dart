@@ -4,7 +4,6 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class RuteroWeekSummary extends StatelessWidget {
   const RuteroWeekSummary({
-    super.key,
     required this.selectedYear,
     required this.selectedMonth,
     required this.selectedWeek,
@@ -15,6 +14,7 @@ class RuteroWeekSummary extends StatelessWidget {
     required this.onWeekChange,
     required this.onDaySelected,
     required this.monthNames,
+    super.key,
   });
 
   final int selectedYear;
@@ -99,7 +99,11 @@ class RuteroWeekSummary extends StatelessWidget {
   }
 
   Widget _buildWeekNavigator(
-      BuildContext context, int startDay, int endDay, String monthName) {
+    BuildContext context,
+    int startDay,
+    int endDay,
+    String monthName,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(

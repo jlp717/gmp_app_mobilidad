@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
@@ -40,18 +39,6 @@ enum ConflictType {
 
 /// Representa un conflicto detectado durante la sincronización
 class SyncConflict {
-  final String id;
-  final String operationId;
-  final String entityType;
-  final String entityId;
-  final String endpoint;
-  final String method;
-  final Map<String, dynamic> localChanges;
-  final Map<String, dynamic>? serverData;
-  final ConflictType conflictType;
-  final DateTime detectedAt;
-  final int retryCount;
-
   const SyncConflict({
     required this.id,
     required this.operationId,
@@ -60,25 +47,11 @@ class SyncConflict {
     required this.endpoint,
     required this.method,
     required this.localChanges,
-    this.serverData,
     required this.conflictType,
     required this.detectedAt,
+    this.serverData,
     this.retryCount = 0,
   });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'operationId': operationId,
-        'entityType': entityType,
-        'entityId': entityId,
-        'endpoint': endpoint,
-        'method': method,
-        'localChanges': localChanges,
-        'serverData': serverData,
-        'conflictType': conflictType.toString(),
-        'detectedAt': detectedAt.toIso8601String(),
-        'retryCount': retryCount,
-      };
 
   factory SyncConflict.fromJson(Map<String, dynamic> json) => SyncConflict(
         id: json['id'] as String,
@@ -95,6 +68,31 @@ class SyncConflict {
         detectedAt: DateTime.parse(json['detectedAt'] as String),
         retryCount: json['retryCount'] as int? ?? 0,
       );
+  final String id;
+  final String operationId;
+  final String entityType;
+  final String entityId;
+  final String endpoint;
+  final String method;
+  final Map<String, dynamic> localChanges;
+  final Map<String, dynamic>? serverData;
+  final ConflictType conflictType;
+  final DateTime detectedAt;
+  final int retryCount;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'operationId': operationId,
+        'entityType': entityType,
+        'entityId': entityId,
+        'endpoint': endpoint,
+        'method': method,
+        'localChanges': localChanges,
+        'serverData': serverData,
+        'conflictType': conflictType.toString(),
+        'detectedAt': detectedAt.toIso8601String(),
+        'retryCount': retryCount,
+      };
 
   static ConflictType _parseConflictType(String typeStr) {
     return ConflictType.values.firstWhere(
@@ -106,9 +104,9 @@ class SyncConflict {
 
 /// Sistema de resolución de conflictos para operaciones offline
 class ConflictResolver {
-  static final ConflictResolver _instance = ConflictResolver._internal();
   factory ConflictResolver() => _instance;
   ConflictResolver._internal();
+  static final ConflictResolver _instance = ConflictResolver._internal();
 
   static const String _conflictsBoxName = 'sync_conflicts';
 
@@ -117,7 +115,8 @@ class ConflictResolver {
     List<sync_service.SyncOperation> pendingOperations, // Using prefixed import
   ) async {
     debugPrint(
-        '[ConflictResolver] Processing ${pendingOperations.length} pending operations');
+      '[ConflictResolver] Processing ${pendingOperations.length} pending operations',
+    );
 
     final conflicts = <SyncConflict>[];
     final resolvedOperations =
@@ -144,7 +143,8 @@ class ConflictResolver {
         }
       } catch (e) {
         debugPrint(
-            '[ConflictResolver] Error processing operation ${operation.id}: $e');
+          '[ConflictResolver] Error processing operation ${operation.id}: $e',
+        );
         failedOperations.add(operation);
       }
     }
@@ -160,7 +160,8 @@ class ConflictResolver {
 
   /// Detecta si una operación tiene conflicto con el estado actual del servidor
   Future<SyncConflict?> _detectConflict(
-      sync_service.SyncOperation operation) async {
+    sync_service.SyncOperation operation,
+  ) async {
     // Using prefixed import
     try {
       // Determinar tipo de conflicto basado en operación
@@ -177,14 +178,16 @@ class ConflictResolver {
       }
     } catch (e) {
       debugPrint(
-          '[ConflictResolver] Error detecting conflict for ${operation.id}: $e');
+        '[ConflictResolver] Error detecting conflict for ${operation.id}: $e',
+      );
       return null;
     }
   }
 
   /// Detecta conflictos de versión (datos modificados desde que se realizó offline)
   Future<SyncConflict?> _detectVersionConflict(
-      sync_service.SyncOperation operation) async {
+    sync_service.SyncOperation operation,
+  ) async {
     // Using prefixed import
     try {
       // Extraer entidad y ID del endpoint
@@ -199,27 +202,25 @@ class ConflictResolver {
         return null;
       }
 
-      if (currentServerData != null) {
-        // Comparar con los datos locales que se intentan aplicar
-        final hasVersionConflict = _hasSignificantChanges(
-          currentServerData,
-          operation.payload,
-        );
+      // Comparar con los datos locales que se intentan aplicar
+      final hasVersionConflict = _hasSignificantChanges(
+        currentServerData,
+        operation.payload,
+      );
 
-        if (hasVersionConflict) {
-          return SyncConflict(
-            id: 'conflict_${DateTime.now().millisecondsSinceEpoch}_${operation.id}',
-            operationId: operation.id,
-            entityType: entityInfo.$2,
-            entityId: entityInfo.$3,
-            endpoint: operation.endpoint,
-            method: operation.method,
-            localChanges: operation.payload,
-            serverData: currentServerData,
-            conflictType: ConflictType.versionConflict,
-            detectedAt: DateTime.now(),
-          );
-        }
+      if (hasVersionConflict) {
+        return SyncConflict(
+          id: 'conflict_${DateTime.now().millisecondsSinceEpoch}_${operation.id}',
+          operationId: operation.id,
+          entityType: entityInfo.$2,
+          entityId: entityInfo.$3,
+          endpoint: operation.endpoint,
+          method: operation.method,
+          localChanges: operation.payload,
+          serverData: currentServerData,
+          conflictType: ConflictType.versionConflict,
+          detectedAt: DateTime.now(),
+        );
       }
 
       return null;
@@ -231,7 +232,8 @@ class ConflictResolver {
 
   /// Detecta conflictos de recursos (intentar crear algo que ya existe)
   Future<SyncConflict?> _detectResourceConflict(
-      sync_service.SyncOperation operation) async {
+    sync_service.SyncOperation operation,
+  ) async {
     // Using prefixed import
     try {
       // Para operaciones POST, verificar si el recurso ya existe
@@ -278,7 +280,8 @@ class ConflictResolver {
 
   /// Detecta conflictos de dependencias (recurso dependiente cambiado)
   Future<SyncConflict?> _detectDependencyConflict(
-      sync_service.SyncOperation operation) async {
+    sync_service.SyncOperation operation,
+  ) async {
     // Using prefixed import
     // Para DELETE, verificar si el recurso aún existe o si tiene dependencias
     if (operation.method != 'DELETE') return null;
@@ -312,7 +315,8 @@ class ConflictResolver {
       }
     } catch (e) {
       debugPrint(
-          '[ConflictResolver] Error in dependency conflict detection: $e');
+        '[ConflictResolver] Error in dependency conflict detection: $e',
+      );
     }
 
     return null;
@@ -320,7 +324,8 @@ class ConflictResolver {
 
   /// Resuelve un único conflicto basado en estrategia
   Future<ConflictResolution> _resolveSingleConflict(
-      SyncConflict conflict) async {
+    SyncConflict conflict,
+  ) async {
     final strategy = _determineResolutionStrategy(conflict);
 
     switch (strategy) {
@@ -333,7 +338,7 @@ class ConflictResolver {
 
       case ConflictResolutionStrategy.firstWriteWins:
         // Mantener el cambio del servidor, descartar local
-        return ConflictResolution(
+        return const ConflictResolution(
           resolved: true,
           operations: [], // No aplicar operación local
         );
@@ -368,7 +373,7 @@ class ConflictResolver {
       case ConflictResolutionStrategy.manualResolution:
         // Registrar conflicto para resolución manual
         await _storeManualConflict(conflict);
-        return ConflictResolution(
+        return const ConflictResolution(
           resolved: false,
           operations: [],
         );
@@ -377,7 +382,8 @@ class ConflictResolver {
 
   /// Determina la estrategia de resolución basada en el tipo de conflicto y entidad
   ConflictResolutionStrategy _determineResolutionStrategy(
-      SyncConflict conflict) {
+    SyncConflict conflict,
+  ) {
     // Reglas específicas por tipo de entidad
     switch (conflict.entityType) {
       case 'pedido':
@@ -448,7 +454,8 @@ class ConflictResolver {
 
   /// Extrae información de entidad del endpoint
   (String endpoint, String entityType, String entityId)? _extractEntityInfo(
-      String endpoint) {
+    String endpoint,
+  ) {
     // Patrones comunes: /clientes/C001, /pedidos/P001/edit, etc.
     final regExp = RegExp(r'^\/(\w+)\/([^\/]+)(?:\/.*)?$');
     final match = regExp.firstMatch(endpoint);
@@ -478,7 +485,9 @@ class ConflictResolver {
 
   /// Busca recurso existente por clave única
   Future<Map<String, dynamic>?> _findExistingResource(
-      String endpoint, String uniqueKey) async {
+    String endpoint,
+    String uniqueKey,
+  ) async {
     try {
       // Esta implementación dependería de la API específica
       // Por ahora, simplemente intentamos obtener el endpoint base con el ID
@@ -486,7 +495,7 @@ class ConflictResolver {
           endpoint.split('/')[1]; // Extraer base (ej: 'clientes')
       final response = await ApiClient.get('/$baseEndpoint');
 
-      if (response is Map && response.containsKey('data')) {
+      if (response.containsKey('data')) {
         final data = response['data'];
         if (data is List) {
           // Buscar en la lista
@@ -511,7 +520,9 @@ class ConflictResolver {
 
   /// Compara si hay cambios significativos entre dos conjuntos de datos
   bool _hasSignificantChanges(
-      Map<String, dynamic> serverData, Map<String, dynamic> localChanges) {
+    Map<String, dynamic> serverData,
+    Map<String, dynamic> localChanges,
+  ) {
     for (final entry in localChanges.entries) {
       final serverValue = serverData[entry.key];
       if (!_valuesEqual(serverValue, entry.value)) {
@@ -574,7 +585,8 @@ class ConflictResolver {
       );
 
       debugPrint(
-          '[ConflictResolver] Stored conflict ${conflict.id} for manual resolution');
+        '[ConflictResolver] Stored conflict ${conflict.id} for manual resolution',
+      );
     } catch (e) {
       debugPrint('[ConflictResolver] Error storing manual conflict: $e');
     }
@@ -598,7 +610,9 @@ class ConflictResolver {
 
   /// Resuelve un conflicto manualmente
   Future<bool> resolveManualConflict(
-      String conflictId, Map<String, dynamic> resolvedData) async {
+    String conflictId,
+    Map<String, dynamic> resolvedData,
+  ) async {
     try {
       // En una implementación completa:
       // 1. Obtener conflicto por ID
@@ -619,28 +633,28 @@ class ConflictResolver {
 
 /// Resultado de resolución de conflictos
 class ConflictResolution {
-  final bool resolved;
-  final List<sync_service.SyncOperation> operations; // Using prefixed import
+  // Using prefixed import
 
   const ConflictResolution({
     required this.resolved,
     required this.operations,
   });
+  final bool resolved;
+  final List<sync_service.SyncOperation> operations;
 }
 
 /// Resultado del proceso de resolución de conflictos
 class ConflictResolutionResult {
-  final List<SyncConflict> conflicts;
-  final List<sync_service.SyncOperation>
-      resolvedOperations; // Using prefixed import
-  final List<sync_service.SyncOperation>
-      failedOperations; // Using prefixed import
-  final bool success;
-
   const ConflictResolutionResult({
     required this.conflicts,
     required this.resolvedOperations,
     required this.failedOperations,
     required this.success,
   });
+  final List<SyncConflict> conflicts;
+  final List<sync_service.SyncOperation>
+      resolvedOperations; // Using prefixed import
+  final List<sync_service.SyncOperation>
+      failedOperations; // Using prefixed import
+  final bool success;
 }

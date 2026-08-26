@@ -113,7 +113,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     _debounceTimer = Timer(
       const Duration(milliseconds: 250),
-      () => _refreshData(),
+      _refreshData,
     );
   }
 
@@ -203,17 +203,19 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
-        _years = (results[0]! as List<int>)!;
-        _facturas = (results[1]! as List<Factura>)!;
+        _years = results[0]! as List<int>;
+        _facturas = results[1]! as List<Factura>;
         _summary = results[2] as FacturaSummary?;
+        _error = null;
         _isLoading = false;
       });
 
-      _fadeController.forward();
+      unawaited(_fadeController.forward());
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = 'Error cargando documentos: $e';
+        _error =
+            'No se pudieron cargar los documentos. Comprueba la conexión e inténtalo de nuevo.';
         _isLoading = false;
       });
     }
@@ -701,7 +703,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
-        _facturas = (results[0]! as List<Factura>)!;
+        _facturas = results[0]! as List<Factura>;
         _summary = results[1] as FacturaSummary?;
       });
     } catch (e) {
@@ -779,21 +781,23 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       final fileName =
           '${factura.pdfFilePrefix}_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PdfPreviewScreen(
-            pdfBytes: pdfBytes,
-            title: '${factura.tipoLabel} ${factura.numeroFormateado}',
-            fileName: fileName,
-            onEmailTap: () {
-              Navigator.pop(context);
-              _emailFactura(factura);
-            },
-            onWhatsAppTap: () {
-              Navigator.pop(context);
-              _whatsAppFactura(factura);
-            },
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PdfPreviewScreen(
+              pdfBytes: pdfBytes,
+              title: '${factura.tipoLabel} ${factura.numeroFormateado}',
+              fileName: fileName,
+              onEmailTap: () {
+                Navigator.pop(context);
+                _emailFactura(factura);
+              },
+              onWhatsAppTap: () {
+                Navigator.pop(context);
+                _whatsAppFactura(factura);
+              },
+            ),
           ),
         ),
       );
@@ -883,7 +887,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           color: AppTheme.raisedSurface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          ),
         ),
         child: SafeArea(
           child: Column(
@@ -1006,7 +1011,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage:
-          'Hola ${factura.clienteNombre}, le adjunto su ${documentLabel} '
+          'Hola ${factura.clienteNombre}, le adjunto su $documentLabel '
           '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). \n\n'
           'Gracias por su confianza - Granja Mari Pepa',
     );
@@ -1359,9 +1364,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           // Section label
           Row(
             children: [
-              Icon(Icons.filter_list,
-                  size: 16,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500),
+              Icon(
+                Icons.filter_list,
+                size: 16,
+                color: isDark ? Colors.white38 : Colors.grey.shade500,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Filtros',
@@ -1483,8 +1490,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                         color: AppTheme.error.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.close,
-                          size: 18, color: AppTheme.error),
+                      child: const Icon(
+                        Icons.close,
+                        size: 18,
+                        color: AppTheme.error,
+                      ),
                     ),
                   ),
                 ),
@@ -1501,7 +1511,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     required bool isActive,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accentColor = AppTheme.info;
+    const accentColor = AppTheme.info;
 
     return InkWell(
       onTap: onTap,
@@ -1656,8 +1666,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 : Colors.grey.shade400,
             fontSize: 13,
           ),
-          prefixIcon: Icon(icon,
-              color: isDark ? Colors.white38 : Colors.grey.shade400, size: 18),
+          prefixIcon: Icon(
+            icon,
+            color: isDark ? Colors.white38 : Colors.grey.shade400,
+            size: 18,
+          ),
           prefixIconConstraints: const BoxConstraints(minWidth: 40),
           border: InputBorder.none,
           contentPadding:
@@ -1697,9 +1710,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           hint: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon,
-                  size: 16,
-                  color: isDark ? Colors.white38 : Colors.grey.shade400),
+              Icon(
+                icon,
+                size: 16,
+                color: isDark ? Colors.white38 : Colors.grey.shade400,
+              ),
               const SizedBox(width: 8),
               Text(
                 hint,
@@ -1712,8 +1727,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               ),
             ],
           ),
-          icon: Icon(Icons.arrow_drop_down,
-              color: isDark ? Colors.white38 : Colors.grey.shade400),
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: isDark ? Colors.white38 : Colors.grey.shade400,
+          ),
           dropdownColor: isDark ? AppTheme.raisedSurface : Colors.white,
           style: TextStyle(
             color: isDark ? Colors.white : Colors.black87,

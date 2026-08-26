@@ -48,7 +48,8 @@ class DeviceFingerprint {
 
       _initialized = true;
       debugPrint(
-          '[DeviceFingerprint] ✅ $fullVersion | $deviceModel | $deviceOS | ID:$deviceId');
+        '[DeviceFingerprint] ✅ $fullVersion | $deviceModel | $deviceOS | ID:$deviceId',
+      );
     } catch (e) {
       debugPrint('[DeviceFingerprint] ⚠️ Error: $e');
       _initialized = true; // Don't retry, use defaults

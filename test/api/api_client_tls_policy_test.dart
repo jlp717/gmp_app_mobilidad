@@ -100,8 +100,10 @@ void main() {
 
       expect(ApiClient.authToken, 'resume-token');
       expect(ApiClient.dio, isNot(same(previousDio)));
-      expect(ApiClient.dio.options.headers['Authorization'],
-          'Bearer resume-token');
+      expect(
+        ApiClient.dio.options.headers['Authorization'],
+        'Bearer resume-token',
+      );
     });
 
     test('passes bounded retry and timeout options to idempotent posts',

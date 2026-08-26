@@ -107,7 +107,7 @@ void main() {
     });
 
     test('NavItem has correct icon type', () {
-      final item = NavItem(
+      const item = NavItem(
         icon: Icons.home,
         selectedIcon: Icons.home_filled,
         label: 'Test',

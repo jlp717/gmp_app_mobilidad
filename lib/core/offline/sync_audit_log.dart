@@ -11,11 +11,27 @@ class SyncAuditEntry {
     required this.type,
     required this.endpoint,
     required this.startedAt,
+    required this.success,
     this.finishedAt,
     this.httpStatus,
-    required this.success,
     this.error,
   });
+
+  factory SyncAuditEntry.fromJson(Map<String, dynamic> json) => SyncAuditEntry(
+        opId: json['opId']?.toString() ?? '',
+        type: json['type']?.toString() ?? '',
+        endpoint: json['endpoint']?.toString() ?? '',
+        startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        finishedAt: json['finishedAt'] != null
+            ? DateTime.tryParse(json['finishedAt'].toString())
+            : null,
+        httpStatus: json['httpStatus'] is int
+            ? json['httpStatus'] as int
+            : int.tryParse(json['httpStatus']?.toString() ?? ''),
+        success: json['success'] == true,
+        error: json['error']?.toString(),
+      );
 
   final String opId;
   final String type;
@@ -36,22 +52,6 @@ class SyncAuditEntry {
         'success': success,
         'error': error,
       };
-
-  factory SyncAuditEntry.fromJson(Map<String, dynamic> json) => SyncAuditEntry(
-        opId: json['opId']?.toString() ?? '',
-        type: json['type']?.toString() ?? '',
-        endpoint: json['endpoint']?.toString() ?? '',
-        startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? '') ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-        finishedAt: json['finishedAt'] != null
-            ? DateTime.tryParse(json['finishedAt'].toString())
-            : null,
-        httpStatus: json['httpStatus'] is int
-            ? json['httpStatus'] as int
-            : int.tryParse(json['httpStatus']?.toString() ?? ''),
-        success: json['success'] == true,
-        error: json['error']?.toString(),
-      );
 }
 
 /// Hive-backed audit trail for offline sync attempts.
@@ -81,9 +81,9 @@ class SyncAuditLog {
     required String type,
     required String endpoint,
     required DateTime startedAt,
+    required bool success,
     DateTime? finishedAt,
     int? httpStatus,
-    required bool success,
     String? error,
   }) async {
     if (_box == null) {

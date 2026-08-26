@@ -78,6 +78,19 @@ void main() {
     expect(result.messageFor('nombre'), isNotNull);
   });
 
+  test('urgent rejected delivery does not demand an impossible payment', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        status: RepartoDeliveryStatus.rechazado,
+        isUrgent: true,
+        nombre: 'Ana',
+        apellidos: 'Lopez',
+        observaciones: 'Cliente rechaza la entrega',
+        incidenciaMotivo: 'Rechazo del cliente',
+      ),
+    );
+    expect(result.messageFor('pago'), isNull);
+  });
   test('invalid DNI stays on finalizar', () {
     final result = validateRuteroDeliveryForm(_base(dni: '1234'));
     expect(result.firstTabIndex, 2);
@@ -112,14 +125,18 @@ void main() {
   test('each blocking field maps to its tab scroll pane', () {
     expect(ruteroScrollPaneForField('items'), RuteroScrollPane.products);
     expect(
-        ruteroScrollPaneForField('productsStatus'), RuteroScrollPane.products);
+      ruteroScrollPaneForField('productsStatus'),
+      RuteroScrollPane.products,
+    );
     expect(ruteroScrollPaneForField('pago'), RuteroScrollPane.payment);
     expect(ruteroScrollPaneForField('importe'), RuteroScrollPane.payment);
     expect(ruteroScrollPaneForField('nombre'), RuteroScrollPane.finalize);
     expect(ruteroScrollPaneForField('apellidos'), RuteroScrollPane.finalize);
     expect(ruteroScrollPaneForField('dni'), RuteroScrollPane.finalize);
     expect(
-        ruteroScrollPaneForField('observaciones'), RuteroScrollPane.finalize);
+      ruteroScrollPaneForField('observaciones'),
+      RuteroScrollPane.finalize,
+    );
     expect(ruteroScrollPaneForField('firma'), RuteroScrollPane.finalize);
   });
 

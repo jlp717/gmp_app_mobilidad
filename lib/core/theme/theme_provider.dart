@@ -34,11 +34,6 @@ class ThemeProvider extends ChangeNotifier {
     await prefs.setBool('isDarkMode', isDark);
     notifyListeners();
   }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }
 
 /// Riverpod provider for ThemeProvider

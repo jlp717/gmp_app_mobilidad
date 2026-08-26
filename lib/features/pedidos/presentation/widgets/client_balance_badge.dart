@@ -343,17 +343,18 @@ Map<String, Object?> clientDebtFromMap(Map<String, dynamic>? data) {
     'balanceStatus',
     'debtStatus',
     'deudaEstado',
-    'loadStatus'
+    'loadStatus',
   ]).toUpperCase();
   final loadError = data['loadError'] == true || data['balanceError'] == true;
   if (loadError || status == 'ERROR' || status == 'FAILED') {
     return {
       'state': 'error',
-      'message': _debtText(data, const ['message', 'error'])
+      'message': _debtText(data, const ['message', 'error']),
     };
   }
-  if (status == 'LOADING' || status == 'PENDING')
+  if (status == 'LOADING' || status == 'PENDING') {
     return const {'state': 'loading'};
+  }
   final pending = _debtNum(data, const [
     'saldoPendiente',
     'pendiente',
@@ -363,19 +364,23 @@ Map<String, Object?> clientDebtFromMap(Map<String, dynamic>? data) {
     'pending',
     'pendingAmount',
     'outstandingBalance',
-    'balance'
+    'balance',
   ]);
   final overdue = _debtNum(data, const [
     'vencido',
     'totalVencido',
     'importeVencido',
     'overdue',
-    'overdueAmount'
+    'overdueAmount',
   ]);
   final billed = _debtNum(
-      data, const ['facturadoAnual', 'facturado', 'billed', 'yearBilled']);
+    data,
+    const ['facturadoAnual', 'facturado', 'billed', 'yearBilled'],
+  );
   final collected = _debtNum(
-      data, const ['cobradoAnual', 'cobrado', 'collected', 'yearCollected']);
+    data,
+    const ['cobradoAnual', 'cobrado', 'collected', 'yearCollected'],
+  );
   if (pending != null ||
       overdue != null ||
       billed != null ||
@@ -386,17 +391,18 @@ Map<String, Object?> clientDebtFromMap(Map<String, dynamic>? data) {
       'overdue': overdue ?? 0.0,
       'billed': billed ?? 0.0,
       'collected': collected ?? 0.0,
-      'year': _debtInt(data, const ['year', 'ejercicio'])
+      'year': _debtInt(data, const ['year', 'ejercicio']),
     };
   }
   final hasStatus = status.isNotEmpty ||
       data.containsKey('loadError') ||
       data.containsKey('balanceError');
-  if (hasStatus || status == 'UNKNOWN' || status == 'SIN_DATOS')
+  if (hasStatus || status == 'UNKNOWN' || status == 'SIN_DATOS') {
     return {
       'state': 'unknown',
-      'message': _debtText(data, const ['message'])
+      'message': _debtText(data, const ['message']),
     };
+  }
   return const {'state': 'none'};
 }
 
@@ -449,7 +455,11 @@ IconData clientDebtIcon(Map<String, Object?> debt) {
 }
 
 class ClientDebtStatusChip extends StatelessWidget {
-  const ClientDebtStatusChip({required this.balance, this.compact = true});
+  const ClientDebtStatusChip({
+    required this.balance,
+    super.key,
+    this.compact = true,
+  });
   final Map<String, dynamic>? balance;
   final bool compact;
 
@@ -461,24 +471,32 @@ class ClientDebtStatusChip extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(top: compact ? 4 : 6),
       padding: EdgeInsets.symmetric(
-          horizontal: compact ? 7 : 9, vertical: compact ? 3 : 5),
+        horizontal: compact ? 7 : 9,
+        vertical: compact ? 3 : 5,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.11),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: 0.34), width: 0.7),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(clientDebtIcon(debt), color: color, size: compact ? 12 : 14),
-        const SizedBox(width: 4),
-        Flexible(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(clientDebtIcon(debt), color: color, size: compact ? 12 : 14),
+          const SizedBox(width: 4),
+          Flexible(
             child: Text(
-                'Deuda: ${clientDebtAmountLabel(debt)} · ${clientDebtLabel(debt)}',
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: color,
-                    fontSize: compact ? 10 : 11,
-                    fontWeight: FontWeight.w700))),
-      ]),
+              'Deuda: ${clientDebtAmountLabel(debt)} · ${clientDebtLabel(debt)}',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: compact ? 10 : 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -486,8 +504,9 @@ class ClientDebtStatusChip extends StatelessWidget {
 String _debtText(Map<String, dynamic> data, List<String> names) {
   for (final name in names) {
     final value = data[name];
-    if (value != null && value.toString().trim().isNotEmpty)
+    if (value != null && value.toString().trim().isNotEmpty) {
       return value.toString().trim();
+    }
   }
   return '';
 }

@@ -165,8 +165,11 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
               prefixIcon: const Icon(Icons.search, color: Colors.white54),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.white54, size: 18),
+                      icon: const Icon(
+                        Icons.clear,
+                        color: Colors.white54,
+                        size: 18,
+                      ),
                       onPressed: () {
                         _debounce?.cancel();
                         _searchController.clear();
@@ -217,17 +220,21 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
           children: [
             const Icon(Icons.error_outline, color: AppTheme.error, size: 40),
             const SizedBox(height: 8),
-            Text('Error al cargar clientes',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize:
-                        Responsive.fontSize(context, small: 14, large: 16))),
+            Text(
+              'Error al cargar clientes',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: Responsive.fontSize(context, small: 14, large: 16),
+              ),
+            ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: () => _loadClients(search: _searchController.text),
               icon: const Icon(Icons.refresh, color: AppTheme.info),
-              label: const Text('Reintentar',
-                  style: TextStyle(color: AppTheme.info)),
+              label: const Text(
+                'Reintentar',
+                style: TextStyle(color: AppTheme.info),
+              ),
             ),
           ],
         ),
@@ -239,8 +246,9 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
         child: Text(
           'No se encontraron clientes',
           style: TextStyle(
-              color: Colors.white54,
-              fontSize: Responsive.fontSize(context, small: 14, large: 16)),
+            color: Colors.white54,
+            fontSize: Responsive.fontSize(context, small: 14, large: 16),
+          ),
         ),
       );
     }
@@ -259,7 +267,9 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             left: 0,
             right: 0,
             child: LinearProgressIndicator(
-                color: AppTheme.info, backgroundColor: Colors.transparent),
+              color: AppTheme.info,
+              backgroundColor: Colors.transparent,
+            ),
           ),
       ],
     );
@@ -297,8 +307,11 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
-                  child: Icon(Icons.storefront_outlined,
-                      color: AppTheme.info, size: 18),
+                  child: Icon(
+                    Icons.storefront_outlined,
+                    color: AppTheme.info,
+                    size: 18,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -323,39 +336,62 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           code,
                           style: TextStyle(
                             color: AppTheme.info,
-                            fontSize: Responsive.fontSize(context,
-                                small: 11, large: 12),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 11,
+                              large: 12,
+                            ),
                           ),
                         ),
                         if (city.isNotEmpty) ...[
-                          Text(' · ',
-                              style: TextStyle(
-                                  color: Colors.white38,
-                                  fontSize: Responsive.fontSize(context,
-                                      small: 11, large: 12))),
+                          Text(
+                            ' · ',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 11,
+                                large: 12,
+                              ),
+                            ),
+                          ),
                           Flexible(
                             child: Text(
                               city,
                               style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: Responsive.fontSize(context,
-                                      small: 11, large: 12)),
+                                color: Colors.white54,
+                                fontSize: Responsive.fontSize(
+                                  context,
+                                  small: 11,
+                                  large: 12,
+                                ),
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                         if (nif.isNotEmpty) ...[
-                          Text(' · ',
-                              style: TextStyle(
-                                  color: Colors.white38,
-                                  fontSize: Responsive.fontSize(context,
-                                      small: 11, large: 12))),
+                          Text(
+                            ' · ',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 11,
+                                large: 12,
+                              ),
+                            ),
+                          ),
                           Text(
                             nif,
                             style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: Responsive.fontSize(context,
-                                    small: 11, large: 12)),
+                              color: Colors.white54,
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 11,
+                                large: 12,
+                              ),
+                            ),
                           ),
                         ],
                       ],

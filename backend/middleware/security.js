@@ -191,7 +191,11 @@ function sharedRateLimitStore(prefix, options) {
 function createRateLimiter(options, { store } = {}) {
     const rateLimitStore = store || sharedRateLimitStore(options.prefix);
     const skipRequest = options.skip || (() => false);
-    const limiter = rateLimit({ ...options, skip: () => false, store: rateLimitStore });
+    let limiter = null;
+    const getLimiter = () => {
+        if (!limiter) limiter = rateLimit({ ...options, skip: () => false, store: rateLimitStore });
+        return limiter;
+    };
 
     const failClosedLimiter = async (req, res, next) => {
         try {
@@ -200,7 +204,7 @@ function createRateLimiter(options, { store } = {}) {
             if (rateLimitStore.requireRedis && !rateLimitStore.isAvailable()) {
                 return res.status(503).json({ error: 'Servicio temporalmente no disponible', code: 'RATE_LIMIT_UNAVAILABLE' });
             }
-            return limiter(req, res, (error) => {
+            return getLimiter()(req, res, (error) => {
                 if (error?.code === 'RATE_LIMIT_REDIS_UNAVAILABLE') {
                     return res.status(503).json({ error: 'Servicio temporalmente no disponible', code: 'RATE_LIMIT_UNAVAILABLE' });
                 }
@@ -210,8 +214,8 @@ function createRateLimiter(options, { store } = {}) {
             return next(error);
         }
     };
-    failClosedLimiter.resetKey = limiter.resetKey;
-    failClosedLimiter.getKey = limiter.getKey;
+    failClosedLimiter.resetKey = (...args) => getLimiter().resetKey(...args);
+    failClosedLimiter.getKey = (...args) => getLimiter().getKey(...args);
     failClosedLimiter.store = rateLimitStore;
     return failClosedLimiter;
 }

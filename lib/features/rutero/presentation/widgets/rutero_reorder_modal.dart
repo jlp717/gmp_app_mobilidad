@@ -129,27 +129,36 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Ordenar Rutero',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Ordenar Rutero',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           if (_isSaving)
             const Center(
               child: Padding(
                 padding: EdgeInsets.only(right: 16),
                 child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppTheme.accentRose)),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.accentRose,
+                  ),
+                ),
               ),
             )
           else
             TextButton.icon(
               onPressed: _saveOrder,
               icon: const Icon(Icons.save, color: AppTheme.accentRose),
-              label: const Text('Guardar',
-                  style: TextStyle(
-                      color: AppTheme.accentRose, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Guardar',
+                style: TextStyle(
+                  color: AppTheme.accentRose,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
         ],
       ),
@@ -177,18 +186,21 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente para mover...',
-                hintStyle: TextStyle(color: AppTheme.textTertiary),
+                hintStyle: const TextStyle(color: AppTheme.textTertiary),
                 prefixIcon:
                     const Icon(Icons.search, color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.raisedSurface,
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
                 suffixIcon: isSearching
                     ? IconButton(
-                        icon: const Icon(Icons.clear,
-                            color: AppTheme.textTertiary),
+                        icon: const Icon(
+                          Icons.clear,
+                          color: AppTheme.textTertiary,
+                        ),
                         onPressed: () => setState(() {
                           _searchController.clear();
                           _searchQuery = '';
@@ -243,7 +255,10 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
   }
 
   Widget _buildListItem(
-      Map<String, dynamic> client, int index, bool isReorderable) {
+    Map<String, dynamic> client,
+    int index,
+    bool isReorderable,
+  ) {
     // Unique key is critical for ReorderableListView
     final key = ValueKey(client['code']);
 
@@ -262,7 +277,9 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
           child: Text(
             '${index + 1}',
             style: const TextStyle(
-                color: AppTheme.accentRose, fontWeight: FontWeight.bold),
+              color: AppTheme.accentRose,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         title: Text(
@@ -274,7 +291,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         ),
         subtitle: Text(
           (client['code'] as String?) ?? '',
-          style: TextStyle(color: AppTheme.textSecondary),
+          style: const TextStyle(color: AppTheme.textSecondary),
         ),
         trailing: isReorderable
             ? const Icon(Icons.drag_handle, color: AppTheme.textTertiary)

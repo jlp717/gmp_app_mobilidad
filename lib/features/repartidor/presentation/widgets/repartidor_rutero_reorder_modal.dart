@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_route_map_view.dart';
-import 'package:geolocator/geolocator.dart';
 
 class RepartidorRuteroReorderModal extends StatefulWidget {
   const RepartidorRuteroReorderModal({
@@ -103,8 +103,9 @@ class _RepartidorRuteroReorderModalState
         _revision = state.revision;
         _isDirty = false;
         _remoteChangePending = false;
-        if (!silent)
+        if (!silent) {
           _info = 'Se ha cargado el orden guardado por otro usuario.';
+        }
       });
       _refreshLocalEtas();
     } catch (_) {
@@ -142,15 +143,17 @@ class _RepartidorRuteroReorderModalState
   }
 
   int get _gpsCoverage =>
-      _ordered.where((albaran) => _metaFor(albaran)?.hasGps == true).length;
+      _ordered.where((albaran) => _metaFor(albaran)?.hasGps ?? false).length;
 
   String _friendlyError(Object error, {required String fallback}) {
     if (error is ApiException) {
       if (error.statusCode == 409) return 'Otro usuario modificó esta ruta.';
-      if (error.statusCode == 401)
+      if (error.statusCode == 401) {
         return 'La sesión ha caducado. Vuelve a intentarlo.';
-      if (error.statusCode == 503)
+      }
+      if (error.statusCode == 503) {
         return 'El servicio no está disponible ahora. Inténtalo de nuevo.';
+      }
       return error.message;
     }
     return fallback;
@@ -159,8 +162,10 @@ class _RepartidorRuteroReorderModalState
   Future<void> _useCurrentLocation() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        setState(() => _error =
-            'Activa la ubicación del dispositivo para usarla como salida.');
+        setState(
+          () => _error =
+              'Activa la ubicación del dispositivo para usarla como salida.',
+        );
         return;
       }
       var permission = await Geolocator.checkPermission();
@@ -169,8 +174,9 @@ class _RepartidorRuteroReorderModalState
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        if (mounted)
+        if (mounted) {
           setState(() => _error = 'No se concedió acceso a la ubicación.');
+        }
         return;
       }
       final position = await Geolocator.getCurrentPosition(
@@ -180,7 +186,9 @@ class _RepartidorRuteroReorderModalState
       if (mounted) {
         setState(() {
           _origin = RuteroRouteOrigin(
-              lat: position.latitude, lng: position.longitude);
+            lat: position.latitude,
+            lng: position.longitude,
+          );
           _info = 'La propuesta usará tu ubicación actual como salida.';
         });
       }
@@ -252,16 +260,18 @@ class _RepartidorRuteroReorderModalState
       setState(() {
         _metaByKey
           ..clear()
-          ..addEntries(stops.expand((s) {
-            final entries = <MapEntry<String, RuteroStopWindow>>[];
-            if (s.documentId.isNotEmpty) {
-              entries.add(MapEntry(s.documentId, s));
-            }
-            if (s.cliente.isNotEmpty) {
-              entries.add(MapEntry(s.cliente, s));
-            }
-            return entries;
-          }));
+          ..addEntries(
+            stops.expand((s) {
+              final entries = <MapEntry<String, RuteroStopWindow>>[];
+              if (s.documentId.isNotEmpty) {
+                entries.add(MapEntry(s.documentId, s));
+              }
+              if (s.cliente.isNotEmpty) {
+                entries.add(MapEntry(s.cliente, s));
+              }
+              return entries;
+            }),
+          );
         _refreshLocalEtas();
         _loadingMeta = false;
       });
@@ -283,16 +293,18 @@ class _RepartidorRuteroReorderModalState
       _error = null;
       _info = null;
     });
-    HapticFeedback.selectionClick();
+    await HapticFeedback.selectionClick();
     try {
       final result = await RuteroRouteApi.optimizeOrder(
         repartidorId: widget.repartidorId,
         dateYmd: _dateYmd,
         stops: _ordered
-            .map((a) => <String, dynamic>{
-                  'documentId': a.id,
-                  'cliente': a.codigoCliente,
-                })
+            .map(
+              (a) => <String, dynamic>{
+                'documentId': a.id,
+                'cliente': a.codigoCliente,
+              },
+            )
             .toList(growable: false),
         strategy: _strategy,
         origin: _origin,
@@ -482,11 +494,17 @@ class _RepartidorRuteroReorderModalState
         children: [
           _buildToolbar(),
           if (_error != null)
-            _banner(_error!, AppTheme.error.withValues(alpha: 0.12),
-                AppTheme.error),
+            _banner(
+              _error!,
+              AppTheme.error.withValues(alpha: 0.12),
+              AppTheme.error,
+            ),
           if (_info != null)
             _banner(
-                _info!, AppTheme.info.withValues(alpha: 0.12), AppTheme.info),
+              _info!,
+              AppTheme.info.withValues(alpha: 0.12),
+              AppTheme.info,
+            ),
           if (_remoteChangePending) _buildRemoteChangeBanner(),
           Expanded(
             child: TabBarView(
@@ -544,21 +562,22 @@ class _RepartidorRuteroReorderModalState
               ),
             ),
           ),
-          Align(
+          const Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Criterio de propuesta',
-              style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
             ),
           ),
           const SizedBox(height: 4),
           SegmentedButton<RuteroRouteStrategy>(
             segments: RuteroRouteStrategy.values
-                .map((strategy) => ButtonSegment<RuteroRouteStrategy>(
-                      value: strategy,
-                      label: Text(strategy.label),
-                    ))
+                .map(
+                  (strategy) => ButtonSegment<RuteroRouteStrategy>(
+                    value: strategy,
+                    label: Text(strategy.label),
+                  ),
+                )
                 .toList(growable: false),
             selected: {_strategy},
             showSelectedIcon: false,
@@ -580,9 +599,11 @@ class _RepartidorRuteroReorderModalState
                       : Icons.my_location,
                   size: 16,
                 ),
-                label: Text(_origin == null
-                    ? 'Usar mi ubicación actual'
-                    : 'Salida: ubicación actual'),
+                label: Text(
+                  _origin == null
+                      ? 'Usar mi ubicación actual'
+                      : 'Salida: ubicación actual',
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: _pickDepartureTime,
@@ -671,7 +692,7 @@ class _RepartidorRuteroReorderModalState
         final selected = _selectedDocumentId == a.id;
         final window = meta?.windowLabel;
         final obs = meta?.observacionesSnippet ?? '';
-        final closed = meta?.closedDay == true;
+        final closed = meta?.closedDay ?? false;
         final missingGps = meta == null || !meta.hasGps;
         final seqColor = ruteroStopColor(index, _ordered.length);
         final eta = meta?.etaLabel;
@@ -738,8 +759,16 @@ class _RepartidorRuteroReorderModalState
               width: 48,
               height: 48,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: AppTheme.softPanel, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.borderColor)),
-              child: const Icon(Icons.drag_handle, color: AppTheme.textSecondary, size: 28),
+              decoration: BoxDecoration(
+                color: AppTheme.softPanel,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: const Icon(
+                Icons.drag_handle,
+                color: AppTheme.textSecondary,
+                size: 28,
+              ),
             ),
           ),
         );

@@ -1,7 +1,7 @@
 /**
  * Conventional Commits — configuracion del equipo GMP App Movilidad.
  * Tipos permitidos (cerrados): feat|fix|docs|style|refactor|test|chore|perf|ci|revert
- * Politica de tamano y ejemplos: CONTRIBUTING.md
+ * Politica de tamano y ejemplos: docs/CONTRIBUTING.md
  */
 module.exports = {
   extends: ['@commitlint/config-conventional'],

@@ -465,7 +465,9 @@ class PdfExportService {
   ) {
     return pw.TableHelper.fromTextArray(
       border: pw.TableBorder.all(
-          color: const PdfColor.fromInt(0xFF334155), width: 0.5),
+        color: const PdfColor.fromInt(0xFF334155),
+        width: 0.5,
+      ),
       headerDecoration: pw.BoxDecoration(color: bgColor),
       cellAlignment: pw.Alignment.centerLeft,
       headerHeight: 24,

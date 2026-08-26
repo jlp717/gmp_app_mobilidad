@@ -151,8 +151,11 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close,
-                        color: AppTheme.textSecondary, size: 20),
+                    icon: const Icon(
+                      Icons.close,
+                      color: AppTheme.textSecondary,
+                      size: 20,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -213,7 +216,9 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                     ),
                     child: const Text('Cancelar'),
                   ),
@@ -226,7 +231,9 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                       backgroundColor: whatsAppGreen,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -261,7 +268,9 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(
-          color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
+        color: AppTheme.textSecondary.withValues(alpha: 0.5),
+        fontSize: 13,
+      ),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.inkSurface,

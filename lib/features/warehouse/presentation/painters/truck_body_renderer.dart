@@ -108,7 +108,8 @@ class TruckBodyRenderer {
         ],
         stops: const [0.0, 0.55, 1.0],
       ).createShader(
-          Rect.fromCenter(center: center, width: rx * 2, height: ry * 2));
+        Rect.fromCenter(center: center, width: rx * 2, height: ry * 2),
+      );
 
     canvas.drawOval(
       Rect.fromCenter(center: center, width: rx * 2, height: ry * 2),
@@ -130,7 +131,11 @@ class TruckBodyRenderer {
 
     PolyHelper.fillFaceSolid(canvas, pts, _containerFloor, 0.9, 1);
     PolyHelper.strokeFace(
-        canvas, pts, _containerFrame.withValues(alpha: 0.4), 1.5);
+      canvas,
+      pts,
+      _containerFrame.withValues(alpha: 0.4),
+      1.5,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -186,8 +191,10 @@ class TruckBodyRenderer {
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        tp.paint(canvas,
-            Offset(labelPos.dx - tp.width - 2, labelPos.dy - tp.height / 2));
+        tp.paint(
+          canvas,
+          Offset(labelPos.dx - tp.width - 2, labelPos.dy - tp.height / 2),
+        );
       }
     }
   }
@@ -292,7 +299,12 @@ class TruckBodyRenderer {
       proj.project(ox, oy, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, leftPts, _containerBase, Lighting3D.leftLight, 0.17);
+      canvas,
+      leftPts,
+      _containerBase,
+      Lighting3D.leftLight,
+      0.17,
+    );
 
     // Right wall (translucent — reduced alpha for cargo visibility)
     final rightPts = [
@@ -302,7 +314,12 @@ class TruckBodyRenderer {
       proj.project(ox + cW, oy, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, rightPts, _containerBase, Lighting3D.rightLight, 0.17);
+      canvas,
+      rightPts,
+      _containerBase,
+      Lighting3D.rightLight,
+      0.17,
+    );
 
     // Back wall (reduced alpha for better cargo visibility)
     final backPts = [
@@ -312,7 +329,12 @@ class TruckBodyRenderer {
       proj.project(ox, oy + cD, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, backPts, _containerBase, Lighting3D.backLight, 0.22);
+      canvas,
+      backPts,
+      _containerBase,
+      Lighting3D.backLight,
+      0.22,
+    );
 
     // Roof (very translucent)
     final roofPts = [
@@ -322,7 +344,12 @@ class TruckBodyRenderer {
       proj.project(ox, oy + cD, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, roofPts, _containerBase, Lighting3D.topLight, 0.08);
+      canvas,
+      roofPts,
+      _containerBase,
+      Lighting3D.topLight,
+      0.08,
+    );
 
     // Ambient occlusion — dark gradient at floor-wall junctions
     _drawAmbientOcclusion(canvas);
@@ -379,9 +406,18 @@ class TruckBodyRenderer {
     // Door inner face
     final leftDoorFace = [ldBotHinge, ldBotFar, ldTopFar, ldTopHinge];
     PolyHelper.fillFaceSolid(
-        canvas, leftDoorFace, _containerBase, Lighting3D.leftLight, 0.7);
+      canvas,
+      leftDoorFace,
+      _containerBase,
+      Lighting3D.leftLight,
+      0.7,
+    );
     PolyHelper.strokeFace(
-        canvas, leftDoorFace, _containerFrame.withValues(alpha: 0.5), 1.5);
+      canvas,
+      leftDoorFace,
+      _containerFrame.withValues(alpha: 0.5),
+      1.5,
+    );
 
     // Door top edge (thickness)
     final ldThickTop = [
@@ -391,7 +427,12 @@ class TruckBodyRenderer {
       proj.project(ox + doorThickness, oy, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, ldThickTop, _containerFrame, Lighting3D.topLight, 0.5);
+      canvas,
+      ldThickTop,
+      _containerFrame,
+      Lighting3D.topLight,
+      0.5,
+    );
 
     // Door outer face (slightly visible)
     final ldOuterFace = [
@@ -401,7 +442,12 @@ class TruckBodyRenderer {
       proj.project(ox + doorThickness, oy, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, ldOuterFace, _containerBase, Lighting3D.rightLight, 0.5);
+      canvas,
+      ldOuterFace,
+      _containerBase,
+      Lighting3D.rightLight,
+      0.5,
+    );
 
     // ── Right door (hinged on ox+cW, opens toward negative Y) ──
     final rdBotHinge = proj.project(ox + cW, oy, oz, size);
@@ -411,9 +457,18 @@ class TruckBodyRenderer {
 
     final rightDoorFace = [rdBotHinge, rdBotFar, rdTopFar, rdTopHinge];
     PolyHelper.fillFaceSolid(
-        canvas, rightDoorFace, _containerBase, Lighting3D.rightLight, 0.7);
+      canvas,
+      rightDoorFace,
+      _containerBase,
+      Lighting3D.rightLight,
+      0.7,
+    );
     PolyHelper.strokeFace(
-        canvas, rightDoorFace, _containerFrame.withValues(alpha: 0.5), 1.5);
+      canvas,
+      rightDoorFace,
+      _containerFrame.withValues(alpha: 0.5),
+      1.5,
+    );
 
     // Door top edge
     final rdThickTop = [
@@ -423,7 +478,12 @@ class TruckBodyRenderer {
       proj.project(ox + cW - doorThickness, oy, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, rdThickTop, _containerFrame, Lighting3D.topLight, 0.5);
+      canvas,
+      rdThickTop,
+      _containerFrame,
+      Lighting3D.topLight,
+      0.5,
+    );
 
     // Door outer face
     final rdOuterFace = [
@@ -433,7 +493,12 @@ class TruckBodyRenderer {
       proj.project(ox + cW - doorThickness, oy, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, rdOuterFace, _containerBase, Lighting3D.leftLight, 0.5);
+      canvas,
+      rdOuterFace,
+      _containerBase,
+      Lighting3D.leftLight,
+      0.5,
+    );
 
     // ── Hinges (chrome circles on hinge edge) ──
     final hingePaint = Paint()..color = _chrome.withValues(alpha: 0.7);
@@ -532,17 +597,41 @@ class TruckBodyRenderer {
     // Top edges
     _drawEdge(canvas, ox, oy, oz + cH, ox + cW, oy, oz + cH, framePaint);
     _drawEdge(
-        canvas, ox, oy + cD, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
+      canvas,
+      ox,
+      oy + cD,
+      oz + cH,
+      ox + cW,
+      oy + cD,
+      oz + cH,
+      framePaint,
+    );
     _drawEdge(canvas, ox, oy, oz + cH, ox, oy + cD, oz + cH, framePaint);
     _drawEdge(
-        canvas, ox + cW, oy, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
+      canvas,
+      ox + cW,
+      oy,
+      oz + cH,
+      ox + cW,
+      oy + cD,
+      oz + cH,
+      framePaint,
+    );
 
     // Vertical edges
     _drawEdge(canvas, ox, oy, oz, ox, oy, oz + cH, framePaint);
     _drawEdge(canvas, ox + cW, oy, oz, ox + cW, oy, oz + cH, framePaint);
     _drawEdge(canvas, ox, oy + cD, oz, ox, oy + cD, oz + cH, framePaint);
     _drawEdge(
-        canvas, ox + cW, oy + cD, oz, ox + cW, oy + cD, oz + cH, framePaint);
+      canvas,
+      ox + cW,
+      oy + cD,
+      oz,
+      ox + cW,
+      oy + cD,
+      oz + cH,
+      framePaint,
+    );
   }
 
   void _drawEdge(
@@ -651,9 +740,18 @@ class TruckBodyRenderer {
       proj.project(cabX, cabY, cabZ + cabH * 0.65, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, bottomFront, _cabPrimary, Lighting3D.frontLight, 0.95);
+      canvas,
+      bottomFront,
+      _cabPrimary,
+      Lighting3D.frontLight,
+      0.95,
+    );
     PolyHelper.strokeFace(
-        canvas, bottomFront, _cabSecondary.withValues(alpha: 0.3), 1);
+      canvas,
+      bottomFront,
+      _cabSecondary.withValues(alpha: 0.3),
+      1,
+    );
 
     // Grille (horizontal lines between headlights)
     _drawGrille(canvas, cabX, cabY, cabZ, cabW, cabH);
@@ -676,8 +774,11 @@ class TruckBodyRenderer {
     canvas.drawLine(midW1, midW1t, reflectPaint);
     final midW2 = Offset.lerp(windshield[0], windshield[1], 0.65)!;
     final midW2t = Offset.lerp(windshield[3], windshield[2], 0.65)!;
-    canvas.drawLine(midW2, midW2t,
-        reflectPaint..color = Colors.white.withValues(alpha: 0.08));
+    canvas.drawLine(
+      midW2,
+      midW2t,
+      reflectPaint..color = Colors.white.withValues(alpha: 0.08),
+    );
 
     // Cab roof
     final roof = [
@@ -687,9 +788,18 @@ class TruckBodyRenderer {
       proj.project(cabX, cabY + cabD, cabZ + cabH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, roof, _cabPrimary, Lighting3D.topLight, 0.85);
+      canvas,
+      roof,
+      _cabPrimary,
+      Lighting3D.topLight,
+      0.85,
+    );
     PolyHelper.strokeFace(
-        canvas, roof, _cabSecondary.withValues(alpha: 0.2), 1);
+      canvas,
+      roof,
+      _cabSecondary.withValues(alpha: 0.2),
+      1,
+    );
 
     // Cab side
     final side = [
@@ -700,7 +810,12 @@ class TruckBodyRenderer {
       proj.project(cabX + cabW, cabY, cabZ + cabH * 0.65, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, side, _cabSecondary, Lighting3D.rightLight, 0.9);
+      canvas,
+      side,
+      _cabSecondary,
+      Lighting3D.rightLight,
+      0.9,
+    );
     PolyHelper.strokeFace(canvas, side, _cabAccent.withValues(alpha: 0.2), 1);
 
     // Side window
@@ -730,8 +845,14 @@ class TruckBodyRenderer {
     PolyHelper.fillFaceSolid(canvas, bumper, _chrome, 0.7, 0.8);
 
     // License plate on bumper
-    _drawLicensePlate(canvas, cabX + cabW * 0.3, cabY - 3.5, cabZ + cabH * 0.04,
-        cabW * 0.4, cabH * 0.08);
+    _drawLicensePlate(
+      canvas,
+      cabX + cabW * 0.3,
+      cabY - 3.5,
+      cabZ + cabH * 0.04,
+      cabW * 0.4,
+      cabH * 0.08,
+    );
 
     // Mirrors
     _drawMirror(canvas, cabX - 8, cabY + cabD * 0.3, cabZ + cabH * 0.6);
@@ -752,9 +873,18 @@ class TruckBodyRenderer {
       proj.project(ox, cabY, oz + cH * 0.55, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, front, _cabPrimary, Lighting3D.frontLight, 0.92);
+      canvas,
+      front,
+      _cabPrimary,
+      Lighting3D.frontLight,
+      0.92,
+    );
     PolyHelper.strokeFace(
-        canvas, front, _cabSecondary.withValues(alpha: 0.3), 1);
+      canvas,
+      front,
+      _cabSecondary.withValues(alpha: 0.3),
+      1,
+    );
 
     // Grille
     _drawGrille(canvas, ox, cabY, oz, cW, cH);
@@ -786,7 +916,12 @@ class TruckBodyRenderer {
       proj.project(ox + cW, cabY, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, side, _cabSecondary, Lighting3D.rightLight, 0.85);
+      canvas,
+      side,
+      _cabSecondary,
+      Lighting3D.rightLight,
+      0.85,
+    );
 
     // Side indicator
     _drawIndicator(canvas, ox + cW, cabY + cabD * 0.1, oz + cH * 0.3);
@@ -799,7 +934,12 @@ class TruckBodyRenderer {
       proj.project(ox, cabY + cabD, oz + cH, size),
     ];
     PolyHelper.fillFaceSolid(
-        canvas, roofExt, _cabPrimary, Lighting3D.topLight, 0.8);
+      canvas,
+      roofExt,
+      _cabPrimary,
+      Lighting3D.topLight,
+      0.8,
+    );
 
     // Headlights
     _drawHeadlight(canvas, ox + cW * 0.15, cabY + 1, oz + cH * 0.2);
@@ -816,7 +956,13 @@ class TruckBodyRenderer {
 
     // License plate
     _drawLicensePlate(
-        canvas, ox + cW * 0.3, cabY + 1.5, oz + cH * 0.03, cW * 0.4, cH * 0.07);
+      canvas,
+      ox + cW * 0.3,
+      cabY + 1.5,
+      oz + cH * 0.03,
+      cW * 0.4,
+      cH * 0.07,
+    );
 
     // Mirrors
     _drawMirror(canvas, ox - 8, cabY + cabD * 0.3, oz + cH * 0.65);
@@ -828,7 +974,13 @@ class TruckBodyRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _drawGrille(
-      Canvas canvas, double gx, double gy, double gz, double gw, double gh) {
+    Canvas canvas,
+    double gx,
+    double gy,
+    double gz,
+    double gw,
+    double gh,
+  ) {
     final grillePaint = Paint()
       ..color = _chrome.withValues(alpha: 0.2)
       ..strokeWidth = 0.8;
@@ -882,7 +1034,10 @@ class TruckBodyRenderer {
     final r = 2.5 * proj.zoom;
     if (r < 1) return;
     canvas.drawCircle(
-        center, r, Paint()..color = _indicator.withValues(alpha: 0.7));
+      center,
+      r,
+      Paint()..color = _indicator.withValues(alpha: 0.7),
+    );
     canvas.drawCircle(
       center,
       r * 1.5,
@@ -914,7 +1069,13 @@ class TruckBodyRenderer {
   }
 
   void _drawLicensePlate(
-      Canvas canvas, double px, double py, double pz, double pw, double ph) {
+    Canvas canvas,
+    double px,
+    double py,
+    double pz,
+    double pw,
+    double ph,
+  ) {
     final plateText = matricula ?? '';
     if (plateText.isEmpty) return;
 
@@ -929,7 +1090,9 @@ class TruckBodyRenderer {
       const Radius.circular(2),
     );
     canvas.drawRRect(
-        plateRect, Paint()..color = Colors.white.withValues(alpha: 0.85));
+      plateRect,
+      Paint()..color = Colors.white.withValues(alpha: 0.85),
+    );
     canvas.drawRRect(
       plateRect,
       Paint()
@@ -952,7 +1115,9 @@ class TruckBodyRenderer {
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: plateW - 4);
     tp.paint(
-        canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1043,10 +1208,16 @@ class TruckBodyRenderer {
     );
     // Hub cap (chrome)
     canvas.drawCircle(
-        center, sr * 0.45, Paint()..color = _chrome.withValues(alpha: 0.6));
+      center,
+      sr * 0.45,
+      Paint()..color = _chrome.withValues(alpha: 0.6),
+    );
     // Hub center
     canvas.drawCircle(
-        center, sr * 0.15, Paint()..color = const Color(0xFF4A5568));
+      center,
+      sr * 0.15,
+      Paint()..color = const Color(0xFF4A5568),
+    );
     // Chrome rim
     canvas.drawCircle(
       center,
@@ -1063,10 +1234,14 @@ class TruckBodyRenderer {
     for (var i = 0; i < 5; i++) {
       final angle = i * math.pi * 2 / 5;
       canvas.drawLine(
-        Offset(center.dx + math.cos(angle) * sr * 0.2,
-            center.dy + math.sin(angle) * sr * 0.2),
-        Offset(center.dx + math.cos(angle) * sr * 0.6,
-            center.dy + math.sin(angle) * sr * 0.6),
+        Offset(
+          center.dx + math.cos(angle) * sr * 0.2,
+          center.dy + math.sin(angle) * sr * 0.2,
+        ),
+        Offset(
+          center.dx + math.cos(angle) * sr * 0.6,
+          center.dy + math.sin(angle) * sr * 0.6,
+        ),
         spokePaint,
       );
     }
@@ -1077,7 +1252,10 @@ class TruckBodyRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void drawWeightHeatmap(
-      Canvas canvas, List<dynamic> placed, double maxWeight) {
+    Canvas canvas,
+    List<dynamic> placed,
+    double maxWeight,
+  ) {
     if (placed.isEmpty) return;
     for (final b in placed) {
       if (b is! PlacedBox) continue;

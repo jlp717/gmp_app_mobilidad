@@ -2,12 +2,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 class AuthState {
-  final String? userId;
-  final String? role;
-  final bool isJefeVentas;
-  final bool showCommissions;
-  final bool isAuthenticated;
-
   AuthState({
     this.userId,
     this.role,
@@ -15,6 +9,11 @@ class AuthState {
     this.showCommissions = false,
     this.isAuthenticated = false,
   });
+  final String? userId;
+  final String? role;
+  final bool isJefeVentas;
+  final bool showCommissions;
+  final bool isAuthenticated;
 
   AuthState copyWith({
     String? userId,

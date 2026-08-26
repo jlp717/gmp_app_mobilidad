@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/unit_selector_modal.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class _RecordingOrderApi implements PedidosOrderApi {
@@ -149,7 +150,7 @@ void main() {
 
   setUpAll(() async {
     hiveDir =
-        await Directory.systemTemp.createTemp("pedidos_offline_service_test_");
+        await Directory.systemTemp.createTemp('pedidos_offline_service_test_');
     Hive.init(hiveDir.path);
     await PedidosOfflineService.init();
   });
@@ -468,11 +469,12 @@ void main() {
       provider.setClient('4300010363', 'Cliente test');
       final result = provider.addLine(
         Product(
-            code: 'STOCK-PARTIAL-1',
-            name: 'Producto parcial',
-            stockEnvases: 2,
-            unitsPerBox: 12,
-            precioTarifa1: 10),
+          code: 'STOCK-PARTIAL-1',
+          name: 'Producto parcial',
+          stockEnvases: 2,
+          unitsPerBox: 12,
+          precioTarifa1: 10,
+        ),
         3,
         36,
         'CAJAS',
@@ -490,13 +492,14 @@ void main() {
       final provider = PedidosProvider();
       provider.setClient('4300010363', 'Cliente test');
       final product = Product(
-          code: 'DUAL-STOCK-1',
-          name: 'Producto dual',
-          stockEnvases: 1,
-          stockUnidades: 0,
-          unitsPerBox: 12,
-          unitsFraction: 1,
-          precioTarifa1: 10);
+        code: 'DUAL-STOCK-1',
+        name: 'Producto dual',
+        stockEnvases: 1,
+        stockUnidades: 0,
+        unitsPerBox: 12,
+        unitsFraction: 1,
+        precioTarifa1: 10,
+      );
       provider.addLine(product, 1, 0, 'CAJAS', 10);
       final beforeEnvases = provider.lines.single.cantidadEnvases;
       final beforeUnidades = provider.lines.single.cantidadUnidades;
@@ -510,22 +513,30 @@ void main() {
     testWidgets(
         'UnitSelectorModal blocks accepting quantity above selected stock',
         (tester) async {
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           home: Builder(
-              builder: (context) => ElevatedButton(
-                  onPressed: () {
-                    UnitSelectorModal.show(context,
-                        product: Product(
-                            code: 'MODAL-STOCK-1',
-                            name: 'Producto modal',
-                            stockEnvases: 1,
-                            unitsPerBox: 12,
-                            precioTarifa1: 10),
-                        initialUnit: 'CAJAS',
-                        initialQuantity: 2,
-                        availableUnits: const ['CAJAS']);
-                  },
-                  child: const Text('open')))));
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                UnitSelectorModal.show(
+                  context,
+                  product: Product(
+                    code: 'MODAL-STOCK-1',
+                    name: 'Producto modal',
+                    stockEnvases: 1,
+                    unitsPerBox: 12,
+                    precioTarifa1: 10,
+                  ),
+                  initialUnit: 'CAJAS',
+                  initialQuantity: 2,
+                  availableUnits: const ['CAJAS'],
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ACEPTAR'));
@@ -539,22 +550,30 @@ void main() {
         'UnitSelectorModal returns stock alternatives intent when requested quantity exceeds stock',
         (tester) async {
       Future<Map<String, dynamic>?>? modalResult;
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           home: Builder(
-              builder: (context) => ElevatedButton(
-                  onPressed: () {
-                    modalResult = UnitSelectorModal.show(context,
-                        product: Product(
-                            code: 'MODAL-STOCK-2',
-                            name: 'Producto modal alternativo',
-                            stockEnvases: 1,
-                            unitsPerBox: 12,
-                            precioTarifa1: 10),
-                        initialUnit: 'CAJAS',
-                        initialQuantity: 2,
-                        availableUnits: const ['CAJAS']);
-                  },
-                  child: const Text('open alternatives')))));
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                modalResult = UnitSelectorModal.show(
+                  context,
+                  product: Product(
+                    code: 'MODAL-STOCK-2',
+                    name: 'Producto modal alternativo',
+                    stockEnvases: 1,
+                    unitsPerBox: 12,
+                    precioTarifa1: 10,
+                  ),
+                  initialUnit: 'CAJAS',
+                  initialQuantity: 2,
+                  availableUnits: const ['CAJAS'],
+                );
+              },
+              child: const Text('open alternatives'),
+            ),
+          ),
+        ),
+      );
       await tester.tap(find.text('open alternatives'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ACEPTAR'));
@@ -864,7 +883,9 @@ void main() {
       expect(api.confirmedRouteCode, 'R9');
       expect(api.createdClientRequestId, isNotNull);
       expect(
-          api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
+        api.createdClientRequestId,
+        matches(RegExp(r'^[A-Za-z0-9]{8,28}$')),
+      );
     });
     test('keeps queued create as a local draft and does not confirm offline',
         () async {
@@ -873,15 +894,17 @@ void main() {
           PedidosProvider(orderApi: api, refreshAfterConfirm: false);
       provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
       provider.addLine(
-          Product(
-              code: 'ART-OFFLINE',
-              name: 'Producto offline',
-              stockEnvases: 10,
-              precioTarifa1: 10),
-          1,
-          0,
-          'CAJAS',
-          10);
+        Product(
+          code: 'ART-OFFLINE',
+          name: 'Producto offline',
+          stockEnvases: 10,
+          precioTarifa1: 10,
+        ),
+        1,
+        0,
+        'CAJAS',
+        10,
+      );
 
       final result = await provider.confirmOrder('57');
 
@@ -894,7 +917,9 @@ void main() {
       expect(api.createOrderCalls, 1);
       expect(api.confirmOrderCalls, 0);
       expect(
-          api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
+        api.createdClientRequestId,
+        matches(RegExp(r'^[A-Za-z0-9]{8,28}$')),
+      );
       expect(provider.lines, isEmpty);
     });
 
@@ -967,48 +992,49 @@ void main() {
     });
   });
 
-  group("PedidosOfflineService bounded sync", () {
+  group('PedidosOfflineService bounded sync', () {
     OrderLine line(String code) {
       return OrderLine(
         codigoArticulo: code,
-        descripcion: "Producto $code",
+        descripcion: 'Producto $code',
         cantidadEnvases: 1,
         cantidadUnidades: 0,
-        unidadMedida: "CAJAS",
+        unidadMedida: 'CAJAS',
         precioVenta: 10,
       );
     }
 
-    test("persists draft global discount metadata", () async {
+    test('persists draft global discount metadata', () async {
       await PedidosOfflineService.saveDraft(
-        clientCode: "C-DRAFT",
-        clientName: "Cliente draft",
-        vendedorCode: "57",
-        saleType: "CC",
-        lines: [line("ART-DRAFT")],
+        clientCode: 'C-DRAFT',
+        clientName: 'Cliente draft',
+        vendedorCode: '57',
+        saleType: 'CC',
+        lines: [line('ART-DRAFT')],
         globalDiscountPct: 12.5,
       );
 
       final draft = PedidosOfflineService.getDrafts().single;
 
-      expect(draft["globalDiscountPct"], 12.5);
+      expect(draft['globalDiscountPct'], 12.5);
     });
 
-    test("syncs only the configured batch and preserves clientRequestId",
+    test('syncs only the configured batch and preserves clientRequestId',
         () async {
       final requestIds = [];
       var calls = 0;
-      PedidosOfflineService.debugSetCreateOrderForTesting((
-          {required String clientCode,
-          required String clientName,
-          required String vendedorCode,
-          required String tipoVenta,
-          required List lines,
-          required String observaciones,
-          required String? clientRequestId}) async {
+      PedidosOfflineService.debugSetCreateOrderForTesting(({
+        required String clientCode,
+        required String clientName,
+        required String vendedorCode,
+        required String tipoVenta,
+        required List lines,
+        required String observaciones,
+        required String? clientRequestId,
+      }) async {
         calls++;
         requestIds.add(clientRequestId);
-        return {"id": calls, "estado": "BORRADOR"};
+        return {'id': calls, 'estado': 'BORRADOR'};
       });
       var confirmCalls = 0;
       PedidosOfflineService.debugSetConfirmOrderForTesting((
@@ -1020,16 +1046,16 @@ void main() {
         String? routeCode,
       }) async {
         confirmCalls++;
-        return {"id": orderId, "estado": "CONFIRMADO"};
+        return {'id': orderId, 'estado': 'CONFIRMADO'};
       });
 
       for (final i in [0, 1, 2, 3, 4]) {
         await PedidosOfflineService.queueOrderForSync(
-          clientCode: "C$i",
-          clientName: "Cliente $i",
-          vendedorCode: "57",
-          saleType: "CC",
-          lines: [line("ART$i")],
+          clientCode: 'C$i',
+          clientName: 'Cliente $i',
+          vendedorCode: '57',
+          saleType: 'CC',
+          lines: [line('ART$i')],
         );
       }
 
@@ -1045,29 +1071,30 @@ void main() {
         }
       }
 
-      expect(result["totalPendingAtStart"], 5);
-      expect(result["selectedForRun"], 2);
-      expect(result["processed"], 2);
-      expect(result["synced"], 2);
-      expect(result["remainingPending"], 3);
-      expect(result["isBackpressured"], isTrue);
+      expect(result['totalPendingAtStart'], 5);
+      expect(result['selectedForRun'], 2);
+      expect(result['processed'], 2);
+      expect(result['synced'], 2);
+      expect(result['remainingPending'], 3);
+      expect(result['isBackpressured'], isTrue);
       expect(calls, 2);
       expect(confirmCalls, 2);
       expect(requestIds, hasLength(2));
       expect(allRequestIdsPreserved, isTrue);
     });
 
-    test("does not delete queued response without server confirmation",
+    test('does not delete queued response without server confirmation',
         () async {
-      PedidosOfflineService.debugSetCreateOrderForTesting((
-          {required String clientCode,
-          required String clientName,
-          required String vendedorCode,
-          required String tipoVenta,
-          required List lines,
-          required String observaciones,
-          required String? clientRequestId}) async {
-        return {"queued": true, "syncId": "transport_queue_1"};
+      PedidosOfflineService.debugSetCreateOrderForTesting(({
+        required String clientCode,
+        required String clientName,
+        required String vendedorCode,
+        required String tipoVenta,
+        required List lines,
+        required String observaciones,
+        required String? clientRequestId,
+      }) async {
+        return {'queued': true, 'syncId': 'transport_queue_1'};
       });
       PedidosOfflineService.debugSetConfirmOrderForTesting((
         int orderId,
@@ -1077,15 +1104,15 @@ void main() {
         String? driverCode,
         String? routeCode,
       }) async {
-        return {"id": orderId, "estado": "CONFIRMADO"};
+        return {'id': orderId, 'estado': 'CONFIRMADO'};
       });
 
       await PedidosOfflineService.queueOrderForSync(
-        clientCode: "C001",
-        clientName: "Cliente",
-        vendedorCode: "57",
-        saleType: "CC",
-        lines: [line("ART-OFFLINE")],
+        clientCode: 'C001',
+        clientName: 'Cliente',
+        vendedorCode: '57',
+        saleType: 'CC',
+        lines: [line('ART-OFFLINE')],
       );
 
       final result = await PedidosOfflineService.syncPendingOrdersWithResult(
@@ -1094,15 +1121,17 @@ void main() {
       final failedSyncs = PedidosOfflineService.getFailedSyncs();
       final failed = failedSyncs.single as Map;
 
-      expect(result["synced"], 0);
-      expect(result["failed"], 1);
-      expect(result["preservedFailures"], 1);
-      expect(failed["status"], "failed");
-      expect(failed["error"].toString(), contains("no confirmado"));
-      expect(failed["clientRequestId"].toString(),
-          matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
+      expect(result['synced'], 0);
+      expect(result['failed'], 1);
+      expect(result['preservedFailures'], 1);
+      expect(failed['status'], 'failed');
+      expect(failed['error'].toString(), contains('no confirmado'));
+      expect(
+        failed['clientRequestId'].toString(),
+        matches(RegExp(r'^[A-Za-z0-9]{8,28}$')),
+      );
 
-      final syncKey = failed["syncKey"].toString();
+      final syncKey = failed['syncKey'].toString();
       expect(await PedidosOfflineService.retryFailedSync(syncKey), isTrue);
       expect(PedidosOfflineService.getPendingSyncs(), hasLength(1));
     });

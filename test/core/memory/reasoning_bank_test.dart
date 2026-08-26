@@ -35,7 +35,9 @@ void main() {
         // Assert
         expect(embedding1.length, ReasoningBank.embeddingDimension);
         expect(
-            embedding1, equals(embedding2)); // Mismos inputs = mismos outputs
+          embedding1,
+          equals(embedding2),
+        ); // Mismos inputs = mismos outputs
       });
 
       test('should generate different embeddings for different products', () {
@@ -97,9 +99,13 @@ void main() {
 
         // Assert
         final profile = reasoningBank.getUserProfile(userId);
-        final viewScore = profile?['productScores']?['product_view'] ?? 0;
+        final viewScore =
+            (profile?['productScores']?['product_view'] as num?)?.toDouble() ??
+                0;
         final purchaseScore =
-            profile?['productScores']?['product_purchase'] ?? 0;
+            (profile?['productScores']?['product_purchase'] as num?)
+                    ?.toDouble() ??
+                0;
 
         expect(purchaseScore, greaterThan(viewScore));
       });

@@ -226,7 +226,7 @@ class EntregasHeader extends ConsumerWidget {
       'Jueves',
       'Viernes',
       'Sábado',
-      'Domingo'
+      'Domingo',
     ];
     final meses = [
       'Ene',
@@ -240,7 +240,7 @@ class EntregasHeader extends ConsumerWidget {
       'Sep',
       'Oct',
       'Nov',
-      'Dic'
+      'Dic',
     ];
     return '${dias[fecha.weekday - 1]}, ${fecha.day} ${meses[fecha.month - 1]} ${fecha.year}';
   }

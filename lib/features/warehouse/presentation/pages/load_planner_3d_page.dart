@@ -308,10 +308,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
     // Calculate balance
     final t = r.truck;
-    final double cL =
+    final cL =
         t != null ? math.max(t.interior.lengthCm, 250).toDouble() : 250.0;
-    final double cW =
-        t != null ? math.max(t.interior.widthCm, 160).toDouble() : 160.0;
+    final cW = t != null ? math.max(t.interior.widthCm, 160).toDouble() : 160.0;
     final axle = AxleBalanceHelper.axleDistribution(r.placed, cL);
     final lat = AxleBalanceHelper.lateralDistribution(r.placed, cW);
     final balanced = AxleBalanceHelper.isBalanced(r.placed, cL, cW);
@@ -720,8 +719,10 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         children: [
           Icon(icon, color: Colors.white54, size: 20),
           const SizedBox(width: 12),
-          Text('$label:',
-              style: const TextStyle(color: Colors.white54, fontSize: 14)),
+          Text(
+            '$label:',
+            style: const TextStyle(color: Colors.white54, fontSize: 14),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -884,10 +885,16 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 _viewModeBtn(
-                    ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
+                  ViewMode.perspective,
+                  Icons.view_in_ar_rounded,
+                  '3D',
+                ),
                 _viewModeBtn(ViewMode.top, Icons.grid_on_rounded, 'Sup'),
                 _viewModeBtn(
-                    ViewMode.front, Icons.view_agenda_rounded, 'Front'),
+                  ViewMode.front,
+                  Icons.view_agenda_rounded,
+                  'Front',
+                ),
               ],
             ),
           ),
@@ -1575,8 +1582,11 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           const SizedBox(width: 6),
           GestureDetector(
             onTap: () => setState(() => _selectedBoxId = null),
-            child: const Icon(Icons.close_rounded,
-                color: Colors.white30, size: 18),
+            child: const Icon(
+              Icons.close_rounded,
+              color: Colors.white30,
+              size: 18,
+            ),
           ),
         ],
       ),
@@ -1689,8 +1699,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   Widget _buildAxleBalance() {
     final placed = _result!.placed;
     final t = _result!.truck!;
-    final double cL = math.max(t.interior.lengthCm, 250).toDouble();
-    final double cW = math.max(t.interior.widthCm, 160).toDouble();
+    final cL = math.max(t.interior.lengthCm, 250).toDouble();
+    final cW = math.max(t.interior.widthCm, 160).toDouble();
 
     final axle = AxleBalanceHelper.axleDistribution(placed, cL);
     final lat = AxleBalanceHelper.lateralDistribution(placed, cW);

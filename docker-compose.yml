@@ -1,9 +1,14 @@
-# GMP App Mobilidad - Production Docker Compose
-# Usage: docker compose up -d (prod) | docker compose --profile dev up -d (dev)
-# Note: DB2 cannot be containerized. Configure external DB2 via .env
+# GMP App Mobilidad - Docker Compose
+# Prod : docker compose up -d
+# Dev  : docker compose --profile dev up -d
+#
+# DB2 is NOT containerized: AS400 stays remote via ODBC DSN (192.168.1.22).
+# App credentials live in ONE file: .env.docker (gitignored, never commit).
+#   Copy your existing backend runtime values there; compose injects them via
+#   env_file so this YAML stays free of credential names and values.
 
 services:
-  # ─── Backend API ───────────────────────────────────────────────────────
+  # ─── Backend API (production image) ────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -13,22 +18,13 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-3335}:${PORT:-3335}"
-    environment:
-      - NODE_ENV=production
-      - PORT=${PORT:-3335}
-      - ODBC_DSN=${ODBC_DSN:-GMP}
-      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-      - JWT_SECRET=${JWT_SECRET}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispassword}
-      - CORS_ORIGIN=${CORS_ORIGIN}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+    env_file:
+      - ./.env.docker
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "-A", "GMP-SRE-HealthCheck/1.0", "http://localhost:${PORT:-3335}/api/ready"]
+      test: ["CMD", "curl", "-fsS", "-A", "GMP-SRE-HealthCheck/1.0", "http://localhost:${PORT:-3335}/api/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -44,24 +40,29 @@ services:
           memory: 256M
           cpus: '0.5'
 
-  # ─── Redis Cache (L2) ──────────────────────────────────────────────────
+  # ─── Redis Cache (L2) ──────────────────────────────────────────────────────
+  # Internal network only; host port bound to loopback for local inspection.
+  # If you ever expose it beyond loopback, add an ACL/user first.
   redis:
     image: redis:7-alpine
     container_name: gmp-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD:-redispassword}
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --appendonly yes
-      --save 60 1
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --appendonly
+      - "yes"
+      - --save
+      - 60 1
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redispassword}", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -74,19 +75,39 @@ services:
           memory: 256M
           cpus: '0.5'
 
-  # ─── Redis Commander (Dev only) ────────────────────────────────────────
+  # ─── Dev profile ───────────────────────────────────────────────────────────
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: gmp-backend-dev
+    profiles: [dev]
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3336}:3335"
+    env_file:
+      - ./.env.docker
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - gmp-network
+
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: gmp-redis-commander
+    profiles: [dev]
     restart: unless-stopped
     ports:
       - "${REDIS_COMMANDER_PORT:-8081}:8081"
     environment:
-      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD:-redispassword}
+      - REDIS_HOSTS=local:redis:6379
     depends_on:
       - redis
-    profiles:
-      - dev
     networks:
       - gmp-network
 
@@ -97,6 +118,3 @@ volumes:
 networks:
   gmp-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16

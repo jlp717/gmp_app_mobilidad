@@ -305,8 +305,8 @@ class BolsaProvider with ChangeNotifier {
   }
 
   Future<void> setPeriod({required int year, required int month}) async {
-    final boundedMonth = month.clamp(1, 12).toInt();
-    final boundedYear = year.clamp(2020, 2030).toInt();
+    final boundedMonth = month.clamp(1, 12);
+    final boundedYear = year.clamp(2020, 2030);
     if (_selectedYear == boundedYear && _selectedMonth == boundedMonth) {
       return;
     }

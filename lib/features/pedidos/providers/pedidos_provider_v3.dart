@@ -745,7 +745,7 @@ class PedidosProviderV3 with ChangeNotifier {
         observaciones: fullObservaciones,
       );
 
-      if (createResult == null || createResult['id'] == null) {
+      if (createResult['id'] == null) {
         _error = 'Error al crear el pedido';
         return null;
       }
@@ -757,7 +757,7 @@ class PedidosProviderV3 with ChangeNotifier {
       );
 
       // Check if confirmation was blocked due to stock issues
-      if (confirmedResult != null && confirmedResult['blocked'] == true) {
+      if (confirmedResult['blocked'] == true) {
         // Stock validation failed - return the blocked result so UI can show alternatives
         _error = confirmedResult['message'] ?? 'Stock insuficiente';
         return confirmedResult;
@@ -776,10 +776,10 @@ class PedidosProviderV3 with ChangeNotifier {
       // Refresh in background
       refreshOrdersAndStats();
 
-      if (confirmedResult != null && confirmedResult['header'] != null) {
+      if (confirmedResult['header'] != null) {
         return confirmedResult['header'] as Map<String, dynamic>;
       }
-      return createResult as Map<String, dynamic>;
+      return createResult;
     } catch (e) {
       _error = e.toString();
       return null;

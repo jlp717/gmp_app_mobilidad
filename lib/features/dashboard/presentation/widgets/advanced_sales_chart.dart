@@ -34,8 +34,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
 
     final topItems = widget.matrixData.take(12).toList();
     // Simple max calculation
-    double maxY =
-        topItems.map((e) => e.sales).fold(0.0, (a, b) => a > b ? a : b);
+    var maxY =
+        topItems.map((e) => e.sales).fold<double>(0.0, (a, b) => a > b ? a : b);
     maxY = maxY * 1.1;
 
     return Container(
@@ -82,7 +82,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                           'vendor': 'COMERCIALES',
                           'client': 'CLIENTES',
                           'product': 'PRODUCTOS',
-                          'family': 'FAMILIAS'
+                          'family': 'FAMILIAS',
                         };
                         return map[type] ?? type.toUpperCase();
                       }()}',
@@ -114,11 +114,14 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                   children: [
                     Icon(Icons.bar_chart, size: 14, color: widget.color),
                     const SizedBox(width: 6),
-                    Text('Analítica',
-                        style: TextStyle(
-                            color: widget.color,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                    Text(
+                      'Analítica',
+                      style: TextStyle(
+                        color: widget.color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -142,17 +145,19 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                       return BarTooltipItem(
                         '${node.name}\n',
                         const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14),
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                         children: [
                           TextSpan(
                             text:
                                 '${CurrencyFormatter.formatWhole(node.sales)} €',
                             style: TextStyle(
-                                color: widget.color,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500),
+                              color: widget.color,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       );
@@ -189,8 +194,9 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
 
                         // Smart label truncation
                         var label = node.name;
-                        if (label.length > 12)
+                        if (label.length > 12) {
                           label = '${label.substring(0, 10)}..';
+                        }
 
                         return Padding(
                           padding: const EdgeInsets.only(top: 10),
@@ -221,10 +227,13 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         if (value == 0) return const SizedBox();
                         // User requested full numbers: "4.000.000 €"
                         return Text(
-                            CurrencyFormatter.formatWhole(value)
-                                .replaceAll(' €', ''),
-                            style: const TextStyle(
-                                color: Colors.white24, fontSize: 10));
+                          CurrencyFormatter.formatWhole(value)
+                              .replaceAll(' €', ''),
+                          style: const TextStyle(
+                            color: Colors.white24,
+                            fontSize: 10,
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -234,8 +243,9 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 gridData: FlGridData(
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      strokeWidth: 1),
+                    color: Colors.white.withValues(alpha: 0.06),
+                    strokeWidth: 1,
+                  ),
                 ),
                 borderData: FlBorderData(show: false),
                 barGroups: topItems.asMap().entries.map((entry) {
@@ -259,7 +269,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         ),
                         width: 16,
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(8)),
+                          top: Radius.circular(8),
+                        ),
                         backDrawRodData: BackgroundBarChartRodData(
                           show: true,
                           toY: maxY,

@@ -105,8 +105,11 @@ class CobrosSummaryCard extends StatelessWidget {
                                   ? AppTheme.success
                                   : AppTheme.info,
                               fontWeight: FontWeight.bold,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 16, large: 22),
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 16,
+                                large: 22,
+                              ),
                             ),
                           ),
                           Text(
@@ -168,8 +171,11 @@ class CobrosSummaryCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber,
-                      color: AppTheme.error, size: 20),
+                  const Icon(
+                    Icons.warning_amber,
+                    color: AppTheme.error,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

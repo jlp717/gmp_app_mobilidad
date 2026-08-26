@@ -5,21 +5,25 @@ import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 void main() {
   group('LazyIndexedStack Tests', () {
     testWidgets('renders only active child initially', (tester) async {
-      int buildCount = 0;
+      var buildCount = 0;
 
       await tester.pumpWidget(
         MaterialApp(
           home: LazyIndexedStack(
             index: 0,
             children: [
-              Builder(builder: (context) {
-                buildCount++;
-                return const Text('Page 0');
-              }),
-              Builder(builder: (context) {
-                buildCount++;
-                return const Text('Page 1');
-              }),
+              Builder(
+                builder: (context) {
+                  buildCount++;
+                  return const Text('Page 0');
+                },
+              ),
+              Builder(
+                builder: (context) {
+                  buildCount++;
+                  return const Text('Page 1');
+                },
+              ),
             ],
           ),
         ),
@@ -31,7 +35,7 @@ void main() {
     });
 
     testWidgets('renders correct child when index changes', (tester) async {
-      int currentIndex = 0;
+      var currentIndex = 0;
 
       await tester.pumpWidget(
         StatefulBuilder(
@@ -68,7 +72,7 @@ void main() {
 
     testWidgets('preserves state of previously active children',
         (tester) async {
-      int counterValue = 0;
+      var counterValue = 0;
 
       await tester.pumpWidget(
         StatefulBuilder(
@@ -122,11 +126,11 @@ void main() {
 
     testWidgets('respects alignment parameter', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: LazyIndexedStack(
             index: 0,
             alignment: Alignment.center,
-            children: const [
+            children: [
               Text('Centered'),
             ],
           ),
@@ -138,11 +142,11 @@ void main() {
 
     testWidgets('respects sizing parameter', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: LazyIndexedStack(
             index: 0,
             sizing: StackFit.expand,
-            children: const [
+            children: [
               Text('Expanded'),
             ],
           ),
@@ -154,10 +158,10 @@ void main() {
 
     testWidgets('activates correct index on init', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: LazyIndexedStack(
             index: 2,
-            children: const [
+            children: [
               Text('Page 0'),
               Text('Page 1'),
               Text('Page 2'),

@@ -222,8 +222,10 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   children: [
                     Icon(Icons.info_outline, color: Colors.white38, size: 18),
                     SizedBox(width: 8),
-                    Text('Sin tarifa disponible',
-                        style: TextStyle(color: Colors.white54, fontSize: 13)),
+                    Text(
+                      'Sin tarifa disponible',
+                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                    ),
                   ],
                 ),
               ),
@@ -265,9 +267,10 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                           Text(
                             _abbreviate(ct.description),
                             style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600),
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -282,8 +285,9 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                       Text(
                         '(${_fmt(ct.precioUnitario)} €/$unitAbbr)',
                         style: TextStyle(
-                            color: orange.withValues(alpha: 0.75),
-                            fontSize: 11),
+                          color: orange.withValues(alpha: 0.75),
+                          fontSize: 11,
+                        ),
                       ),
                   ],
                 ),
@@ -345,14 +349,18 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                           Text(
                             _abbreviate(t.description),
                             style: const TextStyle(
-                                color: Colors.white70, fontSize: 12),
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             '${_fmt(t.price)} €/cj',
                             style: const TextStyle(
-                                color: Colors.white54, fontSize: 11),
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),
@@ -361,7 +369,9 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                       Text(
                         '(${_fmt(t.precioUnitario)} €/$unitAbbr)',
                         style: const TextStyle(
-                            color: Colors.white38, fontSize: 11),
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
                       ),
                   ],
                 ),
@@ -380,7 +390,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   foregroundColor: Colors.white54,
                   side: const BorderSide(color: AppTheme.borderColor),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 child: const Text('CANCELAR', style: TextStyle(fontSize: 13)),
               ),
@@ -398,13 +409,16 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   label: Text(
                     'ACEPTAR  ${_fmt(_priceForSelection(_selected))} €/${_unitAbbr(p.displayUnit)}',
                     style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.bold),
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),

@@ -70,3 +70,38 @@ defaults de produccion dentro de controllers). Sin awilix — YAGNI.
 objectives.js (cx106), repartidor.js (78), entregas.js (53), warehouse.js (45),
 resto de planner.js y dashboard.js (matrix-data, recent-sales...).
 Misma receta: mover SQL a repositories, caso de uso a service, controller fino.
+
+## 5. Cierre de WARNs de la entrega (2026-08-26)
+
+Todos los WARN registrados en el informe del Prompt 3 quedan resueltos:
+
+1. **Plugin `require-green-tests` v3** (`.opencode/plugins/require-green-tests.ts`):
+   la lane Dart usaba `dart test`, estructuralmente incapaz de cargar Flutter
+   (`dart:ui`) en Windows -> rojo permanente. Ahora detecta pubspec con
+   `sdk: flutter` y ejecuta `flutter test`; si falta toolchain hace SKIP con
+   aviso (WARN no bloqueante). Nota: el runtime carga plugins al arranque;
+   requiere reinicio de OpenCode para que la v3 tome efecto.
+2. **Schemas duplicados finanzas**: TODOS los esquemas zod y helpers de selector
+   viven ahora en `src/validators/repartidorFinanzas.validators.js` (fuente unica,
+   29 exports). El route file importa; bloque local eliminado (-203 lineas).
+   Suite repartidor-finanzas: 61 tests verdes.
+3. **Split `DashboardService.getMetrics` (cx37)**: descompuesto en
+   `_resolvePeriod/_fetchPeriodAggregates/_computeTodaySales/_normalizeAggregates/
+   _enrichWithBSales/_buildMetricsPayload/_fetchWeeklyEvolution/_fetchMonthlyEvolution`.
+   Maximo ciclomatico resultante: cx12 (`_buildMetricsPayload`, calculo puro).
+4. **`getBSalesByVendor` fuera de utils/common**: SQL + cache acotada viven en
+   `src/repositories/bSales.repository.js` (`BSalesRepository`,
+   query/cache inyectables). `utils/common` queda como delegador delgado
+   (`getBSalesByVendor` y `getBSales`) para consumers legacy (objectives,
+   commissions); helpers puros ahora exportados.
+
+Regresion final: `npm run test:ci` => **143 passed / 7 suites** (identico a pre-cambios).
+
+## 6. Comando de auditoria de complejidad (reproducible)
+
+```bash
+cd backend
+$env:ESLINT_USE_FLAT_CONFIG='false'
+npx eslint -c .eslintrc-complexity.cjs --format json "routes/*.js"
+```
+(El fichero `.eslintrc-complexity.cjs` se regenera on-demand; contenido en git history.)

@@ -348,3 +348,11 @@ docs/opencode-agent-governance/evals/canary-markers/
 !backend/.env.example
 .semgrep/
 backend/.eslintrc-complexity.cjs
+
+
+# Agent/browser and local state artifacts (never versioned)
+.playwright-mcp/
+tmp/
+.flutter/
+.flutter_tool_state/
+.codex/graph-runs/

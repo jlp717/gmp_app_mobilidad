@@ -21,6 +21,15 @@ router.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+// Liveness probe — no DB/Redis. Used by Docker HEALTHCHECK so the container
+// stays alive while DB2 is briefly down; /api/ready reports real readiness.
+router.get('/health/live', (_req: Request, res: Response) => {
+  res.json({
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Detailed health with DB and Redis checks
 router.get('/api/health', async (_req: Request, res: Response) => {
   const checks: Record<string, { status: string; responseTime?: number }> = {};

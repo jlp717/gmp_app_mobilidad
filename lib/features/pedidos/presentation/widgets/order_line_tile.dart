@@ -491,7 +491,9 @@ class OrderLineTile extends StatelessWidget {
                     if (!visible) return const SizedBox.shrink();
                     return Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 3),
+                        horizontal: 5,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: marginColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
@@ -556,7 +558,7 @@ class _LineDiscountChip extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, 0.0),
+              onPressed: () => Navigator.pop(ctx, 0),
               child: const Text('Quitar'),
             ),
             TextButton(
@@ -567,7 +569,7 @@ class _LineDiscountChip extends StatelessWidget {
               onPressed: () {
                 final raw = controller.text.replaceAll(',', '.').trim();
                 final parsed = double.tryParse(raw) ?? 0;
-                final clamped = parsed.clamp(0.0, 100.0).toDouble();
+                final clamped = parsed.clamp(0.0, 100.0);
                 Navigator.pop(ctx, clamped);
               },
               child: const Text('Aplicar'),

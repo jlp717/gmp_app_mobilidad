@@ -188,7 +188,9 @@ class AsyncOperationModal extends StatelessWidget {
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                     ),
                     child: const Text('Cancelar'),
                   ),
@@ -237,8 +239,11 @@ class AsyncOperationModal extends StatelessWidget {
             color: AppTheme.success.withValues(alpha: 0.15),
             border: Border.all(color: AppTheme.success, width: 2),
           ),
-          child: const Icon(Icons.check_rounded,
-              color: AppTheme.success, size: 32),
+          child: const Icon(
+            Icons.check_rounded,
+            color: AppTheme.success,
+            size: 32,
+          ),
         );
       case _ModalState.error:
         return Container(
@@ -249,8 +254,11 @@ class AsyncOperationModal extends StatelessWidget {
             color: AppTheme.error.withValues(alpha: 0.15),
             border: Border.all(color: AppTheme.error, width: 2),
           ),
-          child: const Icon(Icons.error_outline_rounded,
-              color: AppTheme.error, size: 32),
+          child: const Icon(
+            Icons.error_outline_rounded,
+            color: AppTheme.error,
+            size: 32,
+          ),
         );
     }
   }

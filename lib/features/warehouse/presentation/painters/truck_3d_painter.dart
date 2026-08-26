@@ -49,9 +49,9 @@ class TruckPainter extends CustomPainter {
     final t = result.truck!;
 
     // Structural floor: ensure minimum paint dimensions
-    final double cW = math.max(t.interior.widthCm, 160).toDouble();
-    final double cD = math.max(t.interior.lengthCm, 250).toDouble();
-    final double cH = math.max(t.interior.heightCm, 150).toDouble();
+    final cW = math.max(t.interior.widthCm, 160).toDouble();
+    final cD = math.max(t.interior.lengthCm, 250).toDouble();
+    final cH = math.max(t.interior.heightCm, 150).toDouble();
     final isVan = t.interior.lengthCm > 0 && t.interior.lengthCm < 400;
 
     final ox = -cW / 2;
@@ -203,8 +203,8 @@ class TopViewPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (result.truck == null) return;
     final t = result.truck!;
-    final double cW = math.max(t.interior.widthCm, 160).toDouble();
-    final double cD = math.max(t.interior.lengthCm, 250).toDouble();
+    final cW = math.max(t.interior.widthCm, 160).toDouble();
+    final cD = math.max(t.interior.lengthCm, 250).toDouble();
 
     // Calculate scale to fit in canvas with padding
     const pad = 40.0;
@@ -313,8 +313,10 @@ class TopViewPainter extends CustomPainter {
       Rect.fromLTWH(offsetX - 5, cabY, cW * scale + 10, 35),
       const Radius.circular(8),
     );
-    canvas.drawRRect(cabRect,
-        Paint()..color = const Color(0xFF1E40AF).withValues(alpha: 0.7));
+    canvas.drawRRect(
+      cabRect,
+      Paint()..color = const Color(0xFF1E40AF).withValues(alpha: 0.7),
+    );
     canvas.drawRRect(
       cabRect,
       Paint()
@@ -398,8 +400,8 @@ class FrontViewPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (result.truck == null) return;
     final t = result.truck!;
-    final double cW = math.max(t.interior.widthCm, 160).toDouble();
-    final double cH = math.max(t.interior.heightCm, 150).toDouble();
+    final cW = math.max(t.interior.widthCm, 160).toDouble();
+    final cH = math.max(t.interior.heightCm, 150).toDouble();
 
     const pad = 40.0;
     final scaleX = (size.width - pad * 2) / cW;
@@ -457,8 +459,10 @@ class FrontViewPainter extends CustomPainter {
       // Fill with slight transparency for depth
       final depthAlpha = 0.4 +
           (b.y / (t.interior.lengthCm > 0 ? t.interior.lengthCm : 1)) * 0.5;
-      canvas.drawRect(rect,
-          Paint()..color = color.withValues(alpha: depthAlpha.clamp(0.4, 0.9)));
+      canvas.drawRect(
+        rect,
+        Paint()..color = color.withValues(alpha: depthAlpha.clamp(0.4, 0.9)),
+      );
       canvas.drawRect(
         rect,
         Paint()
@@ -480,16 +484,20 @@ class FrontViewPainter extends CustomPainter {
           text: TextSpan(
             text: label,
             style: TextStyle(
-                color: textColor,
-                fontSize: math.min(rect.height * 0.35, 9).toDouble(),
-                fontWeight: FontWeight.bold),
+              color: textColor,
+              fontSize: math.min(rect.height * 0.35, 9).toDouble(),
+              fontWeight: FontWeight.bold,
+            ),
           ),
           textDirection: TextDirection.ltr,
         )..layout(maxWidth: rect.width - 2);
         tp.paint(
-            canvas,
-            Offset(
-                rect.center.dx - tp.width / 2, rect.center.dy - tp.height / 2));
+          canvas,
+          Offset(
+            rect.center.dx - tp.width / 2,
+            rect.center.dy - tp.height / 2,
+          ),
+        );
       }
     }
 
@@ -508,7 +516,10 @@ class FrontViewPainter extends CustomPainter {
             toScreen(weightX / totalWeight, weightZ / totalWeight);
         // CoG marker
         canvas.drawCircle(
-            cogScreen, 6, Paint()..color = const Color(0xFFFF6B6B));
+          cogScreen,
+          6,
+          Paint()..color = const Color(0xFFFF6B6B),
+        );
         canvas.drawCircle(
           cogScreen,
           6,
@@ -522,20 +533,26 @@ class FrontViewPainter extends CustomPainter {
           text: const TextSpan(
             text: 'CdG',
             style: TextStyle(
-                color: Color(0xFFFF6B6B),
-                fontSize: 8,
-                fontWeight: FontWeight.bold),
+              color: Color(0xFFFF6B6B),
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
         cogTp.paint(
-            canvas, Offset(cogScreen.dx - cogTp.width / 2, cogScreen.dy + 10));
+          canvas,
+          Offset(cogScreen.dx - cogTp.width / 2, cogScreen.dy + 10),
+        );
       }
     }
 
     // Dimensions
     const dimStyle = TextStyle(
-        color: Color(0xAAFFFFFF), fontSize: 9, fontWeight: FontWeight.w500);
+      color: Color(0xAAFFFFFF),
+      fontSize: 9,
+      fontWeight: FontWeight.w500,
+    );
     final wTp = TextPainter(
       text: TextSpan(text: '${cW.round()} cm', style: dimStyle),
       textDirection: TextDirection.ltr,

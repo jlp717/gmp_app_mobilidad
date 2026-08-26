@@ -4,10 +4,9 @@ import 'package:go_router/go_router.dart';
 class PremiumSlideRoute<T> extends PageRouteBuilder<T> {
   PremiumSlideRoute({
     required Widget page,
-    RouteSettings? settings,
+    super.settings,
     Duration duration = const Duration(milliseconds: 220),
   }) : super(
-          settings: settings,
           pageBuilder: (context, animation, secondaryAnimation) => page,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             final curved = CurvedAnimation(
@@ -35,10 +34,9 @@ class PremiumSlideRoute<T> extends PageRouteBuilder<T> {
 class PremiumFadeRoute<T> extends PageRouteBuilder<T> {
   PremiumFadeRoute({
     required Widget page,
-    RouteSettings? settings,
+    super.settings,
     Duration duration = const Duration(milliseconds: 180),
   }) : super(
-          settings: settings,
           pageBuilder: (context, animation, secondaryAnimation) => page,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(
@@ -58,10 +56,9 @@ class PremiumFadeRoute<T> extends PageRouteBuilder<T> {
 class PremiumScaleRoute<T> extends PageRouteBuilder<T> {
   PremiumScaleRoute({
     required Widget page,
-    RouteSettings? settings,
+    super.settings,
     Duration duration = const Duration(milliseconds: 200),
   }) : super(
-          settings: settings,
           pageBuilder: (context, animation, secondaryAnimation) => page,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             final curved = CurvedAnimation(

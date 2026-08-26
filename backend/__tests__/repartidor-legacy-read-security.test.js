@@ -693,7 +693,7 @@ describe('document ownership and side-effect contracts', () => {
   });
 
   test('server routes document email through the finance write guard', () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
     expect(source).toMatch(
       /req\.path === '\/document\/send-email'[\s\S]{0,120}repartoFinanceWriteGuard/,
     );

@@ -24,11 +24,10 @@ class DashboardRepository {
         return this._cachedQuery(this._queryWithParams, sql, cacheKey, ttl, params);
     }
 
-    /** Ventas B por vendedor: delega en el helper existente (misma SQL/cache). */
-    // ponytail: reutiliza getBSalesByVendor de utils/common; extraer su SQL aqui si se toca esa zona.
+    /** Ventas B por vendedor: acceso via BSalesRepository (SQL+cache ahi). */
     fetchBSalesByVendor(year, vendorScope) {
-        const { getBSalesByVendor } = require('../../utils/common');
-        return getBSalesByVendor(year, vendorScope);
+        const { bSalesRepository } = require('./bSales.repository');
+        return bSalesRepository.getByVendor(year, vendorScope);
     }
 }
 

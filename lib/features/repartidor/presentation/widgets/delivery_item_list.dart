@@ -122,8 +122,11 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                 color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.warning_amber,
-                  color: AppTheme.error, size: 20),
+              child: const Icon(
+                Icons.warning_amber,
+                color: AppTheme.error,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             const Expanded(
@@ -151,7 +154,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               decoration: InputDecoration(
                 hintText: 'Ingrese el motivo de la no entrega...',
                 hintStyle: TextStyle(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                ),
                 filled: true,
                 fillColor: AppTheme.softPanel,
                 border: OutlineInputBorder(
@@ -169,7 +173,9 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
             Text(
               '* Las observaciones son obligatorias',
               style: TextStyle(
-                  color: AppTheme.error.withValues(alpha: 0.7), fontSize: 11),
+                color: AppTheme.error.withValues(alpha: 0.7),
+                fontSize: 11,
+              ),
             ),
           ],
         ),
@@ -181,8 +187,10 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               item.quantityDelivered = item.quantityOrdered;
               Navigator.of(ctx).pop();
             },
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -228,8 +236,11 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined,
-                size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 48,
+              color: AppTheme.textSecondary.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 12),
             const Text(
               'Sin items para entregar',
@@ -311,7 +322,9 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.info.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(4),
@@ -373,7 +386,9 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                       const Text(
                         'uds',
                         style: TextStyle(
-                            fontSize: 9, color: AppTheme.textSecondary),
+                          fontSize: 9,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -397,8 +412,11 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.note_alt,
-                        color: AppTheme.error.withValues(alpha: 0.7), size: 14),
+                    Icon(
+                      Icons.note_alt,
+                      color: AppTheme.error.withValues(alpha: 0.7),
+                      size: 14,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
