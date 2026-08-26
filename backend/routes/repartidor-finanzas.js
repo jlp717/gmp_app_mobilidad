@@ -639,7 +639,7 @@ async function invalidateFinanceCaches(repartidorId) {
   const patterns = [
     `query:repartidor:finance:${repartidorId}:*`,
     `repartidor:finance:${repartidorId}:*`,
-    `query:repartidor:collections:${repartidorId}:*`,
+    `query:repartidor:collections:*`,
   ];
   for (const pattern of patterns) {
     try {

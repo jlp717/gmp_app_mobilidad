@@ -706,15 +706,22 @@ async function loadCollectionsInBatches(repartidorIds, load, keyFields) {
   const ids = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   const batches = [];
   for (let index = 0; index < ids.length; index += COLLECTION_DRIVER_BATCH_SIZE) batches.push(ids.slice(index, index + COLLECTION_DRIVER_BATCH_SIZE));
-  const settled = await Promise.allSettled(batches.map((batch) => load(batch)));
-  const successful = settled.filter((result) => result.status === 'fulfilled').map((result) => result.value || []);
+  const successful = [];
+  let failedBatches = 0;
+  for (const batch of batches) {
+    try {
+      successful.push((await load(batch)) || []);
+    } catch (_error) {
+      failedBatches += 1;
+    }
+  }
   if (!successful.length) {
     const error = new Error('REPARTIDOR_COLLECTIONS_UNAVAILABLE');
     error.code = 'REPARTIDOR_COLLECTIONS_UNAVAILABLE';
     throw error;
   }
   const rows = mergeCollectionRows(successful, keyFields);
-  Object.defineProperty(rows, 'batchStatus', { value: successful.length === settled.length ? 'AVAILABLE' : 'PARTIAL' });
+  Object.defineProperty(rows, 'batchStatus', { value: failedBatches > 0 ? 'PARTIAL' : 'AVAILABLE' });
   return rows;
 }
 
@@ -1686,15 +1693,17 @@ async function getAppCollectedOverlay({ month, year, repartidorIds } = {}) {
   }
   try {
     const placeholders = ids.map(() => '?').join(',');
-    const rows = await runQueryWithParams(
+    const cacheKey = `repartidor:collections:overlay:${ids.join(',')}:${year}:${month}`;
+    const rows = await runCached(
       `SELECT DIACOBRO AS DIA, SUM(IMPORTEVENCIMIENTO) AS APP_COBRADO
          FROM ${cobrosTable}
         WHERE MESCOBRO = ?
           AND ANOCOBRO = ?
           AND TRIM(CODIGOVENDEDOR) IN (${placeholders})
         GROUP BY DIACOBRO`,
+      cacheKey,
+      TTL.REALTIME,
       [month, year, ...ids],
-      false,
     );
     const byDay = (Array.isArray(rows) ? rows : [])
       .map((row) => ({

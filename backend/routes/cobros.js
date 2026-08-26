@@ -36,6 +36,7 @@ async function invalidateCobrosCache(codigoCliente) {
             invalidateCachePattern(`query:query:cobros:pendientes:cvc:${cli}:*`),
             invalidateCachePattern(`query:query:cobros:historico:${cli}:*`),
             invalidateCachePattern('query:query:cobros:pending-summary:*'),
+            invalidateCachePattern('query:repartidor:collections:*'),
         ]);
     } catch (err) {
         logger.warn(`[COBROS] Cache invalidation skipped: ${err.message}`);
