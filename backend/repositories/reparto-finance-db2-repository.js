@@ -584,15 +584,21 @@ function createRepartoFinanceDb2Repository(options = {}) {
     WHERE ${balanceFilter.sql}
   `, balanceFilter.params);
       }
-      const testFilter = inClause(`TRIM(${info.balanceCodeColumn})`, ids);
-      const prodFilter = inClause(`TRIM(${info.balanceCodeColumn})`, ids);
+      const testFilter = inClause(`TRIM(T.${info.balanceCodeColumn})`, ids);
+      const prodFilter = inClause(`TRIM(P.${info.balanceCodeColumn})`, ids);
       return run(`
-    SELECT COALESCE(
-      (SELECT SUM(SALDO_PENDIENTE) FROM ${tables.balances} WHERE ${testFilter.sql}),
-      (SELECT SUM(SALDO_PENDIENTE) FROM ${overlay.production.balances} WHERE ${prodFilter.sql}),
-      0
-    ) AS SALDO_PENDIENTE
-    FROM SYSIBM.SYSDUMMY1
+    SELECT COALESCE((SELECT SUM(T.SALDO_PENDIENTE)
+                       FROM ${tables.balances} T
+                      WHERE ${testFilter.sql}), 0)
+         + COALESCE((SELECT SUM(P.SALDO_PENDIENTE)
+                       FROM ${overlay.production.balances} P
+                      WHERE ${prodFilter.sql}
+                        AND NOT EXISTS (
+                          SELECT 1
+                            FROM ${tables.balances} T2
+                           WHERE TRIM(T2.${info.balanceCodeColumn}) = TRIM(P.${info.balanceCodeColumn})
+                        )), 0) AS SALDO_PENDIENTE
+      FROM SYSIBM.SYSDUMMY1
   `, [...testFilter.params, ...prodFilter.params]);
     },
 
@@ -1447,7 +1453,12 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async selectDeliveredAmount({ ids, fromYmd, toYmd }) {
-      const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
+      const repFilter = ids.length === 1
+        ? inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids)
+        : {
+          sql: ids.map(() => 'TRIM(OPP.CODIGOREPARTIDOR) = ?').join(' OR '),
+          params: ids,
+        };
       return run(`
     SELECT COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_REPARTIDO
     FROM ${erpDataSchema}.OPP OPP
