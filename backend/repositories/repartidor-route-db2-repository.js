@@ -688,7 +688,7 @@ async function getCollectionsDailyBatch(selectedYear, selectedMonth, repartidorI
 }
 
 // DB2 CVC joins become unstable near the 20-code mark; keep manager-wide requests bounded.
-const COLLECTION_DRIVER_BATCH_SIZE = 10;
+const COLLECTION_DRIVER_BATCH_SIZE = 5;
 
 function mergeCollectionRows(groups, keyFields) {
   const numeric = ['TOTAL_COBRABLE', 'TOTAL_COBRADO', 'TOTAL_PENDIENTE', 'NUM_DOCUMENTOS', 'CVC_DOCUMENTOS', 'CVC_AMBIGUOUS_DOCUMENTS'];
