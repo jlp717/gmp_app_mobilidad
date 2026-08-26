@@ -33,6 +33,10 @@ const {
     buildVendedorFilterParameterized,
     buildVendedorFilterLACLAEParameterized
 } = require('../src/utils/dashboardFilters');
+const {
+    metricsController,
+    salesEvolutionController
+} = require('../src/controllers/dashboard.controller');
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
 const VOLATILE_CACHE_QUERY_KEYS = new Set(['forcerefresh', 'refresh', '_ts', 't', 'cachebust', 'cachebuster']);
