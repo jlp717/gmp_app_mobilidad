@@ -350,6 +350,24 @@ describe('network optimizer cache headers', () => {
     expect(secondRes.json).toHaveBeenCalledWith({ error: 'boom' });
   });
 
+  test('does not leave an unhandled rejection when the first response is not JSON', async () => {
+    const req = makeGetReq({ headers: { authorization: 'Bearer first-only-token' } });
+    const firstRes = makeEventedRes();
+    const unhandled = jest.fn();
+    const onUnhandled = () => unhandled();
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      responseCoalescing(req, firstRes, jest.fn());
+      firstRes.status(204);
+      firstRes.emit('finish');
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   test('force-refresh requests bypass response coalescing', () => {
     const req = makeGetReq({ query: { forceRefresh: 'true' } });
     const firstNext = jest.fn();

@@ -350,6 +350,7 @@ function responseCoalescing(req, res, next) {
         resolvePromise = resolve;
         rejectPromise = reject;
     });
+    promise.catch(() => {});
 
     pendingRequests.set(signature, {
         promise,
