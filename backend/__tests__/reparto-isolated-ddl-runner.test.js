@@ -168,7 +168,7 @@ describe('reparto isolated DDL pinned contract', () => {
       statementCount: 20,
     });
     expect(manifest.verifier).toMatchObject({
-      sha256: '0FAE018A237A2130A73C3D8DA95F923D2CA4B1DBFE2737EB4D8BCBBE6ED19CD6',
+      sha256: 'AB5CFF817C7E0E9D88A421885170B693C08DC032BC76CFEA5DC608C9911A8520',
       statementCount: 9,
     });
     for (const entry of [...Object.values(manifest.migrations), manifest.verifier]) {
