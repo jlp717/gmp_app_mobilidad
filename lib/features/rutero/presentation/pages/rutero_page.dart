@@ -680,14 +680,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                     onSearchChanged: (v) =>
                         setState(() => _searchQuery = v.toLowerCase()),
                     onSortChanged: _onSortChanged,
-                    onAlertTypeChanged: (v) => setState(() {
-                      _selectedAlertType = v;
-                      _loadDayClients();
-                    }),
-                    onOnlyWithAlertsChanged: (v) => setState(() {
-                      _onlyWithAlerts = v;
-                      _loadDayClients();
-                    }),
+                    onAlertTypeChanged: (v) {
+                      setState(() => _selectedAlertType = v);
+                      unawaited(_loadDayClients());
+                    },
+                    onOnlyWithAlertsChanged: (v) {
+                      setState(() => _onlyWithAlerts = v);
+                      unawaited(_loadDayClients());
+                    },
                   ),
                   Expanded(
                     child: _buildClientList(),
@@ -1382,9 +1382,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     if (result != null) {
       await _saveNewOrder(result);
     }
-
-    // SIEMPRE refrescar después de cerrar el diálogo
-    await _refreshDataAndCounts();
   }
 
   /// Refresca datos y contadores después de cambios
