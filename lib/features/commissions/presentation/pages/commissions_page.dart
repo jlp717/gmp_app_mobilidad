@@ -1547,16 +1547,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         ? 'Adelantado'
         : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
 
-    // Get payment authorization status
+    // Payment and PDF actions require an ERP-authorized supervisory claim.
+    // The user code is never used as an identity or privilege exception.
     final authState = ref.watch(authProvider).value;
-    final curUserCode = authState?.user?.code.trim() ?? '';
-    final curUserName = authState?.user?.name.toUpperCase() ?? '';
-    // Allow payment for ADMIN users or specifically DIEGO (code 98)
-    final normalizedCode = curUserCode.replaceFirst(RegExp('^0+'), '');
-    final canPay =
-        authState?.user?.tipoVendedor == 'ADMIN' || normalizedCode == '98';
-    // PDF generation is ONLY for DIEGO
-    final isDiego = curUserName == 'DIEGO' || normalizedCode == '98';
+    final currentUser = authState?.user;
+    final canManageCommissions = currentUser?.showCommissions == true &&
+        (currentUser?.isJefeVentas == true ||
+            currentUser?.role.toUpperCase() == 'ADMIN');
+    final canPay = canManageCommissions;
+    final isCommissionReportAuthorized = canManageCommissions;
 
     // PDF dialog
     void showPdfDialog() {
@@ -2271,7 +2270,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     ),
                     tooltip: 'Registrar Pago',
                   ),
-                if (isDiego) // PDF button - DIEGO only
+                if (isCommissionReportAuthorized) // ERP-authorized PDF report
                   IconButton(
                     icon: const Icon(
                       Icons.picture_as_pdf_rounded,
@@ -2973,12 +2972,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         return valB.compareTo(valA); // Descending
       });
 
-      // Get payment authorization status
+      // Reuse the ERP-backed authorization used by the single-vendor view.
       final authState = ref.watch(authProvider).value;
-      final curCode =
-          (authState?.user?.code.trim() ?? '').replaceFirst(RegExp('^0+'), '');
-      final canPay =
-          authState?.user?.tipoVendedor == 'ADMIN' || curCode == '98';
+      final currentUser = authState?.user;
+      final canPay = currentUser?.showCommissions == true &&
+          (currentUser?.isJefeVentas == true ||
+              currentUser?.role.toUpperCase() == 'ADMIN');
 
       return ColoredBox(
         color: AppTheme.inkSurface,

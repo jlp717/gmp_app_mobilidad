@@ -28,6 +28,8 @@ describe('ERP mobility role source contract', () => {
     expect(source).toMatch(/PERMITEPREVENTASN/i);
     expect(source).toMatch(/PERMITEREPARTOSN/i);
     expect(source).toMatch(/JEFEVENTASSN/i);
+    expect(source).toMatch(/FROM DSEDAC\.VDDX X/i);
+    expect(source).toMatch(/X\.PERMITEREPARTOSN/i);
     expect(source).toMatch(/permiteReparto && !permitePreventa/i);
     expect(source).not.toContain('CODIGOS_JEFES');
     expect(source).not.toContain('APP_USERS');
@@ -37,10 +39,14 @@ describe('ERP mobility role source contract', () => {
   test('Flutter navigation and scope utilities have no vendor-ID role exception', () => {
     const shell = readFromRepo('..', 'lib', 'features', 'dashboard', 'presentation', 'pages', 'main_shell.dart');
     const scope = readFromRepo('..', 'lib', 'core', 'utils', 'vendor_scope.dart');
+    const commissions = readFromRepo('..', 'lib', 'features', 'commissions', 'presentation', 'pages', 'commissions_page.dart');
 
     expect(shell).not.toMatch(/isCommercial80|normalizedUserCode/);
     expect(scope).not.toMatch(/commercial80|isCommercial80/i);
     expect(shell).toMatch(/final showCommissions = user\?\.showCommissions/);
     expect(scope).toMatch(/hasScopedVendorAccess/);
+    expect(commissions).not.toMatch(/normalizedCode\s*==\s*'98'|curCode\s*==\s*'98'|isDiego|specifically DIEGO/i);
+    expect(commissions).toMatch(/showCommissions/);
+    expect(commissions).toMatch(/isJefeVentas/);
   });
 });

@@ -89,15 +89,21 @@ class RolesService {
 
     private async _fetchConductores(): Promise<{ codigo: string; totalAlbaranes: number }[]> {
         try {
+            // The ERP mobility flags are authoritative. Historical deliveries
+            // may mention a person who is not an authorized driver.
             const resultado = await odbcPool.query<Record<string, unknown>[]>(`
-        SELECT 
-          TRIM(CODIGOCONDUCTOR) as CODIGO,
-          COUNT(*) as TOTAL
-        FROM DSEDAC.CAC
-        WHERE EJERCICIOALBARAN = 2026
-          AND CODIGOCONDUCTOR IS NOT NULL
-          AND TRIM(CODIGOCONDUCTOR) <> ''
-        GROUP BY TRIM(CODIGOCONDUCTOR)
+        SELECT
+          TRIM(X.CODIGOVENDEDOR) as CODIGO,
+          COUNT(CAC.NUMEROALBARAN) as TOTAL
+        FROM DSEDAC.VDDX X
+        LEFT JOIN DSEDAC.CAC CAC
+          ON TRIM(CAC.CODIGOCONDUCTOR) = TRIM(X.CODIGOVENDEDOR)
+         AND CAC.EJERCICIOALBARAN = 2026
+        WHERE TRIM(X.PERMITEREPARTOSN) = 'S'
+          AND COALESCE(TRIM(X.PERMITEPREVENTASN), '') <> 'S'
+          AND COALESCE(TRIM(X.JEFEVENTASSN), '') <> 'S'
+          AND TRIM(X.CODIGOVENDEDOR) <> ''
+        GROUP BY TRIM(X.CODIGOVENDEDOR)
         ORDER BY TOTAL DESC
         FETCH FIRST 50 ROWS ONLY
       `);
