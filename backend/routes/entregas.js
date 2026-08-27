@@ -407,7 +407,11 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                     AND OPP.MESREPARTO = ?
                     AND OPP.ANOREPARTO = ?)
               )
-        ` : '';
+        ` : `
+              AND OPP.DIAREPARTO = ?
+              AND OPP.MESREPARTO = ?
+              AND OPP.ANOREPARTO = ?
+        `;
         const sql = `
             WITH ranked_deliveries AS (
               SELECT

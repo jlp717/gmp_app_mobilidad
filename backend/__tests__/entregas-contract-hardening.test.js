@@ -122,7 +122,8 @@ describe('GET /pendientes contract', () => {
     expect(sql).toMatch(/ROW_NUMBER\(\) OVER\s*\(\s*PARTITION BY[\s\S]*CODIGOCLIENTEALBARAN/i);
     expect(sql).toMatch(/WHERE DELIVERY_RANK = 1[\s\S]*OFFSET \? ROWS FETCH NEXT \? ROWS ONLY/i);
     expect(sql).toContain('OFFSET ? ROWS FETCH NEXT ? ROWS ONLY');
-    expect(params.slice(-2)).toEqual([0, 101]);
+    expect(sql).toMatch(/OPP\.DIAREPARTO = \?[\s\S]*OPP\.MESREPARTO = \?[\s\S]*OPP\.ANOREPARTO = \?/i);
+    expect(params.slice(-5)).toEqual([3, 8, 2026, 0, 101]);
     expect(response.body).toEqual(expect.objectContaining({
       limit: 100, offset: 0, hasMore: true, nextOffset: 100,
       total: null, totalIsExact: false,
