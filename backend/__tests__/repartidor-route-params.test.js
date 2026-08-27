@@ -151,7 +151,7 @@ describe('Repartidor route parameter binding', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
     const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual(['05', '08', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '08', '4300030041', 2026, 0, 50]);
+    expect(params).toEqual(['05', '08', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '08', '05', '08', '4300030041', 2026, 0, 50]);
     expect(sql).toContain('OR EXISTS');
     expect(sql).toContain('C_SCOPE.REPARTIDOR_ID');
   });
@@ -176,8 +176,8 @@ describe('Repartidor route parameter binding', () => {
     expect(sql).toContain('WITH MATCHED_DELIVERIES');
     expect(sql).toContain('FROM DSEDAC.OPP OPP');
     expect(sql).toContain('FROM MATCHED_DELIVERIES DELIVERIES');
-    expect(sql).toContain('WHERE OPP.CODIGOREPARTIDOR IN (?)');
-    expect(sql).not.toContain('TRIM(OPP.CODIGOREPARTIDOR) IN');
+    expect(sql).toContain('WHERE (TRIM(OPP.CODIGOREPARTIDOR) IN (?)');
+    expect(sql).toContain('C_EFFECTIVE.REPARTIDOR_ID IS NOT NULL');
     expect(sql).toContain('CLI.DIRECCION');
     expect(sql).toContain('CLI.CODIGOPOSTAL');
     expect(sql).toContain('CLI.NIF');
@@ -192,6 +192,7 @@ describe('Repartidor route parameter binding', () => {
       '%MAYOR%',
     ]));
     expect(params[0]).toBe('05');
+    expect(params[1]).toBe('05');
     expect(params.slice(-2)).toEqual([0, 11]);
   });
   test('GET /pendientes binds a single repartidor id as parameter array', async () => {

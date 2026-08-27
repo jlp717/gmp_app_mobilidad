@@ -186,6 +186,33 @@ function confirmationOverlayStatusCases() {
   }).join('\n                    ');
 }
 
+function confirmationByAlbaranJoin(baseAlias = 'CAC', confirmationAlias = 'C_APP') {
+  const tables = confirmationStatusOverlayTables()[0];
+  if (!tables) return '';
+  return `LEFT JOIN ${tables.confirmations} ${confirmationAlias}
+          ON ${confirmationAlias}.DOCUMENTO_EJERCICIO = ${baseAlias}.EJERCICIOALBARAN
+         AND TRIM(${confirmationAlias}.DOCUMENTO_SERIE) = TRIM(${baseAlias}.SERIEALBARAN)
+         AND ${confirmationAlias}.DOCUMENTO_TERMINAL = ${baseAlias}.TERMINALALBARAN
+         AND ${confirmationAlias}.DOCUMENTO_NUMERO = ${baseAlias}.NUMEROALBARAN
+         AND UPPER(TRIM(${confirmationAlias}.STATUS)) IN ('ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO')`;
+}
+
+function confirmationScopedOwnerJoin(repartidorIds, documentAlias = 'CPC', confirmationAlias = 'C_EFFECTIVE') {
+  const ownerIds = [...new Set((repartidorIds || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean))];
+  const tables = confirmationStatusOverlayTables()[0];
+  if (!ownerIds.length || !tables) return { sql: '', params: [] };
+  return {
+    sql: `LEFT JOIN ${tables.confirmations} ${confirmationAlias}
+              ON TRIM(${confirmationAlias}.DOCUMENT_ID) = ${confirmationDocumentIdExpr(documentAlias)}
+             AND UPPER(TRIM(${confirmationAlias}.STATUS)) IN ('ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO')
+             AND TRIM(${confirmationAlias}.REPARTIDOR_ID) IN (${ownerIds.map(() => '?').join(',')})`,
+    params: ownerIds,
+    ownerExpression: `COALESCE(NULLIF(TRIM(${confirmationAlias}.REPARTIDOR_ID), ''), TRIM(OPP.CODIGOREPARTIDOR))`,
+  };
+}
+
 function jsonSafeScalar(value) {
   if (typeof value === 'bigint') return Number(value);
   return value;
@@ -425,9 +452,10 @@ const INVOICE_HEADER_COLS = `
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA`;
 
 async function resolveAlbaranOwners(key) {
+  const confirmationJoin = confirmationByAlbaranJoin('CAC', 'C_APP');
   return runQueryWithParams(`
         SELECT DISTINCT
-            TRIM(OPP.CODIGOREPARTIDOR) AS OWNER_ID,
+            COALESCE(NULLIF(TRIM(C_APP.REPARTIDOR_ID), ''), TRIM(OPP.CODIGOREPARTIDOR)) AS OWNER_ID,
             TRIM(CAC.CODIGOVENDEDOR) AS VENDOR_ID
         FROM DSEDAC.CAC CAC
         LEFT JOIN DSEDAC.CPC CPC
@@ -439,6 +467,7 @@ async function resolveAlbaranOwners(key) {
             ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
             AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+        ${confirmationJoin}
         WHERE CAC.EJERCICIOALBARAN = ?
           AND TRIM(CAC.SERIEALBARAN) = ?
           AND CAC.TERMINALALBARAN = ?
@@ -449,8 +478,9 @@ async function resolveAlbaranOwners(key) {
 }
 
 async function resolveInvoiceOwners(key) {
+  const confirmationJoin = confirmationByAlbaranJoin('CAC', 'C_APP');
   return runQueryWithParams(`
-        SELECT DISTINCT TRIM(OPP.CODIGOREPARTIDOR) AS OWNER_ID
+        SELECT DISTINCT COALESCE(NULLIF(TRIM(C_APP.REPARTIDOR_ID), ''), TRIM(OPP.CODIGOREPARTIDOR)) AS OWNER_ID
         FROM DSEDAC.CAC CAC
         INNER JOIN DSEDAC.CPC CPC
             ON CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
@@ -461,6 +491,7 @@ async function resolveInvoiceOwners(key) {
             ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
             AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+        ${confirmationJoin}
         WHERE CAC.EJERCICIOFACTURA = ?
           AND TRIM(CAC.SERIEFACTURA) = ?
           AND CAC.NUMEROFACTURA = ?
@@ -767,6 +798,7 @@ async function getClientDocuments({
 }) {
   const ids = repartidorIds;
   const confirmationScope = confirmationOwnerScopeClause(ids);
+  const effectiveOwnerJoin = confirmationScopedOwnerJoin(ids);
   const ownerFilter = `(
                 TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})
                 ${confirmationScope.sql}
@@ -816,7 +848,7 @@ async function getClientDocuments({
                     CPC.ANODOCUMENTO AS ANO, CPC.MESDOCUMENTO AS MES,
                     CPC.DIADOCUMENTO AS DIA,
                     TRIM(CPC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
-                    TRIM(OPP.CODIGOREPARTIDOR) AS DELIVERY_REPARTIDOR,
+                    ${effectiveOwnerJoin.ownerExpression || 'TRIM(OPP.CODIGOREPARTIDOR)'} AS DELIVERY_REPARTIDOR,
                     OPP.NUMEROORDENPREPARACION AS PREPARATION_ORDER_NUMBER,
                     OPP.EJERCICIOORDENPREPARACION AS PREPARATION_ORDER_YEAR,
                     CPC.IMPORTETOTAL,
@@ -836,6 +868,7 @@ async function getClientDocuments({
                     ) AS ALBARAN_RANK
                 FROM DSEDAC.CPC CPC
                 ${repartidorJoin}
+                ${effectiveOwnerJoin.sql}
                 ${dsJoin}
                 LEFT JOIN DSEDAC.CAC CAC_J
                     ON CAC_J.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
@@ -976,6 +1009,7 @@ async function getClientDocuments({
   const allParams = [
     ...ids,
     ...confirmationScope.params,
+    ...effectiveOwnerJoin.params,
     clientCode,
     ...yearFilterParams,
     ...dateParams,
@@ -1527,11 +1561,12 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
     'CLI.TELEFONO1',
     'CLI.TELEFONO2',
   ]);
+  const effectiveOwnerJoin = confirmationScopedOwnerJoin(ids);
   const sql = `
             WITH MATCHED_DELIVERIES AS (
                 SELECT DISTINCT
                     CPC.CODIGOCLIENTEALBARAN,
-                    OPP.CODIGOREPARTIDOR,
+                    ${effectiveOwnerJoin.ownerExpression || 'TRIM(OPP.CODIGOREPARTIDOR)'} AS CODIGOREPARTIDOR,
                     CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     CPC.IMPORTETOTAL,
                     CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
@@ -1540,7 +1575,9 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
                     ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                     AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
-                WHERE OPP.CODIGOREPARTIDOR IN (${ids.map(() => '?').join(', ')})
+                ${effectiveOwnerJoin.sql}
+                WHERE (TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(', ')})
+                    OR ${effectiveOwnerJoin.sql ? 'C_EFFECTIVE.REPARTIDOR_ID IS NOT NULL' : '1 = 0'})
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
             )
@@ -1564,7 +1601,7 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         `;
   // Reduce by repartidor before applying the intentionally flexible client search.
-  const params = [...ids, ...clientSearch.params];
+  const params = [...effectiveOwnerJoin.params, ...ids, ...clientSearch.params];
   // Extra row gives hasMore without a second aggregation query.
   params.push(pageOffset, pageLimit + 1);
   const cacheKey = `repartidor:clients:${ids.join(',')}:${clientSearch.cacheKey}:${pageLimit}:${pageOffset}`;

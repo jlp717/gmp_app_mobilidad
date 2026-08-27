@@ -263,7 +263,7 @@ describe('legacy repartidor read security contracts', () => {
     expect(sql).toContain('LOGICAL_POSITION > ?');
     expect(sql).toContain('LOGICAL_POSITION <= ?');
     expect(sql).not.toContain('OFFSET ? ROWS');
-    expect(params).toEqual(['05', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '4300030041', 2026, 20260801, 20260803, 10, 35]);
+    expect(params).toEqual(['05', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '05', '4300030041', 2026, 20260801, 20260803, 10, 35]);
     expect(response.body.pagination).toEqual({ limit: 25, offset: 10, hasMore: false, nextOffset: 10 });
   });
 
@@ -831,6 +831,6 @@ describe('client pagination beyond the first 100', () => {
       offset: 100,
       hasMore: true,
     });
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['05', 100, 26]);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['05', '05', 100, 26]);
   });
 });
