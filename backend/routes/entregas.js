@@ -649,10 +649,26 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             }
         }
 
+        // LAC is only needed while all header/tax sources are still zero.
+        // Normal priced deliveries are fully resolved by CPC/CAC and must not
+        // trigger one expensive LAC scan per document on manager routes.
+        const lineStatsDocuments = uniqueRows.filter((row) => {
+            const cpcNetoSum = [row.CPC_BASE1, row.CPC_BASE2, row.CPC_BASE3]
+                .reduce((sum, value) => sum + sanitizeErpAmount(value), 0);
+            const cpcIvaSum = [row.CPC_IVA1, row.CPC_IVA2, row.CPC_IVA3]
+                .reduce((sum, value) => sum + sanitizeErpAmount(value), 0);
+            const headerProjection = resolveDeliveryAmount({
+                cpcTotal: row.IMPORTETOTAL,
+                cacTotal: row.CAC_IMPORTETOTAL,
+                cpcNetoSum,
+                cpcIvaSum,
+            });
+            return headerProjection.pricingState !== 'READY';
+        });
         let lineStatsByKey = new Map();
         try {
             lineStatsByKey = await loadDeliveryLineAmountStats(
-                uniqueRows.map((row) => ({
+                lineStatsDocuments.map((row) => ({
                     ejercicio: row.EJERCICIOALBARAN,
                     serie: row.SERIEALBARAN,
                     terminal: row.TERMINALALBARAN,
@@ -664,7 +680,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         } catch (lineStatsError) {
             logger.warn(`[ENTREGAS] Could not load LAC line amount stats: ${lineStatsError.message || lineStatsError}`);
         }
-
         // Process rows
         const projectedAlbaranes = uniqueRows.map(row => {
             const serie = (row.SERIEALBARAN || '').trim();
