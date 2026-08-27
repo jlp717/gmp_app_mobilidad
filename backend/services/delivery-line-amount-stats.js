@@ -2,7 +2,7 @@
 
 const { documentAmountKey, sanitizeErpAmount } = require('./delivery-amount-resolver');
 
-const DEFAULT_CHUNK_SIZE = 25;
+const DEFAULT_CHUNK_SIZE = 80;
 
 function chunkArray(items, size) {
   const out = [];
@@ -49,7 +49,10 @@ async function loadDeliveryLineAmountStats(documents, queryFn, {
   const statsByKey = new Map();
   if (!identities.length) return statsByKey;
 
-  for (const chunk of chunkArray(identities, Math.max(1, Math.min(50, chunkSize)))) {
+  // DB2 scans LAC for each batch. Keep batches bounded, but execute them
+  // concurrently so a large manager route does not pay the scan latency N times.
+  const batches = chunkArray(identities, Math.max(1, Math.min(80, chunkSize)));
+  const batchRows = await Promise.all(batches.map(async (chunk) => {
     const clauses = chunk.map(() => (
       '(L.EJERCICIOALBARAN = ? AND TRIM(L.SERIEALBARAN) = ? AND L.TERMINALALBARAN = ?'
       + ' AND L.NUMEROALBARAN = ? AND TRIM(L.CODIGOCLIENTEALBARAN) = ?)'
@@ -88,14 +91,15 @@ async function loadDeliveryLineAmountStats(documents, queryFn, {
         TRIM(L.CODIGOCLIENTEALBARAN)
     `;
 
-    let rows = [];
     try {
-      rows = await queryFn(sql, params) || [];
+      return await queryFn(sql, params) || [];
     } catch (_) {
       // Fail soft: amount resolver still works with CPC/CAC; pricingState stays conservative.
-      continue;
+      return [];
     }
+  }));
 
+  for (const rows of batchRows) {
     for (const row of rows) {
       const identity = normalizeDocumentIdentity(row);
       if (!identity) continue;
@@ -106,7 +110,6 @@ async function loadDeliveryLineAmountStats(documents, queryFn, {
       }));
     }
   }
-
   return statsByKey;
 }
 

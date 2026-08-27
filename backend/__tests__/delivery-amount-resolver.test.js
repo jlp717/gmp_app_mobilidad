@@ -131,4 +131,30 @@ describe('delivery-line-amount-stats', () => {
       zeroPriceQtyLines: 1,
     });
   });
+  test('runs bounded LAC batches concurrently for large routes', async () => {
+    const calls = [];
+    let active = 0;
+    let peakActive = 0;
+    const queryFn = async (sql, params) => {
+      calls.push({ sql, params });
+      active += 1;
+      peakActive = Math.max(peakActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return [];
+    };
+    const documents = Array.from({ length: 161 }, (_, index) => ({
+      ejercicio: 2026,
+      serie: 'I',
+      terminal: 2,
+      numero: index + 1,
+      cliente: `430000${String(index + 1).padStart(4, '0')}`,
+    }));
+
+    await loadDeliveryLineAmountStats(documents, queryFn);
+
+    expect(calls).toHaveLength(3);
+    expect(calls.every(({ params }) => params.length <= 80 * 5)).toBe(true);
+    expect(peakActive).toBe(3);
+  });
 });
