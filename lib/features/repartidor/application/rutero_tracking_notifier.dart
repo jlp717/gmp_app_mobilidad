@@ -1,18 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_tracking_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_tracking.dart';
 
 final ruteroTrackingProvider =
-    AutoDisposeNotifierProvider<RuteroTrackingNotifier, RuteroTrackingState>(
-        RuteroTrackingNotifier.new);
+    NotifierProvider<RuteroTrackingNotifier, RuteroTrackingState>(
+  RuteroTrackingNotifier.new,
+);
 
-class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
+class RuteroTrackingNotifier extends Notifier<RuteroTrackingState> {
   final FlutterTts _tts = FlutterTts();
   final List<Map<String, dynamic>> _pending = <Map<String, dynamic>>[];
   final List<RuteroTrackingStop> _stops = <RuteroTrackingStop>[];
@@ -24,6 +25,7 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
   bool _speaking = false;
   String? _lastAnnouncedStopId;
   String? _lastAnnouncedArrivalId;
+  double? _lastAnnouncedDistanceKm;
 
   @override
   RuteroTrackingState build() {
@@ -51,7 +53,10 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
       updateStops(stops);
       return;
     }
-    if (state.sessionId != null) await stop();
+    if (state.sessionId != null) {
+      await stop();
+      if (state.sessionId != null) return;
+    }
 
     state = state.copyWith(
       status: RuteroTrackingStatus.starting,
@@ -69,7 +74,9 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
       ..addAll(stops);
     _lastAnnouncedStopId = null;
     _lastAnnouncedArrivalId = null;
+    _lastAnnouncedDistanceKm = null;
 
+    String? startedSessionId;
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
         throw const _TrackingUserException(
@@ -90,12 +97,13 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
       }
 
       final sessionId =
-          'session-\${DateTime.now().toUtc().microsecondsSinceEpoch}';
+          'session-${DateTime.now().toUtc().microsecondsSinceEpoch}';
       final ack = await RuteroTrackingApi.start(
         repartidorId: owner,
         routeDate: date,
         sessionId: sessionId,
       );
+      startedSessionId = ack.sessionId;
       if (_disposed) return;
 
       _positionSubscription = Geolocator.getPositionStream(
@@ -121,6 +129,19 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
       unawaited(_announce('Seguimiento iniciado. Mantén la ubicación activa.'));
     } catch (error) {
       await _cancelLocationStream();
+      if (startedSessionId != null) {
+        try {
+          await RuteroTrackingApi.stop(
+            repartidorId: owner,
+            routeDate: date,
+            sessionId: startedSessionId!,
+            eventId:
+                'start-failed-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+          );
+        } catch (_) {
+          // Best effort: preserve the original start error for the user.
+        }
+      }
       if (_disposed) return;
       final trackingError = error is _TrackingUserException
           ? error
@@ -154,7 +175,7 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
     _stops
       ..clear()
       ..addAll(stops);
-    if (state.position != null) _recalculateNextStop();
+    if (state.isActive) _recalculateNextStop();
   }
 
   Future<void> setVoiceEnabled(bool enabled) async {
@@ -214,7 +235,7 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
         repartidorId: owner,
         routeDate: date,
         sessionId: sessionId,
-        eventId: 'stop-\${DateTime.now().toUtc().microsecondsSinceEpoch}',
+        eventId: 'stop-${DateTime.now().toUtc().microsecondsSinceEpoch}',
       );
       if (_disposed) return;
       _pending.clear();
@@ -257,6 +278,17 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
         ),
       );
     }
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 50,
+        pauseLocationUpdatesAutomatically: false,
+        activityType: ActivityType.automotiveNavigation,
+        allowBackgroundLocationUpdates: true,
+        showBackgroundLocationIndicator: true,
+      );
+    }
     return const LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
       distanceFilter: 50,
@@ -283,7 +315,7 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
     final speed = _boundedSpeed(position.speed);
     final heading = _boundedHeading(position.heading);
     final sample = <String, dynamic>{
-      'eventId': 'position-\${recordedAt.microsecondsSinceEpoch}',
+      'eventId': 'position-${recordedAt.microsecondsSinceEpoch}',
       'latitude': latitude,
       'longitude': longitude,
       'accuracy': accuracy,
@@ -327,22 +359,29 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
     final sessionId = state.sessionId;
     if (owner == null || date == null || sessionId == null) return false;
     _flushing = true;
-    final batch = List<Map<String, dynamic>>.from(_pending);
     try {
-      await RuteroTrackingApi.sendSamples(
-        repartidorId: owner,
-        routeDate: date,
-        sessionId: sessionId,
-        samples: batch,
-      );
-      final sentIds = batch.map((sample) => sample['eventId']).toSet();
-      _pending.removeWhere((sample) => sentIds.contains(sample['eventId']));
-      state = state.copyWith(
-        pendingSamples: _pending.length,
-        lastSentAt: DateTime.now(),
-        clearError: true,
-      );
-      return true;
+      while (!_disposed && _pending.isNotEmpty) {
+        final batch = _pending
+            .take(50)
+            .map((sample) => Map<String, dynamic>.from(sample))
+            .toList(growable: false);
+        await RuteroTrackingApi.sendSamples(
+          repartidorId: owner,
+          routeDate: date,
+          sessionId: sessionId,
+          samples: batch,
+        );
+        final sentIds = batch.map((sample) => sample['eventId']).toSet();
+        _pending.removeWhere((sample) => sentIds.contains(sample['eventId']));
+        if (!_disposed) {
+          state = state.copyWith(
+            pendingSamples: _pending.length,
+            lastSentAt: DateTime.now(),
+            clearError: true,
+          );
+        }
+      }
+      return !_disposed;
     } catch (_) {
       if (!_disposed) {
         state = state.copyWith(
@@ -384,10 +423,28 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
     );
     if (state.isActive && next != null && next.id != previousId) {
       _lastAnnouncedArrivalId = null;
+      _lastAnnouncedDistanceKm = distance;
       if (_lastAnnouncedStopId != next.id) {
         _lastAnnouncedStopId = next.id;
-        unawaited(_announce('Siguiente parada: \${next.name}.'));
+        final distanceMessage = distance == null
+            ? ''
+            : ' Te quedan aproximadamente ${_voiceDistance(distance)}.';
+        unawaited(_announce('Siguiente parada: ${next.name}.$distanceMessage'));
       }
+    }
+    if (state.isActive &&
+        next != null &&
+        next.id == previousId &&
+        distance != null &&
+        (_lastAnnouncedDistanceKm == null ||
+            (distance - _lastAnnouncedDistanceKm!).abs() >= 1)) {
+      _lastAnnouncedDistanceKm = distance;
+      unawaited(
+        _announce(
+          'Distancia aproximada hasta ${next.name}: '
+          '${_voiceDistance(distance)}.',
+        ),
+      );
     }
     if (state.isActive &&
         next != null &&
@@ -395,7 +452,7 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
         distance <= 0.15 &&
         _lastAnnouncedArrivalId != next.id) {
       _lastAnnouncedArrivalId = next.id;
-      unawaited(_announce('Has llegado aproximadamente a \${next.name}.'));
+      unawaited(_announce('Has llegado aproximadamente a ${next.name}.'));
     }
   }
 
@@ -437,6 +494,9 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
   double? _boundedHeading(double value) =>
       value.isFinite && value >= 0 && value <= 360 ? value : null;
 
+  String _voiceDistance(double distanceKm) =>
+      '${distanceKm.toStringAsFixed(1).replaceAll('.', ',')} kilómetros';
+
   String _trackingErrorMessage(Object error) {
     if (error is ApiException && error.statusCode == 401) {
       return 'Tu sesión ha caducado. Inicia sesión de nuevo para seguir.';
@@ -444,7 +504,8 @@ class RuteroTrackingNotifier extends AutoDisposeNotifier<RuteroTrackingState> {
     if (error is ApiException && error.statusCode == 503) {
       return 'El seguimiento no está habilitado en el servidor.';
     }
-    return 'No se pudo iniciar el seguimiento. Comprueba la conexión e inténtalo de nuevo.';
+    return 'No se pudo iniciar el seguimiento. Comprueba la conexión '
+        'e inténtalo de nuevo.';
   }
 
   Future<void> _cancelLocationStream() async {

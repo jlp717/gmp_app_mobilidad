@@ -439,7 +439,19 @@ class RuteroRouteApi {
       maxRetries: 2,
     );
     final affected = response['affectedDocuments'];
-    if (response['success'] != true || affected is! List || affected.isEmpty) {
+    final requestedIds = orden
+        .map((row) => row['documentId']?.toString().trim() ?? '')
+        .toList(growable: false);
+    final affectedIds = affected is List
+        ? affected
+            .map<String>((row) => row is Map
+                ? row['documentId']?.toString().trim() ?? ''
+                : row?.toString().trim() ?? '')
+            .toList(growable: false)
+        : const <String>[];
+    if (response['success'] != true ||
+        affectedIds.isEmpty ||
+        !_isSameDocumentSequence(requestedIds, affectedIds)) {
       throw ApiException('Move acknowledgement invalid',
           statusCode: 503, code: 'RUTERO_DAY_MOVE_ACK_INVALID');
     }

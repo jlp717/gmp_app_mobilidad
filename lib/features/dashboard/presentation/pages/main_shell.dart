@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/app_version_badge.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';

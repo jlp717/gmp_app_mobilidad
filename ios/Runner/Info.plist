@@ -49,6 +49,8 @@
 	<string>GMP usa tu ubicación mientras haces el rutero para mostrar tu avance y la próxima parada.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>GMP necesita mantener el seguimiento de ruta activo cuando cambias de aplicación durante el reparto.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>GMP necesita mantener el seguimiento de ruta activo mientras realizas el reparto.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

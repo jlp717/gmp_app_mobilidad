@@ -69,6 +69,7 @@ function monday(dateYmd) {
   if (!DATE_RE.test(String(dateYmd || ''))) return null;
   const date = new Date(`${dateYmd}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return null;
+  if (date.toISOString().slice(0, 10) !== String(dateYmd)) return null;
   date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
   return date.toISOString().slice(0, 10);
 }
@@ -121,7 +122,12 @@ function assertMoveInput({ repartidorId, sourceDate, targetDate, position, docum
     throw new RuteroDayMoveConflictError('DATE_INVALID');
   }
   if (sourceDate === targetDate) throw new RuteroDayMoveConflictError('RUTERO_MOVE_SAME_DAY');
-  if (monday(sourceDate) !== monday(targetDate)) {
+  const sourceWeek = monday(sourceDate);
+  const targetWeek = monday(targetDate);
+  if (!sourceWeek || !targetWeek) {
+    throw new RuteroDayMoveConflictError('DATE_INVALID');
+  }
+  if (sourceWeek !== targetWeek) {
     throw new RuteroDayMoveConflictError('RUTERO_MOVE_OUTSIDE_WEEK');
   }
   if (!Number.isInteger(position) || position < 0 || position >= 500) {
@@ -135,7 +141,7 @@ function assertMoveInput({ repartidorId, sourceDate, targetDate, position, docum
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(key)) {
     throw new RuteroDayMoveConflictError('RUTERO_MOVE_IDEMPOTENCY_REQUIRED');
   }
-  return { docs, key, weekStart: monday(sourceDate) };
+  return { docs, key, weekStart: sourceWeek };
 }
 
 function visibleDocumentsSql({ override, documents }) {

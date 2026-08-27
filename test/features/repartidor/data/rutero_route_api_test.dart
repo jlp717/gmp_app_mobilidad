@@ -155,6 +155,31 @@ void main() {
               .any((k) => k.toLowerCase() == 'idempotency-key'),
           isFalse);
     });
+
+    test('day move rejects an ACK for a different document sequence', () async {
+      responseFor = (_) => {
+            'success': true,
+            'affectedDocuments': ['DOC-OTHER'],
+          };
+      await expectLater(
+        RuteroRouteApi.moveDay(
+          repartidorId: '05',
+          dateYmd: '2026-08-27',
+          targetDateYmd: '2026-08-28',
+          position: 0,
+          orden: [
+            {'documentId': 'DOC-1'}
+          ],
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.code,
+            'code',
+            'RUTERO_DAY_MOVE_ACK_INVALID',
+          ),
+        ),
+      );
+    });
   });
   test('missing revision fails locally without a save request', () async {
     await expectLater(

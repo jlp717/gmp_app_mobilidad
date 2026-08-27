@@ -54,6 +54,13 @@ describe('repartidor rutero day move repository', () => {
 
   test('rejects invalid dates, outside-week moves and malformed positions', () => {
     expect(monday('2026-08-27')).toBe('2026-08-24');
+    expect(monday('2026-02-30')).toBeNull();
+    expect(() => assertMoveInput({
+      repartidorId: '05', sourceDate: '2026-02-30',
+      targetDate: '2026-02-31', position: 0,
+      documents: [{ documentId: 'DOC-1' }],
+      idempotencyKey: 'move-test-1234',
+    })).toThrow(RuteroDayMoveConflictError);
     expect(() => assertMoveInput({
       repartidorId: '05',
       sourceDate: '2026-08-24',

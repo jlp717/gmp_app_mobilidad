@@ -1467,6 +1467,7 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
        AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
       LEFT JOIN ${table} ROUTE_MOVE
         ON ROUTE_MOVE.REPARTIDOR_ID IN (${moveIds})
+       AND ROUTE_MOVE.REPARTIDOR_ID = TRIM(OPP.CODIGOREPARTIDOR)
        AND ROUTE_MOVE.WEEK_START = ?
        AND TRIM(ROUTE_MOVE.DOCUMENT_ID) = ${expr}
       ${confirmationJoins}

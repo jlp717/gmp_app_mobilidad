@@ -54,6 +54,10 @@ const REPARTO_BOOLEAN_FLAGS = Object.freeze([
     'REPARTO_PRODUCTION_CONFIRMATION_APPROVED',
     'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED',
 ]);
+const ROUTING_CAPABILITY_FLAGS = Object.freeze([
+    'REPARTIDOR_DAY_MOVE_ENABLED',
+    'REPARTIDOR_TRACKING_ENABLED',
+]);
 // Contrato fail-closed (tests ecosystem-reparto-fail-closed + reparto-runtime-production):
 // el baseline PM2 es produccion con TODOS los approvals en false. Cualquier
 // perfil staging/isolated_test se define explicitamente en el fichero de
@@ -79,6 +83,9 @@ function explicitRepartoValue(name, fallback) {
 const repartoConfiguredBooleans = Object.freeze(
     Object.fromEntries(REPARTO_BOOLEAN_FLAGS.map((name) => [name, explicitRepartoBoolean(name)])),
 );
+const routingCapabilityEnv = Object.freeze(
+    Object.fromEntries(ROUTING_CAPABILITY_FLAGS.map((name) => [name, explicitRepartoBoolean(name)])),
+);
 
 // Default PM2 profile is fail-closed production. Staging isolated_test is only
 // applied when those values are already present in the PM2/shell environment
@@ -89,6 +96,7 @@ const repartoFailClosedEnv = Object.freeze({
     REPARTO_EVIDENCE_PENDING_TTL_HOURS: explicitRepartoValue('REPARTO_EVIDENCE_PENDING_TTL_HOURS', '24'),
     ...repartoConfiguredBooleans,
     REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+    ...routingCapabilityEnv,
     REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
     REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
     USE_TS_ROUTES: 'false',

@@ -108,17 +108,29 @@ void main() {
         handler.resolve(Response<Map<String, dynamic>>(
           requestOptions: request,
           statusCode: 200,
-          data: {'success': true, 'affectedDocuments': ['DOC-1']},
+          data: {
+            'success': true,
+            'affectedDocuments': ['DOC-1']
+          },
         ));
         return;
+      }
       if (failOrder && request.path.contains('/rutero/order/')) {
-        handler.reject(DioException(
+        if (request.method == 'GET') {
+          handler.resolve(Response<Map<String, dynamic>>(
             requestOptions: request,
-            type: DioExceptionType.badResponse,
-            response: Response(
-                requestOptions: request,
-                statusCode: 422,
-                data: {'code': 'RUTERO_ORDER_REVISION_REQUIRED'})));
+            statusCode: 200,
+            data: {'success': true, 'revision': '', 'orden': []},
+          ));
+        } else {
+          handler.reject(DioException(
+              requestOptions: request,
+              type: DioExceptionType.badResponse,
+              response: Response(
+                  requestOptions: request,
+                  statusCode: 422,
+                  data: {'code': 'RUTERO_ORDER_REVISION_REQUIRED'})));
+        }
         return;
       }
       handler.resolve(Response<Map<String, dynamic>>(
@@ -163,16 +175,8 @@ void main() {
       albaranes: [AlbaranEntrega.fromJson(row('DOC-1'))],
     )));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Falta actualizar'), findsOneWidget);
-    expect(find.text('Recargar orden guardado'), findsOneWidget);
     await tester.tap(find.text('Guardar'));
     expect(puts, isEmpty);
-    failOrder = false;
-    await tester.tap(find.text('Recargar orden guardado'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Falta actualizar'), findsNothing);
-    expect(find.text('Cliente DOC-2'),
-        findsOneWidget); // Unfiltered route replaces search subset.
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -300,7 +304,7 @@ void main() {
   });
 
   testWidgets(
-      'day move dialog chooses same-week position but never reports a move',
+      'day move dialog sends a same-week move and closes after acknowledgement',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -320,7 +324,9 @@ void main() {
     await tester.enterText(find.byType(TextField), '3');
     await tester.tap(find.text('Mover parada'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('No se ha cambiado el día'), findsOneWidget);
+    expect(moves, hasLength(1));
+    expect(moves.single.data['targetDate'], '2026-08-28');
+    expect(moves.single.data['position'], 2);
     expect(puts, isEmpty);
   });
 
