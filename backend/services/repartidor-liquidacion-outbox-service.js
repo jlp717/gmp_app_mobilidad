@@ -149,8 +149,9 @@ async function completeClaimedOutbox(id, token, status, { payload, results = [],
   await query(
     `UPDATE ${tables.liquidationOutbox}
         SET STATUS = ?, PAYLOAD_JSON = ?
-      WHERE ID = ? AND STATUS = 'FAILED' AND PAYLOAD_JSON = ?`,
-    [status, serialized, id, payload],
+      WHERE ID = ? AND STATUS = 'FAILED'
+        AND LOCATE(CAST(? AS VARCHAR(64)), PAYLOAD_JSON) > 0`,
+    [status, serialized, id, token],
   );
   const rows = await query(
     `SELECT STATUS, PAYLOAD_JSON FROM ${tables.liquidationOutbox}

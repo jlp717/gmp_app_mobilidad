@@ -33,7 +33,11 @@ function outboxQuery({ id = 17, payload = { type: 'REPARTIDOR_LIQUIDACION_EMAIL'
       return state.status === 'FAILED' ? [{ STATUS: state.status, PAYLOAD_JSON: state.payload }] : [];
     }
     if (statement.includes('SET STATUS = ?, PAYLOAD_JSON = ?')) {
-      if (state.status === 'FAILED' && state.payload === params[3]) {
+      const claimToken = params[3];
+      const claimMatches = statement.includes('LOCATE')
+        ? String(state.payload).includes(String(claimToken || ''))
+        : state.payload === claimToken;
+      if (state.status === 'FAILED' && claimMatches) {
         state.status = params[0];
         state.payload = params[1];
       }
