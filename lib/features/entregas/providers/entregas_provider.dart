@@ -12,6 +12,20 @@ export '../../../core/models/estado_entrega.dart';
 const _deliveryLoadFailureMessage =
     'No se pudieron cargar las entregas. Intentalo de nuevo.';
 
+bool _selectedOwnerContains(String selection, String owner) {
+  final target = owner.trim().toUpperCase();
+  if (target.isEmpty) return false;
+  return selection.split(',').any((candidate) {
+    final normalized = candidate.trim().toUpperCase();
+    if (normalized == target) return true;
+    final candidateNumber = int.tryParse(normalized);
+    final targetNumber = int.tryParse(target);
+    return candidateNumber != null &&
+        targetNumber != null &&
+        candidateNumber == targetNumber;
+  });
+}
+
 /// A backend payload did not meet the minimum contract needed to identify a
 /// delivery safely.  Keep this error deliberately free of server values: it is
 /// shown through generic connection/error surfaces and must not leak data.
@@ -289,6 +303,8 @@ class AlbaranEntrega {
     this.importeIva = 0,
     this.ivaBreakdown = const [],
     this.checksum,
+    this.latitud,
+    this.longitud,
     this.formaPago = '',
     this.formaPagoDesc = '',
     this.tipoPago = '',
@@ -342,6 +358,10 @@ class AlbaranEntrega {
       poblacion: json['poblacion']?.toString() ?? '',
       telefono: json['telefono']?.toString() ?? '',
       telefono2: json['telefono2']?.toString() ?? '',
+      latitud: _optionalNullableDouble(
+          json, const <String>['latitud', 'lat', 'latitude']),
+      longitud: _optionalNullableDouble(
+          json, const <String>['longitud', 'lng', 'longitude']),
       emailCliente:
           json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: _documentDate(json),
@@ -408,6 +428,8 @@ class AlbaranEntrega {
   final String poblacion;
   final String telefono;
   final String telefono2;
+  final double? latitud;
+  final double? longitud;
   final String emailCliente;
   final String fecha;
   final double importeTotal;
@@ -464,9 +486,17 @@ class AlbaranEntrega {
     double? lineSum,
     String? pricingState,
     String? amountSource,
+    double? latitud,
+    double? longitud,
     EstadoEntrega? estado,
     List<EntregaItem>? items,
     String? observaciones,
+    String? confirmationId,
+    String? cobroId,
+    bool? cobrado,
+    double? importeCobrado,
+    String? formaPagoCobro,
+    bool clearPaymentBalance = false,
   }) {
     return AlbaranEntrega(
       id: id,
@@ -484,6 +514,8 @@ class AlbaranEntrega {
       poblacion: poblacion,
       telefono: telefono,
       telefono2: telefono2,
+      latitud: latitud ?? this.latitud,
+      longitud: longitud ?? this.longitud,
       emailCliente: emailCliente,
       fecha: fecha,
       importeTotal: importeTotal ?? this.importeTotal,
@@ -516,13 +548,13 @@ class AlbaranEntrega {
       firma: firma,
       horaEntrega: horaEntrega,
       horaPrevista: horaPrevista,
-      confirmationId: confirmationId,
-      cobroId: cobroId,
-      cobrado: cobrado,
-      importeCobrado: importeCobrado,
-      importePendienteCobro: importePendienteCobro,
-      formaPagoCobro: formaPagoCobro,
-      cobroParcial: cobroParcial,
+      confirmationId: confirmationId ?? this.confirmationId,
+      cobroId: cobroId ?? this.cobroId,
+      cobrado: cobrado ?? this.cobrado,
+      importeCobrado: importeCobrado ?? this.importeCobrado,
+      importePendienteCobro: clearPaymentBalance ? null : importePendienteCobro,
+      formaPagoCobro: formaPagoCobro ?? this.formaPagoCobro,
+      cobroParcial: clearPaymentBalance ? false : cobroParcial,
     );
   }
 
@@ -704,6 +736,14 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _debounceTimer?.cancel();
   }
 
+  void _scheduleFilterReload(bool autoReload) {
+    if (autoReload) {
+      _debouncedLoad();
+    } else {
+      _cancelDebouncedLoad();
+    }
+  }
+
   void setRepartidor(
     String repartidorId, {
     bool autoReload = true,
@@ -762,34 +802,34 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _debouncedLoad();
   }
 
-  void setSearchClient(String query) {
+  void setSearchClient(String query, {bool autoReload = true}) {
     state = state.copyWith(searchClient: query);
-    _debouncedLoad();
+    _scheduleFilterReload(autoReload);
   }
 
-  void setSearchAlbaran(String query) {
+  void setSearchAlbaran(String query, {bool autoReload = true}) {
     state = state.copyWith(searchAlbaran: query);
-    _debouncedLoad();
+    _scheduleFilterReload(autoReload);
   }
 
-  void setSortBy(String sort) {
+  void setSortBy(String sort, {bool autoReload = true}) {
     state = state.copyWith(sortBy: sort);
-    _debouncedLoad();
+    _scheduleFilterReload(autoReload);
   }
 
-  void setFilterTipoPago(String tipo) {
+  void setFilterTipoPago(String tipo, {bool autoReload = true}) {
     state = state.copyWith(filterTipoPago: tipo);
-    _debouncedLoad();
+    _scheduleFilterReload(autoReload);
   }
 
-  void setFilterDebeCobrar(String debeCobrar) {
+  void setFilterDebeCobrar(String debeCobrar, {bool autoReload = true}) {
     state = state.copyWith(filterDebeCobrar: debeCobrar);
-    _debouncedLoad();
+    _scheduleFilterReload(autoReload);
   }
 
-  void setFilterDocTipo(String docTipo) {
+  void setFilterDocTipo(String docTipo, {bool autoReload = true}) {
     state = state.copyWith(filterDocTipo: docTipo);
-    _debouncedLoad();
+    _scheduleFilterReload(autoReload);
   }
 
   Future<void> cargarAlbaranesPendientes({
@@ -807,8 +847,16 @@ class EntregasNotifier extends Notifier<EntregasState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      final routeLoadRequested = requestState.sortBy == 'default' &&
+          requestState.repartidorId.isNotEmpty;
+      final routeOrderRequested =
+          routeLoadRequested && !requestState.repartidorId.contains(',');
+      final requestLimit = routeLoadRequested ? 500 : 100;
       var url =
-          '/entregas/pendientes/${requestState.repartidorId}?date=$formattedDate&limit=100&offset=$pageOffset';
+          '/entregas/pendientes/${requestState.repartidorId}?date=$formattedDate&limit=$requestLimit&offset=$pageOffset';
+      if (routeOrderRequested) {
+        url += '&routeOrder=true';
+      }
 
       if (requestState.searchQuery.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(requestState.searchQuery)}';
@@ -838,6 +886,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
         url,
         cacheKey: [
           'entregas:pendientes',
+          routeLoadRequested ? 'rutero-page-v2' : 'source-page',
           requestState.repartidorId,
           formattedDate,
           requestState.searchQuery,
@@ -924,6 +973,43 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
   Future<void> cargarMasAlbaranes() {
     return cargarAlbaranesPendientes(append: true);
+  }
+
+  /// Local projection only after the canonical journal has accepted the ACK.
+  /// A queued/offline request must never call this method as a success.
+  void applyAcknowledgedDelivery({
+    required String deliveryId,
+    required String repartidorId,
+    required Map<String, dynamic> response,
+    double? acceptedPaymentAmount,
+    String? acceptedPaymentMethod,
+  }) {
+    if (!_selectedOwnerContains(state.repartidorId, repartidorId) ||
+        response['queued'] == true) return;
+    final status = response['deliveryStatus']?.toString();
+    if (!const ['ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO']
+        .contains(status)) return;
+    final ack = RepartoConfirmationAcknowledgement.fromResponse(response);
+    final paid = ack.cobroId != null &&
+        acceptedPaymentAmount != null &&
+        acceptedPaymentAmount.isFinite &&
+        acceptedPaymentAmount > 0;
+    _pendingLoadGeneration++; // An older in-flight read cannot erase this ACK.
+    state = state.copyWith(
+        isLoading: false,
+        albaranes: state.albaranes.map((item) {
+          if (item.id != deliveryId) return item;
+          return item.copyWith(
+            estado: EstadoEntrega.fromString(status!),
+            confirmationId: ack.confirmationId,
+            cobroId: ack.cobroId, cobrado: paid ? true : null,
+            importeCobrado: paid ? acceptedPaymentAmount : null,
+            formaPagoCobro: paid ? acceptedPaymentMethod : null,
+            // The ACK doesn't return the server balance. Do not guess it from
+            // invoice totals: partial deliveries can change the payable amount.
+            clearPaymentBalance: paid,
+          );
+        }).toList(growable: false));
   }
 
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(

@@ -18,6 +18,10 @@ ENV/
 # OpenCode: ignore runtime noise/secrets, but track governance-critical configs/tools/plugins/agents.
 # NEVER un-ignore .opencode/CREDENCIALES.md or any secret-bearing local files.
 .opencode/*
+.clinerules/
+.cline/*
+scripts/cline/*
+memory-bank
 !.opencode/config/
 .opencode/config/*
 !.opencode/config/governance/

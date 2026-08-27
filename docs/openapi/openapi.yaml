@@ -16457,6 +16457,419 @@ paths:
                 error: "Error interno"
                 code: "HTTP_500"
       description: "POST repartidor · rutero · order · {repartidorId} · optimize. Contrato del handler Express existente."
+  /repartidor/rutero/tracking/{repartidorId}/start:
+    post:
+      tags:
+        - "Repartidor"
+      summary: "POST repartidor · rutero · tracking · {repartidorId} · start"
+      operationId: "post_Repartidor_repartidor_rutero_tracking_repartidorId_start"
+      parameters:
+        - name: "repartidorId"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Identificador del repartidor."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "date"
+                - "sessionId"
+              properties:
+                date:
+                  type: "string"
+                  format: "date"
+                  example: "2026-08-27"
+                sessionId:
+                  type: "string"
+                  minLength: 8
+                  maxLength: 64
+                  example: "route-20260827-r01"
+            example:
+              date: "2026-08-27"
+              sessionId: "route-20260827-r01"
+      responses:
+        "200":
+          description: "Sesión de tracking iniciada"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                additionalProperties: true
+              example:
+                success: true
+                sessionId: "route-20260827-r01"
+                routeDate: "2026-08-27"
+                replayed: false
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "422":
+          description: "Datos de sesión inválidos"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Solicitud inválida"
+                code: "TRACKING_SESSION_INVALID"
+        "503":
+          description: "Persistencia de tracking no disponible"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Servicio no disponible"
+                code: "RUTERO_TRACKING_UNAVAILABLE"
+      description: "Inicia una sesión de seguimiento GPS para el repartidor autenticado."
+  /repartidor/rutero/tracking/{repartidorId}/samples:
+    post:
+      tags:
+        - "Repartidor"
+      summary: "POST repartidor · rutero · tracking · {repartidorId} · samples"
+      operationId: "post_Repartidor_repartidor_rutero_tracking_repartidorId_samples"
+      parameters:
+        - name: "repartidorId"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Identificador del repartidor."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "date"
+                - "sessionId"
+                - "samples"
+              properties:
+                date:
+                  type: "string"
+                  format: "date"
+                  example: "2026-08-27"
+                sessionId:
+                  type: "string"
+                  minLength: 8
+                  maxLength: 64
+                  example: "route-20260827-r01"
+                samples:
+                  type: "array"
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: "object"
+                    required:
+                      - "eventId"
+                      - "latitude"
+                      - "longitude"
+                      - "recordedAt"
+                    properties:
+                      eventId:
+                        type: "string"
+                        minLength: 8
+                        maxLength: 128
+                        example: "gps-20260827-0001"
+                      latitude:
+                        type: "number"
+                        minimum: -90
+                        maximum: 90
+                        example: 40.4168
+                      longitude:
+                        type: "number"
+                        minimum: -180
+                        maximum: 180
+                        example: -3.7038
+                      accuracy:
+                        type: "number"
+                        minimum: 0
+                        maximum: 5000
+                        example: 12.5
+                      speed:
+                        type: "number"
+                        minimum: 0
+                        maximum: 150
+                        nullable: true
+                        example: 32.4
+                      heading:
+                        type: "number"
+                        minimum: 0
+                        maximum: 360
+                        nullable: true
+                        example: 180
+                      recordedAt:
+                        type: "string"
+                        format: "date-time"
+                        example: "2026-08-27T08:15:00Z"
+            example:
+              date: "2026-08-27"
+              sessionId: "route-20260827-r01"
+              samples:
+                - eventId: "gps-20260827-0001"
+                  latitude: 40.4168
+                  longitude: -3.7038
+                  accuracy: 12.5
+                  speed: 32.4
+                  heading: 180
+                  recordedAt: "2026-08-27T08:15:00Z"
+      responses:
+        "200":
+          description: "Muestras registradas"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                additionalProperties: true
+              example:
+                success: true
+                sessionId: "route-20260827-r01"
+                inserted: 1
+                replayed: 0
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "422":
+          description: "Muestras inválidas"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Solicitud inválida"
+                code: "TRACKING_BATCH_INVALID"
+        "503":
+          description: "Persistencia de tracking no disponible"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Servicio no disponible"
+                code: "RUTERO_TRACKING_UNAVAILABLE"
+      description: "Registra un lote idempotente de posiciones GPS de una sesión activa."
+  /repartidor/rutero/tracking/{repartidorId}/stop:
+    post:
+      tags:
+        - "Repartidor"
+      summary: "POST repartidor · rutero · tracking · {repartidorId} · stop"
+      operationId: "post_Repartidor_repartidor_rutero_tracking_repartidorId_stop"
+      parameters:
+        - name: "repartidorId"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Identificador del repartidor."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "date"
+                - "sessionId"
+              properties:
+                date:
+                  type: "string"
+                  format: "date"
+                  example: "2026-08-27"
+                sessionId:
+                  type: "string"
+                  minLength: 8
+                  maxLength: 64
+                  example: "route-20260827-r01"
+                eventId:
+                  type: "string"
+                  minLength: 8
+                  maxLength: 128
+                  example: "stop-20260827-r01"
+            example:
+              date: "2026-08-27"
+              sessionId: "route-20260827-r01"
+              eventId: "stop-20260827-r01"
+      responses:
+        "200":
+          description: "Sesión de tracking detenida"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                additionalProperties: true
+              example:
+                success: true
+                sessionId: "route-20260827-r01"
+                stopped: true
+                replayed: false
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "422":
+          description: "Datos de sesión inválidos"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Solicitud inválida"
+                code: "TRACKING_SESSION_INVALID"
+        "503":
+          description: "Persistencia de tracking no disponible"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Servicio no disponible"
+                code: "RUTERO_TRACKING_UNAVAILABLE"
+      description: "Cierra una sesión de seguimiento GPS."
+  /repartidor/rutero/tracking/{repartidorId}/latest:
+    get:
+      tags:
+        - "Repartidor"
+      summary: "GET repartidor · rutero · tracking · {repartidorId} · latest"
+      operationId: "get_Repartidor_repartidor_rutero_tracking_repartidorId_latest"
+      parameters:
+        - name: "repartidorId"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Identificador del repartidor."
+        - name: "date"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            format: "date"
+            example: "2026-08-27"
+          description: "Día de ruta consultado."
+      responses:
+        "200":
+          description: "Última posición disponible"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                additionalProperties: true
+              example:
+                success: true
+                position:
+                  sessionId: "route-20260827-r01"
+                  eventId: "gps-20260827-0001"
+                  latitude: 40.4168
+                  longitude: -3.7038
+                  accuracy: 12.5
+                  speedKmh: 32.4
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "422":
+          description: "Fecha inválida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Solicitud inválida"
+                code: "DATE_INVALID"
+        "503":
+          description: "Persistencia de tracking no disponible"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Servicio no disponible"
+                code: "RUTERO_TRACKING_UNAVAILABLE"
+      description: "Devuelve la última posición GPS de un repartidor en una fecha."
   /repartidor/rutero/stops-geo/{repartidorId}:
     get:
       tags:

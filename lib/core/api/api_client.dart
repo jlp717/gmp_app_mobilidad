@@ -974,10 +974,18 @@ class ApiClient {
   static Future<Map<String, dynamic>> put(
     String endpoint, {
     Map<String, dynamic>? data,
+    Duration? receiveTimeout,
+    bool skipRetry = false,
   }) async {
     try {
-      final response =
-          await dio.put<Map<String, dynamic>>(endpoint, data: data);
+      final response = await dio.put<Map<String, dynamic>>(
+        endpoint,
+        data: data,
+        options: Options(
+          receiveTimeout: receiveTimeout,
+          extra: {'skipRetry': skipRetry},
+        ),
+      );
       return response.data!;
     } on DioException catch (e) {
       throw _handleError(e);

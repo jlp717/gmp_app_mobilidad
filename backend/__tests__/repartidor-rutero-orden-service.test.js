@@ -4,6 +4,7 @@ const {
   parseRouteDate,
   normalizeOrdenPayload,
   applySavedOrder,
+  applyDayMovePositions,
   parseCrutHour,
   parseOpenTimeFromObs,
   preferredStartMinute,
@@ -17,6 +18,9 @@ describe('repartidor rutero orden service', () => {
     expect(parseRouteDate('2026-08-11T12:00:00.000Z')).toBe('2026-08-11');
     expect(parseRouteDate('11/08/2026')).toBeNull();
     expect(parseRouteDate('')).toBeNull();
+    expect(parseRouteDate('2026-02-30')).toBeNull();
+    expect(parseRouteDate('2026-08-11garbage')).toBeNull();
+    expect(parseRouteDate('2026-08-11T99:99:99Z')).toBeNull();
   });
 
   test('normalizeOrdenPayload rejects empty and duplicates', () => {
@@ -46,6 +50,17 @@ describe('repartidor rutero orden service', () => {
       { documentId: 'a', posicion: 1 },
     ]);
     expect(ordered.map((i) => i.id)).toEqual(['b', 'a', 'z']);
+  });
+
+  test('applies target positions while preserving non-moved relative order', () => {
+    const ordered = applyDayMovePositions(
+      [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+      [
+        { documentId: 'c', targetPosition: 0 },
+        { documentId: 'd', targetPosition: 2 },
+      ],
+    );
+    expect(ordered.map((item) => item.id)).toEqual(['c', 'a', 'd', 'b']);
   });
 
   test('parseCrutHour handles HHMMSS and HHMM', () => {

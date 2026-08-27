@@ -196,6 +196,7 @@ class RuteroStopWindow {
     double? distanceKmFromPrev,
     int? travelMinutesFromPrev,
     String? reason,
+    bool clearTimeline = false,
   }) {
     return RuteroStopWindow(
       documentId: documentId ?? this.documentId,
@@ -209,16 +210,21 @@ class RuteroStopWindow {
       lng: lng ?? this.lng,
       hasGps: hasGps ?? this.hasGps,
       nombreCliente: nombreCliente ?? this.nombreCliente,
-      etaMinute: etaMinute ?? this.etaMinute,
-      etaLabel: etaLabel ?? this.etaLabel,
-      departureMinute: departureMinute ?? this.departureMinute,
-      departureLabel: departureLabel ?? this.departureLabel,
-      prepReadyLabel: prepReadyLabel ?? this.prepReadyLabel,
-      pickupLabel: pickupLabel ?? this.pickupLabel,
-      distanceKmFromPrev: distanceKmFromPrev ?? this.distanceKmFromPrev,
-      travelMinutesFromPrev:
-          travelMinutesFromPrev ?? this.travelMinutesFromPrev,
-      reason: reason ?? this.reason,
+      etaMinute: clearTimeline ? null : etaMinute ?? this.etaMinute,
+      etaLabel: clearTimeline ? null : etaLabel ?? this.etaLabel,
+      departureMinute:
+          clearTimeline ? null : departureMinute ?? this.departureMinute,
+      departureLabel:
+          clearTimeline ? null : departureLabel ?? this.departureLabel,
+      prepReadyLabel:
+          clearTimeline ? null : prepReadyLabel ?? this.prepReadyLabel,
+      pickupLabel: clearTimeline ? null : pickupLabel ?? this.pickupLabel,
+      distanceKmFromPrev:
+          clearTimeline ? null : distanceKmFromPrev ?? this.distanceKmFromPrev,
+      travelMinutesFromPrev: clearTimeline
+          ? null
+          : travelMinutesFromPrev ?? this.travelMinutesFromPrev,
+      reason: clearTimeline ? null : reason ?? this.reason,
     );
   }
 }
@@ -278,6 +284,43 @@ bool isCompleteDocumentPermutation({
 class RuteroRouteApi {
   const RuteroRouteApi._();
 
+  /// Load the unfiltered route in bounded pages, never save a search subset.
+  static Future<List<Map<String, dynamic>>> fetchDayDocuments({
+    required String repartidorId,
+    required String dateYmd,
+  }) async {
+    final result = <Map<String, dynamic>>[];
+    var offset = 0;
+    for (var page = 0; page < 5; page++) {
+      final response = await ApiClient.get('/entregas/pendientes/$repartidorId',
+          queryParameters: {
+            'date': dateYmd,
+            'limit': 100,
+            'offset': offset,
+            'routeOrder': 'true'
+          },
+          forceRefresh: true,
+          allowStale: false);
+      final rows = response['albaranes'];
+      if (response['success'] != true ||
+          rows is! List ||
+          rows.any((row) => row is! Map)) {
+        throw ApiException('Incomplete route', statusCode: 503);
+      }
+      result.addAll(rows.map((row) => Map<String, dynamic>.from(row as Map)));
+      final pagination = response['pagination'] is Map
+          ? response['pagination'] as Map
+          : response;
+      if (pagination['hasMore'] != true) return result;
+      final next = pagination['nextOffset'];
+      if (next is! int || next <= offset)
+        throw ApiException('Invalid pagination', statusCode: 503);
+      offset = next;
+    }
+    throw ApiException('Route too large',
+        statusCode: 422, code: 'ORDEN_TOO_LARGE');
+  }
+
   static Map<String, RuteroStopWindow> annotateEtasForOrder({
     required List<RuteroEtaStopRef> ordered,
     required Map<String, RuteroStopWindow> metaByKey,
@@ -314,8 +357,15 @@ class RuteroRouteApi {
     final response = await ApiClient.get(
       '/repartidor/rutero/order/$repartidorId',
       queryParameters: {'date': dateYmd},
+      forceRefresh: true,
+      allowStale: false,
     );
-    return RuteroOrderState.fromJson(response);
+    final state = RuteroOrderState.fromJson(response);
+    if (response['success'] == false || state.revision.trim().isEmpty) {
+      throw ApiException('Order revision unavailable',
+          statusCode: 422, code: 'RUTERO_ORDER_REVISION_REQUIRED');
+    }
+    return state;
   }
 
   static Future<RuteroOrderState> fetchOrder({
@@ -330,11 +380,69 @@ class RuteroRouteApi {
     required String baseRevision,
     required List<Map<String, dynamic>> orden,
   }) async {
+    if (baseRevision.trim().isEmpty) {
+      throw ApiException('Order revision required',
+          statusCode: 422, code: 'RUTERO_ORDER_REVISION_REQUIRED');
+    }
     final response = await ApiClient.put(
       '/repartidor/rutero/order/$repartidorId',
       data: {'date': dateYmd, 'baseRevision': baseRevision, 'orden': orden},
+      receiveTimeout: const Duration(seconds: 30),
+      // CAS writes have no idempotency ledger. Read back after uncertain ACK.
+      skipRetry: true,
     );
-    return RuteroOrderState.fromJson(response);
+    final state = RuteroOrderState.fromJson(response);
+    final requestedIds = orden
+        .map((row) => row['documentId']?.toString() ?? '')
+        .toList(growable: false);
+    if (response['success'] != true || state.revision.isEmpty) {
+      throw ApiException('Order acknowledgement invalid', statusCode: 503);
+    }
+    if (!_isSameDocumentSequence(requestedIds, state.orden)) {
+      throw ApiException('Order acknowledgement does not match request',
+          statusCode: 503, code: 'RUTERO_ORDER_ACK_MISMATCH');
+    }
+    return state;
+  }
+
+  static bool _isSameDocumentSequence(
+      List<String> requested, List<String> acknowledged) {
+    if (requested.length != acknowledged.length) return false;
+    for (var index = 0; index < requested.length; index++) {
+      if (requested[index] != acknowledged[index]) return false;
+    }
+    return true;
+  }
+
+  static Future<void> moveDay({
+    required String repartidorId,
+    required String dateYmd,
+    required String targetDateYmd,
+    required int position,
+    required List<Map<String, dynamic>> orden,
+    String? idempotencyKey,
+  }) async {
+    final key = idempotencyKey?.trim().isNotEmpty == true
+        ? idempotencyKey!.trim()
+        : 'rutero-move-${DateTime.now().microsecondsSinceEpoch}';
+    final response = await ApiClient.post(
+      '/repartidor/rutero/order/$repartidorId/move',
+      {
+        'sourceDate': dateYmd,
+        'targetDate': targetDateYmd,
+        'position': position,
+        'orden': orden,
+        'idempotencyKey': key,
+      },
+      receiveTimeout: const Duration(seconds: 15),
+      idempotent: true,
+      maxRetries: 2,
+    );
+    final affected = response['affectedDocuments'];
+    if (response['success'] != true || affected is! List || affected.isEmpty) {
+      throw ApiException('Move acknowledgement invalid',
+          statusCode: 503, code: 'RUTERO_DAY_MOVE_ACK_INVALID');
+    }
   }
 
   static Future<RuteroOptimizeResult> optimizeOrder({

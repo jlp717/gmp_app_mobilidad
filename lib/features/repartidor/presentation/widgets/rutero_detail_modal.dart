@@ -1943,6 +1943,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       prepared: prepared,
       response: response,
     );
+    widget.ref.read(entregasProvider.notifier).applyAcknowledgedDelivery(
+          deliveryId: widget.albaran.id,
+          repartidorId: request.repartidorId ?? '',
+          response: response,
+          acceptedPaymentAmount: request.cobro?.importeCobrado.toDouble(),
+          acceptedPaymentMethod: request.cobro?.formaPago,
+        );
     _refreshAfterAcknowledgedDelivery();
     return true;
   }

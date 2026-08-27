@@ -15,6 +15,8 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_rutero_reorder_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/smart_delivery_card.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_tracking.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_tracking_panel.dart';
 
 typedef RepartidorRuteroWeekLoader = Future<Map<String, dynamic>> Function({
   required String repartidorId,
@@ -178,8 +180,24 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
 
     // Backend supports multi-ID for week endpoint (uses IN clause)
+    final loadAllDeliveryPages = () async {
+      await entregas.cargarAlbaranesPendientes(forceRefresh: forceRefresh);
+
+      // A route is a working list, so the main screen must not silently stop
+      // at the first 100 rows. The endpoint is bounded to five 100-row pages.
+      for (var page = 1; page <= 5; page += 1) {
+        if (!mounted) break;
+        final current = ref.read(entregasProvider);
+        if (!current.hasMore || current.error != null) break;
+        final previousOffset = current.nextOffset;
+        await entregas.cargarMasAlbaranes();
+        final next = ref.read(entregasProvider);
+        if (next.hasMore && next.nextOffset <= previousOffset) break;
+      }
+    };
+
     await Future.wait([
-      entregas.cargarAlbaranesPendientes(forceRefresh: forceRefresh),
+      loadAllDeliveryPages(),
       _loadWeekData(targetId, forceRefresh: forceRefresh),
     ]);
   }
@@ -237,7 +255,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     setState(() => _selectedDate = date);
 
     final entregas = ref.read(entregasProvider.notifier);
-    entregas.seleccionarFecha(date);
+    entregas.seleccionarFecha(date, autoReload: false);
+    unawaited(_loadData());
 
     // Animate list
     _listAnimController.reset();
@@ -251,6 +270,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     _loadData();
   }
 
+  void _updateRouteFilter(void Function(EntregasNotifier) update) {
+    update(ref.read(entregasProvider.notifier));
+    unawaited(_loadData());
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider.select((s) => s.value));
@@ -258,6 +282,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     final isLoading = ref.watch(entregasProvider.select((s) => s.isLoading));
     final error = ref.watch(entregasProvider.select((s) => s.error));
     final albaranes = ref.watch(entregasProvider.select((s) => s.albaranes));
+    final hasMore = ref.watch(entregasProvider.select((s) => s.hasMore));
     final resumenCompletedCount =
         ref.watch(entregasProvider.select((s) => s.resumenCompletedCount));
     final resumenTotalACobrar =
@@ -286,6 +311,17 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             : 'Repartidor $scopedId';
       }
     }
+
+    final trackingStops = albaranes
+        .where((albaran) => albaran.estado != EstadoEntrega.entregado)
+        .map((albaran) => RuteroTrackingStop(
+              id: albaran.id,
+              name: albaran.nombreCliente,
+              latitude: albaran.latitud,
+              longitude: albaran.longitud,
+            ))
+        .toList(growable: false);
+    final routeDateYmd = _selectedDate.toIso8601String().substring(0, 10);
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
@@ -379,10 +415,18 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             isLoading: isLoading,
           ),
 
+          if (scopedId.isNotEmpty && !scopedId.contains(','))
+            RuteroTrackingPanel(
+              repartidorId: scopedId,
+              routeDate: routeDateYmd,
+              stops: trackingStops,
+            ),
+
           // CLIENT LIST
           Expanded(
-            child:
-                isLoading ? _buildLoadingState() : _buildClientList(albaranes),
+            child: isLoading || (albaranes.isEmpty && hasMore && error == null)
+                ? _buildLoadingState()
+                : _buildClientList(albaranes),
           ),
         ],
       ),
@@ -479,9 +523,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                           isDense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
-                        onChanged: (v) => ref
-                            .read(entregasProvider.notifier)
-                            .setSearchClient(v),
+                        onChanged: (v) => _updateRouteFilter(
+                          (notifier) =>
+                              notifier.setSearchClient(v, autoReload: false),
+                        ),
                       ),
                     ),
                     if (_searchClientController.text.isNotEmpty)
@@ -489,9 +534,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         icon: const Icon(Icons.clear, size: 14),
                         onPressed: () {
                           _searchClientController.clear();
-                          ref
-                              .read(entregasProvider.notifier)
-                              .setSearchClient('');
+                          _updateRouteFilter(
+                            (notifier) =>
+                                notifier.setSearchClient('', autoReload: false),
+                          );
                         },
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -533,7 +579,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                           color: AppTheme.textPrimary,
                         ),
                         decoration: const InputDecoration(
-                          hintText: 'NÂº Alb/Fac...',
+                          hintText: 'Nº Alb/Fac...',
                           hintStyle: TextStyle(
                             fontSize: 11,
                             color: AppTheme.textSecondary,
@@ -542,9 +588,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                           isDense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
-                        onChanged: (v) => ref
-                            .read(entregasProvider.notifier)
-                            .setSearchAlbaran(v),
+                        onChanged: (v) => _updateRouteFilter(
+                          (notifier) =>
+                              notifier.setSearchAlbaran(v, autoReload: false),
+                        ),
                       ),
                     ),
                     if (_searchAlbaranController.text.isNotEmpty)
@@ -552,9 +599,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         icon: const Icon(Icons.clear, size: 14),
                         onPressed: () {
                           _searchAlbaranController.clear();
-                          ref
-                              .read(entregasProvider.notifier)
-                              .setSearchAlbaran('');
+                          _updateRouteFilter(
+                            (notifier) => notifier.setSearchAlbaran('',
+                                autoReload: false),
+                          );
                         },
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -574,9 +622,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               icon: Icons.euro,
               onTap: () {
                 unawaited(HapticFeedback.selectionClick());
-                ref.read(entregasProvider.notifier).setFilterDebeCobrar(
-                      filterDebeCobrar == 'S' ? '' : 'S',
-                    );
+                _updateRouteFilter(
+                  (notifier) => notifier.setFilterDebeCobrar(
+                    filterDebeCobrar == 'S' ? '' : 'S',
+                    autoReload: false,
+                  ),
+                );
               },
             ),
 
@@ -589,9 +640,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               icon: Icons.credit_card,
               onTap: () {
                 unawaited(HapticFeedback.selectionClick());
-                ref.read(entregasProvider.notifier).setFilterTipoPago(
-                      filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
-                    );
+                _updateRouteFilter(
+                  (notifier) => notifier.setFilterTipoPago(
+                    filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
+                    autoReload: false,
+                  ),
+                );
               },
             ),
 
@@ -619,7 +673,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     DropdownMenuItem(
                       value: 'default',
                       child: Text(
-                        'â†• Orden',
+                        '• Orden',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 11,
@@ -629,7 +683,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     DropdownMenuItem(
                       value: 'importe_desc',
                       child: Text(
-                        'â†“ Mayor â‚¬',
+                        '• Mayor a menor',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 11,
@@ -639,7 +693,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     DropdownMenuItem(
                       value: 'importe_asc',
                       child: Text(
-                        'â†‘ Menor â‚¬',
+                        '• Menor a mayor',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 11,
@@ -650,7 +704,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   onChanged: (val) {
                     if (val != null) {
                       unawaited(HapticFeedback.selectionClick());
-                      ref.read(entregasProvider.notifier).setSortBy(val);
+                      _updateRouteFilter(
+                        (notifier) =>
+                            notifier.setSortBy(val, autoReload: false),
+                      );
                     }
                   },
                 ),
@@ -879,7 +936,6 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     }
 
     _isDetailModalOpen = true;
-    final entregasNotifier = ref.read(entregasProvider.notifier);
 
     showModalBottomSheet(
       context: context,
@@ -889,7 +945,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     ).whenComplete(() {
       _isDetailModalOpen = false;
       if (mounted) {
-        entregasNotifier.cargarAlbaranesPendientes(forceRefresh: true);
+        // Rebuild the complete route after a confirmation. A direct first
+        // page reload would silently drop stops after the first 100 rows.
+        unawaited(_loadData(forceRefresh: true));
       }
     });
   }

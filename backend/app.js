@@ -40,7 +40,7 @@ function repartoFamilyWriteGuard(req, res, next) {
     return repartoFinanceWriteGuard(req, res, next);
   }
   // Day-scoped rutero order is app routing metadata, not confirmation ledger.
-  if (req.path.startsWith('/rutero/order')) {
+  if (req.path.startsWith('/rutero/order') || req.path.startsWith('/rutero/tracking')) {
     return repartoWritesEnabledGuard(req, res, next);
   }
   return repartoConfirmationWriteGuard(req, res, next);

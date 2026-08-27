@@ -7,8 +7,9 @@ const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
 const { resolveConfirmationTables, resolveFinanceWriteTables } = require('../repositories/repartidor-route-db2-repository');
+const dayMoveRepo = require('../repositories/repartidor-rutero-day-move-db2-repository');
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
-const { applySavedOrder } = require('../services/repartidor-rutero-orden-service');
+const { applySavedOrder, applyDayMovePositions } = require('../services/repartidor-rutero-orden-service');
 const {
     resolveDeliveryAmount,
     documentAmountKey,
@@ -18,6 +19,7 @@ const {
     loadDeliveryLineAmountStats,
     emptyLineStats,
 } = require('../services/delivery-line-amount-stats');
+const REPARTIDOR_ROUTE_ORDER_FETCH_MAX = 500;
 
 /**
  * Strip leading vendor code from VDD names (e.g., "08 DAMIAN" â†’ "DAMIAN")
@@ -299,7 +301,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const { repartidorId } = req.params;
         const { date, limit, offset } = req.query;
 
-        const pageLimit = parseBoundedInteger(limit, { defaultValue: 100, min: 1, max: 100 });
+        const pageLimit = parseBoundedInteger(limit, { defaultValue: 100, min: 1, max: REPARTIDOR_ROUTE_ORDER_FETCH_MAX });
         const pageOffset = parseBoundedInteger(offset, { defaultValue: 0, min: 0, max: 1000000 });
         const targetDate = parseIsoCalendarDate(date);
         if (pageLimit === null || pageOffset === null) {
@@ -328,6 +330,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             });
         }
         const placeholders = idList.map(() => '?').join(',');
+        const sortBy = req.query.sortBy || 'default';
+        const routeOrderMode = req.query.routeOrder === 'true' && sortBy === 'default' && idList.length === 1;
 
         // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
         let paymentConditions = {};
@@ -378,6 +382,32 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               CAST(NULL AS VARCHAR(512)) as DS_OBS,
               CAST(NULL AS VARCHAR(255)) as DS_FIRMA`;
 
+        const dayMoveTable = dayMoveRepo.tryResolveDayOverrideTable();
+        const dayMoveEnabled = Boolean(dayMoveTable);
+        const weekStartYmd = dayMoveEnabled ? dayMoveRepo.monday(targetDate.date) : null;
+        const weekEndDate = weekStartYmd
+            ? new Date(`${weekStartYmd}T12:00:00Z`)
+            : null;
+        if (weekEndDate) weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+        const weekEndYmd = weekEndDate ? weekEndDate.toISOString().slice(0, 10) : null;
+        const dayMoveJoin = dayMoveEnabled ? `
+            LEFT JOIN ${dayMoveTable} ROUTE_MOVE
+              ON ROUTE_MOVE.REPARTIDOR_ID = TRIM(OPP.CODIGOREPARTIDOR)
+             AND ROUTE_MOVE.WEEK_START = ?
+             AND TRIM(ROUTE_MOVE.DOCUMENT_ID) =
+                 TRIM(VARCHAR(CPC.EJERCICIOALBARAN)) || '-' || TRIM(CPC.SERIEALBARAN) || '-' ||
+                 TRIM(VARCHAR(CPC.TERMINALALBARAN)) || '-' || TRIM(VARCHAR(CPC.NUMEROALBARAN)) || '-' ||
+                 TRIM(CPC.CODIGOCLIENTEALBARAN)
+        ` : '';
+        const dayMoveDateWhere = dayMoveEnabled ? `
+              AND (
+                (ROUTE_MOVE.DOCUMENT_ID IS NOT NULL AND ROUTE_MOVE.TARGET_DATE = ?)
+                OR (ROUTE_MOVE.DOCUMENT_ID IS NULL
+                    AND OPP.DIAREPARTO = ?
+                    AND OPP.MESREPARTO = ?
+                    AND OPP.ANOREPARTO = ?)
+              )
+        ` : '';
         const sql = `
             WITH ranked_deliveries AS (
               SELECT
@@ -412,6 +442,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA,
               TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
+              ${dayMoveEnabled ? 'ROUTE_MOVE.TARGET_POSITION AS ROUTE_MOVE_POSITION,' : 'CAST(NULL AS INTEGER) AS ROUTE_MOVE_POSITION,'}
               OPP.NUMEROORDENPREPARACION as ORDEN_PREPARACION,
               COALESCE(TRIM(VDD.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NOMBRE_REPARTIDOR,
               CPC.DIALLEGADA, CPC.HORALLEGADA,
@@ -436,13 +467,12 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
               AND TRIM(CAC.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            ${dayMoveJoin}
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             ${dsJoin}
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
-              AND OPP.DIAREPARTO = ?
-              AND OPP.MESREPARTO = ?
-              AND OPP.ANOREPARTO = ?
+              ${dayMoveDateWhere}
             )
             SELECT * FROM ranked_deliveries
             WHERE DELIVERY_RANK = 1
@@ -455,15 +485,35 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
 
         let rows = [];
         try {
-            const queryParams = [...idList, dia, mes, ano, pageOffset, pageLimit + 1];
+            const queryParams = dayMoveEnabled ? [
+                weekStartYmd,
+                ...idList,
+                Number(weekStartYmd.replace(/-/g, '')),
+                Number(weekEndYmd.replace(/-/g, '')),
+                targetDate.date,
+                dia,
+                mes,
+                ano,
+                routeOrderMode ? 0 : pageOffset,
+                routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX + 1 : pageLimit + 1,
+            ] : [
+                ...idList, dia, mes, ano,
+                routeOrderMode ? 0 : pageOffset,
+                routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX + 1 : pageLimit + 1,
+            ];
             rows = await queryWithParams(sql, queryParams) || [];
         } catch (queryError) {
             logger.error('[ENTREGAS] Pending-delivery query unavailable');
             return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo consultar el listado de entregas');
         }
 
-        const sourceHasMore = rows.length > pageLimit;
-        rows = rows.slice(0, pageLimit);
+        const sourceHasMore = routeOrderMode
+            ? rows.length > REPARTIDOR_ROUTE_ORDER_FETCH_MAX
+            : rows.length > pageLimit;
+        if (routeOrderMode && sourceHasMore && pageOffset >= REPARTIDOR_ROUTE_ORDER_FETCH_MAX) {
+            return sendEntregasUnavailable(res, 'ROUTE_TOO_LARGE', 'La ruta supera el límite de 500 paradas');
+        }
+        rows = rows.slice(0, routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX : pageLimit);
         // Defensive deduplication. SQL already paginates DELIVERY_RANK = 1 rows.
         // Group by Albaran ID + Client and SUM financial fields
         const aggregatedMap = new Map();
@@ -499,6 +549,19 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 .map(row => (row.CLIENTE || '').trim())
                 .filter(Boolean)
         ));
+        const geoByClient = new Map();
+        if (clientCodes.length > 0) {
+            try {
+                const geoRows = await ruteroOrdenRepo.fetchClientGeo(clientCodes);
+                for (const [clientCode, geo] of geoRows.entries()) {
+                    if (geo && Number.isFinite(geo.lat) && Number.isFinite(geo.lng)) {
+                        geoByClient.set(clientCode, geo);
+                    }
+                }
+            } catch (geoError) {
+                logger.warn(`[ENTREGAS] Could not load route GPS: ${geoError?.message || geoError}`);
+            }
+        }
         const parseMoney = (val) => {
             if (val === null || val === undefined) return 0;
             if (typeof val === 'number') return val;
@@ -740,6 +803,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
                 nombreRepartidor: stripVendorCode(row.NOMBRE_REPARTIDOR) || row.CODIGO_REPARTIDOR?.trim() || '',
                 ordenPreparacion: row.ORDEN_PREPARACION || null,
+                routeMovePosition: Number.isInteger(Number(row.ROUTE_MOVE_POSITION)) ? Number(row.ROUTE_MOVE_POSITION) : null,
                 estado: status,
                 observaciones: row.DS_OBS,
                 firma: row.DS_FIRMA
@@ -801,7 +865,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         }
 
         // --- SORTING ---
-        const sortBy = req.query.sortBy || 'default'; // 'default', 'importe_asc', 'importe_desc'
         if (sortBy === 'importe_desc') {
             filteredAlbaranes.sort((a, b) => b.importe - a.importe);
         } else if (sortBy === 'importe_asc') {
@@ -816,25 +879,57 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             }
         }
 
-        // Calculate totals for summary (always from unfiltered `albaranes` for accurate KPIs)
-        const totalBruto = albaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalACobrar = albaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalOpcional = albaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
-        const completedCount = albaranes.filter(a => a.estado === 'ENTREGADO').length;
-
-        const totalFiltered = filteredAlbaranes.length;
-        const nextOffset = pageOffset + uniqueRows.length;
-        const exactTotal = sourceHasMore ? null : nextOffset;
+        if (dayMoveEnabled) {
+            filteredAlbaranes = applyDayMovePositions(
+                filteredAlbaranes,
+                filteredAlbaranes
+                    .map((item) => ({
+                        documentId: item.id,
+                        targetPosition: item.routeMovePosition,
+                    }))
+                    .filter((item) => Number.isInteger(item.targetPosition)),
+            );
+        }
+        const hasPostQueryFilter = Boolean(
+            searchQuery
+            || searchClient
+            || searchAlbaran
+            || filterTipo
+            || filterCobrar
+            || filterDocTipo,
+        );
+        const hasMore = routeOrderMode
+            ? sourceHasMore || pageOffset + pageLimit < filteredAlbaranes.length
+            : sourceHasMore;
+        const paginatedAlbaranes = routeOrderMode
+            ? filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit)
+            : filteredAlbaranes;
+        // Summaries describe this response page so the Flutter provider can
+        // add them safely while it loads the remaining route pages.
+        const summaryAlbaranes = routeOrderMode ? paginatedAlbaranes : albaranes;
+        const totalBruto = summaryAlbaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalACobrar = summaryAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalOpcional = summaryAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const completedCount = summaryAlbaranes.filter(a => a.estado === 'ENTREGADO').length;
+        // The cursor represents rows consumed from the source page, not only
+        // rows that survive post-query filters. Otherwise an empty filtered
+        // page repeats forever while sourceHasMore remains true.
+        const nextOffset = hasMore
+            ? pageOffset + pageLimit
+            : pageOffset + paginatedAlbaranes.length;
+        const totalIsExact = !hasMore && (routeOrderMode || !hasPostQueryFilter);
+        const exactTotal = totalIsExact
+            ? (routeOrderMode ? filteredAlbaranes.length : nextOffset)
+            : null;
         const pagination = {
             limit: pageLimit,
             offset: pageOffset,
-            hasMore: sourceHasMore,
+            hasMore,
             nextOffset,
             total: exactTotal,
-            totalIsExact: !sourceHasMore
+            totalIsExact
         };
         const totalUnfiltered = albaranes.length;
-        const paginatedAlbaranes = filteredAlbaranes;
 
         logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} â†’ albaranes=${paginatedAlbaranes.length} (offset=${pageOffset}, limit=${pageLimit}), totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
 
@@ -845,9 +940,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             originalTotal: totalUnfiltered,
             limit: pageLimit,
             offset: pageOffset,
-            hasMore: sourceHasMore,
+            hasMore,
             nextOffset,
-            totalIsExact: !sourceHasMore,
+            totalIsExact,
             pagination,
             resumen: {
                 totalBruto: Math.round(totalBruto * 100) / 100,

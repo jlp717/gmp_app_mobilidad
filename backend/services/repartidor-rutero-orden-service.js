@@ -16,8 +16,10 @@ const WEEKDAY_CIERRE = [
 
 function parseRouteDate(raw) {
   const text = String(raw || '').trim();
-  const ymd = /^(\d{4}-\d{2}-\d{2})/.exec(text)?.[1] || '';
+  // Retain full-ISO timestamp compatibility, reject trailing garbage.
+  const ymd = /^(\d{4}-\d{2}-\d{2})(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(text)?.[1] || '';
   if (!DATE_RE.test(ymd)) return null;
+  if (text.includes('T') && Number.isNaN(Date.parse(text))) return null;
   const date = new Date(`${ymd}T00:00:00Z`);
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== ymd) return null;
   return ymd;
@@ -94,6 +96,40 @@ function applySavedOrder(items, ordenRows) {
     }))
     .sort((a, b) => (a.rank - b.rank) || (a.index - b.index))
     .map((entry) => entry.item);
+}
+/**
+ * Applies operational day moves after the saved day order.  Moved stops keep
+ * their requested target slot; all other stops preserve their relative order.
+ */
+function applyDayMovePositions(items, moveRows) {
+  if (!Array.isArray(items) || !Array.isArray(moveRows) || moveRows.length === 0) {
+    return items;
+  }
+  const positions = new Map();
+  for (const row of moveRows) {
+    const documentId = String(row?.documentId || row?.DOCUMENT_ID || '').trim();
+    const position = Number(row?.targetPosition ?? row?.TARGET_POSITION);
+    if (documentId && Number.isInteger(position) && position >= 0) {
+      positions.set(documentId, position);
+    }
+  }
+  if (positions.size === 0) return items;
+  const moved = [];
+  const remaining = [];
+  items.forEach((item, index) => {
+    const documentId = String(item?.id || '').trim();
+    if (!positions.has(documentId)) {
+      remaining.push(item);
+      return;
+    }
+    moved.push({ item, index, position: positions.get(documentId) });
+  });
+  moved.sort((left, right) => (left.position - right.position)
+    || (left.index - right.index));
+  for (const entry of moved) {
+    remaining.splice(Math.min(entry.position, remaining.length), 0, entry.item);
+  }
+  return remaining;
 }
 
 /**
@@ -259,8 +295,8 @@ function normalizeOptimizeStopsPayload(body) {
   if (!rawStops) return { error: 'STOPS_INVALID' };
   const parsed = normalizeOrdenPayload(
     rawStops.map((row, index) => ({
-      documentId: row.documentId || row.id,
-      cliente: row.cliente || row.clienteCodigo || row.codigoCliente,
+      documentId: row?.documentId || row?.id,
+      cliente: row?.cliente || row?.clienteCodigo || row?.codigoCliente,
       posicion: index,
     })),
   );
@@ -273,6 +309,7 @@ module.exports = {
   normalizeOrdenPayload,
   buildOrderRankMap,
   applySavedOrder,
+  applyDayMovePositions,
   parseCrutHour,
   parseOpenTimeFromObs,
   preferredStartMinute,

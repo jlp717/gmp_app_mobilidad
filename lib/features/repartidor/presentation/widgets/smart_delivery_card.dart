@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
 import 'package:intl/intl.dart';
 
 /// Smart Delivery Card with futuristic design
@@ -187,6 +188,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               _buildHeader(),
               const SizedBox(height: 10),
               _buildClientInfo(),
+              const SizedBox(height: 6),
+              RuteroStopStatusBadges(albaran: widget.albaran),
               const SizedBox(height: 6),
               _buildQuickActions(),
             ],
@@ -517,7 +520,11 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   String _getPaymentLabel() {
     if (widget.albaran.hasAppCobro) {
       final method = (widget.albaran.formaPagoCobro ?? '').trim();
-      final kind = widget.albaran.cobroParcial ? 'PARCIAL' : 'COBRADO';
+      final kind = widget.albaran.cobroParcial
+          ? 'COBRO PARCIAL'
+          : widget.albaran.importePendienteCobro == null
+              ? 'COBRO REGISTRADO'
+              : 'COBRADO';
       if (method.isEmpty) return kind;
       return '$kind · $method';
     }
@@ -534,7 +541,11 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   }
 
   Color _getPaymentColor() {
-    if (widget.albaran.hasAppCobro) return AppTheme.success;
+    if (widget.albaran.hasAppCobro)
+      return widget.albaran.cobroParcial ||
+              widget.albaran.importePendienteCobro == null
+          ? AppTheme.warning
+          : AppTheme.success;
     if (widget.albaran.esCTR) return AppTheme.obligatorio;
     if (widget.albaran.colorEstado == 'green') return AppTheme.success;
     if (widget.albaran.colorEstado == 'orange') return AppTheme.opcional;

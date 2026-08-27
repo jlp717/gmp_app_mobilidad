@@ -78,6 +78,10 @@ function getAuthScope(req) {
                 ? user.vendedorCodes.map(String).sort()
                 : String(user.vendedorCodes || ''),
             viewAs: String(user.viewAs || user.view_as || headers['x-view-as'] || ''),
+            activeMode: String(user.activeMode || user.active_mode || ''),
+            repartidorCodes: Array.isArray(user.repartidorCodes)
+                ? user.repartidorCodes.map(String).sort()
+                : String(user.repartidorCodes || ''),
         };
         return crypto
             .createHash('sha256')

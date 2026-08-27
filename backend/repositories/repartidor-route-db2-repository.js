@@ -15,6 +15,7 @@ const {
   getDeliveryStatusColumns,
   getDeliveryStatusTable,
 } = require('../utils/delivery-status-check');
+const dayMoveRepo = require('./repartidor-rutero-day-move-db2-repository');
 const { resolveRepartoRuntime, TABLE_MAPPINGS } = require('../config/reparto-runtime');
 
 const MUTATION_RE = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i;
@@ -1424,7 +1425,92 @@ async function getDeliverySummary(selectedYear, selectedMonth, dayFilterParams, 
   )) || [];
 }
 
+function routeWeekDateParts(value) {
+  const text = value instanceof Date
+    ? value.toISOString().slice(0, 10)
+    : String(value || '').slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  return match
+    ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) }
+    : null;
+}
+
+async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdList, table) {
+  const weekStartText = String(weekStartNum).padStart(8, '0');
+  const weekStartYmd = `${weekStartText.slice(0, 4)}-${weekStartText.slice(4, 6)}-${weekStartText.slice(6, 8)}`;
+  const moveIds = repartidorIdList.map(() => '?').join(',');
+  const expr = dayMoveRepo.documentIdExpression('CPC');
+  const weekTables = [resolveConfirmationTables()].filter(Boolean);
+  const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
+  const confirmationJoins = confirmationOverlayJoins(weekTables);
+  const confirmationDelivered = confirmationOverlayDeliveredSql(weekTables);
+  const sql = `
+    WITH DOCUMENTOS_SEMANA AS (
+      SELECT
+        OPP.DIAREPARTO AS DIA,
+        OPP.MESREPARTO AS MES,
+        OPP.ANOREPARTO AS ANO,
+        ROUTE_MOVE.TARGET_DATE AS ROUTE_TARGET_DATE,
+        CPC.SUBEMPRESAALBARAN,
+        CPC.EJERCICIOALBARAN,
+        CPC.SERIEALBARAN,
+        CPC.TERMINALALBARAN,
+        CPC.NUMEROALBARAN,
+        MAX(CASE
+          ${confirmationDelivered}
+          ELSE 0
+        END) AS ENTREGADO
+      FROM DSEDAC.OPP OPP
+      INNER JOIN DSEDAC.CPC CPC
+        ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+       AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
+       AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+      LEFT JOIN ${table} ROUTE_MOVE
+        ON ROUTE_MOVE.REPARTIDOR_ID IN (${moveIds})
+       AND ROUTE_MOVE.WEEK_START = ?
+       AND TRIM(ROUTE_MOVE.DOCUMENT_ID) = ${expr}
+      ${confirmationJoins}
+      WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
+              BETWEEN ? AND ?
+        AND (
+          TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+          ${confirmationScope.sql}
+        )
+      GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO,
+        ROUTE_MOVE.TARGET_DATE,
+        CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN,
+        CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
+    )
+    SELECT DIA, MES, ANO, ROUTE_TARGET_DATE,
+           COUNT(*) AS TOTAL_ALBARANES,
+           SUM(ENTREGADO) AS ENTREGADOS
+      FROM DOCUMENTOS_SEMANA
+     GROUP BY ANO, MES, DIA, ROUTE_TARGET_DATE
+     ORDER BY ANO, MES, DIA, ROUTE_TARGET_DATE
+  `;
+  const rows = await runQueryWithParams(sql, [
+    ...repartidorIdList,
+    weekStartYmd,
+    weekStartNum,
+    weekEndNum,
+    ...repartidorIdList,
+    ...confirmationScope.params,
+  ], false);
+  return (rows || []).map((row) => {
+    const target = routeWeekDateParts(row.ROUTE_TARGET_DATE);
+    return {
+      ...row,
+      DIA: target?.day ?? Number(row.DIA),
+      MES: target?.month ?? Number(row.MES),
+      ANO: target?.year ?? Number(row.ANO),
+    };
+  });
+}
+
+
 async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
+  const dayMoveTable = dayMoveRepo.tryResolveDayOverrideTable();
+  if (dayMoveTable) return getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdList, dayMoveTable);
   const weekTables = [resolveConfirmationTables()].filter(Boolean);
   const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
   const confirmationJoins = confirmationOverlayJoins(weekTables);

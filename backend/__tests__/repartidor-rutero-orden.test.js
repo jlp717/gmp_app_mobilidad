@@ -4,6 +4,7 @@ const express = require('express');
 const request = require('supertest');
 
 const mockListOrder = jest.fn();
+const mockReadOrder = jest.fn();
 const mockReplaceOrder = jest.fn();
 
 jest.mock('../config/db', () => ({
@@ -61,6 +62,7 @@ jest.mock('../repositories/repartidor-route-db2-repository', () => ({
 }));
 jest.mock('../repositories/repartidor-rutero-orden-db2-repository', () => ({
   listOrder: (...args) => mockListOrder(...args),
+  readOrderState: (...args) => mockReadOrder(...args),
   replaceOrder: (...args) => mockReplaceOrder(...args),
   fetchClientWindows: jest.fn(async () => new Map()),
   fetchClientGeo: jest.fn(async () => new Map()),
@@ -83,6 +85,7 @@ describe('repartidor day-scoped rutero order', () => {
     jest.clearAllMocks();
     global.__RUTERO_ORDEN_USER__ = { id: '05', code: '05', role: 'REPARTIDOR', repartidorCodes: ['05'] };
     mockListOrder.mockResolvedValue([]);
+    mockReadOrder.mockResolvedValue({ orden: [], revision: 'W10' });
     mockReplaceOrder.mockImplementation(async (_id, _date, orden) => ({ orden, revision: 'next' }));
   });
 
@@ -141,6 +144,64 @@ describe('repartidor day-scoped rutero order', () => {
       { documentId: 'doc-1', posicion: 1 },
     ]);
     expect(parsed.error).toBe('ORDEN_DUPLICATE');
+  });
+
+  test('GET supplies the initial revision; PUT rejects its omission without writing', async () => {
+    const state = await request(makeApp()).get('/repartidor/rutero/order/05?date=2026-08-11').set('Authorization', 'Bearer t');
+    expect(state.status).toBe(200);
+    expect(state.body.revision).toBe('W10');
+    const missing = await request(makeApp()).put('/repartidor/rutero/order/05').set('Authorization', 'Bearer t')
+      .send({ date: '2026-08-11', orden: [{ documentId: 'DOC-1' }] });
+    expect(missing.status).toBe(422);
+    expect(missing.body.code).toBe('RUTERO_ORDER_REVISION_REQUIRED');
+    expect(mockReplaceOrder).not.toHaveBeenCalled();
+  });
+
+  test.each([[409, 'RUTERO_ORDER_CONFLICT'], [503, 'RUTERO_ORDER_TRANSACTION_UNAVAILABLE']])(
+    'preserves typed save error %s without leaking internals', async (statusCode, code) => {
+      mockReplaceOrder.mockRejectedValueOnce(Object.assign(new Error('internal DB details'), { statusCode, code }));
+      const res = await request(makeApp()).put('/repartidor/rutero/order/05').set('Authorization', 'Bearer t')
+        .send({ date: '2026-08-11', baseRevision: 'current', orden: [{ documentId: 'DOC-1' }] });
+      expect(res.status).toBe(statusCode);
+      expect(res.body.code).toBe(code);
+      expect(JSON.stringify(res.body)).not.toContain('internal DB');
+    },
+  );
+
+  test.each([
+    ['2026-08-23', '2026-08-24', 0, 422, 'RUTERO_MOVE_OUTSIDE_WEEK'],
+    ['2026-08-24', '2026-08-24', 0, 422, 'RUTERO_MOVE_SAME_DAY'],
+    ['2026-08-24', '2026-08-25', -1, 422, 'POSICION_INVALID'],
+    ['2026-08-24', '2026-08-25', 1.5, 422, 'POSICION_INVALID'],
+    ['2026-08-24', '2026-08-30', 0, 503, 'RUTERO_DAY_MOVE_UNAVAILABLE'],
+    ['2026-12-31', '2027-01-03', 3, 503, 'RUTERO_DAY_MOVE_UNAVAILABLE'],
+  ])('move %s -> %s validates week and position without DB writes', async (date, targetDate, position, status, code) => {
+    const res = await request(makeApp()).post('/repartidor/rutero/order/05/move').set('Authorization', 'Bearer t')
+      .send({
+        date,
+        targetDate,
+        position,
+        idempotencyKey: 'move-test-1234',
+        orden: [{ documentId: 'DOC-1', cliente: 'C1' }],
+      });
+    expect(res.status).toBe(status);
+    expect(res.body.code).toBe(code);
+    expect(mockReplaceOrder).not.toHaveBeenCalled();
+    expect(mockListOrder).not.toHaveBeenCalled();
+    expect(mockReadOrder).not.toHaveBeenCalled();
+  });
+
+  test('move denies another driver before inspecting the payload', async () => {
+    const res = await request(makeApp()).post('/repartidor/rutero/order/94/move').set('Authorization', 'Bearer t').send({});
+    expect(res.status).toBe(403);
+    expect(mockReplaceOrder).not.toHaveBeenCalled();
+  });
+
+  test('a malformed optimize stop is a validation error, not an outage', async () => {
+    const res = await request(makeApp()).post('/repartidor/rutero/order/05/optimize').set('Authorization', 'Bearer t')
+      .send({ date: '2026-08-24', stops: [null] });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('DOCUMENT_ID_INVALID');
   });
 
   test('applySavedOrder sorts known docs first and keeps unordered after', () => {

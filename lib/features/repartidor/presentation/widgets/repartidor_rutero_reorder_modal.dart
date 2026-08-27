@@ -7,6 +7,9 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_route_feedback.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_day_move_dialog.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_route_map_view.dart';
 
 class RepartidorRuteroReorderModal extends StatefulWidget {
@@ -34,6 +37,8 @@ class _RepartidorRuteroReorderModalState
   final Map<String, RuteroStopWindow> _metaByKey = {};
   RuteroRouteExplanation? _routeExplanation;
   bool _isSaving = false;
+  bool _loadingOrder = true;
+  bool _routeComplete = false;
   bool _isOptimizing = false;
   RuteroRouteStrategy _strategy = RuteroRouteStrategy.balanced;
   RuteroRouteOrigin? _origin;
@@ -76,6 +81,33 @@ class _RepartidorRuteroReorderModalState
       '${widget.date.day.toString().padLeft(2, '0')}';
 
   Future<void> _initializeRoute() async {
+    setState(() {
+      _loadingOrder = true;
+      _routeComplete = false;
+      _revision = '';
+    });
+    try {
+      final documents = await RuteroRouteApi.fetchDayDocuments(
+          repartidorId: widget.repartidorId, dateYmd: _dateYmd);
+      final fullRoute = documents.map(AlbaranEntrega.fromJson).toList();
+      if (!isCompleteDocumentPermutation(
+          currentIds: fullRoute.map((a) => a.id),
+          proposedIds: fullRoute.map((a) => a.id))) {
+        throw ApiException('Duplicate route documents', statusCode: 422);
+      }
+      if (!mounted) return;
+      setState(() {
+        _ordered = fullRoute;
+        _routeComplete = true;
+      });
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _error = ruteroRouteError(error);
+          _loadingOrder = false;
+        });
+      return;
+    }
     await _reloadFromRemote(silent: true);
     if (mounted) await _loadStopMeta();
   }
@@ -92,6 +124,7 @@ class _RepartidorRuteroReorderModalState
   }
 
   Future<void> _reloadFromRemote({bool silent = false}) async {
+    if (mounted) setState(() => _loadingOrder = true);
     try {
       final state = await RuteroRouteApi.fetchOrderState(
         repartidorId: widget.repartidorId,
@@ -103,27 +136,40 @@ class _RepartidorRuteroReorderModalState
         _revision = state.revision;
         _isDirty = false;
         _remoteChangePending = false;
+        _error = null;
+        _clearTimeline();
         if (!silent) {
-          _info = 'Se ha cargado el orden guardado por otro usuario.';
+          _info = 'Se ha cargado el orden guardado. Puedes volver a ajustarlo.';
         }
       });
       _refreshLocalEtas();
-    } catch (_) {
-      if (mounted && !silent) {
-        setState(() => _error = 'No se pudo actualizar el orden guardado.');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = ruteroRouteError(error));
       }
+    } finally {
+      if (mounted) setState(() => _loadingOrder = false);
     }
   }
 
   Future<void> _pollOrderState() async {
-    if (_isPolling || _isSaving || _isOptimizing || !mounted) return;
+    if (!_routeComplete ||
+        _isPolling ||
+        _isSaving ||
+        _isOptimizing ||
+        _loadingOrder ||
+        !mounted) return;
     _isPolling = true;
     try {
       final state = await RuteroRouteApi.fetchOrderState(
         repartidorId: widget.repartidorId,
         dateYmd: _dateYmd,
       );
-      if (!mounted || state.revision == _revision) return;
+      if (!mounted ||
+          _isSaving ||
+          _isOptimizing ||
+          _loadingOrder ||
+          state.revision == _revision) return;
       if (_isDirty) {
         setState(() => _remoteChangePending = true);
       } else {
@@ -146,17 +192,7 @@ class _RepartidorRuteroReorderModalState
       _ordered.where((albaran) => _metaFor(albaran)?.hasGps ?? false).length;
 
   String _friendlyError(Object error, {required String fallback}) {
-    if (error is ApiException) {
-      if (error.statusCode == 409) return 'Otro usuario modificó esta ruta.';
-      if (error.statusCode == 401) {
-        return 'La sesión ha caducado. Vuelve a intentarlo.';
-      }
-      if (error.statusCode == 503) {
-        return 'El servicio no está disponible ahora. Inténtalo de nuevo.';
-      }
-      return error.message;
-    }
-    return fallback;
+    return ruteroRouteError(error);
   }
 
   Future<void> _useCurrentLocation() async {
@@ -242,8 +278,6 @@ class _RepartidorRuteroReorderModalState
   Future<void> _loadStopMeta() async {
     setState(() {
       _loadingMeta = true;
-
-      _error = null;
     });
     try {
       final clientes = _ordered
@@ -264,10 +298,12 @@ class _RepartidorRuteroReorderModalState
             stops.expand((s) {
               final entries = <MapEntry<String, RuteroStopWindow>>[];
               if (s.documentId.isNotEmpty) {
-                entries.add(MapEntry(s.documentId, s));
+                entries.add(
+                    MapEntry(s.documentId, s.copyWith(clearTimeline: true)));
               }
               if (s.cliente.isNotEmpty) {
-                entries.add(MapEntry(s.cliente, s));
+                entries
+                    .add(MapEntry(s.cliente, s.copyWith(clearTimeline: true)));
               }
               return entries;
             }),
@@ -281,7 +317,7 @@ class _RepartidorRuteroReorderModalState
         _loadingMeta = false;
         // Meta is optional — list reorder still works.
         _info =
-            'Horarios/GPS no disponibles ahora. Puedes reordenar manualmente.';
+            'No se pudieron cargar las ubicaciones y horarios. Puedes cambiar el orden en la lista.';
       });
     }
   }
@@ -348,11 +384,11 @@ class _RepartidorRuteroReorderModalState
         _isOptimizing = false;
         _isDirty = true;
         final departure = result.departureLabel ?? expl?.departureLabel;
-        _info = 'Orden óptimo'
+        _info = 'Propuesta calculada'
             '${departure != null ? ' · salida $departure' : ''}'
             '${end != null ? ' · fin ~$end' : ''}'
             '${km != null ? ' · ~${km.toStringAsFixed(0)} km' : ''}. '
-            'Arrastra si quieres ajustar.';
+            'Puedes ajustar las posiciones en Lista. Pulsa Guardar para conservarlas.';
       });
       if (_tabController.index != 1) {
         _tabController.animateTo(1);
@@ -370,15 +406,19 @@ class _RepartidorRuteroReorderModalState
   }
 
   Future<void> _saveOrder() async {
+    if (!_routeComplete ||
+        _isSaving ||
+        _isOptimizing ||
+        _loadingOrder ||
+        _remoteChangePending) return;
     setState(() {
       _isSaving = true;
       _error = null;
     });
     try {
       if (_revision.isEmpty) {
-        throw StateError(
-          'No se ha podido verificar el orden guardado. Recarga antes de guardar.',
-        );
+        throw ApiException('Revision required',
+            statusCode: 422, code: 'RUTERO_ORDER_REVISION_REQUIRED');
       }
 
       final orden = _ordered.asMap().entries.map((entry) {
@@ -414,14 +454,54 @@ class _RepartidorRuteroReorderModalState
   }
 
   void _onReorder(int oldIndex, int newIndex) {
+    if (_isSaving || _isOptimizing || _loadingOrder) return;
     setState(() {
       if (oldIndex < newIndex) newIndex -= 1;
       final item = _ordered.removeAt(oldIndex);
       _ordered.insert(newIndex, item);
+      _clearTimeline();
       _refreshLocalEtas();
       _isDirty = true;
-      _info = 'Orden manual pendiente de guardar';
+      _info =
+          'Orden pendiente de guardar. Las horas se recalculan al aplicar una nueva propuesta.';
     });
+  }
+
+  void _clearTimeline() {
+    _routeExplanation = null;
+    _metaByKey.updateAll((key, value) => value.copyWith(clearTimeline: true));
+  }
+
+  Future<void> _changePosition(int index) async {
+    final target = await showDialog<int>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+              title: const Text('Elegir posición'),
+              children: [
+                for (var i = 0; i < _ordered.length; i++)
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, i),
+                    child: Text('Parada ${i + 1}'),
+                  )
+              ],
+            ));
+    if (target != null && mounted)
+      _onReorder(index, target > index ? target + 1 : target);
+  }
+
+  Future<void> _moveDay(AlbaranEntrega stop, {bool wholeClient = false}) async {
+    final moved = await showDialog<bool>(
+        context: context,
+        builder: (_) => RuteroDayMoveDialog(
+              date: widget.date,
+              repartidorId: widget.repartidorId,
+              stops: wholeClient
+                  ? _ordered
+                      .where((a) => a.codigoCliente == stop.codigoCliente)
+                      .toList()
+                  : [stop],
+            ));
+    if (moved == true && mounted) Navigator.of(context).pop(true);
   }
 
   void _selectStop(String documentId) {
@@ -468,7 +548,14 @@ class _RepartidorRuteroReorderModalState
             )
           else
             TextButton.icon(
-              onPressed: _ordered.isEmpty ? null : _saveOrder,
+              onPressed: !_routeComplete ||
+                      _ordered.isEmpty ||
+                      _revision.isEmpty ||
+                      _loadingOrder ||
+                      _isOptimizing ||
+                      _remoteChangePending
+                  ? null
+                  : _saveOrder,
               icon: const Icon(Icons.save, color: AppTheme.info),
               label: const Text(
                 'Guardar',
@@ -486,13 +573,19 @@ class _RepartidorRuteroReorderModalState
           unselectedLabelColor: AppTheme.textSecondary,
           tabs: const [
             Tab(text: 'Lista'),
-            Tab(text: 'Mapa 3D'),
+            Tab(text: 'Mapa'),
           ],
         ),
       ),
       body: Column(
         children: [
           _buildToolbar(),
+          if (_loadingOrder) const LinearProgressIndicator(),
+          if (_error != null || _revision.isEmpty)
+            TextButton.icon(
+                onPressed: _isSaving || _loadingOrder ? null : _initializeRoute,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Recargar orden guardado')),
           if (_error != null)
             _banner(
               _error!,
@@ -535,7 +628,7 @@ class _RepartidorRuteroReorderModalState
             children: [
               Expanded(
                 child: Text(
-                  'Arrastra con el dedo: mantén el asa ⋮⋮ y suelta · $_dateYmd',
+                  'Para cambiar el orden, usa el menú de cada parada y elige su posición. También puedes arrastrar el icono de líneas. Después pulsa Guardar. · $_dateYmd',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -555,73 +648,81 @@ class _RepartidorRuteroReorderModalState
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'GPS disponible: $_gpsCoverage/${_ordered.length} paradas',
+              'Ubicación disponible: $_gpsCoverage/${_ordered.length}. Las paradas sin ubicación siguen en la lista, pero no se dibujan en el mapa.',
               style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 11,
               ),
             ),
           ),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Criterio de propuesta',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-            ),
-          ),
-          const SizedBox(height: 4),
-          SegmentedButton<RuteroRouteStrategy>(
-            segments: RuteroRouteStrategy.values
-                .map(
-                  (strategy) => ButtonSegment<RuteroRouteStrategy>(
-                    value: strategy,
-                    label: Text(strategy.label),
-                  ),
-                )
-                .toList(growable: false),
-            selected: {_strategy},
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            onSelectionChanged: (selected) {
-              setState(() => _strategy = selected.single);
-            },
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+          ExpansionTile(
+            title: const Text('Propuesta de ruta'),
             children: [
-              OutlinedButton.icon(
-                onPressed: _useCurrentLocation,
-                icon: Icon(
-                  _origin == null
-                      ? Icons.my_location_outlined
-                      : Icons.my_location,
-                  size: 16,
-                ),
-                label: Text(
-                  _origin == null
-                      ? 'Usar mi ubicación actual'
-                      : 'Salida: ubicación actual',
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Criterio de propuesta',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: _pickDepartureTime,
-                icon: const Icon(Icons.schedule_outlined, size: 16),
-                label: Text('Salida $_departureLabel'),
+              const SizedBox(height: 4),
+              SegmentedButton<RuteroRouteStrategy>(
+                segments: RuteroRouteStrategy.values
+                    .map(
+                      (strategy) => ButtonSegment<RuteroRouteStrategy>(
+                        value: strategy,
+                        label: Text(strategy.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                selected: {_strategy},
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                onSelectionChanged: (selected) {
+                  setState(() => _strategy = selected.single);
+                },
               ),
-              FilledButton.tonalIcon(
-                onPressed: _isOptimizing || _ordered.isEmpty
-                    ? null
-                    : _applyOptimalOrder,
-                icon: _isOptimizing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Aplicar propuesta'),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _useCurrentLocation,
+                    icon: Icon(
+                      _origin == null
+                          ? Icons.my_location_outlined
+                          : Icons.my_location,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _origin == null
+                          ? 'Usar mi ubicación actual'
+                          : 'Salida: ubicación actual',
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _pickDepartureTime,
+                    icon: const Icon(Icons.schedule_outlined, size: 16),
+                    label: Text('Salida $_departureLabel'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: _isSaving ||
+                            _loadingOrder ||
+                            _isOptimizing ||
+                            _ordered.isEmpty
+                        ? null
+                        : _applyOptimalOrder,
+                    icon: _isOptimizing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome, size: 18),
+                    label: const Text('Aplicar propuesta'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -639,7 +740,9 @@ class _RepartidorRuteroReorderModalState
         color: bg,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(text, style: TextStyle(color: fg, fontSize: 13)),
+      child: Semantics(
+          liveRegion: true,
+          child: Text(text, style: TextStyle(color: fg, fontSize: 13))),
     );
   }
 
@@ -661,7 +764,7 @@ class _RepartidorRuteroReorderModalState
             ),
           ),
           TextButton(
-            onPressed: _isSaving ? null : _reloadFromRemote,
+            onPressed: _isSaving || _loadingOrder ? null : _initializeRoute,
             child: const Text('Recargar'),
           ),
         ],
@@ -679,6 +782,7 @@ class _RepartidorRuteroReorderModalState
       );
     }
     return ReorderableListView.builder(
+      buildDefaultDragHandles: false,
       scrollController: _listScrollController,
       itemCount: _ordered.length,
       onReorder: _onReorder,
@@ -732,15 +836,16 @@ class _RepartidorRuteroReorderModalState
               children: [
                 Text(
                   '${a.codigoCliente} · $docLabel'
-                  '${eta != null ? ' · ETA $eta' : ''}'
+                  '${eta != null ? ' · Llegada estimada $eta' : ''}'
                   '${window != null ? ' · $window' : ''}'
                   '${closed ? ' · cerrado hoy' : ''}'
-                  '${missingGps ? ' · sin GPS' : ''}',
+                  '${missingGps ? ' · sin ubicación' : ''}',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
                   ),
                 ),
+                RuteroStopStatusBadges(albaran: a),
                 if (obs.isNotEmpty)
                   Text(
                     obs,
@@ -755,21 +860,33 @@ class _RepartidorRuteroReorderModalState
               ],
             ),
             isThreeLine: obs.isNotEmpty,
-            trailing: Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderColor),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              PopupMenuButton<String>(
+                tooltip: 'Opciones de la parada ${index + 1}',
+                enabled: !_isSaving && !_isOptimizing && !_loadingOrder,
+                onSelected: (value) {
+                  if (value == 'position') _changePosition(index);
+                  if (value == 'day') _moveDay(a);
+                  if (value == 'client') _moveDay(a, wholeClient: true);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: 'position', child: Text('Cambiar posición')),
+                  PopupMenuItem(
+                      value: 'day', child: Text('Cambiar esta parada de día')),
+                  PopupMenuItem(
+                      value: 'client', child: Text('Cambiar cliente de día')),
+                ],
               ),
-              child: const Icon(
-                Icons.drag_handle,
-                color: AppTheme.textSecondary,
-                size: 28,
-              ),
-            ),
+              ReorderableDragStartListener(
+                  index: index,
+                  enabled: !_isSaving && !_isOptimizing && !_loadingOrder,
+                  child: const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(Icons.drag_handle,
+                          color: AppTheme.textSecondary, size: 28))),
+            ]),
           ),
         );
       },

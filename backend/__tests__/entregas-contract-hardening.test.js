@@ -133,6 +133,76 @@ describe('GET /pendientes contract', () => {
     }));
   });
 
+  test('advances the source cursor when a post-query filter hides a page', async () => {
+    const firstPage = Array.from(
+      { length: 101 },
+      (_, index) => pendingRow({
+        NUMEROALBARAN: index + 1,
+        CLIENTE: `C${index + 1}`,
+        NOMBRE_CLIENTE: `Otro ${index + 1}`,
+      }),
+    );
+    const target = pendingRow({
+      NUMEROALBARAN: 150,
+      CLIENTE: 'TARGET',
+      NOMBRE_CLIENTE: 'Cliente objetivo',
+    });
+    mockQueryWithParams.mockImplementation((sql, params) => {
+      if (sql.includes('WITH ranked_deliveries')) {
+        return Promise.resolve(params.at(-2) === 0 ? firstPage : [target]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const first = await request(app()).get(
+      '/pendientes/98?date=2026-08-03&limit=100&offset=0&sortBy=importe_asc&searchClient=TARGET',
+    );
+    expect(first.status).toBe(200);
+    expect(first.body.albaranes).toEqual([]);
+    expect(first.body.pagination).toEqual(expect.objectContaining({
+      hasMore: true,
+      nextOffset: 100,
+    }));
+
+    const second = await request(app()).get(
+      `/pendientes/98?date=2026-08-03&limit=100&offset=${first.body.pagination.nextOffset}&sortBy=importe_asc&searchClient=TARGET`,
+    );
+    expect(second.status).toBe(200);
+    expect(second.body.albaranes).toHaveLength(1);
+    expect(second.body.albaranes[0].codigoCliente).toBe('TARGET');
+    expect(second.body.pagination).toEqual(expect.objectContaining({
+      nextOffset: 101,
+      total: null,
+      totalIsExact: false,
+    }));
+  });
+
+  test('route order reports summaries for the returned page', async () => {
+    const rows = Array.from(
+      { length: 150 },
+      (_, index) => pendingRow({
+        NUMEROALBARAN: index + 1,
+        CLIENTE: `C${index + 1}`,
+      }),
+    );
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('WITH ranked_deliveries')) return Promise.resolve(rows);
+      return Promise.resolve([]);
+    });
+
+    const response = await request(app()).get(
+      '/pendientes/98?date=2026-08-03&routeOrder=true&limit=100&offset=0',
+    );
+    expect(response.status).toBe(200);
+    expect(response.body.albaranes).toHaveLength(100);
+    expect(response.body.resumen.totalBruto).toBe(1200);
+    expect(response.body.pagination).toEqual(expect.objectContaining({
+      hasMore: true,
+      total: null,
+      totalIsExact: false,
+    }));
+  });
+
   test('advances three pages by unique identity despite 102 duplicate physical rows', async () => {
     const physicalRows = [
       ...Array.from({ length: 102 }, () => pendingRow({ NUMEROALBARAN: 42, CLIENTE: 'C1' })),

@@ -3,7 +3,7 @@
 name: gmp_app_mobilidad
 description: "Ultimate Sales Analytics - Ultra-Modern Tablet App for Sales Directors & Representatives"
 publish_to: 'none'
-version: 4.1.17+72
+version: 4.1.18+73
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -19,6 +19,7 @@ dependencies:
   fl_chart: ^0.66.0
   flutter:
     sdk: flutter
+  flutter_tts: ^4.2.5
   flutter_animate: ^4.5.0
   flutter_bluetooth_printer: ^2.2.0 # Raw ZPL over BT Classic (SPP/RFCOMM)
   flutter_local_notifications: ^19.5.0

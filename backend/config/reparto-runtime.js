@@ -31,6 +31,9 @@ const TABLE_MAPPINGS = Object.freeze({
     }),
     routing: Object.freeze({
       order: 'JAVIER.TEST_REPARTIDOR_RUTERO_ORDEN',
+      dayOverride: 'JAVIER.TEST_REPARTIDOR_RUTERO_DIA_OVERRIDE',
+      moveRequests: 'JAVIER.TEST_REPARTIDOR_RUTERO_MOVE_REQUESTS',
+      tracking: 'JAVIER.TEST_REPARTIDOR_RUTERO_TRACKING',
     }),
     notifications: Object.freeze({
       roleTargets: 'JAVIER.TEST_NOTIFICATION_ROLE_TARGETS',
@@ -61,6 +64,9 @@ const TABLE_MAPPINGS = Object.freeze({
     }),
     routing: Object.freeze({
       order: 'JAVIER.REPARTIDOR_RUTERO_ORDEN',
+      dayOverride: 'JAVIER.REPARTIDOR_RUTERO_DIA_OVERRIDE',
+      moveRequests: 'JAVIER.REPARTIDOR_RUTERO_MOVE_REQUESTS',
+      tracking: 'JAVIER.REPARTIDOR_RUTERO_TRACKING',
     }),
     notifications: Object.freeze({
       roleTargets: 'JAVIER.NOTIFICATION_ROLE_TARGETS',
@@ -91,6 +97,9 @@ const TABLE_MAPPINGS = Object.freeze({
     }),
     routing: Object.freeze({
       order: 'TESTMOVIL.LIQUIDIARI',
+      dayOverride: 'TESTMOVIL.REPARTIDOR_RUTERO_DIA_OVERRIDE',
+      moveRequests: 'TESTMOVIL.REPARTIDOR_RUTERO_MOVE_REQUESTS',
+      tracking: 'TESTMOVIL.REPARTIDOR_RUTERO_TRACKING',
     }),
     notifications: Object.freeze({
       roleTargets: 'TESTMOVIL.LIQDIACUE',

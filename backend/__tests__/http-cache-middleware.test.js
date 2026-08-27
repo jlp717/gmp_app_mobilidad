@@ -281,6 +281,45 @@ describe('HTTP cache auth safety', () => {
       'MISS',
     );
   });
+
+  test('separates repartidor cache by active mode and authorized drivers', () => {
+    const base = {
+      method: 'GET',
+      path: '/dashboard/metrics',
+      originalUrl: '/api/dashboard/metrics?date=2026-08-27',
+      baseUrl: '/api',
+      query: { date: '2026-08-27' },
+      headers: {},
+    };
+    const repartoReq = {
+      ...base,
+      user: {
+        id: '01',
+        code: '01',
+        role: 'JEFE_VENTAS',
+        activeMode: 'REPARTIDOR',
+        repartidorCodes: ['05'],
+      },
+    };
+    const commercialReq = {
+      ...base,
+      user: {
+        ...repartoReq.user,
+        activeMode: 'COMERCIAL',
+        repartidorCodes: [],
+      },
+    };
+    const repartoRes = makeRes();
+    cacheMiddleware(repartoReq, repartoRes, jest.fn());
+    repartoRes.json({ success: true, owner: '05' });
+
+    const commercialRes = makeRes();
+    const commercialNext = jest.fn();
+    cacheMiddleware(commercialReq, commercialRes, commercialNext);
+
+    expect(commercialNext).toHaveBeenCalledTimes(1);
+    expect(commercialRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'MISS');
+  });
 });
 
 describe('network optimizer cache headers', () => {

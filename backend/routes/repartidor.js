@@ -51,10 +51,12 @@ const repartidorBreaker = new RepartidorCircuitBreaker({
 const REPARTIDOR_PDF_CACHE_VERSION = 'v3';
 const REPARTIDOR_DOCUMENT_PDF_CACHE_TTL = Number(TTL?.REALTIME) || 60;
 const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
+const trackingRepo = require('../repositories/repartidor-rutero-tracking-db2-repository');
 const facturasService = require('../services/facturas.service');
 const pdfService = require('../services/pdf.service');
 
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
+const ruteroOrderWorkflow = require('../services/repartidor-rutero-order-workflow');
 const {
   optimizeRoutePackage,
   annotateRouteTimeline,
@@ -63,7 +65,6 @@ const {
 } = require('../services/repartidor-rutero-route-optimizer');
 const {
   parseRouteDate,
-  normalizeOrdenPayload,
   normalizeOptimizeStopsPayload,
   preferredStartMinute,
   buildWindowLabel,
@@ -1913,7 +1914,7 @@ router.get('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
     if (!repartidorId) return;
     const fecha = parseRouteDate(req.query.date);
     if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
-    const state = await ruteroOrdenRepo.readOrderState(repartidorId, fecha);
+    const state = await ruteroOrderWorkflow.readOrder(repartidorId, fecha);
     return res.json({ success: true, orden: state.orden, revision: state.revision });
   } catch (error) {
     if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') return sendRouteError(res, 503, error.code);
@@ -1932,18 +1933,8 @@ router.put('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
     const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
     if (!repartidorId) return;
     const body = req.body || {};
-    const fecha = parseRouteDate(body.date);
-    if (!fecha) return sendRouteError(res, 422, 'DATE_INVALID');
-    const parsed = normalizeOrdenPayload(body.orden);
-    if (parsed.error) return sendRouteError(res, 422, parsed.error);
     const updatedBy = String(req.user?.code || req.user?.id || req.user?.user || '').trim();
-    const orden = await ruteroOrdenRepo.replaceOrder(
-      repartidorId,
-      fecha,
-      parsed.value,
-      updatedBy,
-      body.baseRevision,
-    );
+    const orden = await ruteroOrderWorkflow.saveOrder(repartidorId, body, updatedBy);
     return res.json({ success: true, orden: orden.orden, revision: orden.revision });
   } catch (error) {
     if (error?.code === 'RUTERO_ORDEN_SCHEMA_UNAVAILABLE') return sendRouteError(res, 503, error.code);
@@ -1954,6 +1945,97 @@ router.put('/rutero/order/:repartidorId', verifyToken, async (req, res) => {
 });
 
 // =============================================================================
+// Move one or more stops to another day in the same natural week.
+router.post('/rutero/order/:repartidorId/move', verifyToken, async (req, res) => {
+  const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+  if (!repartidorId) return;
+  try {
+    const updatedBy = String(req.user?.code || req.user?.id || req.user?.user || '').trim();
+    const result = await ruteroOrderWorkflow.moveDay(repartidorId, req.body || {}, updatedBy);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return sendRouteError(res, error.statusCode || 503, error.code || 'RUTERO_DAY_MOVE_UNAVAILABLE');
+  }
+});
+// =============================================================================
+// GPS TRACKING
+// Explicit session lifecycle. Samples are owner-scoped, bounded and idempotent.
+router.post('/rutero/tracking/:repartidorId/start', verifyToken, async (req, res) => {
+  const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+  if (!repartidorId) return;
+  try {
+    const routeDate = parseRouteDate(req.body?.date ?? req.body?.routeDate);
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!routeDate) return sendRouteError(res, 422, 'DATE_INVALID');
+    if (!sessionId) return sendRouteError(res, 422, 'TRACKING_SESSION_INVALID');
+    const result = await trackingRepo.createSession({
+      repartidorId,
+      sessionId,
+      routeDate,
+      updatedBy: req.user?.code || req.user?.id || req.user?.user,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return sendRouteError(res, error.statusCode || 503, error.code || 'RUTERO_TRACKING_START_FAILED');
+  }
+});
+
+router.post('/rutero/tracking/:repartidorId/samples', verifyToken, async (req, res) => {
+  const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+  if (!repartidorId) return;
+  try {
+    const routeDate = parseRouteDate(req.body?.date ?? req.body?.routeDate);
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!routeDate) return sendRouteError(res, 422, 'DATE_INVALID');
+    const result = await trackingRepo.appendSamples({
+      repartidorId,
+      sessionId,
+      routeDate,
+      samples: req.body?.samples,
+      updatedBy: req.user?.code || req.user?.id || req.user?.user,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return sendRouteError(res, error.statusCode || 503, error.code || 'RUTERO_TRACKING_SAMPLES_FAILED');
+  }
+});
+
+router.post('/rutero/tracking/:repartidorId/stop', verifyToken, async (req, res) => {
+  const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+  if (!repartidorId) return;
+  try {
+    const routeDate = parseRouteDate(req.body?.date ?? req.body?.routeDate);
+    const sessionId = String(req.body?.sessionId || '').trim();
+    const eventId = String(req.body?.eventId || '').trim();
+    if (!routeDate) return sendRouteError(res, 422, 'DATE_INVALID');
+    const result = await trackingRepo.stopSession({
+      repartidorId,
+      sessionId,
+      routeDate,
+      eventId: eventId || 'stop-' + Date.now(),
+      updatedBy: req.user?.code || req.user?.id || req.user?.user,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return sendRouteError(res, error.statusCode || 503, error.code || 'RUTERO_TRACKING_STOP_FAILED');
+  }
+});
+
+router.get('/rutero/tracking/:repartidorId/latest', verifyToken, async (req, res) => {
+  const repartidorId = authorizeSingleRepartidorId(req, res, req.params.repartidorId);
+  if (!repartidorId) return;
+  try {
+    const routeDate = parseRouteDate(req.query.date ?? req.query.routeDate);
+    if (!routeDate) return sendRouteError(res, 422, 'DATE_INVALID');
+    const position = await trackingRepo.latestPosition({ repartidorId, routeDate });
+    return res.json({ success: true, position });
+  } catch (error) {
+    return sendRouteError(res, error.statusCode || 503, error.code || 'RUTERO_TRACKING_LATEST_FAILED');
+  }
+});
+
+
+
 // POST /rutero/order/:repartidorId/optimize
 // Suggest early→late order by CRUT preferred windows (does not persist).
 // Body: { date, stops: [{documentId, cliente}] } or { date, documentIds, clientes }

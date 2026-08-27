@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_navigation_button.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// Sequence color: green (1st) → sky → orange (last).
@@ -31,7 +33,7 @@ bool _isValidSpainLatLng(double? lat, double? lng) {
 
 const LatLng _kAlmeriaCenter = LatLng(36.834, -2.4637);
 
-/// 3D MapLibre (OSM tiles, no Mapbox token) with flutter_map 2.5D fallback.
+/// MapLibre with an accessible FlutterMap fallback.
 class RuteroRouteMapView extends StatefulWidget {
   const RuteroRouteMapView({
     required this.ordered,
@@ -39,6 +41,8 @@ class RuteroRouteMapView extends StatefulWidget {
     this.selectedDocumentId,
     this.onStopSelected,
     this.routeExplanation,
+    this.useWebView = true,
+    this.fallbackTileProvider,
     super.key,
   });
 
@@ -47,6 +51,8 @@ class RuteroRouteMapView extends StatefulWidget {
   final String? selectedDocumentId;
   final ValueChanged<String>? onStopSelected;
   final RuteroRouteExplanation? routeExplanation;
+  final bool useWebView;
+  final TileProvider? fallbackTileProvider;
 
   @override
   State<RuteroRouteMapView> createState() => _RuteroRouteMapViewState();
@@ -64,7 +70,12 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
   void initState() {
     super.initState();
     _mapController = MapController();
-    unawaited(_initWebView());
+    if (widget.useWebView) {
+      unawaited(_initWebView());
+    } else {
+      _useFallback = true;
+      _loadingHtml = false;
+    }
   }
 
   @override
@@ -96,6 +107,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
       await controller.addJavaScriptChannel(
         'FlutterMapBridge',
         onMessageReceived: (message) {
+          if (!mounted) return;
           try {
             final data = jsonDecode(message.message) as Map<String, dynamic>;
             final type = data['type']?.toString();
@@ -138,6 +150,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
       setState(() {
         _controller = controller;
       });
+      unawaited(_pushRouteToWeb(force: true));
 
       unawaited(
         Future<void>.delayed(const Duration(seconds: 8), () {
@@ -179,6 +192,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
         'cliente': albaran.codigoCliente,
         'nombreCliente': albaran.nombreCliente,
         'index': entry.key,
+        'next': entry.key == _nextIndex,
         'lat': _isValidSpainLatLng(meta?.lat, meta?.lng) ? meta?.lat : null,
         'lng': _isValidSpainLatLng(meta?.lat, meta?.lng) ? meta?.lng : null,
         'windowLabel': meta?.windowLabel,
@@ -250,16 +264,75 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
     return null;
   }
 
+  int get _nextIndex => widget.ordered.indexWhere((stop) =>
+      stop.estado == EstadoEntrega.pendiente ||
+      stop.estado == EstadoEntrega.enRuta);
+
+  Widget _buildSummary() {
+    final remaining = widget.ordered
+        .where((stop) =>
+            stop.estado == EstadoEntrega.pendiente ||
+            stop.estado == EstadoEntrega.enRuta)
+        .toList();
+    final metas = remaining.map(_metaFor).toList();
+    final measured = remaining.isNotEmpty &&
+        widget.routeExplanation != null &&
+        metas.every((m) =>
+            m?.distanceKmFromPrev != null && m?.travelMinutesFromPrev != null);
+    final km = measured
+        ? metas.fold<double>(0, (sum, m) => sum + m!.distanceKmFromPrev!)
+        : null;
+    final minutes = measured
+        ? metas.fold<int>(0, (sum, m) => sum + m!.travelMinutesFromPrev!)
+        : null;
+    return Material(
+        color: AppTheme.inkSurface,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      '${remaining.length} paradas restantes · ${widget.ordered.length} en total',
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.bold)),
+                  Text(
+                      '${km == null ? "Distancia sin calcular" : "~${km.toStringAsFixed(1)} km"} · ${minutes == null ? "Tiempo sin calcular" : "~$minutes min de conducción"}',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 12)),
+                  if (_nextIndex >= 0)
+                    TextButton.icon(
+                      onPressed: () => widget.onStopSelected
+                          ?.call(widget.ordered[_nextIndex].id),
+                      icon: const Icon(Icons.near_me),
+                      label: Text(
+                          'Siguiente: parada ${_nextIndex + 1} · ${widget.ordered[_nextIndex].nombreCliente}',
+                          maxLines: 2),
+                    ),
+                  Text(
+                      '1 → 2 → 3: orden de visita. Borde amarillo: siguiente. Línea orientativa, no trazado por carretera. '
+                      '${widget.ordered.length - _geoPoints().length} sin ubicación: permanecen en la lista; faltan sus tramos.',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+                ])));
+  }
+
   RuteroStopWindow? _metaFor(AlbaranEntrega a) =>
       widget.metaByDocumentId[a.id] ?? widget.metaByDocumentId[a.codigoCliente];
 
   @override
   Widget build(BuildContext context) {
     final selected = _selectedAlbaran;
-    final explanation = widget.routeExplanation;
     final mappedStops = _geoPoints().length;
     if (widget.ordered.isNotEmpty && mappedStops == 0) {
-      return _buildNoCoordinates();
+      return SingleChildScrollView(
+          child: Column(children: [
+        Padding(padding: const EdgeInsets.all(12), child: _buildSummary()),
+        _buildNoCoordinates(),
+      ]));
     }
 
     return Stack(
@@ -272,24 +345,23 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
           const Center(
             child: CircularProgressIndicator(color: AppTheme.info),
           ),
-        if (explanation != null && !explanation.isEmpty)
-          Positioned(
-            top: 10,
-            left: 12,
-            right: 56,
-            child: _RouteWhyCard(explanation: explanation),
-          ),
+        Positioned(top: 10, left: 12, right: 56, child: _buildSummary()),
         if (selected != null)
           Positioned(
             left: 10,
             right: 10,
             bottom: 10,
-            child: _StopDetailCard(
-              albaran: selected,
-              index: widget.ordered.indexWhere((a) => a.id == selected.id),
-              total: widget.ordered.length,
-              meta: _metaFor(selected),
-              onClose: () => widget.onStopSelected?.call(''),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.35),
+              child: SingleChildScrollView(
+                  child: _StopDetailCard(
+                albaran: selected,
+                index: widget.ordered.indexWhere((a) => a.id == selected.id),
+                total: widget.ordered.length,
+                meta: _metaFor(selected),
+                onClose: () => widget.onStopSelected?.call(''),
+              )),
             ),
           )
         else
@@ -305,8 +377,8 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
               ),
               child: Text(
                 _useFallback
-                    ? 'Mapa 2.5D · toca un nº para detalle'
-                    : '$mappedStops/${widget.ordered.length} con GPS · toca un nodo',
+                    ? 'Toca el número de una parada para ver sus datos'
+                    : '$mappedStops/${widget.ordered.length} con ubicación · toca una parada',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
@@ -339,7 +411,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
             ),
             SizedBox(height: 10),
             Text(
-              'Sin GPS fiable para estas paradas',
+              'No hay ubicaciones disponibles',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppTheme.textPrimary,
@@ -348,7 +420,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
             ),
             SizedBox(height: 6),
             Text(
-              'Muchos clientes no tienen coordenadas o estaban en África por error y ya se filtran.\n\nPuedes ordenar manualmente o usar la propuesta por horarios (sin GPS).\nAvisa al comercial para dar de alta GPS correcto desde ficha cliente.',
+              'Las paradas siguen en la lista y puedes cambiar su orden. No se pueden dibujar la ruta ni sus distancias sin ubicaciones válidas.\n\nPide al comercial que revise la ubicación de los clientes.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
@@ -360,65 +432,100 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
 
   Widget _buildFallbackMap() {
     final points = _geoPoints();
-    return ClipRRect(
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.0012)
-          ..rotateX(-0.55)
-          ..rotateZ(-0.08),
-        child: FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: _center,
-            initialZoom: points.length <= 1 ? 12 : 11,
-            initialRotation: -8,
-            minZoom: 5,
-            maxZoom: 18,
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.gmp.mobilidad',
-              maxZoom: 19,
-            ),
-            if (points.length >= 2)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: points,
-                    strokeWidth: 4,
-                    color: AppTheme.info.withValues(alpha: 0.85),
-                  ),
-                ],
-              ),
-            MarkerLayer(
-              markers: [
-                for (var i = 0; i < widget.ordered.length; i++)
-                  if (_pointFor(widget.ordered[i]) != null)
-                    Marker(
-                      point: _pointFor(widget.ordered[i])!,
-                      width: 48,
-                      height: 48,
-                      child: GestureDetector(
-                        onTap: () =>
-                            widget.onStopSelected?.call(widget.ordered[i].id),
-                        child: _NumberedPin(
-                          index: i + 1,
-                          color: ruteroStopColor(i, widget.ordered.length),
-                          selected:
-                              widget.selectedDocumentId == widget.ordered[i].id,
-                          isFirst: i == 0,
-                          isLast: i == widget.ordered.length - 1 &&
-                              widget.ordered.length > 1,
-                        ),
-                      ),
-                    ),
-              ],
-            ),
-          ],
-        ),
+    final groups = <String, List<int>>{};
+    final positions = <int, LatLng>{};
+    for (var i = 0; i < widget.ordered.length; i++) {
+      final point = _pointFor(widget.ordered[i]);
+      if (point == null) continue;
+      positions[i] = point;
+      groups
+          .putIfAbsent('${point.latitude},${point.longitude}', () => [])
+          .add(i);
+    }
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _center,
+        initialZoom: points.length <= 1 ? 12 : 11,
+        minZoom: 5,
+        maxZoom: 18,
       ),
+      children: [
+        TileLayer(
+            tileProvider: widget.fallbackTileProvider,
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.gmp.mobilidad',
+            maxZoom: 19),
+        PolylineLayer(polylines: [
+          for (var i = 1; i < widget.ordered.length; i++)
+            if (positions[i - 1] != null && positions[i] != null)
+              Polyline(
+                  points: [positions[i - 1]!, positions[i]!],
+                  strokeWidth: 5,
+                  borderStrokeWidth: 2,
+                  borderColor: AppTheme.inkSurface,
+                  color: AppTheme.info),
+        ]),
+        MarkerLayer(markers: [
+          for (var i = 1; i < widget.ordered.length; i++)
+            if (positions[i - 1] != null &&
+                positions[i] != null &&
+                positions[i - 1] != positions[i])
+              _directionMarker(positions[i - 1]!, positions[i]!),
+          for (final indices in groups.values)
+            Marker(
+              point: positions[indices.first]!,
+              width: indices.length * 60.0,
+              height: 60,
+              child: Row(children: [
+                for (final i in indices)
+                  SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Semantics(
+                          button: true,
+                          label:
+                              'Parada ${i + 1}, ${widget.ordered[i].nombreCliente}${i == _nextIndex ? ", siguiente" : ""}',
+                          child: GestureDetector(
+                            onTap: () => widget.onStopSelected
+                                ?.call(widget.ordered[i].id),
+                            child: _NumberedPin(
+                              index: i + 1,
+                              color: ruteroStopColor(i, widget.ordered.length),
+                              selected: widget.selectedDocumentId ==
+                                  widget.ordered[i].id,
+                              isFirst: i == _nextIndex,
+                            ),
+                          ),
+                        ),
+                      )),
+              ]),
+            ),
+        ]),
+        RichAttributionWidget(
+          attributions: const [TextSourceAttribution('OpenStreetMap')],
+        ),
+      ],
+    );
+  }
+
+  Marker _directionMarker(LatLng from, LatLng to) {
+    final angle = math.atan2(
+        -(to.latitude - from.latitude),
+        (to.longitude - from.longitude) *
+            math.cos(from.latitude * math.pi / 180));
+    return Marker(
+      point: LatLng((from.latitude + to.latitude) / 2,
+          (from.longitude + to.longitude) / 2),
+      width: 28,
+      height: 28,
+      child: ExcludeSemantics(
+          child: Transform.rotate(
+              angle: angle,
+              child: const Icon(Icons.arrow_forward,
+                  size: 26, color: AppTheme.inkSurface))),
     );
   }
 
@@ -427,80 +534,6 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
         widget.metaByDocumentId[albaran.codigoCliente];
     if (!_isValidSpainLatLng(meta?.lat, meta?.lng)) return null;
     return LatLng(meta!.lat!, meta.lng!);
-  }
-}
-
-class _RouteWhyCard extends StatelessWidget {
-  const _RouteWhyCard({required this.explanation});
-
-  final RuteroRouteExplanation explanation;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surfaceOverlay.withValues(alpha: 0.94),
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.route, size: 18, color: AppColors.teal),
-                SizedBox(width: 6),
-                Text(
-                  'Por qué esta ruta',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              explanation.summary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-                height: 1.3,
-              ),
-            ),
-            if (explanation.factors.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: explanation.factors.map((f) {
-                  return Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.softPanel,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppColors.borderColor),
-                    ),
-                    child: Text(
-                      f,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -543,11 +576,12 @@ class _StopDetailCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = index >= 0 ? ruteroStopColor(index, total) : AppColors.info;
     final desired = meta?.windowLabel ??
-        (albaran.horaPrevista != null ? 'Prev. ${albaran.horaPrevista}' : null);
+        (albaran.horaPrevista != null
+            ? 'Prevista ${albaran.horaPrevista}'
+            : null);
     final eta = meta?.etaLabel;
     final prep = meta?.prepReadyLabel;
     final pickup = meta?.pickupLabel ?? meta?.departureLabel;
-    final reason = meta?.reason;
 
     return Material(
       elevation: 8,
@@ -634,21 +668,24 @@ class _StopDetailCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _chip(Icons.schedule, 'Deseada', desired ?? 'Sin horario'),
-                _chip(Icons.navigation, 'ETA nuestra', eta ?? '—'),
-                _chip(Icons.inventory_2_outlined, 'Prep. lista', prep ?? '—'),
+                _chip(Icons.schedule, 'Horario de entrega',
+                    desired ?? 'Sin horario'),
+                _chip(Icons.navigation, 'Llegada estimada',
+                    eta ?? 'Sin calcular'),
+                _chip(Icons.inventory_2_outlined, 'Preparación lista',
+                    prep ?? 'Sin calcular'),
                 _chip(Icons.local_shipping_outlined, 'Recogida', pickup ?? '—'),
                 _chip(Icons.payments_outlined, 'Pago', _pagoLabel),
                 if (albaran.ordenPreparacion != null)
                   _chip(
                     Icons.tag,
-                    'Orden prep.',
+                    'Orden de preparación',
                     '#${albaran.ordenPreparacion}',
                   ),
                 if (meta?.distanceKmFromPrev != null)
                   _chip(
                     Icons.straighten,
-                    'Desde ant.',
+                    'Desde la parada anterior',
                     '${meta!.distanceKmFromPrev!.toStringAsFixed(1)} km',
                   ),
               ],
@@ -657,46 +694,10 @@ class _StopDetailCard extends StatelessWidget {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final lat = meta!.lat!;
-                    final lng = meta!.lng!;
-                    final url = Uri.parse(
-                      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-                    );
-                    try {
-                      await launchUrl(
-                        url,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    } catch (_) {}
-                  },
-                  icon: const Icon(Icons.navigation, size: 20),
-                  label: const Text(
-                    'Navegar con Maps',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                  ),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    backgroundColor: AppColors.info,
-                  ),
-                ),
+                child: RuteroNavigationButton(lat: meta!.lat!, lng: meta!.lng!),
               ),
             ],
-            if (reason != null && reason.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                reason,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.95),
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
-                  height: 1.3,
-                ),
-              ),
-            ],
+            RuteroStopStatusBadges(albaran: albaran),
             if ((meta?.observaciones ?? albaran.observaciones ?? '')
                 .trim()
                 .isNotEmpty) ...[
@@ -777,9 +778,15 @@ class _NumberedPin extends StatelessWidget {
     return Container(
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: selected ? AppTheme.warning : color,
+        color: AppTheme.inkSurface,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(
+            color: isFirst
+                ? AppTheme.warning
+                : selected
+                    ? AppTheme.info
+                    : Colors.white,
+            width: isFirst ? 5 : 3),
         boxShadow: [
           if (isFirst)
             BoxShadow(
@@ -805,7 +812,7 @@ class _NumberedPin extends StatelessWidget {
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          fontSize: 12,
+          fontSize: 22,
         ),
       ),
     );
