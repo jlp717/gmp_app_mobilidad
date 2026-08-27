@@ -1090,7 +1090,9 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       financeRepo.selectBalanceSum({ info, ids }),
       financeRepo.selectDailyCobros({ info, ids, dateYmd }),
       financeRepo.selectDailyStructuredSums({ ids, dateYmd }),
-      financeRepo.selectDeliveredAmount({ ids, fromYmd: dateYmd, toYmd: dateYmd }),
+      isolatedTestBalances && typeof financeRepo.selectConfirmedDeliveredAmount === 'function'
+        ? financeRepo.selectConfirmedDeliveredAmount({ ids, date })
+        : financeRepo.selectDeliveredAmount({ ids, fromYmd: dateYmd, toYmd: dateYmd }),
       financeRepo.selectDailyErpDebt({ ids, dateYmd }),
       isolatedTestBalances && typeof financeRepo.selectClosedLiquidacion === 'function' && (ids.length === 1 || (ids.length > 1 && process.env.NODE_ENV !== 'test'))
         ? financeRepo.selectClosedLiquidacion({ info, ids, dateYmd })

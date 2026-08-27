@@ -35,3 +35,23 @@ describe('reparto finance DB2 transaction boundary', () => {
     ]);
   });
 });
+
+test('daily delivered total is sourced from canonical test confirmations', async () => {
+  const calls = [];
+  const repository = createRepartoFinanceDb2Repository({
+    bindings: resolveFinanceBindings(process.env),
+    queryWithParams: jest.fn(async (sql, params) => {
+      calls.push({ sql, params });
+      return [{ TOTAL_REPARTIDO: '123.45' }];
+    }),
+  });
+
+  await expect(repository.selectConfirmedDeliveredAmount({
+    ids: ['02', '44'], date: '2026-08-27',
+  })).resolves.toEqual([{ TOTAL_REPARTIDO: '123.45' }]);
+  expect(calls).toHaveLength(1);
+  expect(calls[0].sql).toContain('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES C');
+  expect(calls[0].sql).toContain('JAVIER.TEST_REPARTO_LINEAS');
+  expect(calls[0].sql).toContain("C.STATUS IN ('ENTREGADO', 'PARCIAL')");
+  expect(calls[0].params).toEqual(['02', '44', '2026-08-27']);
+});

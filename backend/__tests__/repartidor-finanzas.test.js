@@ -245,6 +245,7 @@ describe('Repartidor finanzas routes', () => {
     expect(sqlText).not.toContain('LIQUIDADO_SN');
     expect(sqlText).toContain('COALESCE(NUMEROLIQUIDACION, 0) = 0');
     expect(sqlText).toContain('CODIGO_REPARTIDOR');
+    expect(sqlText).toContain('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES C');
     expect(sqlText).toContain('INNER JOIN DSEDAC.CPC CPC');
     expect(sqlText).toContain('LEFT JOIN DSEDAC.CVC CVC');
     expect(sqlText).not.toMatch(/JAVIER\.(?!TEST_)(?:REPARTIDOR_|REPARTO_)/);

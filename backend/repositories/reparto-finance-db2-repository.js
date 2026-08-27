@@ -10,6 +10,7 @@ const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
 const {
   resolveRepartoRuntime,
+  validateConfirmationTableMapping,
   validateFinanceTableMapping,
 } = require('../config/reparto-runtime');
 
@@ -25,7 +26,8 @@ class FinanceRepoSchemaError extends Error {
 function resolveFinanceBindings(env = process.env) {
   const runtime = resolveRepartoRuntime(env);
   const mapping = validateFinanceTableMapping(runtime);
-  if (!runtime.valid || !mapping.valid) {
+  const confirmationMapping = validateConfirmationTableMapping(runtime);
+  if (!runtime.valid || !mapping.valid || !confirmationMapping.valid) {
     throw new FinanceRepoSchemaError(
       'La configuracion de reparto no permite consultar ni liquidar finanzas',
     );
@@ -41,6 +43,7 @@ function resolveFinanceBindings(env = process.env) {
   return Object.freeze({
     runtime,
     tables: Object.freeze({ ...runtime.tables.finance }),
+    confirmationTables: Object.freeze({ ...runtime.tables.confirmation }),
     deliveryStatusTable: runtime.tables?.notifications?.deliveryStatus
       || (runtime.schemas.app + '.DELIVERY_STATUS'),
     erpDataSchema: runtime.schemas.read,
@@ -373,6 +376,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
   const bindings = options.bindings || resolveFinanceBindings(options.env || process.env);
   const {
     tables,
+    confirmationTables,
     erpDataSchema,
     erpAppSchema,
     commissionConfigSchema,
@@ -396,6 +400,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
   return {
     bindings,
     tables,
+    confirmationTables,
     erpDataSchema,
     erpAppSchema,
     commissionConfigSchema,
@@ -1473,6 +1478,27 @@ function createRepartoFinanceDb2Repository(options = {}) {
     WHERE ${repFilter.sql}
       AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
   `, [...repFilter.params, fromYmd, toYmd]);
+    },
+
+    async selectConfirmedDeliveredAmount({ ids, date }) {
+      const confirmation = confirmationTables;
+      if (!confirmation?.confirmations || !confirmation?.lines) {
+        throw new FinanceRepoSchemaError(
+          'El esquema de confirmaciones de reparto no está disponible',
+        );
+      }
+      const repFilter = inClause('TRIM(C.REPARTIDOR_ID)', ids);
+      return run(`
+    SELECT COALESCE(SUM(
+      COALESCE(L.CANTIDAD_ENTREGADA, 0) * COALESCE(L.PRECIO_UNITARIO, 0)
+    ), 0) AS TOTAL_REPARTIDO
+    FROM ${confirmation.confirmations} C
+    INNER JOIN ${confirmation.lines} L
+      ON L.CONFIRMACION_ID = C.ID
+    WHERE ${repFilter.sql}
+      AND DATE(C.CONFIRMED_AT) = ?
+      AND C.STATUS IN ('ENTREGADO', 'PARCIAL')
+  `, [...repFilter.params, date]);
     },
 
     async selectDailyErpDebt({ ids, dateYmd }) {

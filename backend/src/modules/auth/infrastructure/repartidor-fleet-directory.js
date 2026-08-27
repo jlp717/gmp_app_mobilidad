@@ -22,7 +22,7 @@ const EXCLUDED_PREFIXES = Object.freeze([
   'ZW', 'ZX', 'ZY', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z8', 'Z9',
   'XX', 'TT', 'TEST',
 ]);
-const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A', '97', '98']);
+const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A']);
 
 function canonicalRepartidorCode(value) {
   const raw = String(value || '').trim().toUpperCase();

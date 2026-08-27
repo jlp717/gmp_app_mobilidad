@@ -25,6 +25,7 @@ describe('repartidor fleet directory', () => {
       { CODE: 'A1', NAME: 'Reparto' },
     ])).toEqual([
       { code: '08', name: 'Ocho duplicado' },
+      { code: '98', name: 'Jefe' },
       { code: 'A1', name: 'Reparto' },
     ]);
   });
