@@ -165,7 +165,7 @@ function confirmationDocumentIdExpr(alias = 'CPC') {
 function confirmationOverlayJoins(tablesList = confirmationStatusOverlayTables()) {
   return (tablesList || []).map((tables, index) => {
     const overlayAlias = `TC${index}`;
-    return `LEFT JOIN ${tables.confirmations} ${overlayAlias} ON TRIM(${overlayAlias}.DOCUMENT_ID) = ${confirmationDocumentIdExpr('CPC')} AND TRIM(${overlayAlias}.REPARTIDOR_ID) = TRIM(OPP.CODIGOREPARTIDOR)`;
+    return `LEFT JOIN ${tables.confirmations} ${overlayAlias} ON TRIM(${overlayAlias}.DOCUMENT_ID) = ${confirmationDocumentIdExpr('CPC')}`;
   }).join('\n');
 }
 
@@ -725,6 +725,27 @@ async function loadCollectionsInBatches(repartidorIds, load, keyFields) {
   return rows;
 }
 
+function confirmationOwnerScopeClause(repartidorIds, documentAlias = 'CPC') {
+  const ownerIds = [...new Set((repartidorIds || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean))];
+  const tablesList = confirmationStatusOverlayTables();
+  if (!ownerIds.length || !tablesList.length) return { sql: '', params: [] };
+  const ownerPlaceholders = ownerIds.map(() => '?').join(',');
+  const statusPlaceholders = CANONICAL_CONFIRMATION_STATUSES.map(() => '?').join(',');
+  const sql = tablesList.map((tables) => `OR EXISTS (
+        SELECT 1
+          FROM ${tables.confirmations} C_SCOPE
+         WHERE TRIM(C_SCOPE.DOCUMENT_ID) = ${confirmationDocumentIdExpr(documentAlias)}
+           AND UPPER(TRIM(C_SCOPE.STATUS)) IN (${statusPlaceholders})
+           AND TRIM(C_SCOPE.REPARTIDOR_ID) IN (${ownerPlaceholders})
+      )`).join('\n      ');
+  return {
+    sql,
+    params: tablesList.flatMap(() => [...CANONICAL_CONFIRMATION_STATUSES, ...ownerIds]),
+  };
+}
+
 async function getCollectionsSummary(selectedMonth, selectedYear, repartidorIds) {
   return loadCollectionsInBatches(repartidorIds, (batch) => getCollectionsSummaryBatch(selectedMonth, selectedYear, batch), ['CLIENTE', 'NOMBRE_CLIENTE', 'FORMA_PAGO']);
 }
@@ -745,12 +766,17 @@ async function getClientDocuments({
   pageLimit,
 }) {
   const ids = repartidorIds;
+  const confirmationScope = confirmationOwnerScopeClause(ids);
+  const ownerFilter = `(
+                TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})
+                ${confirmationScope.sql}
+            )`;
   const repartidorJoin = `
             INNER JOIN DSEDAC.OPP OPP
                 ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
                 AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
                 AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-                AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
+                AND ${ownerFilter}`;
 
   let dateFilter = '';
   const dateParams = [];
@@ -949,6 +975,7 @@ async function getClientDocuments({
         `;
   const allParams = [
     ...ids,
+    ...confirmationScope.params,
     clientCode,
     ...yearFilterParams,
     ...dateParams,
@@ -1271,6 +1298,7 @@ async function getCacFirmaBase64(year, serie, terminal, number) {
 
 async function getDeliverySummary(selectedYear, selectedMonth, dayFilterParams, repartidorIdList) {
   const dayFilter = dayFilterParams.length ? `AND OPP.DIAREPARTO <= ?` : '';
+  const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
   const canonicalOnly = isIsolatedTestTableSet();
   const deliveryStatusTable = resolveDeliveryStatusReadTable();
   const dsAvail = Boolean(deliveryStatusTable) && isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
@@ -1334,7 +1362,10 @@ async function getDeliverySummary(selectedYear, selectedMonth, dayFilterParams, 
                 WHERE OPP.ANOREPARTO = ?
                   AND OPP.MESREPARTO = ?
                   ${dayFilter}
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                  AND (
+                    TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                    ${confirmationScope.sql}
+                  )
                 GROUP BY OPP.DIAREPARTO, CPC.SUBEMPRESAALBARAN,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN),
                     CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
@@ -1345,13 +1376,14 @@ async function getDeliverySummary(selectedYear, selectedMonth, dayFilterParams, 
         `;
   return (await runQueryWithParams(
     baseSql,
-    [selectedYear, selectedMonth, ...dayFilterParams, ...repartidorIdList],
+    [selectedYear, selectedMonth, ...dayFilterParams, ...repartidorIdList, ...confirmationScope.params],
     false,
   )) || [];
 }
 
 async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
   const weekTables = [resolveConfirmationTables()].filter(Boolean);
+  const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
   const confirmationJoins = confirmationOverlayJoins(weekTables);
   const confirmationDelivered = confirmationOverlayDeliveredSql(weekTables);
   const sql = `
@@ -1377,7 +1409,10 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
                 ${confirmationJoins}
                 WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
                     BETWEEN ? AND ?
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                  AND (
+                    TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                    ${confirmationScope.sql}
+                  )
                 GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO,
                     CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN,
                     CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
@@ -1390,12 +1425,13 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
             GROUP BY ANO, MES, DIA
             ORDER BY ANO, MES, DIA
         `;
-  return runQueryWithParams(sql, [weekStartNum, weekEndNum, ...repartidorIdList], false);
+  return runQueryWithParams(sql, [weekStartNum, weekEndNum, ...repartidorIdList, ...confirmationScope.params], false);
 }
 
 async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search, offset, limit }) {
   const dsHistAvail = isDeliveryStatusAvailable();
   const dsHistJoin = getDeliveryStatusJoin('CPC', 'DS');
+  const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
   let sql = `
             SELECT 
                 CPC.ANODOCUMENTO || '-' || RIGHT('0' || CPC.MESDOCUMENTO, 2) || '-' || RIGHT('0' || CPC.DIADOCUMENTO, 2) as FECHA,
@@ -1426,9 +1462,12 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             ${dsHistAvail ? dsHistJoin : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+              AND (
+                TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                ${confirmationScope.sql}
+              )
         `;
-  const sqlParams = [startInt, endInt, ...repartidorIdList];
+  const sqlParams = [startInt, endInt, ...repartidorIdList, ...confirmationScope.params];
   const historySearch = buildFlexibleRepartidorSearch(search, [
     'CLI.NOMBRECLIENTE',
     'CLI.NOMBREALTERNATIVO',

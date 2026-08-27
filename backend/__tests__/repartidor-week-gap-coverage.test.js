@@ -95,7 +95,7 @@ describe('GET /rutero/week/:repartidorId delivery truth', () => {
     expect(sql).not.toMatch(/TRIM\(CPC\.CONFORMADOSN\) = 'S' THEN 1/);
     expect(sql).toContain('TEST_REPARTO_CONFIRMACIONES');
     expect(sql).toContain("WHEN UPPER(TRIM(COALESCE(TC0.STATUS, ''))) IN ('ENTREGADO', 'NO_ENTREGADO', 'RECHAZADO') THEN 1");
-    expect(params).toEqual([20260803, 20260809, '05']);
+    expect(params).toEqual([20260803, 20260809, '05', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05']);
   });
 
   test('keeps app-confirmed delivery as an explicit per-document state', async () => {

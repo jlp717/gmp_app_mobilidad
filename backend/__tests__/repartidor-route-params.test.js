@@ -106,7 +106,10 @@ describe('Repartidor route parameter binding', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
     const [, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual([2025, 4, '05', '08']);
+    expect(params).toEqual([2025, 4, '05', '08', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '08']);
+    const [sql] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toContain('OR EXISTS');
+    expect(sql).toContain('C_SCOPE.REPARTIDOR_ID');
     expect(params).not.toContain("'05'");
     expect(params).not.toContain("'08'");
   });
@@ -147,8 +150,10 @@ describe('Repartidor route parameter binding', () => {
     expect(res.status).toBe(200);
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
-    const [, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual(['05', '08', '4300030041', 2026, 0, 50]);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(params).toEqual(['05', '08', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '08', '4300030041', 2026, 0, 50]);
+    expect(sql).toContain('OR EXISTS');
+    expect(sql).toContain('C_SCOPE.REPARTIDOR_ID');
   });
 
   test('GET /history/delivery-summary rejects invalid repartidor ids before querying', async () => {

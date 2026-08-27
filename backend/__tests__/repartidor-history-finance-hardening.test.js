@@ -121,7 +121,7 @@ describe('repartidor history document hardening', () => {
   });
   test('overlays a just-signed TEST confirmation onto DSEDAC history documents', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
+      if (/FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(String(sql))) {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'ENTREGADO',
@@ -142,7 +142,7 @@ describe('repartidor history document hardening', () => {
     });
     const confirmSql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
-      .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
+      .find((sql) => /FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(String(sql)));
     expect(confirmSql).toContain('TRIM(C.DOCUMENT_ID) IN');
     expect(confirmSql).toContain('TRIM(C.REPARTIDOR_ID) IN');
     expect(confirmSql).not.toContain('PEDIDOS_CAB');
@@ -150,7 +150,7 @@ describe('repartidor history document hardening', () => {
 
   test('exposes app cobro fields from the canonical confirmation overlay', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
+      if (/FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(String(sql))) {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'ENTREGADO',
@@ -193,7 +193,7 @@ describe('repartidor history document hardening', () => {
     });
     mockQueryWithParams.mockImplementation(async (sql) => {
       const text = String(sql);
-      if (text.includes('TEST_REPARTO_CONFIRMACIONES')) {
+      if (/FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(text)) {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'ENTREGADO',
@@ -201,7 +201,7 @@ describe('repartidor history document hardening', () => {
           FIRMA_EVIDENCE_ID: 'sig-test',
         }];
       }
-      if (text.includes('REPARTO_CONFIRMACIONES')) {
+      if (/FROM JAVIER\.REPARTO_CONFIRMACIONES C\b/i.test(text)) {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'PARCIAL',
@@ -227,7 +227,7 @@ describe('repartidor history document hardening', () => {
 
   test('overlays a just-signed TEST confirmation onto GET /history by route date', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (String(sql).includes('TEST_REPARTO_CONFIRMACIONES')) {
+      if (/FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(String(sql))) {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
           STATUS: 'ENTREGADO',
@@ -607,7 +607,7 @@ describe('delivery summary canonical status precedence', () => {
     expect(sql).toMatch(/RECHAZAD[AO]|RECHAZADO/i);
     expect(sql).toMatch(/NO_REALIZADA/i);
     expect(sql).not.toMatch(/CONFORMADOSN\) = 'S'\s+OR\s+DS\.STATUS/i);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual([2025, 4, '05']);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual([2025, 4, '05', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05']);
   });
 
   test('keeps homonymous delivery summaries independent by subempresa and client', async () => {
