@@ -412,6 +412,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               AND OPP.MESREPARTO = ?
               AND OPP.ANOREPARTO = ?
         `;
+        const dayMoveWeekRangeWhere = dayMoveEnabled ? `
+              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
+        ` : '';
         const sql = `
             WITH ranked_deliveries AS (
               SELECT
@@ -476,6 +479,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             ${dsJoin}
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
+              ${dayMoveWeekRangeWhere}
               ${dayMoveDateWhere}
             )
             SELECT * FROM ranked_deliveries
