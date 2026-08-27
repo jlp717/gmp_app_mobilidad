@@ -131,7 +131,14 @@ describe('entregas route coverage gaps', () => {
   });
 
   test('returns the authorized pending projection with deterministic identity and payment data', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([pendingRow()]);
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('CVC_ROW_COUNT')) return Promise.resolve([{
+        SUBEMPRESA: '01', EJERCICIO: 2026, SERIE: 'A', TERMINAL: 1, NUMERO: 42, CLIENTE: 'C1',
+        CVC_ROW_COUNT: 1, IMPORTEPENDIENTE: 12,
+      }]);
+      return Promise.resolve([]);
+    });
 
     const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
 
@@ -141,7 +148,8 @@ describe('entregas route coverage gaps', () => {
       pagination: { limit: 1, offset: 0, hasMore: false, nextOffset: 1 },
       albaranes: [expect.objectContaining({
         id: '2026-A-1-42-C1', codigoRepartidor: '94', formaPago: 'CTR',
-        esCTR: true, puedeCobrarse: true, estado: 'PENDIENTE',
+        esCTR: true, puedeCobrarse: true, importeDisponibleCobro: 12,
+        cobroDocumentoEstado: 'AVAILABLE', estado: 'PENDIENTE',
         fecha: '2026-08-03', documentoTipo: 'ALBARAN',
       })],
     });

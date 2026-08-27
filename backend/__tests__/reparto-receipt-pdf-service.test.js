@@ -31,6 +31,12 @@ function receipt(overrides = {}) {
 function pageCount(pdf) {
   return (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
 }
+function pdfText(pdf) {
+  const raw = pdf.toString('latin1');
+  return [...raw.matchAll(/<([0-9a-f]+)>/gi)]
+    .map((match) => Buffer.from(match[1], 'hex').toString('latin1'))
+    .join('');
+}
 
 test('builds a deterministic unpaid presentation from actual quantities and observations', () => {
   const presentation = buildReceiptPresentation(receipt());
@@ -56,6 +62,17 @@ test('renders a PDF with a valid header without depending on a fragile parser', 
   expect(result.pdf.subarray(0, 5).toString()).toBe('%PDF-');
 });
 
+test('renders the business details in the printable delivery note', async () => {
+  const result = await createRepartoReceiptPdfService().render({ receipt: receipt() });
+  const text = pdfText(result.pdf);
+  expect(text).toContain('PRODUCTO REAL');
+  expect(text).toContain('Pedida: 3.00');
+  expect(text).toContain('Pendiente: 1.00');
+  expect(text).toContain('OBSERVACION LINEA');
+  expect(text).toContain('Falta producto');
+  expect(text).toContain('OBSERVACION INCIDENCIA');
+  expect(text).toContain('OBSERVACION GENERAL');
+});
 test('renders a validated PNG signature without an asynchronous decoder crash', async () => {
   const result = await createRepartoReceiptPdfService().render({
     receipt: receipt({ firmaEvidenceId: 'ev_signature' }),

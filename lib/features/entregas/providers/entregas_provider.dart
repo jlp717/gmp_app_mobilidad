@@ -334,6 +334,7 @@ class AlbaranEntrega {
     this.cobrado = false,
     this.importeCobrado,
     this.importePendienteCobro,
+    this.importeDisponibleCobro,
     this.formaPagoCobro,
     this.cobroParcial = false,
   });
@@ -409,6 +410,10 @@ class AlbaranEntrega {
         json,
         const <String>['importePendienteCobro'],
       ),
+      importeDisponibleCobro: _optionalNullableDouble(
+        json,
+        const <String>['importeDisponibleCobro'],
+      ),
       formaPagoCobro: json['formaPagoCobro']?.toString(),
       cobroParcial: json['cobroParcial'] == true,
     );
@@ -467,6 +472,7 @@ class AlbaranEntrega {
   final bool cobrado;
   final double? importeCobrado;
   final double? importePendienteCobro;
+  final double? importeDisponibleCobro;
   final String? formaPagoCobro;
   final bool cobroParcial;
 
@@ -474,6 +480,9 @@ class AlbaranEntrega {
   bool get isZeroEmpty => pricingState == 'ZERO_EMPTY';
   bool get hasAppCobro =>
       cobrado && (importeCobrado != null && importeCobrado! > 0.004);
+
+  bool get tieneSaldoCobrable =>
+      importeDisponibleCobro != null && importeDisponibleCobro! > 0.004;
 
   AlbaranEntrega copyWith({
     double? importeTotal,
@@ -495,6 +504,7 @@ class AlbaranEntrega {
     String? cobroId,
     bool? cobrado,
     double? importeCobrado,
+    double? importeDisponibleCobro,
     String? formaPagoCobro,
     bool clearPaymentBalance = false,
   }) {
@@ -553,6 +563,9 @@ class AlbaranEntrega {
       cobrado: cobrado ?? this.cobrado,
       importeCobrado: importeCobrado ?? this.importeCobrado,
       importePendienteCobro: clearPaymentBalance ? null : importePendienteCobro,
+      importeDisponibleCobro: clearPaymentBalance
+          ? 0
+          : importeDisponibleCobro ?? this.importeDisponibleCobro,
       formaPagoCobro: formaPagoCobro ?? this.formaPagoCobro,
       cobroParcial: clearPaymentBalance ? false : cobroParcial,
     );
@@ -1076,6 +1089,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
             lineSum: albaran.lineSum,
             pricingState: albaran.pricingState,
             amountSource: albaran.amountSource,
+            importeDisponibleCobro: albaran.importeDisponibleCobro,
             items: albaran.items.isNotEmpty ? albaran.items : existing.items,
           );
         }).toList(growable: false);

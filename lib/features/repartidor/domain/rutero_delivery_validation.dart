@@ -61,6 +61,7 @@ class RuteroDeliveryValidationInput {
     required this.hasPersistedSignature,
     required this.importeCobradoText,
     required this.importeTotal,
+    this.importeDisponibleCobro,
   });
 
   final bool isLoadingItems;
@@ -80,6 +81,7 @@ class RuteroDeliveryValidationInput {
   final bool hasPersistedSignature;
   final String importeCobradoText;
   final double importeTotal;
+  final double? importeDisponibleCobro;
 
   bool get hasDiscrepancy => anyQtyModified || anyUnchecked;
 }
@@ -198,7 +200,13 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
   final paymentEligibleStatus =
       input.status == RepartoDeliveryStatus.entregado ||
           input.status == RepartoDeliveryStatus.parcial;
-  if (paymentEligibleStatus && input.isUrgent && !input.isPaid) {
+  final hasKnownCvcBalance = input.importeDisponibleCobro != null;
+  final hasCollectibleBalance =
+      !hasKnownCvcBalance || input.importeDisponibleCobro! > 0.004;
+  if (paymentEligibleStatus &&
+      input.isUrgent &&
+      !input.isPaid &&
+      hasCollectibleBalance) {
     issues.add(
       const RuteroFieldIssue(
         tab: RuteroDeliveryTab.payment,
@@ -208,7 +216,15 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
     );
   }
 
-  if (input.isPaid) {
+  if (input.isPaid && hasKnownCvcBalance && !hasCollectibleBalance) {
+    issues.add(
+      const RuteroFieldIssue(
+        tab: RuteroDeliveryTab.payment,
+        field: 'pago',
+        message: 'No existe saldo cobrable en CVC para este documento.',
+      ),
+    );
+  } else if (input.isPaid) {
     final importe = parseRuteroMoney(input.importeCobradoText);
     if (importe == null || importe <= 0) {
       issues.add(
@@ -218,14 +234,20 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
           message: 'Indica el importe cobrado.',
         ),
       );
-    } else if (importe - input.importeTotal > 0.01) {
-      issues.add(
-        const RuteroFieldIssue(
-          tab: RuteroDeliveryTab.payment,
-          field: 'importe',
-          message: 'El importe no puede superar el total del documento.',
-        ),
-      );
+    } else {
+      final maxCobro = input.importeDisponibleCobro ?? input.importeTotal;
+      final importeCentimos = (importe * 100).round();
+      final maxCobroCentimos = (maxCobro * 100).round();
+      if (importeCentimos > maxCobroCentimos) {
+        issues.add(
+          const RuteroFieldIssue(
+            tab: RuteroDeliveryTab.payment,
+            field: 'importe',
+            message:
+                'El importe no puede superar el saldo cobrable del documento.',
+          ),
+        );
+      }
     }
   }
 

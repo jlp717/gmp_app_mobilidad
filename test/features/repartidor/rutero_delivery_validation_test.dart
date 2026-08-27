@@ -21,6 +21,7 @@ RuteroDeliveryValidationInput _base({
   bool hasPersistedSignature = false,
   String importeCobradoText = '',
   double importeTotal = 10,
+  double? importeDisponibleCobro,
 }) {
   return RuteroDeliveryValidationInput(
     isLoadingItems: isLoadingItems,
@@ -40,6 +41,7 @@ RuteroDeliveryValidationInput _base({
     hasPersistedSignature: hasPersistedSignature,
     importeCobradoText: importeCobradoText,
     importeTotal: importeTotal,
+    importeDisponibleCobro: importeDisponibleCobro,
   );
 }
 
@@ -71,13 +73,36 @@ void main() {
 
   test('urgent unpaid jumps to cobro before finalize', () {
     final result = validateRuteroDeliveryForm(
-      _base(isUrgent: true, isPaid: false, nombre: ''),
+      _base(
+          isUrgent: true,
+          isPaid: false,
+          nombre: '',
+          importeDisponibleCobro: 10),
     );
     expect(result.firstTabIndex, 1);
     expect(result.messageFor('pago'), contains('Cobro obligatorio'));
     expect(result.messageFor('nombre'), isNotNull);
   });
 
+  test('urgent delivery with explicit zero CVC balance can be delivered unpaid',
+      () {
+    final result = validateRuteroDeliveryForm(
+      _base(isUrgent: true, importeDisponibleCobro: 0),
+    );
+    expect(result.messageFor('pago'), isNull);
+  });
+
+  test('paid amount is capped by the CVC balance, not the invoice total', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        importeTotal: 100,
+        importeDisponibleCobro: 12,
+        isPaid: true,
+        importeCobradoText: '12,01',
+      ),
+    );
+    expect(result.messageFor('importe'), contains('saldo cobrable'));
+  });
   test('urgent rejected delivery does not demand an impossible payment', () {
     final result = validateRuteroDeliveryForm(
       _base(

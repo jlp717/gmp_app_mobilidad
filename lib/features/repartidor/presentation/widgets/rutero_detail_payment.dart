@@ -44,6 +44,7 @@ class RuteroDetailPayment extends StatelessWidget {
   final FocusNode? importeFocusNode;
 
   bool get _isUrgent => albaran.esCTR;
+  bool get _hasCollectibleBalance => albaran.tieneSaldoCobrable;
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +91,7 @@ class RuteroDetailPayment extends StatelessWidget {
       child: Column(
         children: [
           const Text(
-            'TOTAL A COBRAR',
+            'SALDO COBRABLE',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 12,
@@ -100,8 +101,10 @@ class RuteroDetailPayment extends StatelessWidget {
           Text(
             albaran.isPendingPrice
                 ? 'Pendiente de precio'
-                : NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                    .format(albaran.importeTotal),
+                : _hasCollectibleBalance
+                    ? NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                        .format(albaran.importeDisponibleCobro)
+                    : 'Sin saldo cobrable',
             style: TextStyle(
               color: albaran.isPendingPrice
                   ? AppTheme.warning
@@ -144,9 +147,11 @@ class RuteroDetailPayment extends StatelessWidget {
                 Text(
                   albaran.isPendingPrice
                       ? 'PRECIO PENDIENTE EN ERP'
-                      : _isUrgent
-                          ? 'COBRO OBLIGATORIO - ${getPaymentTypeLabel()}'
-                          : 'COBRO OPCIONAL - ${getPaymentTypeLabel()}',
+                      : !_hasCollectibleBalance
+                          ? 'SIN SALDO CVC COBRABLE'
+                          : _isUrgent
+                              ? 'COBRO OBLIGATORIO - ${getPaymentTypeLabel()}'
+                              : 'COBRO OPCIONAL - ${getPaymentTypeLabel()}',
                   style: TextStyle(
                     color: albaran.isPendingPrice
                         ? AppTheme.warning
@@ -215,10 +220,12 @@ class RuteroDetailPayment extends StatelessWidget {
     final isSelected = selectedPaymentMethod == method;
 
     return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onPaymentMethodChanged(method);
-      },
+      onTap: _hasCollectibleBalance
+          ? () {
+              HapticFeedback.selectionClick();
+              onPaymentMethodChanged(method);
+            }
+          : null,
       child: RepartidorExecutivePanel(
         accentColor: AppTheme.info,
         selected: isSelected,
@@ -247,14 +254,17 @@ class RuteroDetailPayment extends StatelessWidget {
 
   Widget _buildMarkAsPaid() {
     return InkWell(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onPaidChanged();
-      },
+      onTap: _hasCollectibleBalance
+          ? () {
+              HapticFeedback.selectionClick();
+              onPaidChanged();
+            }
+          : null,
       borderRadius: BorderRadius.circular(12),
       child: RepartidorExecutivePanel(
-        accentColor: AppTheme.success,
-        selected: isPaid,
+        accentColor:
+            _hasCollectibleBalance ? AppTheme.success : AppTheme.textSecondary,
+        selected: isPaid && _hasCollectibleBalance,
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
@@ -263,10 +273,14 @@ class RuteroDetailPayment extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: isPaid ? AppTheme.success : AppTheme.softPanel,
+                color: isPaid && _hasCollectibleBalance
+                    ? AppTheme.success
+                    : AppTheme.softPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isPaid ? AppTheme.success : AppTheme.borderColor,
+                  color: isPaid && _hasCollectibleBalance
+                      ? AppTheme.success
+                      : AppTheme.borderColor,
                   width: 2,
                 ),
               ),
@@ -282,15 +296,19 @@ class RuteroDetailPayment extends StatelessWidget {
                   Text(
                     'MARCAR COMO COBRADO',
                     style: TextStyle(
-                      color: isPaid ? AppTheme.success : AppTheme.textPrimary,
+                      color: isPaid && _hasCollectibleBalance
+                          ? AppTheme.success
+                          : AppTheme.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
                   Text(
-                    isPaid
-                        ? 'Cobro preparado con $selectedPaymentMethod'
-                        : 'Confirmar recepción del pago',
+                    !_hasCollectibleBalance
+                        ? 'No existe saldo pendiente en CVC para este documento'
+                        : isPaid
+                            ? 'Cobro preparado con $selectedPaymentMethod'
+                            : 'Confirmar recepción del pago',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 11,
@@ -299,7 +317,7 @@ class RuteroDetailPayment extends StatelessWidget {
                 ],
               ),
             ),
-            if (isPaid)
+            if (isPaid && _hasCollectibleBalance)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(

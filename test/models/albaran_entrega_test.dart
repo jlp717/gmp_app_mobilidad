@@ -39,6 +39,24 @@ void main() {
       expect(albaran.formaPagoDesc, 'CREDITO');
     });
 
+    test('parses the server-owned collectible CVC balance', () {
+      final albaran = AlbaranEntrega.fromJson({
+        'id': 'cvc-1',
+        'numero': 1,
+        'ejercicio': 2026,
+        'importe': 100,
+        'importeDisponibleCobro': 12.35,
+        'codigoCliente': 'C1',
+        'nombreCliente': 'Test',
+      });
+
+      expect(albaran.importeDisponibleCobro, 12.35);
+      expect(albaran.tieneSaldoCobrable, isTrue);
+      expect(
+        albaran.copyWith(clearPaymentBalance: true).tieneSaldoCobrable,
+        isFalse,
+      );
+    });
     test('uses importe field for importeTotal', () {
       final json = {
         'id': 'test-1',

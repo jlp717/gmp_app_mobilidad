@@ -349,8 +349,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     )..forward();
 
     _observacionesController.text = _albaran.observaciones ?? '';
+    final importeDisponibleCobro = _albaran.importeDisponibleCobro;
     _importeCobradoController.text =
-        _albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
+        importeDisponibleCobro != null && importeDisponibleCobro > 0.004
+            ? importeDisponibleCobro.toStringAsFixed(2).replaceAll('.', ',')
+            : '';
 
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
@@ -579,11 +582,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             lineSum: albaranDetalle.lineSum,
             pricingState: albaranDetalle.pricingState,
             amountSource: albaranDetalle.amountSource,
+            importeDisponibleCobro: albaranDetalle.importeDisponibleCobro,
             items: filtered,
           );
           if (!_isPaid) {
-            _importeCobradoController.text =
-                _albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
+            final importeDisponibleCobro = _albaran.importeDisponibleCobro;
+            _importeCobradoController.text = importeDisponibleCobro != null &&
+                    importeDisponibleCobro > 0.004
+                ? importeDisponibleCobro.toStringAsFixed(2).replaceAll('.', ',')
+                : '';
           }
           _itemsError = identityError;
           _items = filtered;
@@ -902,6 +909,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         setState(() => _selectedPaymentMethod = method);
       },
       onPaidChanged: () {
+        if (!_albaran.tieneSaldoCobrable) {
+          setState(() {
+            _isPaid = false;
+            _pagoError = 'No hay saldo cobrable en CVC para este documento.';
+          });
+          return;
+        }
         setState(() {
           _isPaid = !_isPaid;
           if (_isPaid) {
@@ -910,8 +924,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _removeIssue('pago');
             _removeIssue('importe');
             if (_importeCobradoController.text.trim().isEmpty) {
-              _importeCobradoController.text =
-                  _albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
+              _importeCobradoController.text = _albaran.importeDisponibleCobro!
+                  .toStringAsFixed(2)
+                  .replaceAll('.', ',');
             }
           }
         });
@@ -2203,6 +2218,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         observaciones: _observacionesController.text,
         incidenciaMotivo: _incidenciaMotivoController.text,
         isUrgent: _isUrgent,
+        importeDisponibleCobro: _albaran.importeDisponibleCobro,
         isPaid: _isPaid,
         signatureEmpty: _signatureController.isEmpty,
         hasPersistedSignature: _hasPersistedSignature,

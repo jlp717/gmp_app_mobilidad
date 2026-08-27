@@ -19,6 +19,11 @@ const {
     loadDeliveryLineAmountStats,
     emptyLineStats,
 } = require('../services/delivery-line-amount-stats');
+const {
+    buildCvcAvailabilityQuery,
+    documentKey,
+    mapCvcAvailabilityRows,
+} = require('../services/delivery-cobro-availability');
 const REPARTIDOR_ROUTE_ORDER_FETCH_MAX = 500;
 
 /**
@@ -608,20 +613,25 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const cobroRigurosoClientes = new Set();
         const creditLimitByClient = new Map();
         const pendingDebtByClient = new Map();
+        let cvcAvailabilityByKey = new Map();
         if (clientCodes.length > 0) {
             const clxPlaceholders = clientCodes.map(() => '?').join(',');
             const clpPlaceholders = clientCodes.map(() => '?').join(',');
             const cvcPlaceholders = clientCodes.map(() => '?').join(',');
             const clientOverlayKey = clientCodes.slice().sort().join(',');
-            const cachedOverlayQuery = (sql, cacheKey) => cachedQuery(
-                (querySql, params) => queryWithParams(querySql, params, false, false),
+            const cachedOverlayQuery = (sql, cacheKey, params = clientCodes) => cachedQuery(
+                (querySql, queryParams) => queryWithParams(querySql, queryParams, false, false),
                 sql,
                 cacheKey,
                 15,
-                clientCodes,
+                params,
             );
+            const cvcDocumentPlan = buildCvcAvailabilityQuery(uniqueRows);
+            const cvcDocumentCacheKey = cvcDocumentPlan
+                ? cvcDocumentPlan.documents.map(documentKey).sort().join(',')
+                : 'empty';
 
-            const [clxRows, clpRows, cvcRows] = await Promise.allSettled([
+            const [clxRows, clpRows, cvcRows, cvcDocumentRows] = await Promise.allSettled([
                 cachedOverlayQuery(`
                     SELECT TRIM(CODIGOCLIENTE) as CLIENTE
                     FROM DSEDAC.CLX
@@ -646,8 +656,15 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                       AND IMPORTEPENDIENTE <> 0
                     GROUP BY TRIM(CODIGOCLIENTEALBARAN)
                 `, `entregas:rutero:client-risk:cvc:${clientOverlayKey}`),
+                cvcDocumentPlan
+                    ? cachedOverlayQuery(
+                        cvcDocumentPlan.sql,
+                        `entregas:rutero:document-cobro:${cvcDocumentCacheKey}`,
+                        cvcDocumentPlan.params,
+                    )
+                    : Promise.resolve([]),
             ]);
-            if ([clxRows, clpRows, cvcRows].some((result) => result.status === 'rejected')) {
+            if ([clxRows, clpRows, cvcRows, cvcDocumentRows].some((result) => result.status === 'rejected')) {
                 logger.error('[ENTREGAS] Client financial batch unavailable');
                 return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo completar el listado de entregas');
             }
@@ -678,6 +695,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             if (cvcRows.status === 'rejected') {
                 logger.warn(`[ENTREGAS] Could not load CVC pending debt for credit-limit check: ${cvcRows.reason?.message || cvcRows.reason}`);
             }
+            cvcAvailabilityByKey = mapCvcAvailabilityRows(
+                cvcDocumentRows.status === 'fulfilled' ? (cvcDocumentRows.value || []) : [],
+                cvcDocumentPlan?.documents || [],
+            );
         }
 
         // LAC is only needed while all header/tax sources are still zero.
@@ -755,13 +776,24 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             const numericPaymentCode = /^\d+$/.test(fp) ? String(Number(fp)) : '';
             const paymentInfo = paymentConditions[fp] || paymentConditions[numericPaymentCode] || (() => { throw new RepartoHttpError(503, 'PAYMENT_CONDITION_UNKNOWN', 'La forma de pago del albaran no figura en el catalogo autorizado'); })();
 
-            // Determine if repartidor MUST collect money
-            // CLX.COBRORIGUROSOSN complements PAYMENT_CONDITIONS without replacing it.
-            let esCTR = paymentInfo.mustCollect || cobroRiguroso;
-            let puedeCobrarse = paymentInfo.canCollect || cobroRiguroso;
-
-            // Ensure consistency
-            if (esCTR) puedeCobrarse = true;
+            // The payment catalog determines whether collection is mandatory,
+            // but the actual collectability comes from the unique active CVC
+            // installment for this exact document identity. This prevents the
+            // UI from offering a payment that the confirmation transaction will
+            // necessarily reject as missing or ambiguous.
+            const cvcAvailability = cvcAvailabilityByKey.get(documentKey({
+                SUBEMPRESAALBARAN: row.SUBEMPRESAALBARAN,
+                EJERCICIOALBARAN: row.EJERCICIOALBARAN,
+                SERIEALBARAN: serie,
+                TERMINALALBARAN: row.TERMINALALBARAN,
+                NUMEROALBARAN: row.NUMEROALBARAN,
+                CLIENTE: cliente,
+            })) || { state: 'MISSING', importeDisponibleCobro: 0 };
+            const importeDisponibleCobro = cvcAvailability.state === 'AVAILABLE'
+                ? cvcAvailability.importeDisponibleCobro
+                : 0;
+            const esCTR = paymentInfo.mustCollect || cobroRiguroso;
+            const puedeCobrarse = importeDisponibleCobro > 0.004;
 
             const numeroFactura = row.NUMEROFACTURA || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
@@ -843,6 +875,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 diasPago: paymentInfo.diasPago,
                 esCTR: esCTR,
                 puedeCobrarse: puedeCobrarse,
+                importeDisponibleCobro,
+                cobroDocumentoEstado: cvcAvailability.state,
                 cobroRiguroso: cobroRiguroso,
                 creditoSuperaLimite: creditoSuperaLimite,
                 limiteCredito: limiteCredito,
@@ -958,8 +992,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // add them safely while it loads the remaining route pages.
         const summaryAlbaranes = routeOrderMode ? paginatedAlbaranes : albaranes;
         const totalBruto = summaryAlbaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalACobrar = summaryAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalOpcional = summaryAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalACobrar = summaryAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importeDisponibleCobro || 0), 0);
+        const totalOpcional = summaryAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importeDisponibleCobro || 0), 0);
         const completedCount = summaryAlbaranes.filter(a => a.estado === 'ENTREGADO').length;
         // The cursor represents rows consumed from the source page, not only
         // rows that survive post-query filters. Otherwise an empty filtered
@@ -1421,6 +1455,22 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             qtyLines: albaranItems.length,
             zeroPriceQtyLines,
         });
+        const detailCvcPlan = buildCvcAvailabilityQuery([{
+            SUBEMPRESAALBARAN: header.SUBEMPRESAALBARAN,
+            EJERCICIOALBARAN: header.EJERCICIOALBARAN,
+            SERIEALBARAN: header.SERIEALBARAN,
+            TERMINALALBARAN: header.TERMINALALBARAN,
+            NUMEROALBARAN: header.NUMEROALBARAN,
+            CLIENTE: header.CLIENTE,
+        }]);
+        const detailCvcRows = detailCvcPlan
+            ? await queryWithParams(detailCvcPlan.sql, detailCvcPlan.params, false, false)
+            : [];
+        const detailCvcAvailability = mapCvcAvailabilityRows(
+            detailCvcRows,
+            detailCvcPlan?.documents || [],
+        ).get(documentKey(detailCvcPlan?.documents?.[0]))
+            || { state: 'MISSING', importeDisponibleCobro: 0 };
 
         const albaran = {
             id: documentId,
@@ -1443,6 +1493,10 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             ivaBreakdown: ivaBreakdown,
             checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
             formaPago: (header.FORMA_PAGO || '').trim(),
+            puedeCobrarse: detailCvcAvailability.state === 'AVAILABLE'
+                && detailCvcAvailability.importeDisponibleCobro > 0.004,
+            importeDisponibleCobro: detailCvcAvailability.importeDisponibleCobro,
+            cobroDocumentoEstado: detailCvcAvailability.state,
             items: albaranItems,
             confirmationAvailability: canonical.availability,
             confirmedAt: canonical.confirmation?.CONFIRMED_AT || null,
@@ -1602,4 +1656,3 @@ router.post('/receipt/:entregaId/whatsapp', verifyToken, async (req, res) => {
 });
 
 module.exports = router;
-
