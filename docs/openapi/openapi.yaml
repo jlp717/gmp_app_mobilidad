@@ -16290,6 +16290,107 @@ paths:
                 error: "Error interno"
                 code: "HTTP_500"
       description: "PUT repartidor · rutero · order · {repartidorId}. Contrato del handler Express existente."
+  /repartidor/rutero/order/{repartidorId}/move:
+    post:
+      tags:
+        - "Repartidor"
+      summary: "POST repartidor · rutero · order · {repartidorId} · move"
+      operationId: "post_Repartidor_repartidor_rutero_order_repartidorId_move"
+      parameters:
+        - name: "repartidorId"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Identificador repartidorId."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "date"
+                - "targetDate"
+                - "position"
+                - "orden"
+              properties:
+                date:
+                  type: "string"
+                  format: "date"
+                  example: "2026-08-26"
+                targetDate:
+                  type: "string"
+                  format: "date"
+                  example: "2026-08-27"
+                position:
+                  type: "integer"
+                  minimum: 0
+                  maximum: 499
+                  example: 0
+                orden:
+                  type: "array"
+                  items:
+                    type: "object"
+                    required:
+                      - "documentId"
+                    properties:
+                      documentId:
+                        type: "string"
+                        example: "2026-P-1-42-4300000001"
+                      cliente:
+                        type: "string"
+                        example: "4300000001"
+            example:
+              date: "2026-08-26"
+              targetDate: "2026-08-27"
+              position: 0
+              orden:
+                - documentId: "2026-P-1-42-4300000001"
+                  cliente: "4300000001"
+      responses:
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "422":
+          description: "Movimiento inválido"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Solicitud inválida"
+                code: "RUTERO_MOVE_OUTSIDE_WEEK"
+        "503":
+          description: "Persistencia del movimiento no disponible"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Servicio no disponible"
+                code: "RUTERO_DAY_MOVE_UNAVAILABLE"
+      description: "POST repartidor · rutero · order · {repartidorId} · move. Valida el movimiento y falla cerrada hasta disponer de persistencia operativa autorizada."
   /repartidor/rutero/order/{repartidorId}/optimize:
     post:
       tags:
