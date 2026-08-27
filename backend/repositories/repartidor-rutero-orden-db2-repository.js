@@ -2,6 +2,8 @@
 
 const { queryWithParams, acquireConfiguredConnection } = require('../config/db');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 
 class RuteroOrderConflictError extends Error {
   constructor() {
@@ -228,17 +230,19 @@ async function fetchClientGeo(clientCodes) {
 
   for (const batch of chunk(codes, 80)) {
     const placeholders = batch.map(() => '?').join(',');
+    const batchKey = batch.slice().sort().join(',');
     try {
-      const movilRows = await queryWithParams(
+      const movilRows = await cachedQuery(
+        (sql, params) => queryWithParams(sql, params, false, false),
         `SELECT TRIM(CODIGO) AS CODIGO, LATITUD, LONGITUD
          FROM DSEMOVIL.CLIENTES
          WHERE TRIM(CODIGO) IN (${placeholders})
            AND LATITUD IS NOT NULL AND LONGITUD IS NOT NULL
            AND ABS(LATITUD) > 0.01 AND ABS(LONGITUD) > 0.01
            AND LATITUD BETWEEN 27 AND 44 AND LONGITUD BETWEEN -18 AND 5`,
+        `repartidor:geo:movil:${batchKey}`,
+        TTL.LONG,
         batch,
-        false,
-        false,
       );
       for (const row of movilRows || []) {
         const code = String(row.CODIGO || row.codigo || '').trim();
@@ -257,16 +261,17 @@ async function fetchClientGeo(clientCodes) {
     if (missing.length === 0) continue;
     const missPlaceholders = missing.map(() => '?').join(',');
     try {
-      const locRows = await queryWithParams(
+      const locRows = await cachedQuery(
+        (sql, params) => queryWithParams(sql, params, false, false),
         `SELECT TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE, LATITUD, LONGITUD
          FROM DSEDAC.LOC
          WHERE TRIM(CODIGOCLIENTE) IN (${missPlaceholders})
            AND LATITUD IS NOT NULL AND LONGITUD IS NOT NULL
            AND ABS(LATITUD) > 0.01 AND ABS(LONGITUD) > 0.01
            AND LATITUD BETWEEN 27 AND 44 AND LONGITUD BETWEEN -18 AND 5`,
+        `repartidor:geo:loc:${missing.slice().sort().join(',')}`,
+        TTL.LONG,
         missing,
-        false,
-        false,
       );
       for (const row of locRows || []) {
         const code = String(row.CODIGOCLIENTE || row.codigocliente || '').trim();

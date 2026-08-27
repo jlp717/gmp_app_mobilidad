@@ -472,6 +472,8 @@ async function invalidateFinanceCaches(repartidorId) {
     `query:repartidor:finance:${repartidorId}:*`,
     `repartidor:finance:${repartidorId}:*`,
     `query:repartidor:collections:*`,
+    'query:query:repartidor:rutero-*',
+    'query:query:entregas:rutero:client-risk:*',
   ];
   for (const pattern of patterns) {
     try {

@@ -612,23 +612,31 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             const clxPlaceholders = clientCodes.map(() => '?').join(',');
             const clpPlaceholders = clientCodes.map(() => '?').join(',');
             const cvcPlaceholders = clientCodes.map(() => '?').join(',');
+            const clientOverlayKey = clientCodes.slice().sort().join(',');
+            const cachedOverlayQuery = (sql, cacheKey) => cachedQuery(
+                (querySql, params) => queryWithParams(querySql, params, false, false),
+                sql,
+                cacheKey,
+                15,
+                clientCodes,
+            );
 
             const [clxRows, clpRows, cvcRows] = await Promise.allSettled([
-                queryWithParams(`
+                cachedOverlayQuery(`
                     SELECT TRIM(CODIGOCLIENTE) as CLIENTE
                     FROM DSEDAC.CLX
                     WHERE TRIM(CODIGOCLIENTE) IN (${clxPlaceholders})
                       AND TRIM(COALESCE(COBRORIGUROSOSN, '')) = 'S'
-                `, clientCodes, false, false),
-                queryWithParams(`
+                `, `entregas:rutero:client-risk:clx:${clientOverlayKey}`),
+                cachedOverlayQuery(`
                     SELECT
                       TRIM(CODIGOCLIENTE) as CLIENTE,
                       IMPORTELIMITERIESGO,
                       IMPORTELIMITERIESGOEMPRESA
                     FROM DSEDAC.CLP
                     WHERE TRIM(CODIGOCLIENTE) IN (${clpPlaceholders})
-                `, clientCodes, false, false),
-                queryWithParams(`
+                `, `entregas:rutero:client-risk:clp:${clientOverlayKey}`),
+                cachedOverlayQuery(`
                     SELECT
                       TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
                       COALESCE(SUM(IMPORTEPENDIENTE), 0) as PENDIENTE
@@ -637,7 +645,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                       AND COALESCE(ANULADOSN, '') <> 'S'
                       AND IMPORTEPENDIENTE <> 0
                     GROUP BY TRIM(CODIGOCLIENTEALBARAN)
-                `, clientCodes, false, false),
+                `, `entregas:rutero:client-risk:cvc:${clientOverlayKey}`),
             ]);
             if ([clxRows, clpRows, cvcRows].some((result) => result.status === 'rejected')) {
                 logger.error('[ENTREGAS] Client financial batch unavailable');
