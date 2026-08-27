@@ -257,7 +257,11 @@ function assertPayment(planned, command, actualLines, document) {
       0,
     ))
     : amountPending;
-  const maxCollectable = Math.min(amountPending, amountByDeliveredLines);
+  const isCompleteDelivery = command.delivery.status === 'ENTREGADO'
+    && actualLines.every((line) => line.cantidadRechazada === 0 && line.cantidadPendiente === 0);
+  const maxCollectable = isCompleteDelivery
+    ? amountPending
+    : Math.min(amountPending, amountByDeliveredLines);
   const amount = roundMoney(input.importeCobrado);
   if (amount <= 0 || amount > maxCollectable) {
     throw new RepartoPersistenceError('Importe de cobro superior a la entrega real pendiente', {

@@ -638,6 +638,26 @@ describe('transactional reparto confirmation service', () => {
     expect(repository.snapshot().events).toEqual([]);
   });
 
+  test('allows a complete delivery to collect the exact CVC balance when line valuation is lower', async () => {
+    const repository = createFakeRepository({
+      planned: plannedDelivery({
+        importePendiente: 100,
+        lineas: [
+          { ...plannedDelivery().lineas[0], precioUnitario: 15 },
+          { ...plannedDelivery().lineas[1], precioUnitario: 10 },
+        ],
+      }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+
+    const result = await service.confirm(command({ cobro: payment({ importeCobrado: 100 }) }));
+
+    expect(result).toMatchObject({ created: true, cobroId: '91', deliveryStatus: 'ENTREGADO' });
+    expect(repository.snapshot().cobros[0]).toMatchObject({
+      importeCobrado: 100,
+      importePendiente: 0,
+    });
+  });
   test.each(['MISSING', 'AMBIGUOUS'])(
     'rejects payment before writes when the financial document is %s',
     async (financialDocumentState) => {
