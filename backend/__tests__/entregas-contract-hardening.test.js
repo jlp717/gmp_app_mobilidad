@@ -77,7 +77,10 @@ describe('GET /pendientes contract', () => {
     mockQuery.mockReset();
     mockCachedQuery.mockReset();
     jest.clearAllMocks();
-    mockCachedQuery.mockResolvedValue(paymentCatalog());
+    mockCachedQuery.mockImplementation((fn, sql, _key, _ttl, params) => {
+      if (_key === 'entregas:paymentConditions') return Promise.resolve(paymentCatalog());
+      return fn(sql, params);
+    });
   });
 
   test('rejects non-calendar and non-ISO dates before DB access', async () => {

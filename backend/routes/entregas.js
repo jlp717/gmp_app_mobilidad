@@ -509,7 +509,26 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 routeOrderMode ? 0 : pageOffset,
                 routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX + 1 : pageLimit + 1,
             ];
-            rows = await queryWithParams(sql, queryParams) || [];
+            // Cache only the owner/date/page-scoped ERP source. Canonical
+            // confirmation and cobro overlays are applied below on every
+            // request, so a fresh payment/confirmation is never hidden.
+            const routeCacheKey = [
+                'repartidor:rutero-pending:v2',
+                idList.slice().sort().join(','),
+                targetDate.date,
+                pageLimit,
+                pageOffset,
+                routeOrderMode ? 'ordered' : 'paged',
+                sortBy,
+                dayMoveEnabled ? 'moves' : 'base',
+            ].join(':');
+            rows = await cachedQuery(
+                queryWithParams,
+                sql,
+                routeCacheKey,
+                TTL.REALTIME,
+                queryParams,
+            ) || [];
         } catch (queryError) {
             logger.error('[ENTREGAS] Pending-delivery query unavailable');
             return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo consultar el listado de entregas');

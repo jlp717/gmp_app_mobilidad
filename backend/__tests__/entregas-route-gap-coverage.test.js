@@ -87,7 +87,10 @@ describe('entregas route coverage gaps', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAuthenticatedUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };
-    mockCachedQuery.mockResolvedValue(paymentCatalog());
+    mockCachedQuery.mockImplementation((fn, sql, _key, _ttl, params) => {
+      if (_key === 'entregas:paymentConditions') return Promise.resolve(paymentCatalog());
+      return fn(sql, params);
+    });
   });
 
   test.each([

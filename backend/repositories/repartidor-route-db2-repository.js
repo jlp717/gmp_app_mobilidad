@@ -1489,14 +1489,16 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
      GROUP BY ANO, MES, DIA, ROUTE_TARGET_DATE
      ORDER BY ANO, MES, DIA, ROUTE_TARGET_DATE
   `;
-  const rows = await runQueryWithParams(sql, [
+  const params = [
     ...repartidorIdList,
     weekStartYmd,
     weekStartNum,
     weekEndNum,
     ...repartidorIdList,
     ...confirmationScope.params,
-  ], false);
+  ];
+  const cacheKey = 'repartidor:rutero-week:v2:moves:' + table + ':' + repartidorIdList.slice().sort().join(',') + ':' + weekStartNum + ':' + weekEndNum;
+  const rows = await runCached(sql, cacheKey, TTL.REALTIME, params);
   return (rows || []).map((row) => {
     const target = routeWeekDateParts(row.ROUTE_TARGET_DATE);
     return {
@@ -1555,7 +1557,9 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
             GROUP BY ANO, MES, DIA
             ORDER BY ANO, MES, DIA
         `;
-  return runQueryWithParams(sql, [weekStartNum, weekEndNum, ...repartidorIdList, ...confirmationScope.params], false);
+  const params = [weekStartNum, weekEndNum, ...repartidorIdList, ...confirmationScope.params];
+  const cacheKey = 'repartidor:rutero-week:v2:base:' + repartidorIdList.slice().sort().join(',') + ':' + weekStartNum + ':' + weekEndNum;
+  return runCached(sql, cacheKey, TTL.REALTIME, params);
 }
 
 async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search, offset, limit }) {

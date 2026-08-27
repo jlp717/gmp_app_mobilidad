@@ -48,7 +48,10 @@ describe('entregas BOLA and active-mode guards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUser = { id: '08', code: '08', role: 'REPARTIDOR', repartidorCodes: ['08'] };
-    mockCachedQuery.mockResolvedValue(paymentCatalog());
+    mockCachedQuery.mockImplementation((fn, sql, _key, _ttl, params) => {
+      if (_key === 'entregas:paymentConditions') return Promise.resolve(paymentCatalog());
+      return fn(sql, params);
+    });
     mockQueryWithParams.mockResolvedValue([]);
   });
 

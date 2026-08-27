@@ -2,6 +2,7 @@
 
 const repository = require('../repositories/repartidor-rutero-orden-db2-repository');
 const dayMoveRepository = require('../repositories/repartidor-rutero-day-move-db2-repository');
+const { invalidateCachePattern } = require('./redis-cache');
 const { parseRouteDate, normalizeOrdenPayload } = require('./repartidor-rutero-orden-service');
 
 function invalid(code, statusCode = 422) {
@@ -64,7 +65,7 @@ function validateDayMove(body) {
 async function moveDay(repartidorId, body, updatedBy) {
   const parsed = validateDayMove(body);
   try {
-    return await dayMoveRepository.moveDocuments({
+    const result = await dayMoveRepository.moveDocuments({
       repartidorId,
       sourceDate: parsed.sourceDate,
       targetDate: parsed.targetDate,
@@ -73,6 +74,8 @@ async function moveDay(repartidorId, body, updatedBy) {
       updatedBy,
       idempotencyKey: parsed.idempotencyKey,
     });
+    await invalidateCachePattern('query:query:repartidor:rutero-*');
+    return result;
   } catch (error) {
     if (error?.statusCode) throw error;
     throw invalid('RUTERO_DAY_MOVE_UNAVAILABLE', 503);

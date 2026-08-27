@@ -367,6 +367,17 @@ async function invalidateRepartidorDocumentPdfCache(itemId, repartidorId) {
   }
 }
 
+async function invalidateRepartidorRouteCaches() {
+  if (typeof invalidateCachePattern !== 'function') return;
+  try {
+    await invalidateCachePattern('query:query:repartidor:rutero-*');
+  } catch (_error) {
+    logger.warn('[REPARTO_CONFIRMATION] Rutero cache invalidation failed', {
+      code: 'RUTERO_CACHE_INVALIDATION_FAILED',
+    });
+  }
+}
+
 function createRepartoConfirmationService({ repository, now = () => new Date() }) {
   assertRepository(repository);
 
@@ -474,7 +485,10 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
       return result;
     });
     if (result?.created) {
-      await invalidateRepartidorDocumentPdfCache(command.delivery.itemId, command.actor.repartidorId);
+      await Promise.all([
+        invalidateRepartidorDocumentPdfCache(command.delivery.itemId, command.actor.repartidorId),
+        invalidateRepartidorRouteCaches(),
+      ]);
     }
     return result;
   }
