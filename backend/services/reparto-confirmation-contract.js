@@ -332,7 +332,13 @@ function buildActor(user, body) {
     throw ownershipError();
   }
 
-  return Object.freeze({ userId, repartidorId, role, privileged });
+  return Object.freeze({
+    userId,
+    repartidorId,
+    role,
+    privileged,
+    allowedRepartidorIds: Object.freeze(privileged ? [...fleet] : [repartidorId]),
+  });
 }
 
 function buildConfirmationCommand({ user, headers, body }) {

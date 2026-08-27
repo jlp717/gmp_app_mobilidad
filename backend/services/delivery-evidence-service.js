@@ -124,7 +124,7 @@ function createDeliveryEvidenceService({ repository } = {}) {
     throw new TypeError('repository.stage and repository.getLinked are required');
   }
 
-  async function stage({ documentId, repartidorId, kind, mimeType, buffer, maxBytes }) {
+  async function stage({ documentId, repartidorId, kind, mimeType, buffer, maxBytes, allowedRepartidorIds }) {
     const safeDocumentId = validateText(documentId, 'documentId', 160);
     const safeRepartidorId = validateText(repartidorId, 'repartidorId', 20);
     const safeMimeType = validate({ kind, mimeType, buffer, maxBytes });
@@ -140,10 +140,11 @@ function createDeliveryEvidenceService({ repository } = {}) {
       contentBytes: buffer.length,
       content: buffer,
       storageReference: `DB2_BLOB:${evidenceId}`,
+      allowedRepartidorIds,
     });
   }
 
-  async function stageSignature({ documentId, repartidorId, dataUri }) {
+  async function stageSignature({ documentId, repartidorId, dataUri, allowedRepartidorIds }) {
     const decoded = decodeSignature(dataUri);
     return stage({
       documentId,
@@ -152,10 +153,11 @@ function createDeliveryEvidenceService({ repository } = {}) {
       mimeType: decoded.mimeType,
       buffer: decoded.buffer,
       maxBytes: SIGNATURE_MAX_BYTES,
+      allowedRepartidorIds,
     });
   }
 
-  async function stagePhoto({ documentId, repartidorId, mimeType, buffer }) {
+  async function stagePhoto({ documentId, repartidorId, mimeType, buffer, allowedRepartidorIds }) {
     return stage({
       documentId,
       repartidorId,
@@ -163,6 +165,7 @@ function createDeliveryEvidenceService({ repository } = {}) {
       mimeType,
       buffer,
       maxBytes: PHOTO_MAX_BYTES,
+      allowedRepartidorIds,
     });
   }
 

@@ -15,6 +15,7 @@ const {
     handleRouteError
 } = require('../utils/common');
 const { db2ErpTable } = require('../utils/db2-schemas');
+const { resolvePlannerRole, PlannerRoleError } = require('../src/modules/planner/domain/planner-role-policy');
 
 // Imports from laclae service
 const {
@@ -251,7 +252,11 @@ function getPlannerUserContext(req) {
         ...(Array.isArray(user.vendorCodes) ? user.vendorCodes : []),
         ...(Array.isArray(user.vendedorCodes) ? user.vendedorCodes : []),
     ].map(value => String(value || '').trim()).filter(Boolean))];
-    return { role, code, privileged, visibleCodes };
+    const repartidorCodes = [...new Set([
+        ...(Array.isArray(user.repartidorCodes) ? user.repartidorCodes : []),
+        ...(role === 'REPARTIDOR' ? [code] : []),
+    ].map(value => String(value || '').trim()).filter(Boolean))];
+    return { role, code, privileged, visibleCodes, repartidorCodes };
 }
 
 function writePlannerVendorField(req, location, field, value) {
@@ -266,6 +271,19 @@ function writePlannerVendorField(req, location, field, value) {
 
 function plannerForbidden(res, error = 'No autorizado para este vendedor') {
     return res.status(403).json({ error, code: 'INSUFFICIENT_ROLE' });
+}
+
+function requirePlannerRole(req, res, next) {
+    try {
+        const resolved = resolvePlannerRole(req.user || {}, req.query?.role);
+        req.query.role = resolved.role;
+        return next();
+    } catch (error) {
+        if (error instanceof PlannerRoleError) {
+            return res.status(error.statusCode).json({ error: error.message, code: error.code });
+        }
+        return res.status(403).json({ error: 'Rol de rutero no autorizado', code: 'INSUFFICIENT_ROLE' });
+    }
 }
 
 function requirePlannerPrivilege(req, res, next) {
@@ -298,9 +316,24 @@ function requirePlannerVendorScope({ location, field, mutation = false, requireV
             return plannerForbidden(res, 'REPARTIDOR no puede modificar ruteros comerciales');
         }
 
+        const requestedRole = location === 'query'
+            ? String(req.query?.role || '').trim().toLowerCase()
+            : '';
+        const isRepartidorScope = requestedRole === 'repartidor';
+        const roleScopeCodes = isRepartidorScope
+            ? sanitizePlannerScopeCodes([
+                ...context.repartidorCodes,
+                ...(context.role === 'REPARTIDOR' ? [context.code] : []),
+            ])
+            : sanitizePlannerScopeCodes(context.visibleCodes);
+        if (isRepartidorScope && roleScopeCodes.length === 0) return plannerForbidden(res);
+
         const raw = req[location]?.[field];
         if (raw == null || String(raw).trim() === '') {
-            return requireValue && !context.privileged ? plannerForbidden(res) : next();
+            if (!requireValue) return next();
+            if (roleScopeCodes.length === 0) return plannerForbidden(res);
+            writePlannerVendorField(req, location, field, roleScopeCodes.join(','));
+            return next();
         }
 
         const requestedCodes = String(raw).split(',').map(code => code.trim()).filter(Boolean);
@@ -308,17 +341,17 @@ function requirePlannerVendorScope({ location, field, mutation = false, requireV
 
         if (context.privileged) {
             const requestedAll = requestedCodes.some(code => code.toUpperCase() === 'ALL');
-            if (context.visibleCodes.length === 0) return next();
+            if (roleScopeCodes.length === 0) return next();
             if (requestedAll) {
                 // Expand literal ALL to the manager's visible vendor claims so
                 // "Todos los comerciales" keeps working in commercial Ruta.
-                const expanded = sanitizePlannerScopeCodes(context.visibleCodes).join(',');
+                const expanded = roleScopeCodes.join(',');
                 if (!expanded) return plannerForbidden(res);
                 writePlannerVendorField(req, location, field, expanded);
                 return next();
             }
             const allowedCodes = requestedCodes.filter(requested =>
-                context.visibleCodes.some(visible => plannerCodesMatch(requested, visible)));
+                roleScopeCodes.some(visible => plannerCodesMatch(requested, visible)));
             if (allowedCodes.length === 0) return plannerForbidden(res);
             if (allowedCodes.length !== requestedCodes.length) {
                 writePlannerVendorField(req, location, field, allowedCodes.join(','));
@@ -326,7 +359,9 @@ function requirePlannerVendorScope({ location, field, mutation = false, requireV
             return next();
         }
 
-        const ownedCodes = sanitizePlannerScopeCodes([context.code, ...context.visibleCodes]);
+        const ownedCodes = isRepartidorScope
+            ? sanitizePlannerScopeCodes([context.code, ...context.repartidorCodes])
+            : sanitizePlannerScopeCodes([context.code, ...context.visibleCodes]);
         if (ownedCodes.length === 0) return plannerForbidden(res);
 
         if (mutation) {
@@ -541,12 +576,12 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
 // =============================================================================
 // RUTERO WEEK (Fast CACHE version)
 // =============================================================================
-router.get('/rutero/week', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), (req, res, next) => ruteroWeekController(req, res, next));
+router.get('/rutero/week', requirePlannerRole, requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), (req, res, next) => ruteroWeekController(req, res, next));
 
 // =============================================================================
 // RUTERO VENDEDORES
 // =============================================================================
-router.get('/rutero/vendedores', requirePlannerVendedoresAccess, async (req, res) => {
+router.get('/rutero/vendedores', requirePlannerVendedoresAccess, requirePlannerRole, async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
         const { role } = req.query;
@@ -556,9 +591,13 @@ router.get('/rutero/vendedores', requirePlannerVendedoresAccess, async (req, res
 
         if (role === 'repartidor') {
             sql = `
-                    SELECT TRIM(V.CODIGOVENDEDOR) as code, TRIM(D.NOMBREVENDEDOR) as name
-                    FROM DSEDAC.VEH V
-                    JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                    SELECT DISTINCT TRIM(X.CODIGOVENDEDOR) AS code,
+                        TRIM(D.NOMBREVENDEDOR) AS name
+                    FROM DSEDAC.VDDX X
+                    LEFT JOIN DSEDAC.VDD D
+                      ON TRIM(D.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
+                    WHERE TRIM(X.PERMITEREPARTOSN) = 'S'
+                      AND COALESCE(NULLIF(TRIM(X.JEFEVENTASSN), ''), 'N') <> 'S'
                     ORDER BY D.NOMBREVENDEDOR
                 `;
         } else {
@@ -590,9 +629,13 @@ router.get('/rutero/vendedores', requirePlannerVendedoresAccess, async (req, res
 
         mapped.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-        const allowedCodes = context.privileged
-            ? sanitizePlannerScopeCodes(context.visibleCodes)
-            : sanitizePlannerScopeCodes([context.code, ...context.visibleCodes]);
+        const allowedCodes = role === 'repartidor'
+            ? sanitizePlannerScopeCodes([
+                ...(context.privileged ? context.repartidorCodes : [context.code]),
+            ])
+            : (context.privileged
+                ? sanitizePlannerScopeCodes(context.visibleCodes)
+                : sanitizePlannerScopeCodes([context.code, ...context.visibleCodes]));
         const scoped = allowedCodes.length > 0
             ? mapped.filter((vendor) => allowedCodes.some((allowed) => plannerCodesMatch(vendor.code, allowed)))
             : mapped;
@@ -1062,7 +1105,7 @@ router.get('/rutero/config', requirePlannerVendorScope({ location: 'query', fiel
 // =============================================================================
 // RUTERO DAY COUNTS
 // =============================================================================
-router.get('/rutero/counts', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
+router.get('/rutero/counts', requirePlannerRole, requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { vendedorCodes, role, ignoreOverrides } = req.query;
         const shouldIgnore = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
@@ -1092,7 +1135,7 @@ router.get('/rutero/counts', requirePlannerVendorScope({ location: 'query', fiel
 // =============================================================================
 // RUTERO AVAILABLE POSITIONS
 // =============================================================================
-router.get('/rutero/positions/:day', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
+router.get('/rutero/positions/:day', requirePlannerRole, requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, role } = req.query;
@@ -1155,7 +1198,7 @@ router.post('/rutero/reload-cache', async (req, res) => {
 // NOTE: This endpoint intentionally reloads cache to ensure fresh data.
 // For normal requests, use /rutero/day/:day which uses cached data.
 // =============================================================================
-router.get('/rutero/day-direct/:day', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
+router.get('/rutero/day-direct/:day', requirePlannerRole, requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query;
@@ -1299,7 +1342,7 @@ router.post('/rutero/reload-cache-old', async (req, res) => {
 // =============================================================================
 // RUTERO DAY (OPTIMIZED WITH CACHING) - Hotfix Update Check
 // =============================================================================
-router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
+router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ location: 'query', field: 'vendedorCodes' }), async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides, date } = req.query; // Added ignoreOverrides
@@ -1491,38 +1534,28 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             WHERE CODIGOCLIENTE IN (${batchPlaceholders(batch)})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
-        const currentSalesSql = (batch) => `
+        // One set-based scan returns current sales, previous equivalent-period
+        // sales/cost and previous-year total. The old implementation performed
+        // three independent DB2 scans per client batch.
+        const salesSql = (batch) => `
             SELECT
-                L.LCCDCL as CODE,
-                SUM(L.LCIMVT) as SALES,
-                SUM(L.LCIMCT) as COST
+                L.LCCDCL AS CODE,
+                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS SALES,
+                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMCT ELSE 0 END) AS COST,
+                SUM(CASE WHEN L.LCAADC = ?
+                    AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
+                    THEN L.LCIMVT ELSE 0 END) AS PREV_SALES,
+                SUM(CASE WHEN L.LCAADC = ?
+                    AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
+                    THEN L.LCIMCT ELSE 0 END) AS PREV_COST,
+                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS PREV_TOTAL
             FROM DSED.LACLAE L
             WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
-              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-              AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
-            GROUP BY L.LCCDCL
-        `;
-        const prevSalesSql = endMonthPrevious > 0 ? (batch) => `
-            SELECT
-                L.LCCDCL as CODE,
-                SUM(L.LCIMVT) as SALES,
-                SUM(L.LCIMCT) as COST
-            FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
-              AND L.LCAADC = ?
-              AND ${LACLAE_SALES_FILTER}
-              AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
-            GROUP BY L.LCCDCL
-        ` : null;
-        const prevYearTotalSql = (batch) => `
-            SELECT
-                L.LCCDCL as CODE,
-                SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
-              AND L.LCAADC = ?
-              AND ${LACLAE_SALES_FILTER}
+              AND (
+                (L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)))
+                OR L.LCAADC = ?
+              )
             GROUP BY L.LCCDCL
         `;
         const gpsSql = (batch) => `
@@ -1547,9 +1580,7 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
         // perf: parallelized independent IO (pool-per-call).
         const [
             clientDetailsRows,
-            currentSalesRows,
-            prevYearRowsResult,
-            prevYearTotalRows,
+            salesRows,
             gpsResult,
             notesResult,
             orderStatusResult,
@@ -1564,24 +1595,18 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
             }),
             runBatchedRuteroQuery({
                 batches: clientBatches,
-                buildSql: currentSalesSql,
-                buildParams: (batch) => [...batch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent],
-                buildCacheKey: (batch) => `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${ruteroBatchHash(batch)}`,
+                buildSql: salesSql,
+                buildParams: (batch) => [
+                    currentYear, currentYear,
+                    previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious,
+                    previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious,
+                    previousYear,
+                    ...batch,
+                    currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent,
+                    previousYear,
+                ],
+                buildCacheKey: (batch) => `rutero:sales:combined:v3:${currentYear}:${previousYear}:${endMonthCurrent}:${endDayCurrent}:${endMonthPrevious}:${endDayPrevious}:${ruteroBatchHash(batch)}`,
                 ttl: cacheTTL,
-            }),
-            prevSalesSql ? runBatchedRuteroQuery({
-                batches: clientBatches,
-                buildSql: prevSalesSql,
-                buildParams: (batch) => [...batch, previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious],
-                buildCacheKey: (batch) => `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${ruteroBatchHash(batch)}`,
-                ttl: cacheTTL,
-            }) : Promise.resolve([]),
-            runBatchedRuteroQuery({
-                batches: clientBatches,
-                buildSql: prevYearTotalSql,
-                buildParams: (batch) => [...batch, previousYear],
-                buildCacheKey: (batch) => `rutero:sales:total:${previousYear}:${ruteroBatchHash(batch)}`,
-                ttl: TTL.LONG,
             }),
             runBatchedRuteroQuery({
                 batches: clientBatches,
@@ -1606,33 +1631,21 @@ router.get('/rutero/day/:day', requirePlannerVendorScope({ location: 'query', fi
         const orderStatusDegraded = orderStatusResult?.degraded === true;
 
         // Build maps from results - use safe accessor to handle both uppercase/lowercase columns
-        const prevYearRows = prevYearRowsResult || [];
         const currentSalesMap = new Map();
-        (currentSalesRows || []).forEach(r => {
-            const code = (r.CODE ?? r.code ?? '').toString().trim();
-            if (code) {
-                currentSalesMap.set(code, {
-                    sales: parseFloat(r.SALES ?? r.sales) || 0,
-                    cost: parseFloat(r.COST ?? r.cost) || 0
-                });
-            }
-        });
         const prevYearMap = new Map();
-        prevYearRows.forEach(r => {
-            const code = (r.CODE ?? r.code ?? '').toString().trim();
-            if (code) {
-                prevYearMap.set(code, {
-                    sales: parseFloat(r.SALES ?? r.sales) || 0,
-                    cost: parseFloat(r.COST ?? r.cost) || 0
-                });
-            }
-        });
         const prevYearTotalMap = new Map();
-        prevYearTotalRows.forEach(r => {
+        (salesRows || []).forEach(r => {
             const code = (r.CODE ?? r.code ?? '').toString().trim();
-            if (code) {
-                prevYearTotalMap.set(code, parseFloat(r.SALES ?? r.sales) || 0);
-            }
+            if (!code) return;
+            currentSalesMap.set(code, {
+                sales: parseFloat(r.SALES ?? r.sales) || 0,
+                cost: parseFloat(r.COST ?? r.cost) || 0,
+            });
+            prevYearMap.set(code, {
+                sales: parseFloat(r.PREV_SALES ?? r.prev_sales) || 0,
+                cost: parseFloat(r.PREV_COST ?? r.prev_cost) || 0,
+            });
+            prevYearTotalMap.set(code, parseFloat(r.PREV_TOTAL ?? r.prev_total) || 0);
         });
         const gpsMap = new Map();
         (gpsResult || []).forEach(g => {

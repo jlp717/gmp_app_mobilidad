@@ -412,7 +412,11 @@ function createRepartoEvidenceDb2Repository({
           if (!planned || typeof planned.getPlannedDelivery !== 'function') {
             throw new RepartoEvidenceRepositoryError('Puerto de entrega planificada no disponible');
           }
-          await planned.getPlannedDelivery(record.documentId, record.repartidorId);
+          await planned.getPlannedDelivery(
+            record.documentId,
+            record.repartidorId,
+            { allowedRepartidorIds: record.allowedRepartidorIds },
+          );
           const existing = first(await rows(connection,
             `SELECT DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STORAGE_REFERENCE, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, STATUS, EXPIRES_AT FROM ${table} WHERE EVIDENCE_ID = ? FOR UPDATE WITH RS`,
             [record.evidenceId]));

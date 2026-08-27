@@ -179,6 +179,15 @@ function evidenceRepartidorId(req, requested) {
   return selected;
 }
 
+function evidenceSelection(req, requested) {
+  const repartidorId = evidenceRepartidorId(req, requested);
+  const role = String(req.user?.role || '').trim().toUpperCase();
+  return {
+    repartidorId,
+    allowedRepartidorIds: role === 'REPARTIDOR' ? [repartidorId] : financeFleetCodes(req.user),
+  };
+}
+
 function artifactActor(req, requested) {
   return { role: req.user?.role, repartidorId: evidenceRepartidorId(req, requested) };
 }
@@ -590,7 +599,7 @@ router.post('/rutero/evidence/signature', setCanonicalArtifactHeaders, verifyTok
   try {
     const result = await canonicalConfirmationRuntime.evidenceService.stageSignature({
       documentId: evidenceDocumentId(req.body),
-      repartidorId: evidenceRepartidorId(req, req.body?.repartidorId),
+      ...evidenceSelection(req, req.body?.repartidorId),
       dataUri: req.body?.signature || req.body?.firma,
     });
     return res.status(result.created ? 201 : 200).json({ success: true, ...result });
@@ -607,7 +616,7 @@ router.post('/rutero/evidence/photo', setCanonicalArtifactHeaders, verifyToken, 
       if (!req.file) throw new EvidenceError('EVIDENCE_REQUIRED', 'Debe adjuntar una evidencia', 400);
       const result = await canonicalConfirmationRuntime.evidenceService.stagePhoto({
         documentId: evidenceDocumentId(req.body),
-        repartidorId: evidenceRepartidorId(req, req.body?.repartidorId),
+        ...evidenceSelection(req, req.body?.repartidorId),
         mimeType: req.file.mimetype,
         buffer: req.file.buffer,
       });

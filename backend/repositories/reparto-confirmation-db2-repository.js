@@ -362,8 +362,8 @@ function createRepartoConfirmationDb2Repository({
         return first(await rows(connection,
           `SELECT ID FROM ${confirmations} WHERE DOCUMENT_ID = ? FOR UPDATE WITH RS`, [documentId]));
       },
-      getPlannedDelivery(documentId, repartidorId) {
-        return transactionalPlannedDeliveryPort.getPlannedDelivery(documentId, repartidorId);
+      getPlannedDelivery(documentId, repartidorId, options) {
+        return transactionalPlannedDeliveryPort.getPlannedDelivery(documentId, repartidorId, options);
       },
       assertEvidenceOwnership(ids, owner) {
         return transactionalEvidenceOwnershipPort.assertOwnership(ids, owner);

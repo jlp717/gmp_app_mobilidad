@@ -71,7 +71,6 @@ void main() {
           'Liquidación',
           'Vencimientos',
           'Cobros',
-          'Evolución',
           'Comisiones',
           'Histórico',
           'Asistente',

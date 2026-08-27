@@ -127,6 +127,7 @@ function createFakeRepository({ planned = plannedDelivery(), seededReplay } = {}
   const evidence = new Map([
     ['signature-404', { documentId: planned.documentId, repartidorId: '94', kind: 'FIRMA' }],
     ['photo-404', { documentId: planned.documentId, repartidorId: '94', kind: 'FOTO' }],
+    ['reassigned-signature', { documentId: planned.documentId, repartidorId: '94', kind: 'FIRMA' }],
     ['foreign-photo', { documentId: 'OTHER', repartidorId: '95', kind: 'FOTO' }],
   ]);
 
@@ -553,6 +554,36 @@ describe('transactional reparto confirmation service', () => {
       statusCode: 422,
     });
     expect(repository.snapshot().events).toEqual([]);
+  });
+
+  test('allows a privileged manager to execute a planned delivery for another signed driver', async () => {
+    const repository = createFakeRepository({
+      planned: plannedDelivery({ repartidorId: '95' }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+    const input = command({
+      idempotencyKey: 'reassigned-delivery-2026-S-10-404',
+      actor: {
+        userId: 'V98',
+        repartidorId: '94',
+        role: 'JEFE_VENTAS',
+        privileged: true,
+        allowedRepartidorIds: ['94', '95'],
+      },
+      delivery: {
+        firma: 'reassigned-signature',
+        evidencias: [],
+      },
+    });
+
+    await expect(service.confirm(input)).resolves.toMatchObject({
+      created: true,
+      deliveryStatus: 'ENTREGADO',
+    });
+    expect(repository.snapshot().confirmations.get(input.delivery.itemId)).toMatchObject({
+      repartidorId: '94',
+      actorUserId: 'V98',
+    });
   });
 
   test('rejects evidence owned by another delivery/repartidor before writes', async () => {

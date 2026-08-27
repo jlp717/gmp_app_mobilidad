@@ -97,7 +97,7 @@ void main() {
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 9);
+      expect(repartidorJefe.length, 8);
 
       // Repartidor (regular): 8 items
       final repartidor = NavigationConfigService.getNavItems(

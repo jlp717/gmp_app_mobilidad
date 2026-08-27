@@ -142,7 +142,12 @@ function assertPlannedDelivery(planned, command) {
       statusCode: 404,
     });
   }
-  if (!sameText(planned.repartidorId, command.actor.repartidorId)) {
+  const ownerScope = Array.isArray(command.actor.allowedRepartidorIds)
+    ? command.actor.allowedRepartidorIds : [command.actor.repartidorId];
+  const reassignmentAllowed = command.actor.privileged === true
+    && ownerScope.some((owner) => sameText(planned.repartidorId, owner))
+    && ownerScope.some((owner) => sameText(command.actor.repartidorId, owner));
+  if (!sameText(planned.repartidorId, command.actor.repartidorId) && !reassignmentAllowed) {
     throw new RepartoPersistenceError('La entrega no pertenece al repartidor autenticado', {
       code: 'DELIVERY_OWNERSHIP_REQUIRED',
       statusCode: 403,
@@ -390,6 +395,7 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
       const planned = await tx.getPlannedDelivery(
         command.delivery.itemId,
         command.actor.repartidorId,
+        { allowedRepartidorIds: command.actor.allowedRepartidorIds },
       );
       if (planned.pricingState === PRICING_STATE.PENDING_PRICE) {
         throw new RepartoPersistenceError(

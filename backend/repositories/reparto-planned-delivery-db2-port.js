@@ -92,8 +92,23 @@ async function executeRows(connection, sql, params) {
   }
 }
 
-function headerQuery(schema, includeClient) {
+function normalizeOwnerScope(repartidorId, options = {}) {
+  const requested = [repartidorId, ...(Array.isArray(options.allowedRepartidorIds)
+    ? options.allowedRepartidorIds : [])];
+  const ownerIds = [...new Set(requested.map(assertRepartidorId))];
+  if (ownerIds.length > 100) {
+    throw new RepartoPlannedDeliveryError('El alcance de repartidores es demasiado amplio', {
+      code: 'DELIVERY_OWNERSHIP_REQUIRED', statusCode: 403,
+    });
+  }
+  return ownerIds;
+}
+
+function headerQuery(schema, includeClient, ownerIds = []) {
   const clientClause = includeClient ? ' AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?' : '';
+  const ownerClause = ownerIds.length === 1
+    ? ' AND TRIM(OPP.CODIGOREPARTIDOR) = ?'
+    : ` AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ownerIds.map(() => '?').join(',')})`;
   return `
     SELECT
       TRIM(CPC.SUBEMPRESAALBARAN) AS SUBEMPRESA,
@@ -135,7 +150,7 @@ function headerQuery(schema, includeClient) {
       AND TRIM(CPC.SERIEALBARAN) = ?
       AND CPC.TERMINALALBARAN = ?
       AND CPC.NUMEROALBARAN = ?
-      AND TRIM(OPP.CODIGOREPARTIDOR) = ?${clientClause}
+      ${ownerClause}${clientClause}
     ORDER BY TRIM(CPC.SUBEMPRESAALBARAN), TRIM(CPC.CODIGOCLIENTEALBARAN), CPC.EJERCICIOALBARAN,
       TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
   `;
@@ -321,13 +336,14 @@ function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
 function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
   const safeSchema = validateSchema(schema);
 
-  async function getPlannedDelivery(connection, itemId, repartidorId) {
+  async function getPlannedDelivery(connection, itemId, repartidorId, options = {}) {
     assertConnection(connection);
     const identity = assertItemIdentity(itemId);
     const safeRepartidorId = assertRepartidorId(repartidorId);
-    const headerParams = [identity.ejercicio, identity.serie, identity.terminal, identity.numero, safeRepartidorId];
+    const ownerIds = normalizeOwnerScope(safeRepartidorId, options);
+    const headerParams = [identity.ejercicio, identity.serie, identity.terminal, identity.numero, ...ownerIds];
     if (identity.cliente) headerParams.push(identity.cliente);
-    const headers = await executeRows(connection, headerQuery(safeSchema, Boolean(identity.cliente)), headerParams);
+    const headers = await executeRows(connection, headerQuery(safeSchema, Boolean(identity.cliente), ownerIds), headerParams);
     if (!headers.length) {
       throw new RepartoPlannedDeliveryError('Entrega no encontrada', {
         code: 'DELIVERY_NOT_FOUND', statusCode: 404,
@@ -379,7 +395,8 @@ function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
     forConnection(connection) {
       assertConnection(connection);
       return Object.freeze({
-        getPlannedDelivery: (itemId, repartidorId) => getPlannedDelivery(connection, itemId, repartidorId),
+        getPlannedDelivery: (itemId, repartidorId, options) =>
+          getPlannedDelivery(connection, itemId, repartidorId, options),
       });
     },
   });

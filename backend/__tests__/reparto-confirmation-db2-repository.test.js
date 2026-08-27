@@ -489,7 +489,7 @@ describe('DB2 reparto confirmation repository', () => {
     expect(factory.ports.plannedDeliveryPort.forConnection).toHaveBeenCalledWith(factory.connection);
     expect(factory.ports.evidenceOwnershipPort.forConnection).toHaveBeenCalledWith(factory.connection);
     expect(factory.ports.cobrosPort.forConnection).toHaveBeenCalledWith(factory.connection);
-    expect(factory.ports.plannedBound.getPlannedDelivery).toHaveBeenCalledWith('doc-1', '17');
+    expect(factory.ports.plannedBound.getPlannedDelivery).toHaveBeenCalledWith('doc-1', '17', undefined);
     expect(factory.ports.evidenceBound.assertOwnership).toHaveBeenCalledWith(
       [{ evidenceId: 'sig-1', expectedKind: 'FIRMA' }],
       { documentId: 'doc-1', repartidorId: '17' },

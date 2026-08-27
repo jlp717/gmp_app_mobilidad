@@ -231,7 +231,7 @@ describe('Planner rutero/day route', () => {
         .get('/rutero/day/martes')
         .query({
           vendedorCodes,
-          role: 'JEFE_VENTAS',
+          role: 'comercial',
           year: '2026',
           month: '4',
           week: '4',
@@ -244,4 +244,28 @@ describe('Planner rutero/day route', () => {
     expect(cacheKeys[1]).toContain('scope:2,3:primary:3:');
     expect(cacheKeys[0]).not.toBe(cacheKeys[1]);
   });
+});
+
+test('GET /rutero/day/:day binds combined sales markers before client scope', async () => {
+  const res = await request(makeApp())
+    .get('/rutero/day/martes')
+    .query({
+      vendedorCodes: '02',
+      role: 'comercial',
+      year: '2026',
+      month: '4',
+      week: '4',
+      forceRefresh: '1',
+    });
+
+  expect(res.status).toBe(200);
+  const salesCall = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('AS PREV_TOTAL'));
+  expect(salesCall).toBeDefined();
+  const params = salesCall[1];
+  expect(params[0]).toBe(2026);
+  expect(params[1]).toBe(2026);
+  expect(params[2]).toBe(2025);
+  expect(params[6]).toBe(2025);
+  expect(params[10]).toBe(2025);
+  expect(params.slice(11, 13)).toEqual(['4300000001', '4300000002']);
 });

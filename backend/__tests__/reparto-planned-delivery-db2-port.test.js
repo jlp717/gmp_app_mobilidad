@@ -84,6 +84,19 @@ describe('DB2 planned delivery read port', () => {
     }));
   });
 
+  test('allows a privileged owner scope without dropping the strict driver identity', async () => {
+    const db = connection({ headers: [header({ CODIGOREPARTIDOR: 'REP-2' })] });
+    const port = createRepartoPlannedDeliveryDb2Port();
+    const planned = await port.forConnection(db)
+      .getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1', {
+        allowedRepartidorIds: ['REP-2'],
+      });
+
+    expect(planned.repartidorId).toBe('REP-2');
+    expect(db.calls[0].sql).toContain('TRIM(OPP.CODIGOREPARTIDOR) IN (?,?)');
+    expect(db.calls[0].params).toEqual([2026, 'A', 2, 42, 'REP-1', 'REP-2', 'CLI-01']);
+  });
+
   test('maps a mandatory payment condition from the ERP header catalog join', async () => {
     const port = createRepartoPlannedDeliveryDb2Port();
     const planned = await port.forConnection(connection({

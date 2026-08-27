@@ -280,3 +280,38 @@ test('REPARTIDOR cannot list commercial vendedores', async () => {
   expect(res.status).toBe(403);
   expect(mockCachedQuery).not.toHaveBeenCalled();
 });
+
+test('COMERCIAL cannot force the repartidor planner scope', async () => {
+  const res = await request(makeApp(COMMERCIAL))
+    .get('/rutero/counts?vendedorCodes=01&role=repartidor');
+
+  expect(res.status).toBe(403);
+  expect(res.body.code).toBe('INSUFFICIENT_ROLE');
+  expect(mockGetClientsForDay).not.toHaveBeenCalled();
+});
+
+test('JEFE uses only signed repartidor claims for the repartidor planner scope', async () => {
+  const jefe = { ...JEFE, repartidorCodes: ['44', '45'] };
+  const res = await request(makeApp(jefe))
+    .get('/rutero/counts?vendedorCodes=ALL&role=repartidor');
+
+  expect(res.status).toBe(200);
+  expect(require('../services/laclae').getWeekCountsFromCache.mock.calls.at(-1)[0])
+    .toBe('44,45');
+});
+
+test('REPARTIDOR cannot switch its planner scope to commercial', async () => {
+  const res = await request(makeApp({ ...REPARTIDOR, repartidorCodes: ['01'] }))
+    .get('/rutero/counts?vendedorCodes=01&role=comercial');
+
+  expect(res.status).toBe(403);
+  expect(res.body.code).toBe('INSUFFICIENT_ROLE');
+});
+
+test('JEFE without a planner scope is clamped to signed commercial claims', async () => {
+  const res = await request(makeApp(JEFE)).get('/rutero/week');
+
+  expect(res.status).toBe(200);
+  expect(require('../services/laclae').getWeekCountsFromCache.mock.calls.at(-1)[0])
+    .toBe('01,02');
+});

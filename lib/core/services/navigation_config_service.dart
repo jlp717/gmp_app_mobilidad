@@ -29,6 +29,9 @@ class NavigationConfigService {
         );
       }
       items.addAll(_repartidorItems);
+      if (isJefeVentas) {
+        items.removeWhere((item) => item.label == 'Evolución');
+      }
       if (!showCommissions) {
         items.removeWhere((item) => item.label == 'Comisiones');
       }

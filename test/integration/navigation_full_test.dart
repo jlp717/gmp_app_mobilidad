@@ -32,7 +32,7 @@ void main() {
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 9);
+      expect(repartidorJefe.length, 8);
       expect(repartidorJefe.any((i) => i.label == 'Comisiones'), false);
 
       // Comercial
