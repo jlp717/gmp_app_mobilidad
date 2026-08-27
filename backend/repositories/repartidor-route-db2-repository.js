@@ -822,7 +822,15 @@ async function getClientDocuments({
   }
 
   const dsJoin = getDeliveryStatusJoin('CPC', 'DS');
-  const dsCols = getDeliveryStatusColumns('DS');
+  // DELIVERY_REPARTIDOR is owned by the effective-owner overlay below. The
+  // delivery-status helper also exposes a column with that name when its
+  // table is unavailable/legacy, which produces duplicate CTE column names
+  // and DB2 SQLSTATE 42000/-104 during statement preparation.
+  const dsCols = getDeliveryStatusColumns('DS')
+    .split(/\r?\n/)
+    .filter((line) => !/\bAS\s+DELIVERY_REPARTIDOR\b/i.test(line))
+    .join('\n')
+    .replace(/,\s*$/, '');
   const dsAvail = isDeliveryStatusAvailable();
 
   // Prefer an exact year, otherwise a bounded window (UI "últimos 3 años").
