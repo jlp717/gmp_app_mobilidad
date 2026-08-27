@@ -81,6 +81,14 @@ describe('repartidor rutero day move repository', () => {
       repartidorId: '05',
       sourceDate: '2026-08-24',
       targetDate: '2026-08-25',
+      position: 499,
+      documents: [{ documentId: 'DOC-1' }, { documentId: 'DOC-2' }],
+      idempotencyKey: 'move-test-1234',
+    })).toThrow(RuteroDayMoveConflictError);
+    expect(() => assertMoveInput({
+      repartidorId: '05',
+      sourceDate: '2026-08-24',
+      targetDate: '2026-08-25',
       position: 0,
       documents: [{ documentId: 'DOC-1' }],
       idempotencyKey: 'short',

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_tracking_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_tracking.dart';
 
@@ -29,6 +30,20 @@ class RuteroTrackingNotifier extends Notifier<RuteroTrackingState> {
 
   @override
   RuteroTrackingState build() {
+    ref.listen<AsyncValue<AuthState>>(authProvider, (previous, next) {
+      final previousAuth = previous?.valueOrNull;
+      final nextAuth = next.valueOrNull;
+      final previousUserId = previousAuth?.user?.id;
+      final nextUserId = nextAuth?.user?.id;
+      final sessionChanged = previousUserId != nextUserId ||
+          previousAuth?.activeMode != nextAuth?.activeMode;
+      if (state.sessionId != null && (nextUserId == null || sessionChanged)) {
+        // Stop capture immediately on logout, expiration or role/session
+        // replacement. The stop call cancels GPS and its timer before any
+        // best-effort network flush, so offline logout cannot keep tracking.
+        unawaited(stop());
+      }
+    });
     ref.onDispose(_dispose);
     return const RuteroTrackingState();
   }
@@ -386,8 +401,8 @@ class RuteroTrackingNotifier extends Notifier<RuteroTrackingState> {
       if (!_disposed) {
         state = state.copyWith(
           pendingSamples: _pending.length,
-          error: 'Sin conexión: los puntos quedan guardados y se '
-              'reintentará la sincronización.',
+          error: 'Sin conexión: los puntos pendientes se mantienen durante '
+              'esta sesión y se reintentará la sincronización.',
         );
       }
       return false;
