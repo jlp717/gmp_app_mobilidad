@@ -13,6 +13,14 @@ try {
 }
 const logger = require('../middleware/logger');
 
+function serializeForRedis(value) {
+    return JSON.stringify(value, (_key, item) => {
+        if (typeof item !== 'bigint') return item;
+        const numeric = Number(item);
+        return Number.isSafeInteger(numeric) ? numeric : String(item);
+    });
+}
+
 // Configuration from environment - Redis connection settings
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT) || 6379;
@@ -351,7 +359,7 @@ class RedisCacheService {
 
         try {
             await this._withTimeout(
-                this.client.setEx(fullKey, ttl, JSON.stringify(value)),
+                this.client.setEx(fullKey, ttl, serializeForRedis(value)),
                 REDIS_COMMAND_TIMEOUT_MS,
                 'set'
             );
@@ -525,7 +533,7 @@ class RedisCacheService {
         try {
             const multi = this.client.multi();
             for (const { key, value } of entries) {
-                multi.setEx(this._generateKey(namespace, key), ttl, JSON.stringify(value));
+                multi.setEx(this._generateKey(namespace, key), ttl, serializeForRedis(value));
             }
             await this._withTimeout(multi.exec(), REDIS_COMMAND_TIMEOUT_MS, 'setMany');
             return true;

@@ -179,6 +179,29 @@ describe('cachedQuery redis L1 invalidation (real redis-cache module)', () => {
     mockSet.mockResolvedValue(undefined);
   });
 
+  test('serializes BigInt values for Redis without losing safe integers', async () => {
+    jest.resetModules();
+    jest.unmock('../services/redis-cache');
+
+    const { redisCache } = require('../services/redis-cache');
+    const setEx = jest.fn().mockResolvedValue('OK');
+    redisCache.client = { setEx };
+    redisCache.isConnected = true;
+
+    await redisCache.set('query', 'query:repartidor:test', [{
+      SAFE_ID: BigInt(7),
+      LARGE_ID: BigInt('9007199254740993'),
+    }], 60);
+
+    const payload = setEx.mock.calls[0][2];
+    expect(JSON.parse(payload)).toEqual([{
+      SAFE_ID: 7,
+      LARGE_ID: '9007199254740993',
+    }]);
+
+    redisCache.isConnected = false;
+    redisCache.client = null;
+  });
   test('invalidatePattern clears fresh and stale L1 entries for query-domain keys', async () => {
     jest.resetModules();
     jest.unmock('../services/redis-cache');
