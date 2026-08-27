@@ -808,7 +808,7 @@ async function getClientDocuments({
                 ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
                 AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
                 AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-                AND ${ownerFilter}`;
+            `;
 
   let dateFilter = '';
   const dateParams = [];
@@ -822,7 +822,7 @@ async function getClientDocuments({
   }
 
   const dsJoin = getDeliveryStatusJoin('CPC', 'DS');
-  // DELIVERY_REPARTIDOR is owned by the effective-owner overlay below. The
+  // The effective-owner overlay below supplies DELIVERY_REPARTIDOR. The
   // delivery-status helper also exposes a column with that name when its
   // table is unavailable/legacy, which produces duplicate CTE column names
   // and DB2 SQLSTATE 42000/-104 during statement preparation.
@@ -886,6 +886,7 @@ async function getClientDocuments({
                     AND CAC_J.NUMEROALBARAN = CPC.NUMEROALBARAN
                     AND TRIM(CAC_J.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
                 WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
+                  AND ${ownerFilter}
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
                   ${yearFilter}
@@ -1015,10 +1016,10 @@ async function getClientDocuments({
                 DOC.TERMINALALBARAN DESC
         `;
   const allParams = [
-    ...ids,
-    ...confirmationScope.params,
     ...effectiveOwnerJoin.params,
     clientCode,
+    ...ids,
+    ...confirmationScope.params,
     ...yearFilterParams,
     ...dateParams,
     pageOffset,

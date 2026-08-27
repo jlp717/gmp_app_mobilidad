@@ -151,7 +151,7 @@ describe('Repartidor route parameter binding', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
     const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual(['05', '08', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '08', '05', '08', '4300030041', 2026, 0, 50]);
+    expect(params).toEqual(['05', '08', '4300030041', '05', '08', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05', '08', 2026, 0, 50]);
     expect(sql).toContain('OR EXISTS');
     expect(sql).toContain('C_SCOPE.REPARTIDOR_ID');
   });
