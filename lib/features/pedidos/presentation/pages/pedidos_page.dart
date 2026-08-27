@@ -239,7 +239,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ProviderScope.containerOf(context).read(authProvider).value;
     final vendedorCodes = authState?.vendedorCodes ?? [];
     var codes = vendedorCodes.join(',');
-    if (hasCommercial80VendorScope(
+    if (hasScopedVendorAccess(
       userCode: authState?.user?.code,
       vendorCodes: vendedorCodes,
     )) {

@@ -108,7 +108,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         : (user.vendedorCode?.trim().isNotEmpty ?? false
             ? user.vendedorCode!.trim()
             : user.code.trim());
-    if (hasCommercial80VendorScope(
+    if (hasScopedVendorAccess(
       userCode: user.code,
       vendorCodes: authVendorCodes,
     )) {
@@ -140,7 +140,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       return true;
     }
     final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
-    return hasCommercial80VendorScope(
+    return hasScopedVendorAccess(
           userCode: user.code,
           vendorCodes: authVendorCodes,
         ) &&

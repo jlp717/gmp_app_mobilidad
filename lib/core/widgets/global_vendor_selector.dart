@@ -44,13 +44,16 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
     );
   }
 
-  bool get _isScopedCommercial80 {
+  bool get _isScopedCommercial {
     final authState = ref.read(authProvider).value;
-    return isCommercial80Code(authState?.user?.code);
+    return hasScopedVendorAccess(
+      userCode: authState?.user?.code,
+      vendorCodes: authState?.vendedorCodes ?? const <String>[],
+    );
   }
 
   String get _allOptionLabel =>
-      _isScopedCommercial80 ? 'Equipo Almeria' : 'Todos los comerciales';
+      _isScopedCommercial ? 'Equipo autorizado' : 'Todos los comerciales';
 
   @override
   void initState() {

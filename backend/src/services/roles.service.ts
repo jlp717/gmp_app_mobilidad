@@ -1,11 +1,10 @@
 /**
  * SERVICIO DE ROLES - DETECCIÓN DESDE BD
  * 
- * Detecta roles consultando JAVIER.APP_USERS:
- * - Si existe en APP_USERS → usa ese rol
- * - Si código = '01' (GOYO) → JEFE
- * - Si existe en CAC.CODIGOCONDUCTOR → REPARTIDOR
- * - Por defecto → COMERCIAL
+ * Detecta roles leyendo los flags de movilidad del ERP en DSEDAC.VDDX:
+ * - JEFEVENTASSN = 'S' → JEFE
+ * - PERMITEREPARTOSN = 'S' sin preventa → REPARTIDOR
+ * - En cualquier otro caso → COMERCIAL
  */
 
 import { odbcPool } from '../config/database';
@@ -24,8 +23,6 @@ export interface AppUser {
     rutasAsignadas?: string[];
 }
 
-// Códigos conocidos de JEFES (actualizar según tu BD)
-const CODIGOS_JEFES = ['01']; // GOYO
 
 // Códigos de forma de pago que requieren cobro (CTR)
 const CODIGOS_CTR_TIPICOS = ['01', 'CO', 'EF', 'CT', 'CTR', 'CONTADO', 'EFECTIVO'];
@@ -33,65 +30,40 @@ const CODIGOS_CTR_TIPICOS = ['01', 'CO', 'EF', 'CT', 'CTR', 'CONTADO', 'EFECTIVO
 class RolesService {
 
     /**
-     * Detectar rol del usuario
-     * Orden de prioridad:
-     * 1. Consultar JAVIER.APP_USERS (si existe la tabla)
-     * 2. Código en lista de JEFES conocidos
-     * 3. Código existe en CAC.CODIGOCONDUCTOR → REPARTIDOR
-     * 4. Por defecto → COMERCIAL
+     * Detectar rol del usuario desde los flags de movilidad del ERP.
      */
-    async detectarRol(codigoUsuario: string, isJefeVentasFromLogin?: boolean): Promise<UserRole> {
+    async detectarRol(codigoUsuario: string, _isJefeVentasFromLogin?: boolean): Promise<UserRole> {
         const codigo = codigoUsuario.trim();
+        if (!codigo) return 'COMERCIAL';
 
-        // 1. Verificar en tabla APP_USERS (si existe)
         try {
             const resultado = await odbcPool.query<Record<string, unknown>[]>(`
-        SELECT ROL FROM JAVIER.APP_USERS
-        WHERE TRIM(CODIGO) = ? AND ACTIVO = 'S'
-        FETCH FIRST 1 ROWS ONLY
-      `, [codigo]);
-
-            if (resultado.length > 0) {
-                const rol = toStr(resultado[0].ROL).toUpperCase() as UserRole;
-                logger.info(`[ROLES] Usuario ${codigo} → Rol desde APP_USERS: ${rol}`);
-                return rol;
-            }
-        } catch (error) {
-            // Tabla no existe todavía, continuar con lógica alternativa
-            logger.debug('[ROLES] Tabla APP_USERS no existe, usando lógica alternativa');
-        }
-
-        // 2. Verificar si es Jefe por código conocido o flag del login
-        if (CODIGOS_JEFES.includes(codigo) || isJefeVentasFromLogin) {
-            logger.info(`[ROLES] Usuario ${codigo} → JEFE (código conocido)`);
-            return 'JEFE';
-        }
-
-        // 3. Verificar si es Repartidor (tiene vehículo asignado en VEH)
-        // VEH.CODIGOVENDEDOR contiene los códigos de conductores con vehículo
-        try {
-            logger.info(`[ROLES] Verificando si usuario ${codigo} tiene vehículo en DSEDAC.VEH`);
-            const tieneVehiculo = await odbcPool.query<Record<string, unknown>[]>(`
-        SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA
-        FROM DSEDAC.VEH
+        SELECT
+          TRIM(PERMITEPREVENTASN) as PREVENTISTA_SN,
+          TRIM(PERMITEREPARTOSN) as REPARTIDOR_SN,
+          TRIM(JEFEVENTASSN) as JEFE_SN
+        FROM DSEDAC.VDDX
         WHERE TRIM(CODIGOVENDEDOR) = ?
         FETCH FIRST 1 ROWS ONLY
       `, [codigo]);
 
-            logger.info(`[ROLES] Resultado vehículo para ${codigo}: ${tieneVehiculo.length} filas`);
+            const row = resultado[0];
+            if (!row) return 'COMERCIAL';
+            const isYes = (value: unknown) => ['S', 'Y', '1', 'TRUE']
+                .includes(toStr(value).trim().toUpperCase());
+            const permitePreventa = isYes(row.PREVENTISTA_SN);
+            const permiteReparto = isYes(row.REPARTIDOR_SN);
+            const isJefeVentas = isYes(row.JEFE_SN);
 
-            if (tieneVehiculo.length > 0) {
-                const matricula = toStr(tieneVehiculo[0].MATRICULA);
-                logger.info(`[ROLES] Usuario ${codigo} → REPARTIDOR (vehículo: ${matricula})`);
-                return 'REPARTIDOR';
-            }
+            if (isJefeVentas) return 'JEFE';
+            if (permiteReparto && !permitePreventa) return 'REPARTIDOR';
+            return 'COMERCIAL';
         } catch (error) {
-            logger.error('[ROLES] Error verificando vehículo:', error);
+            // An unavailable profile must never be promoted by an ID, vehicle,
+            // or delivery-history fallback.
+            logger.error('[ROLES] Error leyendo flags de movilidad del ERP:', error);
+            return 'COMERCIAL';
         }
-
-        // 4. Por defecto: COMERCIAL
-        logger.info(`[ROLES] Usuario ${codigo} → COMERCIAL (default)`);
-        return 'COMERCIAL';
     }
 
     /**

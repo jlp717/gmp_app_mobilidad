@@ -74,16 +74,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   ProviderSubscription<String?>? _vendorSubscription;
   int _loadGeneration = 0;
 
-  // Jefe View
-  bool _isLoggedCommercial80() {
+  bool _isCommissionsHiddenForUser() {
     final user = ref.read(authProvider).value?.user;
-    return isCommercial80Code(user?.code);
+    return user?.showCommissions == false;
   }
 
   Map<String, dynamic> _hiddenCommissionsData() => const {
         'success': true,
         'status': 'hidden',
-        'hiddenForCommercial80': true,
+        'hiddenForPermission': true,
         'grandTotalCommission': 0,
         'totals': {'commission': 0},
         'breakdown': [],
@@ -130,7 +129,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     final generation = ++_loadGeneration;
-    if (_isLoggedCommercial80()) {
+    if (_isCommissionsHiddenForUser()) {
       if (!mounted) return;
       setState(() {
         _data = _hiddenCommissionsData();
@@ -1442,10 +1441,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final loggedUserCode = ref.watch(
-      authProvider.select((state) => state.value?.user?.code),
+    final commissionsHidden = ref.watch(
+      authProvider.select(
+        (state) => state.value?.user?.showCommissions == false,
+      ),
     );
-    if (isCommercial80Code(loggedUserCode)) {
+    if (commissionsHidden) {
       return Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Column(

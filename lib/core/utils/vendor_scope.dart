@@ -1,21 +1,11 @@
 // ignore_for_file: public_member_api_docs
 
-const String commercial80Code = '80';
-const List<String> commercial80AlmeriaCodes = <String>['72', '73', '81', '83'];
-const List<String> commercial80ScopedCodes = <String>[
-  commercial80Code,
-  ...commercial80AlmeriaCodes,
-];
-
 String normalizeVendorCode(String? code) {
   final raw = (code ?? '').trim();
   if (raw.isEmpty) return raw;
   final normalized = raw.replaceFirst(RegExp('^0+'), '');
   return normalized.isEmpty ? raw : normalized;
 }
-
-bool isCommercial80Code(String? code) =>
-    normalizeVendorCode(code) == commercial80Code;
 
 List<String> uniqueVendorCodes(Iterable<String> codes) {
   final seen = <String>{};
@@ -40,21 +30,22 @@ bool vendorCodeListContains(Iterable<String> codes, String? code) {
   return codes.any((c) => normalizeVendorCode(c) == normalized);
 }
 
-bool hasCommercial80VendorScope({
+/// Returns true only when the authenticated claims explicitly contain more
+/// than the user's own vendor. The backend is responsible for issuing those
+/// claims from ERP/authorization data; this client never derives them by ID.
+bool hasScopedVendorAccess({
   required String? userCode,
   required List<String> vendorCodes,
 }) {
-  if (!isCommercial80Code(userCode)) return false;
-  return vendorCodes.isEmpty || vendorCodes.length > 1;
+  final uniqueCodes = uniqueVendorCodes(vendorCodes);
+  final ownCode = normalizeVendorCode(userCode);
+  return uniqueCodes.length > 1 &&
+      ownCode.isNotEmpty &&
+      vendorCodeListContains(uniqueCodes, ownCode);
 }
 
-List<String> commercial80AllowedVendorCodes(List<String> authVendorCodes) {
-  final base =
-      authVendorCodes.isNotEmpty ? authVendorCodes : commercial80ScopedCodes;
-  return uniqueVendorCodes(
-    base.where((code) => vendorCodeListContains(commercial80ScopedCodes, code)),
-  );
-}
+List<String> allowedVendorCodesForScope(List<String> authVendorCodes) =>
+    uniqueVendorCodes(authVendorCodes);
 
 List<String>? effectiveAllowedVendorCodes({
   required String? userCode,
@@ -65,8 +56,11 @@ List<String>? effectiveAllowedVendorCodes({
     return uniqueVendorCodes(explicitAllowedCodes);
   }
 
-  if (isCommercial80Code(userCode)) {
-    return commercial80AllowedVendorCodes(authVendorCodes);
+  if (hasScopedVendorAccess(
+    userCode: userCode,
+    vendorCodes: authVendorCodes,
+  )) {
+    return allowedVendorCodesForScope(authVendorCodes);
   }
 
   return null;
@@ -78,16 +72,7 @@ String resolveScopedVendorCodes({
   required String? selectedVendor,
   required String fallbackVendorCodes,
 }) {
-  if (!hasCommercial80VendorScope(
-    userCode: userCode,
-    vendorCodes: authVendorCodes,
-  )) {
-    return selectedVendor != null && selectedVendor.isNotEmpty
-        ? selectedVendor
-        : fallbackVendorCodes;
-  }
-
-  final allowedCodes = commercial80AllowedVendorCodes(authVendorCodes);
+  final allowedCodes = allowedVendorCodesForScope(authVendorCodes);
   final fallback = fallbackVendorCodes.trim();
   final scopedFallback = fallback.isNotEmpty && fallback.toUpperCase() != 'ALL'
       ? fallback
@@ -109,8 +94,8 @@ String resolveScopedVendorCodes({
 /// Vendor codes sent to commercial rutero APIs.
 ///
 /// Jefe "Todos" must stay the literal ALL so the API expands visible claims.
-/// A plain commercial must never send ALL or another vendor persisted in
-/// SharedPreferences from a previous jefe session.
+/// A plain commercial never sends ALL or another persisted vendor from a
+/// previous session.
 String resolveRuteroRequestVendorCodes({
   required String? userCode,
   required List<String> authVendorCodes,
@@ -127,7 +112,7 @@ String resolveRuteroRequestVendorCodes({
     return selectedVendor;
   }
 
-  if (hasCommercial80VendorScope(
+  if (hasScopedVendorAccess(
     userCode: userCode,
     vendorCodes: authVendorCodes,
   )) {

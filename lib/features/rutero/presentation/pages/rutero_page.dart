@@ -367,11 +367,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     if (!mounted) return null;
     final filterCode = ref.read(filterProvider).selectedVendor;
     final authState = ref.read(authProvider).value;
-    if (hasCommercial80VendorScope(
+    if (hasScopedVendorAccess(
       userCode: authState?.user?.code,
       vendorCodes: authState?.vendedorCodes ?? const <String>[],
     )) {
-      final allowedCodes = commercial80AllowedVendorCodes(
+      final allowedCodes = allowedVendorCodesForScope(
         authState?.vendedorCodes ?? const <String>[],
       );
       if (filterCode != null &&

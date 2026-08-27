@@ -141,25 +141,20 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool _isEffectiveRepartidorJefe(UserModel user, Object? activeMode) {
     final mode = activeMode?.toString().trim().toUpperCase();
-    final normalizedCode = user.code.replaceFirst(RegExp('^0+'), '');
     final hasJefeAuthorization =
         user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
-    return mode == 'REPARTIDOR' &&
-        hasJefeAuthorization &&
-        normalizedCode != '80';
+    return mode == 'REPARTIDOR' && hasJefeAuthorization;
   }
 
   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
-    // Commercial 80 (Almeria lead) gets team view access
-    final normalizedCode = user.code.replaceFirst(RegExp('^0+'), '');
-    if (normalizedCode == '80' && vendorCodes.length > 1) return true;
-    return !user.isJefeVentas && vendorCodes.length > 1;
+    return !user.isJefeVentas &&
+        hasScopedVendorAccess(
+          userCode: user.code,
+          vendorCodes: vendorCodes,
+        );
   }
 
   String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
-    // Commercial 80 (Almeria lead) defaults to ALL team members
-    final normalizedCode = user.code.replaceFirst(RegExp('^0+'), '');
-    if (normalizedCode == '80') return 'ALL';
     final ownCode = user.vendedorCode ?? user.code;
     if (vendorCodes.contains(ownCode)) return ownCode;
     return vendorCodes.isNotEmpty ? vendorCodes.first : ownCode;
@@ -387,10 +382,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
-    final normalizedUserCode =
-        (user?.code ?? '').replaceFirst(RegExp('^0+'), '');
-    final showCommissions =
-        (user?.showCommissions ?? false) && normalizedUserCode != '80';
+    final showCommissions = user?.showCommissions ?? false;
 
     final navItems = NavigationConfigService.getNavItems(
       isAlmacen: _isAlmacenEffective,
@@ -482,11 +474,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       authProvider.select((state) => state.value?.vendedorCodes ?? []),
     );
     _ensureScopedVendorSelection(user, vendedorCodes);
-    final normalizedUserCode = user.code.replaceFirst(RegExp('^0+'), '');
-    final isCommercial80 = normalizedUserCode == '80';
-    // 80 stays COMERCIAL in nav even if DB has JEFEVENTASSN (avoids Panel index mismatch)
-    final navIsJefeVentas = isJefeVentas && !isCommercial80;
-    final navItems = _getNavItems(navIsJefeVentas, vendedorCodes);
+    final navItems = _getNavItems(isJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
     final useBottomNav = Responsive.useBottomNav(context);
 
@@ -506,9 +494,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     });
 
     if (useBottomNav) {
-      return _buildPhoneLayout(navItems, safeIndex, user, navIsJefeVentas);
+      return _buildPhoneLayout(navItems, safeIndex, user, isJefeVentas);
     }
-    return _buildTabletLayout(navItems, safeIndex, user, navIsJefeVentas);
+    return _buildTabletLayout(navItems, safeIndex, user, isJefeVentas);
   }
 
   // ---------------------------------------------------------------------------
@@ -1921,10 +1909,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     // COMERCIAL MODE
     // ===============================================
 
-    // Commercial 80: scoped team from login (auth vendedorCodes), not JEFE_VENTAS
-    final normalizedUserCode =
-        (user?.code ?? '').replaceFirst(RegExp('^0+'), '');
-    final isCommercial80 = normalizedUserCode == '80';
+    // A scoped commercial receives its allowed vendor codes from auth claims.
     final effectiveVendorCodes = vendedorCodes;
 
     final hasScopedVendorAccess =
@@ -1934,7 +1919,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         : '';
     final selectedScopedVendor =
         hasScopedVendorAccess ? ref.watch(selectedVendorProvider) : null;
-    final isTeamAggregateView = isCommercial80 &&
+    final isTeamAggregateView = hasScopedVendorAccess &&
         (selectedScopedVendor == null ||
             selectedScopedVendor.isEmpty ||
             selectedScopedVendor == 'ALL');
@@ -1949,7 +1934,6 @@ class _MainShellState extends ConsumerState<MainShell> {
         : (scopedEmployeeCode ?? effectiveVendorCodes.join(','));
     final apiAggregateCode = isTeamAggregateView ? 'ALL' : empCode;
 
-    // Nav always COMERCIAL for 80; team aggregate only affects Objetivos/Comisiones API
     final comercialNav = _getNavItems(false, effectiveVendorCodes);
 
     Widget comercialPageForIndex(int idx) {
@@ -1961,14 +1945,14 @@ class _MainShellState extends ConsumerState<MainShell> {
             isJefeVentas: false,
             vendorSelectorCodes:
                 hasScopedVendorAccess ? effectiveVendorCodes : null,
-            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
-            forceShowVendorSelector: isCommercial80,
+            includeAllVendorOption: hasScopedVendorAccess,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Ruta':
           return RuteroPage(
             employeeCode: empCode,
             isJefeVentas: false,
-            forceShowVendorSelector: isCommercial80,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Objetivos':
           return ObjectivesPage(
@@ -1976,8 +1960,8 @@ class _MainShellState extends ConsumerState<MainShell> {
             isJefeVentas: isTeamAggregateView,
             vendorSelectorCodes:
                 hasScopedVendorAccess ? effectiveVendorCodes : null,
-            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
-            forceShowVendorSelector: isCommercial80,
+            includeAllVendorOption: hasScopedVendorAccess,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Comisiones':
           return CommissionsPage(
@@ -1985,47 +1969,47 @@ class _MainShellState extends ConsumerState<MainShell> {
             isJefeVentas: isTeamAggregateView,
             vendorSelectorCodes:
                 hasScopedVendorAccess ? effectiveVendorCodes : null,
-            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
-            forceShowVendorSelector: isCommercial80,
+            includeAllVendorOption: hasScopedVendorAccess,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Facturas':
           return FacturasPage(
             employeeCode: empCode,
-            forceShowVendorSelector: isCommercial80,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Pedidos':
           return PedidosPage(
             employeeCode: empCode,
             isJefeVentas: false,
-            forceShowVendorSelector: isCommercial80,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Alertas':
           return KpiDashboardPage(
             employeeCode: empCode,
             isJefeVentas: false,
-            forceShowVendorSelector: isCommercial80,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Cobros':
           return CobrosPage(
             employeeCode: empCode,
-            forceShowVendorSelector: isCommercial80,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Liquidación':
           return ComercialLiquidacionDiariaPage(
             employeeCode: empCode,
             isJefeVentas: isTeamAggregateView,
-            forceShowVendorSelector: isCommercial80,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Bolsa':
-          return BolsaPage(forceShowVendorSelector: isCommercial80);
+          return BolsaPage(forceShowVendorSelector: hasScopedVendorAccess);
         case 'Evolución':
           return ClientEvolutionPage(
             employeeCode: apiAggregateCode,
             isJefeVentas: isTeamAggregateView,
             vendorSelectorCodes:
                 hasScopedVendorAccess ? effectiveVendorCodes : null,
-            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
-            forceShowVendorSelector: isCommercial80,
+            includeAllVendorOption: hasScopedVendorAccess,
+            forceShowVendorSelector: hasScopedVendorAccess,
           );
         case 'Asistente':
           return ChatbotPage(vendedorCodes: effectiveVendorCodes);

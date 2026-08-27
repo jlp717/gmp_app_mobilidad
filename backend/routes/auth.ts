@@ -202,8 +202,8 @@ router.post('/login',
                     pinRecord = await queryWithParams(`
                         SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                                TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                               V.TIPOVENDEDOR, X.JEFEVENTASSN,
-                               E.HIDE_COMMISSIONS
+                               V.TIPOVENDEDOR, X.JEFEVENTASSN, X.PERMITEPREVENTASN,
+                               X.PERMITEREPARTOSN, E.HIDE_COMMISSIONS
                         FROM DSEDAC.VDPL1 P
                         JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
                         JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
@@ -228,8 +228,8 @@ router.post('/login',
                 const nameSearch = await queryWithParams(`
                     SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                            TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                           V.TIPOVENDEDOR, X.JEFEVENTASSN,
-                           E.HIDE_COMMISSIONS
+                           V.TIPOVENDEDOR, X.JEFEVENTASSN, X.PERMITEPREVENTASN,
+                           X.PERMITEREPARTOSN, E.HIDE_COMMISSIONS
                     FROM DSEDAC.VDD D
                     JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
                     JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
@@ -260,13 +260,13 @@ router.post('/login',
             // Clean vendor name
             let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
             const vendedorName = rawName.replace(/^\d+\s+/, '').trim();
-            const normalizedLoginCode = (vendedorCode || '').replace(/^0+/, '') || vendedorCode;
-            let isJefeVentas = vendor.JEFEVENTASSN === 'S';
-            if (normalizedLoginCode === '80') {
-                isJefeVentas = false;
-            }
+            const isJefeVentas = String(vendor.JEFEVENTASSN || '').trim().toUpperCase() === 'S';
+            const permitePreventa = String(vendor.PERMITEPREVENTASN || '').trim().toUpperCase() === 'S';
+            const hasRepartidorPermission = String(vendor.PERMITEREPARTOSN || '').trim().toUpperCase() === 'S';
+            // Keep the legacy response aligned with the canonical DDD projection:
+            // dual commercial/repartidor users default to COMERCIAL.
+            const isRepartidor = hasRepartidorPermission && !permitePreventa && !isJefeVentas;
             const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
-
             // ===================================================================
             // STEP 3: Verify PIN with bcrypt support
             // ===================================================================
@@ -291,47 +291,28 @@ router.post('/login',
             }
 
             // ===================================================================
-            // STEP 4: Check for REPARTIDOR Role
+            // STEP 4: Read REPARTIDOR metadata
             // ===================================================================
-            let isRepartidor = false;
-            let codigoConductor: string | null = null;
+            // VDDX is the only source of role truth. VEH is queried only for
+            // optional vehicle metadata and can never promote a user.
+            const codigoConductor: string | null = isRepartidor ? vendedorCode : null;
             let matriculaVehiculo: string | null = null;
 
-            try {
-                const currentYear = new Date().getFullYear();
-                
-                // Check vehicle assignment
-                const vehCheck = await queryWithParams(`
-                    SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA
-                    FROM DSEDAC.VEH
-                    WHERE TRIM(CODIGOCONDUCTOR) = ?
-                      AND TRIM(CODIGOCONDUCTOR) <> '98'
-                    FETCH FIRST 1 ROWS ONLY
-                `, [vendedorCode], false);
-
-                if (vehCheck.length > 0) {
-                    isRepartidor = true;
-                    matriculaVehiculo = vehCheck[0].MATRICULA;
-                    codigoConductor = vendedorCode;
-                    logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode}`);
-                } else {
-                    // Check delivery count in OPP
-                    const oppCheck = await queryWithParams(`
-                        SELECT COUNT(*) as CNT FROM DSEDAC.OPP
-                        WHERE TRIM(CODIGOREPARTIDOR) = ?
-                          AND ANOREPARTO = ?
-                    `, [vendedorCode, currentYear], false);
-                    
-                    if (oppCheck.length > 0 && (oppCheck[0].CNT || 0) >= 100) {
-                        isRepartidor = true;
-                        codigoConductor = vendedorCode;
-                        logger.info(`[${requestId}] 🚚 Detected Repartidor Role via OPP (${oppCheck[0].CNT} deliveries)`);
+            if (isRepartidor) {
+                try {
+                    const vehCheck = await queryWithParams(`
+                        SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA
+                        FROM DSEDAC.VEH
+                        WHERE TRIM(CODIGOCONDUCTOR) = ?
+                        FETCH FIRST 1 ROWS ONLY
+                    `, [vendedorCode], false);
+                    if (vehCheck.length > 0) {
+                        matriculaVehiculo = vehCheck[0].MATRICULA;
                     }
+                } catch (vehError) {
+                    logger.warn(`[${requestId}] Error loading vehicle metadata: ${(vehError as Error).message}`);
                 }
-            } catch (vehError) {
-                logger.warn(`[${requestId}] Error checking vehicle: ${(vehError as Error).message}`);
             }
-
             // ===================================================================
             // STEP 5: Success - Build response
             // ===================================================================
@@ -516,62 +497,35 @@ router.get('/repartidores', verifyToken, async (req: Request, res: Response) => 
             return res.json(_repartidoresCache);
         }
 
-        const currentYear = new Date().getFullYear();
         let results: any[] = [];
 
-        // Source 1: VEH.CODIGOCONDUCTOR
+        // The ERP mobility master is the only source of repartidor authority.
+        // Vehicle assignments and delivery volume are metadata, never a role.
         try {
-            const vehRows = await query(`
-                SELECT DISTINCT TRIM(V.CODIGOCONDUCTOR) as CODE, TRIM(D.NOMBREVENDEDOR) as NAME
-                FROM DSEDAC.VEH V
-                JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(V.CODIGOCONDUCTOR)
-                WHERE TRIM(V.CODIGOCONDUCTOR) <> '98'
-                  AND TRIM(V.CODIGOCONDUCTOR) <> ''
-                  AND V.CODIGOCONDUCTOR IS NOT NULL
+            const repartidorRows = await query(`
+                SELECT DISTINCT TRIM(X.CODIGOVENDEDOR) as CODE,
+                       TRIM(D.NOMBREVENDEDOR) as NAME
+                FROM DSEDAC.VDDX X
+                JOIN DSEDAC.VDD D
+                  ON TRIM(D.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
+                WHERE X.CODIGOVENDEDOR IS NOT NULL
+                  AND TRIM(X.CODIGOVENDEDOR) <> ''
+                  AND TRIM(X.PERMITEREPARTOSN) = 'S'
+                  AND COALESCE(NULLIF(TRIM(X.JEFEVENTASSN), ''), 'N') <> 'S'
             `, false);
-            
-            if (vehRows && vehRows.length > 0) {
-                results.push(...vehRows.map((r: any) => ({ 
-                    code: (r.CODE || '').toString().trim(), 
-                    name: (r.NAME || '').toString().trim() 
+
+            if (repartidorRows && repartidorRows.length > 0) {
+                results.push(...repartidorRows.map((r: any) => ({
+                    code: (r.CODE || '').toString().trim(),
+                    name: (r.NAME || '').toString().trim()
                 })));
             }
         } catch (e) {
-            logger.warn(`[Auth] Error querying VEH conductors: ${(e as Error).message}`);
+            logger.warn(`[Auth] Error querying ERP repartidor flags: ${(e as Error).message}`);
         }
-
-        // Source 2: OPP active repartidores
-        try {
-            const repRows = await query(`
-                SELECT TRIM(OPP.CODIGOREPARTIDOR) as CODE,
-                       COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NAME
-                FROM DSEDAC.OPP OPP
-                LEFT JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL
-                  AND TRIM(OPP.CODIGOREPARTIDOR) <> ''
-                  AND OPP.ANOREPARTO = ${currentYear}
-                  AND NOT EXISTS (
-                    SELECT 1 FROM DSEDAC.VDDX X
-                    WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-                      AND TRIM(X.JEFEVENTASSN) = 'S'
-                  )
-                GROUP BY TRIM(OPP.CODIGOREPARTIDOR), COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR))
-                HAVING COUNT(*) >= 100
-            `, false);
-            
-            if (repRows && repRows.length > 0) {
-                results.push(...repRows.map((r: any) => ({ 
-                    code: (r.CODE || '').toString().trim(), 
-                    name: (r.NAME || '').toString().trim() 
-                })));
-            }
-        } catch (e) {
-            logger.warn(`[Auth] Error querying OPP: ${(e as Error).message}`);
-        }
-
         // Deduplicate and filter
         const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZJ', 'ZK', 'ZL', 'ZM', 'ZN', 'ZO', 'ZP', 'ZQ', 'ZR', 'ZS', 'ZT', 'ZU', 'ZV', 'ZW', 'ZX', 'ZY', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z8', 'Z9', 'XX', 'TT', 'TEST'];
-        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A', '97', '98']);
+        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A', '97']);
         
         const uniqueMap = new Map();
         results.forEach(r => {

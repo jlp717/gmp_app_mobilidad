@@ -71,7 +71,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
     final fallbackVendor = _fallbackVendorCode(authState);
 
-    if (hasCommercial80VendorScope(
+    if (hasScopedVendorAccess(
       userCode: authState?.user?.code,
       vendorCodes: authVendorCodes,
     )) {
@@ -205,7 +205,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     }
 
     try {
-      if (hasCommercial80VendorScope(
+      if (hasScopedVendorAccess(
         userCode: authState?.user?.code,
         vendorCodes: allVendorCodes,
       )) {

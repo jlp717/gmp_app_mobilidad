@@ -134,7 +134,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     final authState = ref.read(authProvider).value;
     final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
 
-    if (hasCommercial80VendorScope(
+    if (hasScopedVendorAccess(
       userCode: authState?.user?.code,
       vendorCodes: authVendorCodes,
     )) {

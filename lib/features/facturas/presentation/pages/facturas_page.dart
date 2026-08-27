@@ -146,7 +146,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
       // SENIOR FIX: Reactive Vendor Selection
       // Always re-read the filter provider to ensure we have the latest selection
-      if (hasCommercial80VendorScope(
+      if (hasScopedVendorAccess(
         userCode: user.code,
         vendorCodes: authState.vendedorCodes,
       )) {

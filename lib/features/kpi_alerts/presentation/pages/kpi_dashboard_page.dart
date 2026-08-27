@@ -67,7 +67,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
     }
     final authState =
         ProviderScope.containerOf(context).read(authProvider).value;
-    if (hasCommercial80VendorScope(
+    if (hasScopedVendorAccess(
       userCode: authState?.user?.code,
       vendorCodes: authState?.vendedorCodes ?? const <String>[],
     )) {

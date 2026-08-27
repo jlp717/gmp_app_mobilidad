@@ -55,16 +55,29 @@ void main() {
     );
   });
 
-  test('commercial 80 ALL keeps the Almeria team scope', () {
+  test('any explicitly scoped commercial can use its authorized team', () {
     expect(
       resolveRuteroRequestVendorCodes(
-        userCode: '80',
-        authVendorCodes: const <String>['80', '72', '73', '81', '83'],
+        userCode: '10',
+        authVendorCodes: const <String>['10', '11', '12'],
         selectedVendor: 'ALL',
-        fallbackVendorCodes: '80,72,73,81,83',
+        fallbackVendorCodes: '10,11,12',
         isJefeVentas: false,
       ),
-      '80,72,73,81,83',
+      '10,11,12',
+    );
+  });
+
+  test('a commercial without a multi-vendor claim stays self-scoped', () {
+    expect(
+      resolveRuteroRequestVendorCodes(
+        userCode: '02',
+        authVendorCodes: const <String>['02'],
+        selectedVendor: 'ALL',
+        fallbackVendorCodes: '02',
+        isJefeVentas: false,
+      ),
+      '02',
     );
   });
 }

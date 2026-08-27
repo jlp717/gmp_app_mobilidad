@@ -56,11 +56,8 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
   // ============================================
   // DETECCIÓN AUTOMÁTICA DE ROL
   // ============================================
-  // El rolesService.detectarRol() se encarga de todo:
-  // 1. Consulta JAVIER.APP_USERS
-  // 2. Verifica código '01' (GOYO) como JEFE
-  // 3. Verifica CAC.CODIGOCONDUCTOR para REPARTIDOR
-  // 4. Default: COMERCIAL
+  // rolesService.detectarRol() consulta los flags de movilidad del ERP
+  // (DSEDAC.VDDX); no se infieren perfiles por código o actividad.
   const codigoVendedor = resultado.vendedor!.codigoVendedor;
   const rol = await rolesService.detectarRol(codigoVendedor);
   const codigoConductor = rol === 'REPARTIDOR' ? codigoVendedor : undefined;
