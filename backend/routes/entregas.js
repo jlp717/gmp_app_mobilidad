@@ -1100,7 +1100,11 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
             ? ` LEFT JOIN ${cobrosTable} CO
                  ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)`
             : '';
-        const rows = await queryWithParams(
+        const overlayCacheKey = 'repartidor:rutero:confirmations:'
+            + documentIds.slice().sort().join(',')
+            + ':' + drivers.slice().sort().join(',');
+        const rows = await cachedQuery(
+            (sql, params) => queryWithParams(sql, params, false, false),
             `SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
                     TRIM(C.STATUS) AS STATUS
                     ${paymentSelect}
@@ -1108,9 +1112,9 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                ${paymentJoin}
               WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
                 AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})`,
+            overlayCacheKey,
+            5,
             [...documentIds, ...drivers],
-            false,
-            false,
         );
         const byId = new Map();
         for (const row of Array.isArray(rows) ? rows : []) {
