@@ -182,7 +182,7 @@ describe('Repartidor route parameter binding', () => {
     expect(sql).toContain('WITH MATCHED_DELIVERIES');
     expect(sql).toContain('FROM DSEDAC.OPP OPP');
     expect(sql).toContain('FROM MATCHED_DELIVERIES DELIVERIES');
-    expect(sql).toContain('WHERE (TRIM(OPP.CODIGOREPARTIDOR) IN (?)');
+    expect(sql).toContain('WHERE (OPP.CODIGOREPARTIDOR IN (?)');
     expect(sql).toContain('C_EFFECTIVE.REPARTIDOR_ID IS NOT NULL');
     expect(sql).toContain('CLI.DIRECCION');
     expect(sql).toContain('CLI.CODIGOPOSTAL');

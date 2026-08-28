@@ -215,6 +215,15 @@ function confirmationScopedOwnerJoin(repartidorIds, documentAlias = 'CPC', confi
   };
 }
 
+// IBM i exposes these ERP owner columns as fixed-width CHAR(2). The route
+// authorization layer already canonicalizes numeric repartidor codes to two
+// digits, so comparing the column directly preserves the business semantics
+// while allowing the native access path to be considered. Applying TRIM to
+// OPP.CODIGOREPARTIDOR made the cold route/history scans needlessly expensive.
+function repartidorOwnerFilter(column, ids, separator = ',') {
+  return `${column} IN (${ids.map(() => '?').join(separator)})`;
+}
+
 function jsonSafeScalar(value) {
   if (typeof value === 'bigint') return Number(value);
   return value;
@@ -543,7 +552,7 @@ async function getCollectionsSummaryBatch(selectedMonth, selectedYear, repartido
                     ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
                 WHERE OPP.MESREPARTO = ?
                   AND OPP.ANOREPARTO = ?
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(() => '?').join(',')})
+                  AND OPP.CODIGOREPARTIDOR IN (${repartidorParams.map(() => '?').join(',')})
             ),
             UNIQUE_DOCUMENTS AS (
                 SELECT * FROM SOURCE_DOCUMENTS WHERE DOCUMENT_RANK = 1
@@ -647,7 +656,7 @@ async function getCollectionsDailyBatch(selectedYear, selectedMonth, repartidorI
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 WHERE OPP.ANOREPARTO = ?
                   AND OPP.MESREPARTO = ?
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                  AND OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
             ),
             UNIQUE_DOCUMENTS AS (
                 SELECT * FROM SOURCE_DOCUMENTS WHERE DOCUMENT_RANK = 1
@@ -802,7 +811,7 @@ async function getClientDocuments({
   const confirmationScope = confirmationOwnerScopeClause(ids);
   const effectiveOwnerJoin = confirmationScopedOwnerJoin(ids);
   const ownerFilter = `(
-                TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})
+                ${repartidorOwnerFilter('OPP.CODIGOREPARTIDOR', ids)}
                 ${confirmationScope.sql}
             )`;
   const repartidorJoin = `
@@ -883,11 +892,11 @@ async function getClientDocuments({
                 LEFT JOIN DSEDAC.CAC CAC_J
                     ON CAC_J.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
                     AND CAC_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                    AND TRIM(CAC_J.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+                    AND CAC_J.SERIEALBARAN = CPC.SERIEALBARAN
                     AND CAC_J.TERMINALALBARAN = CPC.TERMINALALBARAN
                     AND CAC_J.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    AND TRIM(CAC_J.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-                WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
+                    AND CAC_J.CODIGOCLIENTEALBARAN = CPC.CODIGOCLIENTEALBARAN
+                WHERE CPC.CODIGOCLIENTEALBARAN = ?
                   AND ${ownerFilter}
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
@@ -1103,7 +1112,7 @@ async function getObjectives(cleanRepartidorIds, normalizedClientId) {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
+            WHERE OPP.CODIGOREPARTIDOR IN (${placeholders})
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
             ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
@@ -1152,7 +1161,7 @@ async function getObjectivesDetailClients(
                     AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                WHERE OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
                   AND OPP.ANOREPARTO = ?
                   AND NULLIF(TRIM(CPC.CODIGOCLIENTEALBARAN), '') IS NOT NULL
                   ${clientFilter}
@@ -1445,7 +1454,7 @@ async function getDeliverySummary(selectedYear, selectedMonth, dayFilterParams, 
                   AND OPP.MESREPARTO = ?
                   ${dayFilter}
                   AND (
-                    TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                    OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
                     ${confirmationScope.sql}
                   )
                 GROUP BY OPP.DIAREPARTO, CPC.SUBEMPRESAALBARAN,
@@ -1505,14 +1514,14 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
        AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
       LEFT JOIN ${table} ROUTE_MOVE
         ON ROUTE_MOVE.REPARTIDOR_ID IN (${moveIds})
-       AND ROUTE_MOVE.REPARTIDOR_ID = TRIM(OPP.CODIGOREPARTIDOR)
+       AND ROUTE_MOVE.REPARTIDOR_ID = OPP.CODIGOREPARTIDOR
        AND ROUTE_MOVE.WEEK_START = ?
        AND TRIM(ROUTE_MOVE.DOCUMENT_ID) = ${expr}
       ${confirmationJoins}
       WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
               BETWEEN ? AND ?
         AND (
-          TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+          OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
           ${confirmationScope.sql}
         )
       GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO,
@@ -1580,7 +1589,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
                 WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
                     BETWEEN ? AND ?
                   AND (
-                    TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                    OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
                     ${confirmationScope.sql}
                   )
                 GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO,
@@ -1635,7 +1644,7 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
             ${dsHistAvail ? dsHistJoin : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
               AND (
-                TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
                 ${confirmationScope.sql}
               )
         `;
@@ -1714,7 +1723,7 @@ async function getHistoryClients({ repartidorIdList, search, limit, offset }) {
                     AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 ${effectiveOwnerJoin.sql}
-                WHERE (TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(', ')})
+                WHERE (OPP.CODIGOREPARTIDOR IN (${ids.map(() => '?').join(', ')})
                     OR ${effectiveOwnerJoin.sql ? 'C_EFFECTIVE.REPARTIDOR_ID IS NOT NULL' : '1 = 0'})
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
