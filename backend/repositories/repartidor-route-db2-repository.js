@@ -966,8 +966,17 @@ async function getClientDocumentsFast({
   });
 }
 async function getClientDocuments(options) {
-  if (String(process.env.NODE_ENV || '').trim().toLowerCase() !== 'test') return getClientDocumentsFast(options);
-  return getClientDocumentsLegacy(options);
+  if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'test') return getClientDocumentsLegacy(options);
+  const rows = await getClientDocumentsFast(options);
+  const ids = options?.repartidorIds || [];
+  const overlaid = await overlayCanonicalConfirmations(rows || [], {
+    repartidorIds: ids,
+    clientCode: options?.clientCode,
+  });
+  return {
+    rows: overlaid,
+    deliveryStatusAvailability: isDeliveryStatusAvailable() ? 'AVAILABLE' : 'LEGACY_ONLY',
+  };
 }
 
 async function getClientDocumentsLegacy({
