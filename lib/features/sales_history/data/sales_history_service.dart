@@ -4,12 +4,25 @@
 /// Replaces raw http.Client for consistency and performance
 library;
 
+import 'dart:convert';
+
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 
+/// Injectable API read contract; defaults to the shared, scoped ApiClient.
+typedef SalesHistoryGet = Future<Map<String, dynamic>> Function(
+  String endpoint, {
+  Map<String, dynamic>? queryParameters,
+  String? cacheKey,
+  Duration? cacheTTL,
+});
+
+/// Reads detailed sales and summaries through the shared API/cache layer.
 class SalesHistoryService {
-  // Singleton pattern - no need for http.Client instance
-  SalesHistoryService();
+  /// Allows isolated tests to replace reads without creating network traffic.
+  SalesHistoryService({SalesHistoryGet? get}) : _get = get ?? ApiClient.get;
+
+  final SalesHistoryGet _get;
 
   /// Get sales history with caching
   /// TTL: 10 minutes (balance between freshness and performance)
@@ -35,10 +48,9 @@ class SalesHistoryService {
       };
 
       // Generate cache key from params
-      final cacheKey =
-          'sales_history_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}_${limit}_$offset';
+      final cacheKey = 'sales_history_v2_${jsonEncode(queryParams)}';
 
-      final response = await ApiClient.get(
+      final response = await _get(
         '/sales-history',
         queryParameters: queryParams,
         cacheKey: cacheKey,
@@ -81,10 +93,9 @@ class SalesHistoryService {
         if (endDate != null) 'endDate': endDate,
       };
 
-      final cacheKey =
-          'sales_history_summary_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}';
+      final cacheKey = 'sales_history_summary_v2_${jsonEncode(queryParams)}';
 
-      return await ApiClient.get(
+      return await _get(
         '/sales-history/summary',
         queryParameters: queryParams,
         cacheKey: cacheKey,

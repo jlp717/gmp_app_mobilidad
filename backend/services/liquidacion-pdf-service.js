@@ -1,10 +1,10 @@
 'use strict';
 
 const PDFDocument = require('pdfkit');
+const { drawCompanyHeader } = require('./company-header');
 
 const NAVY = '#003d7a';
 const NAVY_DEEP = '#00264d';
-const GREEN = '#00a878';
 const GREEN_DARK = '#067a58';
 const AMBER = '#f0b429';
 const RED = '#c2410c';
@@ -215,7 +215,6 @@ function drawCard(doc, {
 function buildLiquidacionPdfBuffer({
   title,
   displayNumber,
-  companyName = 'Granja Mari Pepa',
   repartidorId,
   repartidorName,
   usuarioLabel,
@@ -243,16 +242,12 @@ function buildLiquidacionPdfBuffer({
     const usuario = usuarioLabel || vendedor;
     const generated = generatedAt || new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-    doc.rect(0, 0, pageWidth, 92).fill(NAVY);
-    doc.rect(0, 88, pageWidth, 6).fill(GREEN);
-    doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(18)
-      .text(heading, 36, 22, { width: contentWidth });
-    doc.font('Helvetica').fontSize(11).fillColor('#d7ecff')
-      .text(companyName, 36, 48, { width: contentWidth });
-    doc.fontSize(9).fillColor('#9ec5ea')
-      .text(generated, 36, 66, { width: contentWidth });
-
-    let y = 112;
+    let y = drawCompanyHeader(doc);
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(18)
+      .text(heading, 36, y, { width: contentWidth });
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+      .text(generated, 36, doc.y + 6, { width: contentWidth });
+    y = doc.y + 16;
     doc.roundedRect(36, y, contentWidth, 72, 8).fillAndStroke(CARD_BG, LINE);
     doc.fillColor(MUTED).fontSize(8).text('FECHA', 48, y + 10);
     doc.fillColor(SLATE).fontSize(10).text(dateLabel || generated, 100, y + 8, { width: contentWidth - 120 });
@@ -295,7 +290,7 @@ function buildLiquidacionPdfBuffer({
       rows.forEach((cobro, index) => {
         if (y > doc.page.height - 220) {
           doc.addPage();
-          y = 48;
+          y = drawCompanyHeader(doc);
           doc.rect(36, y, contentWidth, 22).fill(NAVY);
           let hx = 40;
           doc.fillColor(WHITE).font('Helvetica-Bold').fontSize(8);
@@ -339,7 +334,7 @@ function buildLiquidacionPdfBuffer({
 
     if (y > doc.page.height - 280) {
       doc.addPage();
-      y = 48;
+      y = drawCompanyHeader(doc);
     }
 
     doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(12)

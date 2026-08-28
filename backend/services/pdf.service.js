@@ -9,8 +9,7 @@
 
 const PDFDocument = require('pdfkit');
 const logger = require('../middleware/logger');
-const path = require('path');
-const fs = require('fs');
+const { drawCompanyHeader } = require('./company-header');
 const { CircuitBreaker } = require('./circuit-breaker');
 
 const pdfBreaker = new CircuitBreaker({
@@ -24,7 +23,6 @@ const pdfBreaker = new CircuitBreaker({
 // CONFIGURACIÓN Y CONSTANTES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const HEADER_PNG_PATH = path.join(__dirname, '../assets/header.png');
 
 // Paleta de colores corporativos Mari Pepa - Elegante y Profesional
 const COLORS = {
@@ -74,65 +72,7 @@ function formatDate(dia, mes, ano) {
 }
 
 function drawHeader(doc, yStart = 10) {
-    let yPos = yStart;
-
-    // Franja superior de marca (moderna y delgada)
-    doc.rect(0, 0, 595.28, 5)
-        .fillAndStroke(COLORS.secondary, COLORS.secondary);
-
-    yPos += 5;
-
-    // Intentar cargar el logo
-    let logoLoaded = false;
-
-    if (fs.existsSync(HEADER_PNG_PATH)) {
-        try {
-            // Hacer el header más alto para evitar aspecto aplanado
-            doc.image(HEADER_PNG_PATH, 40, yPos, { width: 515, height: 140 });
-            logoLoaded = true;
-            return yPos + 150;
-        } catch (e) {
-            logger.warn('⚠️ No se pudo cargar header.png');
-        }
-    }
-
-    // Si no hay logo, crear header de texto elegante
-    if (!logoLoaded) {
-        // Fondo sutil (más alto)
-        doc.rect(40, yPos, 515, 120)
-            .fillAndStroke(COLORS.ultraLight, COLORS.lightGray);
-
-        yPos += 18;
-
-        // Nombre de la empresa - GRANDE Y DESTACADO
-        doc.fontSize(36)
-            .font('Helvetica-Bold')
-            .fillColor(COLORS.primary)
-            .text(EMPRESA.nombre, 50, yPos);
-
-        yPos += 45;
-
-        // Slogan
-        doc.fontSize(14)
-            .fillColor(COLORS.darkGray)
-            .font('Helvetica')
-            .text(EMPRESA.slogan.toUpperCase(), 50, yPos);
-
-        yPos += 18;
-
-        // Descripción y web
-        doc.fontSize(9)
-            .fillColor(COLORS.mediumGray)
-            .text(EMPRESA.descripcion, 50, yPos);
-
-        doc.fontSize(9)
-            .fillColor(COLORS.secondary)
-            .text(EMPRESA.web, 450, yPos, { align: 'right', width: 95 });
-
-        yPos += 10;
-    }
-
-    return yPos + 5;
+    return drawCompanyHeader(doc, { yStart });
 }
 
 function drawFooter(doc, pageNum, totalPages) {

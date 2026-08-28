@@ -628,6 +628,13 @@ function createRepartidorLiquidacionService({ repository } = {}) {
       const snapshot = normalizeDaySnapshot(await transaction.deriveDaySnapshot({
         repartidorId: command.repartidorId, date: command.date,
       }), command);
+      // Apply only to new closes: an existing immutable replay remains valid.
+      if (snapshot.payments.length === 0) {
+        throw new LiquidacionApplicationError(
+          'No se puede cerrar la liquidación: no hay cobros en el periodo seleccionado.',
+          { code: 'LIQUIDACION_NO_COBROS', statusCode: 409 },
+        );
+      }
       const cobroIds = Object.freeze(snapshot.payments.map(({ id }) => id));
       const expenseIds = Object.freeze(snapshot.expenses.map(({ id }) => id));
       const adjustmentIds = Object.freeze(snapshot.adjustments.map(({ id }) => id));

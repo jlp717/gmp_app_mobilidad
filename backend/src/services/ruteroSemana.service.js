@@ -24,11 +24,15 @@ class RuteroSemanalService {
 
     static cleanVendorCodes(vendedorCodes, { sentinelFiltered = false } = {}) {
         if (!vendedorCodes) return [];
-        if (!sentinelFiltered) {
-            return vendedorCodes.split(',').map(c => c.trim()).filter(c => c);
-        }
+        const started = Date.now();
         const UNK_SENTINEL = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0', '', 'undefined', 'null']);
-        return vendedorCodes.split(',').map(c => c.trim()).filter(c => !UNK_SENTINEL.has(c.toUpperCase()));
+        const codes = vendedorCodes.split(',').map(c => c.trim())
+            .filter(c => sentinelFiltered ? !UNK_SENTINEL.has(c.toUpperCase()) : c);
+        // IN-list duplicates cannot change the result; preserve order and case.
+        // No cross-request caching: ERP/app progress is still read on every call.
+        const uniqueCodes = [...new Set(codes)];
+        logger.info(`[PERF] rutero.vendorCodes before=${codes.length} after=${uniqueCodes.length} elapsedMs=${Date.now() - started}`);
+        return uniqueCodes;
     }
 
     async _computeTodayProgress(todayName, todayClients, vendedorCodes) {

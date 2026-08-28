@@ -1526,13 +1526,16 @@ describe('Repartidor finanzas routes', () => {
 
     expect(res.status).toBe(201);
     const logs = logger.warn.mock.calls;
-    expect(logs).toHaveLength(5);
+    expect(logs).toHaveLength(6);
     logs.forEach(([message, extra]) => {
       expect(message).toBe('[REPARTIDOR_FINANZAS] Cache invalidation failed');
       expect(extra).toEqual({ code: 'FINANCE_CACHE_INVALIDATION_FAILED' });
       expect(JSON.stringify([message, extra])).not.toContain(sentinel);
       expect(JSON.stringify([message, extra])).not.toContain('query:repartidor:finance:94');
     });
+    expect(mockDeleteCachePattern.mock.calls.map(([pattern]) => pattern)).toContain(
+      'query:repartidor:history-documents:*',
+    );
   });
 
   test.each([

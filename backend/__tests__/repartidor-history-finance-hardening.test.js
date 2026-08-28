@@ -4,7 +4,10 @@ const express = require('express');
 const request = require('supertest');
 
 const mockQueryWithParams = jest.fn();
-const mockCachedQuery = jest.fn((queryFn, sql, _key, _ttl, params) => queryFn(sql, params));
+const mockCachedQuery = jest.fn((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
 let mockDeliveryStatusAvailable = true;
 
 jest.mock('../config/db', () => ({
@@ -88,7 +91,10 @@ describe('repartidor history document hardening', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDeliveryStatusAvailable = true;
-    mockCachedQuery.mockImplementation((queryFn, sql, _key, _ttl, params) => queryFn(sql, params));
+    mockCachedQuery.mockImplementation((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
   });
 
   test('treats CONFORMADOSN=S as delivered even when the document date is today', async () => {
@@ -482,7 +488,10 @@ describe('repartidor history document hardening', () => {
 describe('legacy collection reads use complete CVC evidence', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCachedQuery.mockImplementation((queryFn, sql, _key, _ttl, params) => queryFn(sql, params));
+    mockCachedQuery.mockImplementation((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
   });
 
   test.each([

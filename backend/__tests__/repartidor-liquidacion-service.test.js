@@ -49,7 +49,71 @@ function expectError(promise, code, statusCode) {
   return expect(promise).rejects.toMatchObject({ code, statusCode });
 }
 
+function snapshotWithoutPayments({ otherActivity = false } = {}) {
+  const snapshot = validSnapshot();
+  if (otherActivity) {
+    return { ...snapshot, payments: [],
+      breakdown: { ...snapshot.breakdown, payments: 0 }, balance: -4 };
+  }
+  return { ...snapshot, deliveries: [], payments: [], expenses: [], adjustments: [],
+    bankDeposits: [], pending: [], openingBalance: 0, balance: 0,
+    breakdown: { deliveries: 0, payments: 0, expenses: 0, adjustments: 0, bankDeposits: 0, pending: 0 } };
+}
+
+function expectNoCloseWrites(transaction) {
+  for (const method of ['insertOperation', 'markCobrosLiquidated', 'markExpensesLiquidated',
+    'markAdjustmentsLiquidated', 'markBankDepositsLiquidated', 'updateBalance', 'appendAudit',
+    'enqueueEmailOutbox']) {
+    expect(transaction[method]).not.toHaveBeenCalled();
+  }
+}
+
 describe('repartidor-liquidacion-service', () => {
+  test.each([false, true])('rechaza snapshot sin cobros aunque tenga otros movimientos: %s', async (otherActivity) => {
+    const { repository, transaction } = transactionalRepository({ snapshot: snapshotWithoutPayments({ otherActivity }) });
+    await expect(createRepartidorLiquidacionService({ repository }).closeDay(validInput(), validActor()))
+      .rejects.toMatchObject({ name: 'LiquidacionApplicationError', code: 'LIQUIDACION_NO_COBROS',
+        statusCode: 409, message: 'No se puede cerrar la liquidación: no hay cobros en el periodo seleccionado.' });
+    expect(transaction.deriveDaySnapshot).toHaveBeenCalledWith({ repartidorId: 'R-17', date: '2026-08-09' });
+    expectNoCloseWrites(transaction);
+  });
+
+  test.each(['TJ', 'TR'])('permite cerrar con cobros %s aunque no haya efectivo ni saldo positivo', async (paymentMethod) => {
+    const snapshot = validSnapshot();
+    snapshot.payments = snapshot.payments.map((payment) => ({ ...payment, paymentMethod }));
+    snapshot.balance = -4;
+    const { repository, transaction } = transactionalRepository({ snapshot });
+    const result = await createRepartidorLiquidacionService({ repository }).closeDay(validInput(), validActor());
+    expect(result.created).toBe(true);
+    expect(transaction.insertOperation).toHaveBeenCalledTimes(1);
+    expect(transaction.markCobrosLiquidated).toHaveBeenCalledWith(expect.objectContaining({ cobroIds: ['COB-1', 'COB-2'] }));
+  });
+
+  test('rechazo sin cobros no consume token: mismo comando cierra cuando llegan cobros', async () => {
+    const { repository, transaction } = transactionalRepository({ snapshot: snapshotWithoutPayments() });
+    const service = createRepartidorLiquidacionService({ repository });
+    await expectError(service.closeDay(validInput(), validActor()), 'LIQUIDACION_NO_COBROS', 409);
+    expectNoCloseWrites(transaction);
+    transaction.deriveDaySnapshot.mockResolvedValue(validSnapshot());
+    expect((await service.closeDay(validInput(), validActor())).created).toBe(true);
+    expect(transaction.insertOperation).toHaveBeenCalledTimes(1);
+    expect(transaction.enqueueEmailOutbox).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([false, true])('replay previo se conserva sin derivar cobros actuales; historico vacio: %s', async (emptyHistorical) => {
+    const input = validInput();
+    const command = buildLiquidacionCommand(input);
+    const replay = { id: 'OPS-OLD', marker: command.marker, status: 'CLOSED',
+      idempotencyToken: command.idempotencyToken, replayIdentity: command.replayIdentity,
+      snapshot: emptyHistorical ? snapshotWithoutPayments() : validSnapshot() };
+    const { repository, transaction } = transactionalRepository({ replay, snapshot: snapshotWithoutPayments() });
+    const result = await createRepartidorLiquidacionService({ repository }).closeDay(input, validActor());
+    expect(result).toMatchObject({ created: false, liquidacion: { id: 'OPS-OLD' }, outboxIntent: null });
+    expect(transaction.lockDay).not.toHaveBeenCalled();
+    expect(transaction.deriveDaySnapshot).not.toHaveBeenCalled();
+    expectNoCloseWrites(transaction);
+  });
+
   test('preflight capabilities ocurre antes de abrir la transaccion', async () => {
     const error = Object.assign(new Error('schema missing'), { code: 'LIQUIDACION_CAPABILITY_UNAVAILABLE', statusCode: 503 });
     const { repository } = transactionalRepository({ capabilityError: error });

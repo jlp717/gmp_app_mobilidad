@@ -1,4 +1,5 @@
 const express = require('express');
+const { createHash } = require('crypto');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
@@ -399,8 +400,26 @@ router.get('/sales-history', verifyToken, async (req, res) => {
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
     `;
 
-        // Detailed history is usually NOT cached due to high filter variability
-        const rows = await queryWithParams(querySql, whereParams);
+        // Hash the effective SQL, all binds and authenticated scope. Unlike a
+        // delimited key, this cannot confuse search/client values or pagination.
+        // No raw identity or search data is exposed in cache logs.
+        const cacheKey = `analytics:sales-history:v1:${createHash('sha256')
+            .update(JSON.stringify([
+                req.user?.id ?? req.user?.code ?? null,
+                req.user?.company ?? null,
+                req.user?.role ?? null,
+                req.user?.vendorCodes ?? [],
+                req.user?.vendedorCodes ?? [],
+                querySql,
+                whereParams,
+            ]))
+            .digest('hex')}`;
+        const rows = await cachedQuery(queryWithParams, querySql, {
+            cacheKey,
+            // 5-minute normal TTL; retain the helper's existing stale fallback.
+            ttl: TTL.SHORT,
+            queryType: 'sales-history',
+        }, whereParams);
 
         // Format for frontend
         const formattedRows = rows.map(r => ({

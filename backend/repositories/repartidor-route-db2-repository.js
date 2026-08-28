@@ -6,6 +6,7 @@
 'use strict';
 
 const { query, queryWithParams } = require('../config/db');
+const logger = require('../middleware/logger');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const {
@@ -1026,7 +1027,44 @@ async function getClientDocuments({
     pageOffset,
     pageOffset + pageLimit,
   ];
-  const rows = await runQueryWithParams(sql, allParams, false);
+  // La consulta de historico es de solo lectura y su parte ERP puede tardar
+  // segundos al recorrer el historico del cliente. Cachear la pagina completa
+  // con todos sus filtros evita repetir el escaneo al volver a la pestana.
+  // El overlay canonico se recalcula despues para que una confirmacion/cobro
+  // reciente no quede bloqueada por la cache.
+  const sortedIds = [...ids].map((id) => String(id).trim()).sort();
+  const historyCacheKey = [
+    'client-documents-v3',
+    sortedIds.join(','),
+    String(clientCode || '').trim(),
+    yearValue || minYearValue || '',
+    dateFromValue || '',
+    dateToValue || '',
+    pageOffset,
+    pageLimit,
+  ].join(':');
+  const historyStartedAt = Date.now();
+  const rows = await cachedQuery(queryWithParams, sql, {
+    cacheKey: historyCacheKey,
+    prefix: 'repartidor:history-documents',
+    ttl: TTL.REALTIME,
+    role: 'REPARTIDOR',
+    vendorCode: sortedIds.join(','),
+    params: {
+      repartidorIds: sortedIds,
+      clientCode: String(clientCode || '').trim(),
+      yearValue: yearValue || null,
+      minYearValue: minYearValue || null,
+      dateFromValue: dateFromValue || null,
+      dateToValue: dateToValue || null,
+      pageOffset,
+      pageLimit,
+    },
+    dateFrom: dateFromValue || null,
+    dateTo: dateToValue || null,
+    queryType: 'repartidor_history',
+  }, allParams);
+  logger.info(`[PERF] /history/documents client=${clientCode || '-'} owners=${sortedIds.length} rows=${rows?.length || 0} db/cache=${Date.now() - historyStartedAt}ms`);
   const overlaid = await overlayCanonicalConfirmations(rows || [], {
     repartidorIds: ids,
     clientCode,

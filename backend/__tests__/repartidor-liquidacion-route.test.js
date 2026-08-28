@@ -28,6 +28,9 @@ const mockOutbox = {
 jest.mock('../services/repartidor-liquidacion-outbox-service', () => mockOutbox);
 
 const routes = require('../routes/repartidor-finanzas');
+const { createRepartidorLiquidacionService } = require('../services/repartidor-liquidacion-service');
+const { buildLiquidacionCommand } = require('../services/repartidor-liquidacion-contract');
+const { deleteCachePattern } = require('../services/redis-cache');
 
 function makeApp() {
   const app = express();
@@ -51,6 +54,61 @@ describe('repartidor liquidation route boundary', () => {
     routes.resetCanonicalLiquidacionService();
   });
   afterEach(() => routes.resetCanonicalLiquidacionService());
+
+  test('HTTP + servicio real rechaza sin cobros, permite cobros y conserva replay sin duplicar escrituras', async () => {
+    const snapshot = { repartidorId: '94', date: '2026-08-09', deliveries: [], payments: [],
+      expenses: [], adjustments: [], bankDeposits: [], pending: [], openingBalance: 50, balance: 50,
+      breakdown: { deliveries: 0, payments: 0, expenses: 0, adjustments: 0, bankDeposits: 0, pending: 0 } };
+    let persisted = null;
+    const transaction = {
+      getByIdempotencyToken: jest.fn(async () => persisted),
+      lockDay: jest.fn(async () => null),
+      deriveDaySnapshot: jest.fn(async () => snapshot),
+      insertOperation: jest.fn(async (operation) => {
+        persisted = { ...operation, id: '701', status: 'CLOSED' };
+        return { id: '701' };
+      }),
+      markCobrosLiquidated: jest.fn(), markExpensesLiquidated: jest.fn(),
+      markAdjustmentsLiquidated: jest.fn(), markBankDepositsLiquidated: jest.fn(),
+      updateBalance: jest.fn(), appendAudit: jest.fn(), enqueueEmailOutbox: jest.fn(),
+    };
+    routes.setCanonicalLiquidacionService(createRepartidorLiquidacionService({ repository: {
+      assertCapabilities: jest.fn(), withTransaction: async (callback) => callback(transaction),
+    } }));
+    const input = body({ sendEmails: true });
+    const rejected = await request(makeApp()).post('/finanzas/liquidaciones').send(input);
+    expect(rejected.status).toBe(409);
+    expect(rejected.body).toEqual({ success: false, code: 'LIQUIDACION_NO_COBROS',
+      error: 'No se puede cerrar la liquidación: no hay cobros en el periodo seleccionado.' });
+    for (const method of ['insertOperation', 'markCobrosLiquidated', 'markExpensesLiquidated',
+      'markAdjustmentsLiquidated', 'markBankDepositsLiquidated', 'updateBalance', 'appendAudit', 'enqueueEmailOutbox']) {
+      expect(transaction[method]).not.toHaveBeenCalled();
+    }
+    expect(deleteCachePattern).not.toHaveBeenCalled();
+    expect(mockOutbox.processLiquidacionOutboxIntent).not.toHaveBeenCalled();
+
+    snapshot.payments = [{ id: 'COB-1', amount: 25, paymentMethod: 'TJ', collectedAt: '2026-08-09T10:00:00Z' }];
+    snapshot.breakdown.payments = 25;
+    const created = await request(makeApp()).post('/finanzas/liquidaciones').send(input);
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ success: true, created: true, liquidacion: { id: '701', status: 'CLOSED' } });
+    const invalidations = deleteCachePattern.mock.calls.length;
+    expect(invalidations).toBeGreaterThan(0);
+    transaction.deriveDaySnapshot.mockRejectedValue(new Error('Replay must not rederive'));
+    const replay = await request(makeApp()).post('/finanzas/liquidaciones').send(input);
+    expect(replay.status).toBe(200);
+    expect(replay.body).toMatchObject({ success: true, created: false, liquidacion: created.body.liquidacion });
+    expect(transaction.insertOperation).toHaveBeenCalledTimes(1);
+    expect(transaction.enqueueEmailOutbox).toHaveBeenCalledTimes(1);
+    expect(mockOutbox.processLiquidacionOutboxIntent).toHaveBeenCalledTimes(1);
+    expect(deleteCachePattern).toHaveBeenCalledTimes(invalidations);
+
+    // Historical empty closes must also stay replayable after introducing the guard.
+    persisted.snapshot = { ...snapshot, payments: [], breakdown: { ...snapshot.breakdown, payments: 0 } };
+    persisted.marker = buildLiquidacionCommand(input).marker;
+    expect((await request(makeApp()).post('/finanzas/liquidaciones').send(input)).status).toBe(200);
+    expect(transaction.deriveDaySnapshot).toHaveBeenCalledTimes(2);
+  });
 
   test('fails closed with 503 when no transactional liquidation port is wired', async () => {
     const result = await request(makeApp()).post('/finanzas/liquidaciones').send(body());

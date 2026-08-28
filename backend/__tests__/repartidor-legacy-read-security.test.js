@@ -9,7 +9,10 @@ const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockSendEmailWithPdf = jest.fn();
 const mockGenerateDeliveryReceipt = jest.fn();
-const mockCachedQuery = jest.fn((queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params));
+const mockCachedQuery = jest.fn((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
 let mockUser = { id: '05', code: '05', role: 'REPARTIDOR' };
 
 jest.mock('../config/db', () => ({
@@ -160,7 +163,10 @@ describe('legacy repartidor read security contracts', () => {
     jest.clearAllMocks();
     mockUser = { id: '05', code: '05', role: 'REPARTIDOR' };
     mockQueryWithParams.mockResolvedValue([]);
-    mockCachedQuery.mockImplementation((queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params));
+    mockCachedQuery.mockImplementation((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
   });
 
   test('allows a repartidor to read only its own summary', async () => {
@@ -777,7 +783,10 @@ describe('fleet client cards preserve a concrete owner', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUser = { id: '90', code: '90', role: 'JEFE_VENTAS', activeMode: 'REPARTIDOR', repartidorCodes: ['05', '06'] };
-    mockCachedQuery.mockImplementation((queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params));
+    mockCachedQuery.mockImplementation((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
   });
 
   test('same ERP client assigned to two drivers remains two isolated cards', async () => {

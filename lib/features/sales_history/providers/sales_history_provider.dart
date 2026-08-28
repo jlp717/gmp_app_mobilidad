@@ -67,13 +67,23 @@ class SalesHistoryState {
 // ── Notifier ─────────────────────────────────────────────────────────────────
 
 class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
-  final SalesHistoryService _service = SalesHistoryService();
+  /// Uses the shared service unless an isolated reader is injected.
+  SalesHistoryNotifier({SalesHistoryService? service})
+      : _service = service ?? SalesHistoryService();
+
+  final SalesHistoryService _service;
+  int _generation = 0;
 
   @override
-  SalesHistoryState build() => const SalesHistoryState();
+  SalesHistoryState build() {
+    ref.onDispose(() => _generation++);
+    return const SalesHistoryState();
+  }
 
   void setVendedorCodes(String codes) {
-    state = state.copyWith(vendedorCodes: codes);
+    if (state.vendedorCodes == codes) return;
+    _generation++;
+    state = state.copyWith(vendedorCodes: codes, isLoading: false);
   }
 
   void setClientCode(String? code) {
@@ -82,7 +92,9 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
   }
 
   void setProductSearch(String query) {
-    state = state.copyWith(productSearch: query);
+    if (state.productSearch == query) return;
+    _generation++;
+    state = state.copyWith(productSearch: query, isLoading: false);
   }
 
   void setDateRange(String? start, String? end) {
@@ -91,8 +103,16 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
   }
 
   Future<void> loadHistory({bool reset = false}) async {
+    final generation = ++_generation;
+    final filters = state;
     if (reset) {
-      state = state.copyWith(items: [], isLoading: true, error: null);
+      state = state.copyWith(
+        items: [],
+        summary: null,
+        totalCount: 0,
+        isLoading: true,
+        error: null,
+      );
     } else {
       state = state.copyWith(isLoading: true, error: null);
     }
@@ -100,21 +120,23 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
     try {
       final results = await Future.wait([
         _service.getSalesHistory(
-          vendedorCodes: state.vendedorCodes,
-          clientCode: state.clientCode,
-          productSearch: state.productSearch,
-          startDate: state.startDate,
-          endDate: state.endDate,
+          vendedorCodes: filters.vendedorCodes,
+          clientCode: filters.clientCode,
+          productSearch: filters.productSearch,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
         ),
         _service.getSalesHistorySummary(
-          vendedorCodes: state.vendedorCodes,
-          clientCode: state.clientCode,
-          productSearch: state.productSearch,
-          startDate: state.startDate,
-          endDate: state.endDate,
+          vendedorCodes: filters.vendedorCodes,
+          clientCode: filters.clientCode,
+          productSearch: filters.productSearch,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
         ),
       ]);
 
+      // Logical cancellation also covers cache hits and provider disposal.
+      if (generation != _generation) return;
       final historyResult = results[0];
       final summary = results[1];
 
@@ -125,6 +147,7 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
         isLoading: false,
       );
     } catch (e) {
+      if (generation != _generation) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }

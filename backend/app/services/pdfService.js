@@ -16,15 +16,12 @@
 
 const PDFDocument = require('pdfkit');
 const logger = require('../../middleware/logger');
-const path = require('path');
-const fs = require('fs');
+const { drawCompanyHeader } = require('../../services/company-header');
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURACIÓN Y CONSTANTES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const HEADER_PATH = path.join(__dirname, '../../assets/header.webp');
-const HEADER_PNG_PATH = path.join(__dirname, '../../assets/header.png');
 
 // Paleta de colores corporativos Mari Pepa - Elegante y Profesional
 const COLORS = {
@@ -91,79 +88,8 @@ function formatDate(dia, mes, ano) {
 /**
  * Dibujar header corporativo profesional
  */
-function drawHeader(doc, yStart = 10, { compact = false } = {}) {
-    let yPos = yStart;
-    const imageHeight = compact ? 62 : 140;
-    const imageBottomPadding = 10;
-
-    // Franja superior de marca (moderna y delgada)
-    doc.rect(0, 0, 595.28, 5)
-        .fillAndStroke(COLORS.secondary, COLORS.secondary);
-
-    yPos += 5;
-
-    // Intentar cargar el logo
-    let logoLoaded = false;
-
-    if (fs.existsSync(HEADER_PNG_PATH)) {
-        try {
-            // Los albaranes usan un banner compacto para reservar espacio al
-            // bloque final de receptor y firma en la misma hoja cuando cabe.
-            doc.image(HEADER_PNG_PATH, 40, yPos, { width: 515, height: imageHeight });
-            logoLoaded = true;
-            return yPos + imageHeight + imageBottomPadding;
-        } catch (e) {
-            logger.warn('⚠️ No se pudo cargar header.png');
-        }
-    }
-
-    if (!logoLoaded && fs.existsSync(HEADER_PATH)) {
-        try {
-            doc.image(HEADER_PATH, 40, yPos, { width: 515, height: imageHeight });
-            logoLoaded = true;
-            return yPos + imageHeight + imageBottomPadding;
-        } catch (e) {
-            logger.warn('⚠️ No se pudo cargar header.webp');
-        }
-    }
-
-    // Si no hay logo, crear header de texto elegante
-    if (!logoLoaded) {
-        // Fondo sutil (más alto)
-        doc.rect(40, yPos, 515, 120)
-            .fillAndStroke(COLORS.ultraLight, COLORS.lightGray);
-
-        yPos += 18;
-
-        // Nombre de la empresa - GRANDE Y DESTACADO
-        doc.fontSize(36)
-            .font('Helvetica-Bold')
-            .fillColor(COLORS.primary)
-            .text(EMPRESA.nombre, 50, yPos);
-
-        yPos += 45;
-
-        // Slogan
-        doc.fontSize(14)
-            .fillColor(COLORS.darkGray)
-            .font('Helvetica')
-            .text(EMPRESA.slogan.toUpperCase(), 50, yPos);
-
-        yPos += 18;
-
-        // Descripción y web
-        doc.fontSize(9)
-            .fillColor(COLORS.mediumGray)
-            .text(EMPRESA.descripcion, 50, yPos);
-
-        doc.fontSize(9)
-            .fillColor(COLORS.secondary)
-            .text(EMPRESA.web, 450, yPos, { align: 'right', width: 95 });
-
-        yPos += 10;
-    }
-
-    return yPos + 5;
+function drawHeader(doc, yStart = 10) {
+    return drawCompanyHeader(doc, { yStart });
 }
 
 /**
@@ -195,13 +121,13 @@ function drawFooter(doc, pageNum, totalPages) {
         });
 }
 
-function ensureContentSpace(doc, y, requiredHeight, headerOptions = {}) {
+function ensureContentSpace(doc, y, requiredHeight) {
     if (y + requiredHeight <= CONTENT_BOTTOM_Y) {
         return y;
     }
 
     doc.addPage();
-    return drawHeader(doc, 10, headerOptions) + 10;
+    return drawHeader(doc, 10) + 10;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -263,8 +189,7 @@ async function generateInvoicePDF(facturaData) {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // HEADER CORPORATIVO
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            const headerOptions = { compact: isAlbaran };
-            let y = drawHeader(doc, 10, headerOptions);
+            let y = drawHeader(doc, 10);
             y += 10;
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -472,7 +397,7 @@ async function generateInvoicePDF(facturaData) {
                 // Comprobar si necesitamos una nueva página con la nueva altura
                 if (y + rowHeight > 700) {
                     doc.addPage();
-                    y = drawHeader(doc, 10, headerOptions) + 10;
+                    y = drawHeader(doc, 10) + 10;
 
                     // Repetir cabecera de tabla
                     doc.rect(40, y, 515, 16)
@@ -571,7 +496,7 @@ async function generateInvoicePDF(facturaData) {
                     // Draw albaran header with subtotal
                     if (y + 25 > 700) {
                         doc.addPage();
-                        y = drawHeader(doc, 10, headerOptions) + 10;
+                        y = drawHeader(doc, 10) + 10;
                     }
 
                     // Albaran header box
@@ -655,7 +580,7 @@ async function generateInvoicePDF(facturaData) {
             // juntos se trasladan enteros a la última página, lejos del pie.
             const closingBlockHeight = totalsBlockHeight + 45 + 110;
 
-            y = ensureContentSpace(doc, y, closingBlockHeight, headerOptions);
+            y = ensureContentSpace(doc, y, closingBlockHeight);
 
             // Línea final de productos
             doc.moveTo(40, y)

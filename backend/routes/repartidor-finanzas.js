@@ -473,6 +473,7 @@ async function invalidateFinanceCaches(repartidorId) {
     `repartidor:finance:${repartidorId}:*`,
     `query:repartidor:collections:*`,
     'query:query:repartidor:rutero-*',
+    'query:repartidor:history-documents:*',
     'query:query:entregas:rutero:client-risk:*',
   ];
   for (const pattern of patterns) {
@@ -1102,7 +1103,7 @@ router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.
   } catch (error) {
     if (error && [
       'DUPLICATE_DAILY_LIQUIDACION', 'IDEMPOTENCY_CONFLICT',
-      'LIQUIDACION_DAY_ALREADY_CLOSED',
+      'LIQUIDACION_DAY_ALREADY_CLOSED', 'LIQUIDACION_NO_COBROS',
     ].includes(error.code)) {
       return res.status(409).json({
         success: false,

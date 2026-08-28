@@ -4,7 +4,10 @@ const request = require('supertest');
 const express = require('express');
 
 const mockQueryWithParams = jest.fn();
-const mockCachedQuery = jest.fn((queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params));
+const mockCachedQuery = jest.fn((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
 
 jest.mock('../config/db', () => ({
   query: jest.fn(),
@@ -94,7 +97,10 @@ describe('Repartidor route parameter binding', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockQueryWithParams.mockResolvedValue([]);
-    mockCachedQuery.mockImplementation((queryFn, sql, _cacheKey, _ttl, params) => queryFn(sql, params));
+    mockCachedQuery.mockImplementation((queryFn, sql, cacheOptions, ttlOrParams, legacyParams) => {
+  const params = cacheOptions && typeof cacheOptions === 'object' && !Array.isArray(cacheOptions) ? ttlOrParams : legacyParams;
+  return queryFn(sql, params);
+});
   });
 
   test('GET /history/delivery-summary binds repartidor codes without embedded quotes', async () => {

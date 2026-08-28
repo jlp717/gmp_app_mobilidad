@@ -1,6 +1,7 @@
 'use strict';
 
 const PDFDocument = require('pdfkit');
+const { drawCompanyHeader } = require('./company-header');
 const { RepartoPersistenceError } = require('./reparto-confirmation-service');
 const { assertDecodablePng } = require('../utils/png-image-validator');
 
@@ -219,19 +220,6 @@ function createRepartoReceiptPdfService() {
     let pageNumber = 1;
     document.on('pageAdded', () => { pageNumber += 1; });
 
-    const drawCompanyHeader = () => {
-      const x = left();
-      const width = pageWidth();
-      const y = document.y;
-      document.save().fillColor(blue).roundedRect(x, y, width, 66, 8).fill();
-      document.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(15)
-        .text('GRANJA MARI PEPA S.L.', x + 16, y + 12, { width: width - 32 });
-      document.font('Helvetica').fontSize(8)
-        .text('Pol. Ind. Saprelorca - Parcela D3 · 30817 Lorca (Murcia)', x + 16, y + 31, { width: width - 32 });
-      document.text('CIF: B04008710 · Tel: 968 47 08 80', x + 16, y + 44, { width: width - 32 });
-      document.restore();
-      document.y = y + 78;
-    };
 
     const drawDocumentMeta = () => {
       const x = left();
@@ -293,7 +281,7 @@ function createRepartoReceiptPdfService() {
     };
     const addContinuationPage = () => {
       document.addPage();
-      document.y = document.page.margins.top;
+      document.y = drawCompanyHeader(document);
       drawContinuationHeader();
     };
     const ensureSpace = (height, reserved = 0) => {
@@ -405,8 +393,7 @@ function createRepartoReceiptPdfService() {
         .text(`GMP · nota de entrega generada desde la confirmación registrada · página ${pageNumber}`, x, footerY, { width, align: 'right' });
     };
 
-    document.y = document.page.margins.top;
-    drawCompanyHeader();
+    document.y = drawCompanyHeader(document);
     drawDocumentMeta();
     drawTableHeader();
     drawRows();

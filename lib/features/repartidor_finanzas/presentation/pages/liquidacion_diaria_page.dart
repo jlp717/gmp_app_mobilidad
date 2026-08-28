@@ -391,6 +391,28 @@ class _RepartidorLiquidacionDiariaPageState
     RepartidorLiquidacionLedger? ledger,
   ) async {
     if (_saving) return;
+    // Presence, not cash/balance: card payments also belong to the period.
+    // A known closed day may still need to retrieve its immutable replay.
+    final recoveringClose = ledger?.status == 'CLOSED';
+    if (!recoveringClose &&
+        summary.cobros.isEmpty &&
+        summary.cobrosCount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            financeErrorMessage(
+              ApiException(
+                'Sin cobros en el periodo',
+                code: 'LIQUIDACION_NO_COBROS',
+                statusCode: 409,
+              ),
+              'No hay cobros en el periodo seleccionado.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     if (_sessionDate != _today()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -411,7 +433,7 @@ class _RepartidorLiquidacionDiariaPageState
 
     try {
       final ingreso = _parseEuro(_ingresoBancoController.text);
-      if (ingreso > 0.009) {
+      if (!recoveringClose && ingreso > 0.009) {
         final token = _entryTokens.putIfAbsent(
           'BANK_DEPOSIT',
           () => createLiquidacionEntryIdempotencyToken(

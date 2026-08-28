@@ -1,6 +1,7 @@
 'use strict';
 
 const PDFDocument = require('pdfkit');
+const { drawCompanyHeader } = require('./company-header');
 
 const NAVY = '#003d7a';
 const NAVY_DEEP = '#00264d';
@@ -10,7 +11,6 @@ const MUTED = '#64748b';
 const LINE = '#c5d4e8';
 const CARD = '#eef6ff';
 const CARD_GREEN = '#e7f8f1';
-const WHITE = '#ffffff';
 
 function text(value, fallback = '—') {
   const normalized = String(value ?? '').trim();
@@ -44,6 +44,12 @@ function buildCobroPdfBuffer(payload = {}) {
   return new Promise((resolve, reject) => {
     const document = new PDFDocument({ size: 'A4', margin: 42, compress: false });
     const chunks = [];
+    let y = 0;
+    const pageBottom = document.page.height - document.page.margins.bottom;
+    document.on('pageAdded', () => {
+      y = drawCompanyHeader(document);
+      document.y = y;
+    });
     document.on('data', (chunk) => chunks.push(chunk));
     document.on('end', () => resolve(Buffer.concat(chunks)));
     document.on('error', reject);
@@ -52,16 +58,12 @@ function buildCobroPdfBuffer(payload = {}) {
     const contentWidth = pageWidth - document.page.margins.left - document.page.margins.right;
     const left = document.page.margins.left;
 
-    document.rect(0, 0, pageWidth, 96).fill(NAVY);
-    document.rect(0, 92, pageWidth, 4).fill(GREEN);
-    document.fillColor(WHITE).font('Helvetica-Bold').fontSize(19)
-      .text('JUSTIFICANTE DE COBRO', left, 24, { width: contentWidth });
-    document.font('Helvetica').fontSize(10).fillColor('#d7ecff')
-      .text('Granja Mari Pepa · GMP Mobilidad', left, 53, { width: contentWidth });
-    document.fontSize(8).fillColor('#9ec5ea')
-      .text('Documento generado desde el cobro registrado en reparto', left, 70, { width: contentWidth });
-
-    let y = 122;
+    y = drawCompanyHeader(document);
+    document.fillColor(NAVY).font('Helvetica-Bold').fontSize(19)
+      .text('JUSTIFICANTE DE COBRO', left, y, { width: contentWidth });
+    document.font('Helvetica').fontSize(8).fillColor(MUTED)
+      .text('Documento generado desde el cobro registrado en reparto', left, document.y + 6, { width: contentWidth });
+    y = document.y + 16;
     document.roundedRect(left, y, contentWidth, 82, 8).fillAndStroke(CARD, LINE);
     document.fillColor(MUTED).font('Helvetica').fontSize(8).text('ID DE COBRO', left + 12, y + 12);
     document.fillColor(NAVY_DEEP).font('Helvetica-Bold').fontSize(11)
@@ -103,12 +105,18 @@ function buildCobroPdfBuffer(payload = {}) {
       .text(money(payload.pendiente) + ' €', left + 14, y + 15, { width: contentWidth - 28, align: 'right' });
     y += 72;
 
-    if (text(payload.notas, '') !== '') {
+    const notes = text(payload.notas, '');
+    if (notes !== '') {
+      const notesHeight = document.heightOfString(notes, { width: contentWidth });
+      if (y + 16 + notesHeight + 18 + 28 > pageBottom) {
+        document.addPage();
+        y = document.y;
+      }
       document.fillColor(NAVY).font('Helvetica-Bold').fontSize(11).text('Observaciones', left, y);
       y += 16;
       document.fillColor(SLATE).font('Helvetica').fontSize(9)
-        .text(text(payload.notas), left, y, { width: contentWidth });
-      y += document.heightOfString(text(payload.notas), { width: contentWidth }) + 18;
+        .text(notes, left, y, { width: contentWidth });
+      y += notesHeight + 18;
     }
 
     document.fillColor(MUTED).font('Helvetica').fontSize(8)

@@ -1,9 +1,12 @@
 // ignore_for_file: lines_longer_than_80_chars
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/errors/failure.dart';
 
 // Req #16: mapea códigos de error del backend a mensajes claros para el repartidor.
 // ignore: lines_longer_than_80_chars
 const Map<String, String> _financeErrorCodeMessages = <String, String>{
+  'LIQUIDACION_NO_COBROS':
+      'No se puede cerrar la liquidación: no hay cobros en el periodo seleccionado.',
   'DUPLICATE_DAILY_LIQUIDACION':
       'Ya cerraste la jornada de hoy para este repartidor. '
           'Abre una nueva fecha o verifica la liquidación existente.',
@@ -35,6 +38,12 @@ const Map<String, String> _financeErrorCodeMessages = <String, String>{
 
 /// Returns a safe, actionable user-facing message for finance API failures.
 String financeErrorMessage(Object error, String fallback) {
+  // The repository wraps close errors in Failure while other actions expose
+  // ApiException directly. Both paths must preserve the backend business code.
+  if (error is Failure) {
+    final message = _financeErrorCodeMessages[error.code?.trim()];
+    if (message != null) return message;
+  }
   if (error is ApiException) {
     final code = error.code?.trim();
     if (code != null && _financeErrorCodeMessages.containsKey(code)) {

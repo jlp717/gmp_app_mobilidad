@@ -86,4 +86,40 @@ describe('RuteroSemanalService.obtenerRuteroSemanal', () => {
         expect(DAY_NAMES[new Date(2026, 7, 25).getDay()]).toBe('martes');
         expect(DAY_NAMES.length).toBe(7);
     });
+
+    test('deduplica binds sin cambiar orden, case ni filtros de sentinelas', () => {
+        expect(RuteroSemanalService.cleanVendorCodes(' A, A,B,a,0, ')).toEqual(['A', 'B', 'a', '0']);
+        expect(RuteroSemanalService.cleanVendorCodes(' A,A,UNK,NULL,0,B ', { sentinelFiltered: true })).toEqual(['A', 'B']);
+        const repeated = Array.from({ length: 60 }, () => 'A,B').join(',');
+        const before = repeated.split(',').map(c => c.trim()).filter(Boolean).length;
+        const after = RuteroSemanalService.cleanVendorCodes(repeated).length;
+        expect(after).toBe(2);
+        expect(require('../../middleware/logger').info).toHaveBeenCalledWith(
+            expect.stringMatching(/\[PERF\] rutero.vendorCodes before=120 after=2 elapsedMs=\d+/),
+        );
+        console.info(`[PERF] rutero.vendorCodes before=${before} after=${after} (synthetic repeated scope)`);
+    });
+
+    test('progreso se lee cada vez y conserva alcance, role e ignoreOverrides', async () => {
+        const { svc, repo } = makeSvc({ cacheCounts: { martes: 10 }, erp: 2, app: 1 });
+        const args = { vendedorCodes: 'A,A,B', role: 'repartidor', ignoreOverridesBool: true, now: NOW };
+        const first = await svc.obtenerRuteroSemanal(args);
+        repo.fetchErpDeliveredCount.mockResolvedValue(5);
+        const second = await svc.obtenerRuteroSemanal(args);
+        expect(first.payload.weekProgress.martes.delivered).toBe(2);
+        expect(second.payload.weekProgress.martes.delivered).toBe(5);
+        expect(repo.fetchErpDeliveredCount).toHaveBeenCalledTimes(2);
+        expect(repo.fetchAppDeliveredCount).toHaveBeenCalledTimes(2);
+        expect(repo.fetchAppDeliveredCount).toHaveBeenLastCalledWith(['A', 'B']);
+        expect(svc._getWeekCountsFromCache).toHaveBeenLastCalledWith('A,A,B', 'repartidor', true);
+        expect(svc._getTotalClientsFromCache).toHaveBeenLastCalledWith('A,A,B', 'repartidor');
+    });
+
+    test('fallback deduplica binds pero vuelve a consultar en cada peticion', async () => {
+        const { svc, repo } = makeSvc();
+        await svc.obtenerRuteroSemanal({ vendedorCodes: 'A,A,B', now: NOW });
+        await svc.obtenerRuteroSemanal({ vendedorCodes: 'A,A,B', now: NOW });
+        expect(repo.fetchWeeklyVisitCounts).toHaveBeenCalledTimes(2);
+        expect(repo.fetchWeeklyVisitCounts).toHaveBeenLastCalledWith(['A', 'B']);
+    });
 });
