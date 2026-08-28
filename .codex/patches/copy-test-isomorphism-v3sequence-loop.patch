@@ -1,9 +1,0 @@
-diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
---- a/backend/scripts/copy-javier-prod-to-test.js
-+++ b/backend/scripts/copy-javier-prod-to-test.js
-@@ -1182,1 +1182,5 @@
-     for (const p of pairs) {
-+      if (p.objectType === 'SEQUENCE') {
-+        console.log(`PREFLIGHT ONLY sequence ${p.src} -> ${p.dst}; no row copy`);
-+        continue;
-+      }

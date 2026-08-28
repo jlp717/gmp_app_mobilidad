@@ -1,8 +1,0 @@
-diff --git a/backend/routes/repartidor-finanzas.js b/backend/routes/repartidor-finanzas.js
---- a/backend/routes/repartidor-finanzas.js
-+++ b/backend/routes/repartidor-finanzas.js
-@@ -1318,1 +1318,0 @@
--    res.json({ 
-@@ -1327,1 +1326,2 @@
-+    res.json({
-       success: true, 

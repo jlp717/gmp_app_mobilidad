@@ -1,9 +1,0 @@
-diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
---- a/backend/scripts/copy-javier-prod-to-test.js
-+++ b/backend/scripts/copy-javier-prod-to-test.js
-@@ -597,3 +597,2 @@
--    const destinationContracts = destinationExists && !destinationWillBeRebuilt
--    const destinationContractsEnabled = auditOperationalContracts;
--      && destinationContractsEnabled ? await operationalContractsOfFn(pair.dst) : [];
-+    const destinationContracts = destinationExists && !destinationWillBeRebuilt && auditOperationalContracts
-+      ? await operationalContractsOfFn(pair.dst) : [];

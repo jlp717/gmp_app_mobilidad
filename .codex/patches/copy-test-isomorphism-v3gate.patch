@@ -1,9 +1,0 @@
-diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
---- a/backend/scripts/copy-javier-prod-to-test.js
-+++ b/backend/scripts/copy-javier-prod-to-test.js
-@@ -367,6 +367,7 @@ async function reconcileMappingPairs(pairs, {
-       destinationExists,
-       destinationRowCount,
-     });
-+    assertRuntimeWriteCoverage(pair, sourceColumns, plan);
-     for (const operation of plan) {

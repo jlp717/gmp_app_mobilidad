@@ -1,6 +1,0 @@
-diff --git a/backend/config/repartidor-liquidacion-bootstrap.js b/backend/config/repartidor-liquidacion-bootstrap.js
---- a/backend/config/repartidor-liquidacion-bootstrap.js
-+++ b/backend/config/repartidor-liquidacion-bootstrap.js
-@@ -24,1 +24,1 @@
--      configured: false,
-+      configured,

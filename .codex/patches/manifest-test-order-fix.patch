@@ -1,7 +1,0 @@
-diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
---- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
-+++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
-@@ -555 +555,2 @@
--    expect(manifestStore.create).toHaveBeenCalledBefore(executeFn);
-+    expect(manifestStore.create.mock.invocationCallOrder[0])
-+      .toBeLessThan(executeFn.mock.invocationCallOrder[0]);

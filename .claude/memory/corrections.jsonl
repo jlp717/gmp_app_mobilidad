@@ -1,1 +1,0 @@
-{"ts":"2026-08-21T09:00:00Z","source":"javi","trigger":"ejemplo correccion TRACE","rule":"nunca usar VENDEDOR='ALL'","scope":"backend-engineer","check":"grep VENDEDOR_ALL"}

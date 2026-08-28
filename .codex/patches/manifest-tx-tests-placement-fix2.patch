@@ -1,7 +1,0 @@
-diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
---- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
-+++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
-@@ -565 +564,0 @@
--  test('commits each manifest mutation on a dedicated connection before returning', async () => {
-@@ -570,0 +570 @@
-+  test('commits each manifest mutation on a dedicated connection before returning', async () => {

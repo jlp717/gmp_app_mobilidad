@@ -1,8 +1,0 @@
-diff --git a/lib/features/repartidor/data/repartidor_data_service.dart b/lib/features/repartidor/data/repartidor_data_service.dart
---- a/lib/features/repartidor/data/repartidor_data_service.dart
-+++ b/lib/features/repartidor/data/repartidor_data_service.dart
-@@ -539,3 +539,4 @@ class RepartidorDataService {
-     int offset = 0,
-   }) async {
-+    final owner = requireConcreteRepartoOwner(repartidorId);
-     if (repartidorId.trim().isEmpty) {

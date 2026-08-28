@@ -17,11 +17,30 @@ ENV/
 # Secrets and configuration
 # OpenCode: ignore runtime noise/secrets, but track governance-critical configs/tools/plugins/agents.
 # NEVER un-ignore .opencode/CREDENCIALES.md or any secret-bearing local files.
+# GMP Flow V7 (2026-08-28): gobernanza VERSIONADA en git — .clinerules/, .cline/ (salvo runtime),
+# scripts/cline/, scripts/opencode/mcp/ y memory-bank/ se trackean. Solo runtime queda ignorado.
 .opencode/*
-.clinerules/
-.cline/*
-scripts/cline/*
-memory-bank
+.codex/
+.claude/
+.claude/hooks/
+.claude/agents/
+.cline/
+.clinerules
+scripts/cline
+memory-bank/
+.opencode/
+.opencode-legacy/
+# Cline: solo runtime fuera de git (state/ledgers/backups); rules/skills/plugins/knowledge se versionan
+.cline/state/
+.cline/backups/
+.cline/data-runtime/
+# Codex scratch (runtime, nunca versionar; el blanket .codex/ ya lo cubre — reglas explicitas
+# por si algun dia se levanta el blanket para versionar .codex/config.toml / hooks.json)
+.codex/patches/
+.codex/copy-apply-out*
+.codex/*probe*
+.codex/*.patch
+.codex/tmp/
 !.opencode/config/
 .opencode/config/*
 !.opencode/config/governance/
@@ -172,6 +191,8 @@ upload-keystore.jks
 # IDE (Claude Code: track governance, ignore runtime noise)
 .claude/*
 !.claude/settings.json
+!.claude/rules/
+!.claude/rules/**
 !.claude/agents/
 !.claude/agents/**
 !.claude/hooks/
@@ -360,3 +381,16 @@ tmp/
 .flutter/
 .flutter_tool_state/
 .codex/graph-runs/
+
+# Herramientas agenticas locales: no versionar reglas, prompts, skills,
+# configuraciones ni estado de Cline/OpenCode/Codex/Claude.
+# Estas reglas finales prevalecen sobre las excepciones historicas anteriores.
+.clinerules
+.clinerules/
+.cline/
+.opencode/
+.opencode-legacy/
+.codex/
+.claude/
+opencode.json
+.mcp.json

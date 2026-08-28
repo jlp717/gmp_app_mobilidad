@@ -1,8 +1,0 @@
-diff --git a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
---- a/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
-+++ b/backend/__tests__/copy-javier-prod-to-test-preflight.test.js
-@@ -440,0 +441,4 @@
-+    const pair = {
-+      group: 'finance', key: 'cobros', objectType: 'TABLE',
-+      src: 'JAVIER.REPARTIDOR_COBROS', dst: 'JAVIER.TEST_REPARTIDOR_COBROS',
-+    };

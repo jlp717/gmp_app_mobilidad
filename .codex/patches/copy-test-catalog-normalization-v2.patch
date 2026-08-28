@@ -1,9 +1,0 @@
-diff --git a/backend/scripts/copy-javier-prod-to-test.js b/backend/scripts/copy-javier-prod-to-test.js
---- a/backend/scripts/copy-javier-prod-to-test.js
-+++ b/backend/scripts/copy-javier-prod-to-test.js
-@@ -1350,0 +1351,2 @@
-+  normalizeCatalogYesNo,
-+  normalizeCatalogBoolean,
-@@ -1366,2 +1367,0 @@
--  normalizeCatalogYesNo,
--  normalizeCatalogBoolean,

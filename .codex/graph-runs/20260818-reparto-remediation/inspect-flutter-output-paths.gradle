@@ -1,9 +1,0 @@
-gradle.taskGraph.whenReady { graph ->
-    graph.allTasks.findAll { it.name == 'compileFlutterBuildRelease' }.each { task ->
-        println 'GMP_FLUTTER_OUTPUTS_BEGIN'
-        task.outputs.files.files.eachWithIndex { file, index ->
-            println "GMP_FLUTTER_OUTPUT_${index}=${file.path}"
-        }
-        println 'GMP_FLUTTER_OUTPUTS_END'
-    }
-}

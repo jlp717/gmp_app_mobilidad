@@ -1,7 +1,0 @@
-diff --git a/backend/services/liquidacion-pdf-service.js b/backend/services/liquidacion-pdf-service.js
---- a/backend/services/liquidacion-pdf-service.js
-+++ b/backend/services/liquidacion-pdf-service.js
-@@ -107 +107,2 @@
--  const saldoActual = roundMoney(input.saldoActual ?? input.saldoAnterior);
-+  const openingBalance = roundMoney(input.openingBalance ?? input.saldoInicial ?? input.saldoActual ?? input.saldoAnterior);
-+  const saldoActual = openingBalance;
