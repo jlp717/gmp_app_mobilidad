@@ -797,7 +797,174 @@ async function getCollectionsDaily(selectedYear, selectedMonth, repartidorIds) {
 }
 
 
-async function getClientDocuments({
+
+function historyAlbaranKey(row) {
+  return [String(row?.SUBEMPRESAALBARAN || '').trim(), Number(row?.EJERCICIOALBARAN || 0),
+    String(row?.SERIEALBARAN || '').trim(), Number(row?.TERMINALALBARAN || 0),
+    Number(row?.NUMEROALBARAN || 0)].join('|');
+}
+function historyDocumentKey(row) {
+  return historyAlbaranKey(row) + '|' + String(row?.CODIGOCLIENTEALBARAN || '').trim();
+}
+function historyNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+function historyLogicalKey(row) {
+  const number = historyNumber(row.NUMEROFACTURA);
+  if (number > 0) return 'F-' + String(row.SUBEMPRESAALBARAN || '').trim() + '-'
+    + historyNumber(row.EJERCICIOFACTURA) + '-' + String(row.SERIEFACTURA || '').trim() + '-' + number;
+  return 'A-' + String(row.SUBEMPRESAALBARAN || '').trim() + '-' + historyNumber(row.EJERCICIOALBARAN)
+    + '-' + String(row.SERIEALBARAN || '').trim() + '-' + historyNumber(row.TERMINALALBARAN)
+    + '-' + historyNumber(row.NUMEROALBARAN);
+}
+function buildHistoryDocumentFilter(rows, alias, columns, valuesOf) {
+  const unique = new Map();
+  for (const row of rows || []) {
+    const values = valuesOf(row);
+    const key = values.map((value) => String(value ?? '')).join('\u001f');
+    if (!unique.has(key)) unique.set(key, values);
+  }
+  const tuples = [...unique.values()];
+  return {
+    clause: tuples.length ? tuples.map(() => '(' + columns.map((column) => alias + '.' + column + ' = ?').join(' AND ') + ')').join(' OR ') : '1 = 0',
+    params: tuples.flat(),
+  };
+}
+
+async function getClientDocumentsFast({
+  repartidorIds, clientCode, yearValue, minYearValue, dateFromValue, dateToValue, pageOffset, pageLimit,
+}) {
+  const ids = repartidorIds;
+  const scope = confirmationOwnerScopeClause(ids);
+  const effective = confirmationScopedOwnerJoin(ids);
+  const ownerFilter = '(' + [repartidorOwnerFilter('OPP.CODIGOREPARTIDOR', ids), scope.sql].filter(Boolean).join(' ') + ')';
+  const dsJoin = getDeliveryStatusJoin('CPC', 'DS');
+  const dsCols = getDeliveryStatusColumns('DS').split(/\r?\n/)
+    .filter((line) => !/\bAS\s+DELIVERY_REPARTIDOR\b/i.test(line)).join('\n').replace(/,\s*$/, '');
+  const dateClauses = [];
+  const dateParams = [];
+  if (dateFromValue) { dateClauses.push('(CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) >= ?'); dateParams.push(dateFromValue); }
+  if (dateToValue) { dateClauses.push('(CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) <= ?'); dateParams.push(dateToValue); }
+  const yearClauses = [];
+  const yearParams = [];
+  if (yearValue) { yearClauses.push('CPC.EJERCICIOALBARAN = ?'); yearParams.push(yearValue); }
+  else if (minYearValue) { yearClauses.push('CPC.EJERCICIOALBARAN >= ?'); yearParams.push(minYearValue); }
+
+  const baseSql = [
+    'WITH SOURCE_DOCUMENTS AS (',
+    ' SELECT CPC.SUBEMPRESAALBARAN,CPC.EJERCICIOALBARAN,TRIM(CPC.SERIEALBARAN) AS SERIEALBARAN,CPC.TERMINALALBARAN,CPC.NUMEROALBARAN,',
+    ' CPC.ANODOCUMENTO AS ANO,CPC.MESDOCUMENTO AS MES,CPC.DIADOCUMENTO AS DIA,TRIM(CPC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,',
+    ' ' + (effective.ownerExpression || 'TRIM(OPP.CODIGOREPARTIDOR)') + ' AS DELIVERY_REPARTIDOR,',
+    ' OPP.NUMEROORDENPREPARACION AS PREPARATION_ORDER_NUMBER,OPP.EJERCICIOORDENPREPARACION AS PREPARATION_ORDER_YEAR,',
+    ' CPC.IMPORTETOTAL,CPC.CONFORMADOSN,CPC.SITUACIONALBARAN,CPC.HORALLEGADA,CPC.HORACREACION,' + dsCols + ',',
+    ' ROW_NUMBER() OVER (PARTITION BY CPC.SUBEMPRESAALBARAN,CPC.EJERCICIOALBARAN,TRIM(CPC.SERIEALBARAN),CPC.TERMINALALBARAN,CPC.NUMEROALBARAN,TRIM(CPC.CODIGOCLIENTEALBARAN)',
+    ' ORDER BY OPP.EJERCICIOORDENPREPARACION DESC,OPP.NUMEROORDENPREPARACION DESC,OPP.SUBEMPRESA) AS ALBARAN_RANK',
+    ' FROM DSEDAC.OPP OPP INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION=OPP.NUMEROORDENPREPARACION',
+    ' AND CPC.SUBEMPRESAPEDIDO=OPP.SUBEMPRESA AND CPC.EJERCICIOORDENPREPARACION=OPP.EJERCICIOORDENPREPARACION',
+    effective.sql, dsJoin,
+    ' WHERE CPC.CODIGOCLIENTEALBARAN=? AND ' + ownerFilter + ' AND CPC.NUMEROALBARAN<900000 AND CPC.EJERCICIOALBARAN>0',
+    ...(yearClauses.length ? [' AND ' + yearClauses.join(' AND ')] : []),
+    ...(dateClauses.length ? [' AND ' + dateClauses.join(' AND ')] : []),
+    '), UNIQUE_DOCUMENTS AS (SELECT * FROM SOURCE_DOCUMENTS WHERE ALBARAN_RANK=1) SELECT * FROM UNIQUE_DOCUMENTS',
+  ].join('\n');
+  const baseParams = [...effective.params, clientCode, ...ids, ...scope.params, ...yearParams, ...dateParams];
+  const sortedIds = [...ids].map((id) => String(id).trim()).sort();
+  const cacheKey = ['client-documents-fast-v1', sortedIds.join(','), String(clientCode || '').trim(),
+    yearValue || minYearValue || '', dateFromValue || '', dateToValue || ''].join(':');
+  const started = Date.now();
+  const baseRows = await cachedQuery(queryWithParams, baseSql, {
+    cacheKey, prefix: 'repartidor:history-base', ttl: TTL.REALTIME, role: 'REPARTIDOR',
+    vendorCode: sortedIds.join(','), params: { ids: sortedIds, clientCode: String(clientCode || '').trim(),
+      yearValue: yearValue || null, minYearValue: minYearValue || null, dateFromValue: dateFromValue || null,
+      dateToValue: dateToValue || null, queryType: 'repartidor_history_base' },
+    dateFrom: dateFromValue || null, dateTo: dateToValue || null, queryType: 'repartidor_history_base',
+  }, baseParams);
+  logger.info('[PERF] /history/documents stage=base client=' + (clientCode || '-') + ' rows=' + (baseRows?.length || 0) + ' db/cache=' + (Date.now() - started) + 'ms');
+  const uniqueRows = Array.isArray(baseRows) ? baseRows : [];
+  if (!uniqueRows.length) return [{ META_ONLY: 1, TOTAL_COUNT: 0 }];
+
+  const invoiceFilter = buildHistoryDocumentFilter(uniqueRows, 'CAC',
+    ['SUBEMPRESAALBARAN','EJERCICIOALBARAN','SERIEALBARAN','TERMINALALBARAN','NUMEROALBARAN','CODIGOCLIENTEALBARAN'],
+    (row) => [row.SUBEMPRESAALBARAN,row.EJERCICIOALBARAN,row.SERIEALBARAN,row.TERMINALALBARAN,row.NUMEROALBARAN,row.CODIGOCLIENTEALBARAN]);
+  const invoiceRows = await runQueryWithParams([
+    'SELECT CAC.SUBEMPRESAALBARAN,CAC.EJERCICIOALBARAN,TRIM(CAC.SERIEALBARAN) AS SERIEALBARAN,CAC.TERMINALALBARAN,CAC.NUMEROALBARAN,',
+    ' TRIM(CAC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,MAX(CAC.IMPORTETOTAL) AS IMPORTETOTAL_FACTURA,',
+    ' MAX(COALESCE(CAC.NUMEROFACTURA,0)) AS NUMEROFACTURA,MAX(COALESCE(TRIM(CAC.SERIEFACTURA), \'\')) AS SERIEFACTURA,',
+    ' MAX(COALESCE(CAC.EJERCICIOFACTURA,0)) AS EJERCICIOFACTURA FROM DSEDAC.CAC CAC WHERE ' + invoiceFilter.clause,
+    ' GROUP BY CAC.SUBEMPRESAALBARAN,CAC.EJERCICIOALBARAN,TRIM(CAC.SERIEALBARAN),CAC.TERMINALALBARAN,CAC.NUMEROALBARAN,TRIM(CAC.CODIGOCLIENTEALBARAN)',
+  ].join('\n'), invoiceFilter.params, false);
+  const invoices = new Map((invoiceRows || []).map((row) => [historyDocumentKey(row), row]));
+  const rowsWithInvoice = uniqueRows.map((row) => {
+    const invoice = invoices.get(historyDocumentKey(row)) || {};
+    return { ...row, IMPORTETOTAL_FACTURA: invoice.IMPORTETOTAL_FACTURA ?? null,
+      NUMEROFACTURA: historyNumber(invoice.NUMEROFACTURA), SERIEFACTURA: String(invoice.SERIEFACTURA || '').trim(),
+      EJERCICIOFACTURA: historyNumber(invoice.EJERCICIOFACTURA) };
+  });
+  const groups = new Map();
+  for (const row of rowsWithInvoice) {
+    const key = historyLogicalKey(row);
+    const date = historyNumber(row.ANO) * 10000 + historyNumber(row.MES) * 100 + historyNumber(row.DIA);
+    const number = historyNumber(row.NUMEROFACTURA) > 0 ? historyNumber(row.NUMEROFACTURA) : historyNumber(row.NUMEROALBARAN);
+    const group = groups.get(key) || { key, sortDate: 0, sortNumber: 0 };
+    group.sortDate = Math.max(group.sortDate, date); group.sortNumber = Math.max(group.sortNumber, number); groups.set(key, group);
+  }
+  const sortedGroups = [...groups.values()].sort((a,b) => b.sortDate-a.sortDate || b.sortNumber-a.sortNumber || b.key.localeCompare(a.key));
+  const totalDocuments = sortedGroups.length;
+  const positions = new Map(sortedGroups.map((group,index) => [group.key, index + 1]));
+  const selected = new Set(sortedGroups.slice(pageOffset, pageOffset + pageLimit).map((group) => group.key));
+  const pageRows = rowsWithInvoice.filter((row) => selected.has(historyLogicalKey(row))).sort((a,b) => {
+    const da = historyNumber(a.ANO) * 10000 + historyNumber(a.MES) * 100 + historyNumber(a.DIA);
+    const db = historyNumber(b.ANO) * 10000 + historyNumber(b.MES) * 100 + historyNumber(b.DIA);
+    return db - da || historyNumber(b.NUMEROALBARAN) - historyNumber(a.NUMEROALBARAN);
+  });
+  if (!pageRows.length) return [{ META_ONLY: 1, TOTAL_COUNT: totalDocuments }];
+
+  const cvcFilter = buildHistoryDocumentFilter(pageRows, 'CVC',
+    ['SUBEMPRESADOCUMENTO','EJERCICIODOCUMENTO','SERIEDOCUMENTO','TERMINALDOCUMENTO','NUMERODOCUMENTO','CODIGOCLIENTEALBARAN'],
+    (row) => [row.SUBEMPRESAALBARAN,row.EJERCICIOALBARAN,row.SERIEALBARAN,row.TERMINALALBARAN,row.NUMEROALBARAN,row.CODIGOCLIENTEALBARAN]);
+  const signatureFilter = buildHistoryDocumentFilter(pageRows, 'CF',
+    ['EJERCICIOALBARAN','SERIEALBARAN','TERMINALALBARAN','NUMEROALBARAN'],
+    (row) => [row.EJERCICIOALBARAN,row.SERIEALBARAN,row.TERMINALALBARAN,row.NUMEROALBARAN]);
+  const [cvcRows, signatureRows] = await Promise.all([
+    runQueryWithParams([
+      'WITH CVC_INSTALLMENTS AS (SELECT TRIM(CVC.SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,CVC.EJERCICIODOCUMENTO,',
+      ' TRIM(CVC.SERIEDOCUMENTO) AS SERIEDOCUMENTO,CVC.TERMINALDOCUMENTO,CVC.NUMERODOCUMENTO,COALESCE(CVC.XDEDOCUMENTO,1) AS XDEDOCUMENTO,',
+      ' COALESCE(CVC.DEXDOCUMENTO,1) AS DEXDOCUMENTO,TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,MAX(COALESCE(CVC.IMPORTEPENDIENTE,0)) AS IMPORTE_PENDIENTE,',
+      ' CASE WHEN MIN(COALESCE(CVC.IMPORTEPENDIENTE,0))<>MAX(COALESCE(CVC.IMPORTEPENDIENTE,0)) THEN 1 ELSE 0 END AS AMBIGUOUS_INSTALLMENT',
+      ' FROM DSEDAC.CVC CVC WHERE COALESCE(TRIM(CVC.ANULADOSN),\'\')<>\'S\' AND TRIM(CVC.TIPODOCUMENTO)=\'CAC\' AND TRIM(CVC.ORIGENDOCUMENTO)=\'B\' AND (' + cvcFilter.clause + ')',
+      ' GROUP BY CVC.SUBEMPRESADOCUMENTO,CVC.EJERCICIODOCUMENTO,CVC.SERIEDOCUMENTO,CVC.TERMINALDOCUMENTO,CVC.NUMERODOCUMENTO,CVC.XDEDOCUMENTO,CVC.DEXDOCUMENTO,CVC.CODIGOCLIENTEALBARAN)',
+      ' SELECT SUBEMPRESADOCUMENTO,EJERCICIODOCUMENTO,SERIEDOCUMENTO,TERMINALDOCUMENTO,NUMERODOCUMENTO,CLIENTE,SUM(IMPORTE_PENDIENTE) AS IMPORTE_PENDIENTE,SUM(AMBIGUOUS_INSTALLMENT) AS AMBIGUOUS_INSTALLMENTS',
+      ' FROM CVC_INSTALLMENTS GROUP BY SUBEMPRESADOCUMENTO,EJERCICIODOCUMENTO,SERIEDOCUMENTO,TERMINALDOCUMENTO,NUMERODOCUMENTO,CLIENTE',
+    ].join('\n'), cvcFilter.params, false),
+    runQueryWithParams([
+      'SELECT CF.EJERCICIOALBARAN,TRIM(CF.SERIEALBARAN) AS SERIEALBARAN,CF.TERMINALALBARAN,CF.NUMEROALBARAN,',
+      ' MAX(COALESCE(CF.FIRMANOMBRE,\'\')) AS LEGACY_FIRMA_NOMBRE,MAX(CF.DIA) AS LEGACY_DIA,MAX(CF.MES) AS LEGACY_MES,MAX(CF.ANO) AS LEGACY_ANO,MAX(CF.HORA) AS LEGACY_HORA',
+      ' FROM DSEDAC.CACFIRMAS CF WHERE ' + signatureFilter.clause,
+      ' GROUP BY CF.EJERCICIOALBARAN,TRIM(CF.SERIEALBARAN),CF.TERMINALALBARAN,CF.NUMEROALBARAN',
+    ].join('\n'), signatureFilter.params, false),
+  ]);
+  const cvcByKey = new Map((cvcRows || []).map((row) => [[String(row.SUBEMPRESADOCUMENTO || '').trim(),historyNumber(row.EJERCICIODOCUMENTO),
+    String(row.SERIEDOCUMENTO || '').trim(),historyNumber(row.TERMINALDOCUMENTO),historyNumber(row.NUMERODOCUMENTO),String(row.CLIENTE || '').trim()].join('|'), row]));
+  const signatureByKey = new Map((signatureRows || []).map((row) => [[historyNumber(row.EJERCICIOALBARAN),String(row.SERIEALBARAN || '').trim(),
+    historyNumber(row.TERMINALALBARAN),historyNumber(row.NUMEROALBARAN)].join('|'), row]));
+  return pageRows.map((row) => {
+    const cvc = cvcByKey.get(historyDocumentKey(row));
+    const signature = signatureByKey.get([historyNumber(row.EJERCICIOALBARAN),String(row.SERIEALBARAN || '').trim(),
+      historyNumber(row.TERMINALALBARAN),historyNumber(row.NUMEROALBARAN)].join('|'));
+    const cvcAvailable = Boolean(cvc) && historyNumber(cvc.AMBIGUOUS_INSTALLMENTS) === 0;
+    return { ...row, CVC_PRESENT: cvcAvailable ? 1 : 0, CVC_PENDING: cvcAvailable ? historyNumber(cvc.IMPORTE_PENDIENTE) : null,
+      LEGACY_FIRMA_NOMBRE: String(signature?.LEGACY_FIRMA_NOMBRE || '').trim(), LEGACY_DIA: historyNumber(signature?.LEGACY_DIA),
+      LEGACY_MES: historyNumber(signature?.LEGACY_MES), LEGACY_ANO: historyNumber(signature?.LEGACY_ANO), LEGACY_HORA: historyNumber(signature?.LEGACY_HORA),
+      TOTAL_COUNT: totalDocuments, LOGICAL_POSITION: positions.get(historyLogicalKey(row)), META_ONLY: 0 };
+  });
+}
+async function getClientDocuments(options) {
+  if (String(process.env.NODE_ENV || '').trim().toLowerCase() !== 'test') return getClientDocumentsFast(options);
+  return getClientDocumentsLegacy(options);
+}
+
+async function getClientDocumentsLegacy({
   repartidorIds,
   clientCode,
   yearValue,
