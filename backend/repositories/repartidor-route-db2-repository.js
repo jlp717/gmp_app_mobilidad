@@ -884,16 +884,22 @@ async function getClientDocumentsFast({
   const uniqueRows = Array.isArray(baseRows) ? baseRows : [];
   if (!uniqueRows.length) return [{ META_ONLY: 1, TOTAL_COUNT: 0 }];
 
-  const invoiceFilter = buildHistoryDocumentFilter(uniqueRows, 'CAC',
-    ['SUBEMPRESAALBARAN','EJERCICIOALBARAN','SERIEALBARAN','TERMINALALBARAN','NUMEROALBARAN','CODIGOCLIENTEALBARAN'],
-    (row) => [row.SUBEMPRESAALBARAN,row.EJERCICIOALBARAN,row.SERIEALBARAN,row.TERMINALALBARAN,row.NUMEROALBARAN,row.CODIGOCLIENTEALBARAN]);
+  // The old composite OR predicate generated six bound parameters per
+  // document. DB2 for i prepared that statement slowly even when the client
+  // only had a small number of documents. Scope the ERP read by the same
+  // client/year constraints as the base scan, then keep the exact natural-key
+  // match in JS. This preserves correctness without forcing a wide OR plan.
+  const invoiceWhere = ['TRIM(CAC.CODIGOCLIENTEALBARAN) = ?', 'CAC.NUMEROALBARAN < 900000'];
+  const invoiceParams = [clientCode];
+  if (yearValue) { invoiceWhere.push('CAC.EJERCICIOALBARAN = ?'); invoiceParams.push(yearValue); }
+  else if (minYearValue) { invoiceWhere.push('CAC.EJERCICIOALBARAN >= ?'); invoiceParams.push(minYearValue); }
   const invoiceRows = await runQueryWithParams([
     'SELECT CAC.SUBEMPRESAALBARAN,CAC.EJERCICIOALBARAN,TRIM(CAC.SERIEALBARAN) AS SERIEALBARAN,CAC.TERMINALALBARAN,CAC.NUMEROALBARAN,',
     ' TRIM(CAC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,MAX(CAC.IMPORTETOTAL) AS IMPORTETOTAL_FACTURA,',
     ' MAX(COALESCE(CAC.NUMEROFACTURA,0)) AS NUMEROFACTURA,MAX(COALESCE(TRIM(CAC.SERIEFACTURA), \'\')) AS SERIEFACTURA,',
-    ' MAX(COALESCE(CAC.EJERCICIOFACTURA,0)) AS EJERCICIOFACTURA FROM DSEDAC.CAC CAC WHERE ' + invoiceFilter.clause,
+    ' MAX(COALESCE(CAC.EJERCICIOFACTURA,0)) AS EJERCICIOFACTURA FROM DSEDAC.CAC CAC WHERE ' + invoiceWhere.join(' AND '),
     ' GROUP BY CAC.SUBEMPRESAALBARAN,CAC.EJERCICIOALBARAN,TRIM(CAC.SERIEALBARAN),CAC.TERMINALALBARAN,CAC.NUMEROALBARAN,TRIM(CAC.CODIGOCLIENTEALBARAN)',
-  ].join('\n'), invoiceFilter.params, false);
+  ].join('\n'), invoiceParams, false);
   const invoices = new Map((invoiceRows || []).map((row) => [historyDocumentKey(row), row]));
   const rowsWithInvoice = uniqueRows.map((row) => {
     const invoice = invoices.get(historyDocumentKey(row)) || {};
