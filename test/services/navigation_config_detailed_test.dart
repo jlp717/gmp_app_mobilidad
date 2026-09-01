@@ -29,11 +29,11 @@ void main() {
         showCommissions: true,
       );
 
-      expect(items.length, 9);
+      expect(items.length, 8);
       expect(items.any((i) => i.label == 'Panel'), false);
       expect(items[0].label, 'Clientes');
       expect(items.any((i) => i.label == 'Liquidación'), true);
-      expect(items.any((i) => i.label == 'Vencimientos'), true);
+      expect(items.any((i) => i.label == 'Vencimientos'), false);
       expect(items.any((i) => i.label == 'Comisiones'), true);
       expect(items.any((i) => i.label == 'Cobros'), true);
     });
@@ -46,7 +46,7 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 8);
+      expect(items.length, 7);
       expect(items.any((i) => i.label == 'Comisiones'), false);
       expect(items.any((i) => i.label == 'Evolución'), false);
       expect(items[0].label, 'Panel');

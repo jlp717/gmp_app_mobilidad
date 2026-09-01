@@ -27,8 +27,8 @@ class RepartidorFinanzasService {
     }
 
     /** GET /vencimientos/:repartidorId â€” listado paginado por cursor. */
-    getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, search, estado }) {
-        return this._finance().getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, search, estado });
+    getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, search, estado, tipoDocumento }) {
+        return this._finance().getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, search, estado, tipoDocumento });
     }
 
     /** GET /commissions/summary/:repartidorId â€” resumen de comisiones. */

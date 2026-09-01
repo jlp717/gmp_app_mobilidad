@@ -148,7 +148,14 @@ describe('contrato finanzas repartidor (post-refactor)', () => {
 
     test('vencimientos shape range/pagination identico', async () => {
         const res = await request(app).get('/vencimientos/12?limit=200').expect(200);
-        expect(res.body.range).toEqual({ from: expect.any(String), to: expect.any(String), limit: 100, search: null });
+        expect(res.body.range).toEqual({
+            from: expect.any(String),
+            to: expect.any(String),
+            limit: 100,
+            search: null,
+            estado: null,
+            tipoDocumento: null,
+        });
         expect(res.body.pagination).toEqual({ total: 1, limit: 100, hasMore: false, nextCursor: null });
         expect(res.body.vencimientos).toEqual([{ docId: 'F-2026-1' }]);
     });

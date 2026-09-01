@@ -15,6 +15,7 @@ enum VencimientoEstado {
   hoy,
   proximo,
   sinFecha,
+  cobrado,
 }
 
 class VencimientoItem {
@@ -51,9 +52,29 @@ class VencimientoItem {
 
 enum VencimientosFiltro {
   todos,
+  pendientes,
   vencidos,
+  cobrados,
   hoy,
   proximos,
+}
+
+String documentTypeLabel(String tipoDocumento) {
+  return switch (tipoDocumento.trim().toUpperCase()) {
+    'CAC' => 'ALBARÁN',
+    'COC' => 'FACTURA',
+    'DEV' => 'DEVOLUCIÓN',
+    final value when value.isNotEmpty => value,
+    _ => 'DOCUMENTO',
+  };
+}
+
+bool canCobrarVencimiento(VencimientoItem item, String repartidorId) {
+  return !repartidorId.contains(',') &&
+      item.documento.trim().isNotEmpty &&
+      item.tipoDocumento.trim().isNotEmpty &&
+      item.keys.isNotEmpty &&
+      item.importePendiente > 0;
 }
 
 List<VencimientoItem> filterVencimientosBySearch(
@@ -73,10 +94,12 @@ List<VencimientoItem> filterVencimientosBySearch(
 class VencimientosPage extends StatefulWidget {
   const VencimientosPage({
     super.key,
-    this.title = 'Vencimientos',
+    this.title = 'Cobros',
     this.vencimientos = const [],
     this.initialFiltro = VencimientosFiltro.todos,
+    this.initialTipoDocumento,
     this.onFiltroChanged,
+    this.onTipoDocumentoChanged,
     this.onSearchSubmitted,
     this.onItemTap,
     this.total,
@@ -88,7 +111,9 @@ class VencimientosPage extends StatefulWidget {
   final String title;
   final List<VencimientoItem> vencimientos;
   final VencimientosFiltro initialFiltro;
+  final String? initialTipoDocumento;
   final ValueChanged<VencimientosFiltro>? onFiltroChanged;
+  final ValueChanged<String?>? onTipoDocumentoChanged;
   final ValueChanged<String>? onSearchSubmitted;
   final ValueChanged<VencimientoItem>? onItemTap;
   final int? total;
@@ -102,6 +127,7 @@ class VencimientosPage extends StatefulWidget {
 
 class _VencimientosPageState extends State<VencimientosPage> {
   late VencimientosFiltro _filtro = widget.initialFiltro;
+  late String? _tipoDocumento = widget.initialTipoDocumento;
   String _searchQuery = '';
 
   @override
@@ -140,7 +166,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
               textInputAction: TextInputAction.search,
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: const InputDecoration(
-                labelText: 'Buscar cliente o albarán',
+                labelText: 'Buscar cliente, albarán o factura',
                 prefixIcon: Icon(Icons.search),
                 isDense: true,
               ),
@@ -153,10 +179,17 @@ class _VencimientosPageState extends State<VencimientosPage> {
               widget.onFiltroChanged?.call(filtro);
             },
           ),
+          _DocumentTypeFilter(
+            selected: _tipoDocumento,
+            onSelected: (tipoDocumento) {
+              setState(() => _tipoDocumento = tipoDocumento);
+              widget.onTipoDocumentoChanged?.call(tipoDocumento);
+            },
+          ),
           Expanded(
-            child: visible.isEmpty
+            child: visible.isEmpty && !widget.hasMore
                 ? const _EmptyState(
-                    message: 'No hay vencimientos para el filtro',
+                    message: 'No hay cobros pendientes para el filtro',
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
@@ -211,12 +244,18 @@ class _VencimientosPageState extends State<VencimientosPage> {
     final byEstado = widget.vencimientos.where((item) {
       return switch (_filtro) {
         VencimientosFiltro.todos => true,
+        VencimientosFiltro.pendientes =>
+          item.importePendiente > 0 && item.estado != VencimientoEstado.vencido,
         VencimientosFiltro.vencidos => item.estado == VencimientoEstado.vencido,
+        VencimientosFiltro.cobrados => item.estado == VencimientoEstado.cobrado,
         VencimientosFiltro.hoy => item.estado == VencimientoEstado.hoy,
         VencimientosFiltro.proximos => item.estado == VencimientoEstado.proximo,
       };
     });
-    return filterVencimientosBySearch(byEstado, _searchQuery)
+    final byTipo = byEstado.where(
+      (item) => _tipoDocumento == null || item.tipoDocumento == _tipoDocumento,
+    );
+    return filterVencimientosBySearch(byTipo, _searchQuery)
       ..sort((a, b) {
         if (a.fecha == null) return b.fecha == null ? 0 : 1;
         if (b.fecha == null) return -1;
@@ -232,6 +271,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
         VencimientoEstado.hoy => 'Vencen hoy',
         VencimientoEstado.proximo => 'Proximos',
         VencimientoEstado.sinFecha => 'Sin fecha válida',
+        VencimientoEstado.cobrado => 'Cobrados',
       };
       grouped.putIfAbsent(key, () => []).add(item);
     }
@@ -243,7 +283,7 @@ class RepartidorVencimientosPage extends ConsumerStatefulWidget {
   const RepartidorVencimientosPage({
     required this.repartidorId,
     super.key,
-    this.title = 'Vencimientos',
+    this.title = 'Cobros',
   });
 
   final String repartidorId;
@@ -252,6 +292,13 @@ class RepartidorVencimientosPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<RepartidorVencimientosPage> createState() =>
       _RepartidorVencimientosPageState();
+}
+
+class RepartidorCobrosPage extends RepartidorVencimientosPage {
+  const RepartidorCobrosPage({
+    required super.repartidorId,
+    super.key,
+  }) : super(title: 'Cobros');
 }
 
 class _RepartidorVencimientosPageState
@@ -263,6 +310,9 @@ class _RepartidorVencimientosPageState
   late DateTime _to;
   String? _nextCursor;
   String _serverSearch = '';
+  VencimientosFiltro _filtro = VencimientosFiltro.todos;
+  String? _estado;
+  String? _tipoDocumento;
   Object? _error;
   int _total = 0;
   int _generation = 0;
@@ -310,6 +360,29 @@ class _RepartidorVencimientosPageState
     _loadFirstPage(forceRefresh: true);
   }
 
+  void _changeFiltro(VencimientosFiltro filtro) {
+    final estado = switch (filtro) {
+      VencimientosFiltro.vencidos => 'vencido',
+      VencimientosFiltro.pendientes => 'pendiente',
+      VencimientosFiltro.cobrados => 'cobrado',
+      _ => null,
+    };
+    final serverFilterChanged = _estado != estado;
+    setState(() {
+      _filtro = filtro;
+      _estado = estado;
+    });
+    if (serverFilterChanged) {
+      _loadFirstPage(forceRefresh: true);
+    }
+  }
+
+  void _changeTipoDocumento(String? tipoDocumento) {
+    if (_tipoDocumento == tipoDocumento) return;
+    setState(() => _tipoDocumento = tipoDocumento);
+    _loadFirstPage(forceRefresh: true);
+  }
+
   Future<void> _loadPage({
     required bool reset,
     bool forceRefresh = false,
@@ -323,6 +396,9 @@ class _RepartidorVencimientosPageState
       if (reset) {
         _isLoading = true;
         _error = null;
+        _items.clear();
+        _nextCursor = null;
+        _total = 0;
       } else {
         _isLoadingMore = true;
       }
@@ -333,7 +409,8 @@ class _RepartidorVencimientosPageState
       to: _to,
       clientCode: null as String?,
       search: _serverSearch.isEmpty ? null : _serverSearch,
-      estado: null as String?,
+      estado: _estado,
+      tipoDocumento: _tipoDocumento,
       cursor: reset ? null : _nextCursor,
       limit: _pageSize,
       forceRefresh: forceRefresh,
@@ -350,13 +427,17 @@ class _RepartidorVencimientosPageState
         _isLoadingMore = false;
       });
     } catch (error, stackTrace) {
-      await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted || generation != _generation) return;
       setState(() {
         _error = error;
         _isLoading = false;
         _isLoadingMore = false;
       });
+      try {
+        await Sentry.captureException(error, stackTrace: stackTrace);
+      } catch (_) {
+        // Telemetry must never keep the page in a loading state.
+      }
     }
   }
 
@@ -425,7 +506,7 @@ class _RepartidorVencimientosPageState
         backgroundColor: AppTheme.inkSurface,
         body: Center(
           child: Text(
-            'Selecciona un repartidor para consultar vencimientos',
+            'Selecciona un repartidor para consultar cobros',
             style: TextStyle(color: AppTheme.textSecondary),
           ),
         ),
@@ -447,7 +528,7 @@ class _RepartidorVencimientosPageState
               Text(
                 financeErrorMessage(
                   _error!,
-                  'No se pudieron cargar los vencimientos',
+                  'No se pudieron cargar los cobros',
                 ),
                 style: const TextStyle(color: AppTheme.textSecondary),
               ),
@@ -468,11 +549,15 @@ class _RepartidorVencimientosPageState
           child: VencimientosPage(
             title: widget.title,
             vencimientos: _items.map(_mapVencimiento).toList(),
+            initialFiltro: _filtro,
+            initialTipoDocumento: _tipoDocumento,
             total: _total,
             hasMore: _nextCursor != null,
             isLoadingMore: _isLoadingMore,
             onLoadMore: _loadMore,
             onSearchSubmitted: _submitSearch,
+            onFiltroChanged: _changeFiltro,
+            onTipoDocumentoChanged: _changeTipoDocumento,
             onItemTap: (item) => _showDetail(
               context,
               ref,
@@ -492,13 +577,15 @@ class _RepartidorVencimientosPageState
     final todayDate = DateTime(today.year, today.month, today.day);
     final dueDate =
         fecha == null ? null : DateTime(fecha.year, fecha.month, fecha.day);
-    final estado = dueDate == null
-        ? VencimientoEstado.sinFecha
-        : dueDate.isBefore(todayDate)
-            ? VencimientoEstado.vencido
-            : dueDate.isAtSameMomentAs(todayDate)
-                ? VencimientoEstado.hoy
-                : VencimientoEstado.proximo;
+    final estado = item.importePendiente <= 0
+        ? VencimientoEstado.cobrado
+        : dueDate == null
+            ? VencimientoEstado.sinFecha
+            : dueDate.isBefore(todayDate)
+                ? VencimientoEstado.vencido
+                : dueDate.isAtSameMomentAs(todayDate)
+                    ? VencimientoEstado.hoy
+                    : VencimientoEstado.proximo;
 
     return VencimientoItem(
       id: item.documento,
@@ -528,10 +615,7 @@ class _RepartidorVencimientosPageState
     VencimientoItem item, {
     required VoidCallback onSaved,
   }) {
-    final canAbonar = item.fecha != null &&
-        !repartidorId.contains(',') &&
-        item.keys.isNotEmpty &&
-        item.importePendiente > 0;
+    final canAbonar = canCobrarVencimiento(item, repartidorId);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -554,9 +638,19 @@ class _RepartidorVencimientosPageState
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    item.documento,
-                    style: const TextStyle(color: AppTheme.textSecondary),
+                  Row(
+                    children: [
+                      _DocumentTypePill(tipoDocumento: item.tipoDocumento),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item.documento,
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -645,6 +739,7 @@ class _RepartidorVencimientosPageState
     final amountController = TextEditingController(
       text: item.importePendiente.toStringAsFixed(2).replaceAll('.', ','),
     );
+    final notesController = TextEditingController();
 
     var formaPago = 'EFECTIVO';
     var saving = false;
@@ -685,6 +780,7 @@ class _RepartidorVencimientosPageState
                   importePendiente: item.importePendiente - amount,
                   formaPago: formaPago,
                   idempotencyToken: idempotencyToken,
+                  notas: notesController.text,
                 );
                 if (result.isConfirmed) {
                   ref
@@ -712,7 +808,6 @@ class _RepartidorVencimientosPageState
                   ),
                 );
               } catch (error, stackTrace) {
-                await Sentry.captureException(error, stackTrace: stackTrace);
                 if (!contentContext.mounted) return;
                 setState(() {
                   saving = false;
@@ -721,6 +816,11 @@ class _RepartidorVencimientosPageState
                     'No se pudo registrar el abono',
                   );
                 });
+                try {
+                  await Sentry.captureException(error, stackTrace: stackTrace);
+                } catch (_) {
+                  // Telemetry must never keep the payment dialog blocked.
+                }
               }
             }
 
@@ -789,6 +889,19 @@ class _RepartidorVencimientosPageState
                       labelText: 'Forma de pago',
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    enabled: !saving,
+                    maxLength: 60,
+                    minLines: 2,
+                    maxLines: 4,
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: const InputDecoration(
+                      labelText: 'Observaciones (opcional)',
+                      prefixIcon: Icon(Icons.notes),
+                    ),
+                  ),
                   if (errorText != null) ...[
                     const SizedBox(height: 10),
                     Text(
@@ -820,7 +933,10 @@ class _RepartidorVencimientosPageState
           },
         );
       },
-    ).whenComplete(amountController.dispose);
+    ).whenComplete(() {
+      amountController.dispose();
+      notesController.dispose();
+    });
   }
 }
 
@@ -910,7 +1026,9 @@ class _FilterStrip extends StatelessWidget {
         child: Row(
           children: [
             _chip(VencimientosFiltro.todos, 'Todos'),
+            _chip(VencimientosFiltro.pendientes, 'Pendientes'),
             _chip(VencimientosFiltro.vencidos, 'Vencidos'),
+            _chip(VencimientosFiltro.cobrados, 'Cobrados'),
             _chip(VencimientosFiltro.hoy, 'Hoy'),
             _chip(VencimientosFiltro.proximos, 'Proximos'),
           ],
@@ -928,6 +1046,44 @@ class _FilterStrip extends StatelessWidget {
         color: AppTheme.info,
         selected: isSelected,
         onTap: () => onSelected(filtro),
+      ),
+    );
+  }
+}
+
+class _DocumentTypeFilter extends StatelessWidget {
+  const _DocumentTypeFilter({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _chip(null, 'Todos los documentos'),
+          _chip('COC', 'Facturas'),
+          _chip('CAC', 'Albaranes'),
+          _chip('DEV', 'Devoluciones'),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String? value, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: RepartidorExecutivePill(
+        label: label,
+        color: AppTheme.success,
+        selected: selected == value,
+        onTap: () => onSelected(value),
       ),
     );
   }
@@ -1043,13 +1199,22 @@ class _VencimientoRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${item.documento} - '
-                    '${_formatDueDate(item.fecha)}',
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12,
-                    ),
+                  Row(
+                    children: [
+                      _DocumentTypePill(tipoDocumento: item.tipoDocumento),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${item.documento} - '
+                          '${_formatDueDate(item.fecha)}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   if ((item.vendedor ?? '').isNotEmpty) ...[
                     const SizedBox(height: 3),
@@ -1080,6 +1245,31 @@ class _VencimientoRow extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DocumentTypePill extends StatelessWidget {
+  const _DocumentTypePill({required this.tipoDocumento});
+
+  final String tipoDocumento;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.info.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        documentTypeLabel(tipoDocumento),
+        style: const TextStyle(
+          color: AppTheme.info,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -1138,6 +1328,7 @@ Color _statusColor(VencimientoEstado estado) {
     VencimientoEstado.hoy => AppTheme.warning,
     VencimientoEstado.proximo => AppTheme.info,
     VencimientoEstado.sinFecha => AppTheme.textTertiary,
+    VencimientoEstado.cobrado => AppTheme.success,
   };
 }
 
@@ -1147,6 +1338,7 @@ String _statusLabel(VencimientoEstado estado) {
     VencimientoEstado.hoy => 'Hoy',
     VencimientoEstado.proximo => 'Proximo',
     VencimientoEstado.sinFecha => 'Sin fecha válida',
+    VencimientoEstado.cobrado => 'Cobrado',
   };
 }
 

@@ -112,12 +112,6 @@ class NavigationConfigService {
       color: AppTheme.success,
     ),
     NavItem(
-      icon: Icons.event_available_outlined,
-      selectedIcon: Icons.event_available,
-      label: 'Vencimientos',
-      color: AppTheme.warning,
-    ),
-    NavItem(
       icon: Icons.payments_outlined,
       selectedIcon: Icons.payments,
       label: 'Cobros',

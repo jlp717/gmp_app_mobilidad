@@ -284,6 +284,51 @@ describe('Repartidor finanzas routes', () => {
     expect(sqlText).not.toContain('FROM DSEDAC.LQD');
   });
 
+  test('GET /daily-summary preserves a closed liquidation snapshot', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
+        TOTAL_EFECTIVO: '10',
+        TOTAL_CHEQUES: '2',
+        TOTAL_TARJETA: '3',
+        TOTAL_POSTDATADOS: '4',
+        TOTAL_COBROS_DIA: '19',
+        COBROS_COUNT: '4',
+      }])
+      .mockResolvedValueOnce([{ SALDO_PENDIENTE: '50' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ TOTAL: '1' }])
+      .mockResolvedValueOnce([{ TOTAL: '2' }])
+      .mockResolvedValueOnce([{ TOTAL: '3' }])
+      .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '20' }])
+      .mockResolvedValueOnce([{ DEUDA_PENDIENTE: '7' }])
+      .mockResolvedValueOnce([{
+        STATUS: 'CLOSED',
+        IMPORTESALDOACTUAL: '42.50',
+        IMPORTEEFECTIVO: '100',
+        IMPORTECHEQUES: '8',
+        IMPORTETARJETA: '9',
+        IMPORTEPOSTDATADOS: '10',
+        TOTAL_COBROS_DIA: '127',
+        IMPORTEGASTOS: '4',
+        IMPORTEINGRESOENBANCO: '5',
+        IMPORTEENTREGADO2: '99',
+        IMPORTETOTALAINGRESAR: '121',
+        SNAPSHOT_JSON: JSON.stringify({ breakdown: { adjustments: -2.5 } }),
+      }]);
+
+    const res = await request(app)
+      .get('/finanzas/daily-summary/94')
+      .query({ date: '2026-08-25' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.summary.status).toBe('CLOSED');
+    expect(res.body.summary.saldoActual).toBe(42.5);
+    expect(res.body.summary.totalCobrosDia).toBe(127);
+    expect(res.body.summary.totalAIngresar).toBe(121);
+    expect(res.body.summary.ajustes).toBe(-2.5);
+  });
+
   test('GET /daily-summary includes signed adjustments in totalAIngresar', async () => {
     mockQueryWithParams
       .mockResolvedValueOnce(alignedSchemaRows)
@@ -556,7 +601,13 @@ describe('Repartidor finanzas routes', () => {
 
     const res = await request(app)
       .get('/finanzas/vencimientos/94')
-      .query({ from: '2026-04-01', to: '2026-04-30', limit: 25, search: 'MECA' });
+      .query({
+        from: '2026-04-01',
+        to: '2026-04-30',
+        limit: 25,
+        search: 'MECA',
+        tipoDocumento: 'CAC',
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.vencimientos[0]).toMatchObject({
@@ -575,13 +626,58 @@ describe('Repartidor finanzas routes', () => {
     expect(sql).toContain('CLCL1.DIASLIMITECREDITO');
     expect(sql).toContain('CLCL1.DIASLIMITECREDITOCONFECHAALB');
     expect(sql).toContain('CLI.NOMBRECLIENTE');
-    expect(params).toEqual(['94', 20260401, 20260430, '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', 0, 25]);
+    expect(sql).toContain('TRIM(CVC.TIPODOCUMENTO) = ?');
+    expect(sql).toContain('WHERE 1 = 1');
+    expect(sql).toMatch(/BETWEEN \? AND \? OR[\s\S]*IS NULL/);
+    expect(params).toEqual(['94', 20260401, 20260430, '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', 'CAC', 0, 25]);
+    expect(res.body.range).toMatchObject({
+      tipoDocumento: 'CAC',
+      search: 'MECA',
+    });
     expect(res.body.pagination).toEqual({
       total: 1,
       limit: 25,
       hasMore: false,
       nextCursor: null,
     });
+  });
+
+  test('GET /vencimientos exposes fully paid documents through the cobrados filter', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
+        TIPODOCUMENTO: 'COC',
+        ORIGENDOCUMENTO: 'B',
+        SUBEMPRESADOCUMENTO: 'GMP',
+        EJERCICIODOCUMENTO: 2026,
+        SERIEDOCUMENTO: 'F',
+        TERMINALDOCUMENTO: 10,
+        NUMERODOCUMENTO: 99,
+        XDEDOCUMENTO: 1,
+        DEXDOCUMENTO: 1,
+        CODIGOCLIENTEALBARAN: 'C001',
+        NOMBRE_CLIENTE: 'CLIENTE COBRADO',
+        DIAVENCIMIENTO: 1,
+        MESVENCIMIENTO: 8,
+        ANOVENCIMIENTO: 2026,
+        IMPORTEVENCIMIENTO: '100.00',
+        IMPORTEPENDIENTE: '0.00',
+        TOTAL_COUNT: 1,
+      }]);
+
+    const res = await request(app)
+      .get('/finanzas/vencimientos/94')
+      .query({ from: '2026-01-01', to: '2026-12-31', estado: 'cobrado' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.vencimientos[0]).toMatchObject({
+      tipoDocumento: 'COC',
+      importePendiente: 0,
+    });
+    const [sql, params] = mockQueryWithParams.mock.calls[1];
+    expect(sql).toContain('BASE.IMPORTEPENDIENTE <= 0');
+    expect(sql).not.toMatch(/BASE\.DUE_YMD >= \?/);
+    expect(params).toEqual(['94', 20260101, 20261231, 0, 50]);
   });
 
   test('GET /vencimientos uses the calculated due date for mapping and SQL filters', async () => {
@@ -635,7 +731,8 @@ describe('Repartidor finanzas routes', () => {
     expect((sql.match(/CLCL1\.DIASLIMITECREDITO IS NOT NULL/g) || []).length)
       .toBeGreaterThanOrEqual(2);
     expect(sql).toContain('AS DUE_YMD');
-    expect(sql).toContain('BASE.DUE_YMD >= ?');
+    expect(sql).toContain('BASE.DUE_YMD >= ? OR BASE.DUE_YMD IS NULL');
+    expect(sql).toContain('CVC.ANOVENCIMIENTO > 0');
   });
 
   test('GET /vencimientos/:repartidorId/:docId/detalle binds the authorized repartidor to the service query', async () => {
@@ -716,7 +813,7 @@ describe('Repartidor finanzas routes', () => {
     const firstSql = mockQueryWithParams.mock.calls[1];
     expect(firstSql[0]).toContain('COUNT(*) OVER() AS TOTAL_COUNT');
     expect(firstSql[0]).toContain('WHERE PAGED.RN > ? AND PAGED.RN <= ?');
-    expect(firstSql[0]).toContain('BASE.DUE_YMD >= ?');
+    expect(firstSql[0]).toContain('BASE.DUE_YMD >= ? OR BASE.DUE_YMD IS NULL');
     expect(firstSql[0]).not.toContain('BASE.DUE_YMD < ?');
     expect(firstSql[1]).toEqual([
       '94', 20260401, 20260430, '4300001119', todayYmd, 0, 100,
@@ -1147,7 +1244,7 @@ describe('Repartidor finanzas routes', () => {
     )).toBe(false);
   });
 
-  test('POST /cobros accepts a second partial payment with a different token while balance remains', async () => {
+  test('POST /cobros stays fail-closed before a second partial payment is attempted', async () => {
     mockQueryWithParams.mockResolvedValue(alignedSchemaRows);
     mockConnQuery.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.CVC/i.test(sql)) return [{ ERP_IMPORTEPENDIENTE: 189.60 }];

@@ -204,6 +204,7 @@ void main() {
             VencimientoItem(
               cliente: 'Cliente vencido',
               documento: 'A-1',
+              tipoDocumento: 'CAC',
               fecha: DateTime(2026, 4, 20),
               importe: 100,
               estado: VencimientoEstado.vencido,
@@ -211,16 +212,26 @@ void main() {
             VencimientoItem(
               cliente: 'Cliente futuro',
               documento: 'B-1',
+              tipoDocumento: 'COC',
               fecha: DateTime(2026, 5, 2),
               importe: 200,
               estado: VencimientoEstado.proximo,
+            ),
+            VencimientoItem(
+              cliente: 'Cliente cobrado',
+              documento: 'C-1',
+              tipoDocumento: 'COC',
+              fecha: DateTime(2026, 4, 1),
+              importe: 0,
+              importePendiente: 0,
+              estado: VencimientoEstado.cobrado,
             ),
           ],
         ),
       ),
     );
 
-    expect(find.text('Vencimientos'), findsOneWidget);
+    expect(find.text('Cobros'), findsOneWidget);
     expect(find.text('Cliente vencido'), findsOneWidget);
     expect(find.text('Cliente futuro'), findsOneWidget);
 
@@ -228,6 +239,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Cliente vencido'), findsOneWidget);
+    expect(find.text('Cliente futuro'), findsNothing);
+
+    await tester.tap(find.text('Facturas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cliente vencido'), findsNothing);
+
+    await tester.tap(find.text('Todos'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cobrados'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cliente cobrado'), findsOneWidget);
     expect(find.text('Cliente futuro'), findsNothing);
   });
 
@@ -258,6 +282,58 @@ void main() {
     expect(filterVencimientosBySearch(items, 'cliente'), hasLength(2));
   });
 
+  test('cobro de vencimiento conserva observaciones y separa cache por tipo',
+      () async {
+    Map<String, dynamic>? sentPayload;
+    final service = RepartidorFinanzasService(
+      pendingOperations: () => const [],
+      offlinePost: (endpoint, data, {syncType, cacheKey}) async {
+        sentPayload = data;
+        return <String, dynamic>{'queued': true, 'syncId': 'sync-1'};
+      },
+    );
+
+    await service.registerVencimientoCobro(
+      repartidorId: '94',
+      codigoCliente: '4300001119',
+      nombreCliente: 'CARNICERIA MECA',
+      tipoDocumento: 'CAC',
+      documento: 'E 2026-B-I-010-002730-01',
+      keys: const {
+        'tipoDocumento': 'CAC',
+        'ejercicioDocumento': 2026,
+        'serieDocumento': 'I',
+        'terminalDocumento': 10,
+        'numeroDocumento': 2730,
+      },
+      importeCobrado: 10,
+      importePendiente: 30,
+      formaPago: 'EFECTIVO',
+      idempotencyToken: 'cobro-observaciones-1',
+      notas: 'Entregado a recepción',
+    );
+
+    expect(sentPayload?['notas'], 'Entregado a recepción');
+    expect(
+      RepartidorFinanzasService.vencimientosCacheKey(
+        repartidorId: '94',
+        from: '2026-01-01',
+        to: '2026-12-31',
+        limit: 100,
+        tipoDocumento: 'CAC',
+      ),
+      isNot(
+        RepartidorFinanzasService.vencimientosCacheKey(
+          repartidorId: '94',
+          from: '2026-01-01',
+          to: '2026-12-31',
+          limit: 100,
+          tipoDocumento: 'COC',
+        ),
+      ),
+    );
+  });
+
   testWidgets('repartidor vencimientos exposes abonar action', (tester) async {
     final now = DateTime.now();
     final from = DateTime(now.year, now.month, now.day).subtract(
@@ -273,6 +349,7 @@ void main() {
       clientCode: null as String?,
       search: null as String?,
       estado: null as String?,
+      tipoDocumento: null as String?,
       cursor: null as String?,
       limit: 100,
       forceRefresh: false,
@@ -282,16 +359,19 @@ void main() {
       wrap(
         const RepartidorVencimientosPage(repartidorId: '94'),
         overrides: [
+          repartidorFinanzasServiceProvider.overrideWith(
+            (ref) => RepartidorFinanzasService(
+              pendingOperations: () => const [],
+            ),
+          ),
           repartidorVencimientosProvider(args).overrideWith(
             (ref) async => RepartidorVencimientosBatch(
               items: [
-                RepartidorVencimiento(
+                const RepartidorVencimiento(
                   tipoDocumento: 'CAC',
                   codigoCliente: '4300001119',
                   nombreCliente: 'CARNICERIA MECA',
-                  fechaVencimiento: DateTime(now.year, now.month, now.day)
-                      .toIso8601String()
-                      .substring(0, 10),
+                  fechaVencimiento: '',
                   documento: 'E 2026-B-I-010-002730-01',
                   importe: 73.19,
                   importePendiente: 40,
@@ -322,6 +402,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Abonar'), findsOneWidget);
+    expect(find.text('ALBARÁN'), findsWidgets);
+
+    await tester.tap(find.text('Abonar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Observaciones (opcional)'), findsOneWidget);
   });
 
   testWidgets('comisiones displays summary and commercial-style table',

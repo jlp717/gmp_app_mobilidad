@@ -757,6 +757,7 @@ function expectedCobroPayload(delivery, cobro) {
     importePendiente: cobro.importePendiente || 0,
     formaPago: cobro.formaPago,
     pantallaOrigen: cobro.pantallaOrigen || 'RUTERO',
+    notas: normalizeText(cobro.notas).slice(0, 60),
   };
 }
 
@@ -805,6 +806,13 @@ function assertCobroPayloadMatchesInput(row, expected) {
     roundMoney(expected.importePendiente || 0)
   ) {
     mismatches.push('IMPORTEPENDIENTE');
+  }
+  const actualNotes = firstDefinedValue(row, ['OBSERVACIONES', 'NOTAS']);
+  if (
+    actualNotes !== undefined &&
+    normalizeText(actualNotes) !== normalizeText(expected.notas || '')
+  ) {
+    mismatches.push('OBSERVACIONES');
   }
   if (mismatches.length > 0) {
     throw new IdempotencyConflictError(`Token existente con payload distinto: ${mismatches.join(', ')}`);
@@ -963,7 +971,7 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
   });
 
   const totals = firstRow(totalsRows);
-  const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+  let saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
   const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
   const gastos = 0;
 
@@ -1082,19 +1090,17 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   }
 
   const dateYmd = compactDate(date);
-  const isolatedTestBalances = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
-
   const [totalsRows, balanceRows, cobroRows, structured, deliveredRows, debtRows, closedRows] =
     await Promise.all([
       financeRepo.selectDailyTotals({ info, ids, dateYmd }),
       financeRepo.selectBalanceSum({ info, ids }),
       financeRepo.selectDailyCobros({ info, ids, dateYmd }),
       financeRepo.selectDailyStructuredSums({ ids, dateYmd }),
-      isolatedTestBalances && typeof financeRepo.selectConfirmedDeliveredAmount === 'function'
+      typeof financeRepo.selectConfirmedDeliveredAmount === 'function'
         ? financeRepo.selectConfirmedDeliveredAmount({ ids, date })
         : financeRepo.selectDeliveredAmount({ ids, fromYmd: dateYmd, toYmd: dateYmd }),
       financeRepo.selectDailyErpDebt({ ids, dateYmd }),
-      isolatedTestBalances && typeof financeRepo.selectClosedLiquidacion === 'function' && (ids.length === 1 || (ids.length > 1 && process.env.NODE_ENV !== 'test'))
+      typeof financeRepo.selectClosedLiquidacion === 'function' && (ids.length === 1 || (ids.length > 1 && process.env.NODE_ENV !== 'test'))
         ? financeRepo.selectClosedLiquidacion({ info, ids, dateYmd })
         : Promise.resolve([]),
     ]);
@@ -1107,30 +1113,10 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
   const totals = firstRow(totalsRows);
   const closedRow = firstRow(closedRows);
   const isClosed = Boolean(closedRow && Object.keys(closedRow).length > 0);
-  let saldoActual = 0;
-  if (isolatedTestBalances) {
-    // TEST liquidations serialize the day against TEST_REPARTIDOR_FINANCIAL_BALANCES.
-    // DSEDAC.LQD is an ERP read model and may contain a different production
-    // snapshot, so mixing it here would make Daily Summary disagree with the
-    // exact balance used by closeDay().
-    saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
-  } else {
-    try {
-      const lqdRows = await Promise.all(ids.map((id) => financeRepo.selectLastLqdSaldo(id)));
-      const hasLqdSnapshot = lqdRows.some((rows) => Array.isArray(rows) && rows.length > 0);
-      if (hasLqdSnapshot) {
-        saldoActual = roundMoney(lqdRows.reduce((sum, rows) => {
-          if (!rows || !rows.length) return sum;
-          return sum + Number(value(rows[0], 'SALDO', 0) || 0);
-        }, 0));
-      } else {
-        saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
-      }
-    } catch (error) {
-      logger.warn(`[REPARTIDOR_FINANZAS] daily-summary DSEDAC.LQD saldo: ${error.message}`);
-      saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
-    }
-  }
+  // The balance row is the same authoritative source used by closeDay().
+  // Never replace it with the ERP LQD read model: that made the screen and
+  // the transaction disagree after a test copy or a partial payment.
+  let saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
   let totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
   let gastos = roundMoney(structured.gastos);
   let ingresoBanco = roundMoney(structured.ingresoBanco);
@@ -1310,8 +1296,19 @@ function financeCursorSecret() {
   return secret;
 }
 
-function vencimientosCursorFingerprint({ repartidorId, from, to, clientCode, search, estado, todayYmd }) {
-  return [repartidorId, from, to, clientCode || '', search || '', estado || 'todos', todayYmd].join('|');
+function vencimientosCursorFingerprint({
+  repartidorId, from, to, clientCode, search, estado, tipoDocumento, todayYmd,
+}) {
+  return [
+    repartidorId,
+    from,
+    to,
+    clientCode || '',
+    search || '',
+    estado || 'todos',
+    tipoDocumento || 'todos',
+    todayYmd,
+  ].join('|');
 }
 
 function cursorSignature(encodedPayload) {
@@ -1381,11 +1378,13 @@ function encodeVencimientosCursor(offset, fingerprint, todayYmd) {
   return `${encodedPayload}.${cursorSignature(encodedPayload)}`;
 }
 
-async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCode, search, estado }) {
+async function getVencimientos({
+  repartidorId, from, to, limit, cursor, clientCode, search, estado, tipoDocumento,
+}) {
   const ids = codeList(repartidorId);
   const pageLimit = Math.min(Math.max(toInt(limit), 1), 100);
   const cursorState = decodeVencimientosCursor(cursor, {
-    repartidorId: ids.join(','), from, to, clientCode, search, estado,
+    repartidorId: ids.join(','), from, to, clientCode, search, estado, tipoDocumento,
   });
   const { offset, todayYmd, fingerprint } = cursorState;
   const info = await getFinanceSchemaInfo();
@@ -1400,6 +1399,7 @@ async function getVencimientos({ repartidorId, from, to, limit, cursor, clientCo
     clientCode,
     search,
     estado,
+    tipoDocumento,
     todayYmd,
     offset,
     pageLimit,
@@ -1557,12 +1557,16 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         throw new AlreadyDeliveredError(existingDelivery);
       }
 
-      await validateCobroDocument({
+      const documentRow = await validateCobroDocument({
         ...cobro,
         codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
       }, conn);
 
-      await assertDocumentNotAlreadyCollected(conn, info, {
+      await assertPaymentWithinOutstandingBalance(conn, info, {
+        ...cobro,
+        codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
+      }, documentRow);
+      await assertDocumentNotCollectedByCommercial(conn, {
         ...cobro,
         codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
       });

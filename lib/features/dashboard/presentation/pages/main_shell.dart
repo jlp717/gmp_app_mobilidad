@@ -1980,15 +1980,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                 canCreateRepartidorLiquidationAdjustments(user),
           );
         }
-        if (label == 'Vencimientos') {
-          return RepartidorVencimientosPage(
-            repartidorId: repartidorId,
-          );
-        }
         if (label == 'Cobros') {
-          return RepartidorVencimientosPage(
+          return RepartidorCobrosPage(
             repartidorId: repartidorId,
-            title: 'Cobros',
           );
         }
         if (label == 'Evolución') {

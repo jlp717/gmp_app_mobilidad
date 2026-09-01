@@ -54,11 +54,19 @@ async function vencimientosController(req, res, next) {
             clientCode: query.clientCode,
             search: query.search,
             estado: query.estado,
+            tipoDocumento: query.tipoDocumento,
         });
         return res.json({
             success: true,
             repartidorId: params.repartidorId,
-            range: { from: query.from, to: query.to, limit: query.limit, search: query.search ?? null },
+            range: {
+                from: query.from,
+                to: query.to,
+                limit: query.limit,
+                search: query.search ?? null,
+                estado: query.estado ?? null,
+                tipoDocumento: query.tipoDocumento ?? null,
+            },
             vencimientos: page.items,
             pagination: {
                 total: page.total,

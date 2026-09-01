@@ -95,7 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('No se pudieron cargar los vencimientos'),
+      find.text('No se pudieron cargar los cobros'),
       findsOneWidget,
     );
     expect(find.text('Reintentar'), findsOneWidget);
@@ -115,7 +115,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('Selecciona un repartidor para consultar vencimientos'),
+      find.text('Selecciona un repartidor para consultar cobros'),
       findsOneWidget,
     );
     expect(queried, isFalse);

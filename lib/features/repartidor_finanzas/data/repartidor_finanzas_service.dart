@@ -182,9 +182,11 @@ class RepartidorFinanzasService {
     String? clientCode,
     String? search,
     String? estado,
+    String? tipoDocumento,
   }) =>
       '${_prefix}_vencimientos_${repartidorId}_${from}_$to'
-      '_${clientCode ?? 'all'}_${search ?? 'all'}_${estado ?? 'all'}_${limit}_'
+      '_${clientCode ?? 'all'}_${search ?? 'all'}_${estado ?? 'all'}_'
+      '${tipoDocumento ?? 'all'}_${limit}_'
       '${cursor ?? 'first'}';
 
   static String evolutionCacheKey(String repartidorId) =>
@@ -685,6 +687,7 @@ class RepartidorFinanzasService {
     String? clientCode,
     String? search,
     String? estado,
+    String? tipoDocumento,
     String? cursor,
     int limit = 50,
     bool forceRefresh = false,
@@ -706,6 +709,8 @@ class RepartidorFinanzasService {
           'clientCode': clientCode,
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (estado != null && estado.isNotEmpty) 'estado': estado,
+        if (tipoDocumento != null && tipoDocumento.isNotEmpty)
+          'tipoDocumento': tipoDocumento,
       },
       cacheKey: vencimientosCacheKey(
         repartidorId: repartidorId,
@@ -716,6 +721,7 @@ class RepartidorFinanzasService {
         clientCode: clientCode,
         search: search,
         estado: estado,
+        tipoDocumento: tipoDocumento,
       ),
       cacheTTL: const Duration(minutes: 2),
       forceRefresh: forceRefresh,
@@ -771,6 +777,7 @@ class RepartidorFinanzasService {
     required double importePendiente,
     required String formaPago,
     required String idempotencyToken,
+    String? notas,
   }) async {
     final payload = _buildVencimientoCobroPayload(
       repartidorId: repartidorId,
@@ -783,6 +790,7 @@ class RepartidorFinanzasService {
       importePendiente: importePendiente,
       formaPago: formaPago,
       idempotencyToken: idempotencyToken,
+      notas: notas,
     );
     final obligationKey = _vencimientoObligationKey(payload);
     final existing = findPendingVencimientoCobro(
@@ -860,6 +868,7 @@ class RepartidorFinanzasService {
     required double importePendiente,
     required String formaPago,
     required String idempotencyToken,
+    String? notas,
   }) {
     String keyString(String key, [String fallback = '']) {
       final value = keys[key];
@@ -891,7 +900,7 @@ class RepartidorFinanzasService {
       'formaPago': formaPago,
       'pantallaOrigen': 'VENCIMIENTOS',
       'idempotencyToken': idempotencyToken,
-      'notas': documento.isEmpty ? null : 'Abono vencimiento $documento',
+      'notas': notas?.trim().isEmpty ?? true ? null : notas!.trim(),
     };
   }
 

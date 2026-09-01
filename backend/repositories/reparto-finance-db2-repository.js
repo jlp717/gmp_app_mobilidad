@@ -279,6 +279,8 @@ function cobroReplaySelect(info) {
     'IMPORTE_COBRADO',
     'IMPORTEPENDIENTE',
     'IMPORTE_PENDIENTE',
+    'OBSERVACIONES',
+    'NOTAS',
     'LIQUIDADO_SN',
     'NUMEROLIQUIDACION',
     'CREATED_AT',
@@ -363,7 +365,11 @@ function vencimientosDueYmdExpression() {
   const baseDay = `CASE WHEN ${useAlbaran} THEN CPC.DIADOCUMENTO ELSE CVC.DIAEMISION END`;
   const baseDate = db2DateFromParts(baseYear, baseMonth, baseDay);
   const calculatedDate = `(${baseDate} + INTEGER(CLCL1.DIASLIMITECREDITO) DAYS)`;
-  const rawDueYmd = '(CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)';
+  const rawDueYmd = `(CASE
+    WHEN CVC.ANOVENCIMIENTO > 0 AND CVC.MESVENCIMIENTO > 0 AND CVC.DIAVENCIMIENTO > 0
+    THEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+    ELSE NULL
+  END)`;
   return `(CASE
     WHEN CLCL1.DIASLIMITECREDITO IS NOT NULL
       AND (${baseYear}) > 0 AND (${baseMonth}) > 0 AND (${baseDay}) > 0
@@ -1050,12 +1056,18 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async selectVencimientosPage({
-      info, ids, fromYmd, toYmd, clientCode, search, estado, todayYmd, offset, pageLimit,
+      info, ids, fromYmd, toYmd, clientCode, search, estado, tipoDocumento,
+      todayYmd, offset, pageLimit,
     }) {
       const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
       const dueYmd = vencimientosDueYmdExpression();
       const params = [...repFilter.params, fromYmd, toYmd];
-      const hasAppDocs = info?.cobrosHasDocumentColumns !== false;
+      // The legacy ledger does not carry the complete CVC discriminator. Do
+      // not build a document join against it: legacy rows remain readable,
+      // while the canonical payment capability fails closed until the
+      // aligned ledger is available.
+      const hasAppDocs = info?.cobrosAligned === true
+        && info?.cobrosHasDocumentColumns !== false;
       let clientFilter = '';
       if (clientCode) {
         clientFilter = ' AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?';
@@ -1074,39 +1086,59 @@ function createRepartoFinanceDb2Repository(options = {}) {
           + ')';
         params.push(term, term, term, term, term, term);
       }
+      let documentTypeFilter = '';
+      if (tipoDocumento) {
+        documentTypeFilter = ' AND TRIM(CVC.TIPODOCUMENTO) = ?';
+        params.push(tipoDocumento);
+      }
       let stateFilter = '';
-      if (estado === 'vencido' || estado === 'pendiente') {
+      if (estado === 'vencido' || estado === 'pendiente' || estado === 'cobrado') {
         stateFilter = estado === 'vencido'
-          ? ' AND BASE.DUE_YMD < ?'
-          : ' AND BASE.DUE_YMD >= ?';
-        params.push(todayYmd);
+          ? ' AND BASE.IMPORTEPENDIENTE > 0 AND BASE.DUE_YMD < ?'
+          : estado === 'pendiente'
+            ? ' AND BASE.IMPORTEPENDIENTE > 0 AND (BASE.DUE_YMD >= ? OR BASE.DUE_YMD IS NULL)'
+            : ' AND BASE.IMPORTEPENDIENTE <= 0';
+        if (estado !== 'cobrado') params.push(todayYmd);
       }
       params.push(offset, offset + pageLimit);
 
       const pendingExpr = hasAppDocs
         ? 'CAST(CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0) AS DECIMAL(15,2)) AS IMPORTEPENDIENTE'
         : 'CAST(CVC.IMPORTEPENDIENTE AS DECIMAL(15,2)) AS IMPORTEPENDIENTE';
+      const appCobroColumns = info.cobrosAligned
+        ? {
+          code: 'CODIGOVENDEDOR', client: 'CODIGOCLIENTEALBARAN', type: 'TIPODOCUMENTO',
+          origin: 'ORIGENDOCUMENTO', company: 'SUBEMPRESADOCUMENTO', year: 'EJERCICIODOCUMENTO',
+          series: 'SERIEDOCUMENTO', terminal: 'TERMINALDOCUMENTO', number: 'NUMERODOCUMENTO',
+          xde: 'XDEDOCUMENTO', dex: 'DEXDOCUMENTO', amount: 'IMPORTEVENCIMIENTO',
+        }
+        : {
+          code: 'CODIGO_REPARTIDOR', client: 'CODIGO_CLIENTE', type: 'TIPO_DOCUMENTO',
+          origin: 'ORIGEN_DOCUMENTO', company: 'SUBEMPRESA_DOCUMENTO', year: 'EJERCICIO_DOCUMENTO',
+          series: 'SERIE_DOCUMENTO', terminal: 'TERMINAL_DOCUMENTO', number: 'NUMERO_DOCUMENTO',
+          xde: 'XDE_DOCUMENTO', dex: 'DEX_DOCUMENTO', amount: 'IMPORTE_COBRADO',
+        };
       const appCobrosJoin = hasAppDocs ? `
         LEFT JOIN (
           SELECT
-            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
-            TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
-            TRIM(TIPODOCUMENTO) AS TIPODOCUMENTO,
-            TRIM(ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
-            TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,
-            EJERCICIODOCUMENTO,
-            TRIM(SERIEDOCUMENTO) AS SERIEDOCUMENTO,
-            TERMINALDOCUMENTO,
-            NUMERODOCUMENTO,
-            XDEDOCUMENTO,
-            DEXDOCUMENTO,
-            SUM(COALESCE(IMPORTEVENCIMIENTO, 0)) AS IMPORTE_COBRADO_APP
+            TRIM(${appCobroColumns.code}) AS CODIGOVENDEDOR,
+            TRIM(${appCobroColumns.client}) AS CODIGOCLIENTEALBARAN,
+            TRIM(${appCobroColumns.type}) AS TIPODOCUMENTO,
+            TRIM(${appCobroColumns.origin}) AS ORIGENDOCUMENTO,
+            TRIM(${appCobroColumns.company}) AS SUBEMPRESADOCUMENTO,
+            ${appCobroColumns.year} AS EJERCICIODOCUMENTO,
+            TRIM(${appCobroColumns.series}) AS SERIEDOCUMENTO,
+            ${appCobroColumns.terminal} AS TERMINALDOCUMENTO,
+            ${appCobroColumns.number} AS NUMERODOCUMENTO,
+            ${appCobroColumns.xde} AS XDEDOCUMENTO,
+            ${appCobroColumns.dex} AS DEXDOCUMENTO,
+            SUM(COALESCE(${appCobroColumns.amount}, 0)) AS IMPORTE_COBRADO_APP
           FROM ${tables.cobros}
-          GROUP BY TRIM(CODIGOVENDEDOR), TRIM(CODIGOCLIENTEALBARAN),
-            TRIM(TIPODOCUMENTO), TRIM(ORIGENDOCUMENTO),
-            TRIM(SUBEMPRESADOCUMENTO), EJERCICIODOCUMENTO,
-            TRIM(SERIEDOCUMENTO), TERMINALDOCUMENTO,
-            NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO
+          GROUP BY TRIM(${appCobroColumns.code}), TRIM(${appCobroColumns.client}),
+            TRIM(${appCobroColumns.type}), TRIM(${appCobroColumns.origin}),
+            TRIM(${appCobroColumns.company}), ${appCobroColumns.year},
+            TRIM(${appCobroColumns.series}), ${appCobroColumns.terminal},
+            ${appCobroColumns.number}, ${appCobroColumns.xde}, ${appCobroColumns.dex}
         ) APP_COBROS
           ON APP_COBROS.CODIGOVENDEDOR = TRIM(OPP.CODIGOREPARTIDOR)
           AND APP_COBROS.CODIGOCLIENTEALBARAN = TRIM(CVC.CODIGOCLIENTEALBARAN)
@@ -1180,13 +1212,14 @@ function createRepartoFinanceDb2Repository(options = {}) {
           ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
         ${appCobrosJoin}
         WHERE ${repFilter.sql}
-          AND ${dueYmd} BETWEEN ? AND ?
+          AND (${dueYmd} BETWEEN ? AND ? OR ${dueYmd} IS NULL)
           AND COALESCE(CVC.ANULADOSN, '') <> 'S'
           AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
           ${clientFilter}
           ${searchFilter}
+          ${documentTypeFilter}
       ) BASE
-      WHERE BASE.IMPORTEPENDIENTE <> 0
+      WHERE 1 = 1
         ${stateFilter}
     ) PAGED
     WHERE PAGED.RN > ? AND PAGED.RN <= ?
@@ -1400,7 +1433,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
         add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
         add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
         add('OPERADOR', input.operador || 'unknown');
-        add('OBSERVACIONES', input.notas || '');
+        add('OBSERVACIONES', normalizeText(input.notas).slice(0, 60));
       } else {
         add('CODIGO_CLIENTE', input.codigoCliente);
         add('NOMBRE_CLIENTE', input.nombreCliente || '');
@@ -1420,7 +1453,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
         add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
         add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
         add('OPERADOR', input.operador || 'unknown');
-        add('NOTAS', input.notas || '');
+        add('NOTAS', normalizeText(input.notas).slice(0, 60));
       }
 
       await runOn(conn, `

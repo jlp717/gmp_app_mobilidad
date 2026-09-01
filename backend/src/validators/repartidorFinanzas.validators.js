@@ -70,7 +70,8 @@ const vencimientosQuerySchema = z.object({
   cursor: z.string().trim().min(1).max(512).optional(),
   clientCode: z.string().trim().max(20).optional(),
   search: z.string().trim().max(80).optional(),
-  estado: z.enum(['pendiente', 'vencido']).optional(),
+  estado: z.enum(['pendiente', 'vencido', 'cobrado']).optional(),
+  tipoDocumento: z.enum(['CAC', 'COC', 'DEV']).optional(),
 }).refine((query) => query.from <= query.to, {
   path: ['to'],
   message: 'El final del rango debe ser igual o posterior al inicio',
@@ -95,7 +96,7 @@ const cobroSchema = z.object({
   formaPago: z.string().trim().min(1).max(20),
   pantallaOrigen: z.enum(['RUTERO', 'VENCIMIENTOS']).default('RUTERO'),
   idempotencyToken: idempotencyTokenSchema,
-  notas: z.string().trim().max(500).optional(),
+  notas: z.string().trim().max(60).optional(),
 });
 
 const legacyLiquidacionSchema = z.object({

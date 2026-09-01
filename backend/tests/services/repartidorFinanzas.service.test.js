@@ -35,6 +35,7 @@ describe('RepartidorFinanzasService: DI y delegacion exacta', () => {
             clientCode: 'C001',
             search: 'cliente',
             estado: 'pendiente',
+            tipoDocumento: 'CAC',
         };
         const expected = { items: [{ id: 'F-1' }], total: 1, hasMore: false, nextCursor: null };
         financeMock.getVencimientos.mockResolvedValue(expected);
@@ -67,6 +68,9 @@ describe('validators repartidorFinanzas: mismas reglas que el route legacy', () 
         const ok = v.vencimientosQuerySchema.safeParse({ limit: '200' });
         expect(ok.success).toBe(true);
         expect(ok.data.limit).toBe(100);
+    expect(v.vencimientosQuerySchema.safeParse({ tipoDocumento: 'CAC' }).success).toBe(true);
+    expect(v.vencimientosQuerySchema.safeParse({ tipoDocumento: 'FAC' }).success).toBe(false);
+    expect(v.vencimientosQuerySchema.safeParse({ estado: 'cobrado' }).success).toBe(true);
         const bad = v.vencimientosQuerySchema.safeParse({ from: '2026-05-01', to: '2026-01-01' });
         expect(bad.success).toBe(false);
     });

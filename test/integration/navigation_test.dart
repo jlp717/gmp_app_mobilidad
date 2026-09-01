@@ -90,23 +90,23 @@ void main() {
       );
       expect(almacen.length, 5);
 
-      // Repartidor (jefe): Panel + 8 items
+      // Repartidor (jefe): Panel + 7 items (Cobros unifica vencimientos)
       final repartidorJefe = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: true,
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 8);
+      expect(repartidorJefe.length, 7);
 
-      // Repartidor (regular): 8 items
+      // Repartidor (regular): 7 items (Cobros unifica vencimientos)
       final repartidor = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: true,
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(repartidor.length, 8);
+      expect(repartidor.length, 7);
 
       // Jefe Ventas: 13 items (Panel + 12)
       final jefe = NavigationConfigService.getNavItems(
