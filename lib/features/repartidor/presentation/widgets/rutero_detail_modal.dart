@@ -24,6 +24,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_servi
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_inbox.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_upload_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
@@ -305,6 +306,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _isJournalBlocked = false;
   bool _isRestoringJournal = false;
   bool _lastConfirmWasQueued = false;
+  bool _recipientSuggestionApplied = false;
   RepartoDeliveryStatus _deliveryStatus = RepartoDeliveryStatus.entregado;
   RepartoDifferenceReason _differenceReason = RepartoDifferenceReason.otro;
   RepartoIncidentType _incidentType = RepartoIncidentType.otro;
@@ -342,6 +344,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _evidenceCoordinator = RepartoEvidenceConfirmationCoordinator(
       RepartoEvidenceUploadService(),
       _confirmationJournal,
+      inbox: RepartoEvidenceInbox(HiveRepartoEvidenceInboxStore()),
     );
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onDeliveryTabChanged);
@@ -364,6 +367,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
     _loadItems();
     _loadPrinterConfig();
+    unawaited(_loadRecipientSuggestion());
     unawaited(
       _restorePendingEvidence().timeout(
         const Duration(seconds: 3),
@@ -378,6 +382,40 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         },
       ),
     );
+  }
+
+  Future<void> _loadRecipientSuggestion() async {
+    if (_isCompleted) return;
+    final clientCode = _albaran.codigoCliente.trim();
+    final repartidorId = _albaran.codigoRepartidor.trim();
+    if (clientCode.isEmpty ||
+        repartidorId.isEmpty ||
+        repartidorId.toUpperCase() == 'ALL') {
+      return;
+    }
+
+    try {
+      final suggestion = await RepartidorDataService.getRecipientSuggestion(
+        clientCode: clientCode,
+        repartidorId: repartidorId,
+      );
+      if (!mounted || suggestion == null || !suggestion.isComplete) return;
+
+      // A manual value always wins. This prevents a slow suggestion request
+      // from overwriting what the repartidor has already typed.
+      if (_nombreController.text.trim().isNotEmpty ||
+          _apellidosController.text.trim().isNotEmpty ||
+          _dniController.text.trim().isNotEmpty) {
+        return;
+      }
+      _nombreController.text = suggestion.nombre;
+      _apellidosController.text = suggestion.apellidos;
+      _dniController.text = suggestion.dni;
+      setState(() => _recipientSuggestionApplied = true);
+    } catch (error) {
+      // Suggestions are optional. A read outage must never block a delivery.
+      debugPrint('[RUTERO] recipient suggestion skipped: $error');
+    }
   }
 
   Future<void> _restorePendingEvidence() async {
@@ -714,60 +752,112 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     // evidence transaction is active. Only the success path opts back in.
     return PopScope(
       canPop: !_isSubmitting || _allowProgrammaticDismiss,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 1),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(
-            parent: _slideController,
-            curve: Curves.easeOutCubic,
-          ),
-        ),
-        child: RepartidorExecutiveSheet(
-          height: Responsive.modalHeight(
-            context,
-            portraitFraction: _isCompleted ? 0.70 : 0.92,
-            landscapeFraction: _isCompleted ? 0.80 : 0.95,
-          ),
-          accentColor: _isCompleted
-              ? _terminalAccentColor
-              : _isUrgent
-                  ? AppTheme.obligatorio
-                  : AppTheme.info,
-          child: Column(
-            children: [
-              RuteroDetailHeader(
-                albaran: _albaran,
-                isCompleted: _isCompleted,
+      child: Stack(
+        children: [
+          IgnorePointer(
+            ignoring: _isSubmitting,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(
+                  parent: _slideController,
+                  curve: Curves.easeOutCubic,
+                ),
               ),
-              if (_isCompleted)
-                Expanded(child: _buildCompletedView())
-              else ...[
-                RuteroDetailTabBar(
-                  tabController: _tabController,
-                  isUrgent: _isUrgent,
-                  productErrorCount: _countIssues(RuteroDeliveryTab.products),
-                  paymentErrorCount: _countIssues(RuteroDeliveryTab.payment),
-                  finalizeErrorCount: _countIssues(RuteroDeliveryTab.finalize),
+              child: RepartidorExecutiveSheet(
+                height: Responsive.modalHeight(
+                  context,
+                  portraitFraction: _isCompleted ? 0.70 : 0.92,
+                  landscapeFraction: _isCompleted ? 0.80 : 0.95,
                 ),
-                RuteroValidationBanner(
-                  issues: _validationIssues,
-                  onIssueTap: _focusValidationIssue,
-                ),
-                Expanded(
-                  child: IndexedStack(
-                    index: _tabController.index,
-                    children: [
-                      SizedBox.expand(child: _buildProductsTab()),
-                      SizedBox.expand(child: _buildPaymentTab()),
-                      SizedBox.expand(child: _buildFinalizeTab()),
+                accentColor: _isCompleted
+                    ? _terminalAccentColor
+                    : _isUrgent
+                        ? AppTheme.obligatorio
+                        : AppTheme.info,
+                child: Column(
+                  children: [
+                    RuteroDetailHeader(
+                      albaran: _albaran,
+                      isCompleted: _isCompleted,
+                    ),
+                    if (_isCompleted)
+                      Expanded(child: _buildCompletedView())
+                    else ...[
+                      RuteroDetailTabBar(
+                        tabController: _tabController,
+                        isUrgent: _isUrgent,
+                        productErrorCount:
+                            _countIssues(RuteroDeliveryTab.products),
+                        paymentErrorCount:
+                            _countIssues(RuteroDeliveryTab.payment),
+                        finalizeErrorCount:
+                            _countIssues(RuteroDeliveryTab.finalize),
+                      ),
+                      RuteroValidationBanner(
+                        issues: _validationIssues,
+                        onIssueTap: _focusValidationIssue,
+                      ),
+                      Expanded(
+                        child: IndexedStack(
+                          index: _tabController.index,
+                          children: [
+                            SizedBox.expand(child: _buildProductsTab()),
+                            SizedBox.expand(child: _buildPaymentTab()),
+                            SizedBox.expand(child: _buildFinalizeTab()),
+                          ],
+                        ),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
+          if (_isSubmitting) ...[
+            const Positioned.fill(
+              child: ModalBarrier(
+                dismissible: false,
+                color: Colors.black54,
+              ),
+            ),
+            Positioned.fill(child: _buildSubmissionOverlay()),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubmissionOverlay() {
+    return Center(
+      child: RepartidorExecutivePanel(
+        accentColor: AppTheme.info,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 34,
+              height: 34,
+              child: CircularProgressIndicator(color: AppTheme.info),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Guardando entrega…',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'No cierres ni edites la entrega hasta que termine.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+          ],
         ),
       ),
     );
@@ -1379,6 +1469,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
             ],
           ),
+          if (_recipientSuggestionApplied) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Datos del último destinatario de este cliente. Puedes editarlos si es otra persona.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+                height: 1.3,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           RuteroErrorSpotlight(
             key: _nombreFieldKey,
@@ -1389,8 +1490,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               focusNode: _nombreFocusNode,
               enabled: !_isSubmitting,
               onChanged: (_) {
-                if (_nombreError != null) {
+                if (_nombreError != null || _recipientSuggestionApplied) {
                   setState(() {
+                    _recipientSuggestionApplied = false;
                     _nombreError = null;
                     _removeIssue('nombre');
                   });
@@ -1414,8 +1516,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               focusNode: _apellidosFocusNode,
               enabled: !_isSubmitting,
               onChanged: (_) {
-                if (_apellidosError != null) {
+                if (_apellidosError != null || _recipientSuggestionApplied) {
                   setState(() {
+                    _recipientSuggestionApplied = false;
                     _apellidosError = null;
                     _removeIssue('apellidos');
                   });
@@ -1439,8 +1542,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               focusNode: _dniFocusNode,
               enabled: !_isSubmitting,
               onChanged: (_) {
-                if (_dniError != null) {
+                if (_dniError != null || _recipientSuggestionApplied) {
                   setState(() {
+                    _recipientSuggestionApplied = false;
                     _dniError = null;
                     _removeIssue('dni');
                   });
@@ -1881,6 +1985,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<bool> _confirmarEntregaCanonica({
+    required RepartoDeliveryStatus status,
+    required DateTime occurredAt,
+    required String? repartidorId,
+    required List<RepartoDeliveryLine> lineas,
+    required bool allowEmptyLineas,
+    required RepartoReceiver? receiver,
+    required RepartoIncident? incidencia,
+    required RepartoPayment? cobro,
     required String? firmaId,
     required List<String> evidenceIds,
     required String observaciones,
@@ -1889,33 +2001,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final deferEvidence = pendingEvidenceRefs.isNotEmpty;
     final request = RepartoConfirmationRequest(
       itemId: widget.albaran.id,
-      status: _deliveryStatus,
-      occurredAt: DateTime.now().toUtc(),
-      repartidorId: _repartidorIdsParaInvalidar().isEmpty
-          ? null
-          : _repartidorIdsParaInvalidar().first,
-      lineas: _buildCanonicalLines(),
-      allowEmptyLineas: _albaran.isZeroEmpty && _items.isEmpty,
-      receiver: _deliveryStatus == RepartoDeliveryStatus.noEntregado
-          ? null
-          : RepartoReceiver(
-              nombre: _nombreController.text,
-              apellidos: _apellidosController.text,
-              dni: _dniController.text,
-            ),
-      firma:
-          _deliveryStatus == RepartoDeliveryStatus.noEntregado ? null : firmaId,
+      status: status,
+      occurredAt: occurredAt,
+      repartidorId: repartidorId,
+      lineas: lineas,
+      allowEmptyLineas: allowEmptyLineas,
+      receiver: receiver,
+      firma: status == RepartoDeliveryStatus.noEntregado ? null : firmaId,
       evidencias: evidenceIds,
       observaciones: observaciones,
-      incidencia: _deliveryStatus == RepartoDeliveryStatus.noEntregado ||
-              _deliveryStatus == RepartoDeliveryStatus.rechazado
-          ? RepartoIncident(
-              tipo: _incidentType,
-              motivo: _incidenciaMotivoController.text,
-              observaciones: observaciones,
-            )
-          : null,
-      cobro: _isPaid ? _buildCanonicalPayment() : null,
+      incidencia: incidencia,
+      cobro: cobro,
       deferEvidence: deferEvidence,
       pendingEvidence: pendingEvidenceRefs,
     );
@@ -2011,10 +2107,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
     widget.ref.read(entregasProvider.notifier).applyAcknowledgedDelivery(
           deliveryId: widget.albaran.id,
-          repartidorId: request.repartidorId ?? '',
+          repartidorId: repartidorId ?? '',
           response: response,
-          acceptedPaymentAmount: request.cobro?.importeCobrado.toDouble(),
-          acceptedPaymentMethod: request.cobro?.formaPago,
+          acceptedPaymentAmount: cobro?.importeCobrado.toDouble(),
+          acceptedPaymentMethod: cobro?.formaPago,
         );
     _refreshAfterAcknowledgedDelivery();
     return true;
@@ -2548,19 +2644,39 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (!_validateFields()) return;
     if (!_confirmationOperation.beginSubmit()) return;
 
-    setState(() => _isSubmitting = true);
-
     try {
       final confirmed = await _showConfirmationDialog();
       if (!confirmed || !mounted) return;
 
-      final signaturePng =
-          _deliveryStatus == RepartoDeliveryStatus.noEntregado ||
-                  (_hasPersistedSignature && _signatureController.isEmpty)
-              ? null
-              : await _signatureController.toPngBytes() ??
-                  (throw Exception('Error al procesar firma'));
-
+      // Freeze every user-controlled value before the first awaited evidence
+      // operation. The confirmation request must describe exactly what the
+      // user accepted, even if a callback tries to mutate a tab meanwhile.
+      final frozenStatus = _deliveryStatus;
+      final repartidorIds = _repartidorIdsParaInvalidar();
+      final frozenRepartidorId =
+          repartidorIds.isEmpty ? null : repartidorIds.first;
+      final frozenLineas = List<RepartoDeliveryLine>.unmodifiable(
+        _buildCanonicalLines(),
+      );
+      final frozenReceiver = frozenStatus == RepartoDeliveryStatus.noEntregado
+          ? null
+          : RepartoReceiver(
+              nombre: _nombreController.text,
+              apellidos: _apellidosController.text,
+              dni: _dniController.text,
+            );
+      final frozenIncident =
+          frozenStatus == RepartoDeliveryStatus.noEntregado ||
+                  frozenStatus == RepartoDeliveryStatus.rechazado
+              ? RepartoIncident(
+                  tipo: _incidentType,
+                  motivo: _incidenciaMotivoController.text,
+                  observaciones: _observacionesController.text.trim(),
+                )
+              : null;
+      final frozenPayment = _isPaid ? _buildCanonicalPayment() : null;
+      final frozenAllowEmptyLineas = _albaran.isZeroEmpty && _items.isEmpty;
+      final frozenOccurredAt = DateTime.now().toUtc();
       var finalObs = _observacionesController.text.trim();
       final qtyChanges = <String>[];
       for (final item in _items) {
@@ -2584,14 +2700,33 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _tabController.animateTo(2);
         return;
       }
+      setState(() => _isSubmitting = true);
+
+      // Freeze the photo membership before any awaited conversion/upload. A
+      // picker callback that was already in flight must not alter the payload
+      // accepted by the user or race the canonical confirmation snapshot.
+      final frozenPhotos = List<XFile>.unmodifiable(
+        List<XFile>.from(_evidencePhotos),
+      );
+      final signaturePng = frozenStatus == RepartoDeliveryStatus.noEntregado ||
+              (_hasPersistedSignature && _signatureController.isEmpty)
+          ? null
+          : await _signatureController.toPngBytes() ??
+              (throw Exception('Error al procesar firma'));
       final success = await _evidenceCoordinator.uploadThenConfirm<bool>(
         entregaId: widget.albaran.id,
         signaturePngBytes: signaturePng,
-        photos: List<XFile>.unmodifiable(_evidencePhotos),
-        repartidorId: _repartidorIdsParaInvalidar().isEmpty
-            ? null
-            : _repartidorIdsParaInvalidar().first,
+        photos: frozenPhotos,
+        repartidorId: frozenRepartidorId,
         confirm: (evidence) => _confirmarEntregaCanonica(
+          status: frozenStatus,
+          occurredAt: frozenOccurredAt,
+          repartidorId: frozenRepartidorId,
+          lineas: frozenLineas,
+          allowEmptyLineas: frozenAllowEmptyLineas,
+          receiver: frozenReceiver,
+          incidencia: frozenIncident,
+          cobro: frozenPayment,
           firmaId: evidence.signatureId,
           evidenceIds: evidence.photoIds,
           observaciones: finalObs,
@@ -2603,6 +2738,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!success) {
         _showError('No se pudo registrar la entrega');
         return;
+      }
+
+      // The canonical endpoint has acknowledged the durable transaction at
+      // this point. Release the interaction lock immediately; printing and
+      // the optional document picker must never keep a confirmed delivery in
+      // a loading state.
+      if (!_lastConfirmWasQueued && mounted) {
+        _albaran.estado = _localDeliveryStatus();
+        setState(() {
+          _isSubmitting = false;
+          _allowProgrammaticDismiss = true;
+        });
       }
 
       // Queued writes are deliberately not presented as completed work. The

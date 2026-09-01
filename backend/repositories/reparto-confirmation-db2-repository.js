@@ -47,6 +47,10 @@ const RECEIVER_NAME_CAPABILITY = Object.freeze({
   minimumLength: 100,
   compatibleDataTypes: Object.freeze(new Set(['VARCHAR', 'CHARACTER VARYING'])),
 });
+const REQUIRED_CONFIRMATION_UNIQUE_KEYS = Object.freeze([
+  Object.freeze({ name: 'IDEMPOTENCY_KEY', columns: Object.freeze(['IDEMPOTENCY_KEY']) }),
+  Object.freeze({ name: 'DOCUMENT_ID', columns: Object.freeze(['DOCUMENT_ID']) }),
+]);
 
 class RepartoRepositoryUnavailableError extends RepartoPersistenceError {
   constructor(message, details) {
@@ -151,6 +155,37 @@ function cancelConnection(connection) {
     Promise.resolve(connection.cancel()).catch(() => {});
   } catch (_) {
     // Cancellation is best effort; the connection is still closed in finally.
+  }
+}
+
+function assertUniqueConfirmationKeys(indexRows, confirmationTable) {
+  const expected = new Set(REQUIRED_CONFIRMATION_UNIQUE_KEYS.map(({ columns }) => columns.join(':')));
+  const actual = new Set();
+  const byIndex = new Map();
+  for (const row of indexRows || []) {
+    const unique = String(rowValue(row, 'IS_UNIQUE') || '').trim().toUpperCase();
+    const indexName = String(rowValue(row, 'INDEX_NAME') || '').trim().toUpperCase();
+    const column = String(rowValue(row, 'COLUMN_NAME') || '').trim().toUpperCase();
+    const position = Number(rowValue(row, 'ORDINAL_POSITION'));
+    if (!indexName || !['U', 'YES'].includes(unique) || !column || !Number.isSafeInteger(position)) continue;
+    if (!byIndex.has(indexName)) byIndex.set(indexName, []);
+    byIndex.get(indexName).push({ column, position });
+  }
+  for (const keys of byIndex.values()) {
+    const signature = keys
+      .sort((left, right) => left.position - right.position)
+      .map(({ column }) => column)
+      .join(':');
+    if (expected.has(signature)) actual.add(signature);
+  }
+  const missingUniqueKeys = [...expected]
+    .filter((signature) => !actual.has(signature))
+    .map((signature) => `${confirmationTable}:${signature}`);
+  if (missingUniqueKeys.length) {
+    throw new RepartoRepositoryUnavailableError(
+      'Faltan índices únicos para la idempotencia de confirmaciones de reparto',
+      { confirmationTable, missingUniqueKeys },
+    );
   }
 }
 
@@ -309,6 +344,18 @@ function createRepartoConfirmationDb2Repository({
       throw new RepartoRepositoryUnavailableError('El esquema de pruebas no contiene las columnas requeridas', { missingColumns });
     }
     assertReceiverNameCapacity(columnRows, tableNames.confirmations);
+    const indexRows = await rows(connection,
+      `SELECT I.INDEX_NAME, I.IS_UNIQUE, K.COLUMN_NAME, K.ORDINAL_POSITION
+         FROM QSYS2.SYSINDEXES I
+         JOIN QSYS2.SYSKEYS K
+           ON K.INDEX_SCHEMA = I.INDEX_SCHEMA
+          AND K.INDEX_NAME = I.INDEX_NAME
+        WHERE I.INDEX_SCHEMA = ?
+          AND I.TABLE_NAME = ?
+          AND I.IS_UNIQUE IN ('U', 'YES')
+        ORDER BY I.INDEX_NAME, K.ORDINAL_POSITION`,
+      [safeSchema, tableNames.confirmations], signal);
+    assertUniqueConfirmationKeys(indexRows, tableNames.confirmations);
     if (requireCobrosCapability) {
       await runWithSignal(connection, () => cobrosPort.assertCapabilities(connection), signal);
     }
@@ -470,7 +517,11 @@ function createRepartoConfirmationDb2Repository({
         }
       },
       async insertCobro(payment) {
-        await runWithSignal(connection, () => cobrosPort.assertCapabilities(connection), signal);
+        // withTransaction() already ran the capability gate on this exact
+        // connection before BEGIN. Re-running the three QSYS2 catalog
+        // queries here made paid confirmations pay an unnecessary latency
+        // penalty and, when DB2 was slow, looked like an infinite spinner.
+        // Keep the bound port as the only write path after that gate.
         return transactionalCobrosPort.insertCobro(payment);
       },
       async insertIdempotencyRecord({ idempotencyKey, fingerprint, documentId, result }) {

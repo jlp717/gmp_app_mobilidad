@@ -97,8 +97,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (success) {
       final user = ref.read(authProvider).value?.user;
 
-      final isJefe = user?.isJefeVentas ??
-          false || user?.role == 'JEFE_VENTAS' || user?.role == 'JEFE';
+      final isJefe = (user?.isJefeVentas ?? false) ||
+          user?.role == 'JEFE_VENTAS' ||
+          user?.role == 'JEFE';
 
       if (isJefe) {
         if (!mounted) return;

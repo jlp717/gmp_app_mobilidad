@@ -680,6 +680,8 @@ class ApiClient {
   /// GET request with optional caching
   ///
   /// [cacheKey] caches valid responses when provided.
+  /// [cacheResponse] can disable both explicit and automatic local caching for
+  /// responses that may contain sensitive, user-specific data.
   /// [cacheTTL] defaults to [CacheService.defaultTTL].
   /// [forceRefresh] bypasses cache when true.
   static Future<Map<String, dynamic>> get(
@@ -687,6 +689,7 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     String? cacheKey,
     Duration? cacheTTL,
+    bool cacheResponse = true,
     bool forceRefresh = false,
     bool allowStale = true,
     Duration maxStale = const Duration(hours: 24),
@@ -694,11 +697,13 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final requestKey = _buildRequestKey('GET_MAP', endpoint, queryParameters);
-    final effectiveCacheKey = cacheKey ??
-        _autoCacheKey(
-          endpoint,
-          queryParameters,
-        );
+    final effectiveCacheKey = cacheResponse
+        ? cacheKey ??
+            _autoCacheKey(
+              endpoint,
+              queryParameters,
+            )
+        : null;
     final canDeduplicate = !forceRefresh && cancelToken == null;
 
     if (canDeduplicate) {

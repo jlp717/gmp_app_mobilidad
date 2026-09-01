@@ -37,6 +37,23 @@ function columnRows({
     })));
 }
 
+function indexRows(tables = QUALIFIED_TABLES, missingUniqueIndex) {
+  const confirmationTable = mappedTableNames(tables).confirmations;
+  const prefix = confirmationTable.startsWith('TEST_') ? 'UX_TEST_REP_CONFIRM' : 'UX_REP_CONFIRM';
+  return [
+    ['IDEMPOTENCY_KEY', `${prefix}_KEY`],
+    ['DOCUMENT_ID', `${prefix}_DOCUMENT`],
+  ]
+    .filter(([column]) => column !== missingUniqueIndex)
+    .map(([COLUMN_NAME, INDEX_NAME]) => ({
+      TABLE_NAME: confirmationTable,
+      INDEX_NAME,
+      IS_UNIQUE: 'U',
+      COLUMN_NAME,
+      ORDINAL_POSITION: 1,
+    }));
+}
+
 function duplicateKeyError() {
   const error = new Error('duplicate key');
   error.state = '23505';
@@ -47,6 +64,7 @@ function fakeConnection({
   missingTable, missingColumn, replay, rawReplay, replayAfterFirstLookup = false, prior, catalogError, uniqueFailures = 0, queryOnly = false,
   transactionMethods = true, commitError, rollbackError, closeError, failWriteAt, cobrosCapabilityError,
   receiverNameLength = 100, receiverNameDataType = 'VARCHAR',
+  missingUniqueIndex,
   tables = QUALIFIED_TABLES,
 } = {}) {
   const calls = [];
@@ -73,6 +91,9 @@ function fakeConnection({
     if (sql.includes('QSYS2.SYSCOLUMNS')) {
       return columnRows({ tables, receiverNameLength, receiverNameDataType })
         .filter((row) => `${row.TABLE_NAME}.${row.COLUMN_NAME}` !== missingColumn);
+    }
+    if (sql.includes('QSYS2.SYSINDEXES')) {
+      return indexRows(tables, missingUniqueIndex);
     }
     if (sql.includes('WHERE IDEMPOTENCY_KEY = ?')) {
       idempotencyLookups += 1;
@@ -335,6 +356,20 @@ describe('DB2 reparto confirmation repository', () => {
         .rejects.toMatchObject({ statusCode: 503 });
       expect(missingFinancialIdentity.calls.some((call) => call.sql === 'BEGIN_TRANSACTION')).toBe(false);
     }
+  });
+
+  test('fails closed before BEGIN when a confirmation idempotency index is absent', async () => {
+    const factory = fakeConnection({ missingUniqueIndex: 'DOCUMENT_ID' });
+
+    await expect(repository(factory).withTransaction(async () => 'never')).rejects.toMatchObject({
+      code: 'REPARTO_TEST_SCHEMA_UNAVAILABLE',
+      statusCode: 503,
+      details: {
+        missingUniqueKeys: ['TEST_REPARTO_CONFIRMACIONES:DOCUMENT_ID'],
+      },
+    });
+    expect(factory.calls.some((call) => call.sql === 'BEGIN_TRANSACTION')).toBe(false);
+    expect(factory.persistedWrites()).toBe(0);
   });
 
   test.each([80, 81])('fails closed before BEGIN and DML when RECEPTOR_NOMBRE only has %i characters', async (receiverNameLength) => {
@@ -601,6 +636,7 @@ describe('DB2 reparto confirmation repository', () => {
     expect([...previouslyStagedBlobIds]).toEqual(['sig-1', 'photo-1']);
     expect(factory.ports.evidenceOwnershipPort.forConnection).toHaveBeenCalledWith(factory.connection);
     expect(factory.ports.cobrosPort.forConnection).toHaveBeenCalledWith(factory.connection);
+    expect(factory.ports.cobrosPort.assertCapabilities).toHaveBeenCalledTimes(1);
     expect(factory.ports.cobrosBound.insertCobro).toHaveBeenCalledTimes(1);
     expect(factory.calls.filter((call) => call.sql === 'BEGIN_TRANSACTION')).toHaveLength(1);
     expect(factory.calls.map((call) => call.sql)).toContain('ROLLBACK_TRANSACTION');

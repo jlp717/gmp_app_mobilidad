@@ -15,6 +15,7 @@ class RoleSelectionDialog extends StatefulWidget {
 
 class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   String _selectedRole = 'COMERCIAL';
+  bool _isSwitching = false;
 
   @override
   Widget build(BuildContext context) {
@@ -120,10 +121,12 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      context.go('/dashboard');
-                    },
+                    onPressed: _isSwitching
+                        ? null
+                        : () {
+                            Navigator.of(context).pop();
+                            context.go('/dashboard');
+                          },
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -153,14 +156,20 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                       elevation: 0,
                       shadowColor: AppTheme.info.withValues(alpha: 0.3),
                     ),
-                    onPressed: _confirmRole,
-                    child: const Text(
-                      'Confirmar',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
-                      ),
-                    ),
+                    onPressed: _isSwitching ? null : _confirmRole,
+                    child: _isSwitching
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Confirmar',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0,
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -179,7 +188,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   ) {
     final isSelected = _selectedRole == role;
     return InkWell(
-      onTap: () => setState(() => _selectedRole = role),
+      onTap: _isSwitching ? null : () => setState(() => _selectedRole = role),
       borderRadius: BorderRadius.circular(AppTheme.radiusLg),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
@@ -252,6 +261,8 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   }
 
   Future<void> _confirmRole() async {
+    if (_isSwitching) return;
+    setState(() => _isSwitching = true);
     final ref = ProviderScope.containerOf(context);
     try {
       final success =
@@ -287,6 +298,8 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSwitching = false);
     }
   }
 }

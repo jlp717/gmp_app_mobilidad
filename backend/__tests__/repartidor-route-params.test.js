@@ -201,6 +201,53 @@ describe('Repartidor route parameter binding', () => {
     expect(params[1]).toBe('05');
     expect(params.slice(-2)).toEqual([0, 11]);
   });
+
+  test('GET /recipient-suggestion returns the latest owner-scoped recipient', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{
+      RECEPTOR_NOMBRE: 'Ana',
+      RECEPTOR_APELLIDOS: 'Prueba',
+      RECEPTOR_DNI: '12345678z',
+    }]);
+
+    const res = await request(app)
+      .get('/recipient-suggestion')
+      .query({ cliente: 'C1', repartidorId: '05' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      suggestion: {
+        nombre: 'Ana',
+        apellidos: 'Prueba',
+        dni: '12345678Z',
+      },
+    });
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toContain('TRIM(C.CLIENTE_CODIGO) = ?');
+    expect(sql).toContain('TRIM(C.REPARTIDOR_ID) IN (?)');
+    expect(params).toEqual(['C1', '05']);
+  });
+
+  test('GET /recipient-suggestion rejects fleet selectors to keep recipient PII owner-scoped', async () => {
+    const res = await request(app)
+      .get('/recipient-suggestion')
+      .query({ cliente: 'C1', repartidorId: '02,05' });
+
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('REPARTIDOR_ID_MULTI_NOT_ALLOWED');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('GET /recipient-suggestion never exposes another driver', async () => {
+    const res = await request(app)
+      .get('/recipient-suggestion')
+      .query({ cliente: 'C1', repartidorId: '99' });
+
+    expect(res.status).toBe(403);
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
   test('GET /pendientes binds a single repartidor id as parameter array', async () => {
     const entregasApp = makeEntregasApp();
     mockCachedQuery.mockResolvedValueOnce([

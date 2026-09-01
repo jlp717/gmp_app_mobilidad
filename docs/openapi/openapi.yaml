@@ -15439,6 +15439,112 @@ paths:
                 error: "Demasiadas solicitudes"
                 code: "HTTP_429"
       description: "POST repartidor · entregas · {entregaId} · lineas. Contrato del handler Express existente."
+  /repartidor/recipient-suggestion:
+    get:
+      tags:
+        - "Repartidor"
+      summary: "GET repartidor · recipient suggestion"
+      operationId: "get_Repartidor_repartidor_recipient_suggestion"
+      parameters:
+        - name: "cliente"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            example: "4300001"
+          description: "Código del cliente cuya última identidad de entrega se solicita."
+        - name: "repartidorId"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            example: "05"
+          description: "Identificador del repartidor propietario de la entrega."
+      responses:
+        "200":
+          description: "Sugerencia de destinatario disponible o nula"
+          headers:
+            Cache-Control:
+              schema:
+                type: "string"
+              description: "La respuesta contiene PII y no debe almacenarse en caché."
+          content:
+            application/json:
+              schema:
+                type: "object"
+                required:
+                  - success
+                  - suggestion
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  suggestion:
+                    nullable: true
+                    oneOf:
+                      - type: "object"
+                        required:
+                          - nombre
+                          - apellidos
+                          - dni
+                        properties:
+                          nombre:
+                            type: "string"
+                            example: "Ana"
+                          apellidos:
+                            type: "string"
+                            example: "Prueba"
+                          dni:
+                            type: "string"
+                            example: "12345678Z"
+                      - type: "null"
+              example:
+                success: true
+                suggestion:
+                  nombre: "Ana"
+                  apellidos: "Prueba"
+                  dni: "12345678Z"
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "422":
+          description: "Parámetros inválidos o selector ambiguo"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "No se pudo completar la solicitud"
+                code: "REPARTIDOR_ID_MULTI_NOT_ALLOWED"
+        "503":
+          description: "Sugerencia no disponible temporalmente"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "No se pudo completar la solicitud"
+                code: "REPARTIDOR_RECIPIENT_SUGGESTION_FAILED"
+      description: "GET repartidor · recipient suggestion. Identidad owner-scoped y sin caché."
   /repartidor/history/clients/{repartidorId}:
     get:
       tags:

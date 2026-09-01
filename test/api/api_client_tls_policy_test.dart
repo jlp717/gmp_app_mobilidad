@@ -149,6 +149,35 @@ void main() {
       expect(caught.code, 'VALIDATION_FAILED');
     });
 
+    test('does not cache responses when cacheResponse is disabled', () async {
+      ApiClient.resetForTesting();
+      final adapter = _CountingGetAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      final first = await ApiClient.get(
+        '/repartidor/recipient-suggestion',
+        queryParameters: const <String, dynamic>{
+          'cliente': 'CLIENTE-1',
+          'repartidorId': 'REP-1',
+        },
+        cacheResponse: false,
+        forceRefresh: true,
+      );
+      final second = await ApiClient.get(
+        '/repartidor/recipient-suggestion',
+        queryParameters: const <String, dynamic>{
+          'cliente': 'CLIENTE-1',
+          'repartidorId': 'REP-1',
+        },
+        cacheResponse: false,
+        forceRefresh: true,
+      );
+
+      expect(first['request'], 1);
+      expect(second['request'], 2);
+      expect(adapter.requestCount, 2);
+    });
+
     test('does not logout when a pre-login request returns 401 after login',
         () async {
       ApiClient.resetForTesting();
@@ -232,6 +261,29 @@ class _NoTokenThenLoginAdapter implements HttpClientAdapter {
 
     return ResponseBody.fromString(
       jsonEncode({'ok': true}),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _CountingGetAdapter implements HttpClientAdapter {
+  var requestCount = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestCount++;
+    return ResponseBody.fromString(
+      jsonEncode({'request': requestCount}),
       200,
       headers: {
         Headers.contentTypeHeader: ['application/json'],

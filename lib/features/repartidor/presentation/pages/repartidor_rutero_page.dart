@@ -973,6 +973,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // The detail owns an explicit close action. Keeping the route from
+      // dismissing by barrier tap or swipe guarantees that the confirmation
+      // lock cannot be bypassed while evidence/payment is being persisted.
+      isDismissible: false,
+      enableDrag: false,
       builder: (ctx) => RuteroDetailModal(albaran: albaran, ref: ref),
     ).whenComplete(() {
       _isDetailModalOpen = false;

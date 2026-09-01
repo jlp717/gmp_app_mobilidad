@@ -56,6 +56,32 @@ class LocalDocumentShare {
   bool get deliveredByBot => sent && !localShare;
 }
 
+/// Complete recipient identity captured on a previous delivery for the same
+/// client and driver. The API only returns a suggestion; the driver can edit
+/// every field before confirming a different recipient.
+class RepartoRecipientSuggestion {
+  const RepartoRecipientSuggestion({
+    required this.nombre,
+    required this.apellidos,
+    required this.dni,
+  });
+
+  factory RepartoRecipientSuggestion.fromJson(Map<String, dynamic> json) {
+    return RepartoRecipientSuggestion(
+      nombre: json['nombre']?.toString().trim() ?? '',
+      apellidos: json['apellidos']?.toString().trim() ?? '',
+      dni: json['dni']?.toString().trim().toUpperCase() ?? '',
+    );
+  }
+
+  final String nombre;
+  final String apellidos;
+  final String dni;
+
+  bool get isComplete =>
+      nombre.isNotEmpty && apellidos.isNotEmpty && dni.isNotEmpty;
+}
+
 class RepartoReceiptEmailResult {
   const RepartoReceiptEmailResult({
     required this.success,
@@ -677,6 +703,42 @@ class RepartidorDataService {
         'No se pudo cargar el historial de clientes',
       );
     }
+  }
+
+  /// Best-effort lookup used when opening a delivery. It is deliberately not
+  /// cached for long: the previous recipient must be fresh after a delivery,
+  /// while the request remains a single bounded read per opened client.
+  static Future<RepartoRecipientSuggestion?> getRecipientSuggestion({
+    required String clientCode,
+    required String repartidorId,
+  }) async {
+    final client = clientCode.trim();
+    final owner = requireConcreteRepartoOwner(repartidorId);
+    if (client.isEmpty || client.length > 40) {
+      throw const RepartidorDataException(
+        'El cliente de la entrega no es válido.',
+        statusCode: 422,
+        code: 'CLIENTE_INVALID',
+      );
+    }
+
+    final response = await ApiClient.get(
+      '/repartidor/recipient-suggestion',
+      queryParameters: <String, String>{
+        'cliente': client,
+        'repartidorId': owner,
+      },
+      cacheResponse: false,
+      forceRefresh: true,
+      allowStale: false,
+      receiveTimeout: const Duration(seconds: 8),
+    );
+    final rawSuggestion = response['suggestion'];
+    if (rawSuggestion is! Map) return null;
+    final suggestion = RepartoRecipientSuggestion.fromJson(
+      Map<String, dynamic>.from(rawSuggestion),
+    );
+    return suggestion.isComplete ? suggestion : null;
   }
 
   /// Obtener documentos de un cliente

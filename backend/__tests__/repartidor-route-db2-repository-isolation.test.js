@@ -114,4 +114,28 @@ describe('repartidor route app-state table isolation', () => {
     await expect(repository.getEntregaFirma('delivery-7')).resolves.toEqual([]);
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
+
+  test('recipient suggestions read only complete owner-scoped app records', async () => {
+    setRuntime('test', 'isolated_test', 'JAVIER');
+    mockQueryWithParams.mockResolvedValueOnce([{
+      RECEPTOR_NOMBRE: 'Ana',
+      RECEPTOR_APELLIDOS: 'Prueba',
+      RECEPTOR_DNI: '12345678Z',
+    }]);
+
+    await expect(repository.getRecipientSuggestion({
+      clientCode: 'C1',
+      ownerIds: ['05'],
+    })).resolves.toEqual({
+      nombre: 'Ana',
+      apellidos: 'Prueba',
+      dni: '12345678Z',
+    });
+
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toContain('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES C');
+    expect(sql).toContain("UPPER(TRIM(C.STATUS)) IN ('ENTREGADO', 'PARCIAL')");
+    expect(sql).toContain('TRIM(C.REPARTIDOR_ID) IN (?)');
+    expect(params).toEqual(['C1', '05']);
+  });
 });

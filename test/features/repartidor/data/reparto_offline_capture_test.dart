@@ -227,6 +227,34 @@ void main() {
     expect(evidence.signatureId, signatureEvidenceId);
     expect(evidence.photoIds, isEmpty);
   });
+
+  test(
+      'offline confirmation without evidence still reaches the confirmation callback',
+      () async {
+    final journal = RepartoConfirmationJournal(_MemoryJournalStore());
+    final coordinator = RepartoEvidenceConfirmationCoordinator(
+      _NoNetworkUploader(),
+      journal,
+      inbox: RepartoEvidenceInbox(_MemoryInboxStore()),
+      offlineDetector: () => true,
+    );
+
+    RepartoUploadedEvidence? capturedEvidence;
+    final result = await coordinator.uploadThenConfirm<bool>(
+      entregaId: 'DOC-NO-EVIDENCE',
+      signaturePngBytes: null,
+      photos: const <XFile>[],
+      confirm: (evidence) async {
+        capturedEvidence = evidence;
+        return true;
+      },
+    );
+
+    expect(result, isTrue);
+    expect(capturedEvidence?.signatureId, isNull);
+    expect(capturedEvidence?.photoIds, isEmpty);
+    expect(capturedEvidence?.pendingRefs, isEmpty);
+  });
 }
 
 class _FixedIdUploader implements RepartoEvidenceUploader {

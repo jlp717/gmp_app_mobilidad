@@ -12,6 +12,42 @@ void main() {
 
   tearDown(ApiClient.resetForTesting);
 
+  test('recipient suggestion is fetched for the concrete client owner',
+      () async {
+    Map<String, dynamic>? capturedQuery;
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        capturedQuery = Map<String, dynamic>.from(options.queryParameters);
+        handler.resolve(
+          Response<Map<String, dynamic>>(
+            requestOptions: options,
+            statusCode: 200,
+            data: const {
+              'success': true,
+              'suggestion': {
+                'nombre': 'Ana',
+                'apellidos': 'Prueba',
+                'dni': '12345678z',
+              },
+            },
+          ),
+        );
+      },
+    );
+    ApiClient.dio.interceptors.add(interceptor);
+
+    final suggestion = await RepartidorDataService.getRecipientSuggestion(
+      clientCode: 'C1',
+      repartidorId: '05',
+    );
+
+    expect(suggestion?.nombre, 'Ana');
+    expect(suggestion?.apellidos, 'Prueba');
+    expect(suggestion?.dni, '12345678Z');
+    expect(capturedQuery, containsPair('cliente', 'C1'));
+    expect(capturedQuery, containsPair('repartidorId', '05'));
+  });
+
   test('canonical receipt carries one concrete owner', () {
     expect(
       const RepartoCanonicalReceiptRequest(

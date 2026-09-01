@@ -2524,6 +2524,40 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
 
 
 // =============================================================================
+// GET /recipient-suggestion
+// Returns the latest complete recipient for this client/driver pair.
+// =============================================================================
+router.get('/recipient-suggestion', verifyToken, async (req, res) => {
+    const clientCode = String(req.query?.cliente || '').trim();
+    if (!clientCode || clientCode.length > 40 || /[\u0000-\u001F\u007F]/.test(clientCode)) {
+        return sendRouteError(res, 422, 'CLIENTE_INVALID');
+    }
+
+    const ownerId = authorizeSingleRepartidorId(
+        req,
+        res,
+        req.query?.repartidorId,
+    );
+    if (!ownerId) return;
+
+    // Recipient identity is personal data. A suggestion is always scoped to
+    // one concrete driver/client pair; never cache or aggregate it across a
+    // privileged user's fleet selector.
+    res.set('Cache-Control', 'private, no-store');
+
+    try {
+        const suggestion = await repartidorDb.getRecipientSuggestion({
+            clientCode,
+            ownerIds: [ownerId],
+        });
+        return res.json({ success: true, suggestion });
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Recipient suggestion failed: ${String(error?.message || error).slice(0, 240)}`);
+        return sendRouteError(res, 503, 'REPARTIDOR_RECIPIENT_SUGGESTION_FAILED');
+    }
+});
+
+// =============================================================================
 // GET /history/clients/:repartidorId
 // Get clients with delivery history from OPP + client info from CLI
 // Uses ONLY columns verified to exist: OPP.CODIGOREPARTIDOR, CLI.CODIGOCLIENTE,

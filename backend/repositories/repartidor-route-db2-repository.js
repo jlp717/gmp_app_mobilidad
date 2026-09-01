@@ -452,6 +452,52 @@ async function getCanonicalConfirmationSignature({
   }
 }
 
+/**
+ * Returns the most recent complete recipient captured for this client and
+ * one of the caller's authorized delivery owners. The owner restriction is
+ * intentional: recipient identity is personal data and must not leak across
+ * drivers or to a sales-only actor.
+ */
+async function getRecipientSuggestion({ clientCode, ownerIds } = {}) {
+  const tablesList = resolveConfirmationReadTables();
+  const normalizedClient = String(clientCode || '').trim();
+  const normalizedOwners = [...new Set(
+    (ownerIds || []).map((id) => String(id || '').trim()).filter(Boolean),
+  )];
+  if (!tablesList.length || !normalizedClient || !normalizedOwners.length) {
+    return null;
+  }
+
+  const ownerPlaceholders = normalizedOwners.map(() => '?').join(', ');
+  for (const tables of tablesList) {
+    const rows = await runQueryWithParams(
+      `SELECT TRIM(C.RECEPTOR_NOMBRE) AS RECEPTOR_NOMBRE,
+              TRIM(C.RECEPTOR_APELLIDOS) AS RECEPTOR_APELLIDOS,
+              TRIM(C.RECEPTOR_DNI) AS RECEPTOR_DNI
+         FROM ${tables.confirmations} C
+        WHERE TRIM(C.CLIENTE_CODIGO) = ?
+          AND TRIM(C.REPARTIDOR_ID) IN (${ownerPlaceholders})
+          AND UPPER(TRIM(C.STATUS)) IN ('ENTREGADO', 'PARCIAL')
+          AND TRIM(C.RECEPTOR_NOMBRE) <> ''
+          AND TRIM(C.RECEPTOR_APELLIDOS) <> ''
+          AND TRIM(C.RECEPTOR_DNI) <> ''
+        ORDER BY C.CONFIRMED_AT DESC, C.ID DESC
+        FETCH FIRST 1 ROW ONLY`,
+      [normalizedClient, ...normalizedOwners],
+      false,
+    );
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (row) {
+      return {
+        nombre: String(row.RECEPTOR_NOMBRE || row.receptor_nombre || '').trim(),
+        apellidos: String(row.RECEPTOR_APELLIDOS || row.receptor_apellidos || '').trim(),
+        dni: String(row.RECEPTOR_DNI || row.receptor_dni || '').trim().toUpperCase(),
+      };
+    }
+  }
+  return null;
+}
+
 function assertReadOnlySql(sql) {
   const text = String(sql || '');
   if (MUTATION_RE.test(text)) {
@@ -2234,6 +2280,7 @@ module.exports = {
   getAppCollectedOverlay,
   recordDocumentEmailLedger,
   getCanonicalConfirmationSignature,
+  getRecipientSuggestion,
   getObjectives,
   getObjectivesDetailClients,
   getObjectivesDetailLaclae,
