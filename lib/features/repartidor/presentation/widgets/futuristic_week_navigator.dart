@@ -126,6 +126,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     final weekRange =
         '${dateFormat.format(weekStart)} - ${dateFormat.format(weekEnd)}';
     final progress = _calculateWeekProgress();
+    final compact =
+        Responsive.isPhone(context) || Responsive.isLandscapeCompact(context);
 
     return TickerMode(
       enabled: motionEnabled,
@@ -151,14 +153,13 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             mainAxisSize: MainAxisSize.min,
             children: [
               // Week header with navigation
-              _buildWeekHeader(weekNum, weekRange),
+              _buildWeekHeader(weekNum, weekRange, compact: compact),
 
               // Day strip
-              _buildDayStrip(),
+              _buildDayStrip(compact: compact),
 
               // Progress bar
-              if (!Responsive.isLandscapeCompact(context))
-                _buildProgressBar(progress),
+              if (!compact) _buildProgressBar(progress),
             ],
           ),
         ),
@@ -178,13 +179,15 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     }
   }
 
-  Widget _buildWeekHeader(int weekNum, String weekRange) {
+  Widget _buildWeekHeader(
+    int weekNum,
+    String weekRange, {
+    required bool compact,
+  }) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: 16,
-        vertical: Responsive.isLandscapeCompact(context)
-            ? 2
-            : 8 * Responsive.landscapeScale(context),
+        vertical: compact ? 4 : 8 * Responsive.landscapeScale(context),
       ),
       child: Row(
         children: [
@@ -240,7 +243,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   ],
                 ),
                 const SizedBox(height: 4),
-                if (!Responsive.isLandscapeCompact(context))
+                if (!compact)
                   Text(
                     weekRange,
                     style: TextStyle(
@@ -261,10 +264,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             },
           ),
 
-          const SizedBox(width: 12),
+          if (!compact) const SizedBox(width: 12),
 
           // Client count badge
-          if (!Responsive.isLandscapeCompact(context)) _buildClientBadge(),
+          if (!compact) _buildClientBadge(),
         ],
       ),
     );
@@ -335,7 +338,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     );
   }
 
-  Widget _buildDayStrip() {
+  Widget _buildDayStrip({required bool compact}) {
     if (widget.weekDays.isEmpty) {
       return Container(
         height: Responsive.value(context, phone: 48, desktop: 55),
@@ -355,24 +358,34 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     return Container(
       height: Responsive.isLandscapeCompact(context)
           ? 32
-          : Responsive.value(context, phone: 55, desktop: 60),
+          : compact
+              ? 44
+              : Responsive.value(context, phone: 55, desktop: 60),
       padding: EdgeInsets.symmetric(
         horizontal: 6,
-        vertical: Responsive.isLandscapeCompact(context) ? 2 : 4,
+        vertical: compact ? 2 : 4,
       ),
       child: Row(
         children: widget.weekDays.asMap().entries.map((entry) {
           final index = entry.key;
           final dayData = entry.value;
           return Expanded(
-            child: _buildDayTile(dayData, index),
+            child: _buildDayTile(
+              dayData,
+              index,
+              compact: compact,
+            ),
           );
         }).toList(),
       ),
     );
   }
 
-  Widget _buildDayTile(Map<String, dynamic> dayData, int index) {
+  Widget _buildDayTile(
+    Map<String, dynamic> dayData,
+    int index, {
+    required bool compact,
+  }) {
     final date = DateTime.parse(dayData['date'] as String);
     final isSelected = DateUtils.isSameDay(date, widget.selectedDate);
     final isToday = DateUtils.isSameDay(date, DateTime.now());
@@ -458,7 +471,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   ),
                 ),
                 // Status indicator
-                if (count > 0 && !isSelected)
+                if (count > 0 && !isSelected && !compact)
                   Container(
                     margin: const EdgeInsets.only(top: 4),
                     width: 6,
@@ -475,7 +488,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                     ),
                   ),
                 // Today indicator
-                if (isToday && !isSelected)
+                if (isToday && !isSelected && !compact)
                   Container(
                     margin: const EdgeInsets.only(top: 2),
                     padding:

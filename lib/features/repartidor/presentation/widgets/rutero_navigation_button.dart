@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,27 +15,44 @@ class RuteroNavigationButton extends StatefulWidget {
 class _RuteroNavigationButtonState extends State<RuteroNavigationButton> {
   bool _opening = false;
   Future<void> _open() async {
+    if (_opening) return;
     setState(() => _opening = true);
     var opened = false;
-    try {
-      final url = Uri.https('www.google.com', '/maps/dir/', {
-        'api': '1',
-        'destination': '${widget.lat},${widget.lng}',
-        'travelmode': 'driving',
-      });
-      opened = await (widget.launcher?.call(url) ??
-              launchUrl(url, mode: LaunchMode.externalApplication))
-          .timeout(const Duration(seconds: 10));
-    } catch (_) {
-      // A failed launch is actionable, never silently discarded.
+    final destination = '${widget.lat},${widget.lng}';
+    final urls = kIsWeb
+        ? <Uri>[]
+        : switch (defaultTargetPlatform) {
+            TargetPlatform.android => [
+                Uri.parse('google.navigation:q=$destination&mode=d'),
+                Uri.parse('geo:$destination'),
+              ],
+            TargetPlatform.iOS => [
+                Uri.parse(
+                  'comgooglemaps://?daddr=$destination&directionsmode=driving',
+                ),
+                Uri.parse('maps://?daddr=$destination&dirflg=d'),
+              ],
+            _ => <Uri>[],
+          };
+    for (final url in urls) {
+      if (!mounted) return;
+      try {
+        opened = await (widget.launcher?.call(url) ??
+                launchUrl(url, mode: LaunchMode.externalApplication))
+            .timeout(const Duration(seconds: 10));
+        if (opened) break;
+      } catch (_) {
+        // Try the next native app; report failure if none can open the route.
+      }
     }
     if (!mounted) return;
     setState(() => _opening = false);
-    if (!opened)
+    if (!opened) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
             'No se pudo abrir la navegación. Comprueba que tienes una aplicación de mapas e inténtalo de nuevo.'),
       ));
+    }
   }
 
   @override

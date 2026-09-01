@@ -1,8 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_clientes_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
+
+/// OfflineBanner (embebido en Clientes/Histórico) vigila
+/// connectivityStatusProvider. En tests no hay ProviderScope y el provider
+/// real instanciaría ConnectivityService con timers reales; se sobreescribe
+/// con un stream online estable y sin side effects.
+Widget _withConnectivity(Widget child) {
+  return ProviderScope(
+    overrides: [
+      connectivityStatusProvider.overrideWith(
+        (ref) => const Stream<ConnectivityStatus>.empty(),
+      ),
+    ],
+    child: child,
+  );
+}
 
 void main() {
   testWidgets('a concrete client owner is preserved from Clientes under ALL',
@@ -12,34 +29,36 @@ void main() {
     String? owner;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: RepartidorClientesPage(
-          repartidorId: 'ALL',
-          isJefeMode: true,
-          clientsLoader: ({
-            required repartidorId,
-            required limit,
-            required offset,
-            required forceRefresh,
-            search,
-          }) async =>
-              (
-            clients: [
-              HistoryClient(
-                id: 'C1',
-                name: 'Cliente 1',
-                address: 'Calle 1',
-                totalDocuments: 1,
-                repCode: '08',
-              ),
-            ],
-            hasMore: false,
+      _withConnectivity(
+        MaterialApp(
+          home: RepartidorClientesPage(
+            repartidorId: 'ALL',
+            isJefeMode: true,
+            clientsLoader: ({
+              required repartidorId,
+              required limit,
+              required offset,
+              required forceRefresh,
+              search,
+            }) async =>
+                (
+              clients: [
+                HistoryClient(
+                  id: 'C1',
+                  name: 'Cliente 1',
+                  address: 'Calle 1',
+                  totalDocuments: 1,
+                  repCode: '08',
+                ),
+              ],
+              hasMore: false,
+            ),
+            onNavigateToHistoryWithOwner: (id, name, repartidorId) {
+              clientId = id;
+              clientName = name;
+              owner = repartidorId;
+            },
           ),
-          onNavigateToHistoryWithOwner: (id, name, repartidorId) {
-            clientId = id;
-            clientName = name;
-            owner = repartidorId;
-          },
         ),
       ),
     );
@@ -57,30 +76,32 @@ void main() {
     String? loadedOwner;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: RepartidorHistoricoPage(
-          repartidorId: 'ALL',
-          initialClientId: 'C1',
-          initialClientName: 'Cliente 1',
-          initialRepartidorId: '08',
-          clientsPageLoader: ({
-            required repartidorId,
-            required limit,
-            required offset,
-            required forceRefresh,
-            search,
-          }) async =>
-              (clients: const <HistoryClient>[], hasMore: false),
-          documentsLoader: ({
-            required clientId,
-            required repartidorId,
-            dateFrom,
-            dateTo,
-            year,
-          }) async {
-            loadedOwner = repartidorId;
-            return const [];
-          },
+      _withConnectivity(
+        MaterialApp(
+          home: RepartidorHistoricoPage(
+            repartidorId: 'ALL',
+            initialClientId: 'C1',
+            initialClientName: 'Cliente 1',
+            initialRepartidorId: '08',
+            clientsPageLoader: ({
+              required repartidorId,
+              required limit,
+              required offset,
+              required forceRefresh,
+              search,
+            }) async =>
+                (clients: const <HistoryClient>[], hasMore: false),
+            documentsLoader: ({
+              required clientId,
+              required repartidorId,
+              dateFrom,
+              dateTo,
+              year,
+            }) async {
+              loadedOwner = repartidorId;
+              return const [];
+            },
+          ),
         ),
       ),
     );
@@ -94,30 +115,32 @@ void main() {
     final calls = <({String? search, int offset})>[];
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: RepartidorHistoricoPage(
-          repartidorId: '08',
-          clientsPageLoader: ({
-            required repartidorId,
-            required limit,
-            required offset,
-            required forceRefresh,
-            search,
-          }) async {
-            calls.add((search: search, offset: offset));
-            return (
-              clients: [
-                HistoryClient(
-                  id: search == null ? 'BASE' : 'ACME',
-                  name: search == null ? 'Cliente base' : 'Cliente ACME',
-                  address: 'Calle 1',
-                  totalDocuments: 1,
-                  repCode: '08',
-                ),
-              ],
-              hasMore: search == null,
-            );
-          },
+      _withConnectivity(
+        MaterialApp(
+          home: RepartidorHistoricoPage(
+            repartidorId: '08',
+            clientsPageLoader: ({
+              required repartidorId,
+              required limit,
+              required offset,
+              required forceRefresh,
+              search,
+            }) async {
+              calls.add((search: search, offset: offset));
+              return (
+                clients: [
+                  HistoryClient(
+                    id: search == null ? 'BASE' : 'ACME',
+                    name: search == null ? 'Cliente base' : 'Cliente ACME',
+                    address: 'Calle 1',
+                    totalDocuments: 1,
+                    repCode: '08',
+                  ),
+                ],
+                hasMore: search == null,
+              );
+            },
+          ),
         ),
       ),
     );
@@ -161,35 +184,37 @@ void main() {
         );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: RepartidorHistoricoPage(
-          repartidorId: 'ALL',
-          initialClientId: 'C1',
-          initialClientName: 'Cliente 1',
-          initialRepartidorId: '08',
-          clientsPageLoader: ({
-            required repartidorId,
-            required limit,
-            required offset,
-            required forceRefresh,
-            search,
-          }) async =>
-              (clients: const <HistoryClient>[], hasMore: false),
-          documentsPageLoader: ({
-            required clientId,
-            required repartidorId,
-            required limit,
-            required offset,
-            dateFrom,
-            dateTo,
-            year,
-          }) async {
-            offsets.add(offset);
-            return (
-              documents: [document('D$offset', offset + 1)],
-              hasMore: offset == 0,
-            );
-          },
+      _withConnectivity(
+        MaterialApp(
+          home: RepartidorHistoricoPage(
+            repartidorId: 'ALL',
+            initialClientId: 'C1',
+            initialClientName: 'Cliente 1',
+            initialRepartidorId: '08',
+            clientsPageLoader: ({
+              required repartidorId,
+              required limit,
+              required offset,
+              required forceRefresh,
+              search,
+            }) async =>
+                (clients: const <HistoryClient>[], hasMore: false),
+            documentsPageLoader: ({
+              required clientId,
+              required repartidorId,
+              required limit,
+              required offset,
+              dateFrom,
+              dateTo,
+              year,
+            }) async {
+              offsets.add(offset);
+              return (
+                documents: [document('D$offset', offset + 1)],
+                hasMore: offset == 0,
+              );
+            },
+          ),
         ),
       ),
     );

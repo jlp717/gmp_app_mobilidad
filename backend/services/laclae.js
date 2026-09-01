@@ -1,5 +1,8 @@
 const logger = require('../middleware/logger');
 const { getPool } = require('../config/db');
+// Lazy require: redis-cache no importa laclae hoy, pero el lazy require evita
+// acoplar el arranque de la L1 de reparto a la disponibilidad de Redis.
+const { deleteCachePattern, onInvalidationPattern } = require('../services/redis-cache');
 
 // LACLAE Cache for fast visit/delivery day lookups
 // Structure: { vendedor: { clientCode: { visitDays: [], deliveryDays: [] } } }
@@ -152,7 +155,54 @@ async function reloadRuteroConfig() {
     } catch (e) {
         logger.error(`Reload config failed: ${e.message}`);
     }
+    // Multi-instance staleness fix (FASE 0 P0-2): the in-process
+    // ruteroConfigCache above only refreshed THIS instance. Publish a
+    // dedicated pattern; every cluster instance subscribed via
+    // _setupInvalidationPatternHook (below) reloads its own copy from
+    // JAVIER.RUTERO_CONFIG. reloadRuteroConfig is NOT re-entered by the
+    // hook, so there is no publish/reload loop.
+    try {
+        await deleteCachePattern('laclae:rutero-config:*');
+    } catch (e) {
+        // Non-fatal: local reload already succeeded; other instances will
+        // converge on their own TTL. Logged, never thrown.
+        logger.warn(`Rutero config cross-instance invalidation failed: ${e.message}`);
+    }
 }
+
+// Cross-instance convergence: when ANOTHER instance publishes
+// laclae:rutero-config:*, refresh this process's ruteroConfigCache. The
+// pattern is only ever published by reloadRuteroConfig, and the hook reloads
+// through _reloadRuteroConfigLocal (which does NOT publish), so the
+// propagation is a single hop with no echo loop.
+let _invalidationHookRegistered = false;
+function _setupInvalidationPatternHook() {
+    if (_invalidationHookRegistered) return;
+    if (typeof onInvalidationPattern !== 'function') return;
+    _invalidationHookRegistered = true;
+    onInvalidationPattern((pattern) => {
+        if (pattern !== 'gmp:laclae:rutero-config:*') return;
+        // Local-only reload: no publish, no loop.
+        _reloadRuteroConfigLocal().catch((e) => {
+            logger.warn(`Rutero config remote-invalidation reload failed: ${e.message}`);
+        });
+    });
+}
+
+// Local-only variant: refreshes this process's ruteroConfigCache from
+// JAVIER.RUTERO_CONFIG without publishing anything.
+async function _reloadRuteroConfigLocal() {
+    const dbPool = getPool();
+    if (!dbPool) return;
+    try {
+        const conn = await dbPool.connect();
+        await loadRuteroConfigCache(conn);
+        await conn.close();
+    } catch (e) {
+        logger.error(`Reload config failed: ${e.message}`);
+    }
+}
+_setupInvalidationPatternHook();
 
 
 // Load LACLAE visit/delivery data into memory cache
@@ -254,15 +304,9 @@ async function loadLaclaeCacheInternal() {
                 if (String(row.VIS_J).trim() === 'S') entry.visitDays.add('jueves');
                 if (String(row.VIS_V).trim() === 'S') entry.visitDays.add('viernes');
                 if (String(row.VIS_S).trim() === 'S') entry.visitDays.add('sabado');
-
-                if (String(row.CLIENTE).includes('9046')) {
-                    logger.info(`🔍 DEBUG 9046 MATCH: '${row.CLIENTE}' Vend '${row.VENDEDOR}' Flags L:${row.VIS_L} V:${row.VIS_V} (Hex V: ${Buffer.from(String(row.VIS_V)).toString('hex')}) -> Days: ${Array.from(entry.visitDays).join(',')}`);
-                }
             });
 
             logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
-            const v15Count = cdviRows.filter(r => r.VENDEDOR === '15').length;
-            logger.info(`   🔎 DEBUG: Vendor 15 has ${v15Count} clients in CDVI cache`);
 
 
             // 2. Load Sales/History data from DSED.LACLAE (Legacy source + Delivery Info)
@@ -397,8 +441,6 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
                 finalClients.add(clientCode);
             }
         });
-
-        logger.debug(`📊 getClientsForDay('${vendedor}', '${day}'): Found ${finalClients.size} so far`);
 
         // Add clients that exist ONLY in RuteroConfig (orphan overrides)
         if (!ignoreOverrides) {

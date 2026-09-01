@@ -112,10 +112,10 @@ describe('GET /pendientes contract', () => {
     expect(JSON.stringify(response.body)).not.toContain('SQL and bind values');
   });
 
-  test('paginates ranked unique delivery identities with truthful metadata', async () => {
+  test('fetches one shared dataset with fixed bounds and paginates in memory', async () => {
     mockQueryWithParams.mockResolvedValueOnce(Array.from(
       { length: 101 },
-      (_, index) => pendingRow({ NUMEROALBARAN: index + 1 }),
+      (_, index) => pendingRow({ NUMEROALBARAN: index + 1, CLIENTE: `C${index + 1}` }),
     ));
     const response = await request(app()).get('/pendientes/98?date=2026-08-03&limit=100&offset=0');
     expect(response.status).toBe(200);
@@ -126,7 +126,8 @@ describe('GET /pendientes contract', () => {
     expect(sql).toMatch(/WHERE DELIVERY_RANK = 1[\s\S]*OFFSET \? ROWS FETCH NEXT \? ROWS ONLY/i);
     expect(sql).toContain('OFFSET ? ROWS FETCH NEXT ? ROWS ONLY');
     expect(sql).toMatch(/OPP\.DIAREPARTO = \?[\s\S]*OPP\.MESREPARTO = \?[\s\S]*OPP\.ANOREPARTO = \?/i);
-    expect(params.slice(-5)).toEqual([3, 8, 2026, 0, 101]);
+    // Dataset bounds are always 0/501 regardless of request pagination.
+    expect(params.slice(-6)).toEqual(['98', 3, 8, 2026, 0, 501]);
     expect(response.body).toEqual(expect.objectContaining({
       limit: 100, offset: 0, hasMore: true, nextOffset: 100,
       total: null, totalIsExact: false,
@@ -135,10 +136,11 @@ describe('GET /pendientes contract', () => {
         total: null, totalIsExact: false,
       },
     }));
+    expect(response.body.albaranes).toHaveLength(100);
   });
 
-  test('advances the source cursor when a post-query filter hides a page', async () => {
-    const firstPage = Array.from(
+  test('applies post-query filters over the whole dataset before slicing the page', async () => {
+    const dataset = Array.from(
       { length: 101 },
       (_, index) => pendingRow({
         NUMEROALBARAN: index + 1,
@@ -151,10 +153,8 @@ describe('GET /pendientes contract', () => {
       CLIENTE: 'TARGET',
       NOMBRE_CLIENTE: 'Cliente objetivo',
     });
-    mockQueryWithParams.mockImplementation((sql, params) => {
-      if (sql.includes('WITH ranked_deliveries')) {
-        return Promise.resolve(params.at(-2) === 0 ? firstPage : [target]);
-      }
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('WITH ranked_deliveries')) return Promise.resolve([...dataset, target]);
       return Promise.resolve([]);
     });
 
@@ -162,26 +162,32 @@ describe('GET /pendientes contract', () => {
       '/pendientes/98?date=2026-08-03&limit=100&offset=0&sortBy=importe_asc&searchClient=TARGET',
     );
     expect(first.status).toBe(200);
-    expect(first.body.albaranes).toEqual([]);
+    // The whole dataset is filtered in memory, so the hidden target is
+    // already reachable on the first page window without another SQL run.
+    expect(first.body.albaranes).toHaveLength(1);
+    expect(first.body.albaranes[0].codigoCliente).toBe('TARGET');
     expect(first.body.pagination).toEqual(expect.objectContaining({
-      hasMore: true,
-      nextOffset: 100,
+      hasMore: false,
+      nextOffset: 1,
+      total: 1,
+      totalIsExact: true,
     }));
 
-    const second = await request(app()).get(
-      `/pendientes/98?date=2026-08-03&limit=100&offset=${first.body.pagination.nextOffset}&sortBy=importe_asc&searchClient=TARGET`,
+    // A wider window over the same cached dataset resolves identically.
+    const wide = await request(app()).get(
+      '/pendientes/98?date=2026-08-03&limit=500&offset=0&sortBy=importe_asc&searchClient=TARGET',
     );
-    expect(second.status).toBe(200);
-    expect(second.body.albaranes).toHaveLength(1);
-    expect(second.body.albaranes[0].codigoCliente).toBe('TARGET');
-    expect(second.body.pagination).toEqual(expect.objectContaining({
-      nextOffset: 101,
-      total: null,
-      totalIsExact: false,
+    expect(wide.status).toBe(200);
+    expect(wide.body.albaranes).toHaveLength(1);
+    expect(wide.body.albaranes[0].codigoCliente).toBe('TARGET');
+    expect(wide.body.pagination).toEqual(expect.objectContaining({
+      hasMore: false,
+      total: 1,
+      totalIsExact: true,
     }));
   });
 
-  test('route order reports summaries for the returned page', async () => {
+  test('reports page-scoped summaries while the dataset backs every window', async () => {
     const rows = Array.from(
       { length: 150 },
       (_, index) => pendingRow({
@@ -207,7 +213,7 @@ describe('GET /pendientes contract', () => {
     }));
   });
 
-  test('advances three pages by unique identity despite 102 duplicate physical rows', async () => {
+  test('deduplicates physical rows once and paginates the unique identities', async () => {
     const physicalRows = [
       ...Array.from({ length: 102 }, () => pendingRow({ NUMEROALBARAN: 42, CLIENTE: 'C1' })),
       pendingRow({ NUMEROALBARAN: 43, CLIENTE: 'C2' }),
@@ -217,13 +223,11 @@ describe('GET /pendientes contract', () => {
       `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${row.CLIENTE}`,
       row,
     ])).values()];
-    const offsets = [];
+    const bounds = [];
     mockQueryWithParams.mockImplementation((sql, params) => {
       if (sql.includes('FROM DSEDAC.OPP OPP') && sql.includes('FETCH NEXT')) {
-        const offset = params.at(-2);
-        const fetch = params.at(-1);
-        offsets.push(offset);
-        return Promise.resolve(uniqueRows.slice(offset, offset + fetch));
+        bounds.push([params.at(-2), params.at(-1)]);
+        return Promise.resolve(uniqueRows);
       }
       return Promise.resolve([]);
     });
@@ -232,7 +236,8 @@ describe('GET /pendientes contract', () => {
     const second = await request(app()).get(`/pendientes/98?date=2026-08-03&limit=1&offset=${first.body.pagination.nextOffset}`);
     const third = await request(app()).get(`/pendientes/98?date=2026-08-03&limit=1&offset=${second.body.pagination.nextOffset}`);
 
-    expect(offsets).toEqual([0, 1, 2]);
+    // Every page window hits the same cached dataset bounds (0/501).
+    expect(bounds).toEqual([[0, 501], [0, 501], [0, 501]]);
     expect([first, second, third].map((response) => response.status)).toEqual([200, 200, 200]);
     expect([first, second, third].map((response) => response.body.albaranes[0].id)).toEqual([
       '2026-A-1-42-C1', '2026-A-1-43-C2', '2026-A-1-44-C3',
@@ -274,7 +279,7 @@ describe('GET /albaran exact identity and canonical quantities', () => {
       if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
         return unavailable
           ? Promise.reject(new Error('schema absent'))
-          : Promise.resolve([{ ID: 77, STATUS: 'PARCIAL', CONFIRMED_AT: '2026-08-03T10:00:00Z' }]);
+          : Promise.resolve([{ DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '98', CLIENTE_CODIGO: 'C1', ID: 77, STATUS: 'PARCIAL', CONFIRMED_AT: '2026-08-03T10:00:00Z' }]);
       }
       if (sql.includes('FROM JAVIER.TEST_REPARTO_LINEAS')) {
         return Promise.resolve(duplicateConfirmationLine ? [
@@ -311,9 +316,8 @@ describe('GET /albaran exact identity and canonical quantities', () => {
   test('distinguishes unavailable confirmation schema from a confirmed zero quantity', async () => {
     detailMocks({ unavailable: true });
     const response = await request(app()).get('/albaran/42/2026?serie=A&terminal=1&cliente=C1&repartidorId=98');
-    expect(response.status).toBe(200);
-    expect(response.body.albaran.confirmationAvailability).toBe('UNAVAILABLE');
-    expect(response.body.albaran.items.every((line) => line.cantidadEntregada === null)).toBe(true);
+    expect(response.status).toBe(503);
+    expect(response.body.code).toBe('CANONICAL_DELIVERY_STATUS_UNAVAILABLE');
   });
 
   test('rejects ambiguous duplicate canonical line identities', async () => {
@@ -356,6 +360,10 @@ describe('GET /payment-conditions errors', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockQuery.mockReset();
+    // The catalog now flows through cachedQuery: delegate to the underlying
+    // query fn so the DB-error redaction contract is still exercised.
+    mockCachedQuery.mockReset();
+    mockCachedQuery.mockImplementation((fn, sql, _key, _ttl, params) => fn(sql, params));
   });
 
   test('returns a typed redacted 503 without exposing DB errors', async () => {

@@ -155,7 +155,8 @@ describe('entregas route coverage gaps', () => {
     });
     const deliveryQuery = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('FROM DSEDAC.OPP OPP'));
     expect(deliveryQuery).toBeDefined();
-    expect(deliveryQuery[1].slice(-2)).toEqual([0, 2]);
+    // The dataset is always fetched with fixed bounds regardless of request pagination.
+    expect(deliveryQuery[1].slice(-2)).toEqual([0, 501]);
   });
 
   test('overlays canonical confirmation status onto the pending list', async () => {
@@ -180,6 +181,61 @@ describe('entregas route coverage gaps', () => {
     expect(overlaySql).toContain('TRIM(C.REPARTIDOR_ID) IN');
   });
 
+  test('keeps canonical NO_ENTREGADO distinct from an unclicked red stop', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
+        return Promise.resolve([{ DOCUMENT_ID: '2026-A-1-42-C1', STATUS: 'NO_ENTREGADO' }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.albaranes[0]).toMatchObject({
+      id: '2026-A-1-42-C1', estado: 'NO_ENTREGADO', colorEstado: 'orange',
+    });
+  });
+  test('does not fall back to TEST state when production is explicitly selected', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousTableSet = process.env.REPARTO_TABLE_SET;
+    process.env.NODE_ENV = 'test';
+    process.env.REPARTO_TABLE_SET = 'production';
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      return Promise.resolve([]);
+    });
+
+    try {
+      const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('CANONICAL_DELIVERY_STATUS_UNAVAILABLE');
+      expect(mockQueryWithParams.mock.calls.some(([sql]) => sql.includes('TEST_REPARTO_CONFIRMACIONES'))).toBe(false);
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+      if (previousTableSet === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previousTableSet;
+    }
+  });
+
+  test('does not apply another repartidor canonical state to the current stop', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
+        return Promise.resolve([{
+          DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '95', STATUS: 'ENTREGADO', ID: 99,
+        }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.albaranes[0]).toMatchObject({ estado: 'PENDIENTE', colorEstado: 'red' });
+  });
   test('returns a typed redacted error when the authorized pending query fails', async () => {
     mockQueryWithParams.mockRejectedValueOnce(new Error('DB2 diagnostic must not leak'));
 
@@ -191,6 +247,9 @@ describe('entregas route coverage gaps', () => {
   });
 
   test('returns the payment catalog with the documented scalar conversions', async () => {
+    // Delegate cachedQuery to the underlying query fn so the once-queued
+    // catalog rows are consumed here and do not bleed into later tests.
+    mockCachedQuery.mockImplementation((fn, sql, _key, _ttl, params) => fn(sql, params));
     mockQuery.mockResolvedValueOnce(paymentCatalog());
 
     const response = await authorized('get', '/payment-conditions');
@@ -203,6 +262,9 @@ describe('entregas route coverage gaps', () => {
   });
 
   test('returns a typed redacted payment-catalog failure', async () => {
+    // The catalog flows through cachedQuery: delegate to the underlying query
+    // fn so the DB-failure redaction contract is still exercised end to end.
+    mockCachedQuery.mockImplementation((fn, sql, _key, _ttl, params) => fn(sql, params));
     mockQuery.mockRejectedValueOnce(new Error('driver trace must not reach client'));
 
     const response = await authorized('get', '/payment-conditions');
@@ -249,7 +311,7 @@ describe('entregas route coverage gaps', () => {
   test('returns the authorized albaran, including canonical confirmation quantities', async () => {
     mockQueryWithParams.mockImplementation((sql) => {
       if (sql.includes('FROM DSEDAC.CPC CPC')) return Promise.resolve([detailHeader()]);
-      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) return Promise.resolve([{ ID: 'C-1', STATUS: 'PARCIAL', CONFIRMED_AT: '2026-08-03T09:00:00.000Z' }]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) return Promise.resolve([{ DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '94', CLIENTE_CODIGO: 'C1', ID: 'C-1', STATUS: 'PARCIAL', CONFIRMED_AT: '2026-08-03T09:00:00.000Z' }]);
       if (sql.includes('FROM JAVIER.TEST_REPARTO_LINEAS')) return Promise.resolve([{ LINEA_ID: 1, CANTIDAD_ENTREGADA: 1, CANTIDAD_RECHAZADA: 1, CANTIDAD_PENDIENTE: 0 }]);
       if (sql.includes('FROM DSEDAC.LAC')) return Promise.resolve([{ SECUENCIA: 1, CODIGOARTICULO: 'P1', DESCRIPCION: 'Producto', CANTIDADUNIDADES: 2, CANTIDADENVASES: 1, IMPORTEVENTA: 12, UNIDADMEDIDA: 'UN' }]);
       return Promise.resolve([]);
@@ -294,4 +356,66 @@ describe('entregas route coverage gaps', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
     expect(mockReceiptWriter).not.toHaveBeenCalled();
   });
+  test('resolves equal canonical states identically regardless of database row order', async () => {
+    const canonicalRows = [
+      { DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '94', STATUS: 'ENTREGADO', ID: 20 },
+      { DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '94', STATUS: 'ENTREGADO', ID: 10 },
+    ];
+
+    for (const rows of [canonicalRows, canonicalRows.slice().reverse()]) {
+      mockQueryWithParams.mockReset();
+      mockQueryWithParams.mockImplementation((sql) => {
+        if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+        if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) return Promise.resolve(rows);
+        return Promise.resolve([]);
+      });
+
+      const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+      expect(response.status).toBe(200);
+      expect(response.body.albaranes[0].estado).toBe('ENTREGADO');
+    }
+  });
+
+  test('rejects contradictory canonical states instead of choosing by row order', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
+        return Promise.resolve([
+          { DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '94', STATUS: 'ENTREGADO', ID: 10 },
+          { DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '94', STATUS: 'NO_ENTREGADO', ID: 20 },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: false,
+      code: 'CONFLICTING_CANONICAL_DELIVERY_STATUS',
+    }));
+    expect(JSON.stringify(response.body)).not.toContain('2026-A-1-42-C1');
+  });
+
+  test('fails closed when the canonical status source cannot be read', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
+        return Promise.reject(new Error('private DB2 diagnostic'));
+      }
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: false,
+      code: 'CANONICAL_DELIVERY_STATUS_UNAVAILABLE',
+    }));
+    expect(JSON.stringify(response.body)).not.toContain('private DB2 diagnostic');
+  });
+
 });

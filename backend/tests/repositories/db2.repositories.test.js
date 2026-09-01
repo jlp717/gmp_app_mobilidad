@@ -18,16 +18,128 @@ describe('repositories: parametrizacion SQL y seams', () => {
     });
 
     test('RuteroRepository app: esquema nuevo usa IDEMPOTENCY_TOKEN/OPERADOR', async () => {
-        process.env.DELIVERY_STATUS_SCHEMA = 'new';
-        const q = jest.fn(async () => [{ DELIVERED: '3' }]);
-        const repo = new RuteroRepository({ queryWithParams: q });
-        await repo.fetchAppDeliveredCount(['A1']);
-        const [sql] = q.mock.calls[0];
-        if (/IDEMPOTENCY_TOKEN/.test(sql)) {
-            expect(sql).toMatch(/DS\.OPERADOR/);
-            expect(sql).toMatch(/JAVIER\.DELIVERY_STATUS/);
-        } else {
-            expect(sql).toMatch(/DS\.REPARTIDOR_ID/);
+        const keys = [
+            'NODE_ENV',
+            'REPARTO_ENVIRONMENT',
+            'REPARTO_TABLE_SET',
+            'ODBC_DSN',
+            'REPARTIDOR_FINANCE_READ_SCHEMA',
+            'REPARTIDOR_FINANCE_APP_SCHEMA',
+            'REPARTIDOR_FINANCE_ERP_SCHEMA',
+            'REPARTO_WRITES_ENABLED',
+            'REPARTO_EVIDENCE_PENDING_TTL_HOURS',
+        ];
+        const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+        Object.assign(process.env, {
+            NODE_ENV: 'production',
+            REPARTO_ENVIRONMENT: 'production',
+            REPARTO_TABLE_SET: 'production',
+            ODBC_DSN: 'GMP',
+            REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+            REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+            REPARTIDOR_FINANCE_ERP_SCHEMA: 'DSEDAC',
+            REPARTO_WRITES_ENABLED: 'false',
+            REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+        });
+        jest.resetModules();
+        try {
+            const { RuteroRepository: ProductionRuteroRepository } =
+                require('../../src/repositories/rutero.repository');
+            const q = jest.fn(async () => [{ DELIVERED: '3' }]);
+            const repo = new ProductionRuteroRepository({ queryWithParams: q });
+            await repo.fetchAppDeliveredCount(['A1']);
+            const [sql] = q.mock.calls[0];
+            expect(sql).toContain('FROM JAVIER.DELIVERY_STATUS DS');
+        } finally {
+            jest.resetModules();
+            for (const key of keys) {
+                if (previous[key] === undefined) delete process.env[key];
+                else process.env[key] = previous[key];
+            }
+        }
+    });
+
+    test('RuteroRepository no consulta estados cuando el runtime es invalido', async () => {
+        const keys = [
+            'NODE_ENV',
+            'REPARTO_ENVIRONMENT',
+            'REPARTO_TABLE_SET',
+            'ODBC_DSN',
+            'REPARTIDOR_FINANCE_READ_SCHEMA',
+            'REPARTIDOR_FINANCE_APP_SCHEMA',
+            'REPARTIDOR_FINANCE_ERP_SCHEMA',
+            'REPARTO_WRITES_ENABLED',
+            'REPARTO_EVIDENCE_PENDING_TTL_HOURS',
+        ];
+        const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+        Object.assign(process.env, {
+            NODE_ENV: 'staging',
+            REPARTO_ENVIRONMENT: 'staging',
+            REPARTO_TABLE_SET: 'production',
+            ODBC_DSN: 'GMP',
+            REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+            REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+            REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+            REPARTO_WRITES_ENABLED: 'true',
+            REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+        });
+        jest.resetModules();
+        try {
+            const { RuteroRepository: InvalidRuteroRepository } =
+                require('../../src/repositories/rutero.repository');
+            const q = jest.fn();
+            const repo = new InvalidRuteroRepository({ queryWithParams: q });
+            await expect(repo.fetchAppDeliveredCount(['A1'])).resolves.toBe(0);
+            expect(q).not.toHaveBeenCalled();
+        } finally {
+            jest.resetModules();
+            for (const key of keys) {
+                if (previous[key] === undefined) delete process.env[key];
+                else process.env[key] = previous[key];
+            }
+        }
+    });
+
+    test('RuteroRepository app: isolated_test usa la tabla TEST del runtime', async () => {
+        const keys = [
+            'NODE_ENV',
+            'REPARTO_ENVIRONMENT',
+            'REPARTO_TABLE_SET',
+            'ODBC_DSN',
+            'REPARTIDOR_FINANCE_READ_SCHEMA',
+            'REPARTIDOR_FINANCE_APP_SCHEMA',
+            'REPARTIDOR_FINANCE_ERP_SCHEMA',
+            'REPARTO_WRITES_ENABLED',
+            'REPARTO_EVIDENCE_PENDING_TTL_HOURS',
+        ];
+        const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+        Object.assign(process.env, {
+            NODE_ENV: 'staging',
+            REPARTO_ENVIRONMENT: 'staging',
+            REPARTO_TABLE_SET: 'isolated_test',
+            ODBC_DSN: 'GMP',
+            REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+            REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+            REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+            REPARTO_WRITES_ENABLED: 'true',
+            REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+        });
+        jest.resetModules();
+        try {
+            const { RuteroRepository: IsolatedRuteroRepository } =
+                require('../../src/repositories/rutero.repository');
+            const q = jest.fn(async () => [{ DELIVERED: '3' }]);
+            const repo = new IsolatedRuteroRepository({ queryWithParams: q });
+            await repo.fetchAppDeliveredCount(['A1']);
+            const [sql] = q.mock.calls[0];
+            expect(sql).toContain('FROM JAVIER.TEST_DELIVERY_STATUS DS');
+            expect(sql).not.toContain('FROM JAVIER.DELIVERY_STATUS DS');
+        } finally {
+            jest.resetModules();
+            for (const key of keys) {
+                if (previous[key] === undefined) delete process.env[key];
+                else process.env[key] = previous[key];
+            }
         }
     });
 

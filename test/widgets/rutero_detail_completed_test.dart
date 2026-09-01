@@ -94,7 +94,60 @@ void main() {
     expect(find.text('Orden prep.'), findsOneWidget);
     expect(find.text('991'), findsOneWidget);
     expect(find.text('Nota por WhatsApp'), findsOneWidget);
-    expect(find.text('Ver Albarán'), findsOneWidget);
+    expect(find.text('ALBARÁN (CON FIRMA)'), findsNothing);
+    expect(find.text('Ver Albarán'), findsNothing);
+    expect(find.text('Compartir Albarán'), findsNothing);
+    expect(find.text('Albarán por WhatsApp'), findsNothing);
+  });
+
+  testWidgets('el rechazo conserva la nota pero no ofrece documento comercial',
+      (tester) async {
+    final albaran = AlbaranEntrega(
+      id: '2026-A-1-45-C1',
+      numeroAlbaran: 45,
+      ejercicio: 2026,
+      codigoCliente: 'C1',
+      nombreCliente: 'Cliente rechazado',
+      fecha: '2026-08-21',
+      importeTotal: 12,
+      codigoRepartidor: '08',
+      numeroFactura: 9837,
+      estado: EstadoEntrega.rechazado,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RuteroDetailCompleted(
+            albaran: albaran,
+            onPreviewDeliveryNotePdf: () {},
+            onShareDeliveryNotePdf: () {},
+            onShareDeliveryNoteWhatsApp: () {},
+            onPreviewCommercialPdf: () {},
+            onShareCommercialPdf: () {},
+            onShareCommercialWhatsApp: () {},
+            buildPrinterConfigSection: () => const Text('PRINTER CONFIG'),
+            tieneImpresora: true,
+            items: <EntregaItem>[
+              EntregaItem(
+                itemId: 'line-1',
+                codigoArticulo: 'A1',
+                descripcion: 'Articulo',
+                cantidadPedida: 1,
+              ),
+            ],
+            onShowZebraPrintPreview: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('ENTREGA RECHAZADA'), findsOneWidget);
+    expect(find.text('NOTA DE ENTREGA'), findsOneWidget);
+    expect(find.text('FACTURA (CON FIRMA)'), findsNothing);
+    expect(find.text('Ver Factura'), findsNothing);
+    expect(find.text('PRINTER CONFIG'), findsNothing);
+    expect(find.text('Imprimir ticket térmico'), findsNothing);
   });
 
   testWidgets('si hay factura, el bloque comercial se etiqueta Factura',

@@ -182,7 +182,9 @@ describe('Facturas Query Parallelization', () => {
     const callOrder: string[] = [];
 
     mockQuery.mockImplementation(async (sql: string) => {
-      if (sql.includes('CAC.NUMEROFACTURA') && sql.includes('FETCH FIRST 1')) {
+      // Header SQL reads from DSEDAC.CFC (facturas.service.ts:311-334):
+      // CFC.NUMEROFACTURA + FETCH FIRST 1.
+      if (sql.includes('CFC.NUMEROFACTURA') && sql.includes('FETCH FIRST 1')) {
         callOrder.push('header');
         await new Promise(r => setTimeout(r, 10));
         return [{

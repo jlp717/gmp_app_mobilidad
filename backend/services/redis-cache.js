@@ -82,6 +82,11 @@ class RedisCacheService {
         this.subscriber = null;
         this.isConnected = false;
         this.pendingCommands = [];
+        // Pattern subscribers: callbacks invoked on every received
+        // cache:invalidate message whose pattern matches. Lets in-process
+        // caches that live OUTSIDE this module (e.g. laclae ruteroConfigCache)
+        // react to cross-instance invalidations without a require cycle.
+        this._patternHooks = [];
         this.stats = {
             hits: { l1: 0, l2: 0 },
             misses: 0,
@@ -171,6 +176,18 @@ class RedisCacheService {
                     this._invalidateL1ByPattern(pattern);
                 } else if (keys) {
                     keys.forEach(key => L1_CACHE.delete(key));
+                }
+
+                // Fan-out to external in-process caches (e.g. laclae
+                // ruteroConfigCache) so they converge with this instance.
+                if (pattern) {
+                    for (const hook of this._patternHooks) {
+                        try {
+                            hook(pattern);
+                        } catch (hookError) {
+                            logger.warn(`[RedisCache] Pattern hook failed for ${pattern}: ${hookError.message}`);
+                        }
+                    }
                 }
 
                 this.stats.invalidations++;
@@ -461,6 +478,10 @@ class RedisCacheService {
                 );
 
                 const keys = [];
+                // scanIterator only — a KEYS() fallback would block Redis O(N)
+                // server-side on a big keyspace and leave L2 un-invalidated when
+                // it times out. If the client lacks scanIterator, log and skip
+                // rather than risk blocking the shared instance.
                 if (typeof this.client.scanIterator === 'function') {
                     for await (const key of this.client.scanIterator({ MATCH: fullPattern, COUNT: 500 })) {
                         keys.push(key);
@@ -473,11 +494,9 @@ class RedisCacheService {
                         }
                     }
                 } else {
-                    keys.push(...await this._withTimeout(
-                        this.client.keys(fullPattern),
-                        REDIS_COMMAND_TIMEOUT_MS,
-                        'keys'
-                    ));
+                    logger.warn(
+                        `[RedisCache] scanIterator unavailable — skipping non-blocking pattern invalidation: ${pattern}`
+                    );
                 }
                 if (keys.length > 0) {
                     await this._withTimeout(
@@ -599,6 +618,26 @@ class RedisCacheService {
         this.isConnected = false;
         logger.info('[RedisCache] Connections closed');
     }
+
+    /**
+     * Register a pattern hook: called with every invalidation pattern
+     * received over the pub/sub channel, including ones published by other
+     * instances. Intended for in-process caches living outside this module
+     * (laclae ruteroConfigCache) so they can converge cluster-wide without
+     * a require cycle into this file.
+     * @param {(pattern: string) => void} hook
+     * @returns {() => void} unregister function
+     */
+    onInvalidationPattern(hook) {
+        if (typeof hook !== 'function') {
+            throw new TypeError('onInvalidationPattern expects a function');
+        }
+        this._patternHooks.push(hook);
+        return () => {
+            const idx = this._patternHooks.indexOf(hook);
+            if (idx !== -1) this._patternHooks.splice(idx, 1);
+        };
+    }
 }
 
 // Singleton instance
@@ -617,6 +656,7 @@ module.exports = {
     invalidateCache: (pattern) => redisCache.invalidatePattern(pattern),
     invalidateCachePattern: (pattern) => redisCache.invalidatePattern(pattern),
     deleteCachePattern: (pattern) => redisCache.invalidatePattern(pattern), // Alias for clarity
+    onInvalidationPattern: (hook) => redisCache.onInvalidationPattern(hook),
     getOrSetCache: (ns, key, fn, ttl) => redisCache.getOrSet(ns, key, fn, ttl),
     getCacheStats: () => redisCache.getStats(),
     getRedisClient: () => redisCache.client,

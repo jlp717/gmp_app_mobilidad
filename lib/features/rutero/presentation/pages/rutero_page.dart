@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
@@ -1155,7 +1156,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
               backgroundColor:
-                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.info,
+                  isWhatsApp ? AppColors.whatsappGreen : AppTheme.info,
             ),
             child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
           ),
@@ -1295,8 +1296,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               ),
             ...phones.map(
               (p) => ListTile(
-                leading:
-                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                leading: const Icon(
+                  Icons.phone_android,
+                  color: AppColors.whatsappGreen,
+                ),
                 title: Text((p['number'] as String?) ?? ''),
                 subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
                 onTap: () {

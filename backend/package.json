@@ -19,7 +19,7 @@
     "lint": "eslint src/**/*.ts --quiet",
     "test": "jest --passWithNoTests --forceExit",
     "test:targeted": "jest --runInBand --forceExit",
-    "test:ci": "jest --ci --runInBand --forceExit __tests__/pedidos_contracts.test.js __tests__/pedidos_idempotency.test.js __tests__/performance-cache.test.js __tests__/perf-low-risk-contracts.test.js __tests__/runtime-performance-config.test.js __tests__/http-cache-middleware.test.js __tests__/security-middleware.test.js tests/security/pedido-ownership.idor.test.js __tests__/cobros_route_contracts.test.js __tests__/repartidor-finanzas.test.js __tests__/repartidor-liquidacion-route.test.js __tests__/repartidor-liquidacion-service.test.js __tests__/reparto-confirmation-service.test.js __tests__/reparto-receipt-route-http.test.js __tests__/repartidor-finance-schema-fail-closed.test.js __tests__/products_route_contracts.test.js",
+    "test:ci": "jest --ci --runInBand --forceExit",
     "test:coverage": "jest --coverage --passWithNoTests --forceExit",
     "test:watch": "jest --watch",
     "db:migrate": "sequelize-cli db:migrate",

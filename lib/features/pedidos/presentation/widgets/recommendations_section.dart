@@ -32,16 +32,20 @@ class _RecommendationsSectionState
 
   @override
   Widget build(BuildContext context) {
-    final provider = ref.watch(pedidosProvider);
-    final hasHistory = provider.clientHistory.isNotEmpty;
-    final hasSimilar = provider.similarClients.isNotEmpty;
+    // select(): este panel solo depende de las listas de recomendación;
+    // otros cambios del provider (carrito, búsqueda) no deben rebuildarlo.
+    final clientHistory =
+        ref.watch(pedidosProvider.select((p) => p.clientHistory));
+    final similarClients =
+        ref.watch(pedidosProvider.select((p) => p.similarClients));
+    final hasHistory = clientHistory.isNotEmpty;
+    final hasSimilar = similarClients.isNotEmpty;
     final canSeeMargin =
         ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
 
     if (!hasHistory && !hasSimilar) return const SizedBox.shrink();
 
-    final totalCount =
-        provider.clientHistory.length + provider.similarClients.length;
+    final totalCount = clientHistory.length + similarClients.length;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -104,7 +108,7 @@ class _RecommendationsSectionState
               context,
               title: 'Productos habituales',
               icon: Icons.history,
-              items: provider.clientHistory,
+              items: clientHistory,
               canSeeMargin: canSeeMargin,
             ),
           if (hasSimilar)
@@ -112,7 +116,7 @@ class _RecommendationsSectionState
               context,
               title: 'Otros clientes compran',
               icon: Icons.people_outline,
-              items: provider.similarClients,
+              items: similarClients,
               canSeeMargin: canSeeMargin,
             ),
         ],

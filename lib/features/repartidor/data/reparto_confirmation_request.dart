@@ -147,6 +147,54 @@ class RepartoPayment {
       };
 }
 
+/// Reference to one not-yet-uploaded evidence slot. Only valid inside a
+/// queued offline confirmation; the drain resolves it to an `ev_` id before
+/// the canonical POST ever leaves the device.
+class RepartoPendingEvidenceRef {
+  const RepartoPendingEvidenceRef({
+    required this.slot,
+    required this.fingerprint,
+    required this.idempotencyKey,
+  });
+
+  final String slot;
+  final String fingerprint;
+  final String idempotencyKey;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'slot': slot.trim(),
+        'fingerprint': fingerprint.trim(),
+        'idempotencyKey': idempotencyKey.trim(),
+      };
+
+  static RepartoPendingEvidenceRef fromJson(Map<String, dynamic> json) {
+    final slot = json['slot'];
+    final fingerprint = json['fingerprint'];
+    final idempotencyKey = json['idempotencyKey'];
+    if (slot is! String ||
+        !_isValidPendingSlot(slot) ||
+        fingerprint is! String ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint) ||
+        idempotencyKey is! String ||
+        !RegExp(r'^[A-Za-z0-9_.:-]{8,128}$').hasMatch(idempotencyKey)) {
+      throw const RepartoConfirmationValidationException(
+        'La evidencia pendiente no es válida.',
+      );
+    }
+    return RepartoPendingEvidenceRef(
+      slot: slot,
+      fingerprint: fingerprint,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+
+  static bool _isValidPendingSlot(String value) =>
+      value == 'signature' ||
+      value == 'photo-0' ||
+      value == 'photo-1' ||
+      value == 'photo-2';
+}
+
 /// Immutable payload builder for the canonical reparto confirmation endpoint.
 /// Ownership is derived from the bearer token; JEFE in Perfil Reparto must
 /// also send [repartidorId] for the selected driver (Ver como).
@@ -166,6 +214,8 @@ class RepartoConfirmationRequest {
     this.latitud,
     this.longitud,
     this.cobro,
+    this.deferEvidence = false,
+    this.pendingEvidence = const <RepartoPendingEvidenceRef>[],
   });
 
   final String itemId;
@@ -186,6 +236,12 @@ class RepartoConfirmationRequest {
   final double? latitud;
   final double? longitud;
   final RepartoPayment? cobro;
+
+  /// Offline-only mode: firma/evidencias are referenced by pendingEvidence
+  /// slots instead of server `ev_` ids. Never serialized on the wire; the
+  /// drain resolves slots to ids before the canonical POST.
+  final bool deferEvidence;
+  final List<RepartoPendingEvidenceRef> pendingEvidence;
 
   Map<String, dynamic> toJson() {
     _validate();
@@ -210,6 +266,42 @@ class RepartoConfirmationRequest {
       if (cobro != null) 'cobro': cobro!.toJson(),
     };
   }
+
+  /// Wire payload for a deferred offline confirmation. The pendingEvidence
+  /// block travels ONLY inside the queued operation; the drain strips it and
+  /// injects resolved `ev_` ids before the POST.
+  Map<String, dynamic> toDeferredJson() {
+    if (!deferEvidence) return toJson();
+    _validate();
+    return <String, dynamic>{
+      'delivery': <String, dynamic>{
+        'itemId': itemId.trim(),
+        'status': status.apiValue,
+        'occurredAt': occurredAt.toUtc().toIso8601String(),
+        if (_hasText(repartidorId)) 'repartidorId': repartidorId!.trim(),
+        'lineas': lineas.map((line) => line.toJson()).toList(growable: false),
+        if (receiver != null) 'receiver': receiver!.toJson(),
+        if (_hasText(observaciones)) 'observaciones': observaciones!.trim(),
+        if (incidencia != null) 'incidencia': incidencia!.toJson(),
+        if (latitud != null) 'latitud': latitud,
+        if (longitud != null) 'longitud': longitud,
+        'forceUpdate': false,
+        'pendingEvidence': <String, dynamic>{
+          if (pendingEvidence.any((ref) => ref.slot == 'signature'))
+            'firma': _pendingRef('signature'),
+          if (pendingEvidence.any((ref) => ref.slot != 'signature'))
+            'fotos': pendingEvidence
+                .where((ref) => ref.slot != 'signature')
+                .map((ref) => ref.toJson())
+                .toList(growable: false),
+        },
+      },
+      if (cobro != null) 'cobro': cobro!.toJson(),
+    };
+  }
+
+  Map<String, dynamic> _pendingRef(String slot) =>
+      pendingEvidence.firstWhere((ref) => ref.slot == slot).toJson();
 
   void _validate() {
     if (!_hasText(itemId)) _invalid('itemId es obligatorio');
@@ -270,6 +362,14 @@ class RepartoConfirmationRequest {
         !_isValidDniNie(value.dni)) {
       _invalid('Nombre, apellidos y DNI/NIE valido son obligatorios');
     }
+    if (deferEvidence) {
+      // Offline queue: firma arrives as a pending slot reference resolved by
+      // the drain, so the evidence id itself must not be required here.
+      if (!pendingEvidence.any((ref) => ref.slot == 'signature')) {
+        _invalid('La firma es obligatoria');
+      }
+      return;
+    }
     if (!_hasText(firma)) _invalid('La firma es obligatoria');
   }
 
@@ -291,6 +391,17 @@ class RepartoConfirmationRequest {
   }
 
   void _validateEvidenceIds() {
+    if (deferEvidence) {
+      // Deferred offline confirmations reference inbox slots by fingerprint;
+      // ids resolve during the drain. Still enforce shape and photo budget.
+      if (pendingEvidence.length > 4 ||
+          pendingEvidence.any((ref) =>
+              ref.slot != ref.slot.trim() ||
+              !RepartoPendingEvidenceRef._isValidPendingSlot(ref.slot))) {
+        _invalid('Evidencias pendientes invalidas');
+      }
+      return;
+    }
     if (_hasText(firma) && !_isValidEvidenceId(firma!)) {
       _invalid('Firma invalida');
     }
@@ -406,22 +517,7 @@ class RepartoConfirmationOperation {
       _occurredAt = _clock().toUtc();
     }
     return RepartoPreparedConfirmation(
-      request: RepartoConfirmationRequest(
-        itemId: request.itemId,
-        status: request.status,
-        occurredAt: _occurredAt!,
-        lineas: request.lineas,
-        allowEmptyLineas: request.allowEmptyLineas,
-        repartidorId: request.repartidorId,
-        receiver: request.receiver,
-        firma: request.firma,
-        evidencias: request.evidencias,
-        observaciones: request.observaciones,
-        incidencia: request.incidencia,
-        latitud: request.latitud,
-        longitud: request.longitud,
-        cobro: request.cobro,
-      ),
+      request: request,
       idempotencyKey: _idempotencyKey!,
       isRetry: isRetry,
     );
@@ -436,22 +532,29 @@ class RepartoConfirmationOperation {
   void endSubmit() => _submitting = false;
 
   static String fingerprintFor(RepartoConfirmationRequest request) {
-    final material = RepartoConfirmationRequest(
-      itemId: request.itemId,
-      status: request.status,
-      occurredAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-      lineas: request.lineas,
-      allowEmptyLineas: request.allowEmptyLineas,
-      repartidorId: request.repartidorId,
-      receiver: request.receiver,
-      firma: request.firma,
-      evidencias: request.evidencias,
-      observaciones: request.observaciones,
-      incidencia: request.incidencia,
-      latitud: request.latitud,
-      longitud: request.longitud,
-      cobro: request.cobro,
-    ).toJson();
+    // Material identity is evidence-agnostic: the same confirmation attempt
+    // keeps its fingerprint whether evidence ids are resolved (online) or
+    // still pending (offline queue). Byte-level identity lives separately in
+    // the journal evidence slots.
+    final material = <String, dynamic>{
+      'delivery': <String, dynamic>{
+        'itemId': request.itemId.trim(),
+        'status': request.status.apiValue,
+        if (RepartoConfirmationRequest._hasText(request.repartidorId))
+          'repartidorId': request.repartidorId!.trim(),
+        'lineas':
+            request.lineas.map((line) => line.toJson()).toList(growable: false),
+        if (request.receiver != null) 'receiver': request.receiver!.toJson(),
+        if (RepartoConfirmationRequest._hasText(request.observaciones))
+          'observaciones': request.observaciones!.trim(),
+        if (request.incidencia != null)
+          'incidencia': request.incidencia!.toJson(),
+        if (request.latitud != null) 'latitud': request.latitud,
+        if (request.longitud != null) 'longitud': request.longitud,
+        'allowEmptyLineas': request.allowEmptyLineas,
+      },
+      if (request.cobro != null) 'cobro': request.cobro!.toJson(),
+    };
     return fingerprintForJson(material);
   }
 
@@ -497,7 +600,11 @@ class RepartoPreparedConfirmation {
 
   Map<String, String> get headers =>
       <String, String>{'Idempotency-Key': idempotencyKey};
-  Map<String, dynamic> toJson() => request.toJson();
+
+  /// Wire payload: deferred when the request carries pending evidence slots,
+  /// canonical once every evidence id is resolved.
+  Map<String, dynamic> toJson() =>
+      request.deferEvidence ? request.toDeferredJson() : request.toJson();
 }
 
 /// Persists the material fingerprint, request key and occurrence time before
@@ -566,6 +673,8 @@ class RepartoPersistentConfirmationOperation {
         latitud: request.latitud,
         longitud: request.longitud,
         cobro: request.cobro,
+        deferEvidence: request.deferEvidence,
+        pendingEvidence: request.pendingEvidence,
       ),
       idempotencyKey: idempotencyKey,
       isRetry: storedFingerprint == fingerprint,

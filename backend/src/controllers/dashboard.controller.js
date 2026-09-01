@@ -4,7 +4,9 @@ const logger = require('../../middleware/logger');
 const { getCurrentDate } = require('../../utils/common');
 const { resolveDashboardVendedorCodes } = require('../utils/dashboardScope');
 const { DashboardRepository } = require('../repositories/dashboard.repository');
-const { DashboardService } = require('../services/dashboard.service');
+// Explicit .js: a .ts twin of this module exists; jest resolves the TS
+// chain via moduleNameMapper, so pin this CommonJS require to its real file.
+const { DashboardService } = require('../services/dashboard.service.js');
 const { TTL, redisCache } = require('../../services/redis-cache');
 const { respondError } = require('../middlewares/errorHandler');
 const { parsePeriodQuery, parseEvolutionQuery } = require('../validators/query.validators');

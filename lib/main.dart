@@ -154,6 +154,9 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     _router = _createRouter();
     SyncQueueService.confirmDeliveryReconciler ??=
         defaultConfirmDeliveryReconciler;
+    // Deferred evidence resolution: queued offline confirmations upload
+    // their inbox evidence right before the canonical POST.
+    SyncQueueService.confirmEvidenceResolver ??= buildConfirmEvidenceResolver();
     // Auth gate for ConnectivityService online → OfflineSyncBridge.
     ConnectivityService.onOnlineSyncGate = () async {
       final authState = ref.read(authProvider).value;

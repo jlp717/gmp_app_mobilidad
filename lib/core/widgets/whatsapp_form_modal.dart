@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -102,7 +103,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
 
   @override
   Widget build(BuildContext context) {
-    const whatsAppGreen = Color(0xFF25D366);
+    const whatsAppGreen = AppColors.whatsappGreen;
 
     return Dialog(
       backgroundColor: Colors.transparent,

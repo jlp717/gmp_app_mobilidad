@@ -25,6 +25,7 @@ jest.mock('../config/db', () => ({
 jest.mock('../services/query-optimizer', () => ({
   cachedQuery: (queryFn, sql, _cacheKeyOrOptions, _ttl, params) =>
     queryFn(sql, params),
+  patternFor: jest.requireActual('../services/query-optimizer').patternFor,
 }));
 
 jest.mock('../services/redis-cache', () => ({

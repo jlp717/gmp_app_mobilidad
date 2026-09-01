@@ -130,12 +130,13 @@ describe('repartidor history document hardening', () => {
       if (/FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(String(sql))) {
         return [{
           DOCUMENT_ID: '2026-A-1-42-C1',
+          REPARTIDOR_ID: '05',
           STATUS: 'ENTREGADO',
           ID: BigInt(7),
           FIRMA_EVIDENCE_ID: 'sig-1',
         }];
       }
-      return [historyRow({ CONFORMADOSN: 'N', DELIVERY_STATUS: null })];
+      return [historyRow({ CONFORMADOSN: 'N', DELIVERY_STATUS: null, DELIVERY_REPARTIDOR: '05' })];
     });
 
     const response = await get('/history/documents/C1').query({ repartidorId: '05' });

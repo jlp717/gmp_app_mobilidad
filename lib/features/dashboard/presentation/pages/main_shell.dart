@@ -57,6 +57,46 @@ bool canCreateRepartidorLiquidationAdjustments(UserModel? user) {
   return role == 'JEFE_VENTAS' || role == 'ADMIN';
 }
 
+/// True when an auth transition requires (re)preparing the reparto session:
+/// the user just became non-null (late auto-login after the shell mounted),
+/// the signed identity changed, or the active mode changed.
+@visibleForTesting
+bool shouldPrepareRepartoSession({
+  required UserModel? previousUser,
+  required UserModel? nextUser,
+  required Object? previousMode,
+  required Object? nextMode,
+}) {
+  if (nextUser == null) return false;
+  if (previousUser == null) return true;
+  final previousIdentity = '${previousUser.code}:${previousUser.claimsVersion}';
+  final nextIdentity = '${nextUser.code}:${nextUser.claimsVersion}';
+  if (previousIdentity != nextIdentity) return true;
+  return previousMode?.toString().trim().toUpperCase() !=
+      nextMode?.toString().trim().toUpperCase();
+}
+
+/// Resolves the fleet repartidor id sent to reparto endpoints, or null when
+/// no valid fleet selection exists yet. Callers must show the retryable
+/// preparation panel instead of falling back to vendedor codes, which the
+/// backend rejects with 403/422.
+@visibleForTesting
+String? resolveFleetRepartidorId({
+  required String? selectedRepartidor,
+  required List<Map<String, dynamic>> repartidoresOptions,
+}) {
+  final selected = selectedRepartidor?.trim();
+  if (selected != null && selected.isNotEmpty && selected != 'ALL') {
+    return selected;
+  }
+  final codes = repartidoresOptions
+      .map((entry) => entry['code']?.toString().trim() ?? '')
+      .where((code) => code.isNotEmpty)
+      .toList();
+  if (codes.isEmpty) return null;
+  return codes.join(',');
+}
+
 /// Main app shell with navigation rail for tablet mode
 /// Dashboard is only visible for Jefe de Ventas
 class MainShell extends ConsumerStatefulWidget {
@@ -79,6 +119,10 @@ class _MainShellState extends ConsumerState<MainShell> {
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
   String? _repartidoresError;
+
+  /// Identity signature (code:claimsVersion:activeMode) of the last prepared
+  /// reparto session; prevents duplicate fleet fetches per auth transition.
+  String? _preparedSessionSignature;
 
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
@@ -272,16 +316,37 @@ class _MainShellState extends ConsumerState<MainShell> {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
     if (user != null) {
-      if (_isEffectiveRepartidorJefe(user, authState?.activeMode)) {
-        // Fetch repartidores
-        await _fetchRepartidores();
-      } else {
-        // Non-Jefe starts at first available section (Clientes)
-        setState(() {
-          _currentIndex = 0; // Will map to Clientes for non-Jefe
-        });
-      }
+      _onSessionReady(user, authState?.activeMode);
     }
+  }
+
+  /// Prepares reparto session state once per identity signature after an auth
+  /// transition lands (cold-start auto-login, role/mode switch, re-login).
+  ///
+  /// This is the single preparation path: the initState connection check and
+  /// the authProvider listener both route here, so a shell that mounted before
+  /// the auto-login finished still fetches the fleet exactly once.
+  void _onSessionReady(UserModel user, Object? activeMode) {
+    if (!mounted) return;
+    final modeKey = activeMode?.toString().trim().toUpperCase();
+    final signature = '${user.code}:${user.claimsVersion}:$modeKey';
+    if (_preparedSessionSignature == signature) return;
+    _preparedSessionSignature = signature;
+
+    if (user.role.trim().toUpperCase() == 'REPARTIDOR') {
+      _forceRepartidorMode = true;
+    }
+    if (_isEffectiveRepartidorJefe(user, activeMode)) {
+      _selectedRepartidor ??= 'ALL';
+      _fetchRepartidores();
+      return;
+    }
+    setState(() {
+      _selectedRepartidor = null;
+      _repartidoresOptions = [];
+      _repartidoresError = null;
+      _currentIndex = 0;
+    });
   }
 
   // Show logout confirmation modal
@@ -366,6 +431,17 @@ class _MainShellState extends ConsumerState<MainShell> {
               .compareTo(b['code']?.toString() ?? ''),
         );
 
+        // A claims rotation can remove the previously selected driver; fall
+        // back to the whole fleet instead of keeping a now-unauthorized code.
+        final selected = _selectedRepartidor;
+        if (selected != null &&
+            selected != 'ALL' &&
+            _repartidoresOptions.every(
+              (entry) => entry['code']?.toString() != selected,
+            )) {
+          _selectedRepartidor = 'ALL';
+        }
+
         _isLoadingRepartidores = false;
         _repartidoresError = null;
       });
@@ -373,8 +449,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (mounted) {
         setState(() {
           _isLoadingRepartidores = false;
-          _repartidoresError =
-              'No se ha podido cargar la lista de repartidores. Se usan los codigos autorizados disponibles.';
+          _repartidoresError = 'No se ha podido cargar la lista de '
+              'repartidores. Pulsa Reintentar para preparar la sesion.';
         });
       }
     }
@@ -416,7 +492,6 @@ class _MainShellState extends ConsumerState<MainShell> {
         'Alertas',
         'Bolsa',
         'Evolución',
-        'Evolución',
         'Asistente',
       ];
       mappedItems.sort((a, b) {
@@ -447,6 +522,24 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.watch(
       authProvider.select((state) => state.value?.activeMode),
     );
+
+    // Cold-start race fix: GoRouter mounts this shell while the auto-login is
+    // still restoring the persisted session, so initState saw a null user and
+    // never prepared the reparto fleet. Listening here re-runs the preparation
+    // exactly once when the session transition lands (deduped by identity
+    // signature inside _onSessionReady).
+    ref.listen(authProvider, (previous, next) {
+      final nextUser = next.value?.user;
+      if (!shouldPrepareRepartoSession(
+        previousUser: previous?.value?.user,
+        nextUser: nextUser,
+        previousMode: previous?.value?.activeMode,
+        nextMode: next.value?.activeMode,
+      )) {
+        return;
+      }
+      _onSessionReady(nextUser!, next.value?.activeMode);
+    });
 
     if (user == null) {
       return const Scaffold(
@@ -1689,7 +1782,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
-                      'Lista no disponible. Usando codigos autorizados.',
+                      'Lista de repartidores no disponible.',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
@@ -1707,6 +1800,71 @@ class _MainShellState extends ConsumerState<MainShell> {
         ],
       ),
     );
+  }
+
+  /// Retryable panel shown while the reparto session is being prepared.
+  ///
+  /// Replaces the previous silent fallback that sent vendedor codes as
+  /// repartidor ids, which the backend rejected with 403/422 and broke every
+  /// reparto tab after a cold restart.
+  Widget _buildRepartoPreparingPanel() {
+    final isLoading = _isLoadingRepartidores;
+    final message = _repartidoresError ??
+        'Preparando la sesion de reparto. '
+            'Si el aviso no desaparece, pulsa Reintentar.';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Semantics(
+          label: 'Estado de preparacion de la sesion de reparto',
+          container: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isLoading)
+                const CircularProgressIndicator(color: AppTheme.info)
+              else
+                const Icon(
+                  Icons.local_shipping_outlined,
+                  size: 48,
+                  color: AppTheme.warning,
+                ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Semantics(
+                button: true,
+                label: 'Reintentar preparar la sesion de reparto',
+                child: TextButton(
+                  key: const ValueKey('reparto-preparing-retry'),
+                  onPressed: isLoading ? null : _retryRepartoSession,
+                  child: const Text('REINTENTAR'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _retryRepartoSession() async {
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
+    if (user == null || !mounted) return;
+    setState(() {
+      // Invalidate the prepared signature so the retry re-runs the full
+      // preparation path for the current identity.
+      _preparedSessionSignature = null;
+    });
+    _onSessionReady(user, authState?.activeMode);
   }
 
   Widget _buildCurrentPage(bool isJefeVentas) {
@@ -1738,22 +1896,33 @@ class _MainShellState extends ConsumerState<MainShell> {
     // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      var effectiveRepartidorId =
-          user?.codigoConductor ?? vendedorCodes.join(',');
-      final isJefe = user?.isJefeVentas ?? false;
+      // Authoritative reparto-jefe check (includes ADMIN); the previous local
+      // check used bare isJefeVentas and missed ADMINs in REPARTIDOR mode.
+      final isJefe = user == null
+          ? isJefeVentas
+          : _isEffectiveRepartidorJefe(user, authState?.activeMode);
 
-      if (isJefeVentas) {
-        if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
-          if (_repartidoresOptions.isNotEmpty) {
-            effectiveRepartidorId =
-                _repartidoresOptions.map((e) => e['code']).join(',');
-          } else {
-            effectiveRepartidorId = vendedorCodes.join(',');
-          }
-        } else {
-          effectiveRepartidorId = _selectedRepartidor!;
-        }
+      final String? effectiveRepartidorId;
+      if (isJefe) {
+        effectiveRepartidorId = resolveFleetRepartidorId(
+          selectedRepartidor: _selectedRepartidor,
+          repartidoresOptions: _repartidoresOptions,
+        );
+      } else {
+        final ownCode = user?.codigoConductor?.trim() ?? '';
+        effectiveRepartidorId = ownCode.isNotEmpty ? ownCode : null;
       }
+
+      if (effectiveRepartidorId == null) {
+        // Fleet not ready yet (cold start or failed fetch). Never fall back to
+        // vendedor codes: the backend rejects them with 403/422 and every
+        // reparto tab fails. Show the retryable preparation panel instead.
+        return _buildRepartoPreparingPanel();
+      }
+      // Non-nullable alias: the Dart 3.0 language version does not keep type
+      // promotion for locals captured by closures, and every page builder
+      // below is one.
+      final repartidorId = effectiveRepartidorId;
 
       final repNamesMap = <String, String>{
         for (final r in _repartidoresOptions)
@@ -1773,12 +1942,12 @@ class _MainShellState extends ConsumerState<MainShell> {
         final label = idx < navItems.length ? navItems[idx].label : '';
 
         if (label == 'Panel') {
-          return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+          return RepartidorPanelPage(repartidorId: repartidorId);
         }
         if (label == 'Clientes') {
           final histIdx = navIndexOf('Histórico');
           return RepartidorClientesPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
             isJefeMode: isJefe,
             onNavigateToHistory: (clientId, clientName) {
               setState(() {
@@ -1800,41 +1969,41 @@ class _MainShellState extends ConsumerState<MainShell> {
         }
         if (label == 'Rutero') {
           return RepartidorRuteroPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
             repartidorNames: repNamesMap,
           );
         }
         if (label == 'Liquidacion Diaria' || label == 'Liquidación') {
           return RepartidorLiquidacionDiariaPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
             canCreateAdjustments:
                 canCreateRepartidorLiquidationAdjustments(user),
           );
         }
         if (label == 'Vencimientos') {
           return RepartidorVencimientosPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
           );
         }
         if (label == 'Cobros') {
           return RepartidorVencimientosPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
             title: 'Cobros',
           );
         }
         if (label == 'Evolución') {
           return RepartidorEvolutionPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
           );
         }
         if (label == 'Comisiones') {
           return repartidor_finanzas.RepartidorComisionesFinanzasPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
           );
         }
         if (label == 'Histórico') {
           return RepartidorHistoricoPage(
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
             initialClientId: _pendingClientId,
             initialClientName: _pendingClientName,
             initialRepartidorId: _pendingClientRepartidorId,
@@ -1844,25 +2013,31 @@ class _MainShellState extends ConsumerState<MainShell> {
         if (label == 'Asistente') {
           return ChatbotPage(
             vendedorCodes: vendedorCodes,
-            repartidorId: effectiveRepartidorId,
+            repartidorId: repartidorId,
           );
         }
         return const Center(child: Text('Página no encontrada'));
       }
 
+      // Only the Historico tab key reacts to pending-client navigation: it
+      // has no didUpdateWidget handling for initialClientId, so it must remount
+      // when a new client is opened. Other tabs keep stable keys so a
+      // Cliente->Historico jump never remounts already-visited pages.
+      final historyTabIdx = navIndexOf('Histórico');
       final content = LazyIndexedStack(
         index: _currentIndex,
         children: List.generate(navItems.length, (idx) {
+          final pendingKeyPart = idx == historyTabIdx
+              ? '_${_pendingClientId ?? ""}_${_pendingClientRepartidorId ?? ""}'
+              : '';
           return KeyedSubtree(
-            key: ValueKey(
-              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}_${_pendingClientRepartidorId ?? ""}',
-            ),
+            key: ValueKey('rutero_view_${repartidorId}_$idx$pendingKeyPart'),
             child: pageForIndex(idx),
           );
         }),
       );
 
-      if (isJefeVentas) {
+      if (isJefe) {
         return Column(
           children: [
             _buildRepartidorHeader(),

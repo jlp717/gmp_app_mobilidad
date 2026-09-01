@@ -79,7 +79,11 @@ async function startServer() {
   });
   server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
   server.headersTimeout = Math.min(65000, HTTP_REQUEST_TIMEOUT_MS + 5000);
-  server.keepAliveTimeout = parseInt(process.env.HTTP_KEEPALIVE_TIMEOUT_MS, 10) || 5000;
+  // Keep-alive must stay strictly below headersTimeout (Node requirement).
+  // 60s (or 5s under the headers cap) stops per-request TCP/TLS re-handshakes
+  // through the Cloudflare tunnel that the previous 5s default forced.
+  const keepAliveDefault = Math.min(60000, server.headersTimeout - 5000);
+  server.keepAliveTimeout = parseInt(process.env.HTTP_KEEPALIVE_TIMEOUT_MS, 10) || keepAliveDefault;
   return server;
 }
 

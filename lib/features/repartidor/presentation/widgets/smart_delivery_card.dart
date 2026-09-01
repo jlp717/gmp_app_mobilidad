@@ -73,6 +73,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           true,
         _ => false,
       };
+  bool get _isUnconfirmed =>
+      widget.albaran.estado == EstadoEntrega.pendiente ||
+      widget.albaran.estado == EstadoEntrega.enRuta;
   bool get _isUrgent => widget.albaran.esCTR;
 
   Color get _terminalColor => switch (widget.albaran.estado) {
@@ -84,6 +87,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   Color get _borderColor {
     if (_isTerminal) return _terminalColor;
+    if (_isUnconfirmed) return AppTheme.obligatorio;
     if (widget.albaran.colorEstado == 'purple' || _isFactura) {
       return AppTheme.accentIndigo;
     }
@@ -97,6 +101,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     Color baseColor;
     if (_isTerminal) {
       baseColor = _terminalColor;
+    } else if (_isUnconfirmed) {
+      baseColor = AppTheme.obligatorio;
     } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
       baseColor = AppTheme.accentIndigo;
     } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {

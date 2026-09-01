@@ -1549,11 +1549,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
     // Payment and PDF actions require an ERP-authorized supervisory claim.
     // The user code is never used as an identity or privilege exception.
-    final authState = ref.watch(authProvider).value;
-    final currentUser = authState?.user;
-    final canManageCommissions = currentUser?.showCommissions == true &&
-        (currentUser?.isJefeVentas == true ||
-            currentUser?.role.toUpperCase() == 'ADMIN');
+    // select(): watching the whole AsyncValue rebuilt tables and the vendor
+    // list on every auth emission; only these three flags matter here.
+    final canManageCommissions = ref.watch(authProvider.select((s) {
+      final user = s.value?.user;
+      return user?.showCommissions == true &&
+          (user?.isJefeVentas == true || user?.role.toUpperCase() == 'ADMIN');
+    }));
     final canPay = canManageCommissions;
     final isCommissionReportAuthorized = canManageCommissions;
 
@@ -2973,11 +2975,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       });
 
       // Reuse the ERP-backed authorization used by the single-vendor view.
-      final authState = ref.watch(authProvider).value;
-      final currentUser = authState?.user;
-      final canPay = currentUser?.showCommissions == true &&
-          (currentUser?.isJefeVentas == true ||
-              currentUser?.role.toUpperCase() == 'ADMIN');
+      // select(): only the pay flag is needed; the full AsyncValue watch
+      // rebuilt the whole vendors table on every auth emission.
+      final canPay = ref.watch(authProvider.select((s) {
+        final user = s.value?.user;
+        return user?.showCommissions == true &&
+            (user?.isJefeVentas == true || user?.role.toUpperCase() == 'ADMIN');
+      }));
 
       return ColoredBox(
         color: AppTheme.inkSurface,

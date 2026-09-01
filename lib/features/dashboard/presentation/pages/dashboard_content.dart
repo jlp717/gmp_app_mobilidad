@@ -600,7 +600,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    final isJefeVentas = ref.watch(authProvider).value?.isDirector ?? false;
+    // select(): watching the whole AsyncValue rebuilt the dashboard Scaffold
+    // on every auth emission; only the director flag matters here.
+    final isJefeVentas =
+        ref.watch(authProvider.select((s) => s.value?.isDirector ?? false));
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,

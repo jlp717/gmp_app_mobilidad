@@ -112,6 +112,7 @@ class RuteroWeekSummary extends StatelessWidget {
           Row(
             children: [
               IconButton(
+                tooltip: 'Semana anterior',
                 onPressed: () => onWeekChange(-1),
                 icon: const Icon(
                   Icons.chevron_left,
@@ -132,6 +133,7 @@ class RuteroWeekSummary extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               IconButton(
+                tooltip: 'Semana siguiente',
                 onPressed: () => onWeekChange(1),
                 icon: const Icon(
                   Icons.chevron_right,

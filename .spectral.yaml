@@ -1,0 +1,10 @@
+# Spectral ruleset GMP: OAS base + reglas de proyecto (ADR-001)
+extends: ["spectral:oas"]
+
+rules:
+  # Los componentes viven en ficheros modulares y quedan inlineados al compilar:
+  # el chequeo de "unused" sobre el artefacto genera ruido.
+  oas3-unused-component: off
+  no-$ref-siblings: off
+  operation-tag-defined: warn
+  openapi-tags-alphabetical: off

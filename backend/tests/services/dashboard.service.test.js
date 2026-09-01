@@ -1,6 +1,8 @@
 'use strict';
 
-const { DashboardService } = require('../../src/services/dashboard.service');
+// Explicit .js: a .ts twin exists (used by the TS integration suites via
+// moduleNameMapper); this suite tests the CommonJS DashboardService class.
+const { DashboardService } = require('../../src/services/dashboard.service.js');
 
 // Fecha real del sistema: los tests derivan expectativas dinamicamente para
 // no acoplarse a un dia concreto (paridad con getCurrentDate legacy).

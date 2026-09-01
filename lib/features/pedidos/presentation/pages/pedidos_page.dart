@@ -88,6 +88,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // Cache guard: solo cargar datos de Mis Pedidos la primera vez
   bool _misPedidosLoaded = false;
 
+  // Memoized catalog partition/sort for _buildProductList: partitioning +
+  // sorting the whole catalog used to run on every build (each cart tap
+  // re-sorted hundreds of items synchronously). Recomputed only when the
+  // products list, search text or favorites set actually change.
+  List<Object>? _catalogDisplayCache;
+  String? _catalogCacheSearch;
+  int? _catalogCacheProductsVersion;
+  Set<String>? _catalogCacheFavorites;
+
   // Rutero-style sort modes for order inspection
   String _orderSortMode =
       'custom'; // 'custom', 'route', 'sales_desc', 'sales_asc'
@@ -709,9 +718,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           // View Promotions button
           Consumer(
             builder: (ctx, ref, _) {
-              final prov = ref.watch(pedidosProvider);
+              // Narrow watch: this AppBar button only depends on client
+              // presence + the promotions list, not the whole provider
+              // (every cart mutation used to rebuild it).
+              final prov = ref.watch(pedidosProvider.select(
+                (p) => (hasClient: p.hasClient, promos: p.activePromotionsList),
+              ));
               if (!prov.hasClient) return const SizedBox.shrink();
-              final promos = prov.activePromotionsList;
+              final promos = prov.promos;
               // Count unique promotions by promoCode, not individual items
               final uniquePromoCodes =
                   promos.map((p) => p.promoCode).toSet().length;
@@ -724,6 +738,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     ),
                     tooltip: 'Ver Promociones',
                     onPressed: () {
+                      // Full state read on demand — closures need products
+                      // and lines only when the user actually opens the page.
+                      final prov = ref.read(pedidosProvider);
                       Navigator.push(
                         context,
                         MaterialPageRoute<void>(
@@ -784,7 +801,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           // Save draft button & Auto-save status
           Consumer(
             builder: (ctx, ref, _) {
-              final prov = ref.watch(pedidosProvider);
+              // Narrow watch: the button only cares about line presence,
+              // dirty flag and last-save time — not every provider change.
+              final prov = ref.watch(pedidosProvider.select(
+                (p) => (
+                  hasLines: p.hasLines,
+                  isDirty: p.isDirty,
+                  lastAutoSaved: p.lastAutoSaved,
+                ),
+              ));
               if (!prov.hasLines) return const SizedBox.shrink();
               return Row(
                 mainAxisSize: MainAxisSize.min,
@@ -812,9 +837,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     ),
                     tooltip: 'Guardar como borrador manual',
                     onPressed: () async {
-                      await prov.saveDraft(
-                        widget.employeeCode,
-                      );
+                      await ref.read(pedidosProvider).saveDraft(
+                            widget.employeeCode,
+                          );
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -833,8 +858,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           // Drafts list button
           Consumer(
             builder: (ctx, ref, _) {
-              final prov = ref.watch(pedidosProvider);
-              final count = prov.draftCount;
+              final count = ref.watch(
+                pedidosProvider.select((p) => p.draftCount),
+              );
               return Stack(
                 children: [
                   IconButton(
@@ -843,7 +869,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       color: AppTheme.textSecondary,
                     ),
                     tooltip: 'Borradores guardados',
-                    onPressed: () => _showDraftsDialog(prov),
+                    onPressed: () =>
+                        _showDraftsDialog(ref.read(pedidosProvider)),
                   ),
                   if (count > 0)
                     Positioned(
@@ -1514,53 +1541,72 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     // Search mode: purchased DESC (most spent first) → new alphabetical
     final isSearching =
         provider.productSearch != null && provider.productSearch!.isNotEmpty;
+    final favoritesSnapshot = Set<String>.from(provider.favoriteProductCodes);
+    final productsVersion = provider.products.length;
 
-    final purchased = <Product>[];
-    final nuevos = <Product>[];
-    for (final p in provider.products) {
-      if (p.hasPurchased) {
-        purchased.add(p);
-      } else {
-        nuevos.add(p);
-      }
-    }
-
-    if (isSearching) {
-      purchased.sort((a, b) {
-        final aSales = a.salesThisYear + a.salesPrevYear;
-        final bSales = b.salesThisYear + b.salesPrevYear;
-        final salesCmp = bSales.compareTo(aSales); // DESC: más gastado primero
-        if (salesCmp != 0) return salesCmp;
-        final aFav = provider.isFavorite(a.code) ? 1 : 0;
-        final bFav = provider.isFavorite(b.code) ? 1 : 0;
-        if (aFav != bFav) return bFav.compareTo(aFav);
-        return a.name.compareTo(b.name);
-      });
+    // Reuse the memoized partition/sort while products (by length — the list
+    // is only ever appended/loaded), search text and favorites are unchanged.
+    final cacheValid = _catalogDisplayCache != null &&
+        _catalogCacheSearch == provider.productSearch &&
+        _catalogCacheProductsVersion == productsVersion &&
+        setEquals(_catalogCacheFavorites, favoritesSnapshot);
+    List<Object> displayList;
+    if (cacheValid) {
+      displayList = _catalogDisplayCache!;
     } else {
-      purchased.sort((a, b) {
-        final aSales = a.salesThisYear + a.salesPrevYear;
-        final bSales = b.salesThisYear + b.salesPrevYear;
-        final salesCmp =
-            aSales.compareTo(bSales); // ASC: menos comprado primero
-        if (salesCmp != 0) return salesCmp;
+      final purchased = <Product>[];
+      final nuevos = <Product>[];
+      for (final p in provider.products) {
+        if (p.hasPurchased) {
+          purchased.add(p);
+        } else {
+          nuevos.add(p);
+        }
+      }
+
+      if (isSearching) {
+        purchased.sort((a, b) {
+          final aSales = a.salesThisYear + a.salesPrevYear;
+          final bSales = b.salesThisYear + b.salesPrevYear;
+          final salesCmp =
+              bSales.compareTo(aSales); // DESC: más gastado primero
+          if (salesCmp != 0) return salesCmp;
+          final aFav = provider.isFavorite(a.code) ? 1 : 0;
+          final bFav = provider.isFavorite(b.code) ? 1 : 0;
+          if (aFav != bFav) return bFav.compareTo(aFav);
+          return a.name.compareTo(b.name);
+        });
+      } else {
+        purchased.sort((a, b) {
+          final aSales = a.salesThisYear + a.salesPrevYear;
+          final bSales = b.salesThisYear + b.salesPrevYear;
+          final salesCmp =
+              aSales.compareTo(bSales); // ASC: menos comprado primero
+          if (salesCmp != 0) return salesCmp;
+          final aFav = provider.isFavorite(a.code) ? 1 : 0;
+          final bFav = provider.isFavorite(b.code) ? 1 : 0;
+          if (aFav != bFav) return bFav.compareTo(aFav);
+          return a.name.compareTo(b.name);
+        });
+      }
+      nuevos.sort((a, b) {
         final aFav = provider.isFavorite(a.code) ? 1 : 0;
         final bFav = provider.isFavorite(b.code) ? 1 : 0;
         if (aFav != bFav) return bFav.compareTo(aFav);
         return a.name.compareTo(b.name);
       });
-    }
-    nuevos.sort((a, b) {
-      final aFav = provider.isFavorite(a.code) ? 1 : 0;
-      final bFav = provider.isFavorite(b.code) ? 1 : 0;
-      if (aFav != bFav) return bFav.compareTo(aFav);
-      return a.name.compareTo(b.name);
-    });
 
-    final showSeparator = purchased.isNotEmpty && nuevos.isNotEmpty;
-    final displayList = <Object>[];
-    displayList.addAll(purchased);
-    if (showSeparator) displayList.add('__SEPARATOR__');
-    displayList.addAll(nuevos);
+      final showSeparator = purchased.isNotEmpty && nuevos.isNotEmpty;
+      displayList = <Object>[];
+      displayList.addAll(purchased);
+      if (showSeparator) displayList.add('__SEPARATOR__');
+      displayList.addAll(nuevos);
+
+      _catalogDisplayCache = displayList;
+      _catalogCacheSearch = provider.productSearch;
+      _catalogCacheProductsVersion = productsVersion;
+      _catalogCacheFavorites = favoritesSnapshot;
+    }
 
     final lineByProductCode = <String, OrderLine>{};
     for (final line in provider.lines) {
@@ -2026,14 +2072,23 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     ),
                   ],
                 )
-              : ListView(
+              : ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                  children: [
-                    _buildDevolucionesSummary(returns),
-                    const SizedBox(height: 12),
-                    ...returns.map(_buildDevolucionCard),
-                  ],
+                  // Summary header + one card per return; virtualized so long
+                  // return histories only build the visible cards.
+                  itemCount: returns.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Column(
+                        children: [
+                          _buildDevolucionesSummary(returns),
+                          const SizedBox(height: 12),
+                        ],
+                      );
+                    }
+                    return _buildDevolucionCard(returns[index - 1]);
+                  },
                 ),
         );
       },

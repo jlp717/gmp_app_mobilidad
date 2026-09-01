@@ -474,6 +474,10 @@ exports.validateQuery = (schema) => {
 
 const { sanitizeForSQL } = require('../utils/common');
 
+// Campos de credenciales: nunca se sanitizan (mutilar passwords rompe login
+// y debilita la credencial). Van SIEMPRE parametrizados a la query.
+const SENSITIVE_FIELD_RE = /^(password|password_confirm|passwordConfirm|new_?password|current_?password|pin|secret|token|api_?key)$/i;
+
 exports.sanitizeInput = (req, res, next) => {
     if (req.body && typeof req.body === 'object') {
         const sanitize = (obj) => {
@@ -488,7 +492,8 @@ exports.sanitizeInput = (req, res, next) => {
             } else if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
                 const sanitizedObj = {};
                 for (const key of Object.keys(obj)) {
-                    sanitizedObj[key] = sanitize(obj[key]);
+                    // Los campos sensibles pasan intactos (van parametrizados).
+                    sanitizedObj[key] = SENSITIVE_FIELD_RE.test(key) ? obj[key] : sanitize(obj[key]);
                 }
                 return sanitizedObj;
             } else if (Array.isArray(obj)) {

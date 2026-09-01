@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
@@ -915,7 +916,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               ),
               ListTile(
                 leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF25D366),
+                  backgroundColor: AppColors.whatsappGreen,
                   child: Icon(Icons.chat, color: Colors.white, size: 20),
                 ),
                 title: const Text(
@@ -1088,7 +1089,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
     return Consumer(
       builder: (context, ref, _) {
-        final authState = ref.watch(authProvider).value;
+        // select(): the whole-page Consumer used to watch the full auth
+        // AsyncValue, so every auth emission rebuilt header, summary,
+        // filters and list. Only the jefe flag drives the vendor selector.
+        final showVendorSelector = ref.watch(
+              authProvider.select((s) => s.value?.user?.isJefeVentas ?? false),
+            ) ||
+            widget.forceShowVendorSelector;
         return Column(
           children: [
             // Header (AppBar replacement)
@@ -1144,8 +1151,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       ),
                     ],
                   ),
-                  if ((authState?.user?.isJefeVentas ?? false) ||
-                      widget.forceShowVendorSelector) ...[
+                  if (showVendorSelector) ...[
                     const SizedBox(height: 12),
                     Container(
                       constraints: const BoxConstraints(minHeight: 50),

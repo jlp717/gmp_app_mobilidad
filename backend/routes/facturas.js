@@ -13,6 +13,8 @@ const documentPdfService = require('../app/services/pdfService');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 const { verifyToken } = require('../middleware/auth');
+const { authorizeVendorScope, isFinancialRole, userScopeCodes, normalizeCode } = require('../middleware/vendor-scope');
+const { emailLimiter } = require('../middleware/security');
 
 const FACTURA_PDF_CACHE_VERSION = 'v4';
 const FACTURA_DEFAULT_LIMIT = 250;
@@ -67,6 +69,101 @@ function isDocumentNotFound(error) {
         error.message === 'Albaran no encontrado' ||
         error.message === 'Documento no encontrado'
     );
+}
+
+// =============================================================================
+// ASVS V8 / BOLA (H-01): object-level authorization on commercial documents.
+// The signed token carries the user's vendor scope (code, vendorCodes,
+// vendedorCodes); detail/PDF/share endpoints must never leak a document
+// whose vendor is outside that scope. Mirrors commissions.js +
+// middleware/vendor-scope.js — no new auth pattern invented here.
+// =============================================================================
+
+function isDocumentScopeForbiddenResponse(deniedCodes) {
+    return {
+        success: false,
+        code: 'DOCUMENT_SCOPE_FORBIDDEN',
+        error: 'No tienes permisos para acceder a este documento',
+        denied: deniedCodes || undefined
+    };
+}
+
+// Returns true/false, or a Promise<boolean> for the empty-vendor ownership
+// lookup; every caller awaits the result either way.
+function authorizeDocumentScope(req, document) {
+    const user = req.user;
+    // Financial roles (jefe/admin) supervise every vendor; allow all documents.
+    if (isFinancialRole(user)) return true;
+
+    const allowed = userScopeCodes(user);
+    const documentVendor = normalizeCode(document?.detail?.header?.vendedor);
+    if (documentVendor && allowed.has(documentVendor)) return true;
+
+    // CFC invoices with empty CODIGOVENDEDOR are list-visible for a vendor when
+    // the client owns another CFC invoice of that vendor (appendCfcVendorScopeFilter).
+    // Mirror that rule here so list->detail does not 403 on the same document.
+    if (document.documentType === 'factura' && !documentVendor) {
+        const clienteId = document?.detail?.header?.clienteId;
+        const ejercicio = document?.detail?.header?.ejercicio
+            || document?.displayEjercicio;
+        const vendorCodes = [...allowed];
+        if (clienteId && vendorCodes.length > 0) {
+            // isFacturaClientOwnedByVendors handles its own errors (returns false).
+            return facturasService.isFacturaClientOwnedByVendors(clienteId, vendorCodes, parseInt(ejercicio, 10) || new Date().getFullYear());
+        }
+    }
+
+    logger.warn(`[facturas] DOCUMENT_SCOPE_FORBIDDEN user=${user?.code || 'unknown'} vendor=${documentVendor || 'empty'} type=${document?.documentType}`);
+    return false;
+}
+
+/**
+ * Scopes a client-supplied vendedorCodes query param against the signed user
+ * scope. Returns { vendedorCodes } on success or { status, body } to send.
+ * Same contract as commissions.js: ALL is financial-role only.
+ */
+function scopeVendedorCodesQuery(req) {
+    const raw = String(req.query.vendedorCodes || '').trim();
+    if (!raw) {
+        return { status: 400, body: { success: false, error: 'vendedorCodes is required' } };
+    }
+
+    const normalized = raw.toUpperCase();
+    if (normalized === 'ALL') {
+        if (!isFinancialRole(req.user)) {
+            logger.warn(`[facturas] Forbidden ALL request: user=${req.user?.code || 'unknown'}`);
+            return {
+                status: 403,
+                body: {
+                    success: false,
+                    code: 'VENDOR_SCOPE_FORBIDDEN',
+                    error: 'Forbidden: ALL requiere rol financiero'
+                }
+            };
+        }
+        return { vendedorCodes: 'ALL' };
+    }
+
+    const requested = raw.split(',').map(c => c.trim()).filter(Boolean);
+    if (requested.length === 0) {
+        return { status: 400, body: { success: false, error: 'vendedorCodes is required' } };
+    }
+
+    const scopeCheck = authorizeVendorScope(req, requested);
+    if (!scopeCheck.ok) {
+        logger.warn(`[facturas] Forbidden scoped request: user=${req.user?.code || 'unknown'} denied=${(scopeCheck.denied || []).join(',')}`);
+        return {
+            status: 403,
+            body: {
+                success: false,
+                code: 'VENDOR_SCOPE_FORBIDDEN',
+                error: 'Forbidden: vendedor fuera de tu alcance',
+                denied: scopeCheck.denied
+            }
+        };
+    }
+
+    return { vendedorCodes: raw };
 }
 
 function parseRouteInt(value) {
@@ -211,8 +308,9 @@ async function resolveCommercialDocument({ serie, numero, ejercicio, terminal, r
     throw httpError(lastNotFound?.message || 'Documento no encontrado', 404);
 }
 
-async function getCommercialDocumentPdf(params) {
-    const document = await resolveCommercialDocument(params);
+// ASVS V8: call authorizeDocumentScope() between resolve and build so a
+// forbidden request never triggers the expensive PDF generation.
+async function buildCommercialDocumentPdf(document) {
     const cacheKey = [
         'commercial_document',
         document.documentType,
@@ -254,8 +352,12 @@ function clampFacturasOffset(value) {
  */
 router.get('/', verifyToken, async (req, res, next) => {
     try {
+        // ASVS V8 / BOLA: vendor codes are user-scoped, not client-trusted.
+        const scoped = scopeVendedorCodesQuery(req);
+        if (scoped.status) return res.status(scoped.status).json(scoped.body);
+
         const params = {
-            vendedorCodes: req.query.vendedorCodes,
+            vendedorCodes: scoped.vendedorCodes,
             year: req.query.year ? parseInt(req.query.year) : undefined,
             month: req.query.month ? parseInt(req.query.month) : undefined,
             search: req.query.search,
@@ -268,10 +370,6 @@ router.get('/', verifyToken, async (req, res, next) => {
             limit: req.query.limit ? parseInt(req.query.limit, 10) : undefined,
             offset: req.query.offset ? parseInt(req.query.offset, 10) : undefined
         };
-
-        if (!params.vendedorCodes) {
-            return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
-        }
 
         const result = await facturasService.getFacturas(params);
 
@@ -298,11 +396,10 @@ router.get('/', verifyToken, async (req, res, next) => {
  */
 router.get('/years', verifyToken, async (req, res, next) => {
     try {
-        const vendedorCodes = req.query.vendedorCodes;
-
-        if (!vendedorCodes) {
-            return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
-        }
+        // ASVS V8 / BOLA: vendor codes are user-scoped, not client-trusted.
+        const scoped = scopeVendedorCodesQuery(req);
+        if (scoped.status) return res.status(scoped.status).json(scoped.body);
+        const vendedorCodes = scoped.vendedorCodes;
 
         const years = await facturasService.getAvailableYears(vendedorCodes);
 
@@ -322,8 +419,12 @@ router.get('/years', verifyToken, async (req, res, next) => {
  */
 router.get('/summary', verifyToken, async (req, res, next) => {
     try {
+        // ASVS V8 / BOLA: vendor codes are user-scoped, not client-trusted.
+        const scoped = scopeVendedorCodesQuery(req);
+        if (scoped.status) return res.status(scoped.status).json(scoped.body);
+
         const params = {
-            vendedorCodes: req.query.vendedorCodes,
+            vendedorCodes: scoped.vendedorCodes,
             year: req.query.year ? parseInt(req.query.year) : undefined,
             month: req.query.month ? parseInt(req.query.month) : undefined,
             search: req.query.search,
@@ -334,10 +435,6 @@ router.get('/summary', verifyToken, async (req, res, next) => {
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo
         };
-
-        if (!params.vendedorCodes) {
-            return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
-        }
 
         const summary = await facturasService.getSummary(params);
 
@@ -375,6 +472,11 @@ router.get('/:serie/:numero/:ejercicio', verifyToken, async (req, res, next) => 
             requestedType: getRequestDocumentType(req)
         });
 
+        // ASVS V8 / BOLA: the document vendor must be inside the signed user scope.
+        if (!await authorizeDocumentScope(req, document)) {
+            return res.status(403).json(isDocumentScopeForbiddenResponse());
+        }
+
         res.json({
             success: true,
             factura: document.detail,
@@ -400,19 +502,26 @@ router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, async (req, res, next)
     try {
         const { serie, numero, ejercicio } = req.params;
         const preview = req.query.preview === 'true';
-        const document = await getCommercialDocumentPdf({
+        const document = await resolveCommercialDocument({
             serie,
             numero,
             ejercicio,
             terminal: req.query.terminal,
             requestedType: getRequestDocumentType(req)
         });
-        const pdfBuffer = document.pdfBuffer;
-        const filename = document.filename;
+
+        // ASVS V8 / BOLA: the document vendor must be inside the signed user scope.
+        if (!await authorizeDocumentScope(req, document)) {
+            return res.status(403).json(isDocumentScopeForbiddenResponse());
+        }
+
+        const pdfDocument = await buildCommercialDocumentPdf(document);
+        const pdfBuffer = pdfDocument.pdfBuffer;
+        const filename = pdfDocument.filename;
         const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
         const disposition = preview ? 'inline' : 'attachment';
 
-        logger.info(`[FACTURAS] PDF serving: ${filename} (${pdfBuffer.length} bytes, type: ${document.documentType}, cache: ${document.fromCache ? 'HIT' : 'MISS'})`);
+        logger.info(`[FACTURAS] PDF serving: ${filename} (${pdfBuffer.length} bytes, type: ${document.documentType}, cache: ${pdfDocument.fromCache ? 'HIT' : 'MISS'})`);
 
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `${disposition}; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`);
@@ -437,6 +546,39 @@ router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, async (req, res, next)
 });
 
 /**
+ * ASVS V8: third-party delivery of a commercial document is only allowed to
+ * the client's own email on file. The document detail does not expose a
+ * verified client email (DSEDAC.CLI has no EMAIL column; verified against the
+ * living schema), so non-financial roles fail closed per remediation spec.
+ */
+function authorizeDocumentShareRecipient(req, document, destinatario) {
+    if (isFinancialRole(req.user)) return true;
+    const clientEmail = String(document?.detail?.header?.clienteEmail || '')
+        .trim()
+        .toLowerCase();
+    if (!clientEmail) return false;
+    return clientEmail === String(destinatario || '').trim().toLowerCase();
+}
+
+function shareDestinatarioNotAllowedResponse() {
+    return {
+        success: false,
+        code: 'SHARE_DESTINATARIO_NOT_ALLOWED',
+        error: 'El envío de este documento a ese destinatario no está permitido para tu perfil.',
+        no_retry_reason: 'Solo un Jefe de Ventas puede enviar este documento; no reintentar con el mismo perfil.'
+    };
+}
+
+function emailDestinatarioNotAllowedResponse() {
+    return {
+        success: false,
+        code: 'EMAIL_DESTINATARIO_NOT_ALLOWED',
+        error: 'El envío de este documento a ese destinatario no está permitido para tu perfil.',
+        no_retry_reason: 'Solo un Jefe de Ventas puede enviar este documento por email; no reintentar con el mismo perfil.'
+    };
+}
+
+/**
  * POST /api/facturas/share/whatsapp
  * WhatsApp share with PDF base64 for Flutter to share as document
  */
@@ -448,14 +590,24 @@ router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
 
-        const document = await getCommercialDocumentPdf({
+        const document = await resolveCommercialDocument({
             serie,
             numero,
             ejercicio,
             terminal,
             requestedType: getRequestDocumentType(req)
         });
-        const pdfBuffer = document.pdfBuffer;
+
+        // ASVS V8 / BOLA: the document vendor must be inside the signed user scope.
+        if (!await authorizeDocumentScope(req, document)) {
+            return res.status(403).json(isDocumentScopeForbiddenResponse());
+        }
+        if (!authorizeDocumentShareRecipient(req, document, telefono)) {
+            return res.status(422).json(shareDestinatarioNotAllowedResponse());
+        }
+
+        const pdfDocument = await buildCommercialDocumentPdf(document);
+        const pdfBuffer = pdfDocument.pdfBuffer;
         const message = buildWhatsAppMessageForDocument(document, clienteNombre);
 
         const phoneClean = telefono.replace(/\D/g, '');
@@ -491,7 +643,7 @@ router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
  * POST /api/facturas/send-email
  * Server-side email sending with PDF attachment via Nodemailer
  */
-router.post('/send-email', verifyToken, async (req, res, next) => {
+router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     try {
         const { serie, numero, ejercicio, terminal, destinatario, asunto, cuerpo, clienteNombre } = req.body;
@@ -505,7 +657,7 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
             return res.status(400).json({ success: false, error: 'Email destinatario inválido' });
         }
 
-        const document = await getCommercialDocumentPdf({
+        const document = await resolveCommercialDocument({
             serie,
             numero,
             ejercicio,
@@ -513,6 +665,17 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
             requestedType: getRequestDocumentType(req)
         });
 
+        // ASVS V8 / BOLA: the document vendor must be inside the signed user scope.
+        if (!await authorizeDocumentScope(req, document)) {
+            return res.status(403).json(isDocumentScopeForbiddenResponse());
+        }
+        // ASVS V8: emails leave our perimeter; only the client's own email or a
+        // financial role may receive a commercial document.
+        if (!authorizeDocumentShareRecipient(req, document, destinatario)) {
+            return res.status(422).json(emailDestinatarioNotAllowedResponse());
+        }
+
+        const pdfDocument = await buildCommercialDocumentPdf(document);
         const emailSubject = asunto || `${document.label} ${document.displaySerie}-${document.displayNumero} - Granja Mari Pepa`;
         const htmlBody = buildEmailHtmlForDocument(document, clienteNombre, cuerpo);
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -521,7 +684,7 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
             to: destinatario,
             subject: emailSubject,
             htmlBody,
-            pdfBuffer: document.pdfBuffer,
+            pdfBuffer: pdfDocument.pdfBuffer,
             pdfFilename
         }));
 
@@ -546,7 +709,7 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
  * POST /api/facturas/share/email (LEGACY - kept for backward compatibility)
  * Now redirects to send-email
  */
-router.post('/share/email', verifyToken, async (req, res, next) => {
+router.post('/share/email', verifyToken, emailLimiter, async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     try {
         const { serie, numero, ejercicio, terminal, destinatario, clienteNombre } = req.body;
@@ -560,13 +723,25 @@ router.post('/share/email', verifyToken, async (req, res, next) => {
             return res.status(400).json({ success: false, error: 'Email inválido' });
         }
 
-        const document = await getCommercialDocumentPdf({
+        const document = await resolveCommercialDocument({
             serie,
             numero,
             ejercicio,
             terminal,
             requestedType: getRequestDocumentType(req)
         });
+
+        // ASVS V8 / BOLA: the document vendor must be inside the signed user scope.
+        if (!await authorizeDocumentScope(req, document)) {
+            return res.status(403).json(isDocumentScopeForbiddenResponse());
+        }
+        // ASVS V8: emails leave our perimeter; only the client's own email or a
+        // financial role may receive a commercial document.
+        if (!authorizeDocumentShareRecipient(req, document, destinatario)) {
+            return res.status(422).json(emailDestinatarioNotAllowedResponse());
+        }
+
+        const pdfDocument = await buildCommercialDocumentPdf(document);
         const emailSubject = `${document.label} ${document.displaySerie}-${document.displayNumero} - Granja Mari Pepa`;
         const htmlBody = buildEmailHtmlForDocument(document, clienteNombre);
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -575,7 +750,7 @@ router.post('/share/email', verifyToken, async (req, res, next) => {
             to: destinatario,
             subject: emailSubject,
             htmlBody,
-            pdfBuffer: document.pdfBuffer,
+            pdfBuffer: pdfDocument.pdfBuffer,
             pdfFilename
         }));
 

@@ -16,11 +16,14 @@ class OrderKpiDashboard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prov = ref.watch(pedidosProvider);
-    final stats = prov.orderStats;
-    final showMargin = prov.isMarginVisible;
+    // select(): solo KPIs — no rebuild con carrito/búsqueda/productos.
+    final stats = ref.watch(pedidosProvider.select((p) => p.orderStats));
+    final showMargin =
+        ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+    final isLoadingStats =
+        ref.watch(pedidosProvider.select((p) => p.isLoadingStats));
 
-    if (prov.isLoadingStats || stats == null) {
+    if (isLoadingStats || stats == null) {
       return _buildLoadingState(showMarginCards: showMargin);
     }
 

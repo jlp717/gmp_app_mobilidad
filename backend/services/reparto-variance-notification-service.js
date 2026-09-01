@@ -286,24 +286,6 @@ async function enqueueVarianceOutbox(row, { query = queryWithParams, env = proce
   return result;
 }
 
-async function markOutboxStatus(id, { status, error = null, query = queryWithParams, env = process.env } = {}) {
-  const tables = notificationTables(env);
-  if (status === 'SENT') {
-    await query(
-      `UPDATE ${tables.varianceOutbox}
-          SET STATUS = ?, SENT_AT = CURRENT TIMESTAMP, ERROR = NULL
-        WHERE ID = ?`,
-      [status, id],
-    );
-    return;
-  }
-  await query(
-    `UPDATE ${tables.varianceOutbox}
-        SET STATUS = ?, ERROR = ?
-      WHERE ID = ?`,
-    [status, normalizeText(error).slice(0, 500) || null, id],
-  );
-}
 
 async function sendVarianceEmail(payload, recipients, { sendEmail = sendEmailWithPdf } = {}) {
   if (!recipients.length) {
@@ -405,6 +387,7 @@ async function notifyAfterCobro({
   env = process.env,
   sendEmail = sendEmailWithPdf,
   resolveRecipients = resolveLiquidacionRecipients,
+  resolveClient = resolveDocumentClient,
 } = {}) {
   if (!result?.created || !cobro) {
     return { skipped: true, reason: 'not_created' };
@@ -438,11 +421,29 @@ async function notifyAfterCobro({
     }
 
     const amount = Number(cobro.importeCobrado);
+    const documento = cobroDocumentLabel(cobro);
+    // The canonical rutero payment schema carries no client identity, so the
+    // receipt PDF and the notification email used to ship an empty Cliente
+    // row. Enrich from the authoritative ERP document (CPC + CLI) — same
+    // pattern as notifyAfterConfirm. The vencimientos flow already sends
+    // both fields and skips the lookup entirely.
+    let codigoCliente = normalizeText(cobro.codigoCliente);
+    let nombreCliente = normalizeText(cobro.nombreCliente);
+    if (!codigoCliente || !nombreCliente) {
+      try {
+        const resolvedClient = await resolveClient(documento, { query });
+        codigoCliente = codigoCliente || normalizeText(resolvedClient?.codigo || resolvedClient?.code);
+        nombreCliente = nombreCliente || normalizeText(resolvedClient?.nombre || resolvedClient?.name);
+      } catch (error) {
+        // A failed enrichment must never block the durable cobro alert.
+        logger.warn(`[cobro-notify] client resolve error: ${error.message}`);
+      }
+    }
     const payload = {
       cobroId: identity,
-      documento: cobroDocumentLabel(cobro),
-      codigoCliente: normalizeText(cobro.codigoCliente),
-      nombreCliente: normalizeText(cobro.nombreCliente),
+      documento,
+      codigoCliente,
+      nombreCliente,
       repartidorId,
       importe: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
       pendiente: Number.isFinite(Number(cobro.importePendiente))

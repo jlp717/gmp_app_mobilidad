@@ -238,58 +238,68 @@ class RepartidorFinanzasNotifier extends Notifier<RepartidorFinanzasState> {
 
     state = state.copyWith(isLoadingOverview: true, error: null);
 
-    var collectionsIncomplete = false;
-    late final RepartidorCollectionSummary collectionSummary;
-    var dailyCollections = const <DailyCollectionSnapshot>[];
+    // The three overview calls (collection summary, daily collections, delivery
+    // summary) are independent GETs — fire them in parallel instead of paying
+    // 3x serialized latency on every overview load. Partial-failure semantics
+    // are preserved: collections errors degrade to empty + banner while the
+    // delivery summary still decides success vs error state.
+    final results = await Future.wait<List<dynamic>>([
+      _service
+          .getCollectionSummary(
+            repartidorId: filters.repartidorId,
+            year: filters.year,
+            month: filters.month,
+            forceRefresh: forceRefresh,
+          )
+          .then<List<dynamic>>((value) => [value])
+          .catchError((_) => const []),
+      _service
+          .getDailyCollections(
+            repartidorId: filters.repartidorId,
+            year: filters.year,
+            month: filters.month,
+            forceRefresh: forceRefresh,
+          )
+          .then<List<dynamic>>((value) => [value])
+          .catchError((_) => const []),
+      _service
+          .getDeliverySummary(
+            repartidorId: filters.repartidorId,
+            year: filters.year,
+            month: filters.month,
+            forceRefresh: forceRefresh,
+          )
+          .then<List<dynamic>>((value) => [value])
+          .catchError((_) => const [null]),
+    ]);
 
-    try {
-      collectionSummary = await _service.getCollectionSummary(
-        repartidorId: filters.repartidorId,
-        year: filters.year,
-        month: filters.month,
-        forceRefresh: forceRefresh,
-      );
-    } catch (_) {
-      collectionsIncomplete = true;
-      collectionSummary = RepartidorCollectionSummary.empty(
-        repartidorId: filters.repartidorId,
-        year: filters.year,
-        month: filters.month,
-      );
-    }
+    final collectionSummary = results[0].isNotEmpty
+        ? results[0][0] as RepartidorCollectionSummary
+        : RepartidorCollectionSummary.empty(
+            repartidorId: filters.repartidorId,
+            year: filters.year,
+            month: filters.month,
+          );
+    final collectionsIncomplete = results[0].isEmpty || results[1].isEmpty;
+    final dailyCollections = results[1].isNotEmpty
+        ? results[1][0] as List<DailyCollectionSnapshot>
+        : const <DailyCollectionSnapshot>[];
 
-    try {
-      dailyCollections = await _service.getDailyCollections(
-        repartidorId: filters.repartidorId,
-        year: filters.year,
-        month: filters.month,
-        forceRefresh: forceRefresh,
-      );
-    } catch (_) {
-      collectionsIncomplete = true;
-      dailyCollections = const [];
-    }
-
-    try {
-      final deliverySummary = await _service.getDeliverySummary(
-        repartidorId: filters.repartidorId,
-        year: filters.year,
-        month: filters.month,
-        forceRefresh: forceRefresh,
-      );
-      if (requestGeneration != _requestGeneration) return;
+    if (requestGeneration != _requestGeneration) return;
+    final deliveryResult = results[2][0];
+    if (deliveryResult != null) {
       state = state.copyWith(
         collectionSummary: collectionSummary,
         dailyCollections: dailyCollections,
-        deliverySummary: deliverySummary,
+        deliverySummary: deliveryResult as RepartidorDeliverySummary,
         isLoadingOverview: false,
         lastUpdated: DateTime.now(),
         error: collectionsIncomplete
-            ? 'El detalle de cobros ERP no está completo. Entregas y liquidación sí están disponibles.'
+            ? 'El detalle de cobros ERP no está completo. '
+                'Entregas y liquidación sí están disponibles.'
             : null,
       );
-    } catch (_) {
-      if (requestGeneration != _requestGeneration) return;
+    } else {
       state = state.copyWith(
         collectionSummary: collectionSummary,
         dailyCollections: dailyCollections,

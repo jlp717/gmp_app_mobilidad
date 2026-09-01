@@ -17,23 +17,40 @@ ENV/
 # Secrets and configuration
 # OpenCode: ignore runtime noise/secrets, but track governance-critical configs/tools/plugins/agents.
 # NEVER un-ignore .opencode/CREDENCIALES.md or any secret-bearing local files.
-# GMP Flow V7 (2026-08-28): gobernanza VERSIONADA en git — .clinerules/, .cline/ (salvo runtime),
-# scripts/cline/, scripts/opencode/mcp/ y memory-bank/ se trackean. Solo runtime queda ignorado.
+# GMP Flow V7 (2026-08-29, spec team-port): gobernanza VERSIONADA en git — .clinerules/,
+# .cline/ (salvo runtime), scripts/cline/, scripts/opencode/mcp/ y memory-bank/ se trackean.
+# Solo runtime y secretos quedan ignorados. El bloque IDE (mas abajo) define .claude/* + excepciones.
 .opencode/*
-.codex/
-.claude/
-.claude/hooks/
-.claude/agents/
-.cline/
-.clinerules
-scripts/cline
-memory-bank/
-.opencode/
 .opencode-legacy/
-# Cline: solo runtime fuera de git (state/ledgers/backups); rules/skills/plugins/knowledge se versionan
+# Codex: gobernanza versionada (config.toml + hooks.json); runtime fuera (spec decision 4).
+.codex/*
+!.codex/config.toml
+!.codex/hooks.json
+# Cursor: gobernanza versionada (rules .mdc + hooks); resto (plans/sessions) fuera.
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+!.cursor/hooks.json
+# GMP Flow V7 kernel: reglas y memoria versionadas.
+!.clinerules/
+!.clinerules/**
+!memory-bank/
+!scripts/cline/
+!scripts/cline/**
+# Cline: gobernanza versionada (README/rules/skills/plugins/knowledge); solo runtime fuera.
+# data-template lleva cline_mcp_settings.json (SECRET_PATH del guardrail) e install-report es
+# output local del instalador: ambos fuera de git.
+.cline/*
+!.cline/README.md
+!.cline/rules/
+!.cline/knowledge/
+!.cline/skills/
+!.cline/plugins/
 .cline/state/
 .cline/backups/
 .cline/data-runtime/
+.cline/data-template/
+.cline/install-report.txt
 # Codex scratch (runtime, nunca versionar; el blanket .codex/ ya lo cubre — reglas explicitas
 # por si algun dia se levanta el blanket para versionar .codex/config.toml / hooks.json)
 .codex/patches/
@@ -43,6 +60,7 @@ memory-bank/
 .codex/tmp/
 !.opencode/config/
 .opencode/config/*
+!.opencode/config/automation-schedule.json
 !.opencode/config/governance/
 !.opencode/config/governance/**
 !.opencode/config/model-routing.yaml
@@ -77,6 +95,8 @@ memory-bank/
 !.opencode/skills/**
 !.opencode/agents/
 !.opencode/agents/**
+!.opencode/commands/
+!.opencode/commands/**
 !.opencode/AGENTS.md
 !.opencode/DEPRECATED.md
 !.opencode/scripts/
@@ -307,6 +327,7 @@ backend/scripts/analizar_*.js
 backend/scripts/*.log
 backend/scripts/*.txt
 backend/scripts/*.json
+backend/probe-interval-source.js
 
 # Redundant docs that shouldn't be tracked
 00_START_HERE.md
@@ -382,15 +403,20 @@ tmp/
 .flutter_tool_state/
 .codex/graph-runs/
 
-# Herramientas agenticas locales: no versionar reglas, prompts, skills,
-# configuraciones ni estado de Cline/OpenCode/Codex/Claude.
-# Estas reglas finales prevalecen sobre las excepciones historicas anteriores.
-.clinerules
-.clinerules/
+# Herramientas agenticas locales (bloque final 2026-08-28 REVOCADO 2026-08-29, spec team-port):
+# la gobernanza V7 (reglas/skills/plugins/agentes/scripts) SI se versiona; solo runtime/secretos fuera.
+# El detalle por herramienta vive en los bloques de arriba (OpenCode/Codex/Claude/Cline).
+
+# Decision de release 2026-09-01: arboles locales de asistentes, fuera de la rama.
 .cline/
-.opencode/
-.opencode-legacy/
-.codex/
+.clinerules/
 .claude/
+.opencode/
+.codex/
+.cursor/
 opencode.json
 .mcp.json
+scripts/cline/
+scripts/opencode/
+scripts/team/
+memory-bank/

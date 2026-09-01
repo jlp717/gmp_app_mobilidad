@@ -298,10 +298,18 @@ function assertPayment(planned, command, actualLines, document) {
 function assertPaymentRequired(planned, command) {
   if (command.cobro
     || !planned.cobroObligatorio
-    || !['ENTREGADO', 'PARCIAL'].includes(command.delivery.status)
-    || !(Number(planned.importePendiente) > 0)) {
+    || !['ENTREGADO', 'PARCIAL'].includes(command.delivery.status)) {
     return;
   }
+
+  if (String(planned.financialDocumentState || '').trim().toUpperCase() === 'AMBIGUOUS') {
+    throw new RepartoPersistenceError('El documento financiero de cobro falta o es ambiguo', {
+      code: 'PAYMENT_DOCUMENT_UNAVAILABLE',
+      statusCode: 409,
+    });
+  }
+
+  if (!(Number(planned.importePendiente) > 0)) return;
 
   throw new RepartoPersistenceError('El documento exige registrar un cobro antes de confirmar la entrega', {
     code: 'PAYMENT_REQUIRED',

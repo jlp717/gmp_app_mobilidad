@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/config/feature_flags.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_planner_3d_page.dart';
@@ -78,6 +79,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           children: [
             _buildHeader(),
             _buildDateSelector(),
+            const OfflineBanner(),
             if (!_loading && _error == null && _trucks.isNotEmpty)
               _buildKpiStrip(),
             Expanded(
@@ -149,6 +151,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
             ),
           ),
           IconButton(
+            tooltip: 'Actualizar datos',
             onPressed: () => _loadDashboard(forceRefresh: true),
             icon: const Icon(
               Icons.refresh_rounded,
@@ -195,6 +198,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
       child: Row(
         children: [
           IconButton(
+            tooltip: 'Día anterior',
             onPressed: () => _changeDate(-1),
             icon: const Icon(
               Icons.chevron_left_rounded,
@@ -275,6 +279,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
             ),
           ),
           IconButton(
+            tooltip: 'Día siguiente',
             onPressed: () => _changeDate(1),
             icon: const Icon(
               Icons.chevron_right_rounded,

@@ -374,7 +374,7 @@ describe('Service cache integration', () => {
   });
 
   test('dashboard.getDashboardVendedor caches on second call', async () => {
-    const { dashboardService } = require('../services/dashboard.service');
+    const { dashboardService } = require('../services/dashboard.service.ts');
 
     // Mock all 9 parallel queries
     mockQuery.mockImplementation(async () => {
@@ -423,7 +423,7 @@ describe('Service cache integration', () => {
   });
 
   test('different parameters create different cache entries', async () => {
-    const { dashboardService } = require('../services/dashboard.service');
+    const { dashboardService } = require('../services/dashboard.service.ts');
 
     mockQuery.mockResolvedValue([{ TOTAL: 100, CANTIDAD: 1, MARGEN: 10 }]);
 

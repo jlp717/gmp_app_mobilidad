@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/application/rutero_tracking_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_tracking.dart';
 
@@ -23,10 +24,17 @@ class RuteroTrackingPanel extends ConsumerStatefulWidget {
 }
 
 class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
+  bool _expanded = true;
+  bool _hasResolvedInitialExpansion = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    ref.read(ruteroTrackingProvider.notifier).updateStops(widget.stops);
+    if (!_hasResolvedInitialExpansion) {
+      _expanded = !Responsive.isPhone(context);
+      _hasResolvedInitialExpansion = true;
+    }
+    _syncStopsAfterBuild();
   }
 
   @override
@@ -35,8 +43,22 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
     if (oldWidget.routeDate != widget.routeDate ||
         oldWidget.repartidorId != widget.repartidorId ||
         oldWidget.stops != widget.stops) {
-      ref.read(ruteroTrackingProvider.notifier).updateStops(widget.stops);
+      _syncStopsAfterBuild();
     }
+  }
+
+  /// Notifier updates must run after the widget tree finishes building;
+  /// mutating provider state from didChangeDependencies throws in Riverpod.
+  void _syncStopsAfterBuild() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(ruteroTrackingProvider.notifier).updateStops(widget.stops);
+      }
+    });
+  }
+
+  void _toggleExpanded() {
+    setState(() => _expanded = !_expanded);
   }
 
   @override
@@ -50,171 +72,214 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
     final busy = tracking.status == RuteroTrackingStatus.starting ||
         tracking.status == RuteroTrackingStatus.stopping;
     final accent = tracking.isActive ? AppTheme.success : AppTheme.info;
+    final isPhone = Responsive.isPhone(context);
+    final toggleLabel = tracking.isActive
+        ? 'Seguimiento activo. '
+            '${_expanded ? 'Contraer' : 'Desplegar'} panel de seguimiento'
+        : '${_expanded ? 'Contraer' : 'Desplegar'} panel de seguimiento';
 
     return Card(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: EdgeInsets.fromLTRB(12, isPhone ? 4 : 8, 12, isPhone ? 4 : 8),
       color: AppTheme.softPanel,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: accent.withValues(alpha: 0.35)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        padding: EdgeInsets.fromLTRB(
+          14,
+          isPhone ? 8 : 12,
+          14,
+          isPhone ? 8 : 10,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  tracking.isActive
-                      ? Icons.my_location
-                      : Icons.location_searching,
-                  color: accent,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tracking.isActive
-                        ? 'Seguimiento activo'
-                        : 'Seguimiento de ruta',
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+            Semantics(
+              button: true,
+              expanded: _expanded,
+              label: toggleLabel,
+              onTap: _toggleExpanded,
+              onTapHint: _expanded ? 'Contraer' : 'Desplegar',
+              child: InkWell(
+                key: const ValueKey('rutero-tracking-collapse'),
+                onTap: _toggleExpanded,
+                excludeFromSemantics: true,
+                borderRadius: BorderRadius.circular(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Row(
+                    children: [
+                      Icon(
+                        tracking.isActive
+                            ? Icons.my_location
+                            : Icons.location_searching,
+                        color: accent,
+                        size: isPhone ? 20 : 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          tracking.isActive
+                              ? 'Seguimiento activo'
+                              : 'Seguimiento de ruta',
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (tracking.isActive)
+                        const ExcludeSemantics(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: Chip(
+                              label: Text('EN MARCHA'),
+                              visualDensity: VisualDensity.compact,
+                              labelStyle: TextStyle(fontSize: 10),
+                            ),
+                          ),
+                        ),
+                      Tooltip(
+                        message: _expanded ? 'Contraer' : 'Desplegar',
+                        child: Icon(
+                          _expanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (tracking.isActive)
-                  const Chip(
-                    label: Text('EN MARCHA'),
-                    visualDensity: VisualDensity.compact,
-                    labelStyle: TextStyle(fontSize: 10),
+              ),
+            ),
+            if (_expanded) ...[
+              const SizedBox(height: 6),
+              Text(
+                tracking.isActive
+                    ? 'La ubicación se registra mientras repartes. '
+                        'Puedes seguir usando otras aplicaciones.'
+                    : 'Registra tu avance y recibe avisos sobre la próxima parada.',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (tracking.nextStop != null)
+                _NextStopSummary(tracking: tracking)
+              else
+                const Text(
+                  'No quedan paradas pendientes en esta ruta.',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
+              if (tracking.position != null) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    _Metric(
+                      icon: Icons.gps_fixed,
+                      text: 'Precisión ±' +
+                          tracking.position!.accuracy.toStringAsFixed(0) +
+                          ' m',
+                    ),
+                    if (tracking.position!.speedKmh != null)
+                      _Metric(
+                        icon: Icons.speed,
+                        text: tracking.position!.speedKmh!.toStringAsFixed(0) +
+                            ' km/h',
+                      ),
+                    if (tracking.lastSentAt != null)
+                      _Metric(
+                        icon: Icons.cloud_done,
+                        text: 'Sincronizado ' + _time(tracking.lastSentAt!),
+                      ),
+                  ],
+                ),
+              ],
+              if (tracking.pendingSamples > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  tracking.pendingSamples.toString() +
+                      ' punto(s) pendiente(s) de sincronizar',
+                  style: const TextStyle(
+                    color: AppTheme.warning,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+              if (tracking.error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  tracking.error!,
+                  key: const ValueKey('rutero-tracking-error'),
+                  style: const TextStyle(color: AppTheme.error, fontSize: 12),
+                ),
+                if (tracking.status == RuteroTrackingStatus.permissionDenied ||
+                    tracking.status == RuteroTrackingStatus.unavailable)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _openLocationSettings,
+                      icon: const Icon(Icons.settings, size: 16),
+                      label: const Text('Abrir ajustes'),
+                    ),
                   ),
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              tracking.isActive
-                  ? 'La ubicación se registra mientras repartes. '
-                      'Puedes seguir usando otras aplicaciones.'
-                  : 'Registra tu avance y recibe avisos sobre la próxima parada.',
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 10),
-            if (tracking.nextStop != null)
-              _NextStopSummary(tracking: tracking)
-            else
-              const Text(
-                'No quedan paradas pendientes en esta ruta.',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              ),
-            if (tracking.position != null) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
+              const Divider(height: 18),
+              Row(
                 children: [
-                  _Metric(
-                    icon: Icons.gps_fixed,
-                    text: 'Precisión ±' +
-                        tracking.position!.accuracy.toStringAsFixed(0) +
-                        ' m',
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: busy
+                          ? null
+                          : canStop
+                              ? notifier.stop
+                              : () => notifier.start(
+                                    repartidorId: widget.repartidorId,
+                                    routeDate: widget.routeDate,
+                                    stops: widget.stops,
+                                  ),
+                      icon: Icon(canStop ? Icons.stop : Icons.play_arrow),
+                      label: Text(
+                        busy
+                            ? 'Procesando…'
+                            : canStop
+                                ? tracking.status == RuteroTrackingStatus.error
+                                    ? 'Reintentar cierre'
+                                    : 'Parar seguimiento'
+                                : 'Iniciar seguimiento',
+                      ),
+                    ),
                   ),
-                  if (tracking.position!.speedKmh != null)
-                    _Metric(
-                      icon: Icons.speed,
-                      text: tracking.position!.speedKmh!.toStringAsFixed(0) +
-                          ' km/h',
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: 'Avisos de voz',
+                    child: Switch(
+                      value: tracking.voiceEnabled,
+                      onChanged: busy ? null : notifier.setVoiceEnabled,
                     ),
-                  if (tracking.lastSentAt != null)
-                    _Metric(
-                      icon: Icons.cloud_done,
-                      text: 'Sincronizado ' + _time(tracking.lastSentAt!),
-                    ),
+                  ),
+                  const Icon(
+                    Icons.volume_up_outlined,
+                    color: AppTheme.textSecondary,
+                    size: 18,
+                  ),
                 ],
               ),
-            ],
-            if (tracking.pendingSamples > 0) ...[
               const SizedBox(height: 4),
-              Text(
-                tracking.pendingSamples.toString() +
-                    ' punto(s) pendiente(s) de sincronizar',
-                style: const TextStyle(
-                  color: AppTheme.warning,
-                  fontSize: 11,
+              const Text(
+                'La distancia es aproximada en línea recta. Para indicaciones '
+                'de giro, usa el botón Navegar de la parada.',
+                style: TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 10,
                 ),
               ),
             ],
-            if (tracking.error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                tracking.error!,
-                key: const ValueKey('rutero-tracking-error'),
-                style: const TextStyle(color: AppTheme.error, fontSize: 12),
-              ),
-              if (tracking.status == RuteroTrackingStatus.permissionDenied ||
-                  tracking.status == RuteroTrackingStatus.unavailable)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _openLocationSettings,
-                    icon: const Icon(Icons.settings, size: 16),
-                    label: const Text('Abrir ajustes'),
-                  ),
-                ),
-            ],
-            const Divider(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: busy
-                        ? null
-                        : canStop
-                            ? notifier.stop
-                            : () => notifier.start(
-                                  repartidorId: widget.repartidorId,
-                                  routeDate: widget.routeDate,
-                                  stops: widget.stops,
-                                ),
-                    icon: Icon(canStop ? Icons.stop : Icons.play_arrow),
-                    label: Text(
-                      busy
-                          ? 'Procesando…'
-                          : canStop
-                              ? tracking.status == RuteroTrackingStatus.error
-                                  ? 'Reintentar cierre'
-                                  : 'Parar seguimiento'
-                              : 'Iniciar seguimiento',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Tooltip(
-                  message: 'Avisos de voz',
-                  child: Switch(
-                    value: tracking.voiceEnabled,
-                    onChanged: busy ? null : notifier.setVoiceEnabled,
-                  ),
-                ),
-                const Icon(
-                  Icons.volume_up_outlined,
-                  color: AppTheme.textSecondary,
-                  size: 18,
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'La distancia es aproximada en línea recta. Para indicaciones '
-              'de giro, usa el botón Navegar de la parada.',
-              style: TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 10,
-              ),
-            ),
           ],
         ),
       ),

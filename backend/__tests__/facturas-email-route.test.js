@@ -30,6 +30,7 @@ jest.mock('../middleware/logger', () => ({
 jest.mock('../services/facturas.service', () => ({
   getFacturaDetail: (...args) => mockGetFacturaDetail(...args),
   getAlbaranDetailForPdf: (...args) => mockGetAlbaranDetailForPdf(...args),
+  isFacturaClientOwnedByVendors: jest.fn().mockResolvedValue(true),
   generateWhatsAppMessage: jest.fn(),
 }));
 
@@ -64,7 +65,14 @@ beforeEach(() => {
   mockGeneratePdf.mockResolvedValue(Buffer.from('%PDF-1.4'));
   mockGenerateDocumentPdf.mockResolvedValue(Buffer.from('%PDF-1.4'));
   mockGetFacturaDetail.mockResolvedValue({
-    header: { fecha: '12/06/2026', total: 10, clienteNombre: 'Cliente' },
+    header: {
+      fecha: '12/06/2026',
+      total: 10,
+      clienteNombre: 'Cliente',
+      vendedor: '01',
+      clienteId: '4300010400',
+      clienteEmail: 'cliente@example.com',
+    },
   });
   mockGetAlbaranDetailForPdf.mockResolvedValue({
     documentType: 'albaran',
@@ -78,6 +86,8 @@ beforeEach(() => {
       IMPORTETOTAL: 1172.49,
       clienteNombre: 'Cliente Albaran',
       NOMBRECLIENTEFACTURA: 'Cliente Albaran',
+      clienteId: '4300001183',
+      vendedor: '01',
     },
     lines: [],
   });

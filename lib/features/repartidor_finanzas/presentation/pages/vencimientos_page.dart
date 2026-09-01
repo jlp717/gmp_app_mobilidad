@@ -108,37 +108,18 @@ class _VencimientosPageState extends State<VencimientosPage> {
   Widget build(BuildContext context) {
     final visible = _filteredItems();
     final groups = _groupItems(visible);
-    final rows = <Widget>[
+    // Flat typed row specs so ListView.builder only creates widget configs
+    // for the visible rows (virtualized grouped list).
+    final rowSpecs = <_VencimientoRowSpec>[
       for (final entry in groups.entries) ...[
-        _GroupHeader(
-          title: entry.key,
-          count: entry.value.length,
-          amount: _total(entry.value),
+        _GroupHeaderSpec(
+          entry.key,
+          entry.value.length,
+          _total(entry.value),
         ),
-        const SizedBox(height: 8),
-        for (final item in entry.value) ...[
-          _VencimientoRow(
-            item: item,
-            onTap: widget.onItemTap == null
-                ? null
-                : () => widget.onItemTap?.call(item),
-          ),
-          const SizedBox(height: 8),
-        ],
+        for (final item in entry.value) _VencimientoItemSpec(item),
       ],
-      if (widget.hasMore)
-        Center(
-          child: widget.isLoadingMore
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(),
-                )
-              : OutlinedButton.icon(
-                  onPressed: widget.onLoadMore,
-                  icon: const Icon(Icons.expand_more),
-                  label: const Text('Cargar más'),
-                ),
-        ),
+      if (widget.hasMore) const _LoadMoreSpec(),
     ];
 
     return Scaffold(
@@ -177,9 +158,48 @@ class _VencimientosPageState extends State<VencimientosPage> {
                 ? const _EmptyState(
                     message: 'No hay vencimientos para el filtro',
                   )
-                : ListView(
+                : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                    children: rows,
+                    itemCount: rowSpecs.length,
+                    itemBuilder: (context, index) {
+                      final spec = rowSpecs[index];
+                      return switch (spec) {
+                        _GroupHeaderSpec(
+                          :final title,
+                          :final count,
+                          :final amount,
+                        ) =>
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _GroupHeader(
+                              title: title,
+                              count: count,
+                              amount: amount,
+                            ),
+                          ),
+                        _VencimientoItemSpec(:final item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _VencimientoRow(
+                              item: item,
+                              onTap: widget.onItemTap == null
+                                  ? null
+                                  : () => widget.onItemTap?.call(item),
+                            ),
+                          ),
+                        _LoadMoreSpec() => Center(
+                            child: widget.isLoadingMore
+                                ? const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : OutlinedButton.icon(
+                                    onPressed: widget.onLoadMore,
+                                    icon: const Icon(Icons.expand_more),
+                                    label: const Text('Cargar más'),
+                                  ),
+                          ),
+                      };
+                    },
                   ),
           ),
         ],
@@ -911,6 +931,31 @@ class _FilterStrip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lightweight typed specs for the virtualized vencimientos list: the flat
+/// row list holds data, and ListView.builder only instantiates widgets for
+/// visible rows.
+sealed class _VencimientoRowSpec {
+  const _VencimientoRowSpec();
+}
+
+class _GroupHeaderSpec extends _VencimientoRowSpec {
+  const _GroupHeaderSpec(this.title, this.count, this.amount);
+
+  final String title;
+  final int count;
+  final double amount;
+}
+
+class _VencimientoItemSpec extends _VencimientoRowSpec {
+  const _VencimientoItemSpec(this.item);
+
+  final VencimientoItem item;
+}
+
+class _LoadMoreSpec extends _VencimientoRowSpec {
+  const _LoadMoreSpec();
 }
 
 class _GroupHeader extends StatelessWidget {

@@ -6,7 +6,10 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_inbox.dart';
 import 'package:image_picker/image_picker.dart';
 
 abstract interface class RepartoEvidenceUploader {
@@ -251,18 +254,36 @@ class RepartoUploadedEvidence {
   const RepartoUploadedEvidence({
     required this.signatureId,
     required this.photoIds,
+    this.pendingRefs = const <RepartoPendingEvidenceRef>[],
   });
 
   final String? signatureId;
   final List<String> photoIds;
+
+  /// Slots captured offline: bytes live in the inbox and ids resolve during
+  /// the drain. Empty means every evidence id is resolved server-side.
+  final List<RepartoPendingEvidenceRef> pendingRefs;
+
+  bool get hasPending => pendingRefs.isNotEmpty;
 }
 
 /// Coordinates the bounded upload phase before the canonical confirmation.
 class RepartoEvidenceConfirmationCoordinator {
-  const RepartoEvidenceConfirmationCoordinator(this._uploader, this._journal);
+  const RepartoEvidenceConfirmationCoordinator(
+    this._uploader,
+    this._journal, {
+    RepartoEvidenceInbox? inbox,
+    bool Function()? offlineDetector,
+  })  : _inbox = inbox,
+        _offlineDetector = offlineDetector;
 
   final RepartoEvidenceUploader _uploader;
   final RepartoConfirmationJournal _journal;
+  final RepartoEvidenceInbox? _inbox;
+
+  /// Test seam: defaults to the live ConnectivityService. Tests inject a
+  /// deterministic detector to exercise the offline capture branch.
+  final bool Function()? _offlineDetector;
 
   Future<T> uploadThenConfirm<T>({
     required String entregaId,
@@ -287,6 +308,17 @@ class RepartoEvidenceConfirmationCoordinator {
       hasSignatureBytes: signaturePngBytes != null,
       photoCount: photos.length,
     );
+
+    // Offline capture: persist bytes durably, keep slot identities in the
+    // journal, and hand the caller pending references instead of server ids.
+    if (isOfflineCapture) {
+      return _confirmWithInboxEvidence<T>(
+        entregaId: entregaId,
+        signaturePngBytes: signaturePngBytes,
+        photos: photos,
+        confirm: confirm,
+      );
+    }
     final signatureId = signaturePngBytes == null
         ? _persistedId(entry, 'signature')
         : await _uploadSignature(
@@ -327,6 +359,117 @@ class RepartoEvidenceConfirmationCoordinator {
       ]),
     );
     return confirm(evidence);
+  }
+
+  bool get isOfflineCapture {
+    final detector = _offlineDetector;
+    return detector != null
+        ? detector()
+        : ConnectivityService.instance.currentStatus !=
+            ConnectivityStatus.online;
+  }
+
+  Future<T> _confirmWithInboxEvidence<T>({
+    required String entregaId,
+    required Uint8List? signaturePngBytes,
+    required List<XFile> photos,
+    required Future<T> Function(RepartoUploadedEvidence evidence) confirm,
+  }) async {
+    final inbox = _inbox;
+    if (inbox == null) {
+      throw const RepartoEvidenceUploadException(
+        'Sin conexión y sin almacenamiento local disponible.',
+        code: 'INBOX_UNAVAILABLE',
+        statusCode: 503,
+      );
+    }
+    final pendingRefs = <RepartoPendingEvidenceRef>[];
+    final resolvedPhotoIds = <String>[];
+
+    // Slots already resolved by a previous (possibly partial) drain keep
+    // their server evidence ids; only un-resolved slots consume inbox bytes.
+    var entry = await _journal.loadOrCreate(entregaId);
+    final resolvedSignatureId = _persistedId(entry, 'signature');
+    if (signaturePngBytes != null && resolvedSignatureId == null) {
+      pendingRefs.add(
+        await _stashOfflineEvidence(
+          inbox: inbox,
+          entregaId: entregaId,
+          slot: 'signature',
+          bytes: signaturePngBytes,
+        ),
+      );
+    }
+
+    for (var index = 0; index < photos.length; index++) {
+      final slot = 'photo-$index';
+      entry = await _journal.loadOrCreate(entregaId);
+      final resolved = _persistedId(entry, slot);
+      if (resolved != null) {
+        resolvedPhotoIds.add(resolved);
+        continue;
+      }
+      final bytes = await photos[index].readAsBytes();
+      pendingRefs.add(
+        await _stashOfflineEvidence(
+          inbox: inbox,
+          entregaId: entregaId,
+          slot: slot,
+          bytes: bytes,
+        ),
+      );
+    }
+
+    // Every slot must be either resolved or pending for the caller to build
+    // a complete deferred payload.
+    final effectiveSignatureId = resolvedSignatureId ??
+        (signaturePngBytes == null ? _persistedId(entry, 'signature') : null);
+
+    return confirm(
+      RepartoUploadedEvidence(
+        signatureId: effectiveSignatureId,
+        photoIds: List<String>.unmodifiable(resolvedPhotoIds),
+        pendingRefs: List<RepartoPendingEvidenceRef>.unmodifiable(
+          pendingRefs,
+        ),
+      ),
+    );
+  }
+
+  /// Reserves the journal slot (stable fingerprint + idempotency key) and
+  /// persists the raw bytes in the encrypted inbox.
+  Future<RepartoPendingEvidenceRef> _stashOfflineEvidence({
+    required RepartoEvidenceInbox inbox,
+    required String entregaId,
+    required String slot,
+    required Uint8List bytes,
+  }) async {
+    final record = await _journal.reserveEvidence(
+      deliveryId: entregaId,
+      slot: slot,
+      fingerprint: sha256.convert(bytes).toString(),
+    );
+    if (record.evidenceId != null) {
+      // A previous partial drain already uploaded these exact bytes.
+      return RepartoPendingEvidenceRef(
+        slot: slot,
+        fingerprint: record.fingerprint,
+        idempotencyKey: record.idempotencyKey,
+      );
+    }
+    await inbox.put(
+      deliveryId: entregaId,
+      slot: slot,
+      bytes: bytes,
+      fingerprint: record.fingerprint,
+      idempotencyKey: record.idempotencyKey,
+      savedAt: DateTime.now(),
+    );
+    return RepartoPendingEvidenceRef(
+      slot: slot,
+      fingerprint: record.fingerprint,
+      idempotencyKey: record.idempotencyKey,
+    );
   }
 
   Future<void> _failClosedIfPendingEvidenceHasNoBytes({

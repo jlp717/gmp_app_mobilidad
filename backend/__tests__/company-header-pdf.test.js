@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
-const { HEADER_PNG_PATH, getHeaderAsset, drawCompanyHeader } = require('../services/company-header');
+const { HEADER_PNG_PATH, getHeaderAsset, drawCompanyHeader, __resetHeaderAssetCacheForTests } = require('../services/company-header');
 const { generateInvoicePDF: cleanInvoice } = require('../services/pdf.service');
 const { generateInvoicePDF: documentInvoice } = require('../app/services/pdfService');
 const { buildLiquidacionPdfBuffer } = require('../services/liquidacion-pdf-service');
@@ -112,9 +112,13 @@ test('justificante de cobro repeats the PNG header on controlled continuation pa
 });
 
 test('missing corporate PNG fails closed instead of drawing a placeholder', () => {
+  // Earlier suites warm the process-lifetime asset cache; the cold-start
+  // guard must be exercised explicitly.
+  __resetHeaderAssetCacheForTests();
   const exists = fs.existsSync;
   jest.spyOn(fs, 'existsSync').mockImplementation((file) => file === HEADER_PNG_PATH ? false : exists(file));
   const doc = { page: { width: 595.28, margins: { left: 36, right: 36 } }, image: jest.fn() };
   expect(() => drawCompanyHeader(doc)).toThrow(expect.objectContaining({ code: 'COMPANY_HEADER_ASSET_UNAVAILABLE' }));
   expect(doc.image).not.toHaveBeenCalled();
+  __resetHeaderAssetCacheForTests();
 });

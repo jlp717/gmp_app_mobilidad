@@ -226,7 +226,10 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       itemBuilder: (ctx, i) {
         final line = provider.lines[i];
         return OrderLineTile(
-          key: ObjectKey(line),
+          // Stable key per article: the cart deduplicates by codigoArticulo,
+          // so identity follows the code. ObjectKey(line) changed every
+          // key on each updateLine and repainted the whole list per tap.
+          key: ValueKey(line.codigoArticulo),
           line: line,
           index: i,
           onDismissed: () async {

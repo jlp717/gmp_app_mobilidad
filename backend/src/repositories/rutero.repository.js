@@ -1,6 +1,7 @@
 'use strict';
 
 const { db } = require('../config');
+const { resolveRepartoRuntime } = require('../../config/reparto-runtime');
 
 /**
  * Acceso DB2 para /rutero/week. Solo lectura: DSEDAC (ERP) y JAVIER.DELIVERY_STATUS.
@@ -37,13 +38,21 @@ class RuteroRepository {
     async fetchAppDeliveredCount(cleanCodes) {
         const { isDeliveryStatusNewSchema } = require('../../utils/delivery-status-check');
         const dsNew = isDeliveryStatusNewSchema();
+        const { getDeliveryStatusTable } = require('../../utils/delivery-status-check');
+        const runtime = resolveRepartoRuntime(process.env);
+        const deliveryStatusTable = runtime?.valid
+            ? runtime.tables?.notifications?.deliveryStatus
+            : getDeliveryStatusTable();
+        if (!/^[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*$/.test(String(deliveryStatusTable || ''))) {
+            return 0;
+        }
         const appPlaceholders = cleanCodes.map(() => '?').join(',');
         const countCol = dsNew ? 'COUNT(DISTINCT DS.IDEMPOTENCY_TOKEN)' : 'COUNT(DISTINCT DS.ID)';
         const repCol = dsNew ? 'DS.OPERADOR' : 'DS.REPARTIDOR_ID';
         const dateCol = dsNew ? 'DS.UPDATED_AT' : 'DS.FECHAACTUALIZACION';
         const appSql = `
             SELECT ${countCol} as DELIVERED
-            FROM JAVIER.DELIVERY_STATUS DS
+            FROM ${deliveryStatusTable} DS
             WHERE DS.STATUS = 'ENTREGADO'
               AND ${repCol} IN (${appPlaceholders})
               AND DATE(${dateCol}) = CURRENT DATE

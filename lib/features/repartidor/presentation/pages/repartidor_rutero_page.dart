@@ -8,11 +8,13 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/futuristic_week_navigator.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/holographic_kpi_dashboard.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_rutero_reorder_modal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/reparto_sync_status_sheet.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/smart_delivery_card.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_tracking.dart';
@@ -312,123 +314,163 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       }
     }
 
+    // Terminal visit states (entregado, noEntregado, rechazado) must not be
+    // announced as "próxima parada": the driver already closed them. Pendiente,
+    // enRuta and parcial remain navigation targets (parcial needs a revisit).
     final trackingStops = albaranes
-        .where((albaran) => albaran.estado != EstadoEntrega.entregado)
-        .map((albaran) => RuteroTrackingStop(
-              id: albaran.id,
-              name: albaran.nombreCliente,
-              latitude: albaran.latitud,
-              longitude: albaran.longitud,
-            ))
+        .where(
+          (albaran) =>
+              albaran.estado != EstadoEntrega.entregado &&
+              albaran.estado != EstadoEntrega.noEntregado &&
+              albaran.estado != EstadoEntrega.rechazado,
+        )
+        .map(
+          (albaran) => RuteroTrackingStop(
+            id: albaran.id,
+            name: albaran.nombreCliente,
+            latitude: albaran.latitud,
+            longitude: albaran.longitud,
+          ),
+        )
         .toList(growable: false);
     final routeDateYmd = _selectedDate.toIso8601String().substring(0, 10);
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
-      body: Column(
-        children: [
-          // HEADER (COMPACT)
-          SmartSyncHeader(
-            title: 'Rutero',
-            subtitle: currentName,
-            onSync: () => _loadData(forceRefresh: true),
-            isLoading: isLoading || _isLoadingWeek,
-            compact: true,
-          ),
-
-          // FUTURISTIC WEEK NAVIGATOR
-          FuturisticWeekNavigator(
-            selectedDate: _selectedDate,
-            weekDays: _weekDays,
-            onDaySelected: _onDaySelected,
-            onWeekChange: _onWeekChange,
-            isLoading: _isLoadingWeek,
-            totalClients: albaranes.length,
-          ),
-
-          // ERROR BANNER
-          if (error != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    color: AppTheme.error,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      error,
-                      style:
-                          const TextStyle(color: AppTheme.error, fontSize: 12),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.refresh,
-                      color: AppTheme.error,
-                      size: 18,
-                    ),
-                    onPressed: () => _loadData(forceRefresh: true),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
+      body: RefreshIndicator(
+        onRefresh: () => _loadData(forceRefresh: true),
+        color: AppTheme.info,
+        backgroundColor: AppTheme.raisedSurface,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // HEADER (COMPACT)
+            SliverToBoxAdapter(
+              child: SmartSyncHeader(
+                title: 'Rutero',
+                subtitle: currentName,
+                onSync: () => _loadData(forceRefresh: true),
+                isLoading: isLoading || _isLoadingWeek,
+                compact: true,
               ),
             ),
 
-          if (_weekError != null)
-            TextButton.icon(
-              key: const ValueKey('week-load-retry'),
-              onPressed: () => _loadData(forceRefresh: true),
-              icon: const Icon(Icons.refresh, color: AppTheme.error),
-              label: Text(_weekError!),
+            // PENDING SYNC INDICATOR (EARS-11)
+            const SliverToBoxAdapter(child: _PendingSyncChip()),
+
+            // FUTURISTIC WEEK NAVIGATOR
+            SliverToBoxAdapter(
+              child: FuturisticWeekNavigator(
+                selectedDate: _selectedDate,
+                weekDays: _weekDays,
+                onDaySelected: _onDaySelected,
+                onWeekChange: _onWeekChange,
+                isLoading: _isLoadingWeek,
+                totalClients: albaranes.length,
+              ),
             ),
 
-          if (_identityError != null) _buildIdentityError(),
+            // ERROR BANNER
+            if (error != null)
+              SliverToBoxAdapter(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.error.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: AppTheme.error,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          error,
+                          style: const TextStyle(
+                            color: AppTheme.error,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: AppTheme.error,
+                          size: 18,
+                        ),
+                        onPressed: () => _loadData(forceRefresh: true),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
-          // SEARCH & FILTER ROW
-          _buildSearchAndFilters(
-            filterDebeCobrar: filterDebeCobrar,
-            filterTipoPago: filterTipoPago,
-            sortBy: sortBy,
-            albaranes: albaranes,
-            authUserCode: authState?.user?.code,
-          ),
+            if (_weekError != null)
+              SliverToBoxAdapter(
+                child: TextButton.icon(
+                  key: const ValueKey('week-load-retry'),
+                  onPressed: () => _loadData(forceRefresh: true),
+                  icon: const Icon(Icons.refresh, color: AppTheme.error),
+                  label: Text(_weekError!),
+                ),
+              ),
 
-          // HOLOGRAPHIC KPI DASHBOARD
-          HolographicKpiDashboard(
-            totalEntregas: albaranes.length,
-            entregasCompletadas: resumenCompletedCount,
-            montoACobrar: resumenTotalACobrar,
-            montoOpcional: resumenTotalOpcional,
-            totalMonto: resumenTotalBruto,
-            isLoading: isLoading,
-          ),
+            if (_identityError != null)
+              SliverToBoxAdapter(child: _buildIdentityError()),
 
-          if (scopedId.isNotEmpty && !scopedId.contains(','))
-            RuteroTrackingPanel(
-              repartidorId: scopedId,
-              routeDate: routeDateYmd,
-              stops: trackingStops,
+            // SEARCH & FILTER ROW
+            SliverToBoxAdapter(
+              child: _buildSearchAndFilters(
+                filterDebeCobrar: filterDebeCobrar,
+                filterTipoPago: filterTipoPago,
+                sortBy: sortBy,
+                albaranes: albaranes,
+                authUserCode: authState?.user?.code,
+              ),
             ),
 
-          // CLIENT LIST
-          Expanded(
-            child: isLoading || (albaranes.isEmpty && hasMore && error == null)
-                ? _buildLoadingState()
-                : _buildClientList(albaranes),
-          ),
-        ],
+            // HOLOGRAPHIC KPI DASHBOARD
+            SliverToBoxAdapter(
+              child: HolographicKpiDashboard(
+                totalEntregas: albaranes.length,
+                entregasCompletadas: resumenCompletedCount,
+                montoACobrar: resumenTotalACobrar,
+                montoOpcional: resumenTotalOpcional,
+                totalMonto: resumenTotalBruto,
+                isLoading: isLoading,
+              ),
+            ),
+
+            if (scopedId.isNotEmpty && !scopedId.contains(','))
+              SliverToBoxAdapter(
+                child: RuteroTrackingPanel(
+                  repartidorId: scopedId,
+                  routeDate: routeDateYmd,
+                  stops: trackingStops,
+                ),
+              ),
+
+            // CLIENT LIST
+            if (isLoading || (albaranes.isEmpty && hasMore && error == null))
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildLoadingState(),
+              )
+            else
+              _buildClientListSliver(albaranes),
+          ],
+        ),
       ),
     );
   }
@@ -810,39 +852,27 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 
-  Widget _buildClientList(List<AlbaranEntrega> albaranes) {
+  Widget _buildClientListSliver(List<AlbaranEntrega> albaranes) {
     if (albaranes.isEmpty) {
-      return _buildEmptyState();
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _buildEmptyState(),
+      );
     }
 
     return AnimatedBuilder(
       animation: _listAnimController,
       builder: (context, child) {
-        return FadeTransition(
-          opacity: _listAnimController,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.1),
-              end: Offset.zero,
-            ).animate(
-              CurvedAnimation(
-                parent: _listAnimController,
-                curve: Curves.easeOutCubic,
-              ),
+        return SliverOpacity(
+          opacity: _listAnimController.value,
+          sliver: SliverPadding(
+            padding: EdgeInsets.only(
+              top: 4,
+              bottom: Responsive.useBottomNav(context) ? 16 : 100,
             ),
-            child: RefreshIndicator(
-              onRefresh: () => _loadData(forceRefresh: true),
-              color: AppTheme.info,
-              backgroundColor: AppTheme.raisedSurface,
-              child: ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                // Responsive: less bottom padding on phones with bottom nav
-                padding: EdgeInsets.only(
-                  top: 4,
-                  bottom: Responsive.useBottomNav(context) ? 16 : 100,
-                ),
-                itemCount: albaranes.length,
-                itemBuilder: (context, index) {
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
                   final albaran = albaranes[index];
 
                   return Column(
@@ -866,6 +896,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     ],
                   );
                 },
+                childCount: albaranes.length,
               ),
             ),
           ),
@@ -875,10 +906,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   Widget _buildEmptyState() {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Center(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             RepartidorExecutivePanel(
@@ -1033,6 +1065,68 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// EARS-11: pending/failed offline operations indicator with counter and
+/// access to the sync status sheet. Hidden while the queue is empty.
+class _PendingSyncChip extends StatelessWidget {
+  const _PendingSyncChip();
+
+  void _openSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => const RepartoSyncStatusSheet(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: OfflineSyncNotifier.pendingCount,
+      builder: (context, pending, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: OfflineSyncNotifier.failedCount,
+          builder: (context, failed, _) {
+            if (pending <= 0 && failed <= 0) return const SizedBox.shrink();
+            final hasFailures = failed > 0;
+            return Semantics(
+              button: true,
+              label: 'Sincronización: $pending pendientes, $failed con error',
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    avatar: Icon(
+                      hasFailures
+                          ? Icons.error_outline
+                          : Icons.cloud_upload_outlined,
+                      size: 18,
+                      color: hasFailures ? AppTheme.error : AppTheme.warning,
+                    ),
+                    label: Text(
+                      hasFailures
+                          ? '$pending pendientes · $failed con error'
+                          : '$pending pendientes de sincronizar',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: hasFailures ? AppTheme.error : AppTheme.warning,
+                      ),
+                    ),
+                    onPressed: () => _openSheet(context),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

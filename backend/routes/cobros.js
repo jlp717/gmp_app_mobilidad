@@ -36,7 +36,7 @@ async function invalidateCobrosCache(codigoCliente) {
             invalidateCachePattern(`query:query:cobros:pendientes:cvc:${cli}:*`),
             invalidateCachePattern(`query:query:cobros:historico:${cli}:*`),
             invalidateCachePattern('query:query:cobros:pending-summary:*'),
-            invalidateCachePattern('query:repartidor:collections:*'),
+            invalidateCachePattern('query:query:repartidor:collections:*'),
         ]);
     } catch (err) {
         logger.warn(`[COBROS] Cache invalidation skipped: ${err.message}`);
@@ -135,6 +135,12 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
     const runQuery = vendorParams.length > 0
         ? (sql, params) => queryWithParams(sql, params)
         : (sql) => query(sql, false);
+
+    // NOTE (perf backlog): these correlated-EXISTS portfolio scans were a
+    // cachedQuery candidate (TTL.SHORT, matching the endpoint's existing
+    // window), but legacy-contract tests mock the query layer directly and
+    // cache-assisted money reads made them nondeterministic. Left uncached
+    // deliberately; revisit together with an invalidation contract test.
 
     try {
         const comercialSql = [

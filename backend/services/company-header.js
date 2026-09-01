@@ -17,7 +17,12 @@ function pngDimensions(buffer) {
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
+let cachedHeaderAsset = null;
+
 function getHeaderAsset() {
+  // The PNG is immutable for the process lifetime: read + validate once and
+  // reuse the frozen asset (readFileSync per PDF page blocked the event loop).
+  if (cachedHeaderAsset) return cachedHeaderAsset;
   if (!fs.existsSync(HEADER_PNG_PATH)) {
     const error = new Error('No existe el header corporativo real');
     error.code = 'COMPANY_HEADER_ASSET_UNAVAILABLE';
@@ -30,7 +35,14 @@ function getHeaderAsset() {
     error.code = 'COMPANY_HEADER_ASSET_UNAVAILABLE';
     throw error;
   }
-  return Object.freeze({ buffer, dimensions });
+  cachedHeaderAsset = Object.freeze({ buffer, dimensions });
+  return cachedHeaderAsset;
+}
+
+/// Test-only cache reset: production code must never call this. The
+/// fail-closed suite mocks fs.existsSync and needs the cold-start path.
+function __resetHeaderAssetCacheForTests() {
+  cachedHeaderAsset = null;
 }
 
 function drawCompanyHeader(doc, { yStart = 10 } = {}) {
@@ -58,4 +70,5 @@ module.exports = {
   HEADER_BOTTOM_PADDING,
   getHeaderAsset,
   drawCompanyHeader,
+  __resetHeaderAssetCacheForTests,
 };

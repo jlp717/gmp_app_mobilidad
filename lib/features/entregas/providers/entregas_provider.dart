@@ -1068,8 +1068,12 @@ class EntregasNotifier extends Notifier<EntregasState> {
         cacheKey:
             'entregas:albaran:$owner:$numero:$ejercicio:$serie:$terminal:$resolvedCliente',
         cacheTTL: const Duration(minutes: 2),
-        forceRefresh: true,
-        allowStale: false,
+        // Delivery-note contents only change after a confirmation, which
+        // already invalidates this key. Serving the 2-min cache instead of a
+        // forced refresh keeps re-opening a detail sheet instant, especially
+        // on poor coverage during a route.
+        forceRefresh: false,
+        allowStale: true,
       );
 
       if (response['success'] == true && response['albaran'] != null) {

@@ -216,6 +216,6 @@ describe('Repartidor route parameter binding', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
 
     const [, params] = mockQueryWithParams.mock.calls[0];
-    expect(params).toEqual(['02', 21, 4, 2026, 0, 101]);
+    expect(params).toEqual(['02', 21, 4, 2026, 0, 501]);
   });
 });

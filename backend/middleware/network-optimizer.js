@@ -315,13 +315,15 @@ function responseCoalescing(req, res, next) {
         return next();
     }
 
-    // Create request signature
+    // Create request signature. x-view-as participates: the same token can
+    // switch vendor scope per request (JEFE "viewing as"), and sharing a
+    // coalesced response across scopes would leak the wrong vendor's data.
     const authFingerprint = crypto
         .createHash('sha256')
         .update(req.get('authorization') || '')
         .digest('hex')
         .slice(0, 16);
-    const signature = `${authFingerprint}:${req.path}?${stableQueryString(req.query)}`;
+    const signature = `${authFingerprint}:${req.path}?${stableQueryString(req.query)}:view=${req.get('x-view-as') || ''}`;
 
     // Check if identical request is pending
     if (pendingRequests.has(signature)) {
@@ -337,7 +339,12 @@ function responseCoalescing(req, res, next) {
                 res.status(result.statusCode || 200).json(result.data);
             })
             .catch(err => {
-                res.status(500).json({ error: 'Request coalescing failed', code: 'COALESCING_ERROR' });
+                // Propagate the upstream status when there is one — a 503/429
+                // must not surface to coalesced waiters as a generic 500.
+                res.status(err && err.statusCode ? err.statusCode : 500).json({
+                    error: 'Request coalescing failed',
+                    code: 'COALESCING_ERROR',
+                });
             });
 
         return; // Don't call next

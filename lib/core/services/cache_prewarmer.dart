@@ -68,17 +68,19 @@ class CachePreWarmer {
   ) async {
     try {
       // Match the exact cache key pattern used by facturas service.
-      await ApiClient.get(
-        '/facturas?vendedorCodes=$vendorCodes&year=$year&month=$month',
-        cacheKey: 'facturas_${vendorCodes}_${year}_${month}_all___',
-        cacheTTL: CacheService.shortTTL,
-      );
-
-      await ApiClient.get(
-        '/facturas/years?vendedorCodes=$vendorCodes',
-        cacheKey: 'facturas_years_$vendorCodes',
-        cacheTTL: CacheService.longTTL,
-      );
+      // Independent GETs — pre-warm them in parallel.
+      await Future.wait([
+        ApiClient.get(
+          '/facturas?vendedorCodes=$vendorCodes&year=$year&month=$month',
+          cacheKey: 'facturas_${vendorCodes}_${year}_${month}_all___',
+          cacheTTL: CacheService.shortTTL,
+        ),
+        ApiClient.get(
+          '/facturas/years?vendedorCodes=$vendorCodes',
+          cacheKey: 'facturas_years_$vendorCodes',
+          cacheTTL: CacheService.longTTL,
+        ),
+      ]);
 
       debugPrint('[CachePreWarmer] Facturas pre-warmed');
     } catch (e) {

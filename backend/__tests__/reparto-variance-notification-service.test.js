@@ -61,6 +61,113 @@ describe('reparto-variance-notification-service', () => {
     expect(result).toEqual({ skipped: false, attempted: 3, sent: 2, failed: 1, allSucceeded: false });
   });
 
+  test('notifyAfterCobro resolves the client from the ERP document when the rutero payment carries no client fields', async () => {
+    const sendEmail = jest.fn(() => ({ success: true }));
+    const resolveRecipients = jest.fn(() => ({
+      emails: ['driver@example.test'],
+      details: [],
+      missingRequired: [],
+    }));
+    const resolveClient = jest.fn(() => ({ codigo: '4300001', nombre: 'Cliente ERP' }));
+    const query = jest.fn();
+
+    const result = await notifyAfterCobro({
+      cobro: {
+        // Canonical rutero payment schema: entregaId/importe/formaPago only.
+        codigoRepartidor: '94',
+        entregaId: '2026-A-1-100-4300001',
+        documento: '2026-A-1-100-4300001',
+        importeCobrado: 30,
+        formaPago: 'EFECTIVO',
+        pantallaOrigen: 'RUTERO',
+        idempotencyToken: 'cobro-notify-0002',
+      },
+      result: { created: true, cobroId: '82' },
+    }, {
+      env: {},
+      query,
+      sendEmail,
+      resolveRecipients,
+      resolveClient,
+    });
+
+    expect(resolveClient).toHaveBeenCalledWith('2026-A-1-100-4300001', expect.any(Object));
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    const message = sendEmail.mock.calls[0][0];
+    expect(message.htmlBody).toContain('4300001');
+    expect(message.htmlBody).toContain('Cliente ERP');
+    expect(message.textBody).toContain('Cliente: 4300001 Cliente ERP');
+    expect(result.skipped).toBe(false);
+  });
+
+  test('notifyAfterCobro keeps partial client data from the vencimientos flow without an extra document lookup', async () => {
+    const sendEmail = jest.fn(() => ({ success: true }));
+    const resolveRecipients = jest.fn(() => ({
+      emails: ['driver@example.test'],
+      details: [],
+      missingRequired: [],
+    }));
+    const resolveClient = jest.fn(() => ({ codigo: '4300001', nombre: 'Cliente ERP' }));
+
+    await notifyAfterCobro({
+      cobro: {
+        codigoRepartidor: '94',
+        codigoCliente: '4300001',
+        nombreCliente: 'Cliente Vencimientos',
+        entregaId: '2026-S-10-404-4300001',
+        importeCobrado: 25.5,
+        formaPago: 'EFECTIVO',
+        pantallaOrigen: 'VENCIMIENTOS',
+        idempotencyToken: 'cobro-notify-0003',
+      },
+      result: { created: true, id: '83' },
+    }, {
+      env: {},
+      query: jest.fn(),
+      sendEmail,
+      resolveRecipients,
+      resolveClient,
+    });
+
+    expect(resolveClient).not.toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      htmlBody: expect.stringContaining('Cliente Vencimientos'),
+    }));
+  });
+
+  test('notifyAfterCobro does not block the notification when the client document lookup fails', async () => {
+    const sendEmail = jest.fn(() => ({ success: true }));
+    const resolveRecipients = jest.fn(() => ({
+      emails: ['driver@example.test'],
+      details: [],
+      missingRequired: [],
+    }));
+    const resolveClient = jest.fn(() => Promise.reject(new Error('CPC unavailable')));
+
+    const result = await notifyAfterCobro({
+      cobro: {
+        codigoRepartidor: '94',
+        entregaId: '2026-A-1-100-4300001',
+        documento: '2026-A-1-100-4300001',
+        importeCobrado: 30,
+        formaPago: 'EFECTIVO',
+        pantallaOrigen: 'RUTERO',
+        idempotencyToken: 'cobro-notify-0004',
+      },
+      result: { created: true, cobroId: '84' },
+    }, {
+      env: {},
+      query: jest.fn(),
+      sendEmail,
+      resolveRecipients,
+      resolveClient,
+    });
+
+    expect(resolveClient).toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(result.skipped).toBe(false);
+  });
+
   test('notifyAfterCobro skips idempotent replay before resolving recipients', async () => {
     const resolveRecipients = jest.fn();
     const sendEmail = jest.fn();

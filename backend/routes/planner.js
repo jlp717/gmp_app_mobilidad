@@ -3,7 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const logger = require('../middleware/logger');
 const { getPool, query, queryWithParams } = require('../config/db');
-const { cachedQuery } = require('../services/query-optimizer');
+const { cachedQuery, patternFor } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern, redisCache } = require('../services/redis-cache');
 const {
     getCurrentDate,
@@ -795,10 +795,16 @@ router.post('/rutero/move_clients', requirePlannerVendorScope({ location: 'body'
         // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
         try {
             await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
-            await deleteCachePattern(`query:rutero:details:v3:*`);
-            await deleteCachePattern(`query:rutero:sales:*`);
-            await deleteCachePattern(`query:rutero:gps:*`);
+            await deleteCachePattern(patternFor('rutero:details:v3', 3));
+            await deleteCachePattern(patternFor('rutero:sales:combined:v3', 2));
+            await deleteCachePattern(patternFor('rutero:gps:v3', 2));
             await invalidateRuteroDayPayloadsForVendor(vendedor);
+            // A planner day-move re-shapes the driver's week view / pending list.
+            // Those come from cachedQuery("repartidor:rutero-*") keys (route
+            // repository), same double-prefixed family the confirmation
+            // workflows already invalidate — without this the mobile app can
+            // serve the pre-move route for the full cache TTL.
+            await deleteCachePattern('query:query:repartidor:rutero-*');
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
@@ -894,9 +900,9 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
         // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
         try {
             await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
-            await deleteCachePattern(`query:rutero:details:v3:*`);
-            await deleteCachePattern(`query:rutero:sales:*`);
-            await deleteCachePattern(`query:rutero:gps:*`);
+            await deleteCachePattern(patternFor('rutero:details:v3', 3));
+            await deleteCachePattern(patternFor('rutero:sales:combined:v3', 2));
+            await deleteCachePattern(patternFor('rutero:gps:v3', 2));
             await invalidateRuteroDayPayloadsForVendor(vendedor);
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
@@ -996,9 +1002,9 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
         try {
             const cachePattern = `rutero:config:v2:${vendedor}:*`;
             await deleteCachePattern(cachePattern);
-            await deleteCachePattern(`query:rutero:details:v3:*`);
-            await deleteCachePattern(`query:rutero:sales:*`);
-            await deleteCachePattern(`query:rutero:gps:*`);
+            await deleteCachePattern(patternFor('rutero:details:v3', 3));
+            await deleteCachePattern(patternFor('rutero:sales:combined:v3', 2));
+            await deleteCachePattern(patternFor('rutero:gps:v3', 2));
             await invalidateRuteroDayPayloadsForVendor(vendedor);
             logger.info(`♻️ Cache invalidated for pattern: ${cachePattern} and query caches`);
         } catch (cacheErr) {
@@ -1179,8 +1185,12 @@ router.post('/rutero/reload-cache', async (req, res) => {
         await loadLaclaeCache();
         // Also invalidate Redis query caches so clients/rutero queries use fresh data
         try {
-            await deleteCachePattern('clients:*');
-            await deleteCachePattern('rutero:*');
+            // cachedQuery keys live under the double "query:query:" prefix, while
+            // day payloads written directly via redisCache.set('query', ...) live
+            // under the single "query:" prefix — clear both families.
+            await deleteCachePattern(patternFor('clients:list:v8', 1));
+            await deleteCachePattern(patternFor('rutero:details:v3', 1));
+            await deleteCachePattern('query:rutero:*');
             logger.info('[CACHE RELOAD] Redis query caches invalidated (clients + rutero)');
         } catch (redisErr) {
             logger.warn(`[CACHE RELOAD] Redis invalidation failed (non-blocking): ${redisErr.message}`);
@@ -1325,8 +1335,12 @@ router.post('/rutero/reload-cache-old', async (req, res) => {
         await loadLaclaeCache();
         // Also invalidate Redis query caches so clients/rutero queries use fresh data
         try {
-            await deleteCachePattern('clients:*');
-            await deleteCachePattern('rutero:*');
+            // cachedQuery keys live under the double "query:query:" prefix, while
+            // day payloads written directly via redisCache.set('query', ...) live
+            // under the single "query:" prefix — clear both families.
+            await deleteCachePattern(patternFor('clients:list:v8', 1));
+            await deleteCachePattern(patternFor('rutero:details:v3', 1));
+            await deleteCachePattern('query:rutero:*');
             logger.info('[CACHE RELOAD] Redis query caches invalidated (clients + rutero)');
         } catch (redisErr) {
             logger.warn(`[CACHE RELOAD] Redis invalidation failed (non-blocking): ${redisErr.message}`);

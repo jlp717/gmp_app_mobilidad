@@ -101,8 +101,11 @@ describe('CobrosService', () => {
                 formaPago: 'EFECTIVO'
             });
 
-            // El servicio captura el error y retorna success
-            expect(resultado.success).toBe(true);
+            // Contrato real: una inserción fallida no se reporta como cobro
+            // registrado. El servicio captura el error y responde typed
+            // success:false (nunca lanza).
+            expect(resultado.success).toBe(false);
+            expect(resultado.error).toBe('Error registrando cobro');
         });
     });
 

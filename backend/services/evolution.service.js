@@ -159,8 +159,17 @@ async function getProductEvolution({ vendedorCodes, clientCode, limit = 20 }) {
         ORDER BY VENTAS_TOTAL DESC
         FETCH FIRST ? ROWS ONLY`;
 
+    const productEvolutionCacheKey = `evolution:products:${vendedorCodes || 'ALL'}:${clientCode || ''}:${limit}`;
+
     try {
-        const rows = await queryWithParams(sql, params);
+        // Full-scan LACLAE 2 years + JOIN + GROUP BY per tab open — same cachedQuery
+        // pattern as getSalesEvolution keeps repeat opens instant.
+        const rows = await cachedQuery(
+            (sql) => queryWithParams(sql, params),
+            sql,
+            productEvolutionCacheKey,
+            TTL.MEDIUM
+        );
         return (rows || []).map(r => {
             const actual = parseFloat(r.VENTAS_ACTUAL) || 0;
             const anterior = parseFloat(r.VENTAS_ANTERIOR) || 0;
@@ -215,8 +224,16 @@ async function getClientEvolution({ vendedorCodes, limit = 30 }) {
         ORDER BY VENTAS_ACTUAL DESC
         FETCH FIRST ? ROWS ONLY`;
 
+    const clientEvolutionCacheKey = `evolution:clients:${vendedorCodes || 'ALL'}:${limit}`;
+
     try {
-        const rows = await queryWithParams(sql, params);
+        // Same cachedQuery pattern as getSalesEvolution (TTL.MEDIUM).
+        const rows = await cachedQuery(
+            (sql) => queryWithParams(sql, params),
+            sql,
+            clientEvolutionCacheKey,
+            TTL.MEDIUM
+        );
         return (rows || []).map(r => {
             const actual = parseFloat(r.VENTAS_ACTUAL) || 0;
             const anterior = parseFloat(r.VENTAS_ANTERIOR) || 0;

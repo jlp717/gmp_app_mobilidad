@@ -1007,30 +1007,37 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         }),
     ]);
 
-    // Partition data by vendor in memory
+    // Partition data by vendor in memory (single O(N) pass per dataset instead of
+    // O(V×N) filter/find scans per vendor — with ALL vendors and large datasets the
+    // previous approach blocked the event loop).
+    const vendorKey = (raw) => {
+        const value = String(raw || '').trim();
+        return value.replace(/^0+/, '') || value;
+    };
+    const partitionByVendor = (rows) => {
+        const map = new Map();
+        for (const row of rows) {
+            const key = vendorKey(row.VENDOR_CODE);
+            const bucket = map.get(key);
+            if (bucket) bucket.push(row);
+            else map.set(key, [row]);
+        }
+        return map;
+    };
+    const salesByVendor = partitionByVendor(allSalesRows);
+    const bSalesByVendor = partitionByVendor(allBSalesRows);
+    const paymentsByVendor = partitionByVendor(allPaymentsRows);
+    const fixedByVendor = partitionByVendor(allFixedTargets);
+    const vendorNamesByVendor = partitionByVendor(allVendorNames);
+
     const dataByVendor = {};
     for (const code of vendorCodes) {
-        const normalized = code.trim().replace(/^0+/, '') || code.trim();
-        const salesRows = allSalesRows.filter(r => {
-            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
-            return vc === normalized || vc === code.trim();
-        });
-        const bSalesRows = allBSalesRows.filter(r => {
-            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
-            return vc === normalized || vc === code.trim();
-        });
-        const paymentRows = allPaymentsRows.filter(r => {
-            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
-            return vc === normalized || vc === code.trim();
-        });
-        const fixedRows = allFixedTargets.filter(r => {
-            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
-            return vc === normalized || vc === code.trim();
-        });
-        const vendorName = allVendorNames.find(r => {
-            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
-            return vc === normalized || vc === code.trim();
-        });
+        const normalized = vendorKey(code);
+        const salesRows = salesByVendor.get(normalized) || [];
+        const bSalesRows = bSalesByVendor.get(normalized) || [];
+        const paymentRows = paymentsByVendor.get(normalized) || [];
+        const fixedRows = fixedByVendor.get(normalized) || [];
+        const vendorName = (vendorNamesByVendor.get(normalized) || [])[0];
 
         // Build B-sales maps
         const bSalesCurr = {};
@@ -1106,6 +1113,25 @@ function getCommissionBatchChunkSize() {
     return Math.max(8, Math.min(configured, 40));
 }
 
+function getCommissionChunkConcurrency(chunkCount) {
+    const configured = parseInt(process.env.COMMISSION_ALL_VENDOR_CHUNK_CONCURRENCY || '3', 10);
+    const parsed = Number.isFinite(configured) ? Math.max(1, Math.min(configured, 4)) : 3;
+    return Math.min(parsed, chunkCount);
+}
+
+async function runChunksWithConcurrency(chunks, concurrency, worker) {
+    const results = new Array(chunks.length);
+    let next = 0;
+    const runners = Array.from({ length: concurrency }, async () => {
+        while (next < chunks.length) {
+            const index = next++;
+            results[index] = await worker(chunks[index], index);
+        }
+    });
+    await Promise.all(runners);
+    return results;
+}
+
 async function batchFetchVendorDataChunked(vendorCodes, year) {
     const safeCodes = [...new Set((vendorCodes || [])
         .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
@@ -1119,16 +1145,16 @@ async function batchFetchVendorDataChunked(vendorCodes, year) {
     }
 
     const chunks = chunkArray(safeCodes, chunkSize);
-    const merged = {};
-    logger.info(`[COMMISSIONS] Chunked batch fetch: ${safeCodes.length} vendors in ${chunks.length} chunk(s) of ${chunkSize}`);
+    const concurrency = getCommissionChunkConcurrency(chunks.length);
+    logger.info(`[COMMISSIONS] Chunked batch fetch: ${safeCodes.length} vendors in ${chunks.length} chunk(s) of ${chunkSize}, concurrency ${concurrency}`);
 
-    for (let index = 0; index < chunks.length; index++) {
-        const chunk = chunks[index];
-        const startedAt = Date.now();
-        const partial = await batchFetchAllVendorData(chunk, year);
-        Object.assign(merged, partial);
-        logger.info(`[COMMISSIONS] Chunk ${index + 1}/${chunks.length} loaded ${chunk.length} vendors in ${Date.now() - startedAt}ms`);
+    const startedAt = Date.now();
+    const partials = await runChunksWithConcurrency(chunks, concurrency, (chunk) => batchFetchAllVendorData(chunk, year));
+    const merged = {};
+    for (const partial of partials) {
+        if (partial) Object.assign(merged, partial);
     }
+    logger.info(`[COMMISSIONS] Chunks loaded ${safeCodes.length} vendors in ${Date.now() - startedAt}ms`);
 
     return merged;
 }
@@ -1431,9 +1457,16 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         snapshotMonthsWithData = salesSnapshot.monthsWithData;
     }
 
+    // Pre-index salesRows by (year, month) once instead of O(rows) find() calls
+    // inside the 12-month loop below (24 scans per vendor before, O(1) now).
+    const salesRowsByYearMonth = new Map();
+    for (const row of salesRows) {
+        salesRowsByYearMonth.set(`${row.YEAR}:${row.MONTH}`, row);
+    }
+
     for (let m = 1; m <= 12; m++) {
-        const prevRow = salesRows.find(r => r.YEAR == prevYear && r.MONTH == m);
-        const currRow = salesRows.find(r => r.YEAR == selectedYear && r.MONTH == m);
+        const prevRow = salesRowsByYearMonth.get(`${prevYear}:${m}`);
+        const currRow = salesRowsByYearMonth.get(`${selectedYear}:${m}`);
 
         // Base sales from LACLAE
         let prevSales = prevRow ? parseFloat(prevRow.SALES) : 0;

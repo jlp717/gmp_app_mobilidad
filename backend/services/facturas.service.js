@@ -38,7 +38,8 @@ const facturasListInFlight = new Map();
 const facturasSummaryInFlight = new Map();
 const facturaDetailInFlight = new Map();
 const albaranDetailInFlight = new Map();
-const DOCUMENT_DETAIL_CACHE_VERSION = 'v1';
+// v2: header now carries CODIGOVENDEDOR for BOLA scope checks (routes/facturas.js)
+const DOCUMENT_DETAIL_CACHE_VERSION = 'v2';
 
 async function withInFlight(map, key, loader) {
     const existing = map.get(key);
@@ -652,10 +653,9 @@ class FacturasService {
                 const { sql, queryParams } = buildAlbaranSqlForVendors(vendorBatch, offsetValue, limitValue);
                 queries.push(() => queryWithParams(sql, queryParams));
             }
-            const results = [];
-            for (const runQuery of queries) {
-                results.push(await runQuery());
-            }
+            // Invoices and delivery notes are independent lookups — run them
+            // concurrently instead of paying both latencies serially per batch.
+            const results = await Promise.all(queries.map(runQuery => runQuery()));
             return results.flat();
         }
 
@@ -1092,10 +1092,8 @@ class FacturasService {
             const queries = [];
             if (includeFacturas) queries.push(() => runInvoiceSummaryBatch(batchVendors));
             if (includeAlbaranes) queries.push(() => runAlbaranSummaryBatch(batchVendors));
-            const results = [];
-            for (const runQuery of queries) {
-                results.push(await runQuery());
-            }
+            // Independent summary lookups — run concurrently.
+            const results = await Promise.all(queries.map(runQuery => runQuery()));
             return results.flat();
         }
 
@@ -1195,6 +1193,7 @@ class FacturasService {
         TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
         TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
         TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA,
+        TRIM(CFC.CODIGOVENDEDOR) as CODIGOVENDEDORFACTURA,
         CFC.IMPORTETOTAL as TOTALFACTURA,
         CFC.IMPORTEBASEIMPONIBLE1,
         CFC.PORCENTAJEIVA1,
@@ -1275,6 +1274,7 @@ class FacturasService {
                     clienteDireccion: header.DIRECCIONCLIENTEFACTURA,
                     clientePoblacion: header.POBLACIONCLIENTEFACTURA,
                     clienteNif: header.CIFCLIENTEFACTURA,
+                    vendedor: String(header.CODIGOVENDEDORFACTURA || '').trim(),
                     total: parseFloat(header.TOTALFACTURA) || 0,
                     bases
                 },
@@ -1304,6 +1304,39 @@ class FacturasService {
                 logger.error(`Error fetching factura detail: ${error.message}`);
             }
             throw error;
+        }
+    }
+
+    /**
+     * BOLA scope support: for CFC invoices whose CODIGOVENDEDOR is empty, the
+     * list endpoint grants visibility when the client has at least one CFC
+     * invoice owned by one of the scoped vendors (appendCfcVendorScopeFilter).
+     * This check mirrors that exact rule for the detail endpoints.
+     * SQL is fully parameterized; caller codes are never interpolated.
+     */
+    async isFacturaClientOwnedByVendors(clienteId, vendorCodes, ejercicio) {
+        if (!clienteId || !Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+            return false;
+        }
+
+        const placeholders = vendorCodes.map(() => '?').join(',');
+        const ownershipSql = `
+      SELECT 1 AS OK
+      FROM DSEDAC.CFC OWN
+      WHERE TRIM(OWN.CODIGOCLIENTE) = ?
+        AND TRIM(OWN.CODIGOVENDEDOR) IN (${placeholders})
+        AND OWN.NUMEROFACTURA > 0
+        AND OWN.NUMEROFACTURA < 900000
+        AND OWN.EJERCICIOFACTURA = ?
+      FETCH FIRST 1 ROWS ONLY
+    `;
+
+        try {
+            const rows = await queryWithParams(ownershipSql, [clienteId, ...vendorCodes, ejercicio]);
+            return Array.isArray(rows) && rows.length > 0;
+        } catch (error) {
+            logger.error(`Error checking factura client ownership: ${error.message}`);
+            return false;
         }
     }
 
@@ -1362,6 +1395,7 @@ class FacturasService {
         TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
         TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
         TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA,
+        TRIM(CAC.CODIGOVENDEDOR) as CODIGOVENDEDORALBARAN,
         CAC.IMPORTETOTAL,
         COALESCE(CAC.IMPORTEBRUTO, 0) as IMPORTEBRUTO,
         CAC.IMPORTEBASEIMPONIBLE1,
@@ -1456,6 +1490,7 @@ class FacturasService {
                     clienteDireccion: header.DIRECCIONCLIENTEFACTURA,
                     clientePoblacion: header.POBLACIONCLIENTEFACTURA,
                     clienteNif: header.CIFCLIENTEFACTURA,
+                    vendedor: String(header.CODIGOVENDEDORALBARAN || '').trim(),
                     total,
                     base: parseFloat(header.IMPORTEBRUTO) || bases.reduce((sum, b) => sum + b.base, 0),
                     iva: TAX_SLOTS.reduce((sum, slot) => sum + (parseFloat(header[`IMPORTEIVA${slot}`]) || 0), 0),

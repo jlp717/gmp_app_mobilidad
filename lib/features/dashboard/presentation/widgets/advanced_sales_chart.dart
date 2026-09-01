@@ -164,21 +164,26 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                     },
                   ),
                   touchCallback: (FlTouchEvent event, barTouchResponse) {
-                    setState(() {
-                      if (!event.isInterestedForInteractions ||
-                          barTouchResponse == null ||
-                          barTouchResponse.spot == null) {
-                        _touchedIndex = -1;
-                        return;
+                    if (!event.isInterestedForInteractions ||
+                        barTouchResponse == null ||
+                        barTouchResponse.spot == null) {
+                      if (_touchedIndex != -1) {
+                        setState(() => _touchedIndex = -1);
                       }
-                      _touchedIndex =
-                          barTouchResponse.spot!.touchedBarGroupIndex;
-
-                      if (event is FlTapUpEvent) {
-                        final node = topItems[_touchedIndex];
-                        widget.onBarTap(node.id, node.type);
-                      }
-                    });
+                      return;
+                    }
+                    final newIndex =
+                        barTouchResponse.spot!.touchedBarGroupIndex;
+                    if (event is FlTapUpEvent) {
+                      final node = topItems[newIndex];
+                      widget.onBarTap(node.id, node.type);
+                    }
+                    // Rebuild only when the highlighted bar actually
+                    // changes; dragging over the chart used to rebuild the
+                    // whole BarChartData on every single touch event.
+                    if (newIndex != _touchedIndex) {
+                      setState(() => _touchedIndex = newIndex);
+                    }
                   },
                 ),
                 titlesData: FlTitlesData(

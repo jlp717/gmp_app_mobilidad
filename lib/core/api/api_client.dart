@@ -240,7 +240,11 @@ class ApiClient {
           }
           return pinned;
         }
-        ..connectionTimeout = ApiConfig.connectTimeout;
+        ..connectionTimeout = ApiConfig.connectTimeout
+        // Bursty screens (dashboard 6 calls + prewarmer) previously opened an
+        // unbounded number of sockets; mobile networks degrade past ~6
+        // concurrent connections. Queue extras on the keep-alive pool instead.
+        ..maxConnectionsPerHost = 6;
 
       return client;
     };

@@ -102,6 +102,37 @@ class MatrixDataTable extends StatefulWidget {
 }
 
 class _MatrixDataTableState extends State<MatrixDataTable> {
+  // Flattened visible rows (node, level) cached per data instance: expanding
+  // a vendor with hundreds of clients used to recursively materialize every
+  // row of the expanded subtree in one Column inside a SingleChildScrollView —
+  // no builder, no laziness. The flat list at least bounds the work to the
+  // actually-visible tree and keeps one widget per row instead of nested
+  // Columns per level.
+  List<MapEntry<MatrixNode, int>>? _flatCache;
+  List<MatrixNode>? _flatCacheSource;
+
+  List<MapEntry<MatrixNode, int>> _flatRows() {
+    if (_flatCache != null && identical(_flatCacheSource, widget.data)) {
+      return _flatCache!;
+    }
+    final rows = <MapEntry<MatrixNode, int>>[];
+    void walk(MatrixNode node, int level) {
+      rows.add(MapEntry(node, level));
+      if (node.isExpanded && node.children.isNotEmpty) {
+        for (final child in node.children) {
+          walk(child, level + 1);
+        }
+      }
+    }
+
+    for (final node in widget.data) {
+      walk(node, 0);
+    }
+    _flatCache = rows;
+    _flatCacheSource = widget.data;
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.data.isEmpty) {
@@ -208,14 +239,13 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
 
-            // Tree List - builds all nodes recursively
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: widget.data.length,
-              itemBuilder: (context, index) {
-                return _buildNodeWithChildren(widget.data[index], 0);
-              },
+            // Tree List — one flat Column of rows (see _flatRows note).
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final row in _flatRows())
+                  RepaintBoundary(child: _buildNodeRow(row.key, row.value)),
+              ],
             ),
 
             // TOTAL ROW (ORANGE)
@@ -307,21 +337,14 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     );
   }
 
-  /// Build a node AND its children if expanded (recursive tree)
-  Widget _buildNodeWithChildren(MatrixNode node, int level) {
-    final widgets = <Widget>[_buildNodeRow(node, level)];
-
-    // If expanded, add children recursively
-    if (node.isExpanded && node.children.isNotEmpty) {
-      for (final child in node.children) {
-        widgets.add(_buildNodeWithChildren(child, level + 1));
-      }
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: widgets,
-    );
+  void _toggleExpand(MatrixNode node) {
+    setState(() {
+      node.isExpanded = !node.isExpanded;
+      // Expansion mutates nodes in place, so the flat-row cache must be
+      // dropped manually — the widget.data list identity stays the same.
+      _flatCache = null;
+      _flatCacheSource = null;
+    });
   }
 
   Widget _buildNodeRow(MatrixNode node, int level) {
@@ -353,9 +376,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       onTap: () {
         if (hasChildren) {
           // Toggle expansion within this table
-          setState(() {
-            node.isExpanded = !node.isExpanded;
-          });
+          _toggleExpand(node);
         }
         // Also notify parent if needed
         if (widget.onNodeTap != null) {
@@ -388,11 +409,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             // Expand icon or dot
             if (hasChildren)
               GestureDetector(
-                onTap: () {
-                  setState(() {
-                    node.isExpanded = !node.isExpanded;
-                  });
-                },
+                onTap: () => _toggleExpand(node),
                 child: Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Icon(

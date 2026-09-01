@@ -12,6 +12,7 @@ class CanonicalLocalAuthSession {
     required this.vendedorCodes,
     required this.activeMode,
     required this.expiresAt,
+    this.accessTokenTtlMs,
   });
 
   final String accessToken;
@@ -20,6 +21,11 @@ class CanonicalLocalAuthSession {
   final List<String> vendedorCodes;
   final String activeMode;
   final DateTime expiresAt;
+
+  /// Real server-side access-token lifetime (from `tokenExpiresIn`/`expiresIn`
+  /// in login/refresh/switch-role responses). Null when the server did not
+  /// report it; callers must then fall back to the server default TTL.
+  final int? accessTokenTtlMs;
 }
 
 /// Persists a rotated session as one fail-closed local transaction.
@@ -36,6 +42,7 @@ class AuthSessionPersistence {
   static const String _kExpiresAt = 'session_expires_at';
   static const String _kVendedorCodes = 'vendedor_codes';
   static const String _kActiveMode = 'auth_active_mode';
+  static const String _kAccessTokenTtl = 'access_token_ttl_ms';
 
   Future<void> commit(CanonicalLocalAuthSession session) async {
     try {
@@ -51,6 +58,10 @@ class AuthSessionPersistence {
         jsonEncode(session.vendedorCodes),
       );
       await SecureStorage.writeSecureData(_kActiveMode, session.activeMode);
+      final ttl = session.accessTokenTtlMs;
+      if (ttl != null && ttl > 0) {
+        await SecureStorage.writeSecureData(_kAccessTokenTtl, ttl.toString());
+      }
     } catch (error) {
       await clear();
       throw AuthSessionPersistenceException(error);
@@ -65,6 +76,7 @@ class AuthSessionPersistence {
       _kExpiresAt,
       _kVendedorCodes,
       _kActiveMode,
+      _kAccessTokenTtl,
     ]) {
       await _bestEffort(() => SecureStorage.deleteSecureData(key));
     }
@@ -122,6 +134,22 @@ class AuthSessionPersistence {
       // Best-effort migration only.
     }
     return null;
+  }
+
+  /// Reads the persisted server-side access-token TTL in milliseconds.
+  ///
+  /// Returns null when absent or unreadable; callers fall back to the server
+  /// default TTL (never to a hardcoded optimistic value).
+  static Future<int?> readAccessTokenTtlMs() async {
+    try {
+      final raw = await SecureStorage.readSecureData(_kAccessTokenTtl);
+      if (raw == null || raw.isEmpty) return null;
+      final parsed = int.tryParse(raw);
+      if (parsed == null || parsed <= 0) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _bestEffort(Future<void> Function() operation) async {

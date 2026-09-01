@@ -8,6 +8,12 @@ class RuteroStopStatusBadges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusColor = switch (albaran.estado) {
+      EstadoEntrega.entregado => AppTheme.success,
+      EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
+      EstadoEntrega.rechazado => AppTheme.error,
+      EstadoEntrega.pendiente || EstadoEntrega.enRuta => AppTheme.obligatorio,
+    };
     final payment = albaran.hasAppCobro
         ? albaran.cobroParcial
             ? albaran.importePendienteCobro == null
@@ -20,8 +26,8 @@ class RuteroStopStatusBadges extends StatelessWidget {
             ? 'Cobro pendiente'
             : 'Sin cobro registrado';
     return Wrap(spacing: 8, runSpacing: 4, children: [
-      _badge(albaran.estado.icon, 'Entrega: ${albaran.estado.label}',
-          albaran.estado.color),
+      _badge(
+          albaran.estado.icon, 'Entrega: ${albaran.estado.label}', statusColor),
       _badge(
           Icons.payments_outlined,
           payment,

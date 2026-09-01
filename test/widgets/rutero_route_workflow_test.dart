@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_rutero_reorder_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_rutero_page.dart';
@@ -211,6 +214,53 @@ void main() {
         isTrue);
   });
 
+  testWidgets(
+      'delivery records remain reachable on a short mobile viewport with sync notice',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() async {
+      OfflineSyncNotifier.refreshCounts(pending: 0, failed: 0);
+      await tester.binding.setSurfaceSize(null);
+    });
+    OfflineSyncNotifier.refreshCounts(pending: 1, failed: 0);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: RepartidorRuteroPage(
+            repartidorId: '05',
+            weekLoader: ({
+              required String repartidorId,
+              required DateTime date,
+              required bool forceRefresh,
+            }) async =>
+                {
+              'success': true,
+              'days': <dynamic>[],
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(find.byType(ActionChip), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byType(CustomScrollView),
+      const Offset(0, -600),
+    );
+    await tester.pump();
+    expect(find.text('Cliente DOC-1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('position menu saves both documents in chosen order',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
@@ -267,26 +317,169 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('navigation reports false and exceptions without new permissions',
-      (tester) async {
-    for (final throwsError in [false, true]) {
-      await tester.pumpWidget(MaterialApp(
+  group('native navigation', () {
+    Future<void> pumpNavigation(
+      WidgetTester tester,
+      Future<bool> Function(Uri) launcher,
+    ) =>
+        tester.pumpWidget(MaterialApp(
           home: Scaffold(
-              body: RuteroNavigationButton(
-        key: ValueKey(throwsError),
-        lat: 37,
-        lng: -2,
-        launcher: (_) async {
-          if (throwsError) throw StateError('unavailable');
-          return false;
-        },
-      ))));
-      await tester.tap(find.text('Navegar a esta parada'));
-      await tester.pumpAndSettle();
-      expect(
-          find.textContaining('No se pudo abrir la navegación'), findsWidgets);
-      await tester.pumpWidget(const SizedBox());
+            body: RuteroNavigationButton(lat: 37, lng: -2, launcher: launcher),
+          ),
+        ));
+
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      final schemes = platform == TargetPlatform.android
+          ? ['google.navigation', 'geo']
+          : ['comgooglemaps', 'maps'];
+
+      void expectPrimary(Uri uri) {
+        expect(uri.scheme, schemes.first);
+        expect(uri.scheme, isNot('https'));
+        if (platform == TargetPlatform.android) {
+          // google.navigation puts its parameters in the opaque URI path.
+          expect(Uri.splitQueryString(uri.path), {
+            'q': '37.0,-2.0',
+            'mode': 'd',
+          });
+        } else {
+          expect(uri.queryParameters, {
+            'daddr': '37.0,-2.0',
+            'directionsmode': 'driving',
+          });
+        }
+      }
+
+      testWidgets('$platform navigation stops after primary success',
+          (tester) async {
+        final attempts = <Uri>[];
+        await pumpNavigation(tester, (uri) async {
+          attempts.add(uri);
+          return true;
+        });
+        await tester.tap(find.text('Navegar a esta parada'));
+        await tester.pumpAndSettle();
+        expect(attempts, hasLength(1));
+        expectPrimary(attempts.single);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(find.text('Navegar a esta parada'), findsOneWidget);
+      }, variant: TargetPlatformVariant.only(platform));
+
+      for (final throwsError in [false, true]) {
+        testWidgets('$platform navigation falls back after error=$throwsError',
+            (tester) async {
+          final attempts = <Uri>[];
+          await pumpNavigation(tester, (uri) async {
+            attempts.add(uri);
+            if (attempts.length == 1) {
+              if (throwsError) throw StateError('unavailable');
+              return false;
+            }
+            return true;
+          });
+          await tester.tap(find.text('Navegar a esta parada'));
+          await tester.pumpAndSettle();
+          expect(attempts.map((uri) => uri.scheme), schemes);
+          expect(attempts.any((uri) => uri.scheme == 'https'), isFalse);
+          expectPrimary(attempts.first);
+          if (platform == TargetPlatform.android) {
+            expect(attempts.last.path, '37.0,-2.0');
+          } else {
+            expect(attempts.last.queryParameters, {
+              'daddr': '37.0,-2.0',
+              'dirflg': 'd',
+            });
+          }
+          expect(find.byType(SnackBar), findsNothing);
+          expect(find.text('Navegar a esta parada'), findsOneWidget);
+        }, variant: TargetPlatformVariant.only(platform));
+
+        testWidgets('$platform navigation reports all errors=$throwsError',
+            (tester) async {
+          final attempts = <Uri>[];
+          await pumpNavigation(tester, (uri) async {
+            attempts.add(uri);
+            if (throwsError) throw StateError('unavailable');
+            return false;
+          });
+          await tester.tap(find.text('Navegar a esta parada'));
+          await tester.pumpAndSettle();
+          expect(attempts.map((uri) => uri.scheme), schemes);
+          expect(attempts.any((uri) => uri.scheme == 'https'), isFalse);
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(find.textContaining('No se pudo abrir la navegación'),
+              findsOneWidget);
+          expect(
+              tester
+                  .widget<FilledButton>(find.bySubtype<FilledButton>())
+                  .onPressed,
+              isNotNull);
+        }, variant: TargetPlatformVariant.only(platform));
+      }
     }
+
+    for (final platform in [
+      TargetPlatform.linux,
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+      TargetPlatform.fuchsia,
+    ]) {
+      testWidgets('$platform navigation shows error without launching a URL',
+          (tester) async {
+        final attempts = <Uri>[];
+        await pumpNavigation(tester, (uri) async {
+          attempts.add(uri);
+          return true;
+        });
+        await tester.tap(find.text('Navegar a esta parada'));
+        await tester.pumpAndSettle();
+        expect(attempts, isEmpty);
+        expect(find.byType(SnackBar), findsOneWidget);
+      }, variant: TargetPlatformVariant.only(platform));
+    }
+
+    testWidgets('navigation ignores repeated taps while opening',
+        (tester) async {
+      final pending = Completer<bool>();
+      final attempts = <Uri>[];
+      await pumpNavigation(tester, (uri) {
+        attempts.add(uri);
+        return pending.future;
+      });
+      await tester.tap(find.text('Navegar a esta parada'));
+      await tester.tap(find.text('Navegar a esta parada'));
+      await tester.pump();
+      expect(attempts, hasLength(1));
+      expect(
+          tester.widget<FilledButton>(find.bySubtype<FilledButton>()).onPressed,
+          isNull);
+      pending.complete(true);
+      await tester.pumpAndSettle();
+      expect(attempts, hasLength(1));
+      expect(find.byType(SnackBar), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('navigation allows ten seconds per attempt then reports error',
+        (tester) async {
+      final attempts = <Uri>[];
+      await pumpNavigation(tester, (uri) {
+        attempts.add(uri);
+        return Completer<bool>().future;
+      });
+      await tester.tap(find.text('Navegar a esta parada'));
+      await tester.pump(const Duration(seconds: 9));
+      expect(attempts, hasLength(1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(attempts.map((uri) => uri.scheme), ['google.navigation', 'geo']);
+      await tester.pump(const Duration(seconds: 9));
+      expect(find.byType(SnackBar), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+          tester.widget<FilledButton>(find.bySubtype<FilledButton>()).onPressed,
+          isNotNull);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   });
 
   testWidgets('route without coordinates still exposes summary and next stop',

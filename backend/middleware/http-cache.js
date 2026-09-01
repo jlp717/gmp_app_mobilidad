@@ -200,6 +200,10 @@ function get(key) {
     }
 
     totalHits++;
+    // LRU refresh: re-insert the entry so evictIfNeeded (insertion-order
+    // eviction) drops cold keys first. Mirrors the L1 pattern in redis-cache.
+    cache.delete(key);
+    cache.set(key, entry);
     return entry.data;
 }
 

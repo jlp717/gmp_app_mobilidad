@@ -49,9 +49,13 @@ jest.mock('../../services/repartidor-finance-service', () => ({
 }));
 
 const { errorHandler } = require('../../src/middlewares/errorHandler');
-const { createDashboardRoutes } = require('../../src/routes/dashboard.routes');
-const { createPlannerRoutes } = require('../../src/routes/planner.routes');
-const { createRepartidorFinanzasRoutes } = require('../../src/routes/repartidorFinanzas.routes');
+// Explicit .js: jest moduleNameMapper pins the dashboard TS chain
+// (routes/controller/service) to its .ts twins for src/index.ts mounts;
+// explicit extensions bypass the mapper so these CommonJS factories
+// (createDashboardRoutes etc.) keep resolving their .js implementations.
+const { createDashboardRoutes } = require('../../src/routes/dashboard.routes.js');
+const { createPlannerRoutes } = require('../../src/routes/planner.routes.js');
+const { createRepartidorFinanzasRoutes } = require('../../src/routes/repartidorFinanzas.routes.js');
 const laclae = require('../../services/laclae');
 const financeSvc = require('../../services/repartidor-finance-service');
 

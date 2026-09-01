@@ -196,29 +196,33 @@ class WeeklyMiniChart extends StatelessWidget {
           final isSelected = index == selectedIndex;
 
           return Expanded(
-            child: GestureDetector(
-              onTap: () => onDayTap?.call(index),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  height: height.clamp(4.0, 24.0),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppTheme.info
-                        : count > 0
-                            ? AppTheme.info.withValues(alpha: 0.35)
-                            : AppTheme.borderColor.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(4),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: AppTheme.info.withValues(alpha: 0.18),
-                              blurRadius: 8,
-                            ),
-                          ]
-                        : null,
+            child: Semantics(
+              button: true,
+              label: 'Ventas del día ${index + 1}',
+              child: GestureDetector(
+                onTap: () => onDayTap?.call(index),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    height: height.clamp(4.0, 24.0),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.info
+                          : count > 0
+                              ? AppTheme.info.withValues(alpha: 0.35)
+                              : AppTheme.borderColor.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: AppTheme.info.withValues(alpha: 0.18),
+                                blurRadius: 8,
+                              ),
+                            ]
+                          : null,
+                    ),
                   ),
                 ),
               ),

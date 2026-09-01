@@ -2078,6 +2078,10 @@ router.get('/purchase-history-global', async (req, res) => {
         const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 500);
         const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
+        // Cache key base for the cachedQuery wrappers below (all 5 queries share
+        // the same WHERE/params shape; offset only varies the detail page).
+        const cacheKeyParts = `${fromYmd}:${toYmd}:${isAllVendor ? 'ALL' : vendor}:${clientCode}:${productCode}:${familia}:${marca}:${limit}:${offset}`;
+
         // Condiciones WHERE
         const where = [
             `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
@@ -2205,11 +2209,39 @@ router.get('/purchase-history-global', async (req, res) => {
         `;
 
         const [detail, summary, topProducts, lastYear, monthlyByYear] = await Promise.all([
-            queryWithParams(detailSql, params, []),
-            queryWithParams(summarySql, params, []),
-            queryWithParams(topProductosSql, params, []),
-            queryWithParams(lastYearSql, lastYearParams, []),
-            queryWithParams(monthlyByYearSql, params, []),
+            // 4-5 LACLAE full-window scans per request: cachedQuery (TTL.SHORT) keeps
+            // repeat opens of the JEFE purchase-history tab instant without serving
+            // stale data long enough to matter for sales exploration.
+            cachedQuery(
+                (sql) => queryWithParams(sql, params, []),
+                detailSql,
+                `pedidos:purchase-history-global:detail:${cacheKeyParts}`,
+                TTL.SHORT,
+            ),
+            cachedQuery(
+                (sql) => queryWithParams(sql, params, []),
+                summarySql,
+                `pedidos:purchase-history-global:summary:${cacheKeyParts}`,
+                TTL.SHORT,
+            ),
+            cachedQuery(
+                (sql) => queryWithParams(sql, params, []),
+                topProductosSql,
+                `pedidos:purchase-history-global:top:${cacheKeyParts}`,
+                TTL.SHORT,
+            ),
+            cachedQuery(
+                (sql) => queryWithParams(sql, lastYearParams, []),
+                lastYearSql,
+                `pedidos:purchase-history-global:lastyear:${cacheKeyParts}`,
+                TTL.SHORT,
+            ),
+            cachedQuery(
+                (sql) => queryWithParams(sql, params, []),
+                monthlyByYearSql,
+                `pedidos:purchase-history-global:monthly:${cacheKeyParts}`,
+                TTL.SHORT,
+            ),
         ]);
 
         const s = summary?.[0] || {};

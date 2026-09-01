@@ -26,6 +26,7 @@ jest.mock('../config/db', () => ({
 }));
 jest.mock('../services/query-optimizer', () => ({
   cachedQuery: (...args) => mockCachedQuery(...args),
+  patternFor: jest.requireActual('../services/query-optimizer').patternFor,
 }));
 jest.mock('../services/redis-cache', () => ({
   TTL: { SHORT: 60, MEDIUM: 300, LONG: 1800, REALTIME: 60 },

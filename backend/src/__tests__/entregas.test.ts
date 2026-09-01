@@ -19,7 +19,14 @@ jest.mock('fs', () => ({
     mkdirSync: jest.fn(),
     writeFileSync: jest.fn(),
     renameSync: jest.fn(),
-    readFileSync: jest.fn().mockReturnValue('[]')
+    readFileSync: jest.fn().mockReturnValue('[]'),
+    // entregas.service uses fs.promises.writeFile for signature persistence.
+    promises: {
+        writeFile: jest.fn().mockResolvedValue(undefined),
+        unlink: jest.fn().mockResolvedValue(undefined),
+        readFile: jest.fn().mockResolvedValue(Buffer.from('[]')),
+        mkdir: jest.fn().mockResolvedValue(undefined),
+    },
 }));
 
 import { entregasService } from '../services/entregas.service';
@@ -104,8 +111,14 @@ describe('EntregasService', () => {
                 repartidorId: 'REP01'
             });
 
-            expect(resultado.success).toBe(true);
-            expect(fs.writeFileSync).toHaveBeenCalled();
+            // Contrato real con TODAS las queries caídas: la inserción en
+            // ENTREGAS_LOG falla y se escribe el log local (fs.promises.writeFile),
+            // pero el flujo CTR posterior (obtenerAlbaran con la misma mock
+            // rechazada) lanza, el catch global responde success:false typed.
+            // El log local SÍ se escribió antes de la caída.
+            expect(fs.promises.writeFile).toHaveBeenCalled();
+            expect(resultado.success).toBe(false);
+            expect(resultado.error).toBe('Error actualizando estado de entrega');
         });
 
         it('debe manejar entregas parciales', async () => {
@@ -132,7 +145,7 @@ describe('EntregasService', () => {
 
             expect(path).toContain('signatures');
             expect(path).toContain('firma_REG123');
-            expect(fs.writeFileSync).toHaveBeenCalled();
+            expect(fs.promises.writeFile).toHaveBeenCalled();
         });
 
         it('debe eliminar header data:image del base64', async () => {
@@ -140,7 +153,7 @@ describe('EntregasService', () => {
 
             await entregasService.guardarFirma('REG123', base64SinHeader);
 
-            expect(fs.writeFileSync).toHaveBeenCalled();
+            expect(fs.promises.writeFile).toHaveBeenCalled();
         });
     });
 

@@ -3,7 +3,7 @@
 name: gmp_app_mobilidad
 description: "Ultimate Sales Analytics - Ultra-Modern Tablet App for Sales Directors & Representatives"
 publish_to: 'none'
-version: 4.1.18+74
+version: 4.1.19+75
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -79,7 +79,12 @@ dev_dependencies:
   mockito: ^5.4.4
   mocktail: ^1.0.4
   riverpod_generator: ^2.4.0
-  test: ^1.26.2
+  # Floor relaxed from ^1.26.2: that range cannot solve against current
+  # stable flutter_test (test_api 0.7.12+) while hive_generator ^2.0.1 pins
+  # analyzer <7 — `flutter pub get` failed on CI (flutter-tests, ago 28).
+  # ^1.25.0 lets the solver pick 1.26.2 (committed lock) locally and a
+  # compatible newer test on stable CI runners.
+  test: ^1.25.0
   very_good_analysis: ^6.0.0
 
 flutter_icons:

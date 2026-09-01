@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
@@ -676,7 +677,7 @@ class RuteroClientListItem extends StatelessWidget {
                 onPressed: onWhatsAppTap,
                 icon: const Icon(
                   Icons.chat,
-                  color: Color(0xFF25D366),
+                  color: AppColors.whatsappGreen,
                   size: 26,
                 ),
                 tooltip: 'WhatsApp',

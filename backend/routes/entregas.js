@@ -6,7 +6,8 @@ const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
-const { resolveConfirmationTables, resolveFinanceWriteTables } = require('../repositories/repartidor-route-db2-repository');
+const { resolveFinanceWriteTables } = require('../repositories/repartidor-route-db2-repository');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const dayMoveRepo = require('../repositories/repartidor-rutero-day-move-db2-repository');
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
 const { applySavedOrder, applyDayMovePositions } = require('../services/repartidor-rutero-orden-service');
@@ -24,6 +25,10 @@ const {
     documentKey,
     mapCvcAvailabilityRows,
 } = require('../services/delivery-cobro-availability');
+const {
+    DeliveryStatusResolutionError,
+    resolveCanonicalDeliveryStatuses,
+} = require('../services/deterministic-delivery-status');
 const REPARTIDOR_ROUTE_ORDER_FETCH_MAX = 500;
 
 /**
@@ -162,6 +167,21 @@ async function getDeliveryOwner(itemId, clientCode) {
  * @returns {boolean} true if format is valid
  */
 class RepartoHttpError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
+
+const ROUTE_STATUS_ALIASES = Object.freeze({ NO_REALIZADA: 'NO_ENTREGADO' });
+const ROUTE_STATUSES = new Set([
+    'PENDIENTE', 'EN_RUTA', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO',
+]);
+
+function normalizePersistedRouteStatus(raw) {
+    const normalized = String(raw || '').trim().toUpperCase();
+    if (!normalized) return null;
+    const status = ROUTE_STATUS_ALIASES[normalized] || normalized;
+    if (!ROUTE_STATUSES.has(status)) {
+        throw new RepartoHttpError(503, 'INVALID_DELIVERY_STATUS_SOURCE', 'La fuente de estados de entrega contiene un estado no reconocido');
+    }
+    return status;
+}
 function todayIsoDate() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -209,59 +229,6 @@ function sendEntregasUnavailable(res, code, message) {
 function sendRepartoError(res, error) {
     if (error instanceof RepartoHttpError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
     return res.status(503).json({ success: false, code: 'CANONICAL_RECEIPT_UNAVAILABLE', error: 'No se pudo generar el recibo canonico' });
-}
-const moment = require('moment'); // Ensure moment is available
-
-// --- HELPER: Get Gamification Stats (Real DB) ---
-async function getGamificationStats(repartidorId) {
-    try {
-        const currentYear = new Date().getFullYear();
-
-        // Parallelize level + streak queries (independent) with cache
-        const [levelResult, streakResult] = await Promise.all([
-            cachedQuery(queryWithParams, `
-            SELECT COUNT(*) as TOTAL
-            FROM DSEDAC.CPC
-            WHERE TRIM(CODIGOREPARTIDOR) = ?
-              AND ANODOCUMENTO = ?
-        `, `entregas:gamification:level:${repartidorId}:${currentYear}`, TTL.SHORT, [repartidorId, currentYear]),
-            cachedQuery(queryWithParams, `
-            SELECT DISTINCT DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
-            FROM DSEDAC.CPC
-            WHERE TRIM(CODIGOREPARTIDOR) = ?
-              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= ?
-        `, `entregas:gamification:streak:${repartidorId}`, TTL.SHORT, [repartidorId, moment().subtract(7, 'days').format('YYYYMMDD')])
-        ]);
-        const totalDeliveries = levelResult[0]?.TOTAL || 0;
-        const streakDays = streakResult.length; // Approximate active days in last week
-
-        let level = 'BRONCE';
-        let nextLevel = 'PLATA';
-        let progress = 0.0;
-
-        if (totalDeliveries < 100) {
-            level = 'BRONCE';
-            nextLevel = 'PLATA';
-            progress = totalDeliveries / 100;
-        } else if (totalDeliveries < 500) {
-            level = 'PLATA';
-            nextLevel = 'ORO';
-            progress = (totalDeliveries - 100) / 400;
-        } else if (totalDeliveries < 2000) {
-            level = 'ORO';
-            nextLevel = 'PLATINO';
-            progress = (totalDeliveries - 500) / 1500;
-        } else {
-            level = 'PLATINO';
-            nextLevel = 'DIAMANTE';
-            progress = 1.0;
-        }
-
-        return { level, nextLevel, progress, streakDays, totalDeliveries };
-    } catch (e) {
-        logger.error(`Error calculating gamification: ${e.message}`);
-        return { level: 'BRONCE', nextLevel: 'PLATA', progress: 0, streakDays: 0, totalDeliveries: 0 };
-    }
 }
 
 // --- HELPER: Get Heuristic AI Suggestions ---
@@ -336,7 +303,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         }
         const placeholders = idList.map(() => '?').join(',');
         const sortBy = req.query.sortBy || 'default';
-        const routeOrderMode = req.query.routeOrder === 'true' && sortBy === 'default' && idList.length === 1;
 
         // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
         let paymentConditions = {};
@@ -496,6 +462,11 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // Table initialization removed to prevent AS400 errors.
         // Tables JAVIER.DELIVERY_STATUS and JAVIER.CLIENT_SIGNERS are assumed to exist.
 
+        // The ERP dataset is fetched ONCE per (repartidorIds, date, moves|base)
+        // with fixed OFFSET 0 / FETCH 501. Pagination, filtering and sorting
+        // happen in memory below, so every limit/offset/sortBy combination
+        // shares the same cache entry and the CTE runs only on cold misses.
+        const RUTERO_DATASET_FETCH_MAX = REPARTIDOR_ROUTE_ORDER_FETCH_MAX;
         let rows = [];
         try {
             const queryParams = dayMoveEnabled ? [
@@ -507,31 +478,27 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 dia,
                 mes,
                 ano,
-                routeOrderMode ? 0 : pageOffset,
-                routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX + 1 : pageLimit + 1,
+                0,
+                RUTERO_DATASET_FETCH_MAX + 1,
             ] : [
                 ...idList, dia, mes, ano,
-                routeOrderMode ? 0 : pageOffset,
-                routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX + 1 : pageLimit + 1,
+                0,
+                RUTERO_DATASET_FETCH_MAX + 1,
             ];
-            // Cache only the owner/date/page-scoped ERP source. Canonical
+            // Cache only the owner/date-scoped ERP source. Canonical
             // confirmation and cobro overlays are applied below on every
             // request, so a fresh payment/confirmation is never hidden.
             const routeCacheKey = [
-                'repartidor:rutero-pending:v2',
+                'repartidor:rutero-pending:v3',
                 idList.slice().sort().join(','),
                 targetDate.date,
-                pageLimit,
-                pageOffset,
-                routeOrderMode ? 'ordered' : 'paged',
-                sortBy,
                 dayMoveEnabled ? 'moves' : 'base',
             ].join(':');
             rows = await cachedQuery(
                 queryWithParams,
                 sql,
                 routeCacheKey,
-                TTL.REALTIME,
+                TTL.SHORT,
                 queryParams,
             ) || [];
         } catch (queryError) {
@@ -539,13 +506,15 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo consultar el listado de entregas');
         }
 
-        const sourceHasMore = routeOrderMode
-            ? rows.length > REPARTIDOR_ROUTE_ORDER_FETCH_MAX
-            : rows.length > pageLimit;
-        if (routeOrderMode && sourceHasMore && pageOffset >= REPARTIDOR_ROUTE_ORDER_FETCH_MAX) {
+        const sourceHasMore = rows.length > RUTERO_DATASET_FETCH_MAX;
+        // Multi-driver views historically served the complete combined list
+        // via SQL pagination; the 500-stop budget only guarded the single
+        // driver route-order mode. Keep that contract: only single-driver
+        // walks can 503, multi-driver pages terminate via hasMore.
+        if (sourceHasMore && idList.length === 1 && pageOffset >= RUTERO_DATASET_FETCH_MAX) {
             return sendEntregasUnavailable(res, 'ROUTE_TOO_LARGE', 'La ruta supera el límite de 500 paradas');
         }
-        rows = rows.slice(0, routeOrderMode ? REPARTIDOR_ROUTE_ORDER_FETCH_MAX : pageLimit);
+        rows = rows.slice(0, RUTERO_DATASET_FETCH_MAX);
         // Defensive deduplication. SQL already paginates DELIVERY_RANK = 1 rows.
         // Group by Albaran ID + Client and SUM financial fields
         const aggregatedMap = new Map();
@@ -623,7 +592,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 (querySql, queryParams) => queryWithParams(querySql, queryParams, false, false),
                 sql,
                 cacheKey,
-                15,
+                60,
                 params,
             );
             const cvcDocumentPlan = buildCvcAvailabilityQuery(uniqueRows);
@@ -799,39 +768,28 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const esFactura = numeroFactura > 0;
 
-            // --- DELIVERY STATUS LOGIC (HYBRID SENIOR STATUS v2) ---
-            // Priority: 1) DELIVERY_STATUS (App confirmation - Real Time)
-            //           2) Legacy CONFORMADOSN == 'S' (Paper confirmation processed)
-            //           3) Today + DIALLEGADA (Legacy "On Route" - Loaded but not confirmed)
-            //           4) Default (Pending)
+            // --- DELIVERY STATUS LOGIC ---
+            // A legacy ERP signal can only describe a non-terminal route state.
+            // Terminal states come from the canonical confirmation overlay.
 
-            let status = (row.DS_STATUS || '').trim();
+            let status = normalizePersistedRouteStatus(row.DS_STATUS);
             const legacyConfirmed = (row.CONFORMADOSN || '').trim() === 'S';
 
             if (!status || status === '') {
                 if (legacyConfirmed) {
-                    status = 'ENTREGADO'; // Legacy Confirmed
+                    status = 'ENTREGADO'; // Legacy paper confirmation.
                 } else if (row.DIALLEGADA > 0) {
-                    status = 'EN_RUTA';   // Today + Planned + Not Confirmed = On Route
+                    status = 'EN_RUTA'; // Loaded/visited signal, not a delivery confirmation.
                 } else {
                     status = 'PENDIENTE';
                 }
             }
 
-            // --- COLOR LOGIC ---
-            let colorEstado = 'green';
-            if (status === 'ENTREGADO') {
-                colorEstado = 'green';
-            } else {
-                if (esFactura) {
-                    colorEstado = 'purple';
-                } else if (esCTR || puedeCobrarse) {
-                    colorEstado = 'red';
-                } else {
-                    colorEstado = 'green';
-                }
-            }
-
+            // Red means the stop has not been confirmed by the delivery workflow.
+            // Payment urgency remains available through esCTR/presentation actions.
+            const colorEstado = ['PENDIENTE', 'EN_RUTA'].includes(status)
+                ? 'red'
+                : status === 'ENTREGADO' ? 'green' : 'orange';
             const importeTotal = importeAlbaran;
             const importeBruto = parseMoney(row.IMPORTEBRUTO);
 
@@ -974,37 +932,27 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                     .filter((item) => Number.isInteger(item.targetPosition)),
             );
         }
-        const hasPostQueryFilter = Boolean(
-            searchQuery
-            || searchClient
-            || searchAlbaran
-            || filterTipo
-            || filterCobrar
-            || filterDocTipo,
-        );
-        const hasMore = routeOrderMode
-            ? sourceHasMore || pageOffset + pageLimit < filteredAlbaranes.length
-            : sourceHasMore;
-        const paginatedAlbaranes = routeOrderMode
-            ? filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit)
-            : filteredAlbaranes;
+        // Unified in-memory pagination over the shared cached dataset. The
+        // hasMore cursor advances through the FILTERED list, so an empty
+        // filtered page never repeats while later pages still hold matches.
+        // sourceHasMore only extends the walk while the physical dataset is
+        // still full at the cap AND the walk is single-driver (multi-driver
+        // walks terminate at the filtered list, never an empty-page loop).
+        const hasMore = pageOffset + pageLimit < filteredAlbaranes.length
+            || (sourceHasMore && filteredAlbaranes.length >= RUTERO_DATASET_FETCH_MAX && idList.length === 1);
+        const paginatedAlbaranes = filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit);
         // Summaries describe this response page so the Flutter provider can
         // add them safely while it loads the remaining route pages.
-        const summaryAlbaranes = routeOrderMode ? paginatedAlbaranes : albaranes;
+        const summaryAlbaranes = paginatedAlbaranes;
         const totalBruto = summaryAlbaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
         const totalACobrar = summaryAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importeDisponibleCobro || 0), 0);
         const totalOpcional = summaryAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importeDisponibleCobro || 0), 0);
         const completedCount = summaryAlbaranes.filter(a => a.estado === 'ENTREGADO').length;
-        // The cursor represents rows consumed from the source page, not only
-        // rows that survive post-query filters. Otherwise an empty filtered
-        // page repeats forever while sourceHasMore remains true.
         const nextOffset = hasMore
             ? pageOffset + pageLimit
             : pageOffset + paginatedAlbaranes.length;
-        const totalIsExact = !hasMore && (routeOrderMode || !hasPostQueryFilter);
-        const exactTotal = totalIsExact
-            ? (routeOrderMode ? filteredAlbaranes.length : nextOffset)
-            : null;
+        const totalIsExact = !hasMore;
+        const exactTotal = totalIsExact ? filteredAlbaranes.length : null;
         const pagination = {
             limit: pageLimit,
             offset: pageOffset,
@@ -1049,12 +997,16 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
 // ===================================
 router.get('/payment-conditions', verifyToken, async (req, res) => {
     try {
-        const conditions = await query(`
+        // Same catalog cache as /pendientes (TTL.LONG); sorting in memory
+        // keeps the shared cache entry stable regardless of ORDER BY.
+        const rows = await cachedQuery(query, `
             SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
             FROM JAVIER.PAYMENT_CONDITIONS
             WHERE ACTIVO = 'S'
-            ORDER BY TIPO, CODIGO
-        `, false);
+        `, 'entregas:paymentConditions', TTL.LONG);
+        const conditions = (rows || [])
+            .slice()
+            .sort((a, b) => String(a.TIPO || '').localeCompare(String(b.TIPO || '')) || String(a.CODIGO || '').localeCompare(String(b.CODIGO || '')));
 
         res.json({
             success: true,
@@ -1078,13 +1030,25 @@ router.get('/payment-conditions', verifyToken, async (req, res) => {
 // GET /albaran/:numero/:ejercicio
 // ===================================
 function confirmationTables() {
-    return resolveConfirmationTables() || {
-        confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
-        lines: 'JAVIER.TEST_REPARTO_LINEAS',
-    };
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.valid && runtime.tables?.confirmation) {
+        return runtime.tables.confirmation;
+    }
+    // Jest may use an explicit isolated fallback, but an explicit production
+    // selection must never silently fall back to TEST_* tables.
+    const requestedTableSet = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase();
+    if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'test'
+        && (!requestedTableSet || requestedTableSet === 'isolated_test')) {
+        return {
+            confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
+            lines: 'JAVIER.TEST_REPARTO_LINEAS',
+        };
+    }
+    return null;
 }
-
 function financeCobrosTable() {
+    const runtime = resolveRepartoRuntime(process.env);
+    if (!runtime?.valid) return null;
     const finance = resolveFinanceWriteTables();
     const cobros = finance?.cobros;
     if (cobros === 'JAVIER.TEST_REPARTIDOR_COBROS'
@@ -1093,7 +1057,6 @@ function financeCobrosTable() {
     }
     return null;
 }
-
 function paymentMethodLabel(code) {
     const normalized = String(code || '').trim().toUpperCase();
     if (['EF', 'EFECTIVO', 'CONTADO', 'F0'].includes(normalized)) return 'EFECTIVO';
@@ -1104,91 +1067,92 @@ function paymentMethodLabel(code) {
     return normalized || null;
 }
 
-const CANONICAL_LIST_STATUSES = Object.freeze(['ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO']);
-
 async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
     if (!Array.isArray(albaranes) || !albaranes.length) return albaranes;
     const documentIds = [...new Set(albaranes.map((item) => String(item.id || '').trim()).filter(Boolean))];
     const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
     if (!documentIds.length || !drivers.length) return albaranes;
+
     const tables = confirmationTables();
-    if (!tables?.confirmations) return albaranes;
+    if (!tables?.confirmations) {
+        throw new RepartoHttpError(
+            503,
+            'CANONICAL_DELIVERY_STATUS_UNAVAILABLE',
+            'La fuente canonica de estados no esta disponible',
+        );
+    }
+
     const cobrosTable = financeCobrosTable();
     try {
         const documentPlaceholders = documentIds.map(() => '?').join(', ');
         const driverPlaceholders = drivers.map(() => '?').join(', ');
         const paymentSelect = cobrosTable
-            ? `,
-              C.ID AS CONFIRMATION_ID,
-              CO.ID AS COBRO_ID,
-              CO.IMPORTEVENCIMIENTO AS IMPORTE_COBRADO,
-              CO.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE_COBRO,
-              TRIM(CO.CODIGOFORMAPAGO) AS FORMA_PAGO_COBRO`
-            : `,
-              C.ID AS CONFIRMATION_ID,
-              CAST(NULL AS INTEGER) AS COBRO_ID,
-              CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_COBRADO,
-              CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_PENDIENTE_COBRO,
-              CAST(NULL AS VARCHAR(10)) AS FORMA_PAGO_COBRO`;
+            ? [
+                ', C.ID AS CONFIRMATION_ID',
+                ', CO.ID AS COBRO_ID',
+                ', CO.IMPORTEVENCIMIENTO AS IMPORTE_COBRADO',
+                ', CO.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE_COBRO',
+                ', TRIM(CO.CODIGOFORMAPAGO) AS FORMA_PAGO_COBRO',
+            ].join('\n')
+            : [
+                ', C.ID AS CONFIRMATION_ID',
+                ', CAST(NULL AS INTEGER) AS COBRO_ID',
+                ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_COBRADO',
+                ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_PENDIENTE_COBRO',
+                ', CAST(NULL AS VARCHAR(10)) AS FORMA_PAGO_COBRO',
+            ].join('\n');
         const paymentJoin = cobrosTable
-            ? ` LEFT JOIN ${cobrosTable} CO
-                 ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)`
+            ? [
+                'LEFT JOIN ' + cobrosTable + ' CO',
+                'ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)',
+            ].join('\n')
             : '';
-        const overlayCacheKey = 'repartidor:rutero:confirmations:'
-            + documentIds.slice().sort().join(',')
-            + ':' + drivers.slice().sort().join(',');
-        const rows = await cachedQuery(
-            (sql, params) => queryWithParams(sql, params, false, false),
-            `SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
-                    TRIM(C.STATUS) AS STATUS
-                    ${paymentSelect}
-               FROM ${tables.confirmations} C
-               ${paymentJoin}
-              WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
-                AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})`,
-            overlayCacheKey,
-            5,
-            [...documentIds, ...drivers],
-        );
+        const sql = [
+            'SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,',
+            '       TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID,',
+            '       TRIM(C.STATUS) AS STATUS',
+            paymentSelect,
+            'FROM ' + tables.confirmations + ' C',
+            paymentJoin,
+            'WHERE TRIM(C.DOCUMENT_ID) IN (' + documentPlaceholders + ')',
+            '  AND TRIM(C.REPARTIDOR_ID) IN (' + driverPlaceholders + ')',
+            'ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID',
+        ].filter(Boolean).join('\n');
+        // Read the canonical state directly. A cached confirmation can hide a
+        // just-persisted terminal state; the DB2 unique document index keeps
+        // this bounded and deterministic.
+        const rows = await queryWithParams(sql, [...documentIds, ...drivers], false, false);
         const byId = new Map();
-        for (const row of Array.isArray(rows) ? rows : []) {
-            const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
-            const status = String(row.STATUS || row.status || '').trim().toUpperCase();
-            if (!id || !CANONICAL_LIST_STATUSES.includes(status)) continue;
-            const importeCobrado = Number(row.IMPORTE_COBRADO ?? row.importe_cobrado);
-            const importePendienteCobro = Number(
-                row.IMPORTE_PENDIENTE_COBRO ?? row.importe_pendiente_cobro,
-            );
+        for (const [id, match] of resolveCanonicalDeliveryStatuses(rows, { byOwner: true })) {
+            const importeCobrado = Number(match.importeCobrado);
+            const importePendienteCobro = Number(match.importePendienteCobro);
             const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
             byId.set(id, {
-                status,
-                confirmationId: row.CONFIRMATION_ID == null && row.confirmation_id == null
-                    ? null
-                    : String(row.CONFIRMATION_ID ?? row.confirmation_id),
-                cobroId: row.COBRO_ID == null && row.cobro_id == null
-                    ? null
-                    : String(row.COBRO_ID ?? row.cobro_id),
+                status: match.status,
+                confirmationId: match.confirmationId == null ? null : String(match.confirmationId),
+                cobroId: match.cobroId == null ? null : String(match.cobroId),
                 cobrado: hasCobro,
                 importeCobrado: hasCobro ? Math.round(importeCobrado * 100) / 100 : null,
                 importePendienteCobro: hasCobro && Number.isFinite(importePendienteCobro)
                     ? Math.round(importePendienteCobro * 100) / 100
                     : null,
-                formaPagoCobro: paymentMethodLabel(
-                    row.FORMA_PAGO_COBRO ?? row.forma_pago_cobro,
-                ),
+                formaPagoCobro: paymentMethodLabel(match.formaPagoCobro),
                 cobroParcial: hasCobro
                     && Number.isFinite(importePendienteCobro)
                     && importePendienteCobro > 0.004,
             });
         }
         if (!byId.size) return albaranes;
+
         return albaranes.map((item) => {
-            const match = byId.get(String(item.id || '').trim());
+            const documentId = String(item.id || '').trim();
+            const ownerId = String(item.codigoRepartidor || '').trim();
+            const match = byId.get(`${ownerId}\u001f${documentId}`) || byId.get(`\u001f${documentId}`);
             if (!match) return item;
             return {
                 ...item,
                 estado: match.status,
-                colorEstado: match.status === 'ENTREGADO' ? 'green' : item.colorEstado,
+                colorEstado: match.status === 'ENTREGADO' ? 'green' : ['PARCIAL', 'NO_ENTREGADO', 'RECHAZADO'].includes(match.status) ? 'orange' : 'red',
                 confirmationId: match.confirmationId,
                 cobroId: match.cobroId,
                 cobrado: match.cobrado,
@@ -1198,39 +1162,70 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 cobroParcial: match.cobroParcial,
             };
         });
-    } catch (_error) {
-        logger.warn('[ENTREGAS] Canonical confirmation overlay unavailable');
-        return albaranes;
+    } catch (error) {
+        if (error instanceof DeliveryStatusResolutionError) {
+            const statusCode = error.code === 'CONFLICTING_CANONICAL_DELIVERY_STATUS' ? 409 : 503;
+            logger.error('[ENTREGAS] Canonical delivery status rejected');
+            throw new RepartoHttpError(statusCode, error.code, error.message);
+        }
+        logger.error('[ENTREGAS] Canonical confirmation overlay unavailable');
+        throw new RepartoHttpError(
+            503,
+            'CANONICAL_DELIVERY_STATUS_UNAVAILABLE',
+            'La fuente canonica de estados no esta disponible',
+        );
     }
 }
-
 async function loadCanonicalDetailProjection(documentId, repartidorId, clientCode) {
     const tables = confirmationTables();
     if (!tables?.confirmations || !tables?.lines) {
-        return { availability: 'UNAVAILABLE', confirmation: null, linesById: new Map() };
+        throw new RepartoHttpError(
+            503,
+            'CANONICAL_DELIVERY_STATUS_UNAVAILABLE',
+            'La fuente canonica de estados no esta disponible',
+        );
     }
     try {
         const confirmations = await queryWithParams(`
-            SELECT ID, STATUS, CONFIRMED_AT
-            FROM ${tables.confirmations}
-            WHERE TRIM(DOCUMENT_ID) = ?
-              AND TRIM(REPARTIDOR_ID) = ?
-              AND TRIM(CLIENTE_CODIGO) = ?
+            SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
+                   TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID,
+                   TRIM(C.CLIENTE_CODIGO) AS CLIENTE_CODIGO,
+                   C.ID,
+                   TRIM(C.STATUS) AS STATUS,
+                   C.CONFIRMED_AT
+            FROM ${tables.confirmations} C
+            WHERE TRIM(C.DOCUMENT_ID) = ?
+              AND TRIM(C.REPARTIDOR_ID) = ?
+              AND TRIM(C.CLIENTE_CODIGO) = ?
+            ORDER BY TRIM(C.STATUS), C.ID
         `, [documentId, repartidorId, clientCode], false, false);
         if (confirmations.length === 0) {
             return { availability: 'NONE', confirmation: null, linesById: new Map() };
         }
-        if (confirmations.length !== 1) {
-            throw new RepartoHttpError(409, 'AMBIGUOUS_CONFIRMATION', 'Existe mas de una confirmacion para la identidad solicitada');
+
+        // Equal duplicate rows are resolved deterministically; contradictory
+        // statuses are data corruption and fail closed.
+        const resolved = resolveCanonicalDeliveryStatuses(confirmations);
+        const candidate = resolved.get(String(documentId).trim());
+        if (!candidate) {
+            throw new DeliveryStatusResolutionError(
+                'INVALID_CANONICAL_DELIVERY_STATUS',
+                'La confirmacion canonica no coincide con la identidad solicitada',
+                documentId,
+            );
         }
-        const confirmation = confirmations[0];
+        const selected = confirmations.find((row) =>
+            String(row.ID ?? row.id ?? '') === String(candidate.confirmationId ?? ''))
+            || confirmations.slice().sort((left, right) =>
+                String(left.ID ?? left.id ?? '').localeCompare(String(right.ID ?? right.id ?? '')))[0];
+        const confirmation = { ...selected, STATUS: candidate.status };
         const lines = await queryWithParams(`
             SELECT LINEA_ID, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA, CANTIDAD_PENDIENTE,
                    MOTIVO_DIFERENCIA, OBSERVACIONES
             FROM ${tables.lines}
             WHERE CONFIRMACION_ID = ?
             ORDER BY LINEA_ID
-        `, [confirmation.ID], false, false);
+        `, [confirmation.ID ?? confirmation.id], false, false);
         const linesById = new Map();
         for (const line of lines) {
             const lineId = String(line.LINEA_ID);
@@ -1242,11 +1237,19 @@ async function loadCanonicalDetailProjection(documentId, repartidorId, clientCod
         return { availability: 'AVAILABLE', confirmation, linesById };
     } catch (error) {
         if (error instanceof RepartoHttpError) throw error;
-        logger.warn('[ENTREGAS] Canonical confirmation schema unavailable for detail projection');
-        return { availability: 'UNAVAILABLE', confirmation: null, linesById: new Map() };
+        if (error instanceof DeliveryStatusResolutionError) {
+            const statusCode = error.code === 'CONFLICTING_CANONICAL_DELIVERY_STATUS' ? 409 : 503;
+            logger.error('[ENTREGAS] Canonical detail status rejected');
+            throw new RepartoHttpError(statusCode, error.code, error.message);
+        }
+        logger.error('[ENTREGAS] Canonical confirmation detail unavailable');
+        throw new RepartoHttpError(
+            503,
+            'CANONICAL_DELIVERY_STATUS_UNAVAILABLE',
+            'La fuente canonica de estados no esta disponible',
+        );
     }
 }
-
 function confirmedQuantity(value) {
     if (value === null || value === undefined) return null;
     const parsed = Number(value);

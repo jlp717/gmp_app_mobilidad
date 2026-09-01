@@ -183,8 +183,13 @@ class DashboardService {
         }
 
         const vendor = buildVendedorFilterParameterized(vendedorCodes);
-        const [currentRows, lastRows] = await this._fetchPeriodAggregates(ctx, vendor.filter, vendor.params);
-        const todayInfo = await this._computeTodaySales(ctx, vendor.filter, vendor.params);
+        // _computeTodaySales does not depend on period aggregates — run in parallel
+        // instead of paying its latency serially before B-sales enrichment.
+        const [aggregateRows, todayInfo] = await Promise.all([
+            this._fetchPeriodAggregates(ctx, vendor.filter, vendor.params),
+            this._computeTodaySales(ctx, vendor.filter, vendor.params),
+        ]);
+        const [currentRows, lastRows] = aggregateRows;
         const { curr, last } = this._normalizeAggregates(currentRows[0] || {}, lastRows[0] || {});
         const salesTotals = await this._enrichWithBSales(vendedorCodes, ctx.year, ctx.month, curr, last);
         const payload = this._buildMetricsPayload(

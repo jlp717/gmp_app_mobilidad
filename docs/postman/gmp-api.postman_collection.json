@@ -8261,6 +8261,48 @@
           }
         },
         {
+          "name": "POST repartidor · rutero · order · {repartidorId} · move",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/rutero/order/:repartidorId/move",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "rutero",
+                "order",
+                ":repartidorId",
+                "move"
+              ],
+              "query": []
+            },
+            "description": "POST repartidor · rutero · order · {repartidorId} · move. Valida el movimiento y falla cerrada hasta disponer de persistencia operativa autorizada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-08-26\",\n  \"targetDate\": \"2026-08-27\",\n  \"position\": 0,\n  \"orden\": [\n    {\n      \"documentId\": \"2026-P-1-42-4300000001\",\n      \"cliente\": \"4300000001\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "POST repartidor · rutero · order · {repartidorId} · optimize",
           "request": {
             "method": "POST",
@@ -8286,6 +8328,166 @@
               "query": []
             },
             "description": "POST repartidor · rutero · order · {repartidorId} · optimize. Contrato del handler Express existente."
+          }
+        },
+        {
+          "name": "POST repartidor · rutero · tracking · {repartidorId} · start",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/rutero/tracking/:repartidorId/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "rutero",
+                "tracking",
+                ":repartidorId",
+                "start"
+              ],
+              "query": []
+            },
+            "description": "Inicia una sesión de seguimiento GPS para el repartidor autenticado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-08-27\",\n  \"sessionId\": \"route-20260827-r01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST repartidor · rutero · tracking · {repartidorId} · samples",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/rutero/tracking/:repartidorId/samples",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "rutero",
+                "tracking",
+                ":repartidorId",
+                "samples"
+              ],
+              "query": []
+            },
+            "description": "Registra un lote idempotente de posiciones GPS de una sesión activa.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-08-27\",\n  \"sessionId\": \"route-20260827-r01\",\n  \"samples\": [\n    {\n      \"eventId\": \"gps-20260827-0001\",\n      \"latitude\": 40.4168,\n      \"longitude\": -3.7038,\n      \"accuracy\": 12.5,\n      \"speed\": 32.4,\n      \"heading\": 180,\n      \"recordedAt\": \"2026-08-27T08:15:00Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST repartidor · rutero · tracking · {repartidorId} · stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/rutero/tracking/:repartidorId/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "rutero",
+                "tracking",
+                ":repartidorId",
+                "stop"
+              ],
+              "query": []
+            },
+            "description": "Cierra una sesión de seguimiento GPS.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-08-27\",\n  \"sessionId\": \"route-20260827-r01\",\n  \"eventId\": \"stop-20260827-r01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET repartidor · rutero · tracking · {repartidorId} · latest",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/rutero/tracking/:repartidorId/latest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "rutero",
+                "tracking",
+                ":repartidorId",
+                "latest"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-08-27",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Devuelve la última posición GPS de un repartidor en una fecha."
           }
         },
         {

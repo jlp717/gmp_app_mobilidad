@@ -4,6 +4,7 @@
 /// Replaces raw http.Client for consistency and performance
 library;
 
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -47,8 +48,11 @@ class SalesHistoryService {
         'offset': offset.toString(),
       };
 
-      // Generate cache key from params
-      final cacheKey = 'sales_history_v2_${jsonEncode(queryParams)}';
+      // Generate cache key from params — sorted so key insertion order at
+      // different callsites can't produce a second key for the same query
+      // (silent cache miss + duplicate request).
+      final cacheKey =
+          'sales_history_v2_${jsonEncode(SplayTreeMap.from(queryParams))}';
 
       final response = await _get(
         '/sales-history',
@@ -93,7 +97,9 @@ class SalesHistoryService {
         if (endDate != null) 'endDate': endDate,
       };
 
-      final cacheKey = 'sales_history_summary_v2_${jsonEncode(queryParams)}';
+      // Sorted map (see getProductHistory) for order-insensitive cache keys.
+      final sortedParams = SplayTreeMap.from(queryParams);
+      final cacheKey = 'sales_history_summary_v2_${jsonEncode(sortedParams)}';
 
       return await _get(
         '/sales-history/summary',

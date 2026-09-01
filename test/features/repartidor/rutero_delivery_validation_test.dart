@@ -22,6 +22,7 @@ RuteroDeliveryValidationInput _base({
   String importeCobradoText = '',
   double importeTotal = 10,
   double? importeDisponibleCobro,
+  double? importeMaxCobrable,
 }) {
   return RuteroDeliveryValidationInput(
     isLoadingItems: isLoadingItems,
@@ -42,6 +43,7 @@ RuteroDeliveryValidationInput _base({
     importeCobradoText: importeCobradoText,
     importeTotal: importeTotal,
     importeDisponibleCobro: importeDisponibleCobro,
+    importeMaxCobrable: importeMaxCobrable,
   );
 }
 
@@ -102,6 +104,85 @@ void main() {
       ),
     );
     expect(result.messageFor('importe'), contains('saldo cobrable'));
+  });
+
+  test('partial delivery caps payment by delivered lines, not CVC balance', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        status: RepartoDeliveryStatus.parcial,
+        importeTotal: 100,
+        importeDisponibleCobro: 100,
+        importeMaxCobrable: 40,
+        isPaid: true,
+        importeCobradoText: '40,01',
+      ),
+    );
+    expect(result.messageFor('importe'), contains('entrega parcial'));
+  });
+
+  test('partial delivery accepts an amount within the delivered-lines cap', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        status: RepartoDeliveryStatus.parcial,
+        importeTotal: 100,
+        importeDisponibleCobro: 100,
+        importeMaxCobrable: 40,
+        isPaid: true,
+        importeCobradoText: '40,00',
+      ),
+    );
+    expect(result.messageFor('importe'), isNull);
+  });
+
+  test('partial payment suggestion follows repeated quantity edits', () {
+    final firstEdit = nextRuteroSuggestedPaymentAmount(
+      currentAmount: 100,
+      lastSuggestedAmount: 100,
+      maximumAmount: 40,
+    );
+    final secondEdit = nextRuteroSuggestedPaymentAmount(
+      currentAmount: firstEdit,
+      lastSuggestedAmount: firstEdit,
+      maximumAmount: 20,
+    );
+    final manualValue = nextRuteroSuggestedPaymentAmount(
+      currentAmount: 15,
+      lastSuggestedAmount: secondEdit,
+      maximumAmount: 10,
+    );
+
+    expect(firstEdit, 40);
+    expect(secondEdit, 20);
+    expect(manualValue, isNull);
+  });
+
+  test('partial payment suggestion recovers after an automatic zero', () {
+    final zeroEdit = nextRuteroSuggestedPaymentAmount(
+      currentAmount: 40,
+      lastSuggestedAmount: 40,
+      maximumAmount: 0,
+    );
+    final recoveredEdit = nextRuteroSuggestedPaymentAmount(
+      currentAmount: null,
+      lastSuggestedAmount: zeroEdit,
+      maximumAmount: 20,
+    );
+
+    expect(zeroEdit, 0);
+    expect(recoveredEdit, 20);
+  });
+
+  test('full delivery keeps the CVC balance as ceiling (no regression)', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        status: RepartoDeliveryStatus.entregado,
+        importeTotal: 100,
+        importeDisponibleCobro: 60,
+        isPaid: true,
+        importeCobradoText: '60,00',
+      ),
+    );
+    expect(result.messageFor('importe'), isNull);
   });
   test('urgent rejected delivery does not demand an impossible payment', () {
     final result = validateRuteroDeliveryForm(

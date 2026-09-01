@@ -323,6 +323,38 @@ class CacheKeyGenerator {
     }
 }
 
+/**
+ * Derive the Redis invalidation pattern for a cacheKey used with cachedQuery().
+ *
+ * cachedQuery() stores under Redis key "gmp:query:query:<cacheKey>:vendor:..."
+ * (namespace "query" from redisCache._generateKey + the legacy "query" prefix
+ * that CacheKeyGenerator prepends — see invalidateByPrefix above). Patterns
+ * missing the double "query:" match no key at all: the invalidation silently
+ * becomes a no-op. This helper centralizes that contract so route files can
+ * not regress it.
+ *
+ * NOT for keys written with redisCache.set(namespace, key) directly (e.g.
+ * planner's "rutero:day:payload:v4:..." payloads): those live under a single
+ * namespace prefix and must keep their hand-built pattern.
+ *
+ * @param {string} cacheKey - the cacheKey passed to cachedQuery (the variable
+ *   tail is allowed; it gets trimmed to the family prefix)
+ * @param {number} [familyLevels=2] - how many leading ":"-separated segments
+ *   of the cacheKey form the invalidation family. Raise it to keep a version
+ *   segment (3 keeps "rutero:details:v3"), use 1 for the whole top-level
+ *   family, or 0 to keep the full cacheKey.
+ * @returns {string} Pattern valid for redisCache.invalidatePattern() and its
+ *   deleteCachePattern/invalidateCachePattern aliases
+ */
+function patternFor(cacheKey, familyLevels = 2) {
+    const base = String(cacheKey || '').trim();
+    if (!base) return 'query:query:*';
+    const family = familyLevels > 0
+        ? base.split(':').slice(0, familyLevels).join(':')
+        : base;
+    return `query:query:${family}:*`;
+}
+
 // Singleton instances
 const stampedeLock = new CacheStampedeLock();
 const cacheMetrics = new CacheMetrics();
@@ -385,6 +417,11 @@ class QueryOptimizer {
         this.batchTimeout = 50; // ms to wait for batching
         this.maxBatchSize = 100;
         this.warmedKeys = new Set();
+        // Amortized stats sweep: no setInterval (startup contract forbids
+        // timers on require('./app')) and no full-map walk per query. We only
+        // consider sweeping every N recorded queries.
+        this._statsSweepCounter = 0;
+        this._statsSweepEvery = 500;
     }
 
     /**
@@ -423,8 +460,13 @@ class QueryOptimizer {
             stats.samples.shift();
         }
 
-        // Cleanup old entries
-        this._cleanupStats();
+        // Amortized cleanup: one full sweep every _statsSweepEvery queries
+        // instead of a per-query walk of every tracked SQL statement.
+        this._statsSweepCounter += 1;
+        if (this._statsSweepCounter >= this._statsSweepEvery) {
+            this._statsSweepCounter = 0;
+            this._cleanupStats();
+        }
     }
 
     /**
@@ -698,6 +740,11 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
 
     cacheMetrics.recordMiss(queryType);
 
+    // Declared before the stampede branch: assigning it there and re-declaring
+    // it below caused a TDZ ReferenceError when the rebuild wait expired, and
+    // the re-declaration clobbered the `false` just assigned.
+    let shouldReleaseLocalLock = true;
+
     if (!stampedeLock.acquire(fullCacheKey)) {
         const waited = await waitForCachedRebuild(fullCacheKey, queryType);
         if (waited.found) {
@@ -706,13 +753,13 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
         }
         cacheMetrics.recordStampedePrevention();
         logger.warn(`[QueryOptimizer] Local cache rebuild wait expired: ${fullCacheKey}`);
-        stampedeLock.release(fullCacheKey);
-        stampedeLock.acquire(fullCacheKey);
+        // No hijack del lock: el holder original sigue vivo; la exclusion la
+        // arbitra el lock distribuido de Redis. Duplicar un rebuild es inocuo.
+        shouldReleaseLocalLock = false;
     }
 
     let redisLockToken = null;
     let freshResult = null;
-    let shouldReleaseLocalLock = true;
 
     try {
         if (redisCache.isConnected && typeof redisCache.acquireLock === 'function') {
@@ -731,9 +778,9 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
                     shouldReleaseLocalLock = true;
                     redisLockToken = await redisCache.acquireLock('query', fullCacheKey, CACHE_LOCK_TTL_MS);
                 } else {
-                    stampedeLock.release(fullCacheKey);
-                    stampedeLock.acquire(fullCacheKey);
-                    shouldReleaseLocalLock = true;
+                    // Otro proceso local retuvo el lock: no lo secuestramos.
+                    logger.warn(`[QueryOptimizer] Local lock busy after distributed wait: ${fullCacheKey}`);
+                    shouldReleaseLocalLock = false;
                 }
 
                 if (!redisLockToken) {
@@ -1087,6 +1134,7 @@ module.exports = {
     CACHE_PREFIXES,
     WARM_QUERIES,
     CacheKeyGenerator,
+    patternFor,
     stampedeLock,
     cacheMetrics,
 };

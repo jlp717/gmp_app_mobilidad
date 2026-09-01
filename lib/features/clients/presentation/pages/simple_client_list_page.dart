@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -370,8 +371,10 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 ),
-                leading:
-                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                leading: const Icon(
+                  Icons.phone_android,
+                  color: AppColors.whatsappGreen,
+                ),
                 title: Text((p['number'] as String?) ?? ''),
                 subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
                 onTap: () {
@@ -430,7 +433,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
               backgroundColor:
-                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.info,
+                  isWhatsApp ? AppColors.whatsappGreen : AppTheme.info,
             ),
             child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
           ),
@@ -1166,7 +1169,7 @@ class _ClientCard extends StatelessWidget {
                       onPressed: onWhatsAppTap,
                       icon: const Icon(
                         Icons.chat,
-                        color: Color(0xFF25D366),
+                        color: AppColors.whatsappGreen,
                         size: 24,
                       ),
                       tooltip: 'WhatsApp',

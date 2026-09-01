@@ -113,19 +113,29 @@ router.get('/vendedores', async (req, res) => {
 router.get('/families', async (req, res) => {
     try {
         const { search, limit = 50 } = req.query;
+        const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
         let whereClause = 'WHERE 1=1';
+        let params = [];
         if (search) {
-            const term = search.toUpperCase().replace(/\'/g, "''").trim();
-            whereClause += ` AND(UPPER(DESCRIPCIONFAMILIA) LIKE '%${term}%' OR CODIGOFAMILIA LIKE '%${term}%')`;
+            // Sanitized LIKE term, bound as a parameter (no string interpolation).
+            const term = `%${sanitizeForSQL(search.toUpperCase().trim())}%`;
+            whereClause += ` AND(UPPER(DESCRIPCIONFAMILIA) LIKE ? OR CODIGOFAMILIA LIKE ?)`;
+            params = [term, term];
         }
 
-        const families = await query(`
+        // Semi-static dropdown catalog — cache like /products and /vendedores do.
+        const cacheKey = `master:families:${search || 'all'}:${safeLimit}`;
+        const families = await cachedQuery(queryWithParams, `
             SELECT TRIM(CODIGOFAMILIA) as CODE, TRIM(DESCRIPCIONFAMILIA) as NAME
             FROM DSEDAC.FAM
             ${whereClause}
             ORDER BY DESCRIPCIONFAMILIA
-            FETCH FIRST ${parseInt(limit)} ROWS ONLY
-            `);
+            FETCH FIRST ${safeLimit} ROWS ONLY
+            `, {
+            cacheKey,
+            ttl: search ? TTL.SHORT : TTL.LONG,
+            params
+        }, params);
 
         res.json(families.map(f => ({
             code: (f.CODE ?? f.code ?? '').toString().trim(),

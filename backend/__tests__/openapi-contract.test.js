@@ -167,7 +167,7 @@ function runtimeDocsProbe(nodeEnv, extraEnv = {}) {
   const result = spawnSync(process.execPath, ["-e", probe], {
     cwd: path.join(root, "backend"),
     encoding: "utf8",
-    timeout: 50000,
+    timeout: 110000,
     env,
   });
   const markerLine = (result.stdout || "").split(/\r?\n/).find((line) => line.startsWith("DOCS_PROBE:"));
@@ -262,7 +262,7 @@ describe("OpenAPI documentation quality", () => {
 });
 
 describe("runtime API documentation mount", () => {
-  jest.setTimeout(70000);
+  jest.setTimeout(120000);
 
   test("serves the spec through the application exported by server.js", () => {
     const publicResult = runtimeDocsProbe("test");

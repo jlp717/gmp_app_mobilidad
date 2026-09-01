@@ -253,24 +253,36 @@ function scopeVendorCodesForUser(userCode, vendedorCodes) {
 async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
     const scopedVendorCodes = vendorCodesArray || [];
 
-    for (const yr of uniqueYears) {
-        const bSalesByMonth = aggregateBSalesByMonth(
-            await getBSalesByVendor(yr, scopedVendorCodes)
-        );
+    // Years are independent VENTAS_B lookups — fetch in parallel instead of
+    // serially paying each year's roundtrip (up to 6 years before).
+    const bSalesResults = await Promise.all(
+        uniqueYears.map(yr => getBSalesByVendor(yr, scopedVendorCodes))
+    );
 
+    // Index rows once by (year, month) so the merge below is O(rows), not a
+    // find() scan per month per year.
+    const rowsByYearMonth = new Map();
+    for (const row of rows) {
+        rowsByYearMonth.set(`${row.YEAR}:${row.MONTH}`, row);
+    }
+
+    uniqueYears.forEach((yr, index) => {
+        const bSalesByMonth = aggregateBSalesByMonth(bSalesResults[index]);
         for (const [month, amount] of Object.entries(bSalesByMonth)) {
             const value = parseFloat(amount) || 0;
             if (value === 0) continue;
 
             const m = parseInt(month);
-            const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
+            const existingRow = rowsByYearMonth.get(`${yr}:${m}`);
             if (existingRow) {
                 existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + value;
             } else {
-                rows.push({ YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 });
+                const newRow = { YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 };
+                rowsByYearMonth.set(`${yr}:${m}`, newRow);
+                rows.push(newRow);
             }
         }
-    }
+    });
 }
 
 function aggregateObjectiveRows(rows) {
@@ -1033,29 +1045,39 @@ router.get('/evolution', verifyToken, async (req, res) => {
         const fixedTargetsByYear = {};
         if (vendorCodesArray.length === 1) {
             const firstCode = vendorCodesArray[0];
-            for (const year of yearsArray) {
-                fixedTargetsByYear[year] = await getExactMonthlyTargets(firstCode, year);
-            }
+            // One COMMERCIAL_TARGETS lookup per year — independent, fetch in parallel.
+            const targetsByYear = await Promise.all(
+                yearsArray.map(year => getExactMonthlyTargets(firstCode, year))
+            );
+            yearsArray.forEach((year, index) => {
+                fixedTargetsByYear[year] = targetsByYear[index];
+            });
             if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
                 logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
             }
         } else if (isAll) {
-            for (const year of yearsArray) {
-                const targets = await getGlobalPinnedMonthlyTargets(year);
+            const targetsByYear = await Promise.all(
+                yearsArray.map(year => getGlobalPinnedMonthlyTargets(year))
+            );
+            yearsArray.forEach((year, index) => {
+                const targets = targetsByYear[index];
                 if (Object.keys(targets).length > 0) {
                     fixedTargetsByYear[year] = targets;
                 }
-            }
+            });
             if (Object.keys(fixedTargetsByYear).length > 0) {
                 logger.info('[OBJECTIVES] JEFE ALL: loaded global pinned months from COMMERCIAL_TARGETS');
             }
         } else if (vendorCodesArray.length > 1) {
-            for (const year of yearsArray) {
-                const targets = await getScopedPinnedMonthlyTargets(year, vendorCodesArray);
+            const targetsByYear = await Promise.all(
+                yearsArray.map(year => getScopedPinnedMonthlyTargets(year, vendorCodesArray))
+            );
+            yearsArray.forEach((year, index) => {
+                const targets = targetsByYear[index];
                 if (Object.keys(targets).length > 0) {
                     fixedTargetsByYear[year] = targets;
                 }
-            }
+            });
         }
 
         // 1. Get Target Config

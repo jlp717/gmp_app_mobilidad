@@ -133,6 +133,13 @@ class AppColors {
   static const Color infoColor = info;
 
   // ===========================================================================
+  // BRAND COLORS
+  // ===========================================================================
+
+  /// Official WhatsApp green used for WhatsApp action buttons/links.
+  static const Color whatsappGreen = Color(0xFF25D366);
+
+  // ===========================================================================
   // TEXT COLORS
   // ===========================================================================
 

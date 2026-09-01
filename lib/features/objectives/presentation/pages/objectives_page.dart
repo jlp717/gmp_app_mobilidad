@@ -78,6 +78,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   String _clientCodeFilter = '';
   String _nifFilter = '';
 
+  // Memoized client-tab filter+sort: this used to re-filter and re-sort the
+  // whole client list (plus 4 status-count scans) on every single build.
+  // Recomputed only when a filter/sort/data input actually changes.
+  List<Map<String, dynamic>>? _clientsFilteredCache;
+  Map<String, int>? _statusCountsCache;
+  String? _clientsCacheKey;
+
   late TabController _tabController;
 
   // Spanish format managed centrally
@@ -2794,47 +2801,67 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       );
     }
 
-    // Filter by search query AND status
-    final filteredClients = _clientsObjectives.where((c) {
-      // Status filter
-      if (_selectedStatusFilter != null &&
-          c['status'] != _selectedStatusFilter) {
-        return false;
+    // Filter by search query AND status, then sort — memoized across builds
+    final cacheKey = [
+      _clientsObjectives.length,
+      _clientSearchQuery,
+      _selectedStatusFilter ?? 'all',
+      _currentSort,
+    ].join('|');
+    List<Map<String, dynamic>> filteredClients;
+    Map<String, int> statusCounts;
+    if (_clientsCacheKey == cacheKey && _clientsFilteredCache != null) {
+      filteredClients = _clientsFilteredCache!;
+      statusCounts = _statusCountsCache!;
+    } else {
+      final query = _clientSearchQuery.toLowerCase();
+      filteredClients = _clientsObjectives.where((c) {
+        // Status filter
+        if (_selectedStatusFilter != null &&
+            c['status'] != _selectedStatusFilter) {
+          return false;
+        }
+        // Search filter
+        if (query.isEmpty) return true;
+        final name = c['name']?.toString().toLowerCase() ?? '';
+        final code = c['code']?.toString().toLowerCase() ?? '';
+        return name.contains(query) || code.contains(query);
+      }).toList();
+
+      // Sort Logic
+      filteredClients.sort((a, b) {
+        final objA = (a['objective'] as num?)?.toDouble() ?? 0;
+        final objB = (b['objective'] as num?)?.toDouble() ?? 0;
+        final salesA = (a['current'] as num?)?.toDouble() ?? 0;
+        final salesB = (b['current'] as num?)?.toDouble() ?? 0;
+
+        switch (_currentSort) {
+          case 'sales_desc':
+            return salesB.compareTo(salesA); // Mayor recaudado b - a
+          case 'objective_desc':
+          default:
+            return objB.compareTo(objA); // Mayor objetivo b - a
+        }
+      });
+
+      // Single-pass status counts (was 4 separate .where scans per build)
+      statusCounts = {
+        'achieved': 0,
+        'ontrack': 0,
+        'atrisk': 0,
+        'critical': 0,
+      };
+      for (final c in _clientsObjectives) {
+        final s = c['status']?.toString();
+        if (s != null && statusCounts.containsKey(s)) {
+          statusCounts[s] = statusCounts[s]! + 1;
+        }
       }
-      // Search filter
-      if (_clientSearchQuery.isEmpty) return true;
-      final name = c['name']?.toString().toLowerCase() ?? '';
-      final code = c['code']?.toString().toLowerCase() ?? '';
-      return name.contains(_clientSearchQuery.toLowerCase()) ||
-          code.contains(_clientSearchQuery.toLowerCase());
-    }).toList();
 
-    // Sort Logic
-    filteredClients.sort((a, b) {
-      final objA = (a['objective'] as num?)?.toDouble() ?? 0;
-      final objB = (b['objective'] as num?)?.toDouble() ?? 0;
-      final salesA = (a['current'] as num?)?.toDouble() ?? 0;
-      final salesB = (b['current'] as num?)?.toDouble() ?? 0;
-
-      switch (_currentSort) {
-        case 'sales_desc':
-          return salesB.compareTo(salesA); // Mayor recaudado b - a
-        case 'objective_desc':
-        default:
-          return objB.compareTo(objA); // Mayor objetivo b - a
-      }
-    });
-
-    // Count by status
-    final statusCounts = {
-      'achieved':
-          _clientsObjectives.where((c) => c['status'] == 'achieved').length,
-      'ontrack':
-          _clientsObjectives.where((c) => c['status'] == 'ontrack').length,
-      'atrisk': _clientsObjectives.where((c) => c['status'] == 'atrisk').length,
-      'critical':
-          _clientsObjectives.where((c) => c['status'] == 'critical').length,
-    };
+      _clientsFilteredCache = filteredClients;
+      _statusCountsCache = statusCounts;
+      _clientsCacheKey = cacheKey;
+    }
 
     return Column(
       children: [

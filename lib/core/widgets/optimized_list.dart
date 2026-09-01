@@ -35,8 +35,10 @@ class OptimizedListView extends StatelessWidget {
       physics: physics ?? const AlwaysScrollableScrollPhysics(),
       shrinkWrap: shrinkWrap,
       itemCount: itemCount,
-      // OPTIMIZATION: Cache 3 screens worth of items
-      cacheExtent: MediaQuery.of(context).size.height * 3,
+      // 1.5 screens of cache: heavy cards (gradients + shadows) at 3 screens
+      // pre-built ~24 offscreen tiles per scroll direction, inflating build
+      // cost and memory for no perceived smoothness gain on these pages.
+      cacheExtent: MediaQuery.of(context).size.height * 1.5,
       addSemanticIndexes: false, // Slight perf gain if not using accessibility
       itemBuilder: (context, index) {
         // Wrap each item in RepaintBoundary for isolated repaints

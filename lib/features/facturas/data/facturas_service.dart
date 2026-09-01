@@ -672,27 +672,44 @@ class FacturasService {
 
   /// Download PDF
   static String _documentPdfEndpoint(Factura factura, {bool preview = false}) {
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final previewQuery = preview ? 'preview=true&' : '';
+    // Cache-busting `?_t=` is only needed for preview variants that the
+    // backend regenerates; stable downloads must keep a deterministic URL so
+    // HTTP/disk caching can kick in (previous code re-downloaded the whole
+    // PDF on every open).
+    final previewQuery = preview
+        ? 'preview=true&_t=${DateTime.now().millisecondsSinceEpoch}&'
+        : '';
     if (factura.isAlbaran) {
       final terminal = factura.terminal ?? 0;
       return '/facturas/${factura.serie}/${factura.numero}/'
           '${factura.ejercicio}/pdf?${previewQuery}documentType=albaran'
-          '&terminal=$terminal&_t=$ts';
+          '&terminal=$terminal';
     }
 
     return '/facturas/${factura.serie}/${factura.numero}/'
-        '${factura.ejercicio}/pdf?${previewQuery}_t=$ts';
+        '${factura.ejercicio}/pdf?${previewQuery}';
+  }
+
+  static File _documentPdfCacheFile(Factura factura, String dirPath) {
+    final safeSerie = factura.serie.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
+    final terminal = factura.terminal ?? 0;
+    return File(
+      '${dirPath}/${factura.pdfFilePrefix}_${safeSerie}_${factura.numero}'
+      '_${factura.ejercicio}_${factura.isAlbaran ? terminal : 'f'}.pdf',
+    );
   }
 
   static Future<File> downloadDocumentoPdf(Factura factura) async {
     try {
-      final bytes = await ApiClient.getBytes(_documentPdfEndpoint(factura));
       final dir = await getTemporaryDirectory();
-      final safeSerie = factura.serie.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
-      final file = File(
-        '${dir.path}/${factura.pdfFilePrefix}_${safeSerie}_${factura.numero}_${factura.ejercicio}.pdf',
-      );
+      final file = _documentPdfCacheFile(factura, dir.path);
+      // Document PDFs are immutable server-side (same serie/numero/ejercicio
+      // never changes content): serve from disk when already downloaded
+      // instead of re-fetching the full PDF per open.
+      if (await file.exists() && await file.length() > 0) {
+        return file;
+      }
+      final bytes = await ApiClient.getBytes(_documentPdfEndpoint(factura));
       await file.writeAsBytes(bytes);
       return file;
     } catch (e) {
@@ -717,16 +734,18 @@ class FacturasService {
     int ejercicio,
   ) async {
     try {
-      // Use ApiClient to get bytes directly - authentication is handled automatically
-      // FIX: Add timestamp to bust Dio HTTP cache on repeated downloads
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      final bytes = await ApiClient.getBytes(
-        '/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts',
-      );
-
       final dir = await getTemporaryDirectory();
       final file =
           File('${dir.path}/Factura_${serie}_${numero}_$ejercicio.pdf');
+      // Invoice PDFs are immutable for a given serie/numero/ejercicio —
+      // serve from disk instead of re-downloading on every call.
+      if (await file.exists() && await file.length() > 0) {
+        return file;
+      }
+      // Use ApiClient to get bytes directly - authentication is handled automatically
+      final bytes = await ApiClient.getBytes(
+        '/facturas/$serie/$numero/$ejercicio/pdf',
+      );
       await file.writeAsBytes(bytes);
       return file;
     } catch (e) {
@@ -742,12 +761,21 @@ class FacturasService {
     int ejercicio,
   ) async {
     try {
-      // FIX: Add timestamp to bust Dio HTTP cache — without this, second request
-      // returns cached response and PDF appears blank/corrupted on re-open
+      final dir = await getTemporaryDirectory();
+      final file =
+          File('${dir.path}/Factura_${serie}_${numero}_$ejercicio.pdf');
+      // Same immutable-document disk cache as downloadFacturaPdf; keeps the
+      // `?_t=` busting on the network path (second uncached requests through
+      // the HTTP layer once returned blank/corrupted previews) while never
+      // re-fetching an already-downloaded document.
+      if (await file.exists() && await file.length() > 0) {
+        return await file.readAsBytes();
+      }
       final ts = DateTime.now().millisecondsSinceEpoch;
       final bytes = await ApiClient.getBytes(
         '/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts',
       );
+      await file.writeAsBytes(bytes);
       return bytes;
     } catch (e) {
       debugPrint('Error downloading PDF bytes: $e');

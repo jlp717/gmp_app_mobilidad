@@ -13,10 +13,12 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
@@ -701,6 +703,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       body: Column(
         children: [
           _buildHeader(),
+          const OfflineBanner(),
           Expanded(
             child: _selectedClientId != null
                 ? _buildDocumentsView()
@@ -2513,7 +2516,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   enabled: hasDeliveryNote,
                   leading: CircleAvatar(
                     backgroundColor: hasDeliveryNote
-                        ? const Color(0xFF25D366)
+                        ? AppColors.whatsappGreen
                         : AppTheme.mutedPanel,
                     child:
                         const Icon(Icons.chat, color: Colors.white, size: 20),
@@ -2610,7 +2613,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
                 ListTile(
                   leading: const CircleAvatar(
-                    backgroundColor: Color(0xFF25D366),
+                    backgroundColor: AppColors.whatsappGreen,
                     child: Icon(Icons.chat, color: Colors.white, size: 20),
                   ),
                   title: const Text(

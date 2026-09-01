@@ -7,8 +7,10 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/notifications/local_notification_service.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:workmanager/workmanager.dart';
 
 class NotificationBackgroundTaskNames {
@@ -66,6 +68,14 @@ class NotificationBackgroundRunner {
       await NotificationOrchestrator.instance.refreshAll(
         reason: 'background:$taskName',
       );
+      // EARS-10: drain the offline queue (evidences + confirmations +
+      // pedidos) whenever the periodic task runs with verified connectivity.
+      if (ConnectivityService.instance.currentStatus ==
+          ConnectivityStatus.online) {
+        await OfflineSyncBridge.syncAll(notify: false);
+      } else {
+        await runRepartoEvidenceInboxMaintenance();
+      }
       return true;
     } catch (e, stack) {
       debugPrint('[Notifications] Background refresh failed: $e\n$stack');

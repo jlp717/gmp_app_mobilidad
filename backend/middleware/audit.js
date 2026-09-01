@@ -36,10 +36,19 @@ const auditLogger = winston.createLogger({
 // IMMUTABLE AUDIT LOG — append-only, never rotated, legal-grade evidence
 // =============================================================================
 const IMMUTABLE_LOG_PATH = 'logs/audit-immutable.log';
+// fs.promises.appendFile: fully async (the old appendFileSync serialized
+// the event loop during error bursts) yet opens/closes the fd per call, so
+// it leaves no persistent handles behind — a module-level WriteStream kept
+// an open handle and broke the server-startup contract (require('./app')
+// must exit naturally with zero active handles).
+const appendImmutable = fs.promises.appendFile;
 function writeImmutable(entry) {
     try {
-        const line = JSON.stringify({ ...entry, _ts: new Date().toISOString() }) + '\n';
-        fs.appendFileSync(IMMUTABLE_LOG_PATH, line, 'utf8');
+        const line =
+            JSON.stringify({ ...entry, _ts: new Date().toISOString() }) + '\n';
+        appendImmutable(IMMUTABLE_LOG_PATH, line, 'utf8').catch(() => {
+            // Silent fail — do not crash the server for audit logging
+        });
     } catch (e) {
         // Silent fail — do not crash the server for audit logging
     }

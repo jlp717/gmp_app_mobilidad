@@ -171,6 +171,18 @@ class SyncQueueService {
     await _box?.delete(id);
   }
 
+  /// Resets a manual-review or backoff operation so the next drain retries
+  /// it immediately (EARS-12). Used by the sync status panel.
+  Future<void> retryManual(SyncOperation operation) async {
+    if (_box == null) return;
+    operation
+      ..failedAt = null
+      ..lastError = null
+      ..attempts = 0;
+    await _box!.put(operation.id, jsonEncode(operation.toJson()));
+    debugPrint('[SyncQueue] Manual retry armed: ${operation.type}');
+  }
+
   /// Get all pending operations.
   List<SyncOperation> get pending {
     if (_box == null) return [];
@@ -388,9 +400,13 @@ class SyncQueueService {
   }
 
   Future<_HttpMutationResult> _processOperation(SyncOperation op) async {
-    final cleanPayload = Map<String, dynamic>.from(op.payload)
+    var cleanPayload = Map<String, dynamic>.from(op.payload)
       ..remove('_journalFingerprint')
       ..remove('_journalIdempotencyKey');
+
+    if (op.type == 'confirm_delivery') {
+      cleanPayload = await _resolveDeferredEvidence(op, cleanPayload);
+    }
 
     try {
       late final Response<dynamic> response;
@@ -571,6 +587,76 @@ class SyncQueueService {
     required String idempotencyKey,
     String? cobroId,
   })? confirmDeliveryReconciler;
+
+  /// Optional hook installed by the repartidor feature. Resolves deferred
+  /// evidence slots (inbox bytes -> upload -> evidence id) BEFORE the queued
+  /// confirmation POST leaves the device. Null resolver on a deferred payload
+  /// fails closed and keeps the operation queued.
+  static Future<Map<String, String>> Function({
+    required String deliveryId,
+    String? repartidorId,
+    required Map<String, dynamic> pendingEvidence,
+  })? confirmEvidenceResolver;
+
+  Future<Map<String, dynamic>> _resolveDeferredEvidence(
+    SyncOperation op,
+    Map<String, dynamic> payload,
+  ) async {
+    final delivery = payload['delivery'];
+    if (delivery is! Map) return payload;
+    final pending = delivery['pendingEvidence'];
+    if (pending is! Map) return payload;
+
+    final resolver = confirmEvidenceResolver;
+    if (resolver == null) {
+      throw StateError(
+        'Confirmacion diferida sin resolvedor de evidencias disponible',
+      );
+    }
+    final deliveryId = delivery['itemId']?.toString().trim();
+    if (deliveryId == null || deliveryId.isEmpty) {
+      throw StateError('Confirmacion diferida sin entrega');
+    }
+    final resolved = await resolver(
+      deliveryId: deliveryId,
+      repartidorId: delivery['repartidorId']?.toString(),
+      pendingEvidence: Map<String, dynamic>.from(pending),
+    );
+
+    final signatureId = resolved['signature'];
+    final expectedSignature = pending['firma'] is Map;
+    if (expectedSignature && (signatureId == null || signatureId.isEmpty)) {
+      throw StateError(
+        'Evidencia de firma pendiente sin id resuelto por el servidor',
+      );
+    }
+    if (signatureId != null && signatureId.isNotEmpty) {
+      delivery['firma'] = signatureId;
+    }
+
+    final photoIds = <String>[];
+    for (final slot in const <String>['photo-0', 'photo-1', 'photo-2']) {
+      final id = resolved[slot];
+      if (id != null && id.isNotEmpty) photoIds.add(id);
+    }
+    final expectedPhotos =
+        pending['fotos'] is List ? (pending['fotos'] as List).length : 0;
+    if (photoIds.length != expectedPhotos) {
+      throw StateError(
+        'Evidencias pendientes incompletas: $expectedPhotos esperadas, '
+        '${photoIds.length} resueltas',
+      );
+    }
+    if (photoIds.isNotEmpty) {
+      final existing = delivery['evidencias'];
+      final merged = existing is List
+          ? <String>[...existing.map((id) => id.toString()), ...photoIds]
+          : photoIds;
+      delivery['evidencias'] = merged;
+    }
+    delivery.remove('pendingEvidence');
+    return payload;
+  }
 
   /// Clear all pending operations.
   Future<void> clear() async {

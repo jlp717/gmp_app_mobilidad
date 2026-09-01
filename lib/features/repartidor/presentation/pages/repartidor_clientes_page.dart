@@ -11,6 +11,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
@@ -229,6 +230,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       body: Column(
         children: [
           _buildHeader(),
+          const OfflineBanner(),
           _buildSearchBar(),
           _buildSortBar(),
           Expanded(

@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -361,7 +362,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                   icon: Icon(
                     Icons.chat,
                     size: Responsive.iconSize(context, phone: 18, desktop: 20),
-                    color: const Color(0xFF25D366),
+                    color: AppColors.whatsappGreen,
                   ), // WhatsApp green
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -592,8 +593,10 @@ class _ClientDetailPageState extends State<ClientDetailPage>
             const SizedBox(height: 12),
             ...phones.map(
               (p) => ListTile(
-                leading:
-                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                leading: const Icon(
+                  Icons.phone_android,
+                  color: AppColors.whatsappGreen,
+                ),
                 title: Text((p['number'] as String?) ?? ''),
                 subtitle: Text((p['type'] as String?) ?? 'Tel©fono'),
                 onTap: () {

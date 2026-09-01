@@ -452,7 +452,7 @@ describe('facturas service fiscal totals', () => {
     expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
     expect(mockRedisSet).toHaveBeenCalledTimes(1);
     expect(mockRedisSet.mock.calls[0][0]).toBe('document');
-    expect(mockRedisSet.mock.calls[0][1]).toBe('facturas:document:v1:albaran:2026:J:93:1183');
+    expect(mockRedisSet.mock.calls[0][1]).toBe('facturas:document:v2:albaran:2026:J:93:1183');
     expect(mockRedisSet.mock.calls[0][3]).toBe(60);
 
     mockRedisGet.mockResolvedValue(first);
@@ -567,7 +567,12 @@ describe('facturas service fiscal totals', () => {
     });
 
     expect(mockQueryWithParams).toHaveBeenCalledTimes(6);
-    expect(maxActive).toBe(1);
+    // Batches run with FACTURAS_SUMMARY_BATCH_CONCURRENCY=1 (default), but the
+    // invoice and delivery-note lookups inside each batch are independent and
+    // now run concurrently (Promise.all in runSummaryBatch), so up to 2
+    // queries are in flight at once; the many-vendor fan-out stays bounded by
+    // the batch count, not by the per-batch concurrency.
+    expect(maxActive).toBe(2);
     expect(summary).toMatchObject({
       totalDocumentos: 6,
       totalFacturasEmitidas: 3,

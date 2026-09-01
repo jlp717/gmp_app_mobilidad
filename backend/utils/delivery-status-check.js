@@ -16,8 +16,8 @@ const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 let _isAvailable = false;
 let _isNewSchema = false;
 let _schemaChecked = false;
-let _tableQualified = 'JAVIER.DELIVERY_STATUS';
-let _tableName = 'DELIVERY_STATUS';
+let _tableQualified = null;
+let _tableName = null;
 
 function resolveDeliveryStatusTable(env = process.env) {
   try {
@@ -27,15 +27,21 @@ function resolveDeliveryStatusTable(env = process.env) {
       return mapped;
     }
   } catch (_) {
-    /* fall through */
+    return null;
   }
-  return 'JAVIER.DELIVERY_STATUS';
+  return null;
 }
 
 async function checkSchema() {
   if (_schemaChecked) return;
   _schemaChecked = true;
   _tableQualified = resolveDeliveryStatusTable();
+  if (!_tableQualified) {
+    _isAvailable = false;
+    _isNewSchema = false;
+    logger.warn('[DELIVERY_STATUS] invalid reparto runtime; refusing production fallback');
+    return;
+  }
   _tableName = _tableQualified.split('.')[1];
 
   try {

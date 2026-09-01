@@ -49,8 +49,26 @@ router.post('/logout', verifyToken, async (req, res) => {
     await handleLogout(req, res);
 });
 
-router.post('/switch-role', verifyToken, async (req, res) => {
+router.post('/switch-role', verifyToken, (req, res) => {
     return authTokenService.handleSwitchRole(req, res);
+});
+
+// =============================================================================
+// SESSION VALIDATION
+// =============================================================================
+
+// Lightweight liveness probe for the mobile cold-start path: the app restores
+// a persisted session and confirms the access token is still active server-side
+// without forcing a full login. verifyToken already rejects expired, tampered
+// or revoked tokens, so reaching this handler means the session is valid.
+router.get('/validate', verifyToken, (req, res) => {
+    const user = req.user || {};
+    return res.json({
+        valid: true,
+        role: user.role || null,
+        activeMode: user.activeMode || null,
+        claimsVersion: user.claimsVersion ?? null,
+    });
 });
 
 // =============================================================================

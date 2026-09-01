@@ -12,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
@@ -284,6 +285,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   final Map<String, bool> _productChecked = {};
   final Map<String, double> _productQuantities = {};
+  double? _lastSuggestedImporteCobrado;
 
   List<EntregaItem> _items = [];
   bool _isLoadingItems = true;
@@ -354,6 +356,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         importeDisponibleCobro != null && importeDisponibleCobro > 0.004
             ? importeDisponibleCobro.toStringAsFixed(2).replaceAll('.', ',')
             : '';
+    _lastSuggestedImporteCobrado = importeDisponibleCobro;
 
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
@@ -591,6 +594,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     importeDisponibleCobro > 0.004
                 ? importeDisponibleCobro.toStringAsFixed(2).replaceAll('.', ',')
                 : '';
+            _lastSuggestedImporteCobrado = importeDisponibleCobro;
           }
           _itemsError = identityError;
           _items = filtered;
@@ -814,6 +818,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   _productsStatusError = null;
                   _removeIssue('productsStatus');
                 }
+                _syncDefaultImporteCobrado();
               });
             },
             onQuantityChanged: (lineId, value) {
@@ -824,6 +829,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   _productsStatusError = null;
                   _removeIssue('productsStatus');
                 }
+                _syncDefaultImporteCobrado();
               });
             },
             onShowQuantityEditDialog: _showQuantityEditDialog,
@@ -838,6 +844,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 for (final linea in _items) {
                   _productChecked[ruteroLineKey(linea)] = !allChecked;
                 }
+                _syncDefaultImporteCobrado();
               });
             },
             onContinueToPayment: () {
@@ -927,6 +934,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               _importeCobradoController.text = _albaran.importeDisponibleCobro!
                   .toStringAsFixed(2)
                   .replaceAll('.', ',');
+              _lastSuggestedImporteCobrado = _albaran.importeDisponibleCobro;
             }
           }
         });
@@ -1116,6 +1124,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                               'Establecimiento cerrado o no disponible';
                         }
                       }
+                      _syncDefaultImporteCobrado();
                     });
                   },
           ),
@@ -1691,6 +1700,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       setState(() {
         _productQuantities[ruteroLineKey(linea)] = result;
         _cachedPdfBase64 = null;
+        _syncDefaultImporteCobrado();
       });
     }
   }
@@ -1867,7 +1877,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     required String? firmaId,
     required List<String> evidenceIds,
     required String observaciones,
+    List<RepartoPendingEvidenceRef> pendingEvidenceRefs = const [],
   }) async {
+    final deferEvidence = pendingEvidenceRefs.isNotEmpty;
     final request = RepartoConfirmationRequest(
       itemId: widget.albaran.id,
       status: _deliveryStatus,
@@ -1897,11 +1909,43 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             )
           : null,
       cobro: _isPaid ? _buildCanonicalPayment() : null,
+      deferEvidence: deferEvidence,
+      pendingEvidence: pendingEvidenceRefs,
     );
     final prepared = await _confirmationOperation.prepare(request);
     Map<String, dynamic> response;
     try {
       await _confirmationOperation.markSubmitting(widget.albaran.id);
+      if (deferEvidence) {
+        // Deferred evidence must go through the queue drain: the canonical
+        // POST only exists once every slot has a server evidence id. Never
+        // send pendingEvidence over the wire directly.
+        final operationId = 'confirm_delivery_'
+            '${DateTime.now().microsecondsSinceEpoch}';
+        final queuedPayload = <String, dynamic>{
+          ...prepared.toJson(),
+          'clientRequestId': operationId,
+          '_journalFingerprint': prepared.fingerprint,
+          '_journalIdempotencyKey': prepared.idempotencyKey,
+        };
+        await SyncQueueService.instance.enqueue(
+          SyncOperation(
+            id: operationId,
+            type: 'confirm_delivery',
+            endpoint: '/repartidor-finanzas/rutero/confirm-delivery-cobro',
+            method: 'POST',
+            payload: queuedPayload,
+            headers: prepared.headers,
+          ),
+        );
+        SyncQueueService.confirmDeliveryReconciler ??=
+            defaultConfirmDeliveryReconciler;
+        _lastConfirmWasQueued = true;
+        if (mounted) {
+          OfflineSyncNotifier.deliveryQueued();
+        }
+        return true;
+      }
       response = await OfflineAwareApi.post(
         '/repartidor-finanzas/rutero/confirm-delivery-cobro',
         prepared.toJson(),
@@ -2007,6 +2051,56 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         formaPago: _selectedPaymentMethod,
         entregaId: widget.albaran.id,
       );
+
+  /// Mirrors the backend assertPayment ceiling: a complete delivery may
+  /// collect the whole pending balance, while a partial one is capped by
+  /// the delivered-lines amount. Keeping both sides aligned prevents the
+  /// server from rejecting an amount the local form already accepted.
+  /// A line without a known unit price cannot cap the amount, matching
+  /// the backend fallback to the full pending balance.
+  double? _maxCollectableAmount() {
+    final saldo = _albaran.importeDisponibleCobro;
+    if (saldo == null || saldo <= 0.004) return saldo;
+    if (_deliveryStatus != RepartoDeliveryStatus.parcial) return saldo;
+    final hasUnpricedLine = _items.any(
+      (item) => (_itemUnitPrice(item) ?? 0) <= 0.004,
+    );
+    if (_items.isEmpty || hasUnpricedLine) return saldo;
+    final byLines = _items.fold<double>(0, (sum, item) {
+      final lineId = ruteroLineKey(item);
+      final ordered = item.cantidadPedida;
+      final checked = _productChecked[lineId] ?? false;
+      final selected = _normalizeQuantity(
+        (_productQuantities[lineId] ?? ordered).clamp(0.0, ordered),
+      );
+      final delivered = checked ? selected : 0.0;
+      return sum + delivered * _itemUnitPrice(item)!;
+    });
+    final capped = double.parse(byLines.toStringAsFixed(2));
+    return capped < saldo ? capped : saldo;
+  }
+
+  double? _itemUnitPrice(EntregaItem item) {
+    return item.precioUnitario > 0.004 ? item.precioUnitario : null;
+  }
+
+  /// Keeps the preloaded payment amount inside the server ceiling while the
+  /// repartidor edits delivered quantities. Only the untouched default
+  /// (full balance) is auto-adjusted; a manually entered amount is left
+  /// alone and surfaced by validation instead of silently rewritten.
+  void _syncDefaultImporteCobrado() {
+    final maxCobro = _maxCollectableAmount();
+    final nextAmount = nextRuteroSuggestedPaymentAmount(
+      currentAmount: _parseMoney(_importeCobradoController.text),
+      lastSuggestedAmount: _lastSuggestedImporteCobrado,
+      maximumAmount: maxCobro,
+    );
+    if (nextAmount == null) return;
+    _importeCobradoController.text = nextAmount > 0.004
+        ? nextAmount.toStringAsFixed(2).replaceAll('.', ',')
+        : '';
+    _lastSuggestedImporteCobrado = nextAmount;
+  }
 
   void _clearValidationErrors() {
     setState(() {
@@ -2219,6 +2313,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         incidenciaMotivo: _incidenciaMotivoController.text,
         isUrgent: _isUrgent,
         importeDisponibleCobro: _albaran.importeDisponibleCobro,
+        importeMaxCobrable: _maxCollectableAmount(),
         isPaid: _isPaid,
         signatureEmpty: _signatureController.isEmpty,
         hasPersistedSignature: _hasPersistedSignature,
@@ -2493,6 +2588,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           firmaId: evidence.signatureId,
           evidenceIds: evidence.photoIds,
           observaciones: finalObs,
+          pendingEvidenceRefs: evidence.pendingRefs,
         ),
       );
 
@@ -2541,23 +2637,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ..firma = updated.firma
         ..estado = _localDeliveryStatus();
 
-      try {
-        await runRuteroPostConfirmationEffects(
-          shouldPrint: _tieneImpresora &&
-              _deliveryStatus != RepartoDeliveryStatus.noEntregado,
-          printTicket: _tryPrintTicketAfterConfirm,
-          shareReceipt: _showShareReceiptDialog,
-        );
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Entrega guardada; el comprobante no está disponible ahora',
-              ),
-              backgroundColor: AppTheme.warning,
-            ),
+      final hasDeliveryDocument =
+          _deliveryStatus == RepartoDeliveryStatus.entregado ||
+              _deliveryStatus == RepartoDeliveryStatus.parcial;
+      if (hasDeliveryDocument) {
+        try {
+          await runRuteroPostConfirmationEffects(
+            shouldPrint: _tieneImpresora,
+            printTicket: _tryPrintTicketAfterConfirm,
+            shareReceipt: _showShareReceiptDialog,
           );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Entrega guardada; el comprobante no está disponible ahora',
+                ),
+                backgroundColor: AppTheme.warning,
+              ),
+            );
+          }
         }
       }
 
@@ -2781,6 +2881,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<void> _showShareReceiptDialog() async {
     final isFactura = widget.albaran.numeroFactura > 0;
     final commercialLabel = isFactura ? 'factura' : 'albarán';
+    // A no-delivery/rejected stop has no signed commercial document to
+    // share; only the delivery note (no-entrega receipt) applies.
+    final showCommercialDocs =
+        _deliveryStatus != RepartoDeliveryStatus.noEntregado &&
+            _deliveryStatus != RepartoDeliveryStatus.rechazado;
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -2850,7 +2955,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 _buildShareButton(
                   icon: Icons.chat,
                   label: 'Nota por WhatsApp',
-                  color: const Color(0xFF25D366),
+                  color: AppColors.whatsappGreen,
                   onTap: () async {
                     Navigator.pop(ctx);
                     await _shareDeliveryNoteViaWhatsApp();
@@ -2877,46 +2982,48 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   },
                 ),
                 const SizedBox(height: 18),
-                Text(
-                  isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                    letterSpacing: 0.4,
+                if (showCommercialDocs) ...[
+                  Text(
+                    isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
+                    style: const TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      letterSpacing: 0.4,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _buildShareButton(
-                  icon: Icons.picture_as_pdf,
-                  label: 'Ver $commercialLabel',
-                  color: AppTheme.info,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _previewCommercialPdf();
-                  },
-                ),
-                const SizedBox(height: 8),
-                _buildShareButton(
-                  icon: Icons.ios_share,
-                  label: 'Compartir $commercialLabel',
-                  color: AppTheme.success,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _shareCommercialLocally();
-                  },
-                ),
-                const SizedBox(height: 8),
-                _buildShareButton(
-                  icon: Icons.chat,
-                  label:
-                      '${commercialLabel[0].toUpperCase()}${commercialLabel.substring(1)} por WhatsApp',
-                  color: const Color(0xFF25D366),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _shareCommercialViaWhatsApp();
-                  },
-                ),
+                  const SizedBox(height: 8),
+                  _buildShareButton(
+                    icon: Icons.picture_as_pdf,
+                    label: 'Ver $commercialLabel',
+                    color: AppTheme.info,
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _previewCommercialPdf();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildShareButton(
+                    icon: Icons.ios_share,
+                    label: 'Compartir $commercialLabel',
+                    color: AppTheme.success,
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _shareCommercialLocally();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildShareButton(
+                    icon: Icons.chat,
+                    label: '${commercialLabel[0].toUpperCase()}'
+                        '${commercialLabel.substring(1)} por WhatsApp',
+                    color: AppColors.whatsappGreen,
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _shareCommercialViaWhatsApp();
+                    },
+                  ),
+                ],
               ],
             ),
           ),

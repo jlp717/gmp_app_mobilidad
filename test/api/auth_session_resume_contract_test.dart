@@ -73,6 +73,60 @@ void main() {
       expect(diverged, isFalse);
     });
   });
+
+  group('Access token TTL contract', () {
+    test('server default TTL mirrors the backend 15-minute default', () {
+      expect(
+        AuthNotifier.serverDefaultAccessTokenTtl,
+        const Duration(minutes: 15),
+        reason: 'Fallback must mirror the ACCESS_TTL_MS default of the '
+            'backend auth middleware, never an optimistic 1-hour guess.',
+      );
+    });
+
+    test('reads the real TTL seconds reported by auth responses', () {
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({'tokenExpiresIn': 900}),
+        900000,
+      );
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({'expiresIn': '1800'}),
+        1800000,
+      );
+    });
+
+    test('tokenExpiresIn wins over expiresIn', () {
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({
+          'tokenExpiresIn': 600,
+          'expiresIn': 1200,
+        }),
+        600000,
+      );
+    });
+
+    test('ignores absent, invalid or implausible TTL values', () {
+      expect(AuthNotifier.accessTokenTtlMsFromResponse({}), isNull);
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({'tokenExpiresIn': 0}),
+        isNull,
+      );
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({'tokenExpiresIn': -5}),
+        isNull,
+      );
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({'expiresIn': 'abc'}),
+        isNull,
+      );
+      expect(
+        AuthNotifier.accessTokenTtlMsFromResponse({
+          'tokenExpiresIn': const Duration(days: 31).inSeconds,
+        }),
+        isNull,
+      );
+    });
+  });
 }
 
 class _RefreshAdapter implements HttpClientAdapter {

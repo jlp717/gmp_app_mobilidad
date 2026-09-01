@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
@@ -79,16 +80,18 @@ class RuteroDetailCompleted extends StatelessWidget {
           _buildSummaryInfo(context),
           const SizedBox(height: 24),
           _buildDocumentsSection(),
-          const SizedBox(height: 16),
-          buildPrinterConfigSection(),
-          if (tieneImpresora && items.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _ShareButton(
-              icon: Icons.print,
-              label: 'Imprimir ticket térmico',
-              color: AppTheme.info,
-              onTap: onShowZebraPrintPreview,
-            ),
+          if (!_isNoDelivery) ...[
+            const SizedBox(height: 16),
+            buildPrinterConfigSection(),
+            if (tieneImpresora && items.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _ShareButton(
+                icon: Icons.print,
+                label: 'Imprimir ticket térmico',
+                color: AppTheme.info,
+                onTap: onShowZebraPrintPreview,
+              ),
+            ],
           ],
           const SizedBox(height: 24),
         ],
@@ -316,7 +319,7 @@ class RuteroDetailCompleted extends StatelessWidget {
         _ShareButton(
           icon: Icons.chat,
           label: 'Nota por WhatsApp',
-          color: const Color(0xFF25D366),
+          color: AppColors.whatsappGreen,
           onTap: onShareDeliveryNoteWhatsApp,
         ),
         if (emailAction != null) ...[
@@ -337,35 +340,40 @@ class RuteroDetailCompleted extends StatelessWidget {
             onTap: printNote,
           ),
         ],
-        const SizedBox(height: 22),
-        _sectionTitle(
-          _isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
-        ),
-        const Text(
-          'Documento comercial ERP. Incluye la firma cuando está disponible.',
-          style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-        ),
-        const SizedBox(height: 10),
-        _ShareButton(
-          icon: Icons.picture_as_pdf,
-          label: 'Ver $_commercialLabel',
-          color: AppTheme.info,
-          onTap: onPreviewCommercialPdf,
-        ),
-        const SizedBox(height: 10),
-        _ShareButton(
-          icon: Icons.ios_share,
-          label: 'Compartir $_commercialLabel',
-          color: AppTheme.success,
-          onTap: onShareCommercialPdf,
-        ),
-        const SizedBox(height: 10),
-        _ShareButton(
-          icon: Icons.chat,
-          label: '$_commercialLabel por WhatsApp',
-          color: const Color(0xFF25D366),
-          onTap: onShareCommercialWhatsApp,
-        ),
+        // A no-delivery/rejected stop has no signed delivery document: the
+        // ERP albarán/factura section stays hidden so the completed view does
+        // not offer a signed document that was never delivered or signed.
+        if (!_isNoDelivery) ...[
+          const SizedBox(height: 22),
+          _sectionTitle(
+            _isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
+          ),
+          const Text(
+            'Documento comercial ERP. Incluye la firma cuando está disponible.',
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          _ShareButton(
+            icon: Icons.picture_as_pdf,
+            label: 'Ver $_commercialLabel',
+            color: AppTheme.info,
+            onTap: onPreviewCommercialPdf,
+          ),
+          const SizedBox(height: 10),
+          _ShareButton(
+            icon: Icons.ios_share,
+            label: 'Compartir $_commercialLabel',
+            color: AppTheme.success,
+            onTap: onShareCommercialPdf,
+          ),
+          const SizedBox(height: 10),
+          _ShareButton(
+            icon: Icons.chat,
+            label: '$_commercialLabel por WhatsApp',
+            color: AppColors.whatsappGreen,
+            onTap: onShareCommercialWhatsApp,
+          ),
+        ],
       ],
     );
   }

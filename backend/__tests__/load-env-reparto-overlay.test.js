@@ -71,3 +71,53 @@ test('overlayRepartoFlags ignores unrelated keys', () => {
     else process.env.REPARTO_TABLE_SET = previousTable;
   }
 });
+
+test('routing capability flags in .env override stale PM2 fail-closed values', () => {
+  const previousTracking = process.env.REPARTIDOR_TRACKING_ENABLED;
+  const previousDayMove = process.env.REPARTIDOR_DAY_MOVE_ENABLED;
+  const previousReadSchema = process.env.REPARTIDOR_FINANCE_READ_SCHEMA;
+
+  process.env.REPARTIDOR_TRACKING_ENABLED = 'false';
+  process.env.REPARTIDOR_DAY_MOVE_ENABLED = 'false';
+  process.env.REPARTIDOR_FINANCE_READ_SCHEMA = 'DSEDAC';
+
+  try {
+    overlayRepartoFlags({
+      REPARTIDOR_TRACKING_ENABLED: 'true',
+      REPARTIDOR_DAY_MOVE_ENABLED: 'true',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+    });
+    expect(process.env.REPARTIDOR_TRACKING_ENABLED).toBe('true');
+    expect(process.env.REPARTIDOR_DAY_MOVE_ENABLED).toBe('true');
+    expect(process.env.REPARTIDOR_FINANCE_READ_SCHEMA).toBe('DSEDAC');
+  } finally {
+    for (const [key, value] of [
+      ['REPARTIDOR_TRACKING_ENABLED', previousTracking],
+      ['REPARTIDOR_DAY_MOVE_ENABLED', previousDayMove],
+      ['REPARTIDOR_FINANCE_READ_SCHEMA', previousReadSchema],
+    ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('overlayRepartoFlags never repoints finance schema routing', () => {
+  const previousReadSchema = process.env.REPARTIDOR_FINANCE_READ_SCHEMA;
+  const previousAppSchema = process.env.REPARTIDOR_FINANCE_APP_SCHEMA;
+  process.env.REPARTIDOR_FINANCE_READ_SCHEMA = 'DSEDAC';
+  delete process.env.REPARTIDOR_FINANCE_APP_SCHEMA;
+  try {
+    overlayRepartoFlags({
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'DSEDAC',
+    });
+    expect(process.env.REPARTIDOR_FINANCE_READ_SCHEMA).toBe('DSEDAC');
+    expect(process.env.REPARTIDOR_FINANCE_APP_SCHEMA).toBeUndefined();
+  } finally {
+    if (previousReadSchema === undefined) delete process.env.REPARTIDOR_FINANCE_READ_SCHEMA;
+    else process.env.REPARTIDOR_FINANCE_READ_SCHEMA = previousReadSchema;
+    if (previousAppSchema === undefined) delete process.env.REPARTIDOR_FINANCE_APP_SCHEMA;
+    else process.env.REPARTIDOR_FINANCE_APP_SCHEMA = previousAppSchema;
+  }
+});

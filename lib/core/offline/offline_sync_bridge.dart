@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 
 /// Unified reconnect sync: SyncQueue (deliveries/cobros/…) + Pedidos queue.
 class OfflineSyncRunResult {
@@ -64,6 +65,10 @@ class OfflineSyncBridge {
         pedidosFailed: pedidosFailed,
         pedidosPending: pedidosPending,
       );
+
+      // EARS-5: after every drain, stale evidence inbox records escalate
+      // manualReview and their bytes are dropped. Never blocks the run.
+      await runRepartoEvidenceInboxMaintenance();
 
       if (notify) {
         OfflineSyncNotifier.reportSyncRun(

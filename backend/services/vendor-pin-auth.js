@@ -11,6 +11,51 @@ const {
 const BCRYPT_PIN_RE = /^\$2[aby]\$/;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
+// Lockout por CUENTA (complementa al lockout por IP de bruteForceIpTracker):
+// N fallos de PIN para el mismo vendedor en la ventana => bloqueo temporal.
+const PIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const PIN_LOCKOUT_MS = 30 * 60 * 1000;
+const PIN_MAX_FAILURES = parseInt(process.env.PIN_MAX_FAILURES || '5', 10);
+const pinFailureTracker = new Map();
+
+function pinAccountLocked(code) {
+    const entry = pinFailureTracker.get(code);
+    if (!entry) return false;
+    if (entry.lockedUntil && Date.now() >= entry.lockedUntil) {
+        pinFailureTracker.delete(code);
+        return false;
+    }
+    return Boolean(entry.lockedUntil);
+}
+
+function recordPinFailure(code, requestId) {
+    const now = Date.now();
+    let entry = pinFailureTracker.get(code);
+    if (!entry || now - entry.lastFail > PIN_FAILURE_WINDOW_MS) {
+        entry = { failures: 0, lastFail: now, lockedUntil: null };
+    }
+    entry.failures += 1;
+    entry.lastFail = now;
+    if (entry.failures >= PIN_MAX_FAILURES) {
+        entry.lockedUntil = now + PIN_LOCKOUT_MS;
+        logger.warn(`[${requestId}] PIN account lockout for vendor ${code}: ${entry.failures} failures — locked 30min`);
+    }
+    pinFailureTracker.set(code, entry);
+
+    // Limpieza periodica de entradas frias (unref: no impide el exit).
+    if (pinFailureTracker.size > 500) {
+        for (const [k, v] of pinFailureTracker) {
+            if (now - v.lastFail > PIN_FAILURE_WINDOW_MS * 4 && !v.lockedUntil) {
+                pinFailureTracker.delete(k);
+            }
+        }
+    }
+}
+
+function clearPinFailures(code) {
+    pinFailureTracker.delete(code);
+}
+
 function normalizePin(value) {
     return value == null ? '' : String(value).trim();
 }
@@ -62,9 +107,15 @@ async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 
         return { valid: false, reason: 'missing_vendor_or_pin' };
     }
 
+    if (pinAccountLocked(code)) {
+        logger.warn(`[${requestId}] Rejected PIN attempt on locked vendor ${code}`);
+        return { valid: false, reason: 'account_locked' };
+    }
+
     const migratedHash = await loadMigratedPinHash(code, requestId);
     if (migratedHash) {
         const valid = await verifyPassword(pin, migratedHash);
+        if (valid) clearPinFailures(code); else recordPinFailure(code, requestId);
         return {
             valid,
             method: valid ? 'migrated_hash' : null,
@@ -74,6 +125,7 @@ async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 
 
     if (isBcryptHash(legacyPin)) {
         const valid = await verifyPassword(pin, legacyPin);
+        if (valid) clearPinFailures(code); else recordPinFailure(code, requestId);
         return {
             valid,
             method: valid ? 'legacy_bcrypt' : null,
@@ -83,12 +135,15 @@ async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 
 
     if (legacyPin && legacyPin === pin) {
         if (!allowPlaintextPinAuth()) {
+            recordPinFailure(code, requestId);
             return { valid: false, reason: 'plaintext_pin_denied' };
         }
         await migratePlaintextPinHash(code, pin, requestId);
+        clearPinFailures(code);
         return { valid: true, method: 'plaintext_migrated' };
     }
 
+    recordPinFailure(code, requestId);
     return { valid: false, reason: 'pin_mismatch' };
 }
 
@@ -98,5 +153,8 @@ module.exports = {
         isBcryptHash,
         loadMigratedPinHash,
         migratePlaintextPinHash,
+        pinAccountLocked,
+        recordPinFailure,
+        clearPinFailures,
     },
 };

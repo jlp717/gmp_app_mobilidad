@@ -1,3 +1,6 @@
+#!/bin/sh
+export PATH="/usr/bin:$PATH"
+
 # 1) Secretos primero: gitleaks sobre lo staged (fallback local si no esta en PATH)
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --verbose --redact --no-banner || exit 1
@@ -8,11 +11,12 @@ else
 fi
 
 # 2) Validaciones por archivo para no exceder el limite de comandos de Windows.
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR | tr -d '\r')
+DART_CMD=dart
 for file in $STAGED; do
   case "$file" in
     *.dart)
-      dart format --output=none --set-exit-if-changed "$file" || {
+      "$DART_CMD" format --output=none --set-exit-if-changed "$file" || {
         echo "[pre-commit] dart format fallo: $file" >&2
         exit 1
       }

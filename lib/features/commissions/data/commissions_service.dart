@@ -122,66 +122,21 @@ class CommissionsService {
         syncType: 'pay_commission',
       );
 
-      // Force cache clear for this vendor AND the ALL view after payment
+      // Force cache clear for this vendor AND the ALL view after payment.
+      // Each invalidateByPrefix is an O(n) scan of the cache box, so the old
+      // per-version list (v7..v17 exact + prefix + legacy keys ≈ 51 scans per
+      // payment) collapsed to the prefixes that can actually hold live entries:
+      // v17 is the only summary key still written, v14 is pre-warmed, and
+      // commissions_team_/comm:summary cover team pages. Exact-key invalidates
+      // are redundant under their own prefix and were dropped.
       await Future.wait([
-        CacheService.invalidate(
-          'commissions_v17_paid_month_lock_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v17_paid_month_lock_ALL_$year'),
         CacheService.invalidateByPrefix('commissions_v17_paid_month_lock_'),
-        CacheService.invalidate(
-          'commissions_v16_client_scope_sales_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v16_client_scope_sales_ALL_$year'),
         CacheService.invalidateByPrefix('commissions_v16_client_scope_sales_'),
-        CacheService.invalidate(
-          'commissions_v15_db2_commission_source_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate(
-          'commissions_v15_db2_commission_source_ALL_$year',
-        ),
         CacheService.invalidateByPrefix(
           'commissions_v15_db2_commission_source_',
         ),
-        CacheService.invalidate(
-          'commissions_v14_final_sources_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v14_final_sources_ALL_$year'),
         CacheService.invalidateByPrefix('commissions_v14_final_sources_'),
-        CacheService.invalidate(
-          'commissions_v13_stable_sources_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v13_stable_sources_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v13_stable_sources_'),
-        CacheService.invalidate(
-          'commissions_v12_monthly_paid_lock_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v12_monthly_paid_lock_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v12_monthly_paid_lock_'),
-        CacheService.invalidate(
-          'commissions_v11_paid_target_fix_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v11_paid_target_fix_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v11_paid_target_fix_'),
-        CacheService.invalidate(
-          'commissions_v10_sales_breakdown_${vendedorCode}_$year',
-        ),
-        CacheService.invalidate('commissions_v10_sales_breakdown_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v10_sales_breakdown_'),
-        CacheService.invalidate('commissions_v9_team80_${vendedorCode}_$year'),
-        CacheService.invalidate('commissions_v9_team80_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v9_team80_'),
-        CacheService.invalidate('commissions_v8_team80_${vendedorCode}_$year'),
-        CacheService.invalidate('commissions_v8_team80_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v8_team80_'),
-        CacheService.invalidate('commissions_v7_team80_${vendedorCode}_$year'),
-        CacheService.invalidate('commissions_v7_team80_ALL_$year'),
-        CacheService.invalidateByPrefix('commissions_v7_team80_'),
         CacheService.invalidateByPrefix('commissions_team_'),
-        CacheService.invalidate('commissions_v5_r1_${vendedorCode}_$year'),
-        CacheService.invalidate('commissions_v4_r1_${vendedorCode}_$year'),
-        CacheService.invalidate('commissions_v3_${vendedorCode}_$year'),
-        CacheService.invalidate('commissions_v2_${vendedorCode}_$year'),
         CacheService.invalidateByPrefix('comm:summary:ALL'),
       ]);
 

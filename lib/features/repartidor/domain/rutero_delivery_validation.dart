@@ -62,6 +62,7 @@ class RuteroDeliveryValidationInput {
     required this.importeCobradoText,
     required this.importeTotal,
     this.importeDisponibleCobro,
+    this.importeMaxCobrable,
   });
 
   final bool isLoadingItems;
@@ -82,6 +83,15 @@ class RuteroDeliveryValidationInput {
   final String importeCobradoText;
   final double importeTotal;
   final double? importeDisponibleCobro;
+
+  /// Server-enforced ceiling for the payment amount. On a complete delivery
+  /// it equals the pending balance; on a partial one it is capped by the
+  /// delivered-lines sum, mirroring the backend assertPayment rule.
+  final double? importeMaxCobrable;
+
+  /// Effective ceiling applied to the payment field.
+  double get effectiveMaxCobro =>
+      importeMaxCobrable ?? importeDisponibleCobro ?? importeTotal;
 
   bool get hasDiscrepancy => anyQtyModified || anyUnchecked;
 }
@@ -135,6 +145,27 @@ double? parseRuteroMoney(String value) {
   final parsed = double.tryParse(normalized);
   if (parsed == null || parsed.isNaN || parsed.isInfinite) return null;
   return double.parse(parsed.toStringAsFixed(2));
+}
+
+/// Returns the next automatic payment suggestion only while the current
+/// value still matches the previous suggestion. This lets repeated quantity
+/// edits follow the partial-delivery ceiling without overwriting manual input.
+double? nextRuteroSuggestedPaymentAmount({
+  required double? currentAmount,
+  required double? lastSuggestedAmount,
+  required double? maximumAmount,
+}) {
+  if (lastSuggestedAmount == null || maximumAmount == null) {
+    return null;
+  }
+  final matchesPreviousSuggestion = currentAmount != null &&
+      (currentAmount - lastSuggestedAmount).abs() < 0.005;
+  final isEmptyZeroSuggestion =
+      currentAmount == null && lastSuggestedAmount.abs() < 0.005;
+  if (!matchesPreviousSuggestion && !isEmptyZeroSuggestion) return null;
+  return maximumAmount > 0.004
+      ? double.parse(maximumAmount.toStringAsFixed(2))
+      : 0;
 }
 
 /// Collects every visible field error so the sheet can jump to the first
@@ -235,16 +266,25 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
         ),
       );
     } else {
-      final maxCobro = input.importeDisponibleCobro ?? input.importeTotal;
+      final maxCobro = input.effectiveMaxCobro;
       final importeCentimos = (importe * 100).round();
       final maxCobroCentimos = (maxCobro * 100).round();
       if (importeCentimos > maxCobroCentimos) {
+        final isPartialCeiling = input.importeMaxCobrable != null &&
+            input.importeDisponibleCobro != null &&
+            input.importeMaxCobrable! < input.importeDisponibleCobro!;
         issues.add(
-          const RuteroFieldIssue(
+          RuteroFieldIssue(
             tab: RuteroDeliveryTab.payment,
             field: 'importe',
-            message:
-                'El importe no puede superar el saldo cobrable del documento.',
+            message: isPartialCeiling
+                ? 'En entrega parcial el cobro no puede superar lo '
+                    'entregado (${maxCobro.toStringAsFixed(2).replaceAll(
+                          '.',
+                          ',',
+                        )} €).'
+                : 'El importe no puede superar el saldo cobrable del '
+                    'documento.',
           ),
         );
       }

@@ -14,7 +14,6 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
-const { sanitizeForSQL } = require('../utils/common');
 
 // Cache para los filtros (se refresca cada 5 minutos)
 let filtersCache = {
@@ -174,11 +173,11 @@ router.get('/fi2', async (req, res) => {
                 SELECT DISTINCT FILTRO02
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
-                WHERE x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'
-                AND x.FILTRO02 IS NOT NULL 
+                WHERE x.FILTRO01 = ?
+                AND x.FILTRO02 IS NOT NULL
                 AND TRIM(x.FILTRO02) <> ''
             `;
-            const fi2ForFi1 = await query(fi2Sql, true, true);
+            const fi2ForFi1 = await queryWithParams(fi2Sql, [fi1Code.trim().padEnd(10)], true, true);
             logger.info(`🔍 FI2 para FI1=${fi1Code}: ${fi2ForFi1.length} códigos encontrados`);
 
             // Mapear los códigos encontrados con los datos del cache
@@ -220,20 +219,21 @@ router.get('/fi3', async (req, res) => {
         let result = [];
 
         if (fi2Code || fi1Code) {
-            // Construir condición dinámica
+            // Construir condición parametrizada
             let whereConditions = [];
-            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${sanitizeForSQL(fi1Code.trim()).padEnd(10)}'`);
-            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${sanitizeForSQL(fi2Code.trim()).padEnd(10)}'`);
+            const params = [];
+            if (fi1Code) { whereConditions.push('x.FILTRO01 = ?'); params.push(fi1Code.trim().padEnd(10)); }
+            if (fi2Code) { whereConditions.push('x.FILTRO02 = ?'); params.push(fi2Code.trim().padEnd(10)); }
 
             const fi3Sql = `
                 SELECT DISTINCT FILTRO03
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE ${whereConditions.join(' AND ')}
-                AND x.FILTRO03 IS NOT NULL 
+                AND x.FILTRO03 IS NOT NULL
                 AND TRIM(x.FILTRO03) <> ''
             `;
-            const fi3Filtered = await query(fi3Sql, true, true);
+            const fi3Filtered = await queryWithParams(fi3Sql, params, true, true);
             logger.info(`🔍 FI3 filtrados: ${fi3Filtered.length} códigos`);
 
             const codesInUse = new Set(
@@ -270,19 +270,20 @@ router.get('/fi4', async (req, res) => {
 
         if (fi1Code || fi2Code || fi3Code) {
             let whereConditions = [];
-            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${sanitizeForSQL(fi1Code.trim()).padEnd(10)}'`);
-            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${sanitizeForSQL(fi2Code.trim()).padEnd(10)}'`);
-            if (fi3Code) whereConditions.push(`x.FILTRO03 = '${sanitizeForSQL(fi3Code.trim()).padEnd(10)}'`);
+            const params = [];
+            if (fi1Code) { whereConditions.push('x.FILTRO01 = ?'); params.push(fi1Code.trim().padEnd(10)); }
+            if (fi2Code) { whereConditions.push('x.FILTRO02 = ?'); params.push(fi2Code.trim().padEnd(10)); }
+            if (fi3Code) { whereConditions.push('x.FILTRO03 = ?'); params.push(fi3Code.trim().padEnd(10)); }
 
             const fi4Sql = `
                 SELECT DISTINCT FILTRO04
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE ${whereConditions.join(' AND ')}
-                AND x.FILTRO04 IS NOT NULL 
+                AND x.FILTRO04 IS NOT NULL
                 AND TRIM(x.FILTRO04) <> ''
             `;
-            const fi4Filtered = await query(fi4Sql, true, true);
+            const fi4Filtered = await queryWithParams(fi4Sql, params, true, true);
             logger.info(`🔍 FI4 filtrados: ${fi4Filtered.length} códigos`);
 
             const codesInUse = new Set(
@@ -354,36 +355,40 @@ router.get('/all', async (req, res) => {
 // =============================================================================
 router.get('/articles', async (req, res) => {
     try {
-        const { fi1, fi2, fi3, fi4, fi5, search, limit = 100, offset = 0 } = req.query;
+        const { fi1, fi2, fi3, fi4, fi5, search } = req.query;
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 100, 500));
+        const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
         let whereConditions = ["a.BLOQUEADOSN <> 'S'"];
+        const params = [];
 
-        if (fi1) whereConditions.push(`TRIM(x.FILTRO01) = '${fi1.trim()}'`);
-        if (fi2) whereConditions.push(`TRIM(x.FILTRO02) = '${fi2.trim()}'`);
-        if (fi3) whereConditions.push(`TRIM(x.FILTRO03) = '${fi3.trim()}'`);
-        if (fi4) whereConditions.push(`TRIM(x.FILTRO04) = '${fi4.trim()}'`);
-        if (fi5) whereConditions.push(`TRIM(a.CODIGOSECCIONLARGA) = '${fi5.trim()}'`);
+        if (fi1) { whereConditions.push('TRIM(x.FILTRO01) = ?'); params.push(fi1.trim()); }
+        if (fi2) { whereConditions.push('TRIM(x.FILTRO02) = ?'); params.push(fi2.trim()); }
+        if (fi3) { whereConditions.push('TRIM(x.FILTRO03) = ?'); params.push(fi3.trim()); }
+        if (fi4) { whereConditions.push('TRIM(x.FILTRO04) = ?'); params.push(fi4.trim()); }
+        if (fi5) { whereConditions.push('TRIM(a.CODIGOSECCIONLARGA) = ?'); params.push(fi5.trim()); }
 
         if (search) {
-            const term = sanitizeForSQL(search.toUpperCase().trim());
-            whereConditions.push(`(UPPER(a.DESCRIPCIONARTICULO) LIKE '%${term}%' OR a.CODIGOARTICULO LIKE '%${term}%')`);
+            const term = `%${search.toUpperCase().trim()}%`;
+            whereConditions.push("(UPPER(a.DESCRIPCIONARTICULO) LIKE ? OR a.CODIGOARTICULO LIKE ?)");
+            params.push(term, term);
         }
 
-        const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+        const whereClause = 'WHERE ' + whereConditions.join(' AND ');
 
         // Contar total
-        const countResult = await query(`
+        const countResult = await queryWithParams(`
             SELECT COUNT(DISTINCT a.CODIGOARTICULO) as total
             FROM DSEDAC.ART a
             INNER JOIN DSEDAC.ARTX x ON a.CODIGOARTICULO = x.CODIGOARTICULO
             ${whereClause}
-        `);
+        `, params);
 
         const total = countResult[0]?.total || 0;
 
-        // Obtener artículos
-        const articles = await query(`
-            SELECT 
+        // Obtener artículos (paginación parametrizada: OFFSET/FETCH aceptan ?)
+        const articles = await queryWithParams(`
+            SELECT
                 TRIM(a.CODIGOARTICULO) as code,
                 TRIM(a.DESCRIPCIONARTICULO) as name,
                 TRIM(x.FILTRO01) as fi1Code,
@@ -397,16 +402,16 @@ router.get('/articles', async (req, res) => {
             INNER JOIN DSEDAC.ARTX x ON a.CODIGOARTICULO = x.CODIGOARTICULO
             ${whereClause}
             ORDER BY a.DESCRIPCIONARTICULO
-            OFFSET ${parseInt(offset)} ROWS
-            FETCH NEXT ${parseInt(limit)} ROWS ONLY
-        `);
+            OFFSET ? ROWS
+            FETCH NEXT ? ROWS ONLY
+        `, [...params, offset, limit]);
 
         res.json({
             success: true,
             articles: articles,
             total: total,
-            limit: parseInt(limit),
-            offset: parseInt(offset),
+            limit: limit,
+            offset: offset,
             filters: { fi1, fi2, fi3, fi4, fi5, search }
         });
 
@@ -431,16 +436,9 @@ router.get('/cascade', async (req, res) => {
             articleCount: 0
         };
 
-        let baseConditions = ["a.BLOQUEADOSN <> 'S'"];
-        if (fi1) baseConditions.push(`TRIM(x.FILTRO01) = '${fi1.trim()}'`);
-        if (fi2) baseConditions.push(`TRIM(x.FILTRO02) = '${fi2.trim()}'`);
-        if (fi3) baseConditions.push(`TRIM(x.FILTRO03) = '${fi3.trim()}'`);
-
-        const baseWhere = 'WHERE ' + baseConditions.join(' AND ');
-
         // FI2 options (solo si hay FI1)
         if (fi1) {
-            const fi2Result = await query(`
+            const fi2Result = await queryWithParams(`
                 SELECT DISTINCT
                     TRIM(x.FILTRO02) as code,
                     COALESCE(TRIM(f.DESCRIPCIONFILTRO), TRIM(x.FILTRO02)) as name,
@@ -449,21 +447,22 @@ router.get('/cascade', async (req, res) => {
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
                 LEFT JOIN DSEDAC.FI2 f ON TRIM(x.FILTRO02) = TRIM(f.CODIGOFILTRO)
                 WHERE a.BLOQUEADOSN <> 'S'
-                AND TRIM(x.FILTRO01) = '${fi1.trim()}'
+                AND TRIM(x.FILTRO01) = ?
                 AND x.FILTRO02 IS NOT NULL AND TRIM(x.FILTRO02) <> ''
                 GROUP BY TRIM(x.FILTRO02), f.DESCRIPCIONFILTRO
                 ORDER BY name
-            `);
+            `, [fi1.trim()]);
             result.fi2Options = fi2Result.filter(f => f.code?.trim());
         }
 
         // FI3 options (si hay FI1 o FI2)
         if (fi1 || fi2) {
             let fi3Conditions = ["a.BLOQUEADOSN <> 'S'"];
-            if (fi1) fi3Conditions.push(`TRIM(x.FILTRO01) = '${fi1.trim()}'`);
-            if (fi2) fi3Conditions.push(`TRIM(x.FILTRO02) = '${fi2.trim()}'`);
+            const fi3Params = [];
+            if (fi1) { fi3Conditions.push('TRIM(x.FILTRO01) = ?'); fi3Params.push(fi1.trim()); }
+            if (fi2) { fi3Conditions.push('TRIM(x.FILTRO02) = ?'); fi3Params.push(fi2.trim()); }
 
-            const fi3Result = await query(`
+            const fi3Result = await queryWithParams(`
                 SELECT DISTINCT
                     TRIM(x.FILTRO03) as code,
                     COALESCE(TRIM(f.DESCRIPCIONFILTRO), TRIM(x.FILTRO03)) as name,
@@ -475,13 +474,19 @@ router.get('/cascade', async (req, res) => {
                 AND x.FILTRO03 IS NOT NULL AND TRIM(x.FILTRO03) <> ''
                 GROUP BY TRIM(x.FILTRO03), f.DESCRIPCIONFILTRO
                 ORDER BY name
-            `);
+            `, fi3Params);
             result.fi3Options = fi3Result.filter(f => f.code?.trim());
         }
 
         // FI4 options
         if (fi1 || fi2 || fi3) {
-            const fi4Result = await query(`
+            let fi4Conditions = ["a.BLOQUEADOSN <> 'S'"];
+            const fi4Params = [];
+            if (fi1) { fi4Conditions.push('TRIM(x.FILTRO01) = ?'); fi4Params.push(fi1.trim()); }
+            if (fi2) { fi4Conditions.push('TRIM(x.FILTRO02) = ?'); fi4Params.push(fi2.trim()); }
+            if (fi3) { fi4Conditions.push('TRIM(x.FILTRO03) = ?'); fi4Params.push(fi3.trim()); }
+
+            const fi4Result = await queryWithParams(`
                 SELECT DISTINCT
                     TRIM(x.FILTRO04) as code,
                     COALESCE(TRIM(f.DESCRIPCIONFILTRO), TRIM(x.FILTRO04)) as name,
@@ -489,21 +494,27 @@ router.get('/cascade', async (req, res) => {
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
                 LEFT JOIN DSEDAC.FI4 f ON TRIM(x.FILTRO04) = TRIM(f.CODIGOFILTRO)
-                ${baseWhere}
+                WHERE ${fi4Conditions.join(' AND ')}
                 AND x.FILTRO04 IS NOT NULL AND TRIM(x.FILTRO04) <> ''
                 GROUP BY TRIM(x.FILTRO04), f.DESCRIPCIONFILTRO
                 ORDER BY name
-            `);
+            `, fi4Params);
             result.fi4Options = fi4Result.filter(f => f.code?.trim());
         }
 
-        // Count matching articles
-        const countResult = await query(`
+        // Count matching articles (siempre: sin filtros cuenta artículos no bloqueados)
+        let countConditions = ["a.BLOQUEADOSN <> 'S'"];
+        const countParams = [];
+        if (fi1) { countConditions.push('TRIM(x.FILTRO01) = ?'); countParams.push(fi1.trim()); }
+        if (fi2) { countConditions.push('TRIM(x.FILTRO02) = ?'); countParams.push(fi2.trim()); }
+        if (fi3) { countConditions.push('TRIM(x.FILTRO03) = ?'); countParams.push(fi3.trim()); }
+
+        const countResult = await queryWithParams(`
             SELECT COUNT(DISTINCT x.CODIGOARTICULO) as total
             FROM DSEDAC.ARTX x
             INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
-            ${baseWhere}
-        `);
+            WHERE ${countConditions.join(' AND ')}
+        `, countParams);
         result.articleCount = countResult[0]?.total || 0;
 
         res.json({

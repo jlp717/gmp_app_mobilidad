@@ -246,6 +246,7 @@ class RuteroDetailHeader extends StatelessWidget {
 
   Widget _buildCloseButton(BuildContext context) {
     return IconButton(
+      tooltip: 'Cerrar detalle',
       icon: Container(
         padding: const EdgeInsets.all(6),
         decoration: const BoxDecoration(

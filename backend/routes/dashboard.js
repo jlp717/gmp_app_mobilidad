@@ -427,6 +427,10 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
 
         const recentTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.MEDIUM : TTL.SHORT;
 
+        // "Recent sales" never needs the full 3-year window MIN_YEAR allows —
+        // bounding to current-1 halves the rows DB2 must group+sort before FETCH FIRST.
+        const recentSalesMinYear = new Date().getFullYear() - 1;
+
         const sql = `
       SELECT
         L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
@@ -439,7 +443,7 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
         COUNT(*) as numLines
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorResult.filter}
+      WHERE L.ANODOCUMENTO >= ${recentSalesMinYear} ${vendedorResult.filter}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
         L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, L.CODIGOVENDEDOR, L.SERIEDOCUMENTO
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC

@@ -78,6 +78,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   final Set<String> _expandedSubfamilies = {};
   // Expansion state for FI hierarchy (keyed by level-code)
   final Set<String> _expandedFiNodes = {};
+  // Progressive FI product loading: how many tiles each expanded family
+  // shows (keyed by node), and the chunk size for the "Ver más" button.
+  final Map<String, int> _fiProductsShown = {};
+  static const int _fiProductChunk = 50;
 
   static const _mNames = [
     'ENE',
@@ -1388,7 +1392,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return results;
   }
 
-  /// Renders a flat column of product tiles from all products in a node's subtree.
+  /// Renders product tiles from all products in a node's subtree, loading
+  /// them progressively: rendering hundreds of `Column` tiles at once (inside
+  /// a ListView.builder item) froze the frame when a big family expanded.
   Widget _buildFlatProductsFromNode(Map<String, dynamic> node) {
     final allProducts = _collectAllProducts(node);
     if (allProducts.isEmpty) {
@@ -1400,7 +1406,29 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ),
       );
     }
-    return Column(children: allProducts.map(_buildFiProduct).toList());
+    final nodeKey = 'fiprods_${node['code'] ?? node['name'] ?? ''}';
+    final shown = _fiProductsShown[nodeKey] ?? _fiProductChunk;
+    final visible = allProducts.take(shown).toList();
+    final hasMore = shown < allProducts.length;
+    return Column(
+      children: [
+        ...visible.map(_buildFiProduct),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: TextButton.icon(
+              onPressed: () => setState(
+                () => _fiProductsShown[nodeKey] = shown + _fiProductChunk,
+              ),
+              icon: const Icon(Icons.expand_more, size: 16),
+              label: Text(
+                'Ver más (${allProducts.length - shown} restantes)',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   /// Always-visible grouping level bar – chip per depth level.

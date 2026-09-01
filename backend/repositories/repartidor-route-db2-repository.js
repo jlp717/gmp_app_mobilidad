@@ -18,6 +18,10 @@ const {
 } = require('../utils/delivery-status-check');
 const dayMoveRepo = require('./repartidor-rutero-day-move-db2-repository');
 const { resolveRepartoRuntime, TABLE_MAPPINGS } = require('../config/reparto-runtime');
+const {
+  DeliveryStatusResolutionError,
+  resolveCanonicalDeliveryStatuses,
+} = require('../services/deterministic-delivery-status');
 
 const MUTATION_RE = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i;
 const CANONICAL_CONFIRMATION_STATUSES = Object.freeze([
@@ -137,18 +141,17 @@ function resolveConfirmationTables() {
       return confirmation;
     }
   } catch (_error) {
-    // Invalid runtime: isolated tests still overlay JAVIER.TEST_*.
+    // Invalid runtime is handled by the explicit test fallback below.
   }
-  if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production') {
-    return null;
-  }
+  const nodeEnvironment = String(process.env.NODE_ENV || '').trim().toLowerCase();
+  const requestedTableSet = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase();
+  if (nodeEnvironment !== 'test' || (requestedTableSet && requestedTableSet !== 'isolated_test')) return null;
   return {
     confirmations: 'JAVIER.TEST_REPARTO_CONFIRMACIONES',
     lines: 'JAVIER.TEST_REPARTO_LINEAS',
     evidences: 'JAVIER.TEST_REPARTO_EVIDENCIAS',
   };
 }
-
 /// History reads ERP documents and overlays the single selected app table-set.
 function resolveConfirmationReadTables() {
   const primary = resolveConfirmationTables();
@@ -251,7 +254,12 @@ function canonicalDocumentId(row, clientCode) {
 async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode } = {}) {
   if (!Array.isArray(rows) || !rows.length) return rows;
   const tablesList = confirmationStatusOverlayTables();
-  if (!tablesList.length) return rows;
+  if (!tablesList.length) {
+    throw new DeliveryStatusResolutionError(
+      'CANONICAL_DELIVERY_STATUS_UNAVAILABLE',
+      'La fuente canonica de estados no esta disponible',
+    );
+  }
   const documentIds = [...new Set(rows.map((row) => canonicalDocumentId(row, clientCode)).filter(Boolean))];
   const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
   if (!documentIds.length || !drivers.length) return rows;
@@ -262,7 +270,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
   try {
     const documentPlaceholders = documentIds.map(() => '?').join(', ');
     const driverPlaceholders = drivers.map(() => '?').join(', ');
-    const byId = new Map();
+    const allConfirmRows = [];
     for (const tables of tablesList) {
       const paymentSelect = cobrosTable
         ? `,
@@ -281,6 +289,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         : '';
       const confirmRows = await runQueryWithParams(
         `SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
+              TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID,
               TRIM(C.STATUS) AS STATUS,
               C.ID,
               C.FIRMA_EVIDENCE_ID
@@ -288,51 +297,67 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
          FROM ${tables.confirmations} C
          ${paymentJoin}
         WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
-          AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})`,
+          AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})
+         ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID`,
         [...documentIds, ...drivers],
         false,
       );
-      for (const row of Array.isArray(confirmRows) ? confirmRows : []) {
-        const id = String(row.DOCUMENT_ID || row.document_id || '').trim();
-        const status = String(row.STATUS || row.status || '').trim().toUpperCase();
-        if (!id || !CANONICAL_CONFIRMATION_STATUSES.includes(status)) continue;
-        const importeCobrado = Number(row.IMPORTE_COBRADO ?? row.importe_cobrado);
-        const importePendienteCobro = Number(
-          row.IMPORTE_PENDIENTE_COBRO ?? row.importe_pendiente_cobro,
-        );
-        const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
-        const formaRaw = String(
-          row.FORMA_PAGO_COBRO ?? row.forma_pago_cobro ?? '',
-        ).trim().toUpperCase();
-        let formaPagoCobro = null;
-        if (['EF', 'EFECTIVO', 'CONTADO', 'F0'].includes(formaRaw)) formaPagoCobro = 'EFECTIVO';
-        else if (['TJ', 'TARJETA', 'TPV'].includes(formaRaw)) formaPagoCobro = 'TARJETA';
-        else if (['BI', 'BIZUM'].includes(formaRaw)) formaPagoCobro = 'BIZUM';
-        else if (['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0'].includes(formaRaw)) formaPagoCobro = 'TRANSFERENCIA';
-        else if (['CH', 'CHEQUE', 'TALON'].includes(formaRaw)) formaPagoCobro = 'CHEQUE';
-        else if (formaRaw) formaPagoCobro = formaRaw;
-        byId.set(id, {
-          status,
-          confirmationId: jsonSafeScalar(row.ID ?? row.id ?? null),
-          firmaEvidenceId: row.FIRMA_EVIDENCE_ID || row.firma_evidence_id || null,
-          cobroId: row.COBRO_ID == null && row.cobro_id == null
-            ? null
-            : String(row.COBRO_ID ?? row.cobro_id),
-          cobrado: hasCobro,
-          importeCobrado: hasCobro ? Math.round(importeCobrado * 100) / 100 : null,
-          importePendienteCobro: hasCobro && Number.isFinite(importePendienteCobro)
-            ? Math.round(importePendienteCobro * 100) / 100
-            : null,
-          formaPagoCobro,
-          cobroParcial: hasCobro
-            && Number.isFinite(importePendienteCobro)
-            && importePendienteCobro > 0.004,
-        });
-      }
+      allConfirmRows.push(...(Array.isArray(confirmRows) ? confirmRows : []));
+    }
+    // The canonical query always projects DOCUMENT_ID. Keeping only that
+    // projection prevents a mocked/legacy base-history response from being
+    // mistaken for an overlay row while preserving fail-closed behavior for
+    // malformed canonical rows that contain an identity.
+    const canonicalRows = allConfirmRows.filter((row) => {
+      if (!row || typeof row !== 'object') return false;
+      return Object.hasOwn(row, 'DOCUMENT_ID') || Object.hasOwn(row, 'document_id');
+    });
+    if (allConfirmRows.length && !canonicalRows.length) return rows;
+
+    const byId = new Map();
+    for (const [id, match] of resolveCanonicalDeliveryStatuses(canonicalRows, { byOwner: true })) {
+      const importeCobrado = Number(match.importeCobrado);
+      const importePendienteCobro = Number(match.importePendienteCobro);
+      const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
+      const formaRaw = String(match.formaPagoCobro ?? '').trim().toUpperCase();
+      const formaPagoCobro = ['EF', 'EFECTIVO', 'CONTADO', 'F0'].includes(formaRaw)
+        ? 'EFECTIVO'
+        : ['TJ', 'TARJETA', 'TPV'].includes(formaRaw)
+          ? 'TARJETA'
+          : ['BI', 'BIZUM'].includes(formaRaw)
+            ? 'BIZUM'
+            : ['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0'].includes(formaRaw)
+              ? 'TRANSFERENCIA'
+              : ['CH', 'CHEQUE', 'TALON'].includes(formaRaw)
+                ? 'CHEQUE'
+                : formaRaw || null;
+      byId.set(id, {
+        status: match.status,
+        confirmationId: jsonSafeScalar(match.confirmationId),
+        firmaEvidenceId: match.firmaEvidenceId || null,
+        cobroId: match.cobroId == null ? null : String(match.cobroId),
+        cobrado: hasCobro,
+        importeCobrado: hasCobro ? Math.round(importeCobrado * 100) / 100 : null,
+        importePendienteCobro: hasCobro && Number.isFinite(importePendienteCobro)
+          ? Math.round(importePendienteCobro * 100) / 100
+          : null,
+        formaPagoCobro,
+        cobroParcial: hasCobro
+          && Number.isFinite(importePendienteCobro)
+          && importePendienteCobro > 0.004,
+      });
     }
     if (!byId.size) return rows;
     return rows.map((row) => {
-      const match = byId.get(canonicalDocumentId(row, clientCode));
+      const documentId = canonicalDocumentId(row, clientCode);
+      const ownerId = String(
+        row.CODIGO_REPARTIDOR
+        || row.CODIGOREPARTIDOR
+        || row.DELIVERY_REPARTIDOR
+        || row.delivery_repartidor
+        || ''
+      ).trim();
+      const match = byId.get(`${ownerId}\u001f${documentId}`) || byId.get(`\u001f${documentId}`);
       const safe = jsonSafeRow(row);
       if (!match) return safe;
       return {
@@ -348,8 +373,10 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         CANONICAL_COBRO_PARCIAL: match.cobroParcial,
       };
     });
-  } catch (_error) {
-    return rows;
+  } catch (error) {
+    if (error instanceof DeliveryStatusResolutionError) throw error;
+    logger.error('[REPARTIDOR] Canonical confirmation overlay unavailable');
+    throw error;
   }
 }
 
@@ -1309,25 +1336,36 @@ async function getObjectives(cleanRepartidorIds, normalizedClientId) {
     queryParams.push(normalizedClientId);
   }
   const placeholders = cleanRepartidorIds.map(() => '?').join(',');
+  // Vencimientos CVC pre-agregados por documento (SUM pendiente): evita el
+  // fan-out 1 CPC x N CVC que inflaba TOTAL_COBRABLE/TOTAL_COBRADO, y replica
+  // los filtros canonicos del CTE CVC_INSTALLMENTS de getCollectionsSummaryBatch
+  // (TIPODOCUMENTO='CAC', ORIGENDOCUMENTO='B', ANULADOSN<>'S', TERMINALDOCUMENTO).
   const sql = `
-            SELECT 
+            SELECT
                 OPP.ANOREPARTO as ANO,
                 OPP.MESREPARTO as MES,
                 SUM(CPC.IMPORTETOTAL) as TOTAL_COBRABLE,
-                SUM(CASE 
-                    WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0 
-                    THEN CPC.IMPORTETOTAL 
-                    ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
-                END) as TOTAL_COBRADO
+                SUM(CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)) as TOTAL_COBRADO
             FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
+            INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                 AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                 AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
-            LEFT JOIN DSEDAC.CVC CVC 
+            LEFT JOIN (
+                SELECT SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO,
+                    TERMINALDOCUMENTO, NUMERODOCUMENTO,
+                    SUM(COALESCE(IMPORTEPENDIENTE, 0)) AS IMPORTEPENDIENTE
+                FROM DSEDAC.CVC
+                WHERE TRIM(TIPODOCUMENTO) = 'CAC'
+                  AND TRIM(ORIGENDOCUMENTO) = 'B'
+                  AND COALESCE(TRIM(ANULADOSN), '') <> 'S'
+                GROUP BY SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO,
+                    TERMINALDOCUMENTO, NUMERODOCUMENTO
+            ) CVC
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND TRIM(CVC.SERIEDOCUMENTO) = CPC.SERIEALBARAN
+                AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.CODIGOREPARTIDOR IN (${placeholders})
               ${clientFilter}
@@ -1761,8 +1799,8 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
     ...repartidorIdList,
     ...confirmationScope.params,
   ];
-  const cacheKey = 'repartidor:rutero-week:v2:moves:' + table + ':' + repartidorIdList.slice().sort().join(',') + ':' + weekStartNum + ':' + weekEndNum;
-  const rows = await runCached(sql, cacheKey, TTL.REALTIME, params);
+  // The query joins canonical state; stale aggregate cache can regress a terminal state.
+  const rows = await runQueryWithParams(sql, params, false);
   return (rows || []).map((row) => {
     const target = routeWeekDateParts(row.ROUTE_TARGET_DATE);
     return {
@@ -1822,8 +1860,8 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
             ORDER BY ANO, MES, DIA
         `;
   const params = [weekStartNum, weekEndNum, ...repartidorIdList, ...confirmationScope.params];
-  const cacheKey = 'repartidor:rutero-week:v2:base:' + repartidorIdList.slice().sort().join(',') + ':' + weekStartNum + ':' + weekEndNum;
-  return runCached(sql, cacheKey, TTL.REALTIME, params);
+  // Canonical status is mutable; weekly aggregates must always read fresh DB2 state.
+  return runQueryWithParams(sql, params, false);
 }
 
 async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search, offset, limit }) {
@@ -1841,6 +1879,7 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
                 CAC.EJERCICIOFACTURA,
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGO_CLIENTE,
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEALBARAN,
+                TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
                 CPC.TERMINALALBARAN,
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.IMPORTETOTAL as TOTAL,
@@ -1886,7 +1925,12 @@ async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search
   sql += ` ORDER BY FECHA DESC, CPC.EJERCICIOALBARAN DESC, CPC.NUMEROALBARAN DESC, CPC.SERIEALBARAN DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
   sqlParams.push(offset, limit);
-  const rows = (await runQueryWithParams(sql, sqlParams, false)) || [];
+  // The multi-token REPLACE-anidada search is the most CPU-expensive path in
+  // this module (up to 168 non-sargable LIKEs); cache the raw ERP page for
+  // TTL.REALTIME like history-base. Canonical overlays still run on every
+  // request, so fresh confirmations/payments are never hidden by the cache.
+  const historyDeliveriesKey = `repartidor:history-deliveries:${repartidorIdList.join(',')}:${historySearch.cacheKey}:${startInt}:${endInt}:${offset}:${limit}`;
+  const rows = (await runCached(sql, historyDeliveriesKey, TTL.REALTIME, sqlParams)) || [];
   const overlaid = await overlayCanonicalConfirmations(rows, {
     repartidorIds: repartidorIdList,
   });
@@ -2095,15 +2139,13 @@ function resolveFinanceWriteTables() {
     const runtime = resolveRepartoRuntime(process.env);
     if (runtime?.valid && runtime.tables?.finance) return runtime.tables.finance;
   } catch (_error) {
-    // Jest and incomplete env fall through to explicit table-set mapping.
+    // Invalid runtime is fail-closed below.
   }
+  const nodeEnvironment = String(process.env.NODE_ENV || '').trim().toLowerCase();
   const set = String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase();
-  if (set === 'isolated_test' || set === 'production') {
-    return TABLE_MAPPINGS[set].finance;
-  }
+  if (nodeEnvironment === 'test' && set === 'isolated_test') return TABLE_MAPPINGS.isolated_test.finance;
   return null;
 }
-
 function isIsolatedTestTableSet() {
   try {
     const runtime = resolveRepartoRuntime(process.env);

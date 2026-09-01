@@ -468,13 +468,24 @@ function requireSingleFinanceRepartidorSelector(req, res, next) {
 }
 
 async function invalidateFinanceCaches(repartidorId) {
+  // Scoped invalidation: one driver's payment must not wipe per-driver caches
+  // for the whole fleet (that forced every repartidor to rebuild heavy CTEs).
+  // Batch/fleet summary keys embed joined id lists, so only the shared overlay
+  // entries (cheap to rebuild on cached per-driver bases) are dropped globally.
+  // Fleet rutero/history/document patterns stay global: a payment legitimately
+  // affects cross-driver JEFE views.
   const patterns = [
-    `query:repartidor:finance:${repartidorId}:*`,
-    `repartidor:finance:${repartidorId}:*`,
-    `query:repartidor:collections:*`,
+    // Double-prefix "query:query:" is mandatory: cachedQuery stores keys as
+    // gmp:query:query:<key>, so single-prefix patterns never matched anything.
+    `query:query:repartidor:finance:${repartidorId}:*`,
+    // Scoped per driver: summary/daily/overlay keys embed joined id lists
+    // ("05,94"), so the glob matches every cache entry that carries this
+    // driver without wiping fleet-wide caches for the others.
+    `query:query:repartidor:collections:*${repartidorId}*`,
+    'query:query:repartidor:history-documents:*',
     'query:query:repartidor:rutero-*',
-    'query:repartidor:history-documents:*',
     'query:query:entregas:rutero:client-risk:*',
+    'query:query:entregas:rutero:document-cobro:*',
   ];
   for (const pattern of patterns) {
     try {

@@ -432,14 +432,43 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   /// Fixed local session TTL, exposed solely for the regression contract.
   @visibleForTesting
   static const Duration localSessionDuration = Duration(hours: 24);
-  static const Duration _accessTokenDuration = Duration(hours: 1);
+
+  /// Fallback access-token lifetime that mirrors the server default
+  /// (`ACCESS_TTL_MS` in backend/middleware/auth.js). Used only when the
+  /// server has not reported the real TTL; never an optimistic guess.
+  @visibleForTesting
+  static const Duration serverDefaultAccessTokenTtl = Duration(minutes: 15);
   static const Duration _resumeRefreshThreshold = Duration(minutes: 5);
   static const String _sessionExpiresAtKey = 'session_expires_at';
+
+  /// Effective access-token lifetime for expiry checks. Starts at the server
+  /// default and is replaced by the real TTL persisted from the last
+  /// login/refresh/switch-role response.
+  Duration _accessTokenTtl = serverDefaultAccessTokenTtl;
 
   /// Calculates the local deadline independently of any active UI role.
   @visibleForTesting
   static DateTime localSessionDeadline(DateTime now) =>
       now.add(localSessionDuration);
+
+  /// Extracts the server-reported access-token TTL in milliseconds from an
+  /// auth response (`tokenExpiresIn` or legacy `expiresIn`, both seconds).
+  /// Returns null when absent or out of sane bounds so callers keep their
+  /// previous value or fall back to [serverDefaultAccessTokenTtl].
+  @visibleForTesting
+  static int? accessTokenTtlMsFromResponse(Map<String, dynamic> response) {
+    for (final key in const ['tokenExpiresIn', 'expiresIn']) {
+      final raw = response[key];
+      final seconds =
+          raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+      if (seconds != null &&
+          seconds > 0 &&
+          seconds <= const Duration(days: 30).inSeconds) {
+        return seconds * 1000;
+      }
+    }
+    return null;
+  }
 
   Timer? _sessionExpiryTimer;
   Future<void>? _logoutInFlight;
@@ -657,6 +686,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       accessTokenKey: accessTokenKey,
     );
     final localExpiresAt = localSessionDeadline(DateTime.now());
+    final accessTokenTtlMs = accessTokenTtlMsFromResponse(response);
+    if (accessTokenTtlMs != null) {
+      _accessTokenTtl = Duration(milliseconds: accessTokenTtlMs);
+    }
     await ref.read(authSessionPersistenceProvider).commit(
           CanonicalLocalAuthSession(
             accessToken: rotation.accessToken,
@@ -665,6 +698,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             vendedorCodes: projection.vendedorCodes,
             activeMode: projection.activeMode,
             expiresAt: localExpiresAt,
+            accessTokenTtlMs: accessTokenTtlMs,
           ),
         );
 
@@ -777,27 +811,35 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
-  bool _isTokenExpired(String token) {
-    final issuedAt = _tokenIssuedAt(token);
-    if (issuedAt == null) return true;
-    return DateTime.now().difference(issuedAt) >= _accessTokenDuration;
-  }
-
   bool _isTokenExpiringSoon(String token) {
     final issuedAt = _tokenIssuedAt(token);
     if (issuedAt == null) return true;
-    final expiresAt = issuedAt.add(_accessTokenDuration);
+    final expiresAt = issuedAt.add(_accessTokenTtl);
     return !DateTime.now().add(_resumeRefreshThreshold).isBefore(expiresAt);
   }
 
   /// Attempt to restore session from storage
   Future<AuthState> _tryAutoLogin() async {
     try {
-      var token = await SecureStorage.readSecureData('user_token');
-      var userDataStr = await SecureStorage.readSecureData('user_data');
-      var codes = await AuthSessionPersistence.readVendedorCodes();
-      final savedMode = await AuthSessionPersistence.readActiveMode();
-      final expiresAt = await _readSessionExpiresAt();
+      // All reads hit the same secure-storage plugin channel — issue them in
+      // one parallel batch instead of six serial roundtrips on cold start.
+      final persisted = await Future.wait<dynamic>([
+        SecureStorage.readSecureData('user_token'),
+        SecureStorage.readSecureData('user_data'),
+        AuthSessionPersistence.readVendedorCodes(),
+        AuthSessionPersistence.readActiveMode(),
+        _readSessionExpiresAt(),
+        AuthSessionPersistence.readAccessTokenTtlMs(),
+      ]);
+      var token = persisted[0] as String?;
+      var userDataStr = persisted[1] as String?;
+      var codes = persisted[2] as List<String>;
+      var savedMode = persisted[3] as String?;
+      final expiresAt = persisted[4] as DateTime?;
+      final persistedTtlMs = persisted[5] as int?;
+      _accessTokenTtl = persistedTtlMs != null
+          ? Duration(milliseconds: persistedTtlMs)
+          : serverDefaultAccessTokenTtl;
 
       if (token != null ||
           userDataStr != null ||
@@ -819,8 +861,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       if (token != null && userDataStr != null) {
         _applySessionDeadline(expiresAt!);
 
-        // Check token expiry BEFORE restoring session to avoid a burst of 401s
-        if (_isTokenExpired(token)) {
+        // Refresh tokens that are expired OR about to expire BEFORE restoring
+        // the session, so a cold start never fires a burst of 401s (the TTL
+        // comes from the persisted server value, not a hardcoded guess).
+        if (_isTokenExpiringSoon(token)) {
           ApiClient.setAuthToken(token);
           final refreshed = await ApiClient.refreshAccessToken();
           token = await SecureStorage.readSecureData('user_token');
@@ -856,11 +900,34 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           await ApiClient.get(ApiConfig.validate);
         } on ApiException catch (e) {
           if (e.statusCode == 401 || e.statusCode == 403) {
-            debugPrint(
-              '[AuthNotifier] Server rejected stored token â€” clearing session',
-            );
-            await _clearStoredSession();
-            return const AuthState(isInitialized: true);
+            // The server invalidated the access token (e.g. a restart rotated
+            // the signing secret). One refresh attempt can recover the whole
+            // session without forcing the user back to the login screen.
+            final recovered = await ApiClient.refreshAccessToken();
+            if (recovered) {
+              token = await SecureStorage.readSecureData('user_token');
+              if (token == null || token.isEmpty) {
+                await _clearStoredSession();
+                return const AuthState(isInitialized: true);
+              }
+              userDataStr = await SecureStorage.readSecureData('user_data');
+              codes = await AuthSessionPersistence.readVendedorCodes();
+              savedMode = await AuthSessionPersistence.readActiveMode();
+              debugPrint(
+                '[AuthNotifier] Stored session recovered via refresh',
+              );
+            } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity) {
+              debugPrint(
+                '[AuthNotifier] Validation offline - restoring local session',
+              );
+            } else {
+              debugPrint(
+                '[AuthNotifier] Server rejected stored token - '
+                'clearing session',
+              );
+              await _clearStoredSession();
+              return const AuthState(isInitialized: true);
+            }
           }
         } catch (_) {
           // Network error â€” proceed with stored session (offline-tolerant)
