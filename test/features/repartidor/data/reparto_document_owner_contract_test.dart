@@ -262,6 +262,190 @@ void main() {
     expect(capturedBody, containsPair('mensaje', 'Nota lista'));
   });
 
+  test('delivery-note not-found classifier excludes commercial 404 errors', () {
+    expect(
+      RepartidorDataService.isDeliveryNoteNotFound(
+        ApiException('missing', statusCode: 404),
+      ),
+      isTrue,
+    );
+    expect(
+      RepartidorDataService.isDeliveryNoteNotFound(
+        ApiException(
+          'missing',
+          statusCode: 503,
+          code: 'REPARTO_RECEIPT_NOT_FOUND',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      RepartidorDataService.isDeliveryNoteNotFound(
+        const RepartidorDataException(
+          'missing',
+          statusCode: 404,
+          code: 'REPARTO_RECEIPT_NOT_FOUND',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      RepartidorDataService.isDeliveryNoteNotFound(
+        const RepartidorDataException(
+          'commercial document missing',
+          statusCode: 404,
+        ),
+      ),
+      isFalse,
+    );
+    for (final status in <int>[401, 403, 409, 422, 503, 504]) {
+      expect(
+        RepartidorDataService.isDeliveryNoteNotFound(
+          ApiException('receipt failed', statusCode: status),
+        ),
+        isFalse,
+      );
+    }
+  });
+
+  test('delivery-note resolver falls back only when absent or not found',
+      () async {
+    var canonicalCalls = 0;
+    var commercialCalls = 0;
+
+    Future<String> canonical(String confirmationId) async {
+      canonicalCalls++;
+      if (confirmationId == 'missing') {
+        throw ApiException(
+          'missing',
+          statusCode: 404,
+          code: 'REPARTO_RECEIPT_NOT_FOUND',
+        );
+      }
+      return 'canonical:$confirmationId';
+    }
+
+    Future<String> commercial() async {
+      commercialCalls++;
+      return 'commercial';
+    }
+
+    expect(
+      await RepartidorDataService.resolveDeliveryNoteWithFallback(
+        confirmationId: null,
+        canonical: canonical,
+        commercial: commercial,
+      ),
+      'commercial',
+    );
+    expect(
+      await RepartidorDataService.resolveDeliveryNoteWithFallback(
+        confirmationId: '7',
+        canonical: canonical,
+        commercial: commercial,
+      ),
+      'canonical:7',
+    );
+    expect(
+      await RepartidorDataService.resolveDeliveryNoteWithFallback(
+        confirmationId: 'missing',
+        canonical: canonical,
+        commercial: commercial,
+      ),
+      'commercial',
+    );
+    expect(canonicalCalls, 2);
+    expect(commercialCalls, 2);
+  });
+
+  test('delivery-note resolver propagates forbidden and unavailable errors',
+      () async {
+    var commercialCalls = 0;
+
+    for (final status in <int>[403, 503]) {
+      await expectLater(
+        RepartidorDataService.resolveDeliveryNoteWithFallback<String>(
+          confirmationId: '7',
+          canonical: (_) async {
+            throw ApiException('receipt failed', statusCode: status);
+          },
+          commercial: () async {
+            commercialCalls++;
+            return 'commercial';
+          },
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.statusCode,
+            'statusCode',
+            status,
+          ),
+        ),
+      );
+    }
+    expect(commercialCalls, 0);
+  });
+
+  test('delivery-note email validates confirmation and preserves API metadata',
+      () async {
+    var requests = 0;
+    ApiClient.dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requests++;
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              response: Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 404,
+                data: const <String, dynamic>{
+                  'error': 'Receipt not found',
+                  'code': 'REPARTO_RECEIPT_NOT_FOUND',
+                },
+              ),
+              type: DioExceptionType.badResponse,
+            ),
+          );
+        },
+      ),
+    );
+
+    await expectLater(
+      RepartidorDataService.emailDeliveryNote(
+        confirmationId: 'bad/id',
+        destinatario: 'cliente@example.test',
+        repartidorId: '08',
+      ),
+      throwsA(
+        isA<RepartidorDataException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          422,
+        ),
+      ),
+    );
+    expect(requests, 0);
+
+    await expectLater(
+      RepartidorDataService.emailDeliveryNote(
+        confirmationId: '7',
+        destinatario: 'cliente@example.test',
+        repartidorId: '08',
+      ),
+      throwsA(
+        isA<RepartidorDataException>()
+            .having((error) => error.statusCode, 'statusCode', 404)
+            .having(
+              (error) => error.code,
+              'code',
+              'REPARTO_RECEIPT_NOT_FOUND',
+            ),
+      ),
+    );
+    expect(requests, 1);
+  });
+
   test('history and signature carry owner in URL and isolate cache keys',
       () async {
     final requests = <RequestOptions>[];

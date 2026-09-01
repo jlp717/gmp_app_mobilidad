@@ -262,6 +262,7 @@ describe('GET /albaran exact identity and canonical quantities', () => {
       EJERCICIOALBARAN: 2026, SERIEALBARAN: 'A', TERMINALALBARAN: 1,
       NUMEROALBARAN: 42, CLIENTE: 'C1', CODIGO_REPARTIDOR: '98',
       SUBEMPRESAALBARAN: '01', IMPORTE: 30, IMPORTE_BRUTO: 30,
+      FORMA_PAGO: 'CTR',
     };
   }
 

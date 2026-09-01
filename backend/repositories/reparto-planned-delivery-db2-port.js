@@ -79,13 +79,50 @@ function validateSchema(schema) {
   return schema;
 }
 
-async function executeRows(connection, sql, params) {
+function cancelConnection(connection) {
+  if (typeof connection?.cancel !== 'function') return;
   try {
-    const result = typeof connection.query === 'function'
-      ? await connection.query(sql, params)
-      : await connection.execute(sql, params);
-    return Array.isArray(result) ? result : (result?.rows || []);
+    Promise.resolve(connection.cancel()).catch(() => {});
   } catch (_) {
+    // Cancellation is best effort; the caller still closes the connection.
+  }
+}
+
+function abortError(signal) {
+  if (signal?.reason instanceof RepartoPersistenceError) return signal.reason;
+  return new RepartoPlannedDeliveryError('La consulta de entrega fue cancelada', {
+    code: 'REPARTO_PLANNED_DELIVERY_TIMEOUT', statusCode: 504,
+  });
+}
+
+async function executeRows(connection, sql, params, signal) {
+  try {
+    if (signal?.aborted) throw abortError(signal);
+    const operation = Promise.resolve().then(() => typeof connection.query === 'function'
+      ? connection.query(sql, params)
+      : connection.execute(sql, params));
+    if (!signal) {
+      const result = await operation;
+      return Array.isArray(result) ? result : (result?.rows || []);
+    }
+    let abortHandler;
+    const aborted = new Promise((_, reject) => {
+      abortHandler = () => {
+        cancelConnection(connection);
+        reject(abortError(signal));
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
+      if (signal.aborted) abortHandler();
+    });
+    try {
+      const result = await Promise.race([operation, aborted]);
+      if (signal.aborted) throw abortError(signal);
+      return Array.isArray(result) ? result : (result?.rows || []);
+    } finally {
+      signal.removeEventListener('abort', abortHandler);
+    }
+  } catch (_) {
+    if (signal?.aborted) throw abortError(signal);
     throw new RepartoPlannedDeliveryError('No se pudo consultar la entrega planificada', {
       code: 'REPARTO_PLANNED_DELIVERY_UNAVAILABLE', statusCode: 503,
     });
@@ -121,6 +158,22 @@ function headerQuery(schema, includeClient, ownerIds = []) {
       TRIM(PC.CODIGO) AS CATALOGO_FORMA_PAGO,
       TRIM(PC.DEBE_COBRAR) AS DEBE_COBRAR,
       TRIM(CLX.COBRORIGUROSOSN) AS COBRO_RIGUROSO,
+      COALESCE(NULLIF((
+        SELECT MAX(CLP.IMPORTELIMITERIESGO)
+        FROM ${schema}.CLP CLP
+        WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+      ), 0), (
+        SELECT MAX(CLP.IMPORTELIMITERIESGOEMPRESA)
+        FROM ${schema}.CLP CLP
+        WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+      ), 0) AS LIMITE_CREDITO,
+      COALESCE((
+        SELECT SUM(CVC.IMPORTEPENDIENTE)
+        FROM ${schema}.CVC CVC
+        WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+          AND COALESCE(CVC.ANULADOSN, '') <> 'S'
+          AND CVC.IMPORTEPENDIENTE <> 0
+      ), 0) AS RIESGO_CREDITO_ACTUAL,
       TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, CPC.CODIGOCLIENTEALBARAN)) AS NOMBRECLIENTE,
       TRIM(OPP.CODIGOREPARTIDOR) AS CODIGOREPARTIDOR,
       CPC.EJERCICIOPEDIDO,
@@ -302,6 +355,11 @@ function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
   const numero = number(row, 'NUMEROALBARAN');
   const serie = text(row, 'SERIEALBARAN');
   const importeTotal = resolvedAmount.amount;
+  const limiteCredito = number(row, 'LIMITE_CREDITO') || 0;
+  const riesgoCreditoActual = number(row, 'RIESGO_CREDITO_ACTUAL') || 0;
+  const cobroRiguroso = text(row, 'COBRO_RIGUROSO') === 'S';
+  const creditoSuperaLimite = limiteCredito > 0
+    && (riesgoCreditoActual + importeTotal) > limiteCredito;
   if (!subempresa || !codigoCliente || !repartidorId || !serie || !Number.isInteger(ejercicio)
     || !Number.isInteger(terminal) || !Number.isInteger(numero) || importeTotal == null) {
     throw new RepartoPlannedDeliveryError('La cabecera planificada no tiene los datos requeridos', {
@@ -325,7 +383,11 @@ function mapHeader(row, itemId, lineas, financial, resolvedAmount) {
     amountSource: resolvedAmount.source,
     pricingState: resolvedAmount.pricingState,
     formaPago,
-    cobroObligatorio: text(row, 'DEBE_COBRAR') === 'S' || text(row, 'COBRO_RIGUROSO') === 'S',
+    cobroObligatorio: text(row, 'DEBE_COBRAR') === 'S' || cobroRiguroso || creditoSuperaLimite,
+    cobroRiguroso,
+    creditoSuperaLimite,
+    limiteCredito,
+    riesgoCreditoActual,
     importePendiente: financial.importePendiente,
     financialDocumentState: financial.state,
     financialDocument: financial.document,
@@ -343,7 +405,7 @@ function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
     const ownerIds = normalizeOwnerScope(safeRepartidorId, options);
     const headerParams = [identity.ejercicio, identity.serie, identity.terminal, identity.numero, ...ownerIds];
     if (identity.cliente) headerParams.push(identity.cliente);
-    const headers = await executeRows(connection, headerQuery(safeSchema, Boolean(identity.cliente), ownerIds), headerParams);
+    const headers = await executeRows(connection, headerQuery(safeSchema, Boolean(identity.cliente), ownerIds), headerParams, options.signal);
     if (!headers.length) {
       throw new RepartoPlannedDeliveryError('Entrega no encontrada', {
         code: 'DELIVERY_NOT_FOUND', statusCode: 404,
@@ -359,7 +421,7 @@ function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
       text(header, 'SUBEMPRESA'), number(header, 'EJERCICIOALBARAN'), text(header, 'SERIEALBARAN'),
       number(header, 'TERMINALALBARAN'), number(header, 'NUMEROALBARAN'), text(header, 'CODIGOCLIENTE'),
     ];
-    const rawLines = await executeRows(connection, linesQuery(safeSchema), documentParams);
+    const rawLines = await executeRows(connection, linesQuery(safeSchema), documentParams, options.signal);
     const provisionalLines = mapLines(rawLines, { allowEmpty: true });
     const lineSum = provisionalLines.reduce((sum, line) => sum + Number(line.importeLinea || 0), 0);
     const zeroPriceQtyLines = provisionalLines.filter(
@@ -386,6 +448,7 @@ function createRepartoPlannedDeliveryDb2Port({ schema = ERP_SCHEMA } = {}) {
       connection,
       financialDocumentQuery(safeSchema),
       documentParams,
+      options.signal,
     ));
     return mapHeader(header, itemId, lineas, financial, resolvedAmount);
   }

@@ -79,6 +79,7 @@ function detailHeader(overrides = {}) {
     SUBEMPRESAALBARAN: '01', EJERCICIOALBARAN: 2026, SERIEALBARAN: 'A',
     TERMINALALBARAN: 1, NUMEROALBARAN: 42, CLIENTE: 'C1',
     CODIGO_REPARTIDOR: '94', IMPORTE: 12, IMPORTE_BRUTO: 12,
+    FORMA_PAGO: 'CTR',
     ...overrides,
   };
 }
@@ -322,6 +323,7 @@ describe('entregas route coverage gaps', () => {
     expect(response.status).toBe(200);
     expect(response.body.albaran).toMatchObject({
       id: '2026-A-1-42-C1', estado: 'PARCIAL', confirmationAvailability: 'AVAILABLE',
+      esCTR: true, cobroObligatorio: true, formaPagoDesc: 'Contado', tipoPago: 'CONTADO',
       items: [expect.objectContaining({ cantidadPedida: 2, cantidadEntregada: 1, cantidadRechazada: 1, cantidadPendiente: 0 })],
     });
   });

@@ -124,13 +124,14 @@ function createDeliveryEvidenceService({ repository } = {}) {
     throw new TypeError('repository.stage and repository.getLinked are required');
   }
 
-  async function stage({ documentId, repartidorId, kind, mimeType, buffer, maxBytes, allowedRepartidorIds }) {
+  async function stage({ documentId, repartidorId, kind, mimeType, buffer, maxBytes, allowedRepartidorIds, signal }) {
+    throwIfAborted(signal);
     const safeDocumentId = validateText(documentId, 'documentId', 160);
     const safeRepartidorId = validateText(repartidorId, 'repartidorId', 20);
     const safeMimeType = validate({ kind, mimeType, buffer, maxBytes });
     const sha256 = contentSha256(buffer);
     const evidenceId = identity(safeDocumentId, safeRepartidorId, kind, sha256);
-    return repository.stage({
+    const result = await repository.stage({
       evidenceId,
       documentId: safeDocumentId,
       repartidorId: safeRepartidorId,
@@ -141,10 +142,14 @@ function createDeliveryEvidenceService({ repository } = {}) {
       content: buffer,
       storageReference: `DB2_BLOB:${evidenceId}`,
       allowedRepartidorIds,
+      signal,
     });
+    throwIfAborted(signal);
+    return result;
   }
 
-  async function stageSignature({ documentId, repartidorId, dataUri, allowedRepartidorIds }) {
+  async function stageSignature({ documentId, repartidorId, dataUri, allowedRepartidorIds, signal }) {
+    throwIfAborted(signal);
     const decoded = decodeSignature(dataUri);
     return stage({
       documentId,
@@ -154,10 +159,11 @@ function createDeliveryEvidenceService({ repository } = {}) {
       buffer: decoded.buffer,
       maxBytes: SIGNATURE_MAX_BYTES,
       allowedRepartidorIds,
+      signal,
     });
   }
 
-  async function stagePhoto({ documentId, repartidorId, mimeType, buffer, allowedRepartidorIds }) {
+  async function stagePhoto({ documentId, repartidorId, mimeType, buffer, allowedRepartidorIds, signal }) {
     return stage({
       documentId,
       repartidorId,
@@ -166,6 +172,7 @@ function createDeliveryEvidenceService({ repository } = {}) {
       buffer,
       maxBytes: PHOTO_MAX_BYTES,
       allowedRepartidorIds,
+      signal,
     });
   }
 

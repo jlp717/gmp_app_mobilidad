@@ -15,102 +15,9 @@ env/
 ENV/
 
 # Secrets and configuration
-# OpenCode: ignore runtime noise/secrets, but track governance-critical configs/tools/plugins/agents.
-# NEVER un-ignore .opencode/CREDENCIALES.md or any secret-bearing local files.
-# GMP Flow V7 (2026-08-29, spec team-port): gobernanza VERSIONADA en git — .clinerules/,
-# .cline/ (salvo runtime), scripts/cline/, scripts/opencode/mcp/ y memory-bank/ se trackean.
-# Solo runtime y secretos quedan ignorados. El bloque IDE (mas abajo) define .claude/* + excepciones.
-.opencode/*
+# Arboles de agentes (Cline/Claude/Codex/Cursor/OpenCode), scripts del equipo y memory-bank:
+# fuera de git por decision de release 2026-09-01 (ver bloque final de este archivo).
 .opencode-legacy/
-# Codex: gobernanza versionada (config.toml + hooks.json); runtime fuera (spec decision 4).
-.codex/*
-!.codex/config.toml
-!.codex/hooks.json
-# Cursor: gobernanza versionada (rules .mdc + hooks); resto (plans/sessions) fuera.
-.cursor/*
-!.cursor/rules/
-!.cursor/rules/**
-!.cursor/hooks.json
-# GMP Flow V7 kernel: reglas y memoria versionadas.
-!.clinerules/
-!.clinerules/**
-!memory-bank/
-!scripts/cline/
-!scripts/cline/**
-# Cline: gobernanza versionada (README/rules/skills/plugins/knowledge); solo runtime fuera.
-# data-template lleva cline_mcp_settings.json (SECRET_PATH del guardrail) e install-report es
-# output local del instalador: ambos fuera de git.
-.cline/*
-!.cline/README.md
-!.cline/rules/
-!.cline/knowledge/
-!.cline/skills/
-!.cline/plugins/
-.cline/state/
-.cline/backups/
-.cline/data-runtime/
-.cline/data-template/
-.cline/install-report.txt
-# Codex scratch (runtime, nunca versionar; el blanket .codex/ ya lo cubre — reglas explicitas
-# por si algun dia se levanta el blanket para versionar .codex/config.toml / hooks.json)
-.codex/patches/
-.codex/copy-apply-out*
-.codex/*probe*
-.codex/*.patch
-.codex/tmp/
-!.opencode/config/
-.opencode/config/*
-!.opencode/config/automation-schedule.json
-!.opencode/config/governance/
-!.opencode/config/governance/**
-!.opencode/config/model-routing.yaml
-!.opencode/config/agent-graph.yaml
-!.opencode/config/semantic-memory-pruner.yaml
-!.opencode/config/chief-protocol.yaml
-!.opencode/config/flow-policy.yaml
-!.opencode/config/verification-loop.yaml
-!.opencode/config/loop-gate.yaml
-!.opencode/config/production-safety.yaml
-!.opencode/config/harness-engineering.yaml
-!.opencode/config/elite-quality-gate.yaml
-!.opencode/config/quality-rubric.yaml
-!.opencode/config/hill-climbing-loop.yaml
-!.opencode/config/qr.yaml
-!.opencode/config/playbooks.yaml
-!.opencode/config/code-quality-contract.yaml
-!.opencode/config/secrets-policy.yaml
-!.opencode/config/connections.yaml
-!.opencode/config/eval-pack.yaml
-!.opencode/config/capability-catalog.yaml
-!.opencode/config/guardrails.yaml
-!.opencode/config/delegation-contract.yaml
-!.opencode/config/session.yaml
-!.opencode/config/task-playbooks.yaml
-!.opencode/config/agency-capability-map.yaml
-!.opencode/config/product-delivery-contract.yaml
-!.opencode/memory/
-.opencode/memory/**
-!.opencode/memory/FIELD-GUIDE.md
-!.opencode/skills/
-!.opencode/skills/**
-!.opencode/agents/
-!.opencode/agents/**
-!.opencode/commands/
-!.opencode/commands/**
-!.opencode/AGENTS.md
-!.opencode/DEPRECATED.md
-!.opencode/scripts/
-!.opencode/scripts/**
-!.opencode/rules/
-!.opencode/rules/**
-!.opencode/audit/
-!.opencode/audit/**
-!.opencode/tools/
-!.opencode/tools/**
-!.opencode/plugins/
-!.opencode/plugins/**
-!.opencode/lib/
-!.opencode/lib/**
 .opencode-runtime/
 .env
 .config/
@@ -208,23 +115,7 @@ key.properties
 android/key.properties
 upload-keystore.jks
 
-# IDE (Claude Code: track governance, ignore runtime noise)
-.claude/*
-!.claude/settings.json
-!.claude/rules/
-!.claude/rules/**
-!.claude/agents/
-!.claude/agents/**
-!.claude/hooks/
-!.claude/hooks/**
-!.claude/skills/
-!.claude/skills/**
-!.claude/config/
-!.claude/config/**
-!.claude/memory/
-!.claude/memory/**
-!.claude/commands/
-!.claude/commands/**
+# Claude Code: arbol local completo fuera de git (decision release 2026-09-01, bloque final).
 .idea/
 
 # RuFlo / Claude-Flow runtime (keep config.yaml, ignore everything else)
@@ -402,6 +293,7 @@ tmp/
 .flutter/
 .flutter_tool_state/
 .codex/graph-runs/
+.codex-remote-attachments/
 
 # Herramientas agenticas locales (bloque final 2026-08-28 REVOCADO 2026-08-29, spec team-port):
 # la gobernanza V7 (reglas/skills/plugins/agentes/scripts) SI se versiona; solo runtime/secretos fuera.

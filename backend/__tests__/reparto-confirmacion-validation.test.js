@@ -164,7 +164,7 @@ describe('structured reparto confirmation validation', () => {
           }),
         ]),
       }),
-    }));
+    }), { signal: expect.any(AbortSignal) });
   });
 
   test.each([
@@ -249,7 +249,7 @@ describe('structured reparto confirmation validation', () => {
         delivery: expect.objectContaining({
           receiver: expect.objectContaining({ nombre: 'A'.repeat(length) }),
         }),
-      }));
+      }), { signal: expect.any(AbortSignal) });
     } else {
       expect(res.body).toMatchObject({
         success: false,
@@ -287,7 +287,7 @@ describe('structured reparto confirmation validation', () => {
     expect(res.status).toBe(201);
     expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
       delivery: expect.objectContaining({ status: 'ENTREGADO', lineas: [] }),
-    }));
+    }), { signal: expect.any(AbortSignal) });
   });
 
   test('permits payment only on a deliverable partial state', async () => {
@@ -305,6 +305,6 @@ describe('structured reparto confirmation validation', () => {
     expect(res.status).toBe(201);
     expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
       cobro: expect.objectContaining({ importeCobrado: 84.5 }),
-    }));
+    }), { signal: expect.any(AbortSignal) });
   });
 });

@@ -50,7 +50,9 @@ const payBodySchema = z.object({
     quarter: z.union([z.number().int(), z.string()]).nullable().optional(),
     amount: z.union([z.number(), z.string()]),
     generatedAmount: z.union([z.number(), z.string()]).optional(),
-    concept: z.string().max(200).optional(),
+    // Kept for compatibility with older clients; authorization never trusts it.
+    adminCode: z.string().max(50).nullable().optional(),
+    concept: z.string().max(200).nullable().optional(),
     observaciones: z.string().max(500).nullable().optional(),
     objetivoMes: z.union([z.number(), z.string()]).optional(),
     ventaActual: z.union([z.number(), z.string()]).optional(),

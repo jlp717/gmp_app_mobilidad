@@ -1018,6 +1018,46 @@ class ApiClient {
         e.type == DioExceptionType.unknown;
   }
 
+  /// Converts untrusted JSON error fields without assuming they are strings.
+  ///
+  /// Validation middleware and DB adapters may return arrays or objects in
+  /// the details field. Keep the rendered value bounded so a malformed
+  /// response cannot flood the UI or logs.
+  static String? _coerceErrorText(Object? value) {
+    String render(Object? raw, int depth) {
+      if (raw == null) return '';
+      if (depth > 3) return raw.toString();
+      if (raw is String) return raw;
+      if (raw is Iterable) {
+        final parts = <String>[];
+        for (final item in raw) {
+          if (parts.length >= 20) break;
+          final rendered = render(item, depth + 1).trim();
+          if (rendered.isNotEmpty) parts.add(rendered);
+        }
+        return parts.join('; ');
+      }
+      if (raw is Map) {
+        final parts = <String>[];
+        for (final entry in raw.entries) {
+          if (parts.length >= 20) break;
+          final rendered = render(entry.value, depth + 1).trim();
+          final key = entry.key.toString().trim();
+          final item = rendered.isEmpty ? key : '$key: $rendered';
+          if (item.isNotEmpty) parts.add(item);
+        }
+        return parts.join('; ');
+      }
+      return raw.toString();
+    }
+
+    final text = render(value, 0).trim();
+    if (text.isEmpty) return null;
+    const maxLength = 500;
+    if (text.length <= maxLength) return text;
+    return '${text.substring(0, maxLength - 1)}…';
+  }
+
   static ApiException _handleError(DioException e) {
     // Never emit transport payloads, exception strings, request paths, tokens,
     // SQL or filesystem details to client logs.
@@ -1068,13 +1108,13 @@ class ApiClient {
       String? serverMessage;
       String? serverCode;
       String? serverConfirmationId;
-      if (data is Map<String, dynamic>) {
-        final error = data['error'] as String?;
-        final details = data['details'] as String?;
-        serverMessage = details != null && details.isNotEmpty
-            ? '$error: $details'
-            : (error ?? data['message'] as String?);
-        serverCode = data['code'] as String?;
+      if (data is Map) {
+        final error = _coerceErrorText(data['error']);
+        final details = _coerceErrorText(data['details']);
+        final message = _coerceErrorText(data['message']);
+        final combined = [error, details].whereType<String>().join(': ');
+        serverMessage = _coerceErrorText(combined) ?? message;
+        serverCode = _coerceErrorText(data['code']);
         final rawConfirmationId = data['confirmationId'];
         if (rawConfirmationId is String && rawConfirmationId.isNotEmpty) {
           serverConfirmationId = rawConfirmationId.trim();

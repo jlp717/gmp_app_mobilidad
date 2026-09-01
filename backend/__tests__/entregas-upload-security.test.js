@@ -5,6 +5,7 @@ const request = require('supertest');
 
 let mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
 let mockUploadFile = null;
+const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockConnQuery = jest.fn();
 const mockSaveReceipt = jest.fn();
@@ -40,7 +41,7 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../config/db', () => ({
-  query: jest.fn(),
+  query: (...args) => mockQuery(...args),
   queryWithParams: (...args) => mockQueryWithParams(...args),
   getPool: () => ({
     connect: jest.fn().mockResolvedValue({
@@ -120,6 +121,10 @@ describe('legacy reparto mutation endpoints', () => {
     jest.clearAllMocks();
     mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
     mockUploadFile = pngFile();
+    mockQuery.mockResolvedValue([{
+      CODIGO: 'CTR', DESCRIPCION: 'Contado', TIPO: 'CONTADO', DIAS_PAGO: 0,
+      DEBE_COBRAR: 'S', PUEDE_COBRAR: 'S', COLOR: 'red',
+    }]);
     mockQueryWithParams.mockResolvedValue(ownerRow('94'));
   });
 
@@ -260,6 +265,7 @@ describe('delivery detail identity and ownership', () => {
       if (sql.includes('FROM DSEDAC.CPC CPC')) return [{
         CODIGO_REPARTIDOR: '94', EJERCICIOALBARAN: 2026, SERIEALBARAN: 'S', TERMINALALBARAN: 10,
         NUMEROALBARAN: 404, CLIENTE: '4300009479', IMPORTE: 0, IMPORTE_BRUTO: 0,
+        FORMA_PAGO: 'CTR',
       }];
       if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) return [];
       if (sql.includes('FROM DSEDAC.LAC')) return [];

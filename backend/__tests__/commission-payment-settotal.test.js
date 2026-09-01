@@ -190,6 +190,54 @@ describe('commission payment setTotal mode', () => {
         expect(insertCall.params).toEqual(expect.arrayContaining([295.53]));
     });
 
+    test('accepts legacy metadata without using it for authorization', async () => {
+        const sqlCalls = [];
+        mockQueryWithParams.mockImplementation(async (sql, params) => {
+            sqlCalls.push({ sql, params });
+            return defaultQueryMock(sql, params);
+        });
+
+        const app = makeApp();
+        const response = await request(app)
+            .post('/pay')
+            .send({
+                vendedorCode: '02',
+                year: 2026,
+                month: 5,
+                amount: 1,
+                generatedAmount: 10,
+                concept: null,
+                adminCode: '98',
+                observaciones: 'Pago parcial autorizado',
+            });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(
+            sqlCalls.some((call) => call.sql.includes('INSERT INTO JAVIER.COMMISSION_PAYMENTS')),
+        ).toBe(true);
+    });
+
+    test('does not authorize legacy adminCode for a non-privileged actor', async () => {
+        const app = makeApp({ code: '02', role: 'COMERCIAL', isJefeVentas: false });
+        const response = await request(app)
+            .post('/pay')
+            .send({
+                vendedorCode: '02',
+                year: 2026,
+                month: 5,
+                amount: 1,
+                generatedAmount: 10,
+                concept: null,
+                adminCode: '98',
+                observaciones: 'Intento no autorizado',
+            });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error).toMatch(/permisos/i);
+        expect(mockQueryWithParams).not.toHaveBeenCalled();
+    });
+
     test('setTotal requires observaciones when correcting an existing total', async () => {
         mockQueryWithParams.mockImplementation(async (sql) => defaultQueryMock(sql));
 

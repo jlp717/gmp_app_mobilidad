@@ -54,7 +54,10 @@ function inject({ validateConfirmation, confirm } = {}) {
 }
 
 describe('canonical reparto confirmation route', () => {
-  afterEach(() => routes.resetCanonicalConfirmationRuntime());
+  afterEach(() => {
+    routes.resetCanonicalConfirmationRuntime();
+    routes.setCanonicalConfirmationTimeoutMs(30000);
+  });
 
   test('fails closed with 503 by default and never falls back to legacy finance persistence', async () => {
     const response = await request(app())
@@ -120,4 +123,33 @@ describe('canonical reparto confirmation route', () => {
     expect(response.body).toMatchObject({ success: false, code: 'REPARTO_CATALOG_VALUE_UNKNOWN' });
     expect(confirmationService.confirm).not.toHaveBeenCalled();
   });
+
+    test('returns a sanitized 504 when confirmation persistence never resolves', async () => {
+      routes.setCanonicalConfirmationTimeoutMs(5);
+      let signalSeen;
+      const confirmationService = {
+        confirm: jest.fn((_command, { signal }) => {
+          signalSeen = signal;
+          return new Promise(() => {});
+        }),
+      };
+    routes.setCanonicalConfirmationRuntime({
+      catalogService: { validateConfirmation: jest.fn().mockResolvedValue(undefined) },
+      confirmationService,
+    });
+
+    const response = await request(app())
+      .post('/finanzas/rutero/confirm-delivery-cobro')
+      .set('Idempotency-Key', 'route-timeout-504')
+      .send(body());
+
+    expect(response.status).toBe(504);
+      expect(response.body).toEqual({
+        success: false,
+        code: 'REPARTO_CONFIRMATION_TIMEOUT',
+        error: 'Servicio temporalmente no disponible',
+      });
+      expect(signalSeen).toBeInstanceOf(AbortSignal);
+      expect(signalSeen.aborted).toBe(true);
+    });
 });

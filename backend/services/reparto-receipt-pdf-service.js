@@ -27,6 +27,12 @@ function decimal(value) {
   return number.toFixed(2);
 }
 
+function optionalNumber(value) {
+  if (value == null || String(value).trim() === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function buildFileName(confirmationId) {
   return `RECIBO_REPARTO_${String(confirmationId)}.pdf`;
 }
@@ -100,6 +106,8 @@ function buildReceiptPresentation(receipt) {
       delivered,
       rejected: Number(line.cantidadRechazada),
       pending: Number(line.cantidadPendiente),
+      difference: delivered - Number(line.cantidadPedida),
+      packages: optionalNumber(line.bultos),
       price,
       amount: delivered * price,
       reason: printable(line.motivoDiferencia) || '-',
@@ -115,20 +123,32 @@ function buildReceiptPresentation(receipt) {
   if (!Number.isFinite(amount)) {
     throw unavailable('REPARTO_RECEIPT_VALUATION_UNAVAILABLE', 'La valoracion del recibo no esta disponible');
   }
-  const ivaBreakdown = Array.isArray(receipt.ivaBreakdown)
+  const fiscalRows = Array.isArray(receipt.ivaBreakdown)
     ? receipt.ivaBreakdown.filter((item) => Number.isFinite(Number(item?.base))
       && Number.isFinite(Number(item?.pct)) && Number.isFinite(Number(item?.iva)))
-      .map((item) => Object.freeze({
+      .map((item) => ({
         base: Number(item.base), pct: Number(item.pct), iva: Number(item.iva),
       }))
     : [];
-  const neto = Number.isFinite(Number(receipt.importeNeto))
-    ? Number(receipt.importeNeto)
-    : amount;
-  const iva = Number.isFinite(Number(receipt.importeIva))
-    ? Number(receipt.importeIva)
+  const ivaBreakdown = [...fiscalRows.reduce((grouped, item) => {
+    const current = grouped.get(item.pct) || { base: 0, pct: item.pct, iva: 0 };
+    current.base += item.base;
+    current.iva += item.iva;
+    grouped.set(item.pct, current);
+    return grouped;
+  }, new Map()).values()]
+    .sort((left, right) => left.pct - right.pct)
+    .map((item) => Object.freeze(item));
+  const explicitNeto = optionalNumber(receipt.importeNeto);
+  const explicitIva = optionalNumber(receipt.importeIva);
+  const fiscalAvailable = ivaBreakdown.length > 0 || explicitIva != null;
+  const neto = explicitNeto != null
+    ? explicitNeto
+    : (ivaBreakdown.length ? ivaBreakdown.reduce((sum, item) => sum + item.base, 0) : amount);
+  const iva = explicitIva != null
+    ? explicitIva
     : ivaBreakdown.reduce((sum, item) => sum + item.iva, 0);
-  const totalConIva = ivaBreakdown.length || receipt.importeIva != null
+  const totalConIva = fiscalAvailable
     ? neto + iva
     : amount;
   const documentNumber = receipt.documento?.numero ?? receipt.documentId;
@@ -162,6 +182,9 @@ function buildReceiptPresentation(receipt) {
     footer.push('Cobro: no registrado');
   }
   return Object.freeze({
+    title: 'NOTA DE ENTREGA',
+    confirmationReference: printable(receipt.confirmationId),
+    documentReference: printable(receipt.documentId || documentNumber),
     header,
     rows: Object.freeze(rows),
     // Keep the old textual projection for callers/tests while exposing the
@@ -186,6 +209,7 @@ function buildReceiptPresentation(receipt) {
     neto,
     iva,
     ivaBreakdown: Object.freeze(ivaBreakdown),
+    fiscalAvailable,
     totalConIva,
     total: amount,
   });
@@ -202,7 +226,7 @@ function createRepartoReceiptPdfService() {
       throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no esta disponible');
     }
     const signatureImage = decodeSignatureImage(signature);
-    const document = new PDFDocument({ size: 'A4', margin: 36, compress: false });
+    const document = new PDFDocument({ size: 'A4', margin: 36, compress: false, bufferPages: true });
     const chunks = [];
     const result = new Promise((resolve, reject) => {
       document.on('data', (chunk) => chunks.push(chunk));
@@ -211,25 +235,24 @@ function createRepartoReceiptPdfService() {
     });
     const pageWidth = () => document.page.width
       - document.page.margins.left - document.page.margins.right;
-    const pageBottom = () => document.page.height - document.page.margins.bottom;
+    const pageBottom = () => document.page.height - document.page.margins.bottom - 28;
     const left = () => document.page.margins.left;
     const blue = '#12355B';
     const paleBlue = '#EAF2F8';
     const ink = '#1F2937';
     const muted = '#64748B';
-    let pageNumber = 1;
-    document.on('pageAdded', () => { pageNumber += 1; });
-
-
     const drawDocumentMeta = () => {
       const x = left();
       const width = pageWidth();
       document.fillColor(blue).font('Helvetica-Bold').fontSize(18)
-        .text(`${presentation.documentType}: ${presentation.documentNumber}`, x, document.y, { width: width * 0.58 });
-      document.fillColor(muted).font('Helvetica').fontSize(9)
-        .text(`Fecha de entrega: ${presentation.dateLabel}`, x + width * 0.58, document.y + 5, {
-          width: width * 0.42, align: 'right',
-        });
+        .text(presentation.title, x, document.y, { width, align: 'center' });
+      const metaY = document.y + 4;
+      document.fillColor(ink).font('Helvetica-Bold').fontSize(9)
+        .text(`Confirmación ${presentation.confirmationReference}`, x, metaY, { width: width * 0.34 })
+        .text(`Documento ${presentation.documentReference || '-'}`, x + width * 0.34, metaY, { width: width * 0.32, align: 'center' });
+      document.fillColor(muted).font('Helvetica').fontSize(8)
+        .text(`Fecha ${presentation.dateLabel}`, x + width * 0.66, metaY, { width: width * 0.34, align: 'right' });
+      document.y = metaY + 16;
       document.moveDown(0.55);
       document.save().fillColor(paleBlue).roundedRect(x, document.y, width, 58, 6).fill();
       document.restore();
@@ -255,12 +278,12 @@ function createRepartoReceiptPdfService() {
       const x = left();
       const width = pageWidth();
       return [
-        { x, width: 30, label: 'Ptda.' },
-        { x: x + 30, width: 78, label: 'Artículo' },
-        { x: x + 108, width: width - 108 - 112 - 70 - 72, label: 'Descripción' },
-        { x: x + width - 246, width: 64, label: 'Entreg.' },
-        { x: x + width - 182, width: 70, label: 'P. unit.' },
-        { x: x + width - 112, width: 112, label: 'Importe neto' },
+        { x, width: 211, label: 'Producto' },
+        { x: x + 211, width: 54, label: 'Pedida' },
+        { x: x + 265, width: 60, label: 'Entregada' },
+        { x: x + 325, width: 65, label: 'Diferencia' },
+        { x: x + 390, width: 55, label: 'Bultos' },
+        { x: x + 445, width: width - 445, label: 'Importe' },
       ];
     };
     const drawTableHeader = () => {
@@ -269,13 +292,15 @@ function createRepartoReceiptPdfService() {
       document.save().fillColor(blue).roundedRect(left(), y, pageWidth(), 24, 4).fill();
       document.restore();
       document.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(8);
-      for (const col of cols) document.text(col.label, col.x + 5, y + 8, { width: col.width - 10, align: col.label === 'Descripción' || col.label === 'Artículo' ? 'left' : 'right' });
+      for (const col of cols) document.text(col.label, col.x + 5, y + 8, { width: col.width - 10, align: col.label === 'Producto' ? 'left' : 'right' });
       document.y = y + 31;
       return cols;
     };
     const drawContinuationHeader = () => {
-      document.fillColor(blue).font('Helvetica-Bold').fontSize(11)
-        .text(`${presentation.documentType}: ${presentation.documentNumber} · continuación`, { width: pageWidth() });
+      document.fillColor(blue).font('Helvetica-Bold').fontSize(14)
+        .text(presentation.title, { width: pageWidth(), align: 'center' });
+      document.fillColor(muted).font('Helvetica').fontSize(8)
+        .text(`Confirmación ${presentation.confirmationReference} · Documento ${presentation.documentReference || '-'} · continuación`, { width: pageWidth(), align: 'center' });
       document.moveDown(0.45);
       drawTableHeader();
     };
@@ -287,60 +312,92 @@ function createRepartoReceiptPdfService() {
     const ensureSpace = (height, reserved = 0) => {
       if (document.y + height + reserved > pageBottom()) addContinuationPage();
     };
+    const textChunk = (value, width, maxHeight) => {
+      const source = String(value || '');
+      const options = { width, lineGap: 1 };
+      if (document.heightOfString(source, options) <= maxHeight) return [source, ''];
+      let low = 1;
+      let high = source.length;
+      let best = 1;
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        if (document.heightOfString(source.slice(0, middle), options) <= maxHeight) {
+          best = middle;
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+      const whitespace = source.lastIndexOf(' ', best);
+      const cut = whitespace > Math.floor(best * 0.65) ? whitespace : best;
+      return [source.slice(0, cut).trimEnd(), source.slice(cut).trimStart()];
+    };
     const drawRows = () => {
       const cols = columns();
       for (const [index, line] of presentation.rows.entries()) {
         throwIfAborted(signal);
-        document.font('Helvetica').fontSize(8);
-        const detailLines = [
-          `Pedida: ${decimal(line.ordered)} · Pendiente: ${decimal(line.pending)}`,
-          `Rechazada: ${decimal(line.rejected)}`,
+        const details = [
+          `${line.article ? `${line.article} · ` : ''}${line.description}`,
+          `Pedida: ${decimal(line.ordered)} · Pendiente: ${decimal(line.pending)} · Rechazada: ${decimal(line.rejected)}`,
           line.reason !== '-' ? `Motivo: ${line.reason}` : null,
           line.observations !== '-' ? `Observaciones: ${line.observations}` : null,
-        ].filter((value) => value != null);
-        const desc = [line.description, ...detailLines].join('\n');
-        const descHeight = document.heightOfString(desc, { width: cols[2].width - 10, lineGap: 1 });
-        const rowHeight = Math.max(30, descHeight + 12);
-        ensureSpace(rowHeight, 280);
-        const y = document.y;
-        if (index % 2 === 0) {
-          document.save().fillColor('#F8FAFC').rect(left(), y - 3, pageWidth(), rowHeight).fill().restore();
+        ].filter(Boolean).join('\n');
+        let remaining = details;
+        let firstSegment = true;
+        while (remaining) {
+          document.font('Helvetica').fontSize(7.5);
+          if (pageBottom() - document.y < 30) addContinuationPage();
+          const available = pageBottom() - document.y;
+          const [chunk, rest] = textChunk(remaining, cols[0].width - 10, Math.max(12, available - 10));
+          const rowHeight = Math.max(28, document.heightOfString(chunk, { width: cols[0].width - 10, lineGap: 1 }) + 10);
+          const y = document.y;
+          if (index % 2 === 0) document.save().fillColor('#F8FAFC').rect(left(), y, pageWidth(), rowHeight).fill().restore();
+          document.fillColor(ink).font('Helvetica').fontSize(7.5)
+            .text(chunk, cols[0].x + 5, y + 5, { width: cols[0].width - 10, lineGap: 1 });
+          if (firstSegment) {
+            document.text(decimal(line.ordered), cols[1].x + 5, y + 5, { width: cols[1].width - 10, align: 'right' })
+              .text(decimal(line.delivered), cols[2].x + 5, y + 5, { width: cols[2].width - 10, align: 'right' })
+              .text(decimal(line.difference), cols[3].x + 5, y + 5, { width: cols[3].width - 10, align: 'right' })
+              .text(line.packages == null ? '-' : decimal(line.packages), cols[4].x + 5, y + 5, { width: cols[4].width - 10, align: 'right' })
+              .text(`${decimal(line.amount)} €`, cols[5].x + 5, y + 5, { width: cols[5].width - 10, align: 'right' });
+          }
+          document.save().strokeColor('#CBD5E1').lineWidth(0.5)
+            .moveTo(left(), y + rowHeight).lineTo(left() + pageWidth(), y + rowHeight).stroke().restore();
+          document.y = y + rowHeight;
+          remaining = rest;
+          firstSegment = false;
+          if (remaining) addContinuationPage();
         }
-        document.fillColor(ink).font('Helvetica').fontSize(8)
-          .text(String(line.index), cols[0].x + 5, y + 5, { width: cols[0].width - 10, align: 'right' })
-          .text(line.article || '-', cols[1].x + 5, y + 5, { width: cols[1].width - 10 })
-          .text(desc, cols[2].x + 5, y + 5, { width: cols[2].width - 10, lineGap: 1 })
-          .text(decimal(line.delivered), cols[3].x + 5, y + 5, { width: cols[3].width - 10, align: 'right' })
-          .text(`${decimal(line.price)} €`, cols[4].x + 5, y + 5, { width: cols[4].width - 10, align: 'right' })
-          .text(`${decimal(line.amount)} €`, cols[5].x + 5, y + 5, { width: cols[5].width - 10, align: 'right' });
-        document.save().strokeColor('#CBD5E1').lineWidth(0.5)
-          .moveTo(left(), y + rowHeight - 3).lineTo(left() + pageWidth(), y + rowHeight - 3).stroke().restore();
-        document.y = y + rowHeight;
       }
     };
     const drawTotalsAndAcknowledgement = () => {
-      ensureSpace(330);
       const x = left();
       const width = pageWidth();
+      const taxLineCount = Math.max(1, presentation.ivaBreakdown.length);
+      const totalsHeight = 57 + (taxLineCount * 16);
+      ensureSpace(totalsHeight + 48);
       document.moveDown(0.25);
-      const totalsHeight = 78;
       document.save().fillColor('#F8FAFC').roundedRect(x, document.y, width, totalsHeight, 6).fill().restore();
       const y = document.y + 9;
       document.fillColor(muted).font('Helvetica').fontSize(8)
-        .text('Bultos / unidades entregadas', x + 14, y, { width: width * 0.55 });
+        .text('Importe neto entregado', x + 14, y, { width: width * 0.55 });
       document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
-        .text(`${presentation.rows.reduce((sum, line) => sum + line.delivered, 0).toFixed(2)}`, x + width * 0.55, y, { width: width * 0.4, align: 'right' });
-      document.fillColor(muted).font('Helvetica').fontSize(8)
-        .text('Importe neto entregado', x + 14, y + 17, { width: width * 0.55 });
-      document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
-        .text(`${decimal(presentation.neto)} €`, x + width * 0.55, y + 17, { width: width * 0.4, align: 'right' });
+        .text(`${decimal(presentation.neto)} €`, x + width * 0.55, y, { width: width * 0.4, align: 'right' });
       if (presentation.ivaBreakdown.length) {
+        presentation.ivaBreakdown.forEach((item, index) => {
+          const taxY = y + 17 + (index * 16);
+          document.fillColor(muted).font('Helvetica').fontSize(8)
+            .text(`Base IVA ${decimal(item.pct)} % · ${decimal(item.base)} €`, x + 14, taxY, { width: width * 0.7 });
+          document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
+            .text(`${decimal(item.iva)} €`, x + width * 0.7, taxY, { width: width * 0.25, align: 'right' });
+        });
+      } else {
         document.fillColor(muted).font('Helvetica').fontSize(8)
-          .text(`IVA (${presentation.ivaBreakdown.map((item) => `${item.pct}%`).join(', ')})`, x + 14, y + 34, { width: width * 0.55 });
+          .text('IVA no disponible en el snapshot persistido', x + 14, y + 17, { width: width * 0.7 });
         document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
-          .text(`${decimal(presentation.iva)} €`, x + width * 0.55, y + 34, { width: width * 0.4, align: 'right' });
+          .text('-', x + width * 0.7, y + 17, { width: width * 0.25, align: 'right' });
       }
-      const totalY = y + (presentation.ivaBreakdown.length ? 51 : 34);
+      const totalY = y + 22 + (taxLineCount * 16);
       document.save().strokeColor('#94A3B8').lineWidth(0.7).moveTo(x + 14, totalY - 5).lineTo(x + width - 14, totalY - 5).stroke().restore();
       document.fillColor(blue).font('Helvetica-Bold').fontSize(11)
         .text('TOTAL ENTREGA', x + 14, totalY, { width: width * 0.55 });
@@ -355,6 +412,33 @@ function createRepartoReceiptPdfService() {
           ? `Cobrado: ${decimal(receipt.cobro.importeCobrado)} € · Forma de pago: ${printable(receipt.cobro.formaPago)} · Fecha: ${paymentDate(receipt.cobro)}`
           : 'Cobro: no registrado en esta entrega', { width });
       document.moveDown(0.22);
+      const finalTexts = [
+        receipt.incidencia?.codigo || receipt.incidencia?.descripcion
+          ? { color: '#9A3412', text: `Incidencia: ${printable(receipt.incidencia?.codigo)} ${printable(receipt.incidencia?.descripcion)}` }
+          : null,
+        receipt.incidencia?.observaciones
+          ? { color: muted, text: `Observaciones incidencia: ${printable(receipt.incidencia.observaciones)}` }
+          : null,
+        receipt.observaciones
+          ? { color: muted, text: `Observaciones: ${printable(receipt.observaciones)}` }
+          : null,
+      ].filter(Boolean);
+      for (const item of finalTexts) {
+        let remaining = item.text;
+        while (remaining) {
+          document.font('Helvetica').fontSize(7.5);
+          if (pageBottom() - document.y < 18) addContinuationPage();
+          const [chunk, rest] = textChunk(remaining, width, Math.max(10, pageBottom() - document.y - 4));
+          document.fillColor(item.color).text(chunk, { width, lineGap: 1 });
+          remaining = rest;
+          if (remaining) addContinuationPage();
+        }
+      }
+      const receptorText = `Receptor: ${printable(receipt.receptor?.nombre)} ${printable(receipt.receptor?.apellidos)} · DNI: ${printable(receipt.receptor?.dni)}`;
+      document.font('Helvetica').fontSize(7.5);
+      const signatureHeight = (signatureImage ? 64 : 44)
+        + document.heightOfString(receptorText, { width }) + 24;
+      ensureSpace(signatureHeight);
       document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
         .text('Firma del cliente', { width });
       document.moveDown(0.08);
@@ -371,26 +455,14 @@ function createRepartoReceiptPdfService() {
         document.y += 44;
       }
       document.fillColor(muted).font('Helvetica').fontSize(7.5)
-        .text(`Receptor: ${printable(receipt.receptor?.nombre)} ${printable(receipt.receptor?.apellidos)} · DNI: ${printable(receipt.receptor?.dni)}`, { width });
-      if (receipt.incidencia?.codigo || receipt.incidencia?.descripcion) {
-        document.fillColor('#9A3412').font('Helvetica-Bold').fontSize(7.5)
-          .text(`Incidencia: ${printable(receipt.incidencia?.codigo)} ${printable(receipt.incidencia?.descripcion)}`, { width });
-      }
-      if (receipt.incidencia?.observaciones) {
-        document.fillColor(muted).font('Helvetica').fontSize(7.5)
-          .text(`Observaciones incidencia: ${printable(receipt.incidencia?.observaciones)}`, { width });
-      }
-      if (receipt.observaciones) {
-        document.fillColor(muted).font('Helvetica').fontSize(7.5)
-          .text(`Observaciones: ${printable(receipt.observaciones)}`, { width });
-      }
+        .text(receptorText, { width });
       document.moveDown(0.25);
+      const legalText = 'La posesión de este documento NO implica el pago de la misma. No se admiten devoluciones una vez aceptada la recepción.';
+      document.font('Helvetica').fontSize(6.5);
+      ensureSpace(document.heightOfString(legalText, { width, lineGap: 1 }) + 4);
       document.fillColor(muted).font('Helvetica').fontSize(6.5)
-        .text('La posesión de este documento NO implica el pago de la misma. No se admiten devoluciones una vez aceptada la recepción.', { width, lineGap: 1 });
+        .text(legalText, { width, lineGap: 1 });
       document.moveDown(0.18);
-      const footerY = document.y;
-      document.fillColor('#94A3B8').font('Helvetica').fontSize(6.5)
-        .text(`GMP · nota de entrega generada desde la confirmación registrada · página ${pageNumber}`, x, footerY, { width, align: 'right' });
     };
 
     document.y = drawCompanyHeader(document);
@@ -399,6 +471,16 @@ function createRepartoReceiptPdfService() {
     drawRows();
     drawTotalsAndAcknowledgement();
     throwIfAborted(signal);
+    const pageRange = document.bufferedPageRange();
+    for (let index = 0; index < pageRange.count; index += 1) {
+      document.switchToPage(pageRange.start + index);
+      const footerY = document.page.height - document.page.margins.bottom - 12;
+      document.save().strokeColor('#CBD5E1').lineWidth(0.5)
+        .moveTo(left(), footerY - 5).lineTo(left() + pageWidth(), footerY - 5).stroke().restore();
+      document.fillColor('#64748B').font('Helvetica').fontSize(6.5)
+        .text(`GMP · nota de entrega desde la confirmación registrada · Página ${index + 1} de ${pageRange.count}`,
+          left(), footerY, { width: pageWidth(), align: 'right', lineBreak: false });
+    }
     document.end();
     const pdf = await result;
     throwIfAborted(signal);

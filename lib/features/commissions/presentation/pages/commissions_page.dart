@@ -666,13 +666,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     final conceptController = TextEditingController(text: 'Pago Comisiones');
     final observacionesController = TextEditingController();
 
-    final adminCode = ProviderScope.containerOf(context)
-            .read(authProvider)
-            .value
-            ?.user
-            ?.code ??
-        '';
-
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1032,7 +1025,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     setTotal: useSetTotalAtConfirm,
                     concept: capturedConcept,
                     observaciones: capturedObs,
-                    adminCode: adminCode,
                     objetivoMes: monthSnapshot['objetivoMes'] ?? 0,
                     ventaActual: monthSnapshot['ventaActual'] ?? 0,
                     ventasSobreObjetivo:
@@ -1070,7 +1062,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     required bool setTotal,
     required String concept,
     required String observaciones,
-    required String adminCode,
     required double objetivoMes,
     required double ventaActual,
     required double ventasSobreObjetivo,
@@ -1268,7 +1259,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           amount: amount,
                           generatedAmount: generatedAmount,
                           concept: concept,
-                          adminCode: adminCode,
                           observaciones: observaciones,
                           objetivoMes: objetivoMes,
                           ventaActual: ventaActual,

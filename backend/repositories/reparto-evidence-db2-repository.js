@@ -299,6 +299,7 @@ function createRepartoEvidenceDb2Repository({
     assertConnection(connection);
 
     async function assertOwnership(requirements, owner) {
+      const signal = owner?.signal;
       const normalizedRequirements = normalizeEvidenceRequirements(requirements);
       if (!normalizedRequirements.length) return;
       const ids = normalizedRequirements.map(({ evidenceId }) => evidenceId);
@@ -306,7 +307,7 @@ function createRepartoEvidenceDb2Repository({
       const placeholders = ids.map(() => '?').join(', ');
       const found = await rows(connection,
         `SELECT EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STATUS, EXPIRES_AT FROM ${table} WHERE EVIDENCE_ID IN (${placeholders}) FOR UPDATE WITH RS`,
-        ids);
+        ids, signal);
       if (found.length !== ids.length) {
         throw new RepartoEvidenceRepositoryError('Alguna evidencia no existe', {
           code: 'EVIDENCE_NOT_FOUND', statusCode: 404,
@@ -339,16 +340,16 @@ function createRepartoEvidenceDb2Repository({
       for (const row of found) assertPendingNotExpired(row, checkedAt);
     }
 
-    async function markLinked(evidenceIds) {
+    async function markLinked(evidenceIds, { signal } = {}) {
       const ids = [...new Set((evidenceIds || []).map(String))];
       if (!ids.length) return;
       const placeholders = ids.map(() => '?').join(', ');
       await execute(connection,
         `UPDATE ${table} SET STATUS = 'ENLAZADA', LINKED_AT = CURRENT TIMESTAMP, EXPIRES_AT = NULL WHERE STATUS = 'PENDIENTE' AND EVIDENCE_ID IN (${placeholders})`,
-        ids);
+        ids, signal);
       const linkedRows = await rows(connection,
         `SELECT EVIDENCE_ID, STATUS, LINKED_AT, EXPIRES_AT FROM ${table} WHERE EVIDENCE_ID IN (${placeholders})`,
-        ids);
+        ids, signal);
       const linkedById = new Map(linkedRows.map((row) => [
         String(value(row, 'EVIDENCE_ID')).trim(), row,
       ]));
@@ -396,7 +397,8 @@ function createRepartoEvidenceDb2Repository({
   }
 
   async function stage(record) {
-    return withConnection(async (connection) => {
+    return withConnection(async (connection, signal) => {
+      throwIfAborted(signal);
       assertExplicitTransaction(connection);
       const stagedAt = new Date(clock());
       if (!Number.isFinite(stagedAt.getTime())) {
@@ -406,7 +408,9 @@ function createRepartoEvidenceDb2Repository({
       for (let attempt = 0; attempt < 2; attempt += 1) {
         let active = false;
         try {
+          throwIfAborted(signal);
           await connection.beginTransaction();
+          throwIfAborted(signal);
           active = true;
           const planned = plannedDeliveryPort.forConnection(connection);
           if (!planned || typeof planned.getPlannedDelivery !== 'function') {
@@ -415,11 +419,11 @@ function createRepartoEvidenceDb2Repository({
           await planned.getPlannedDelivery(
             record.documentId,
             record.repartidorId,
-            { allowedRepartidorIds: record.allowedRepartidorIds },
+            { allowedRepartidorIds: record.allowedRepartidorIds, signal },
           );
           const existing = first(await rows(connection,
             `SELECT DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STORAGE_REFERENCE, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, STATUS, EXPIRES_AT FROM ${table} WHERE EVIDENCE_ID = ? FOR UPDATE WITH RS`,
-            [record.evidenceId]));
+            [record.evidenceId], signal));
           if (existing) {
             const exact = String(value(existing, 'DOCUMENT_ID')).trim() === record.documentId
               && String(value(existing, 'REPARTIDOR_ID')).trim() === record.repartidorId
@@ -434,7 +438,9 @@ function createRepartoEvidenceDb2Repository({
               });
             }
             assertPendingNotExpired(existing, stagedAt);
+            throwIfAborted(signal);
             await connection.commit();
+            throwIfAborted(signal);
             active = false;
             return { evidenceId: record.evidenceId, created: false, idempotent: true };
           }
@@ -442,8 +448,10 @@ function createRepartoEvidenceDb2Repository({
             `INSERT INTO ${table} (EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STORAGE_REFERENCE, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, CONTENT_BLOB, STATUS, CREATED_AT, EXPIRES_AT) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', CURRENT TIMESTAMP, ?)`,
             [record.evidenceId, record.documentId, record.repartidorId, record.kind,
               record.storageReference, record.mimeType, record.contentSha256,
-              record.contentBytes, record.content, db2Timestamp(expiresAt, 'expiresAt')]);
+              record.contentBytes, record.content, db2Timestamp(expiresAt, 'expiresAt')], signal);
+          throwIfAborted(signal);
           await connection.commit();
+          throwIfAborted(signal);
           active = false;
           return { evidenceId: record.evidenceId, created: true, idempotent: false };
         } catch (error) {

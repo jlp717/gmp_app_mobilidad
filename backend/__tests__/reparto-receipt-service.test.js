@@ -12,6 +12,18 @@ test('JEFE selected owner remains repository-scoped without allowAnyOwner', asyn
 });
 test('passes a mandatory owner scope to the repository before snapshot details are returned', async () => { const getReceipt = jest.fn().mockResolvedValue(stored()); const receiptService = createRepartoReceiptService({ repository: { getReceipt } }); await receiptService.getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } }); expect(getReceipt).toHaveBeenCalledWith(expect.objectContaining({ confirmationId: '7', ownerRepartidorId: 'R1', allowAnyOwner: false })); });
 test('returns validated snapshot and never leaks storage references', async () => { const result = await service(stored()).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } }); expect(result.lineas[0]).toMatchObject({ cantidadPedida: 3, cantidadEntregada: 2, cantidadRechazada: 1, cantidadPendiente: 0 }); expect(result.evidencias[0]).not.toHaveProperty('storageReference'); expect(result.cobro.id).toBe('9'); expect(result.documento).toMatchObject({ xde: 3, dex: 4 }); expect(result.pedido.numero).toBe(10); });
+
+test('marks the canonical DB2 snapshot as fiscally unavailable instead of inventing IVA or bultos', async () => {
+  const result = await service(stored()).getReceipt({
+    confirmationId: '7', actor: { repartidorId: 'R1' },
+  });
+  expect(result).toMatchObject({
+    importeNeto: 9,
+    importeIva: null,
+    ivaBreakdown: [],
+  });
+  expect(result.lineas[0]).not.toHaveProperty('bultos');
+});
 test('rejects foreign owner, signature mismatch and ambiguous payment', async () => { await expect(service(stored()).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R2' } })).rejects.toMatchObject({ statusCode: 403 }); await expect(service(stored({ evidences: [] })).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE' }); await expect(service(stored({ payments: [{ ID: 1 }, { ID: 2 }] })).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } })).rejects.toMatchObject({ statusCode: 409 }); });
 test('rejects invalid quantities, valuation and payment ownership', async () => { for (const lines of [[{ CANTIDAD_PEDIDA: NaN, CANTIDAD_ENTREGADA: 0, CANTIDAD_RECHAZADA: 0, CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: 1 }], [{ CANTIDAD_PEDIDA: 2, CANTIDAD_ENTREGADA: 1, CANTIDAD_RECHAZADA: 0, CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: 1 }], [{ CANTIDAD_PEDIDA: null, CANTIDAD_ENTREGADA: 1, CANTIDAD_RECHAZADA: 0, CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: 1 }], [{ CANTIDAD_PEDIDA: 1, CANTIDAD_ENTREGADA: 1, CANTIDAD_RECHAZADA: 0, CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: -1 }]]) await expect(service(stored({ lines })).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } })).rejects.toMatchObject({ statusCode: 503 }); let invalid = stored(); invalid.payments[0].CODIGOVENDEDOR = 'R2'; await expect(service(invalid).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_PAYMENT_UNAVAILABLE' }); invalid = stored(); invalid.payments[0].IMPORTEVENCIMIENTO = 0; await expect(service(invalid).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_PAYMENT_UNAVAILABLE' }); invalid = stored(); invalid.payments[0].DEXDOCUMENTO = 9; await expect(service(invalid).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_PAYMENT_UNAVAILABLE' }); });
 

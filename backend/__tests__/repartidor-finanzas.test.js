@@ -1288,7 +1288,10 @@ describe('Repartidor finanzas routes', () => {
     });
 
     expect(validateConfirmation).toHaveBeenCalledTimes(1);
-    expect(confirm).toHaveBeenCalledWith(validateConfirmation.mock.calls[0][0]);
+    expect(confirm).toHaveBeenCalledWith(
+      validateConfirmation.mock.calls[0][0],
+      { signal: expect.any(AbortSignal) },
+    );
     expect(mockConnQuery).not.toHaveBeenCalled();
   });
 

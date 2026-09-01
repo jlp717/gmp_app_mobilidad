@@ -85,6 +85,7 @@ String requireConcreteRepartoOwner(String? value) {
       code: 'REPARTIDOR_OWNER_REQUIRED',
     );
   }
+
   return value.trim();
 }
 
@@ -481,6 +482,60 @@ class CommissionResult {
 
 /// Servicio de datos para repartidor
 class RepartidorDataService {
+  /// Returns true only when a canonical delivery note is genuinely absent.
+  /// Callers must use this only for errors raised by a canonical-note request;
+  /// a commercial document 404 must never be treated as a note fallback.
+  static bool isDeliveryNoteNotFound(Object error) {
+    if (error is RepartidorDataException) {
+      return error.code == 'REPARTO_RECEIPT_NOT_FOUND';
+    }
+    if (error is ApiException) {
+      return error.statusCode == 404 ||
+          error.code == 'REPARTO_RECEIPT_NOT_FOUND';
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  static RepartidorDataException mapDeliveryNoteError(ApiException error) {
+    final message = switch (error.statusCode) {
+      401 => 'La sesión ha caducado. Inicia sesión para acceder a la nota.',
+      403 => 'No tienes permiso para acceder a esta nota de entrega.',
+      404 => 'La nota de entrega no existe para esta entrega.',
+      409 =>
+        'La entrega todavía no tiene un estado válido para emitir la nota.',
+      422 => 'La identidad de la nota de entrega no es válida.',
+      503 => 'La nota de entrega no está disponible temporalmente.',
+      504 => 'La nota de entrega ha superado el tiempo de espera.',
+      _ => 'No se pudo procesar la nota de entrega.',
+    };
+    return RepartidorDataException(
+      message,
+      statusCode: error.statusCode,
+      code: error.code,
+    );
+  }
+
+  /// Resolves one user action against the canonical note first. The commercial
+  /// document is a fallback only when the canonical note is absent.
+  static Future<T> resolveDeliveryNoteWithFallback<T>({
+    required String? confirmationId,
+    required Future<T> Function(String confirmationId) canonical,
+    required Future<T> Function() commercial,
+  }) async {
+    final confirmation = confirmationId?.trim() ?? '';
+    if (confirmation.isEmpty) return commercial();
+    try {
+      return await canonical(confirmation);
+    } on ApiException catch (error) {
+      if (isDeliveryNoteNotFound(error)) return commercial();
+      rethrow;
+    } on RepartidorDataException catch (error) {
+      if (isDeliveryNoteNotFound(error)) return commercial();
+      rethrow;
+    }
+  }
+
   /// Confirmation changes document state/signature, so stale history must not
   /// survive the server acknowledgement boundary.
   static Future<void> invalidateDeliveryReadCaches() async {
@@ -1130,17 +1185,20 @@ class RepartidorDataService {
   }) async {
     final email = destinatario.trim();
     final owner = repartidorId.trim();
+    final confirmation = confirmationId.trim();
     if (email.length > 180 ||
         !isValidRepartoReceiptEmailAddress(email) ||
-        !isValidRepartoOwnerId(owner)) {
+        !isValidRepartoOwnerId(owner) ||
+        !isValidRepartoServerId(confirmation)) {
       throw const RepartidorDataException(
         'Invalid email or delivery owner.',
         statusCode: 422,
+        code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
       );
     }
     try {
       final response = await ApiClient.post(
-        '/repartidor-finanzas/rutero/confirmations/$confirmationId/receipt/email',
+        '/repartidor-finanzas/rutero/confirmations/$confirmation/receipt/email',
         {'destinatario': email, 'repartidorId': owner},
       );
       final result = RepartoReceiptEmailResult.fromResponse(response);
@@ -1151,6 +1209,8 @@ class RepartidorDataService {
       );
     } on RepartidorDataException {
       rethrow;
+    } on ApiException catch (error) {
+      throw mapDeliveryNoteError(error);
     } catch (_) {
       throw const RepartidorDataException('Receipt email delivery failed.');
     }

@@ -585,6 +585,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             lineSum: albaranDetalle.lineSum,
             pricingState: albaranDetalle.pricingState,
             amountSource: albaranDetalle.amountSource,
+            formaPago: albaranDetalle.formaPago,
+            formaPagoDesc: albaranDetalle.formaPagoDesc,
+            tipoPago: albaranDetalle.tipoPago,
+            diasPago: albaranDetalle.diasPago,
+            esCTR: albaranDetalle.esCTR,
+            puedeCobrarse: albaranDetalle.puedeCobrarse,
+            colorEstado: albaranDetalle.colorEstado,
             importeDisponibleCobro: albaranDetalle.importeDisponibleCobro,
             items: filtered,
           );
@@ -669,7 +676,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   bool get _isFactura => widget.albaran.numeroFactura > 0;
-  bool get _isUrgent => widget.albaran.esCTR;
+  bool get _isUrgent => _albaran.esCTR;
 
   /// Canonical terminal outcomes are read-only. A no-delivery is final too;
   /// reopening it as an editable confirmation risks an inconsistent replay.
@@ -2813,10 +2820,43 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await Printing.layoutPdf(
         onLayout: (_) async => Uint8List.fromList(base64Decode(pdfData)),
       );
-    } on RepartoReceiptUnavailableException {
+    } catch (error) {
       modal.close();
+      if (_isDeliveryNoteMissing(error)) {
+        await _printCommercialPdf();
+        return;
+      }
       if (mounted) {
-        _showError('La nota firmada todavía no está disponible para imprimir.');
+        _showError(
+          repartidorSafeOperationMessage(
+            error: error,
+            operation: 'receiptPrint',
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _printCommercialPdf() async {
+    final isFactura = widget.albaran.numeroFactura > 0;
+    final label = isFactura ? 'factura' : 'albarán';
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando $label para imprimir...',
+    );
+    try {
+      final bytes = await _downloadCommercialPdfBytes();
+      modal.close();
+      await Printing.layoutPdf(
+        onLayout: (_) async => Uint8List.fromList(bytes),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Documento comercial enviado a impresión.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
       }
     } catch (error) {
       modal.close();
@@ -2824,7 +2864,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _showError(
           repartidorSafeOperationMessage(
             error: error,
-            operation: 'receiptPrint',
+            operation: 'documentPrint',
           ),
         );
       }
@@ -3235,20 +3275,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
         ),
       );
-    } on RepartoReceiptUnavailableException {
-      modal.close();
-      if (!mounted) return;
-      _showConfirmationError(
-        repartoConfirmationErrorPresentation(
-          error: const RepartoReceiptUnavailableException(),
-          acknowledged: _isAcknowledgedTombstone,
-        ),
-      );
     } catch (error) {
-      modal.error(
-        repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
-        onRetry: _previewReceiptPdf,
-      );
+      modal.close();
+      if (_isDeliveryNoteMissing(error)) {
+        await _previewCommercialPdf();
+        return;
+      }
+      if (mounted) {
+        modal.error(
+          repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
+          onRetry: _previewReceiptPdf,
+        );
+      }
     }
   }
 
@@ -3272,19 +3310,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         subject: 'Nota de entrega',
         sharePositionOrigin: _shareOrigin(),
       );
-    } on RepartoReceiptUnavailableException {
+    } catch (error) {
       modal.close();
-      if (!mounted) return;
-      _showConfirmationError(
-        repartoConfirmationErrorPresentation(
-          error: const RepartoReceiptUnavailableException(),
-          acknowledged: _isAcknowledgedTombstone,
-        ),
-      );
-    } catch (_) {
-      modal.close();
+      if (_isDeliveryNoteMissing(error)) {
+        await _shareCommercialLocally();
+        return;
+      }
       if (mounted) {
-        _showError('No se pudo preparar la nota de entrega.');
+        _showError(
+          repartidorSafeOperationMessage(
+            error: error,
+            operation: 'pdfDownload',
+          ),
+        );
       }
     }
   }
@@ -3372,17 +3410,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       }
-    } on RepartoReceiptUnavailableException {
-      modal.close();
-      if (!mounted) return;
-      _showConfirmationError(
-        repartoConfirmationErrorPresentation(
-          error: const RepartoReceiptUnavailableException(),
-          acknowledged: _isAcknowledgedTombstone,
-        ),
-      );
     } catch (error) {
       modal.close();
+      if (_isDeliveryNoteMissing(error)) {
+        await _shareCommercialViaWhatsApp(prefilled: form);
+        return;
+      }
       if (mounted) {
         _showError(
           repartidorSafeOperationMessage(
@@ -3540,16 +3573,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           SnackBar(content: Text('Receipt sent to ${email.trim()}')),
         );
       }
-    } on RepartoReceiptUnavailableException catch (error) {
-      if (mounted) {
-        _showConfirmationError(
-          repartoConfirmationErrorPresentation(
-            error: error,
-            acknowledged: _isAcknowledgedTombstone,
-          ),
-        );
-      }
     } catch (error) {
+      if (_isDeliveryNoteMissing(error)) {
+        modal.close();
+        await _emailCommercialFallback(email);
+        return;
+      }
       if (mounted) {
         _showError(
           repartidorSafeOperationMessage(
@@ -3576,23 +3605,67 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
+  bool _isDeliveryNoteMissing(Object error) =>
+      error is RepartoReceiptUnavailableException ||
+      RepartidorDataService.isDeliveryNoteNotFound(error);
+
+  Future<void> _emailCommercialFallback(String email) async {
+    final alb = widget.albaran;
+    final isFactura = alb.numeroFactura > 0;
+    final owner = alb.codigoRepartidor.trim();
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Enviando documento comercial...',
+    );
+    try {
+      await RepartidorDataService.sendEmail(
+        year: isFactura ? alb.ejercicio : alb.ejercicio,
+        serie: isFactura && alb.serieFactura.isNotEmpty
+            ? alb.serieFactura
+            : alb.serie,
+        number: isFactura ? alb.numeroFactura : alb.numeroAlbaran,
+        type: isFactura ? 'factura' : 'albaran',
+        destinatario: email,
+        repartidorId: owner,
+        canEmailDocuments: true,
+        terminal: alb.terminal,
+        facturaNumber: isFactura ? alb.numeroFactura : null,
+        serieFactura: isFactura ? alb.serieFactura : null,
+        ejercicioFactura: isFactura ? alb.ejercicio : null,
+        albaranNumber: alb.numeroAlbaran,
+        albaranSerie: alb.serie,
+        albaranTerminal: alb.terminal,
+        albaranYear: alb.ejercicio,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Documento comercial enviado a $email')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        _showError(
+          repartidorSafeOperationMessage(
+            error: error,
+            operation: 'documentEmail',
+          ),
+        );
+      }
+    } finally {
+      modal.close();
+    }
+  }
+
   Future<String?> _generateReceiptPdf() async {
     try {
       final confirmationId = await _resolveReceiptConfirmationId();
-      final response = await ApiClient.get(
-        RepartoCanonicalReceiptRequest(
-          confirmationId,
-          repartidorId: widget.albaran.codigoRepartidor,
-        ).endpoint,
-        forceRefresh: true,
-        allowStale: false,
-        receiveTimeout: const Duration(seconds: 20),
+      final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+        confirmationId: confirmationId,
+        repartidorId: widget.albaran.codigoRepartidor,
       );
-      return RepartoReceiptPdf.fromResponse(response).base64;
+      return base64Encode(bytes);
     } on RepartoReceiptUnavailableException {
       rethrow;
-    } catch (_) {
-      throw const RepartoReceiptUnavailableException();
     }
   }
 }

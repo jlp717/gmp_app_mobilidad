@@ -393,7 +393,7 @@ async function invalidateRepartidorRouteCaches() {
 function createRepartoConfirmationService({ repository, now = () => new Date() }) {
   assertRepository(repository);
 
-  async function confirm(command) {
+  async function confirm(command, { signal } = {}) {
     const fingerprint = confirmationFingerprint(command);
     const result = await repository.withTransaction(async (tx) => {
       const replay = await tx.getByIdempotencyKey(command.idempotencyKey);
@@ -495,7 +495,7 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
         result: persistedResult,
       });
       return result;
-    });
+    }, { signal });
     if (result?.created) {
       await Promise.all([
         invalidateRepartidorDocumentPdfCache(command.delivery.itemId, command.actor.repartidorId),

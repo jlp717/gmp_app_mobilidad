@@ -226,6 +226,131 @@ function parseBoundedInteger(raw, { defaultValue, min, max }) {
 function sendEntregasUnavailable(res, code, message) {
     return res.status(503).json({ success: false, code, error: message });
 }
+
+const PAYMENT_CONDITIONS_SQL = `
+    SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
+    FROM JAVIER.PAYMENT_CONDITIONS
+    WHERE ACTIVO = 'S'
+`;
+
+function mapPaymentConditions(rows) {
+    const conditions = {};
+    for (const row of rows || []) {
+        const code = normalizeCode(row.CODIGO).toUpperCase();
+        if (!code) continue;
+        conditions[code] = {
+            desc: normalizeCode(row.DESCRIPCION),
+            type: normalizeCode(row.TIPO) || 'CREDITO',
+            diasPago: Number(row.DIAS_PAGO) || 0,
+            mustCollect: row.DEBE_COBRAR === 'S',
+            canCollect: row.PUEDE_COBRAR === 'S',
+            color: normalizeCode(row.COLOR) || 'green',
+        };
+    }
+    if (Object.keys(conditions).length === 0) {
+        throw new RepartoHttpError(
+            503,
+            'PAYMENT_CATALOG_UNAVAILABLE',
+            'El catalogo de formas de pago no esta disponible',
+        );
+    }
+    return conditions;
+}
+
+async function loadPaymentConditions() {
+    try {
+        const rows = await cachedQuery(
+            query,
+            PAYMENT_CONDITIONS_SQL,
+            'entregas:paymentConditions',
+            TTL.LONG,
+        );
+        return mapPaymentConditions(rows);
+    } catch (error) {
+        if (error instanceof RepartoHttpError) throw error;
+        logger.error('[ENTREGAS] Payment catalog unavailable');
+        throw new RepartoHttpError(
+            503,
+            'PAYMENT_CATALOG_UNAVAILABLE',
+            'El catalogo de formas de pago no esta disponible',
+        );
+    }
+}
+
+function resolvePaymentCondition(paymentConditions, rawCode) {
+    const code = normalizeCode(rawCode).toUpperCase();
+    const numericCode = /^\d+$/.test(code) ? String(Number(code)) : '';
+    const condition = paymentConditions[code] || paymentConditions[numericCode];
+    if (!condition) {
+        throw new RepartoHttpError(
+            503,
+            'PAYMENT_CONDITION_UNKNOWN',
+            'La forma de pago del albaran no figura en el catalogo autorizado',
+        );
+    }
+    return condition;
+}
+
+function parseRiskMoney(value) {
+    if (value === null || value === undefined) return 0;
+    const raw = String(value);
+    if (raw.includes(',') && raw.includes('.')) {
+        return Number(raw.indexOf('.') < raw.indexOf(',')
+            ? raw.replace(/\./g, '').replace(',', '.')
+            : raw) || 0;
+    }
+    return Number(raw.replace(',', '.')) || 0;
+}
+
+async function loadClientPaymentRisk(clientCode, importeAlbaran = 0) {
+    const client = normalizeCode(clientCode);
+    if (!client) {
+        return {
+            cobroRiguroso: false,
+            creditoSuperaLimite: false,
+            limiteCredito: 0,
+            riesgoActual: 0,
+        };
+    }
+    const cachedRiskQuery = (sql, key) => cachedQuery(
+        (querySql, params) => queryWithParams(querySql, params, false, false),
+        sql,
+        key,
+        TTL.SHORT,
+        [client],
+    );
+    const [clxRows, clpRows, cvcRows] = await Promise.all([
+        cachedRiskQuery(`
+            SELECT TRIM(CODIGOCLIENTE) AS CLIENTE
+            FROM DSEDAC.CLX
+            WHERE TRIM(CODIGOCLIENTE) = ?
+              AND TRIM(COALESCE(COBRORIGUROSOSN, '')) = 'S'
+        `, `entregas:detail:client-risk:clx:${client}`),
+        cachedRiskQuery(`
+            SELECT IMPORTELIMITERIESGO, IMPORTELIMITERIESGOEMPRESA
+            FROM DSEDAC.CLP
+            WHERE TRIM(CODIGOCLIENTE) = ?
+        `, `entregas:detail:client-risk:clp:${client}`),
+        cachedRiskQuery(`
+            SELECT COALESCE(SUM(IMPORTEPENDIENTE), 0) AS PENDIENTE
+            FROM DSEDAC.CVC
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+              AND COALESCE(ANULADOSN, '') <> 'S'
+              AND IMPORTEPENDIENTE <> 0
+        `, `entregas:detail:client-risk:cvc:${client}`),
+    ]);
+    const limitRow = clpRows?.[0] || {};
+    const limiteCredito = parseRiskMoney(limitRow.IMPORTELIMITERIESGO)
+        || parseRiskMoney(limitRow.IMPORTELIMITERIESGOEMPRESA);
+    const riesgoActual = parseRiskMoney(cvcRows?.[0]?.PENDIENTE);
+    return {
+        cobroRiguroso: (clxRows || []).length > 0,
+        creditoSuperaLimite: limiteCredito > 0
+            && (riesgoActual + (Number(importeAlbaran) || 0)) > limiteCredito,
+        limiteCredito,
+        riesgoActual,
+    };
+}
 function sendRepartoError(res, error) {
     if (error instanceof RepartoHttpError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
     return res.status(503).json({ success: false, code: 'CANONICAL_RECEIPT_UNAVAILABLE', error: 'No se pudo generar el recibo canonico' });
@@ -304,32 +429,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const placeholders = idList.map(() => '?').join(',');
         const sortBy = req.query.sortBy || 'default';
 
-        // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
-        let paymentConditions = {};
-        try {
-            const pcRows = await cachedQuery(query, `
-                SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
-                FROM JAVIER.PAYMENT_CONDITIONS
-                WHERE ACTIVO = 'S'
-            `, 'entregas:paymentConditions', TTL.LONG);
-
-            pcRows.forEach(pc => {
-                const code = (pc.CODIGO || '').trim();
-                paymentConditions[code] = {
-                    desc: (pc.DESCRIPCION || '').trim(),
-                    type: (pc.TIPO || 'CREDITO').trim(),
-                    diasPago: pc.DIAS_PAGO || 0,
-                    mustCollect: pc.DEBE_COBRAR === 'S',
-                    canCollect: pc.PUEDE_COBRAR === 'S',
-                    color: (pc.COLOR || 'green').trim()
-                };
-            });
-            if (Object.keys(paymentConditions).length === 0) throw new Error('empty catalog');
-            logger.info('[ENTREGAS] Payment catalog loaded');
-        } catch (pcError) {
-            logger.error('[ENTREGAS] Payment catalog unavailable');
-            return sendEntregasUnavailable(res, 'PAYMENT_CATALOG_UNAVAILABLE', 'El catalogo de formas de pago no esta disponible');
-        }
+        // The same normalized catalog is used by the list and detail
+        // endpoints; otherwise the detail silently defaulted to optional.
+        const paymentConditions = await loadPaymentConditions();
+        logger.info('[ENTREGAS] Payment catalog loaded');
 
 
         // CORRECTO: Usar OPP â†’ CPC â†’ CAC para repartidores
@@ -740,10 +843,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             const cobroRiguroso =
                 cobroRigurosoClientes.has(cliente) || creditoSuperaLimite;
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
-
-            // Try robust matching
-            const numericPaymentCode = /^\d+$/.test(fp) ? String(Number(fp)) : '';
-            const paymentInfo = paymentConditions[fp] || paymentConditions[numericPaymentCode] || (() => { throw new RepartoHttpError(503, 'PAYMENT_CONDITION_UNKNOWN', 'La forma de pago del albaran no figura en el catalogo autorizado'); })();
+            const paymentInfo = resolvePaymentCondition(paymentConditions, fp);
 
             // The payment catalog determines whether collection is mandatory,
             // but the actual collectability comes from the unique active CVC
@@ -832,6 +932,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 tipoPago: paymentInfo.type,
                 diasPago: paymentInfo.diasPago,
                 esCTR: esCTR,
+                cobroObligatorio: esCTR,
                 puedeCobrarse: puedeCobrarse,
                 importeDisponibleCobro,
                 cobroDocumentoEstado: cvcAvailability.state,
@@ -1458,6 +1559,19 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             qtyLines: albaranItems.length,
             zeroPriceQtyLines,
         });
+        const detailPaymentConditions = await loadPaymentConditions();
+        const detailPaymentInfo = resolvePaymentCondition(
+            detailPaymentConditions,
+            header.FORMA_PAGO,
+        );
+        const detailPaymentRisk = await loadClientPaymentRisk(
+            header.CLIENTE,
+            resolvedAmount.amount,
+        );
+        const detailCobroRiguroso = detailPaymentRisk.cobroRiguroso
+            || detailPaymentRisk.creditoSuperaLimite;
+        const detailEsCTR = detailPaymentInfo.mustCollect || detailCobroRiguroso;
+        const detailStatus = canonicalStatus || 'PENDIENTE';
         const detailCvcPlan = buildCvcAvailabilityQuery([{
             SUBEMPRESAALBARAN: header.SUBEMPRESAALBARAN,
             EJERCICIOALBARAN: header.EJERCICIOALBARAN,
@@ -1496,6 +1610,11 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             ivaBreakdown: ivaBreakdown,
             checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
             formaPago: (header.FORMA_PAGO || '').trim(),
+            formaPagoDesc: detailPaymentInfo.desc,
+            tipoPago: detailPaymentInfo.type,
+            diasPago: detailPaymentInfo.diasPago,
+            esCTR: detailEsCTR,
+            cobroObligatorio: detailEsCTR,
             puedeCobrarse: detailCvcAvailability.state === 'AVAILABLE'
                 && detailCvcAvailability.importeDisponibleCobro > 0.004,
             importeDisponibleCobro: detailCvcAvailability.importeDisponibleCobro,
@@ -1503,7 +1622,14 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             items: albaranItems,
             confirmationAvailability: canonical.availability,
             confirmedAt: canonical.confirmation?.CONFIRMED_AT || null,
-            estado: canonicalStatus || 'PENDIENTE',
+            estado: detailStatus,
+            colorEstado: ['PENDIENTE', 'EN_RUTA'].includes(detailStatus)
+                ? 'red'
+                : detailStatus === 'ENTREGADO' ? 'green' : 'orange',
+            cobroRiguroso: detailCobroRiguroso,
+            creditoSuperaLimite: detailPaymentRisk.creditoSuperaLimite,
+            limiteCredito: detailPaymentRisk.limiteCredito,
+            riesgoCreditoActual: detailPaymentRisk.riesgoActual,
             lineSum: lineSumRounded,
             amountSource: resolvedAmount.source,
             pricingState: resolvedAmount.pricingState,

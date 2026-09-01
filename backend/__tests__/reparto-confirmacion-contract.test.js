@@ -174,7 +174,7 @@ describe('canonical reparto confirmation contract', () => {
       cobro: expect.objectContaining({
         importeCobrado: 189.6,
       }),
-    }));
+    }), { signal: expect.any(AbortSignal) });
   });
 
   test('accepts an unpaid delivery without manufacturing a cobro', async () => {
@@ -195,7 +195,7 @@ describe('canonical reparto confirmation contract', () => {
       idempotencyKey: 'delivery-2026-S-10-404-unpaid',
       delivery: expect.objectContaining({ repartidorId: '94' }),
       cobro: undefined,
-    }));
+    }), { signal: expect.any(AbortSignal) });
   });
 
   test('rejects a missing Idempotency-Key even when a legacy body token is supplied', async () => {

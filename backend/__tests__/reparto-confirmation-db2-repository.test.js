@@ -223,6 +223,31 @@ function confirmationRecord() {
 }
 
 describe('DB2 reparto confirmation repository', () => {
+  test('aborts an in-flight confirmation callback, rolls back and closes the connection', async () => {
+    const factory = fakeConnection();
+    const repo = repository(factory);
+    let releasePlanned;
+    factory.ports.plannedBound.getPlannedDelivery.mockImplementation(() => new Promise((resolve) => {
+      releasePlanned = resolve;
+    }));
+    const controller = new AbortController();
+    const pending = repo.withTransaction(async (tx) => {
+      await tx.getPlannedDelivery('doc-1', '17');
+      return 'must-not-commit';
+    }, { signal: controller.signal });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({
+      code: 'REPARTO_CONFIRMATION_TIMEOUT', statusCode: 504,
+    });
+    expect(factory.calls.map((call) => call.sql)).toContain('ROLLBACK_TRANSACTION');
+    expect(factory.calls.map((call) => call.sql)).not.toContain('COMMIT_TRANSACTION');
+    expect(factory.isClosed()).toBe(true);
+
+    releasePlanned({ documentId: 'doc-1' });
+  });
+
   test('checks QSYS2 before beginning once, then commits and closes', async () => {
     const factory = fakeConnection();
     const repo = repository(factory);

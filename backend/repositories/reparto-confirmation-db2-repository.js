@@ -134,21 +134,66 @@ function validateTables(tables) {
   return Object.freeze({ ...tables });
 }
 
-async function rows(connection, sql, params = []) {
-  const result = typeof connection.query === 'function'
-    ? await connection.query(sql, params)
-    : await connection.execute(sql, params);
+function abortError(signal) {
+  if (signal?.reason instanceof RepartoPersistenceError) return signal.reason;
+  return new RepartoPersistenceError('La confirmación de reparto fue cancelada', {
+    code: 'REPARTO_CONFIRMATION_TIMEOUT', statusCode: 504,
+  });
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortError(signal);
+}
+
+function cancelConnection(connection) {
+  if (typeof connection?.cancel !== 'function') return;
+  try {
+    Promise.resolve(connection.cancel()).catch(() => {});
+  } catch (_) {
+    // Cancellation is best effort; the connection is still closed in finally.
+  }
+}
+
+async function runWithSignal(connection, work, signal) {
+  throwIfAborted(signal);
+  const operation = Promise.resolve().then(() => {
+    throwIfAborted(signal);
+    return work();
+  });
+  if (!signal) return operation;
+  let abortHandler;
+  const aborted = new Promise((_, reject) => {
+    abortHandler = () => {
+      cancelConnection(connection);
+      reject(abortError(signal));
+    };
+    signal.addEventListener('abort', abortHandler, { once: true });
+    if (signal.aborted) abortHandler();
+  });
+  try {
+    const result = await Promise.race([operation, aborted]);
+    throwIfAborted(signal);
+    return result;
+  } finally {
+    signal.removeEventListener('abort', abortHandler);
+  }
+}
+
+async function rows(connection, sql, params = [], signal) {
+  const result = await runWithSignal(connection, () => typeof connection.query === 'function'
+    ? connection.query(sql, params)
+    : connection.execute(sql, params), signal);
   return Array.isArray(result) ? result : (result?.rows || []);
 }
 
-async function execute(connection, sql, params = []) {
-  return typeof connection.query === 'function'
+async function execute(connection, sql, params = [], signal) {
+  return runWithSignal(connection, () => typeof connection.query === 'function'
     ? connection.query(sql, params)
-    : connection.execute(sql, params);
+    : connection.execute(sql, params), signal);
 }
 
-async function scalarIdentity(connection) {
-  const value = first(await rows(connection, 'SELECT IDENTITY_VAL_LOCAL() AS ID FROM SYSIBM.SYSDUMMY1'));
+async function scalarIdentity(connection, signal) {
+  const value = first(await rows(connection, 'SELECT IDENTITY_VAL_LOCAL() AS ID FROM SYSIBM.SYSDUMMY1', [], signal));
   const id = rowValue(value, 'ID');
   if (id == null) throw new RepartoRepositoryUnavailableError('DB2 no devolvió el identificador de la confirmación');
   return id;
@@ -236,10 +281,10 @@ function createRepartoConfirmationDb2Repository({
     throw new TypeError('evidenceOwnershipPort.assertOwnership and forConnection are required');
   }
 
-  async function assertCapabilities(connection) {
+  async function assertCapabilities(connection, { signal } = {}) {
     const tableRows = await rows(connection,
       'SELECT TABLE_NAME FROM QSYS2.SYSTABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN (?, ?, ?, ?)',
-      [safeSchema, tableNames.confirmations, tableNames.lines, tableNames.evidences, tableNames.confirmationEvidences]);
+      [safeSchema, tableNames.confirmations, tableNames.lines, tableNames.evidences, tableNames.confirmationEvidences], signal);
     const foundTables = new Set(tableRows.map((row) => String(rowValue(row, 'TABLE_NAME')).toUpperCase()));
     const missingTables = Object.values(tableNames).filter((table) => !foundTables.has(table));
     if (missingTables.length) {
@@ -247,7 +292,7 @@ function createRepartoConfirmationDb2Repository({
     }
     const columnRows = await rows(connection,
       'SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, LENGTH FROM QSYS2.SYSCOLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN (?, ?, ?, ?)',
-      [safeSchema, tableNames.confirmations, tableNames.lines, tableNames.evidences, tableNames.confirmationEvidences]);
+      [safeSchema, tableNames.confirmations, tableNames.lines, tableNames.evidences, tableNames.confirmationEvidences], signal);
     const available = new Map();
     for (const row of columnRows) {
       const table = String(rowValue(row, 'TABLE_NAME')).toUpperCase();
@@ -264,17 +309,20 @@ function createRepartoConfirmationDb2Repository({
       throw new RepartoRepositoryUnavailableError('El esquema de pruebas no contiene las columnas requeridas', { missingColumns });
     }
     assertReceiverNameCapacity(columnRows, tableNames.confirmations);
-    if (requireCobrosCapability) await cobrosPort.assertCapabilities(connection);
+    if (requireCobrosCapability) {
+      await runWithSignal(connection, () => cobrosPort.assertCapabilities(connection), signal);
+    }
   }
 
-  async function withTransaction(work) {
-    const connection = await connectionFactory();
+  async function withTransaction(work, { signal } = {}) {
+    throwIfAborted(signal);
+    const connection = await runWithSignal(null, () => connectionFactory({ signal }), signal);
     try {
       assertConnection(connection);
       assertExplicitTransaction(connection);
       // Capability gate: never enter a write transaction before catalog validation.
       try {
-        await assertCapabilities(connection);
+          await assertCapabilities(connection, { signal });
       } catch (error) {
         if (error instanceof RepartoPersistenceError) throw error;
         throw new RepartoRepositoryUnavailableError(
@@ -285,10 +333,15 @@ function createRepartoConfirmationDb2Repository({
       for (let attempt = 0; attempt < 2; attempt += 1) {
         let active = false;
         try {
-          await connection.beginTransaction();
+          await runWithSignal(connection, () => connection.beginTransaction(), signal);
           active = true;
-          const result = await work(createTransaction(connection));
-          await connection.commit();
+          const result = await runWithSignal(
+            connection,
+            () => work(createTransaction(connection, { signal })),
+            signal,
+          );
+          throwIfAborted(signal);
+          await runWithSignal(connection, () => connection.commit(), signal);
           active = false;
           return result;
         } catch (error) {
@@ -300,6 +353,7 @@ function createRepartoConfirmationDb2Repository({
           // An absent-key race is resolved by the unique indexes. Re-run the
           // complete callback once so it reads the committed row and returns
           // an exact replay or the appropriate 409 conflict.
+          if (signal?.aborted) throw abortError(signal);
           if (attempt === 0 && isUniqueConstraintError(error)) continue;
           if (error instanceof RepartoPersistenceError) throw error;
           const odbc = Array.isArray(error?.odbcErrors) ? error.odbcErrors[0] : null;
@@ -335,7 +389,7 @@ function createRepartoConfirmationDb2Repository({
     }
   }
 
-  function createTransaction(connection) {
+  function createTransaction(connection, { signal } = {}) {
     const confirmations = safeTables.confirmations;
     const lineTable = safeTables.lines;
     const linkTable = safeTables.confirmationEvidences;
@@ -354,19 +408,25 @@ function createRepartoConfirmationDb2Repository({
     return {
       async getByIdempotencyKey(key) {
         const row = first(await rows(connection,
-          `SELECT PAYLOAD_FINGERPRINT, RESULT_JSON FROM ${confirmations} WHERE IDEMPOTENCY_KEY = ? FOR UPDATE WITH RS`, [key]));
+          `SELECT PAYLOAD_FINGERPRINT, RESULT_JSON FROM ${confirmations} WHERE IDEMPOTENCY_KEY = ? FOR UPDATE WITH RS`, [key], signal));
         if (!row) return null;
         return { fingerprint: rowValue(row, 'PAYLOAD_FINGERPRINT'), result: mapResult(row) };
       },
       async getByDocumentId(documentId) {
         return first(await rows(connection,
-          `SELECT ID FROM ${confirmations} WHERE DOCUMENT_ID = ? FOR UPDATE WITH RS`, [documentId]));
+          `SELECT ID FROM ${confirmations} WHERE DOCUMENT_ID = ? FOR UPDATE WITH RS`, [documentId], signal));
       },
       getPlannedDelivery(documentId, repartidorId, options) {
-        return transactionalPlannedDeliveryPort.getPlannedDelivery(documentId, repartidorId, options);
+        if (!signal && options === undefined) {
+          return transactionalPlannedDeliveryPort.getPlannedDelivery(documentId, repartidorId, options);
+        }
+        return transactionalPlannedDeliveryPort.getPlannedDelivery(documentId, repartidorId, {
+          ...(options || {}), signal,
+        });
       },
       assertEvidenceOwnership(ids, owner) {
-        return transactionalEvidenceOwnershipPort.assertOwnership(ids, owner);
+        if (!signal) return transactionalEvidenceOwnershipPort.assertOwnership(ids, owner);
+        return transactionalEvidenceOwnershipPort.assertOwnership(ids, { ...owner, signal });
       },
       async insertConfirmation(record) {
         const receiver = record.receiver || {};
@@ -383,8 +443,8 @@ function createRepartoConfirmationDb2Repository({
             receiver.nombre ?? null, receiver.apellidos ?? null, receiver.dni ?? null,
             record.firmaEvidenceId ?? null, incidencia.tipo ?? null, incidencia.motivo ?? null,
             incidencia.observaciones ?? null, record.observaciones ?? null, record.latitud ?? null,
-            record.longitud ?? null]);
-        return scalarIdentity(connection);
+            record.longitud ?? null], signal);
+        return scalarIdentity(connection, signal);
       },
       async insertLines(confirmationId, lineas) {
         for (const batch of batches(lineas)) {
@@ -396,7 +456,7 @@ function createRepartoConfirmationDb2Repository({
           ]);
           await execute(connection,
             `INSERT INTO ${lineTable} (CONFIRMACION_ID, LINEA_ID, CODIGO_ARTICULO, DESCRIPCION, CANTIDAD_PEDIDA, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA, CANTIDAD_PENDIENTE, MOTIVO_DIFERENCIA, OBSERVACIONES, PRECIO_UNITARIO) VALUES ${placeholders}`,
-            params);
+            params, signal);
         }
       },
       async linkEvidence(confirmationId, evidenceIds) {
@@ -405,18 +465,18 @@ function createRepartoConfirmationDb2Repository({
           const params = batch.flatMap((evidenceId) => [confirmationId, evidenceId]);
           await execute(connection,
             `INSERT INTO ${linkTable} (CONFIRMACION_ID, EVIDENCE_ID) VALUES ${placeholders}`,
-            params);
-          await transactionalEvidenceLinkPort.markLinked(batch);
+            params, signal);
+          await transactionalEvidenceLinkPort.markLinked(batch, signal ? { signal } : undefined);
         }
       },
       async insertCobro(payment) {
-        await cobrosPort.assertCapabilities(connection);
+        await runWithSignal(connection, () => cobrosPort.assertCapabilities(connection), signal);
         return transactionalCobrosPort.insertCobro(payment);
       },
       async insertIdempotencyRecord({ idempotencyKey, fingerprint, documentId, result }) {
         await execute(connection,
           `UPDATE ${confirmations} SET RESULT_JSON = ? WHERE IDEMPOTENCY_KEY = ? AND PAYLOAD_FINGERPRINT = ? AND DOCUMENT_ID = ?`,
-          [JSON.stringify(result), idempotencyKey, fingerprint, documentId]);
+          [JSON.stringify(result), idempotencyKey, fingerprint, documentId], signal);
       },
     };
   }

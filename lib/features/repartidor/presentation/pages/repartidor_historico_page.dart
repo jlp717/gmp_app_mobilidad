@@ -22,6 +22,7 @@ import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
@@ -2476,6 +2477,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final commercialLabel =
         isFactura ? 'Factura / albarán ERP' : 'Albarán ERP (con firma)';
     final hasDeliveryNote = (doc.confirmationId?.trim() ?? '').isNotEmpty;
+    final noteActionAvailable = _documentOwner(doc) != null;
 
     showModalBottomSheet(
       context: context,
@@ -2513,9 +2515,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 ),
                 ListTile(
-                  enabled: hasDeliveryNote,
+                  enabled: noteActionAvailable,
                   leading: CircleAvatar(
-                    backgroundColor: hasDeliveryNote
+                    backgroundColor: noteActionAvailable
                         ? AppColors.whatsappGreen
                         : AppTheme.mutedPanel,
                     child:
@@ -2524,7 +2526,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   title: Text(
                     'WhatsApp · nota de entrega',
                     style: TextStyle(
-                      color: hasDeliveryNote
+                      color: noteActionAvailable
                           ? Colors.white
                           : AppTheme.textSecondary,
                     ),
@@ -2532,9 +2534,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   subtitle: Text(
                     hasDeliveryNote
                         ? 'PDF firmado de la entrega'
-                        : 'Sin confirmación canónica en histórico',
+                        : 'Si no existe, se compartirá el documento comercial',
                   ),
-                  onTap: hasDeliveryNote
+                  onTap: noteActionAvailable
                       ? () {
                           Navigator.pop(context);
                           _shareDeliveryNoteWhatsApp(doc);
@@ -2543,10 +2545,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
                 if (widget.canEmailDocuments)
                   ListTile(
-                    enabled: hasDeliveryNote,
+                    enabled: noteActionAvailable,
                     leading: CircleAvatar(
-                      backgroundColor:
-                          hasDeliveryNote ? AppTheme.info : AppTheme.mutedPanel,
+                      backgroundColor: noteActionAvailable
+                          ? AppTheme.info
+                          : AppTheme.mutedPanel,
                       child: const Icon(
                         Icons.email_outlined,
                         color: Colors.white,
@@ -2556,12 +2559,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     title: Text(
                       'Email · nota de entrega',
                       style: TextStyle(
-                        color: hasDeliveryNote
+                        color: noteActionAvailable
                             ? Colors.white
                             : AppTheme.textSecondary,
                       ),
                     ),
-                    onTap: hasDeliveryNote
+                    onTap: noteActionAvailable
                         ? () {
                             Navigator.pop(context);
                             _emailHistoryDeliveryNote(doc);
@@ -2569,9 +2572,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         : null,
                   ),
                 ListTile(
-                  enabled: hasDeliveryNote,
+                  enabled: noteActionAvailable,
                   leading: CircleAvatar(
-                    backgroundColor: hasDeliveryNote
+                    backgroundColor: noteActionAvailable
                         ? AppTheme.success
                         : AppTheme.mutedPanel,
                     child: const Icon(
@@ -2583,12 +2586,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   title: Text(
                     'Guardar · nota de entrega',
                     style: TextStyle(
-                      color: hasDeliveryNote
+                      color: noteActionAvailable
                           ? Colors.white
                           : AppTheme.textSecondary,
                     ),
                   ),
-                  onTap: hasDeliveryNote
+                  onTap: noteActionAvailable
                       ? () {
                           Navigator.pop(context);
                           _downloadDeliveryNote(doc);
@@ -2738,6 +2741,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         selectedOwner: widget.repartidorId,
       );
 
+  bool _isDeliveryNoteMissing(Object error) =>
+      error is RepartoReceiptUnavailableException ||
+      RepartidorDataService.isDeliveryNoteNotFound(error);
+
   void _showDocumentOwnerRequired() {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2753,14 +2760,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Future<void> _previewDeliveryNote(_DocumentItem doc) async {
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
+      await _previewDocument(doc);
       return;
     }
     final owner = _documentOwner(doc);
@@ -2806,6 +2806,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
     } catch (e) {
       modal.close();
+      if (_isDeliveryNoteMissing(e)) {
+        await _previewDocument(doc);
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3015,7 +3019,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     return result;
   }
 
-  Future<void> _emailCommercialDocument(_DocumentItem doc) async {
+  Future<void> _emailCommercialDocument(
+    _DocumentItem doc, {
+    String? prefilledEmail,
+  }) async {
     if (!mounted) return;
     if (!widget.canEmailDocuments) return;
     final owner = _documentOwner(doc);
@@ -3023,7 +3030,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       _showDocumentOwnerRequired();
       return;
     }
-    final email = await _askEmailAddress();
+    final email = prefilledEmail ?? await _askEmailAddress();
     if (email == null || email.isEmpty || !mounted) return;
     if (!email.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3085,14 +3092,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Future<void> _emailHistoryDeliveryNote(_DocumentItem doc) async {
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
+      await _emailCommercialDocument(doc);
       return;
     }
     final owner = _documentOwner(doc);
@@ -3123,6 +3123,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       );
     } catch (error) {
+      if (_isDeliveryNoteMissing(error)) {
+        modal.close();
+        await _emailCommercialDocument(doc, prefilledEmail: email);
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3152,7 +3157,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
     try {
       final confirmationId = doc.confirmationId?.trim() ?? '';
-      if (doc.type != _DocType.factura && confirmationId.isNotEmpty) {
+      if (confirmationId.isEmpty) {
+        modal.close();
+        await _printCommercialDocument(doc, owner);
+        return;
+      }
+      if (confirmationId.isNotEmpty) {
         final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
           confirmationId: confirmationId,
           repartidorId: owner,
@@ -3221,6 +3231,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       );
     } catch (error) {
+      if (_isDeliveryNoteMissing(error)) {
+        modal.close();
+        await _printCommercialDocument(doc, owner);
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3235,6 +3250,47 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
     } finally {
       modal.close();
+    }
+  }
+
+  Future<void> _printCommercialDocument(_DocumentItem doc, String owner) async {
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando documento comercial para imprimir...',
+    );
+    try {
+      final bytes = await _downloadCommercialPdfBytes(
+        doc: doc,
+        owner: owner,
+        downloader: widget.documentDownloader,
+      );
+      modal.close();
+      await Printing.layoutPdf(
+        onLayout: (_) async => Uint8List.fromList(bytes),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Documento comercial enviado a impresión.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (error) {
+      modal.close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _sanitizedDocumentActionError(
+                error,
+                fallback: 'No se pudo imprimir el documento comercial.',
+              ),
+            ),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
     }
   }
 
@@ -3256,14 +3312,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
+      await _downloadCommercialDocument(doc);
       return;
     }
     if (_isDownloadingDocument) return;
@@ -3304,6 +3353,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
     } catch (e) {
       modal.close();
+      if (_isDeliveryNoteMissing(e)) {
+        await _downloadCommercialDocument(doc);
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3353,7 +3406,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     await _runShareAction(() => _shareDeliveryNoteWhatsAppUnlocked(doc));
   }
 
-  Future<void> _shareCommercialWhatsAppUnlocked(_DocumentItem doc) async {
+  Future<void> _shareCommercialWhatsAppUnlocked(
+    _DocumentItem doc, {
+    WhatsAppFormResult? prefilled,
+  }) async {
     final owner = _documentOwner(doc);
     if (owner == null) {
       _showDocumentOwnerRequired();
@@ -3363,12 +3419,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final clientName = _selectedClientName ?? 'Cliente';
 
-    final result = await WhatsAppFormModal.show(
-      context,
-      defaultMessage:
-          'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}.\n\n'
-          'Saludos - Granja Mari Pepa',
-    );
+    final result = prefilled ??
+        await WhatsAppFormModal.show(
+          context,
+          defaultMessage:
+              'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}.\n\n'
+              'Saludos - Granja Mari Pepa',
+        );
 
     if (result == null || !mounted) return;
 
@@ -3487,14 +3544,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Esta entrega no tiene nota canonica. Confirmala desde el rutero.',
-          ),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
+      await _shareCommercialWhatsAppUnlocked(doc);
       return;
     }
     final clientName = _selectedClientName ?? 'Cliente';
@@ -3569,6 +3619,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       }
     } catch (e) {
       modal.close();
+      if (_isDeliveryNoteMissing(e)) {
+        await _shareCommercialWhatsAppUnlocked(doc, prefilled: result);
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

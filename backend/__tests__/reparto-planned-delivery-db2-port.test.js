@@ -64,7 +64,7 @@ describe('DB2 planned delivery read port', () => {
     expect(db.calls[0].sql).toContain('OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION');
     expect(db.calls[0].sql).toContain('TRIM(OPP.SUBEMPRESA) = TRIM(CPC.SUBEMPRESAPEDIDO)');
     expect(db.calls[0].sql).toContain('TRIM(CPC.CODIGOCLIENTEALBARAN) = ?');
-    expect(db.calls[0].sql).not.toContain('DSEDAC.CVC');
+    expect(db.calls[0].sql).toContain('DSEDAC.CVC');
     expect(db.calls[0].params).toEqual([2026, 'A', 2, 42, 'REP-1', 'CLI-01']);
     expect(db.calls[1].sql).toContain('TRIM(LAC.SUBEMPRESAALBARAN) = ?');
     expect(db.calls[1].sql).toContain('(LAC.CANTIDADUNIDADES > 0 OR LAC.CANTIDADENVASES > 0)');
@@ -104,6 +104,23 @@ describe('DB2 planned delivery read port', () => {
     })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
 
     expect(planned).toMatchObject({ formaPago: 'C5', cobroObligatorio: true });
+  });
+
+  test('marks a delivery mandatory when the client credit limit would be exceeded', async () => {
+    const port = createRepartoPlannedDeliveryDb2Port();
+    const planned = await port.forConnection(connection({
+      headers: [header({
+        DEBE_COBRAR: 'N', COBRO_RIGUROSO: 'N',
+        LIMITE_CREDITO: '100', RIESGO_CREDITO_ACTUAL: '95',
+      })],
+    })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
+
+    expect(planned).toMatchObject({
+      cobroObligatorio: true,
+      creditoSuperaLimite: true,
+      limiteCredito: 100,
+      riesgoCreditoActual: 95,
+    });
   });
 
   test('marks missing and ambiguous CVC documents as non-payable without choosing one', async () => {

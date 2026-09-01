@@ -90,7 +90,6 @@ class CommissionsService {
     required String vendedorCode,
     required int year,
     required double amount,
-    required String adminCode,
     int? month,
     int? quarter,
     double? generatedAmount,
@@ -102,23 +101,24 @@ class CommissionsService {
     bool setTotal = false,
   }) async {
     try {
+      final payload = <String, dynamic>{
+        'vendedorCode': vendedorCode,
+        'year': year,
+        'amount': amount,
+        if (month != null) 'month': month,
+        if (quarter != null) 'quarter': quarter,
+        if (generatedAmount != null) 'generatedAmount': generatedAmount,
+        if (concept != null) 'concept': concept,
+        if (observaciones != null) 'observaciones': observaciones,
+        if (objetivoMes != null) 'objetivoMes': objetivoMes,
+        if (ventaActual != null) 'ventaActual': ventaActual,
+        if (ventasSobreObjetivo != null)
+          'ventasSobreObjetivo': ventasSobreObjetivo,
+        'setTotal': setTotal,
+      };
       final response = await OfflineAwareApi.post(
         '/commissions/pay',
-        {
-          'vendedorCode': vendedorCode,
-          'year': year,
-          'month': month ?? 0,
-          'quarter': quarter ?? 0,
-          'amount': amount,
-          'generatedAmount': generatedAmount ?? 0,
-          'concept': concept,
-          'adminCode': adminCode,
-          'observaciones': observaciones,
-          'objetivoMes': objetivoMes ?? 0,
-          'ventaActual': ventaActual ?? 0,
-          'ventasSobreObjetivo': ventasSobreObjetivo ?? 0,
-          'setTotal': setTotal,
-        },
+        payload,
         syncType: 'pay_commission',
       );
 

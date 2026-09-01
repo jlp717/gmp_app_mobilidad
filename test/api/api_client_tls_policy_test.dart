@@ -125,6 +125,30 @@ void main() {
       expect(adapter.maxRetries, 0);
     });
 
+    test('maps list-valued server errors without a type cast failure',
+        () async {
+      ApiClient.resetForTesting();
+      final adapter = _ListValuedErrorAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      ApiException? caught;
+      try {
+        await ApiClient.post(
+          '/commissions/pay',
+          const <String, dynamic>{'amount': 1},
+        );
+        fail('Expected ApiException');
+      } on ApiException catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isNotNull);
+      expect(caught!.statusCode, 400);
+      expect(caught.message, contains('Validation failed'));
+      expect(caught.message, contains('concept'));
+      expect(caught.code, 'VALIDATION_FAILED');
+    });
+
     test('does not logout when a pre-login request returns 401 after login',
         () async {
       ApiClient.resetForTesting();
@@ -236,6 +260,41 @@ class _CapturePostOptionsAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       jsonEncode(<String, dynamic>{'ok': true}),
       200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _ListValuedErrorAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      jsonEncode(<String, dynamic>{
+        'error': 'Validation failed',
+        'details': <Object?>[
+          <String, String>{
+            'field': 'concept',
+            'message': 'Expected string, received null',
+          },
+          <Object?>[
+            <String, String>{
+              'field': 'adminCode',
+              'message': 'Legacy field',
+            },
+          ],
+        ],
+        'code': <String>['VALIDATION_FAILED'],
+      }),
+      400,
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>['application/json'],
       },

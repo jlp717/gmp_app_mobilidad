@@ -57,6 +57,25 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+        'accepts the explicit mandatory-collection alias from the detail contract',
+        () {
+      final albaran = AlbaranEntrega.fromJson({
+        'id': '2026-S-93-137-C1',
+        'numero': 137,
+        'ejercicio': 2026,
+        'serie': 'S',
+        'terminal': 93,
+        'importe': 25,
+        'codigoCliente': 'C1',
+        'nombreCliente': 'Test',
+        'cobroObligatorio': true,
+      });
+
+      expect(albaran.esCTR, isTrue);
+      expect(albaran.requiereCobro, isTrue);
+    });
     test('uses importe field for importeTotal', () {
       final json = {
         'id': 'test-1',

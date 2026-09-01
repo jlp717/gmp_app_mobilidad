@@ -137,6 +137,8 @@ function requireCanonicalConfirmationRole(req, res, next) {
 }
 
 const EVIDENCE_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.REPARTO_EVIDENCE_REQUEST_TIMEOUT_MS, 10) || 15000;
+const DEFAULT_CONFIRMATION_REQUEST_TIMEOUT_MS = 30000;
+const POST_COMMIT_CACHE_TIMEOUT_MS = 2000;
 const EVIDENCE_TIMEOUT_CODES = new Set(['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'HYT00', 'HYT01']);
 const evidenceUpload = multer({
   storage: multer.memoryStorage(),
@@ -202,6 +204,10 @@ function setEvidenceRequestTimeout(req, res) {
 }
 
 let canonicalReceiptTimeoutMs = EVIDENCE_REQUEST_TIMEOUT_MS;
+let canonicalConfirmationTimeoutMs = Number.parseInt(
+  process.env.REPARTO_CONFIRMATION_REQUEST_TIMEOUT_MS,
+  10,
+) || DEFAULT_CONFIRMATION_REQUEST_TIMEOUT_MS;
 
 function setCanonicalReceiptTimeoutMs(value) {
   if (!Number.isInteger(value) || value < 1 || value > 60000) throw new TypeError('receipt timeout must be between 1 and 60000 ms');
@@ -222,6 +228,73 @@ function withCanonicalReceiptTimeout(work) {
   // can mean the authoritative ledger state is still being resolved.
   return Promise.race([Promise.resolve().then(() => work(controller.signal)), timeout])
     .finally(() => clearTimeout(timer));
+}
+
+function setCanonicalConfirmationTimeoutMs(value) {
+  if (!Number.isInteger(value) || value < 1 || value > 60000) {
+    throw new TypeError('confirmation timeout must be between 1 and 60000 ms');
+  }
+  canonicalConfirmationTimeoutMs = value;
+}
+
+function withCanonicalConfirmationTimeout(work) {
+  const controller = new AbortController();
+  const timeoutMs = canonicalConfirmationTimeoutMs;
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const timeoutError = new RepartoPersistenceError(
+        'La confirmacion no se pudo completar a tiempo',
+        { code: 'REPARTO_CONFIRMATION_TIMEOUT', statusCode: 504 },
+      );
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+  return Promise.race([
+    Promise.resolve().then(() => work(controller.signal)),
+    timeout,
+  ]).finally(() => clearTimeout(timer));
+}
+
+function withCanonicalEvidenceTimeout(work) {
+  const timeoutMs = EVIDENCE_REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new EvidenceError(
+        'EVIDENCE_TIMEOUT',
+        'El almacen de evidencias no respondio a tiempo',
+        504,
+      );
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([
+    Promise.resolve().then(() => work(controller.signal)),
+    timeout,
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function invalidateFinanceCachesAfterCommit(repartidorId) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(false), POST_COMMIT_CACHE_TIMEOUT_MS);
+  });
+  const invalidation = Promise.resolve()
+    .then(() => invalidateFinanceCaches(repartidorId))
+    .then(() => true)
+    .catch(() => false);
+  const completed = await Promise.race([invalidation, timeout]);
+  clearTimeout(timer);
+  if (!completed) {
+    logger.warn('[REPARTIDOR_FINANZAS] Cache invalidation exceeded post-commit budget', {
+      code: 'FINANCE_CACHE_INVALIDATION_TIMEOUT',
+    });
+  }
+  return completed;
 }
 function isEvidenceTimeout(error) {
   const codes = [
@@ -611,11 +684,12 @@ router.post('/cobros/reverse', verifyToken, requireRepartidorAccess((req) => req
 router.post('/rutero/evidence/signature', setCanonicalArtifactHeaders, verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
   setEvidenceRequestTimeout(req, res);
   try {
-    const result = await canonicalConfirmationRuntime.evidenceService.stageSignature({
+    const result = await withCanonicalEvidenceTimeout((signal) => canonicalConfirmationRuntime.evidenceService.stageSignature({
       documentId: evidenceDocumentId(req.body),
       ...evidenceSelection(req, req.body?.repartidorId),
       dataUri: req.body?.signature || req.body?.firma,
-    });
+      signal,
+    }));
     return res.status(result.created ? 201 : 200).json({ success: true, ...result });
   } catch (error) {
     return sendEvidenceError(res, error, 'POST /rutero/evidence/signature');
@@ -628,12 +702,13 @@ router.post('/rutero/evidence/photo', setCanonicalArtifactHeaders, verifyToken, 
     if (uploadError) return sendEvidenceError(res, uploadError, 'POST /rutero/evidence/photo');
     try {
       if (!req.file) throw new EvidenceError('EVIDENCE_REQUIRED', 'Debe adjuntar una evidencia', 400);
-      const result = await canonicalConfirmationRuntime.evidenceService.stagePhoto({
+      const result = await withCanonicalEvidenceTimeout((signal) => canonicalConfirmationRuntime.evidenceService.stagePhoto({
         documentId: evidenceDocumentId(req.body),
         ...evidenceSelection(req, req.body?.repartidorId),
         mimeType: req.file.mimetype,
         buffer: req.file.buffer,
-      });
+        signal,
+      }));
       return res.status(result.created ? 201 : 200).json({ success: true, ...result });
     } catch (error) {
       return sendEvidenceError(res, error, 'POST /rutero/evidence/photo');
@@ -647,10 +722,11 @@ router.get('/rutero/evidence/:evidenceId', setCanonicalArtifactHeaders, verifyTo
     if (Object.keys(req.query || {}).some((key) => key !== 'repartidorId')) {
       throw new EvidenceError('INVALID_EVIDENCE_REQUEST', 'Selector de evidencia invalido', 422);
     }
-    const evidence = await canonicalConfirmationRuntime.evidenceService.retrieve({
+    const evidence = await withCanonicalEvidenceTimeout((signal) => canonicalConfirmationRuntime.evidenceService.retrieve({
       evidenceId: req.params.evidenceId,
       actor: artifactActor(req, req.query?.repartidorId),
-    });
+      signal,
+    }));
     // Response remains JSON/base64. The filename is fixed and never derived
     // from evidence metadata or request input.
     res.set({
@@ -1016,6 +1092,8 @@ router.post(
   },
 );
 router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfirmationRole, async (req, res) => {
+  req.setTimeout?.(canonicalConfirmationTimeoutMs + 1000);
+  res.setTimeout?.(canonicalConfirmationTimeoutMs + 1000);
   try {
     const command = buildConfirmationCommand({
       user: req.user,
@@ -1025,9 +1103,13 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfi
     // Validate the authoritative catalog before opening the persistence
     // transaction. This prevents an unknown state/reason/payment from being
     // partially written even if a downstream adapter is misconfigured.
-    await canonicalConfirmationRuntime.catalogService.validateConfirmation(command);
-    const result = await canonicalConfirmationRuntime.confirmationService.confirm(command);
-    await invalidateFinanceCaches(command.delivery.repartidorId);
+    const result = await withCanonicalConfirmationTimeout(async (signal) => {
+      await canonicalConfirmationRuntime.catalogService.validateConfirmation(command, { signal });
+      return canonicalConfirmationRuntime.confirmationService.confirm(command, { signal });
+    });
+    // Confirmation is already committed at this point. Cache invalidation is
+    // best-effort and bounded so Redis cannot keep the client spinner alive.
+    await invalidateFinanceCachesAfterCommit(command.delivery.repartidorId);
     if (result.created && command.cobro && result.cobroId != null) {
       Promise.resolve()
         .then(() => repartoVarianceNotificationService.notifyAfterCobro({
@@ -1067,9 +1149,12 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfi
       });
     }
     if (error instanceof RepartoCatalogError || error instanceof RepartoPersistenceError) {
+      const safeMessage = error.statusCode >= 500
+        ? 'Servicio temporalmente no disponible'
+        : error.message;
       return res.status(error.statusCode).json({
         success: false,
-        error: error.message,
+        error: safeMessage,
         code: error.code,
         ...(error.details ? { details: error.details } : {}),
       });
@@ -1404,6 +1489,7 @@ router.evidenceRepartidorId = evidenceRepartidorId;
 router.evidenceDocumentId = evidenceDocumentId;
 router.sendEvidenceError = sendEvidenceError;
 router.setCanonicalReceiptTimeoutMs = setCanonicalReceiptTimeoutMs;
+router.setCanonicalConfirmationTimeoutMs = setCanonicalConfirmationTimeoutMs;
 router.setCanonicalLiquidacionService = setCanonicalLiquidacionService;
 router.resetCanonicalLiquidacionService = resetCanonicalLiquidacionService;
 
