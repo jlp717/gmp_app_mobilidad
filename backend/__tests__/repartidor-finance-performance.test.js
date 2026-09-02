@@ -163,4 +163,18 @@ describe('repartidor finance read performance', () => {
     expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2:g1'))
       .toEqual([expect.objectContaining({ total: 125.5, numCobros: 2 })]);
   });
+
+  test('retries against the new version after a conditional cache write conflict', async () => {
+    mockRedisCache.setIfVersion.mockImplementationOnce(async () => {
+      mockRemoteGeneration = '1';
+      return false;
+    });
+
+    await expect(financeService.getEvolution('57')).resolves.toEqual([
+      expect.objectContaining({ total: 125.5, numCobros: 2 }),
+    ]);
+    expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(2);
+    expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2:g1'))
+      .toEqual([expect.objectContaining({ total: 125.5, numCobros: 2 })]);
+  });
 });

@@ -2100,7 +2100,7 @@ async function getRemoteFinanceGeneration() {
   };
 }
 
-async function cachedFinanceReadAtKey({ key, ttl, loader, remoteVersion = null }) {
+async function cachedFinanceReadAtKey({ key, ttl, loader, remoteVersion = null, retryCount = 0 }) {
   if (!redisCache || typeof redisCache.get !== 'function' || typeof redisCache.set !== 'function') {
     return loader();
   }
@@ -2181,7 +2181,21 @@ async function cachedFinanceReadAtKey({ key, ttl, loader, remoteVersion = null }
         FINANCE_READ_GENERATION_KEY,
         stableRemoteVersion,
       );
-      if (stored === false) return loader();
+      if (stored === false && retryCount < 2) {
+        const currentAfterConflict = await getRemoteFinanceGeneration();
+        if (!currentAfterConflict.available) return loader();
+        if (currentAfterConflict.version !== stableRemoteVersion) {
+          return cachedFinanceReadAtKey({
+            key: cacheKey.replace(/:g[^:]+$/, `:g${currentAfterConflict.version}`),
+            ttl,
+            loader,
+            remoteVersion: currentAfterConflict.version,
+            retryCount: retryCount + 1,
+          });
+        }
+      }
+      // A Redis error or a bounded conflict retry must never make the
+      // committed request fail. The result is deliberately not cached.
       return fresh;
     }
 
