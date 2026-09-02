@@ -2081,6 +2081,7 @@ function financeReadCacheKey(kind, ids, suffix = '') {
 
 function hasDistributedFinanceCache() {
   return typeof redisCache?.getRemote === 'function' &&
+    typeof redisCache?.getIfVersion === 'function' &&
     typeof redisCache?.setIfVersion === 'function' &&
     typeof redisCache?.incrementVersion === 'function';
 }
@@ -2115,7 +2116,28 @@ async function cachedFinanceReadAtKey({ key, ttl, loader, remoteVersion = null }
   flight.promise = (async () => {
     let cached = null;
     try {
-      cached = await redisCache.get(FINANCE_READ_CACHE_NAMESPACE, key);
+      if (remoteVersion !== null && typeof redisCache.getIfVersion === 'function') {
+        const guarded = await redisCache.getIfVersion(
+          FINANCE_READ_CACHE_NAMESPACE,
+          key,
+          FINANCE_READ_CACHE_NAMESPACE,
+          FINANCE_READ_GENERATION_KEY,
+          remoteVersion,
+        );
+        if (guarded === undefined) return loader();
+        if (!guarded.matched) {
+          if (!guarded.version) return loader();
+          return cachedFinanceReadAtKey({
+            key: key.replace(/:g[^:]+$/, `:g${guarded.version}`),
+            ttl,
+            loader,
+            remoteVersion: guarded.version,
+          });
+        }
+        cached = guarded.value;
+      } else {
+        cached = await redisCache.get(FINANCE_READ_CACHE_NAMESPACE, key);
+      }
     } catch (_) {
       // Cache availability must never make an authoritative DB2 read fail.
     }

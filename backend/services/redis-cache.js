@@ -407,6 +407,58 @@ class RedisCacheService {
     }
 
     /**
+     * Read a value only when its shared generation marker still matches.
+     * The marker and payload are read in one Redis script so a PM2 worker
+     * cannot observe a valid marker and then return an older payload after a
+     * concurrent invalidation.
+     * Returns undefined when Redis is unavailable, or an object describing a
+     * version mismatch / matching cached value otherwise.
+     */
+    async getIfVersion(namespace, key, versionNamespace, versionKey, expectedVersion) {
+        if (!this.isConnected || !this.client || typeof this.client.eval !== 'function') {
+            return undefined;
+        }
+        const cacheFullKey = this._generateKey(namespace, key);
+        const versionFullKey = this._generateKey(versionNamespace, versionKey);
+        const script = [
+            'local version = redis.call("GET", KEYS[1])',
+            'if not version then version = "0" end',
+            'if version ~= ARGV[1] then return {0, version} end',
+            'local payload = redis.call("GET", KEYS[2])',
+            'if not payload then return {1} end',
+            'return {1, payload}',
+        ].join('\n');
+        try {
+            const result = await this._withTimeout(
+                this.client.eval(script, {
+                    keys: [versionFullKey, cacheFullKey],
+                    arguments: [String(expectedVersion)],
+                }),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'conditional get',
+            );
+            if (!Array.isArray(result) || result.length === 0) return undefined;
+            if (Number(result[0]) !== 1) {
+                return {
+                    matched: false,
+                    version: result[1] == null ? null : String(result[1]),
+                };
+            }
+            if (result.length < 2 || result[1] == null) {
+                this._recordNamespace(namespace, 'misses');
+                return { matched: true, value: null };
+            }
+            const value = JSON.parse(String(result[1]));
+            this.stats.hits.l2++;
+            this._recordNamespace(namespace, 'hits');
+            this._setL1(cacheFullKey, value, L1_TTL_MS);
+            return { matched: true, value };
+        } catch (_) {
+            return undefined;
+        }
+    }
+
+    /**
      * Increment a shared cache-generation marker. INCR is atomic across PM2
      * workers; the marker is deliberately outside normal finance key families.
      */

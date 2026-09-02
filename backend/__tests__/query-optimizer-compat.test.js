@@ -258,6 +258,35 @@ describe('cachedQuery redis L1 invalidation (real redis-cache module)', () => {
     redisCache.isConnected = false;
     redisCache.client = null;
   });
+
+  test('reads a finance snapshot atomically with its shared version marker', async () => {
+    jest.resetModules();
+    jest.unmock('../services/redis-cache');
+
+    const { redisCache } = require('../services/redis-cache');
+    const evalScript = jest.fn().mockResolvedValue([1, '[{"total":12.5}]']);
+    redisCache.client = { eval: evalScript };
+    redisCache.isConnected = true;
+
+    await expect(redisCache.getIfVersion(
+      'query',
+      'query:repartidor:finance:57:evolution:v2:g7',
+      'query',
+      'repartidor:finance-generation:v2',
+      '7',
+    )).resolves.toEqual({ matched: true, value: [{ total: 12.5 }] });
+
+    const [script, options] = evalScript.mock.calls[0];
+    expect(script).toContain('if version ~= ARGV[1] then return {0, version} end');
+    expect(options.keys).toEqual([
+      'gmp:query:repartidor:finance-generation:v2',
+      'gmp:query:query:repartidor:finance:57:evolution:v2:g7',
+    ]);
+    expect(options.arguments).toEqual(['7']);
+
+    redisCache.isConnected = false;
+    redisCache.client = null;
+  });
 });
 
 describe('QueryBatcher', () => {

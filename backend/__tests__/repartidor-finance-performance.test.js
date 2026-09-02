@@ -16,6 +16,12 @@ let mockRemoteGeneration = '0';
 const mockRedisCache = {
   get: jest.fn(async (_namespace, key) => mockCacheValues.get(key) ?? null),
   getRemote: jest.fn(async () => mockRemoteGeneration),
+  getIfVersion: jest.fn(async (_namespace, key, _versionNamespace, _versionKey, expectedVersion) => {
+    if (expectedVersion !== mockRemoteGeneration) {
+      return { matched: false, version: mockRemoteGeneration };
+    }
+    return { matched: true, value: mockCacheValues.get(key) ?? null };
+  }),
   set: jest.fn(async (_namespace, key, value) => {
     mockCacheValues.set(key, value);
     return true;
@@ -76,6 +82,7 @@ describe('repartidor finance read performance', () => {
     mockRedisCache.get.mockClear();
     mockRedisCache.set.mockClear();
     mockRedisCache.getRemote.mockClear();
+    mockRedisCache.getIfVersion.mockClear();
     mockRedisCache.setIfVersion.mockClear();
     mockRedisCache.incrementVersion.mockClear();
     mockRedisCache.delete.mockClear();
@@ -138,5 +145,22 @@ describe('repartidor finance read performance', () => {
     await financeService.getEvolution('57');
     expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2:g1'))
       .toEqual([expect.objectContaining({ total: 20, numCobros: 2 })]);
+  });
+
+  test('does not serve a stale cache hit when the shared marker changes first', async () => {
+    const oldKey = 'query:repartidor:finance:57:evolution:v2:g0';
+    mockCacheValues.set(oldKey, [{ period: '2026-09', total: 10, totalSales: 10, numCobros: 1 }]);
+    mockRedisCache.getIfVersion.mockImplementationOnce(async () => {
+      mockRemoteGeneration = '1';
+      return { matched: false, version: '1' };
+    });
+
+    await expect(financeService.getEvolution('57')).resolves.toEqual([
+      expect.objectContaining({ total: 125.5, numCobros: 2 }),
+    ]);
+    expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(1);
+    expect(mockCacheValues.has(oldKey)).toBe(true);
+    expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2:g1'))
+      .toEqual([expect.objectContaining({ total: 125.5, numCobros: 2 })]);
   });
 });
