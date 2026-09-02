@@ -12,11 +12,22 @@ Object.assign(process.env, {
 });
 
 const mockCacheValues = new Map();
+let mockRemoteGeneration = '0';
 const mockRedisCache = {
   get: jest.fn(async (_namespace, key) => mockCacheValues.get(key) ?? null),
+  getRemote: jest.fn(async () => mockRemoteGeneration),
   set: jest.fn(async (_namespace, key, value) => {
     mockCacheValues.set(key, value);
     return true;
+  }),
+  setIfVersion: jest.fn(async (_namespace, key, value, _ttl, _versionNamespace, _versionKey, expectedVersion) => {
+    if (expectedVersion !== mockRemoteGeneration) return false;
+    mockCacheValues.set(key, value);
+    return true;
+  }),
+  incrementVersion: jest.fn(async () => {
+    mockRemoteGeneration = String(Number(mockRemoteGeneration) + 1);
+    return mockRemoteGeneration;
   }),
   delete: jest.fn(async (_namespace, key) => mockCacheValues.delete(key)),
   onInvalidationPattern: jest.fn(),
@@ -61,8 +72,12 @@ const financeService = require('../services/repartidor-finance-service');
 describe('repartidor finance read performance', () => {
   beforeEach(() => {
     mockCacheValues.clear();
+    mockRemoteGeneration = '0';
     mockRedisCache.get.mockClear();
     mockRedisCache.set.mockClear();
+    mockRedisCache.getRemote.mockClear();
+    mockRedisCache.setIfVersion.mockClear();
+    mockRedisCache.incrementVersion.mockClear();
     mockRedisCache.delete.mockClear();
     mockRepository.selectSysColumns.mockClear();
     mockRepository.selectEvolution.mockClear();
@@ -78,12 +93,12 @@ describe('repartidor finance read performance', () => {
     expect(first).toEqual(second);
     expect(first[0]).toMatchObject({ period: '2026-09', totalSales: 125.5, numCobros: 2 });
     expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(1);
-    expect(mockRedisCache.set).toHaveBeenCalledTimes(1);
+    expect(mockRedisCache.setIfVersion).toHaveBeenCalledTimes(1);
 
     await expect(financeService.getEvolution('57')).resolves.toEqual(first);
     expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(1);
     expect([...mockCacheValues.keys()]).toEqual([
-      'query:repartidor:finance:57:evolution:v2',
+      'query:repartidor:finance:57:evolution:v2:g0',
     ]);
   });
 
@@ -96,9 +111,9 @@ describe('repartidor finance read performance', () => {
     expect(first).toEqual(second);
     expect(first[0]).toMatchObject({ code: 'ART-1', totalUnits: 4, totalSales: 80 });
     expect(mockRepository.selectTopProducts).toHaveBeenCalledTimes(1);
-    expect(mockRedisCache.set).toHaveBeenCalledTimes(1);
+    expect(mockRedisCache.setIfVersion).toHaveBeenCalledTimes(1);
     expect([...mockCacheValues.keys()]).toEqual([
-      'query:repartidor:finance:57:top-products:v2:10',
+      'query:repartidor:finance:57:top-products:v2:10:g0',
     ]);
   });
 
@@ -114,12 +129,14 @@ describe('repartidor finance read performance', () => {
 
     const pending = financeService.getEvolution('57');
     await new Promise((resolve) => setImmediate(resolve));
-    financeService.invalidateFinanceReadCache('57');
+    await financeService.invalidateFinanceReadCache('57');
     releaseOldRead();
 
     await expect(pending).resolves.toEqual([expect.objectContaining({ total: 20, numCobros: 2 })]);
     expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(2);
-    expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2'))
+    expect(mockCacheValues.has('query:repartidor:finance:57:evolution:v2:g0')).toBe(false);
+    await financeService.getEvolution('57');
+    expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2:g1'))
       .toEqual([expect.objectContaining({ total: 20, numCobros: 2 })]);
   });
 });

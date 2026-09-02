@@ -49,9 +49,20 @@ const financeReadFlights = new Map();
 let financeReadGeneration = 0;
 const FINANCE_READ_CACHE_NAMESPACE = 'query';
 const FINANCE_READ_CACHE_VERSION = 'v2';
+const FINANCE_READ_GENERATION_KEY = 'repartidor:finance-generation:v2';
 
-function invalidateFinanceReadCache() {
+async function invalidateFinanceReadCache() {
   financeReadGeneration += 1;
+  if (typeof redisCache?.incrementVersion !== 'function') return false;
+  try {
+    return Boolean(await redisCache.incrementVersion(
+      FINANCE_READ_CACHE_NAMESPACE,
+      FINANCE_READ_GENERATION_KEY,
+    ));
+  } catch (_) {
+    // Redis invalidation must never make a committed payment request fail.
+    return false;
+  }
 }
 
 if (typeof onInvalidationPattern === 'function') {
@@ -2068,7 +2079,27 @@ function financeReadCacheKey(kind, ids, suffix = '') {
   return `query:repartidor:finance:${ids.join(',')}:${kind}:${FINANCE_READ_CACHE_VERSION}${tail}`;
 }
 
-async function cachedFinanceRead({ key, ttl, loader }) {
+function hasDistributedFinanceCache() {
+  return typeof redisCache?.getRemote === 'function' &&
+    typeof redisCache?.setIfVersion === 'function' &&
+    typeof redisCache?.incrementVersion === 'function';
+}
+
+async function getRemoteFinanceGeneration() {
+  if (!hasDistributedFinanceCache()) return { supported: false };
+  const raw = await redisCache.getRemote(
+    FINANCE_READ_CACHE_NAMESPACE,
+    FINANCE_READ_GENERATION_KEY,
+  );
+  if (raw === undefined) return { supported: true, available: false };
+  return {
+    supported: true,
+    available: true,
+    version: raw === null ? '0' : String(raw),
+  };
+}
+
+async function cachedFinanceReadAtKey({ key, ttl, loader, remoteVersion = null }) {
   if (!redisCache || typeof redisCache.get !== 'function' || typeof redisCache.set !== 'function') {
     return loader();
   }
@@ -2092,13 +2123,45 @@ async function cachedFinanceRead({ key, ttl, loader }) {
 
     let fresh = await loader();
     let freshGeneration = generation;
+    let stableRemoteVersion = remoteVersion;
     // A write can commit while DB2 is still returning the read. Re-read once
     // after an observed invalidation and never publish an old snapshot.
     for (let attempt = 0; attempt < 2 && freshGeneration !== financeReadGeneration; attempt += 1) {
       freshGeneration = financeReadGeneration;
       fresh = await loader();
     }
+    if (remoteVersion !== null) {
+      const currentRemote = await getRemoteFinanceGeneration();
+      if (!currentRemote.available) return fresh;
+      if (currentRemote.version !== remoteVersion) {
+        stableRemoteVersion = currentRemote.version;
+        // A local generation change already caused the bounded re-read above.
+        // Do not issue that same DB2 read twice; the conditional Redis write
+        // below still protects the shared cache if another worker changes the
+        // marker while this request is finishing.
+        if (freshGeneration === generation) fresh = await loader();
+      }
+    }
     if (freshGeneration !== financeReadGeneration) return fresh;
+
+    if (remoteVersion !== null) {
+      const finalRemote = await getRemoteFinanceGeneration();
+      if (!finalRemote.available || finalRemote.version !== stableRemoteVersion) return fresh;
+      const cacheKey = stableRemoteVersion === remoteVersion
+        ? key
+        : key.replace(/:g[^:]+$/, `:g${stableRemoteVersion}`);
+      const stored = await redisCache.setIfVersion(
+        FINANCE_READ_CACHE_NAMESPACE,
+        cacheKey,
+        fresh,
+        ttl,
+        FINANCE_READ_CACHE_NAMESPACE,
+        FINANCE_READ_GENERATION_KEY,
+        stableRemoteVersion,
+      );
+      if (stored === false) return loader();
+      return fresh;
+    }
 
     try {
       await redisCache.set(FINANCE_READ_CACHE_NAMESPACE, key, fresh, ttl);
@@ -2119,6 +2182,22 @@ async function cachedFinanceRead({ key, ttl, loader }) {
   } finally {
     if (financeReadFlights.get(key) === flight) financeReadFlights.delete(key);
   }
+}
+
+async function cachedFinanceRead({ key, ttl, loader }) {
+  const remote = await getRemoteFinanceGeneration();
+  if (remote.supported) {
+    // If the shared marker cannot be read, do not use L1/L2 or write a value:
+    // a PM2 worker cannot prove that its snapshot is current.
+    if (!remote.available) return loader();
+    return cachedFinanceReadAtKey({
+      key: `${key}:g${remote.version}`,
+      ttl,
+      loader,
+      remoteVersion: remote.version,
+    });
+  }
+  return cachedFinanceReadAtKey({ key, ttl, loader });
 }
 
 function getEvolution(repartidorId) {

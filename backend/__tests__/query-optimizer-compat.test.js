@@ -220,6 +220,44 @@ describe('cachedQuery redis L1 invalidation (real redis-cache module)', () => {
     expect(await redisCache.get('query', freshKey)).toBeNull();
     expect(await redisCache.get('query', staleKey)).toBeNull();
   });
+
+  test('uses a shared version marker and atomic conditional write for finance snapshots', async () => {
+    jest.resetModules();
+    jest.unmock('../services/redis-cache');
+
+    const { redisCache, TTL } = require('../services/redis-cache');
+    const get = jest.fn().mockResolvedValue('7');
+    const incr = jest.fn().mockResolvedValue(8);
+    const expire = jest.fn().mockResolvedValue(1);
+    const evalScript = jest.fn().mockResolvedValue(1);
+    redisCache.client = { get, incr, expire, eval: evalScript };
+    redisCache.isConnected = true;
+
+    await expect(redisCache.getRemote('query', 'repartidor:finance-generation:v2')).resolves.toBe('7');
+    await expect(redisCache.incrementVersion('query', 'repartidor:finance-generation:v2')).resolves.toBe('8');
+    await expect(redisCache.setIfVersion(
+      'query',
+      'query:repartidor:finance:57:evolution:v2:g7',
+      [{ total: 12.5 }],
+      60,
+      'query',
+      'repartidor:finance-generation:v2',
+      '7',
+    )).resolves.toBe(true);
+
+    expect(incr).toHaveBeenCalledWith('gmp:query:repartidor:finance-generation:v2');
+    expect(expire).toHaveBeenCalledWith('gmp:query:repartidor:finance-generation:v2', TTL.LONG);
+    const [script, options] = evalScript.mock.calls[0];
+    expect(script).toContain('if not version and ARGV[1] == "0" then');
+    expect(options.keys).toEqual([
+      'gmp:query:repartidor:finance-generation:v2',
+      'gmp:query:query:repartidor:finance:57:evolution:v2:g7',
+    ]);
+    expect(options.arguments).toEqual(['7', '60', '[{"total":12.5}]', String(TTL.LONG)]);
+
+    redisCache.isConnected = false;
+    redisCache.client = null;
+  });
 });
 
 describe('QueryBatcher', () => {

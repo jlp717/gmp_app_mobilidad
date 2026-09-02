@@ -541,7 +541,7 @@ function requireSingleFinanceRepartidorSelector(req, res, next) {
 }
 
 async function invalidateFinanceCaches(repartidorId) {
-  financeService.invalidateFinanceReadCache?.(repartidorId);
+  await financeService.invalidateFinanceReadCache?.(repartidorId);
   // Scoped invalidation: one driver's payment must not wipe per-driver caches
   // for the whole fleet (that forced every repartidor to rebuild heavy CTEs).
   // Batch/fleet summary keys embed joined id lists, so only the shared overlay

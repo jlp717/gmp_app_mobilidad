@@ -388,6 +388,106 @@ class RedisCacheService {
     }
 
     /**
+     * Read an L2 value without consulting L1. This is intentionally narrow:
+     * version markers used for atomic cache writes must always come from the
+     * shared Redis instance, otherwise a PM2 worker could use an old marker.
+     * Returns undefined when Redis is unavailable and null for a missing key.
+     */
+    async getRemote(namespace, key) {
+        if (!this.isConnected || !this.client) return undefined;
+        try {
+            return await this._withTimeout(
+                this.client.get(this._generateKey(namespace, key)),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'remote get',
+            );
+        } catch (_) {
+            return undefined;
+        }
+    }
+
+    /**
+     * Increment a shared cache-generation marker. INCR is atomic across PM2
+     * workers; the marker is deliberately outside normal finance key families.
+     */
+    async incrementVersion(namespace, key, ttl = TTL.LONG) {
+        if (!this.isConnected || !this.client || typeof this.client.incr !== 'function') {
+            return false;
+        }
+        let next;
+        try {
+            next = await this._withTimeout(
+                this.client.incr(this._generateKey(namespace, key)),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'version increment',
+            );
+        } catch (_) {
+            return false;
+        }
+        try {
+            await this._withTimeout(
+                this.client.expire(this._generateKey(namespace, key), ttl),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'version expiry',
+            );
+        } catch (_) {
+            // A missing expiry is safe for correctness; the marker remains
+            // monotonic and avoids serving an old snapshot.
+        }
+        return String(next);
+    }
+
+    /**
+     * Atomically SETEX a cache value only while a shared version marker has
+     * the expected value. This closes the delete-vs-in-flight-SET race that
+     * ordinary pattern invalidation cannot close across PM2 workers.
+     * Returns true when stored, false when the marker changed, and null when
+     * Redis/EVAL is unavailable.
+     */
+    async setIfVersion(namespace, key, value, ttl, versionNamespace, versionKey, expectedVersion) {
+        if (!this.isConnected || !this.client || typeof this.client.eval !== 'function') {
+            return null;
+        }
+        const cacheFullKey = this._generateKey(namespace, key);
+        const versionFullKey = this._generateKey(versionNamespace, versionKey);
+        const script = [
+            'local version = redis.call("GET", KEYS[1])',
+            'if not version and ARGV[1] == "0" then',
+            '  redis.call("SETEX", KEYS[1], ARGV[4], "0")',
+            '  version = "0"',
+            'end',
+            'if version == ARGV[1] then',
+            '  redis.call("SETEX", KEYS[2], ARGV[2], ARGV[3])',
+            '  return 1',
+            'end',
+            'return 0',
+        ].join('\n');
+        try {
+            const result = await this._withTimeout(
+                this.client.eval(script, {
+                    keys: [versionFullKey, cacheFullKey],
+                    arguments: [
+                        String(expectedVersion),
+                        String(ttl),
+                        serializeForRedis(value),
+                        String(TTL.LONG),
+                    ],
+                }),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'conditional set',
+            );
+            if (Number(result) !== 1) return false;
+            const l1Key = cacheFullKey;
+            this._setL1(l1Key, value, Number(ttl) * 1000);
+            this.stats.sets++;
+            this._recordNamespace(namespace, 'sets');
+            return true;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /**
      * Delete value from cache
      * @param {string} namespace - Cache namespace
      * @param {string} key - Cache key
