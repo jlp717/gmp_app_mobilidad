@@ -112,6 +112,20 @@ function normalizeTimestamp(value) {
   return parsed.toISOString();
 }
 
+function toDb2Timestamp(value) {
+  const parsed = new Date(value || '');
+  if (Number.isNaN(parsed.getTime())) {
+    throw new RuteroTrackingValidationError('TRACKING_TIMESTAMP_INVALID');
+  }
+  const pad = (number, width = 2) => String(number).padStart(width, '0');
+  // DB2 TIMESTAMP has no timezone. Keep the instant represented by the API's
+  // ISO timestamp and bind it in DB2's accepted `YYYY-MM-DD HH:mm:ss.SSS`
+  // format; binding the ISO `T...Z` string causes SQLSTATE 22008 (-180).
+  return `${parsed.getUTCFullYear()}-${pad(parsed.getUTCMonth() + 1)}-${pad(parsed.getUTCDate())}`
+    + ` ${pad(parsed.getUTCHours())}:${pad(parsed.getUTCMinutes())}:${pad(parsed.getUTCSeconds())}`
+    + `.${pad(parsed.getUTCMilliseconds(), 3)}`;
+}
+
 function normalizeSample(raw) {
   if (!raw || typeof raw !== 'object') {
     throw new RuteroTrackingValidationError('TRACKING_SAMPLE_INVALID');
@@ -212,7 +226,6 @@ async function appendSamples({
   try {
     const execute = async (sql, params = []) => rowsOf(await connection.query(sql, params));
     await connection.beginTransaction();
-    await execute('LOCK TABLE ' + table + ' IN EXCLUSIVE MODE');
     for (const sample of normalized) {
       const existing = await execute(
         'SELECT EVENT_ID FROM ' + table + ' WHERE SESSION_ID = ? AND EVENT_ID = ?',
@@ -233,7 +246,7 @@ async function appendSamples({
           sample.accuracy,
           sample.speed,
           sample.heading,
-          sample.recordedAt,
+          toDb2Timestamp(sample.recordedAt),
           String(updatedBy || '').trim().slice(0, 40) || null,
         ],
       );
@@ -312,6 +325,7 @@ module.exports = {
   normalizeEventId,
   normalizeSample,
   normalizeSamples,
+  toDb2Timestamp,
   createSession,
   appendSamples,
   stopSession,

@@ -8,6 +8,7 @@ const {
   normalizeSessionId,
   normalizeSample,
   normalizeSamples,
+  toDb2Timestamp,
   createSession,
   appendSamples,
   RuteroTrackingValidationError,
@@ -76,6 +77,11 @@ describe('repartidor rutero tracking repository', () => {
       .toThrow(RuteroTrackingValidationError);
   });
 
+  test('formats API timestamps for DB2 TIMESTAMP bindings', () => {
+    expect(toDb2Timestamp('2026-08-27T10:15:30.123Z'))
+      .toBe('2026-08-27 10:15:30.123');
+  });
+
   test('creates a session idempotently and detects ownership conflicts', async () => {
     db.queryWithParams.mockResolvedValueOnce([]);
     const first = await createSession({
@@ -141,6 +147,7 @@ describe('repartidor rutero tracking repository', () => {
     expect(connection.close).toHaveBeenCalledTimes(1);
     expect(connection.query.mock.calls.filter(([sql]) =>
       sql.startsWith('INSERT INTO')).length).toBe(2);
+    expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('LOCK TABLE'))).toBe(false);
   });
 
   test('rolls back when one sample cannot be persisted', async () => {
@@ -158,7 +165,6 @@ describe('repartidor rutero tracking repository', () => {
       close: jest.fn(),
     };
     connection.query
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockRejectedValueOnce(new Error('DB2 insert failed'));
     db.acquireConfiguredConnection.mockResolvedValue(connection);
