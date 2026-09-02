@@ -12,6 +12,39 @@
 const baileys = require('./whatsappBaileysService');
 const cloud = require('./whatsappCloudService');
 
+function isIsolatedTest(env = process.env) {
+  return String(env?.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
+}
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function testPhoneAllowlist(env = process.env) {
+  return [...new Set(
+    String(env?.REPARTO_WHATSAPP_TEST_ALLOWLIST || '')
+      .split(',')
+      .map(normalizePhone)
+      .filter(Boolean),
+  )];
+}
+
+function assertIsolatedTestPhoneAllowed(phone, env = process.env) {
+  if (!isIsolatedTest(env)) return;
+  const normalized = normalizePhone(phone);
+  const allowlist = testPhoneAllowlist(env);
+  if (!allowlist.length) {
+    const error = new Error('El envío WhatsApp en isolated_test requiere allowlist explícita');
+    error.code = 'REPARTO_WHATSAPP_TEST_POLICY_UNCONFIGURED';
+    throw error;
+  }
+  if (!normalized || !allowlist.includes(normalized)) {
+    const error = new Error('El destinatario WhatsApp no está autorizado en isolated_test');
+    error.code = 'REPARTO_WHATSAPP_TEST_RECIPIENT_NOT_ALLOWED';
+    throw error;
+  }
+}
+
 function activeProvider() {
   if (baileys.isConfigured() && baileys.isReady()) return 'BAILEYS';
   if (cloud.isConfigured()) return 'CLOUD';
@@ -46,6 +79,7 @@ function getStatus() {
  * @returns {Promise<{success:true,messageId:string,mode:string,to:string,provider:string}>}
  */
 async function sendDocumentFromBot(params) {
+  assertIsolatedTestPhoneAllowed(params?.telefono);
   if (baileys.isConfigured()) {
     const ready = await baileys.ensureReady();
     if (ready) {
@@ -76,6 +110,7 @@ module.exports = {
   isBotReady,
   getStatus,
   sendDocumentFromBot,
+  assertIsolatedTestPhoneAllowed,
   baileys,
   cloud,
 };

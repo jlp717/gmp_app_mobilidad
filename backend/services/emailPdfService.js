@@ -18,6 +18,13 @@ const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 
+function redactEmailForLog(value) {
+    const email = String(value || '').trim();
+    const at = email.indexOf('@');
+    if (at <= 0 || at === email.length - 1) return '[redacted-email]';
+    return `${email.slice(0, 1)}***${email.slice(at)}`;
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURACIÓN SMTP
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -28,6 +35,8 @@ const _smtpPort = parseInt(process.env.SMTP_PDF_PORT || process.env.SMTP_PORT) |
 const _smtpSecure = (process.env.SMTP_PDF_SECURE || process.env.SMTP_SECURE) === 'true' || _smtpPort === 465;
 const _smtpUser = process.env.SMTP_PDF_USER || process.env.SMTP_USER || 'noreply@mari-pepa.com';
 const _smtpPass = process.env.SMTP_PDF_PASS || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
+const _allowInsecureSmtpTls = process.env.NODE_ENV === 'test'
+    && String(process.env.SMTP_PDF_ALLOW_INSECURE_TLS || '').trim().toLowerCase() === 'true';
 
 const SMTP_CONFIG = {
     host: _smtpHost,
@@ -41,7 +50,7 @@ const SMTP_CONFIG = {
     greetingTimeout: parseInt(process.env.SMTP_PDF_GREETING_TIMEOUT) || 25000,
     socketTimeout: parseInt(process.env.SMTP_PDF_SOCKET_TIMEOUT) || 45000,
     tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: !_allowInsecureSmtpTls
     },
     logger: smtpLogger,
     debug: isSmtpDebugEnabled()
@@ -390,15 +399,15 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
 
             // Log solo en intento 1, reintentos como debug
             if (attempt === 0) {
-                logger.info(`Enviando email a ${to}...`, { subject, pdfFilename });
+                logger.info(`Enviando email a ${redactEmailForLog(to)}...`, { subject, pdfFilename });
             } else {
-                logger.debug(`Reintento email a ${to} (intento ${attempt + 1}/${MAX_RETRIES})...`);
+                logger.debug(`Reintento email a ${redactEmailForLog(to)} (intento ${attempt + 1}/${MAX_RETRIES})...`);
             }
 
             const info = await transport.sendMail(mailOptions);
 
             logger.info('✅ Email enviado correctamente', {
-                to,
+                to: redactEmailForLog(to),
                 subject,
                 pdfSize: `${(pdfBuffer.length / 1024).toFixed(1)} KB`,
                 messageId: info.messageId
@@ -419,16 +428,16 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
                 if (attempt + 1 < portsToTry.length) {
                     logger.warn(`⚠️ Puerto ${currentPort} SMTP con error (${error.code}), reintentando con puerto ${portsToTry[attempt + 1]}...`);
                 } else {
-                    logger.warn(`⚠️ Error conexión en todos los puertos (intento ${attempt + 1}/${portsToTry.length}): ${error.code}`, { to });
+                    logger.warn(`⚠️ Error conexión en todos los puertos (intento ${attempt + 1}/${portsToTry.length}): ${error.code}`, { to: redactEmailForLog(to) });
                 }
             } else if (isAuth) {
                 // Error autenticación → NO reintentar, es irrecuperable
                 logger.error('❌ Error autenticación SMTP (credenciales inválidas)', {
-                    user: SMTP_CONFIG.auth.user
+                    user: redactEmailForLog(SMTP_CONFIG.auth.user)
                 });
                 throw new Error('Error de autenticación SMTP. Verifica las credenciales del servidor de correo.');
             } else {
-                logger.warn(`⚠️ Error email (intento ${attempt + 1}/${MAX_RETRIES}): ${error.code} - ${error.message}`, { to });
+                logger.warn(`⚠️ Error email (intento ${attempt + 1}/${MAX_RETRIES}): ${error.code} - ${error.message}`, { to: redactEmailForLog(to) });
             }
 
             // Reintentar con siguiente puerto si no es error de auth
@@ -453,7 +462,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     }
 
     logger.error(`❌ Email fallido tras ${MAX_RETRIES} intentos`, {
-        to,
+        to: redactEmailForLog(to),
         pdfFilename,
         errorCode,
         message: userFriendlyMessage
@@ -511,13 +520,13 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
             }
 
             if (attempt === 0) {
-                logger.info(`Enviando email HTML a ${to}...`, { subject });
+                logger.info(`Enviando email HTML a ${redactEmailForLog(to)}...`, { subject });
             } else {
-                logger.debug(`Reintento email HTML a ${to} (intento ${attempt + 1}/${MAX_RETRIES})...`);
+                logger.debug(`Reintento email HTML a ${redactEmailForLog(to)} (intento ${attempt + 1}/${MAX_RETRIES})...`);
             }
 
             const info = await transport.sendMail(mailOptions);
-            logger.info('✅ Email HTML enviado correctamente', { to, subject, messageId: info.messageId });
+            logger.info('✅ Email HTML enviado correctamente', { to: redactEmailForLog(to), subject, messageId: info.messageId });
             return { success: true, messageId: info.messageId };
         } catch (error) {
             lastError = error;
@@ -546,7 +555,7 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
     if (isTimeoutError) {
         userFriendlyMessage = `Timeout conectando al servidor de correo (${SMTP_CONFIG.host}, puertos ${triedPorts}).`;
     }
-    logger.error(`❌ Email HTML fallido tras ${MAX_RETRIES} intentos`, { to, errorCode, message: userFriendlyMessage });
+    logger.error(`❌ Email HTML fallido tras ${MAX_RETRIES} intentos`, { to: redactEmailForLog(to), errorCode, message: userFriendlyMessage });
     throw new Error(userFriendlyMessage);
 }
 

@@ -177,8 +177,31 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
     confirmationEvidences: ref(tables.confirmation.confirmationEvidences),
     cobros: ref(tables.finance.cobros),
   });
+  let capabilitiesReady = false;
+  let capabilitiesPromise = null;
 
-  async function assertCapabilities(connection, { signal } = {}) {
+  async function awaitCapability(promise, signal) {
+    if (!signal) return promise;
+    throwIfAborted(signal);
+    let abortHandler;
+    const aborted = new Promise((_, reject) => {
+      abortHandler = () => {
+        try {
+          throwIfAborted(signal);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
+    });
+    try {
+      return await Promise.race([promise, aborted]);
+    } finally {
+      signal.removeEventListener('abort', abortHandler);
+    }
+  }
+
+  async function validateCapabilities(connection, { signal } = {}) {
     if (!connection || (typeof connection.query !== 'function' && typeof connection.execute !== 'function')) {
       throw new RepartoReceiptUnavailableError('La conexion DB2 del recibo no esta disponible');
     }
@@ -214,6 +237,24 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
     if (missingColumns.length) {
       throw new RepartoReceiptUnavailableError('Faltan columnas del recibo de reparto', { missingColumns });
     }
+  }
+
+  async function assertCapabilities(connection, { signal } = {}) {
+    if (!connection || (typeof connection.query !== 'function' && typeof connection.execute !== 'function')) {
+      throw new RepartoReceiptUnavailableError('La conexion DB2 del recibo no esta disponible');
+    }
+    if (capabilitiesReady) return;
+    if (!capabilitiesPromise) {
+      capabilitiesPromise = validateCapabilities(connection, { signal })
+        .then(() => {
+          capabilitiesReady = true;
+        })
+        .catch((error) => {
+          capabilitiesPromise = null;
+          throw error;
+        });
+    }
+    await awaitCapability(capabilitiesPromise, signal);
   }
 
   async function getReceipt(input) {

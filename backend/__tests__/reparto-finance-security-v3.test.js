@@ -11,6 +11,8 @@ Object.assign(process.env, {
   REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC', REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
   REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER', REPARTO_WRITES_ENABLED: 'true',
   REPARTO_PRODUCTION_WRITES_APPROVED: 'false', JWT_ACCESS_SECRET: 'test-jwt-secret-for-testing-only',
+  REPARTO_EMAIL_TEST_ALLOWLIST: 'cliente@example.com',
+  REPARTO_EMAIL_TEST_SINK: 'cliente@example.com',
 });
 
 let mockUser = { id: '94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] };

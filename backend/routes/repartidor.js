@@ -73,6 +73,17 @@ const {
 } = require('../services/repartidor-rutero-orden-service');
 
 const REPARTIDOR_READ_PAGE_MAX = 100;
+const REPARTIDOR_PDF_REQUEST_TIMEOUT_MS = Math.min(
+    120000,
+    Math.max(5000, Number.parseInt(process.env.REPARTIDOR_PDF_REQUEST_TIMEOUT_MS || '30000', 10) || 30000),
+);
+
+function configureRepartidorPdfTimeout(req, res) {
+    // The ERP/DB2 fallback chain can otherwise leave a client spinner alive
+    // indefinitely when a catalog or PDF dependency is unavailable.
+    if (typeof req?.setTimeout === 'function') req.setTimeout(REPARTIDOR_PDF_REQUEST_TIMEOUT_MS);
+    if (typeof res?.setTimeout === 'function') res.setTimeout(REPARTIDOR_PDF_REQUEST_TIMEOUT_MS);
+}
 
 function normalizedRole(user) {
     return String(user?.role || '').trim().toUpperCase();
@@ -1640,6 +1651,7 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
 // Generate Albaran PDF with optional embedded signature
 // =============================================================================
 router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, async (req, res) => {
+    configureRepartidorPdfTimeout(req, res);
     try {
         const { year, terminal, number } = req.params;
         const parsedYear = parseInt(year);
@@ -2345,6 +2357,7 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
 // Generate formal Invoice PDF
 // =============================================================================
 router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req, res) => {
+    configureRepartidorPdfTimeout(req, res);
     try {
         const { year, number } = req.params;
         const { albaranNumber, albaranSerie, albaranTerminal, albaranYear } = req.query;

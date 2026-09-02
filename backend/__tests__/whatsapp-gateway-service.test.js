@@ -76,4 +76,25 @@ describe('whatsappGatewayService', () => {
       }),
     ).rejects.toMatchObject({ code: 'WHATSAPP_BAILEYS_NOT_PAIRED' });
   });
+
+  test('fails closed for external recipients in isolated_test', async () => {
+    const gw = load({ baileysEnabled: true, baileysReady: true, cloudConfigured: true });
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    await expect(gw.sendDocumentFromBot({
+      telefono: '34600000000',
+      pdfBuffer: Buffer.from('%PDF'),
+      filename: 'a.pdf',
+    })).rejects.toMatchObject({ code: 'REPARTO_WHATSAPP_TEST_POLICY_UNCONFIGURED' });
+  });
+
+  test('allows only explicitly configured isolated_test phone', async () => {
+    const gw = load({ baileysEnabled: true, baileysReady: true, cloudConfigured: true });
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    process.env.REPARTO_WHATSAPP_TEST_ALLOWLIST = '34600000000';
+    await expect(gw.sendDocumentFromBot({
+      telefono: '+34 600 000 000',
+      pdfBuffer: Buffer.from('%PDF'),
+      filename: 'a.pdf',
+    })).resolves.toMatchObject({ provider: 'BAILEYS' });
+  });
 });

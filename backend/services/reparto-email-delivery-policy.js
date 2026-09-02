@@ -28,14 +28,10 @@ function testAllowlist(env) {
   return uniqueEmails(String(env?.REPARTO_EMAIL_TEST_ALLOWLIST || '').split(','));
 }
 
-function strictTestPolicyEnabled(env = process.env) {
-  return String(env?.REPARTO_EMAIL_STRICT_TEST_POLICY || '').trim().toLowerCase() === 'true';
-}
-
 /**
- * Resolves effective SMTP recipients. By default operational mail uses the same
- * direct path as /facturas/send-email. Set REPARTO_EMAIL_STRICT_TEST_POLICY=true
- * to enforce the isolated_test allowlist sink during QA.
+ * Resolves effective SMTP recipients. isolated_test always requires an explicit
+ * allowlist/sink. This is deliberately fail-closed so a missing PM2 flag cannot
+ * turn a test run into an external production mail delivery.
  */
 function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'automatic' } = {}) {
   const requestedRecipients = uniqueEmails(recipients);
@@ -46,21 +42,13 @@ function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'au
       422,
     );
   }
-  if (!strictTestPolicyEnabled(env)) {
+  if (!isIsolatedTest(env)) {
     return {
       effectiveRecipients: requestedRecipients,
       redirected: false,
       policy: 'direct',
     };
   }
-  if (!isIsolatedTest(env)) {
-    return {
-      effectiveRecipients: requestedRecipients,
-      redirected: false,
-      policy: 'standard',
-    };
-  }
-
   const allowlist = testAllowlist(env);
   const sink = normalizeEmail(env?.REPARTO_EMAIL_TEST_SINK);
   if (!allowlist.length) {

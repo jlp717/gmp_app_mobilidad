@@ -139,6 +139,25 @@ test('uses numeric confirmation binds throughout and reads linked evidence metad
   expect(linkedEvidence.params).toEqual([7]);
 });
 
+test('memoizes a successful capability check for later receipt reads', async () => {
+  const fake = receiptConnection({
+    ID: 7, IDEMPOTENCY_KEY: 'idem-receipt-7', CLIENTE_CODIGO: 'C1', REPARTIDOR_ID: 'R1',
+  });
+  const repository = createRepartoReceiptDb2Repository({
+    runtime: runtime(), connectionFactory: jest.fn().mockResolvedValue(fake.connection),
+  });
+
+  await repository.getReceipt({ confirmationId: '7', allowAnyOwner: true });
+  const catalogCallsAfterFirstRead = fake.calls.filter((call) =>
+    call.sql.includes('QSYS2.SYSTABLES') || call.sql.includes('QSYS2.SYSCOLUMNS'));
+  await repository.getReceipt({ confirmationId: '7', allowAnyOwner: true });
+  const catalogCallsAfterSecondRead = fake.calls.filter((call) =>
+    call.sql.includes('QSYS2.SYSTABLES') || call.sql.includes('QSYS2.SYSCOLUMNS'));
+
+  expect(catalogCallsAfterFirstRead).toHaveLength(2);
+  expect(catalogCallsAfterSecondRead).toHaveLength(2);
+});
+
 test('authorizes the confirmation owner before reading lines, evidence metadata or payments', async () => {
   const fake = receiptConnection({
     ID: 7, IDEMPOTENCY_KEY: 'idem-receipt-7', CLIENTE_CODIGO: 'C1', REPARTIDOR_ID: 'R1',

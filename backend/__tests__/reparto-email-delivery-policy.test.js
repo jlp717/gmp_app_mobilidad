@@ -15,16 +15,24 @@ describe('reparto email delivery policy', () => {
     REPARTO_EMAIL_TEST_SINK: 'sink@example.test',
   };
 
-  test('direct delivery is default outside strict test policy', () => {
+  test('direct delivery is default outside isolated test', () => {
     expect(resolveRepartoEmailDelivery({
       recipients: ['cliente@empresa.com'],
-      env: { REPARTO_TABLE_SET: 'isolated_test' },
+      env: { REPARTO_TABLE_SET: 'production' },
       mode: 'manual',
     })).toEqual({
       effectiveRecipients: ['cliente@empresa.com'],
       redirected: false,
       policy: 'direct',
     });
+  });
+
+  test('isolated test fails closed even when strict flag is omitted', () => {
+    expect(() => resolveRepartoEmailDelivery({
+      recipients: ['cliente@empresa.com'],
+      env: { REPARTO_TABLE_SET: 'isolated_test' },
+      mode: 'manual',
+    })).toThrow(RepartoEmailDeliveryPolicyError);
   });
 
   test('automatic isolated messages preserve all allowlisted DB-resolved recipients', () => {

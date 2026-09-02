@@ -603,7 +603,7 @@ router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.co
       ...body,
       operador,
     });
-    await invalidateFinanceCaches(body.codigoRepartidor);
+    await invalidateFinanceCachesAfterCommit(body.codigoRepartidor);
     if (result.created) {
       Promise.resolve()
         .then(() => repartoVarianceNotificationService.notifyAfterCobro({ cobro: body, result }))
@@ -665,7 +665,7 @@ router.post('/cobros/reverse', verifyToken, requireRepartidorAccess((req) => req
       reason: body.reason,
       allowAcrossRepartidores: isPrivileged,
     });
-    await invalidateFinanceCaches(body.repartidorId);
+    await invalidateFinanceCachesAfterCommit(body.repartidorId);
     return res.json({ success: true, ...result });
   } catch (error) {
     if (error && error.code === 'COBRO_NOT_FOUND') {
@@ -1176,7 +1176,7 @@ router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.
 
     // Cache invalidation is a post-commit concern and only applies to a
     // newly created close. Replays must remain read-only.
-    if (result.created) await invalidateFinanceCaches(body.repartidorId);
+    if (result.created) await invalidateFinanceCachesAfterCommit(body.repartidorId);
 
     if (result.created && result.outboxIntent) {
       Promise.resolve()
@@ -1246,7 +1246,7 @@ function createLiquidacionEntryHandler(method, action) {
       const result = await canonicalLiquidacionService[method](req.liquidacionEntry, {
         actorId: actorCode(req.user), actorRole: String(req.user?.role || '').trim(),
       });
-      if (result.created) await invalidateFinanceCaches(req.liquidacionEntry.repartidorId);
+      if (result.created) await invalidateFinanceCachesAfterCommit(req.liquidacionEntry.repartidorId);
       return res.status(result.created ? 201 : 200).json({ success: true, ...result });
     } catch (error) {
       return sendError(res, error, { action, body: req.body });

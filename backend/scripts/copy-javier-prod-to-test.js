@@ -385,6 +385,10 @@ function buildOperationalContractPlan(pair, sourceContracts, destinationContract
 }
 
 const RUNTIME_INSERT_COLUMNS = Object.freeze({
+  'routing.tracking': Object.freeze([Object.freeze([
+    'SESSION_ID', 'EVENT_ID', 'REPARTIDOR_ID', 'ROUTE_DATE', 'EVENT_TYPE',
+    'RECORDED_AT',
+  ])]),
   'finance.cobros': Object.freeze([Object.freeze([
     'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR',
     'CODIGOVENDEDORCOBRO', 'TIPODOCUMENTO', 'ORIGENDOCUMENTO',

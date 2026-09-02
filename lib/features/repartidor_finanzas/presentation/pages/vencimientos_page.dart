@@ -748,6 +748,7 @@ class _RepartidorVencimientosPageState
 
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (contentContext, setState) {
@@ -824,111 +825,117 @@ class _RepartidorVencimientosPageState
               }
             }
 
-            return AlertDialog(
-              backgroundColor: AppTheme.raisedSurface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                side: BorderSide(
-                  color: AppTheme.info.withValues(alpha: 0.28),
+            return PopScope(
+              canPop: !saving,
+              child: AlertDialog(
+                backgroundColor: AppTheme.raisedSurface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  side: BorderSide(
+                    color: AppTheme.info.withValues(alpha: 0.28),
+                  ),
                 ),
-              ),
-              title: const Text(
-                'Abonar vencimiento',
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.documento,
-                    style: const TextStyle(color: AppTheme.textSecondary),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: amountController,
-                    enabled: !saving,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Importe',
-                      prefixIcon: Icon(Icons.euro),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: formaPago,
-                    dropdownColor: AppTheme.raisedSurface,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'EFECTIVO',
-                        child: Text('Efectivo'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'TARJETA',
-                        child: Text('Tarjeta'),
-                      ),
-                      DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
-                      DropdownMenuItem(
-                        value: 'TRANSFERENCIA',
-                        child: Text('Transferencia'),
-                      ),
-                      DropdownMenuItem(value: 'CHEQUE', child: Text('Cheque')),
-                    ],
-                    onChanged: saving
-                        ? null
-                        : (value) {
-                            if (value != null) {
-                              setState(() => formaPago = value);
-                            }
-                          },
-                    decoration: const InputDecoration(
-                      labelText: 'Forma de pago',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: notesController,
-                    enabled: !saving,
-                    maxLength: 60,
-                    minLines: 2,
-                    maxLines: 4,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Observaciones (opcional)',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
-                  ),
-                  if (errorText != null) ...[
-                    const SizedBox(height: 10),
+                title: const Text(
+                  'Abonar vencimiento',
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      errorText!,
-                      style: const TextStyle(color: AppTheme.error),
+                      item.documento,
+                      style: const TextStyle(color: AppTheme.textSecondary),
                     ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: amountController,
+                      enabled: !saving,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText:
+                            'Importe (pendiente ${item.importePendiente.toStringAsFixed(2)} €)',
+                        prefixIcon: const Icon(Icons.euro),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: formaPago,
+                      dropdownColor: AppTheme.raisedSurface,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'EFECTIVO',
+                          child: Text('Efectivo'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'TARJETA',
+                          child: Text('Tarjeta'),
+                        ),
+                        DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
+                        DropdownMenuItem(
+                          value: 'TRANSFERENCIA',
+                          child: Text('Transferencia'),
+                        ),
+                        DropdownMenuItem(
+                            value: 'CHEQUE', child: Text('Cheque')),
+                      ],
+                      onChanged: saving
+                          ? null
+                          : (value) {
+                              if (value != null) {
+                                setState(() => formaPago = value);
+                              }
+                            },
+                      decoration: const InputDecoration(
+                        labelText: 'Forma de pago',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      enabled: !saving,
+                      maxLength: 60,
+                      minLines: 2,
+                      maxLines: 4,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        labelText: 'Observaciones (opcional)',
+                        prefixIcon: Icon(Icons.notes),
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        errorText!,
+                        style: const TextStyle(color: AppTheme.error),
+                      ),
+                    ],
                   ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.of(contentContext).pop(),
+                    child: const Text('Cancelar'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: saving ? null : submit,
+                    icon: saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.payments),
+                    label: const Text('Abonar'),
+                  ),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed:
-                      saving ? null : () => Navigator.of(contentContext).pop(),
-                  child: const Text('Cancelar'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: saving ? null : submit,
-                  icon: saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.payments),
-                  label: const Text('Abonar'),
-                ),
-              ],
             );
           },
         );

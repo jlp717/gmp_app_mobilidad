@@ -145,11 +145,16 @@ function isExactZeroPrepaid(confirmation, storedLines, payments) {
     assertActor(actor);
     throwIfAborted(signal);
     const admin = isAdmin(actor);
+    const ownerRepartidorId = text(actor.repartidorId);
+    // A privileged actor still arrives here through a concrete owner selector
+    // for every document operation. Keep that selector bound to the repository
+    // so a confirmation id cannot widen the scope to the whole fleet.
+    const allowAnyOwner = admin && !ownerRepartidorId;
     const stored = await repository.getReceipt({
       confirmationId,
       idempotencyKey,
-      ownerRepartidorId: admin ? null : text(actor.repartidorId),
-      allowAnyOwner: admin,
+      ownerRepartidorId: ownerRepartidorId || null,
+      allowAnyOwner,
       signal,
     });
     throwIfAborted(signal);
@@ -159,8 +164,8 @@ function isExactZeroPrepaid(confirmation, storedLines, payments) {
       });
     }
     const confirmation = stored.confirmation;
-    if (!admin
-        && text(row(confirmation, 'REPARTIDOR_ID')) !== text(actor.repartidorId)) {
+    if (!allowAnyOwner
+        && text(row(confirmation, 'REPARTIDOR_ID')) !== ownerRepartidorId) {
       throw new RepartoPersistenceError('El recibo no pertenece al repartidor autenticado', {
         code: 'REPARTO_RECEIPT_OWNERSHIP_REQUIRED', statusCode: 403,
       });
