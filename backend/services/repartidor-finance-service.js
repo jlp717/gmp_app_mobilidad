@@ -25,7 +25,7 @@ const {
   RepartoCobrosCapabilityError,
   RepartoCobrosIdempotencyRaceError,
 } = require('../repositories/reparto-cobros-db2-port');
-const { redisCache, TTL } = require('./redis-cache');
+const { redisCache, TTL, onInvalidationPattern } = require('./redis-cache');
 // Req #16: Audit-trail para cobros del repartidor (write best-effort)
 const auditLog = require('./audit-log.service');
 let defaultFinanceRepo = null;
@@ -46,8 +46,21 @@ const FINANCE_TABLES = new Proxy(Object.create(null), {
 
 let _financeSchemaInfo = null;
 const financeReadFlights = new Map();
+let financeReadGeneration = 0;
 const FINANCE_READ_CACHE_NAMESPACE = 'query';
 const FINANCE_READ_CACHE_VERSION = 'v2';
+
+function invalidateFinanceReadCache() {
+  financeReadGeneration += 1;
+}
+
+if (typeof onInvalidationPattern === 'function') {
+  onInvalidationPattern((pattern) => {
+    if (String(pattern || '').includes('repartidor:finance:')) {
+      invalidateFinanceReadCache();
+    }
+  });
+}
 
 function positiveSeconds(...candidates) {
   for (const candidate of candidates) {
@@ -2060,21 +2073,40 @@ async function cachedFinanceRead({ key, ttl, loader }) {
     return loader();
   }
 
+  const generation = financeReadGeneration;
   const current = financeReadFlights.get(key);
-  if (current) return current;
+  if (current && current.generation === generation) return current.promise;
 
-  const flight = (async () => {
+  const flight = {
+    generation,
+    promise: null,
+  };
+  flight.promise = (async () => {
     let cached = null;
     try {
       cached = await redisCache.get(FINANCE_READ_CACHE_NAMESPACE, key);
     } catch (_) {
       // Cache availability must never make an authoritative DB2 read fail.
     }
-    if (cached !== null) return cached;
+    if (cached !== null && generation === financeReadGeneration) return cached;
 
-    const fresh = await loader();
+    let fresh = await loader();
+    let freshGeneration = generation;
+    // A write can commit while DB2 is still returning the read. Re-read once
+    // after an observed invalidation and never publish an old snapshot.
+    for (let attempt = 0; attempt < 2 && freshGeneration !== financeReadGeneration; attempt += 1) {
+      freshGeneration = financeReadGeneration;
+      fresh = await loader();
+    }
+    if (freshGeneration !== financeReadGeneration) return fresh;
+
     try {
       await redisCache.set(FINANCE_READ_CACHE_NAMESPACE, key, fresh, ttl);
+      // Close the small async window between the generation check and Redis
+      // SET. If a commit invalidated meanwhile, remove the just-written value.
+      if (freshGeneration !== financeReadGeneration && typeof redisCache.delete === 'function') {
+        await redisCache.delete(FINANCE_READ_CACHE_NAMESPACE, key);
+      }
     } catch (_) {
       // The read remains valid even if Redis cannot store the result.
     }
@@ -2083,13 +2115,13 @@ async function cachedFinanceRead({ key, ttl, loader }) {
 
   financeReadFlights.set(key, flight);
   try {
-    return await flight;
+    return await flight.promise;
   } finally {
     if (financeReadFlights.get(key) === flight) financeReadFlights.delete(key);
   }
 }
 
-async function getEvolution(repartidorId) {
+function getEvolution(repartidorId) {
   const ids = codeList(repartidorId);
   if (ids.length === 0) {
     throw new FinanceSchemaUnavailableError(
@@ -2124,7 +2156,7 @@ async function getEvolution(repartidorId) {
  * Top productos entregados por el repartidor (basado en CPC.CODIGOREPARTIDOR
  * vía OPP, agregado por familia/artículo).
  */
-async function getTopProducts(repartidorId, { limit = 10 } = {}) {
+function getTopProducts(repartidorId, { limit = 10 } = {}) {
   const ids = codeList(repartidorId);
   if (ids.length === 0) {
     throw new FinanceSchemaUnavailableError(
@@ -2189,6 +2221,7 @@ module.exports = {
   getSaldoActual,
   getEvolution,
   getTopProducts,
+  invalidateFinanceReadCache,
   registerCobro,
   reverseCobro,
   confirmRuteroDeliveryWithCobro,

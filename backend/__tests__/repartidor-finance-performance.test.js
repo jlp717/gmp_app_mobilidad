@@ -18,6 +18,8 @@ const mockRedisCache = {
     mockCacheValues.set(key, value);
     return true;
   }),
+  delete: jest.fn(async (_namespace, key) => mockCacheValues.delete(key)),
+  onInvalidationPattern: jest.fn(),
 };
 const mockRepository = {
   tables: {
@@ -61,6 +63,7 @@ describe('repartidor finance read performance', () => {
     mockCacheValues.clear();
     mockRedisCache.get.mockClear();
     mockRedisCache.set.mockClear();
+    mockRedisCache.delete.mockClear();
     mockRepository.selectSysColumns.mockClear();
     mockRepository.selectEvolution.mockClear();
     mockRepository.selectTopProducts.mockClear();
@@ -97,5 +100,26 @@ describe('repartidor finance read performance', () => {
     expect([...mockCacheValues.keys()]).toEqual([
       'query:repartidor:finance:57:top-products:v2:10',
     ]);
+  });
+
+  test('does not repopulate an old snapshot after a payment invalidates a read in flight', async () => {
+    let releaseOldRead;
+    const oldRead = new Promise((resolve) => { releaseOldRead = resolve; });
+    mockRepository.selectEvolution
+      .mockImplementationOnce(async () => {
+        await oldRead;
+        return [{ ANO: 2026, MES: 9, TOTAL: '10.00', NUM_COBROS: 1 }];
+      })
+      .mockResolvedValueOnce([{ ANO: 2026, MES: 9, TOTAL: '20.00', NUM_COBROS: 2 }]);
+
+    const pending = financeService.getEvolution('57');
+    await new Promise((resolve) => setImmediate(resolve));
+    financeService.invalidateFinanceReadCache('57');
+    releaseOldRead();
+
+    await expect(pending).resolves.toEqual([expect.objectContaining({ total: 20, numCobros: 2 })]);
+    expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(2);
+    expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2'))
+      .toEqual([expect.objectContaining({ total: 20, numCobros: 2 })]);
   });
 });

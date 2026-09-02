@@ -1626,9 +1626,9 @@ describe('Repartidor finanzas routes', () => {
 
     expect(res.status).toBe(201);
     const logs = logger.warn.mock.calls;
-    // 6 scoped/fleet invalidation patterns (driver-scoped + overlay, see
+    // 9 scoped/fleet invalidation patterns (driver-scoped + overlay, see
     // invalidateFinanceCaches): each failed pattern logs exactly one warn.
-    expect(logs).toHaveLength(6);
+    expect(logs).toHaveLength(9);
     logs.forEach(([message, extra]) => {
       expect(message).toBe('[REPARTIDOR_FINANZAS] Cache invalidation failed');
       expect(extra).toEqual({ code: 'FINANCE_CACHE_INVALIDATION_FAILED' });
@@ -1641,6 +1641,13 @@ describe('Repartidor finanzas routes', () => {
     expect(mockDeleteCachePattern.mock.calls.map(([pattern]) => pattern)).toContain(
       'query:query:entregas:rutero:document-cobro:*',
     );
+    const patterns = mockDeleteCachePattern.mock.calls.map(([pattern]) => pattern);
+    expect(patterns).toEqual(expect.arrayContaining([
+      'query:query:repartidor:finance:94:*',
+      'query:query:repartidor:finance:94,*:*',
+      'query:query:repartidor:finance:*,94:*',
+      'query:query:repartidor:finance:*,94,*:*',
+    ]));
   });
 
   test.each([

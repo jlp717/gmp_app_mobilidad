@@ -541,6 +541,7 @@ function requireSingleFinanceRepartidorSelector(req, res, next) {
 }
 
 async function invalidateFinanceCaches(repartidorId) {
+  financeService.invalidateFinanceReadCache?.(repartidorId);
   // Scoped invalidation: one driver's payment must not wipe per-driver caches
   // for the whole fleet (that forced every repartidor to rebuild heavy CTEs).
   // Batch/fleet summary keys embed joined id lists, so only the shared overlay
@@ -550,7 +551,12 @@ async function invalidateFinanceCaches(repartidorId) {
   const patterns = [
     // Double-prefix "query:query:" is mandatory: cachedQuery stores keys as
     // gmp:query:query:<key>, so single-prefix patterns never matched anything.
+    // Finance read keys may contain one or more sorted driver IDs. Keep the
+    // comma delimiters in the glob so driver 57 cannot match driver 157.
     `query:query:repartidor:finance:${repartidorId}:*`,
+    `query:query:repartidor:finance:${repartidorId},*:*`,
+    `query:query:repartidor:finance:*,${repartidorId}:*`,
+    `query:query:repartidor:finance:*,${repartidorId},*:*`,
     // Scoped per driver: summary/daily/overlay keys embed joined id lists
     // ("05,94"), so the glob matches every cache entry that carries this
     // driver without wiping fleet-wide caches for the others.
