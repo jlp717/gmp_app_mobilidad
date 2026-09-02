@@ -57,6 +57,16 @@ const mockRepository = {
   selectTopProducts: jest.fn(async () => [
     { CODIGO: 'ART-1', NOMBRE: 'Producto', UNIDADES: '4', IMPORTE: '80.00' },
   ]),
+  selectDailyTotals: jest.fn(async () => [{
+    TOTAL_EFECTIVO: '10', TOTAL_CHEQUES: '0', TOTAL_TARJETA: '0',
+    TOTAL_POSTDATADOS: '0', TOTAL_COBROS_DIA: '10', COBROS_COUNT: '1',
+  }]),
+  selectBalanceSum: jest.fn(async () => [{ SALDO_PENDIENTE: '5' }]),
+  selectDailyCobros: jest.fn(async () => []),
+  selectDailyStructuredSums: jest.fn(async () => ({ gastos: 0, ingresoBanco: 0, ajustes: 0 })),
+  selectConfirmedDeliveredAmount: jest.fn(async () => [{ TOTAL_REPARTIDO: '0' }]),
+  selectDailyErpDebt: jest.fn(async () => [{ DEUDA_PENDIENTE: '0' }]),
+  selectClosedLiquidacion: jest.fn(async () => []),
 };
 
 jest.mock('../repositories/reparto-finance-db2-repository', () => ({
@@ -89,6 +99,13 @@ describe('repartidor finance read performance', () => {
     mockRepository.selectSysColumns.mockClear();
     mockRepository.selectEvolution.mockClear();
     mockRepository.selectTopProducts.mockClear();
+    mockRepository.selectDailyTotals.mockClear();
+    mockRepository.selectBalanceSum.mockClear();
+    mockRepository.selectDailyCobros.mockClear();
+    mockRepository.selectDailyStructuredSums.mockClear();
+    mockRepository.selectConfirmedDeliveredAmount.mockClear();
+    mockRepository.selectDailyErpDebt.mockClear();
+    mockRepository.selectClosedLiquidacion.mockClear();
   });
 
   test('coalesces concurrent evolution reads and reuses the cached result', async () => {
@@ -176,5 +193,37 @@ describe('repartidor finance read performance', () => {
     expect(mockRepository.selectEvolution).toHaveBeenCalledTimes(2);
     expect(mockCacheValues.get('query:repartidor:finance:57:evolution:v2:g1'))
       .toEqual([expect.objectContaining({ total: 125.5, numCobros: 2 })]);
+  });
+
+  test('retries daily summary only after a transient DB queue timeout', async () => {
+    const queueError = new Error('DB query queue timeout after 12000ms');
+    queueError.code = 'DB_QUERY_QUEUE_TIMEOUT';
+    mockRepository.selectDailyTotals
+      .mockRejectedValueOnce(queueError)
+      .mockResolvedValueOnce([{
+        TOTAL_EFECTIVO: '10', TOTAL_CHEQUES: '0', TOTAL_TARJETA: '0',
+        TOTAL_POSTDATADOS: '0', TOTAL_COBROS_DIA: '10', COBROS_COUNT: '1',
+      }]);
+
+    await expect(financeService.getDailySummary({
+      repartidorId: '57',
+      date: '2026-09-02',
+    })).resolves.toEqual(expect.objectContaining({
+      repartidorId: '57',
+      summary: expect.objectContaining({ totalCobrosDia: 10 }),
+    }));
+    expect(mockRepository.selectDailyTotals).toHaveBeenCalledTimes(2);
+  });
+
+  test('fails explicitly when daily-summary queue contention exhausts retries', async () => {
+    const queueError = new Error('DB query queue timeout after 12000ms');
+    queueError.code = 'DB_QUERY_QUEUE_TIMEOUT';
+    mockRepository.selectDailyTotals.mockRejectedValue(queueError);
+
+    await expect(financeService.getDailySummary({
+      repartidorId: '57',
+      date: '2026-09-02',
+    })).rejects.toMatchObject({ code: 'DB_QUERY_QUEUE_TIMEOUT' });
+    expect(mockRepository.selectDailyTotals).toHaveBeenCalledTimes(3);
   });
 });

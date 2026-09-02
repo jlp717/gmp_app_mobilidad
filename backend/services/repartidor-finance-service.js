@@ -91,6 +91,8 @@ const FINANCE_TOP_PRODUCTS_CACHE_TTL = positiveSeconds(
   TTL?.SHORT,
   300,
 );
+const DAILY_SUMMARY_QUEUE_RETRY_LIMIT = 2;
+const DAILY_SUMMARY_QUEUE_RETRY_DELAY_MS = 250;
 
 class FinanceSchemaUnavailableError extends Error {
   constructor(message = 'El catálogo DB2 de reparto no está disponible') {
@@ -1053,10 +1055,20 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
 async function getDailySummary({ repartidorId, date }) {
   // Try schema-detected query first; on 42S22 (column not found), invalidate
   // the schema cache and retry with fresh detection.
-  for (let retry = 0; retry < 2; retry++) {
+  for (let retry = 0; retry <= DAILY_SUMMARY_QUEUE_RETRY_LIMIT; retry++) {
     try {
       return await _getDailySummaryInternal({ repartidorId, date });
     } catch (error) {
+      const isQueueContention = error?.code === 'DB_QUERY_QUEUE_TIMEOUT'
+        || /db query queue timeout/i.test(String(error?.message || ''));
+      if (isQueueContention && retry < DAILY_SUMMARY_QUEUE_RETRY_LIMIT) {
+        logger.warn('[REPARTIDOR_COBROS] daily-summary retry after transient DB queue contention');
+        await new Promise((resolve) => setTimeout(
+          resolve,
+          DAILY_SUMMARY_QUEUE_RETRY_DELAY_MS * (retry + 1),
+        ));
+        continue;
+      }
       const isColumnMissing = String(error?.message || '')
         .includes('42S22') || String(error?.odbcErrors?.[0]?.state || '') === '42S22';
       if (isColumnMissing && retry === 0) {
