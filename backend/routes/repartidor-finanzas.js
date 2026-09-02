@@ -1018,6 +1018,18 @@ router.post(
         error: 'Telefono de WhatsApp invalido',
       });
     }
+    const fallbackCaption = parsed.data.mensaje
+      || 'Granja Mari Pepa\n\nNota de entrega';
+    const fallbackLocalPayload = {
+      success: true,
+      localShare: true,
+      sent: false,
+      deliveryConfirmed: false,
+      shareMode: 'LOCAL_USER_ACTION',
+      whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(fallbackCaption)}`,
+      message: fallbackCaption,
+      mimeType: 'application/pdf',
+    };
     try {
       const { receipt, rendered } = await renderCanonicalReceipt(
         req, { confirmationId: req.params.confirmationId }, parsed.data.repartidorId,
@@ -1030,27 +1042,22 @@ router.post(
       const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
       const fileName = rendered.fileName || `nota_entrega_${numero}.pdf`;
 
-      if (!whatsappGateway.isBotConfigured()) {
-        return res.status(200).json({
-          success: true,
-          localShare: true,
-          sent: false,
-          deliveryConfirmed: false,
-          shareMode: 'LOCAL_USER_ACTION',
-          whatsappUrl,
-          message: caption,
-          fileName,
-          mimeType: 'application/pdf',
-        });
-      }
-      if (!whatsappGateway.isBotReady()
-          && whatsappGateway.baileys.isConfigured()
-          && !whatsappGateway.cloud.isConfigured()) {
-        return res.status(503).json({
-          success: false,
-          code: 'WHATSAPP_BAILEYS_NOT_PAIRED',
-          error: 'WhatsApp corporativo no esta vinculado',
-        });
+      const localPayload = {
+        success: true,
+        localShare: true,
+        sent: false,
+        deliveryConfirmed: false,
+        shareMode: 'LOCAL_USER_ACTION',
+        whatsappUrl,
+        message: caption,
+        fileName,
+        mimeType: 'application/pdf',
+      };
+      if (!whatsappGateway.isBotConfigured()
+          || (!whatsappGateway.isBotReady()
+            && whatsappGateway.baileys.isConfigured()
+            && !whatsappGateway.cloud.isConfigured())) {
+        return res.status(200).json(localPayload);
       }
 
       const result = await whatsappGateway.sendDocumentFromBot({
@@ -1086,12 +1093,9 @@ router.post(
           error: safeMessage,
         });
       }
-      if (error?.code === 'WHATSAPP_BAILEYS_NOT_PAIRED') {
-        return res.status(503).json({
-          success: false,
-          code: error.code,
-          error: 'WhatsApp corporativo no esta vinculado',
-        });
+      if (error?.code === 'WHATSAPP_BAILEYS_NOT_PAIRED'
+          || error?.code === 'WHATSAPP_DELIVERY_FAILED') {
+        return res.status(200).json(fallbackLocalPayload);
       }
       return sendError(res, error, { action: 'POST canonical receipt whatsapp' });
     }

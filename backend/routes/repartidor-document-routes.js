@@ -662,18 +662,16 @@ router.post('/document/share/whatsapp', verifyToken, async (req, res) => {
         shareMode: 'LOCAL_USER_ACTION',
     };
 
-    if (!whatsappGateway.isBotConfigured()) {
+    if (!whatsappGateway.isBotConfigured()
+        || (!whatsappGateway.isBotReady()
+            && whatsappGateway.baileys.isConfigured()
+            && !whatsappGateway.cloud.isConfigured())) {
+        // Unpaired Baileys must not block the field user. Local OS share
+        // still delivers the PDF; the jefe can pair later for bot send.
         return res.json(localPayload);
     }
 
     try {
-        // If Baileys enabled but not paired yet, and no Cloud — return typed error
-        // so the app can show "gateway no emparejado" instead of fake local success
-        // only when the caller explicitly asked for bot-only. Prefer bot when ready;
-        // if pending and cloud absent, attempt send (throws NOT_PAIRED) and map below.
-        if (!whatsappGateway.isBotReady() && whatsappGateway.baileys.isConfigured() && !whatsappGateway.cloud.isConfigured()) {
-            return sendRouteError(res, 503, 'WHATSAPP_BAILEYS_NOT_PAIRED');
-        }
 
         const isAlbaran = Object.prototype.hasOwnProperty.call(key, 'terminal');
         let headers;
@@ -728,13 +726,10 @@ router.post('/document/share/whatsapp', verifyToken, async (req, res) => {
         if (error.code === 'PHONE_INVALID') {
             return sendRouteError(res, 422, 'PHONE_INVALID');
         }
-        if (error.code === 'WHATSAPP_BAILEYS_NOT_PAIRED') {
-            return sendRouteError(res, 503, 'WHATSAPP_BAILEYS_NOT_PAIRED');
-        }
         if (error.code === 'WHATSAPP_NUMBER_NOT_REGISTERED') {
             return sendRouteError(res, 422, 'WHATSAPP_NUMBER_NOT_REGISTERED');
         }
-        return sendRouteError(res, 503, 'WHATSAPP_DELIVERY_FAILED');
+        return res.json(localPayload);
     }
 });
 
