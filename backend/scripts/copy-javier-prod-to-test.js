@@ -974,11 +974,14 @@ async function contentHashOf(schemaTable, columns, { queryFn = query } = {}) {
   const names = columns.map((column) => column.name);
   if (!names.length) throw new Error(`BACKUP HASH BLOCK ${schemaTable}: no columns`);
   const lobLengths = await actualLobLengthsOf(schemaTable, columns, { queryFn });
-  // IBM i/node-odbc rejects one result row containing all chunks of a large
-  // BLOB (DB2 -101), although each bounded chunk is valid. Split only the
-  // live driver path; unit-test query doubles keep the compact projection.
+  // IBM i/node-odbc rejects one result row containing multiple BLOB chunks
+  // (DB2 -101), although each bounded chunk is valid. The failure also occurs
+  // below the previous "large BLOB" threshold when a value crosses the 4 KiB
+  // HEX chunk boundary. Split any multi-chunk live-driver BLOB; unit-test
+  // query doubles keep the compact projection.
   const hasLargeBlob = [...lobLengths.entries()].some(([index, length]) => (
-    String(columns[index]?.dataType || '').toUpperCase() === 'BLOB' && Number(length) > 65536
+    String(columns[index]?.dataType || '').toUpperCase() === 'BLOB'
+      && Number(length) > (LOB_HASH_CHUNK_CHARS / 2)
   ));
   if (hasLargeBlob && queryFn === query) {
     return contentHashOfLargeBlobSafely(schemaTable, columns, lobLengths, queryFn);
