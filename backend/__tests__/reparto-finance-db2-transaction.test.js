@@ -55,3 +55,23 @@ test('daily delivered total is sourced from canonical test confirmations', async
   expect(calls[0].sql).toContain("C.STATUS IN ('ENTREGADO', 'PARCIAL')");
   expect(calls[0].params).toEqual(['02', '44', '2026-08-27']);
 });
+
+test('top products prefilters driver orders and joins the complete company key', async () => {
+  const calls = [];
+  const repository = createRepartoFinanceDb2Repository({
+    bindings: resolveFinanceBindings(process.env),
+    queryWithParams: jest.fn(async (sql, params) => {
+      calls.push({ sql, params });
+      return [];
+    }),
+  });
+
+  await repository.selectTopProducts({ ids: ['57'], safeLimit: 10 });
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0].sql).toContain('WITH REPARTIDOR_ORDENES AS');
+  expect(calls[0].sql).toContain('SELECT DISTINCT');
+  expect(calls[0].sql).toContain('OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO');
+  expect(calls[0].sql).toContain('TRIM(OPP.CODIGOREPARTIDOR) = ?');
+  expect(calls[0].params).toEqual(['57']);
+});

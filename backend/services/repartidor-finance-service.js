@@ -25,6 +25,7 @@ const {
   RepartoCobrosCapabilityError,
   RepartoCobrosIdempotencyRaceError,
 } = require('../repositories/reparto-cobros-db2-port');
+const { redisCache, TTL } = require('./redis-cache');
 // Req #16: Audit-trail para cobros del repartidor (write best-effort)
 const auditLog = require('./audit-log.service');
 let defaultFinanceRepo = null;
@@ -44,6 +45,28 @@ const FINANCE_TABLES = new Proxy(Object.create(null), {
 });
 
 let _financeSchemaInfo = null;
+const financeReadFlights = new Map();
+const FINANCE_READ_CACHE_NAMESPACE = 'query';
+const FINANCE_READ_CACHE_VERSION = 'v2';
+
+function positiveSeconds(...candidates) {
+  for (const candidate of candidates) {
+    const seconds = Number(candidate);
+    if (Number.isFinite(seconds) && seconds > 0) return Math.round(seconds);
+  }
+  return 60;
+}
+
+const FINANCE_EVOLUTION_CACHE_TTL = positiveSeconds(
+  process.env.REPARTIDOR_EVOLUTION_CACHE_TTL_SECONDS,
+  TTL?.REALTIME,
+  60,
+);
+const FINANCE_TOP_PRODUCTS_CACHE_TTL = positiveSeconds(
+  process.env.REPARTIDOR_TOP_PRODUCTS_CACHE_TTL_SECONDS,
+  TTL?.SHORT,
+  300,
+);
 
 class FinanceSchemaUnavailableError extends Error {
   constructor(message = 'El catálogo DB2 de reparto no está disponible') {
@@ -2023,24 +2046,79 @@ async function getSaldoActual(repartidorId) {
 /**
  * Evolución mensual (últimos 6 meses) de cobros del repartidor.
  */
+function canonicalFinanceIds(ids) {
+  return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
+}
+
+function financeReadCacheKey(kind, ids, suffix = '') {
+  const tail = suffix ? `:${suffix}` : '';
+  return `query:repartidor:finance:${ids.join(',')}:${kind}:${FINANCE_READ_CACHE_VERSION}${tail}`;
+}
+
+async function cachedFinanceRead({ key, ttl, loader }) {
+  if (!redisCache || typeof redisCache.get !== 'function' || typeof redisCache.set !== 'function') {
+    return loader();
+  }
+
+  const current = financeReadFlights.get(key);
+  if (current) return current;
+
+  const flight = (async () => {
+    let cached = null;
+    try {
+      cached = await redisCache.get(FINANCE_READ_CACHE_NAMESPACE, key);
+    } catch (_) {
+      // Cache availability must never make an authoritative DB2 read fail.
+    }
+    if (cached !== null) return cached;
+
+    const fresh = await loader();
+    try {
+      await redisCache.set(FINANCE_READ_CACHE_NAMESPACE, key, fresh, ttl);
+    } catch (_) {
+      // The read remains valid even if Redis cannot store the result.
+    }
+    return fresh;
+  })();
+
+  financeReadFlights.set(key, flight);
+  try {
+    return await flight;
+  } finally {
+    if (financeReadFlights.get(key) === flight) financeReadFlights.delete(key);
+  }
+}
+
 async function getEvolution(repartidorId) {
   const ids = codeList(repartidorId);
-  const info = await getFinanceSchemaInfo();
-  const rows = await financeRepo.selectEvolution({ info, ids });
-  return (rows || []).map((row) => {
-    const ano = toInt(value(row, 'ANO'));
-    const mes = toInt(value(row, 'MES'));
-    const total = roundMoney(value(row, 'TOTAL'));
-    const numCobros = toInt(value(row, 'NUM_COBROS'));
-    return {
-      period: `${ano}-${pad(mes, 2)}`,
-      ano,
-      mes,
-      total,
-      totalSales: total,
-      numCobros,
-    };
-  }).reverse();
+  if (ids.length === 0) {
+    throw new FinanceSchemaUnavailableError(
+      'No existe un repartidor valido para calcular la evolucion',
+    );
+  }
+  const cacheIds = canonicalFinanceIds(ids);
+  return cachedFinanceRead({
+    key: financeReadCacheKey('evolution', cacheIds),
+    ttl: FINANCE_EVOLUTION_CACHE_TTL,
+    loader: async () => {
+      const info = await getFinanceSchemaInfo();
+      const rows = await financeRepo.selectEvolution({ info, ids: cacheIds });
+      return (rows || []).map((row) => {
+        const ano = toInt(value(row, 'ANO'));
+        const mes = toInt(value(row, 'MES'));
+        const total = roundMoney(value(row, 'TOTAL'));
+        const numCobros = toInt(value(row, 'NUM_COBROS'));
+        return {
+          period: `${ano}-${pad(mes, 2)}`,
+          ano,
+          mes,
+          total,
+          totalSales: total,
+          numCobros,
+        };
+      }).reverse();
+    },
+  });
 }
 /**
  * Top productos entregados por el repartidor (basado en CPC.CODIGOREPARTIDOR
@@ -2048,23 +2126,35 @@ async function getEvolution(repartidorId) {
  */
 async function getTopProducts(repartidorId, { limit = 10 } = {}) {
   const ids = codeList(repartidorId);
-  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
-  const rows = await financeRepo.selectTopProducts({ ids, safeLimit });
-  return (rows || []).map((row) => {
-    const codigo = String(value(row, 'CODIGO', '') || '').trim();
-    const nombre = String(value(row, 'NOMBRE', codigo) || codigo).trim();
-    const unidades = toNumber(value(row, 'UNIDADES'));
-    const importe = roundMoney(value(row, 'IMPORTE'));
-    return {
-      codigo,
-      nombre,
-      unidades,
-      importe,
-      code: codigo,
-      name: nombre,
-      totalUnits: unidades,
-      totalSales: importe,
-    };
+  if (ids.length === 0) {
+    throw new FinanceSchemaUnavailableError(
+      'No existe un repartidor valido para calcular los productos destacados',
+    );
+  }
+  const safeLimit = Math.floor(Math.max(1, Math.min(50, Number(limit) || 10)));
+  const cacheIds = canonicalFinanceIds(ids);
+  return cachedFinanceRead({
+    key: financeReadCacheKey('top-products', cacheIds, safeLimit),
+    ttl: FINANCE_TOP_PRODUCTS_CACHE_TTL,
+    loader: async () => {
+      const rows = await financeRepo.selectTopProducts({ ids: cacheIds, safeLimit });
+      return (rows || []).map((row) => {
+        const codigo = String(value(row, 'CODIGO', '') || '').trim();
+        const nombre = String(value(row, 'NOMBRE', codigo) || codigo).trim();
+        const unidades = toNumber(value(row, 'UNIDADES'));
+        const importe = roundMoney(value(row, 'IMPORTE'));
+        return {
+          codigo,
+          nombre,
+          unidades,
+          importe,
+          code: codigo,
+          name: nombre,
+          totalUnits: unidades,
+          totalSales: importe,
+        };
+      });
+    },
   });
 }
 /**
