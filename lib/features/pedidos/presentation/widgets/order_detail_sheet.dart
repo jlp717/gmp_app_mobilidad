@@ -306,7 +306,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         ),
         // Header
         _buildHeader(header, statusColor),
-        const Divider(color: AppTheme.borderColor, height: 1),
+        Divider(color: AppTheme.borderColor, height: 1),
         // Lines
         Expanded(
           child: detail.lines.isEmpty
@@ -425,7 +425,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Widget _buildLineTile(OrderLine line, int number) {
-    final showMargin = ref.watch(pedidosProvider).isMarginVisible;
+    final showMargin = ref.watch(
+      pedidosProvider.select((p) => p.isMarginVisible),
+    );
     final marginColor = line.porcentajeMargen >= 15
         ? AppTheme.success
         : line.porcentajeMargen >= 5
@@ -438,7 +440,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       margin: const EdgeInsets.only(bottom: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: AppTheme.borderColor, width: 0.5),
+        side: BorderSide(color: AppTheme.borderColor, width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -726,12 +728,14 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             ],
           ),
           const SizedBox(height: 10),
-          const Divider(color: AppTheme.borderColor),
+          Divider(color: AppTheme.borderColor),
           const SizedBox(height: 10),
           // Req #2: Margen/% margen solo visibles para JEFE_VENTAS/ADMIN.
           Consumer(
             builder: (ctx, ref, _) {
-              final showMargin = ref.watch(pedidosProvider).isMarginVisible;
+              final showMargin = ref.watch(
+      pedidosProvider.select((p) => p.isMarginVisible),
+    );
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -764,7 +768,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ),
           if (detail.bolsaSummary.hasImpact) ...[
             const SizedBox(height: 10),
-            const Divider(color: AppTheme.borderColor),
+            Divider(color: AppTheme.borderColor),
             const SizedBox(height: 10),
             _buildOrderBolsaSummary(detail.bolsaSummary),
           ],
@@ -822,7 +826,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   Widget _buildActions(OrderSummary header) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border:
             Border(top: BorderSide(color: AppTheme.borderColor, width: 0.5)),

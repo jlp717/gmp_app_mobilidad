@@ -63,7 +63,7 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
             return LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: const [
+              colors: [
                 AppTheme.raisedSurface,
                 AppTheme.mutedPanel,
                 AppTheme.raisedSurface,

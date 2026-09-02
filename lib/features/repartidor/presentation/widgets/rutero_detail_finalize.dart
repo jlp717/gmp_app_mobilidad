@@ -89,7 +89,7 @@ class RuteroDetailFinalize extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(Icons.person, color: AppTheme.info, size: 20),
               SizedBox(width: 8),
@@ -123,7 +123,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                 controller: controller,
                 focusNode: focusNode,
                 onEditingComplete: onEditingComplete,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   labelText: 'Nombre y Apellidos *',
                   prefixIcon: const Icon(Icons.person_outline, size: 20),
@@ -156,7 +156,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                           tileColor: AppTheme.softPanel,
                           title: Text(
                             option,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                             ),
                           ),
@@ -191,7 +191,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                 controller: controller,
                 focusNode: focusNode,
                 onEditingComplete: onEditingComplete,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   labelText: 'DNI / NIF *',
                   prefixIcon: const Icon(Icons.badge_outlined, size: 20),
@@ -224,7 +224,7 @@ class RuteroDetailFinalize extends StatelessWidget {
                           tileColor: AppTheme.softPanel,
                           title: Text(
                             option,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                             ),
                           ),
@@ -269,7 +269,7 @@ class RuteroDetailFinalize extends StatelessWidget {
     return TextField(
       controller: observacionesController,
       maxLines: 3,
-      style: const TextStyle(color: AppTheme.textPrimary),
+      style: TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: 'Observaciones',
         hintText: 'Añadir nota sobre la entrega...',

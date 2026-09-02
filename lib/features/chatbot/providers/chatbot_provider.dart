@@ -539,9 +539,9 @@ final chatbotProvider =
     NotifierProvider<ChatbotNotifier, ChatbotState>(ChatbotNotifier.new);
 
 final chatMessagesProvider = Provider<List<ChatMessage>>((ref) {
-  return ref.watch(chatbotProvider).messages;
+  return ref.watch(chatbotProvider.select((state) => state.messages));
 });
 
 final chatIsLoadingProvider = Provider<bool>((ref) {
-  return ref.watch(chatbotProvider).isLoading;
+  return ref.watch(chatbotProvider.select((state) => state.isLoading));
 });

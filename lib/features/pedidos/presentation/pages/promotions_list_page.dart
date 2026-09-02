@@ -122,7 +122,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               hasAnyPromos
                   ? 'No hay promociones con esos filtros'
                   : 'No hay promociones activas',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -134,7 +134,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               hasAnyPromos
                   ? 'Prueba a cambiar los filtros o la busqueda'
                   : 'Las promociones apareceran aqui cuando esten disponibles',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 13,
               ),
@@ -169,11 +169,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
           // Search bar
           TextField(
             onChanged: (value) => setState(() => _search = value.trim()),
-            style: const TextStyle(color: AppTheme.textPrimary),
+            style: TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, codigo o articulo...',
               hintStyle:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+                  TextStyle(color: AppTheme.textTertiary, fontSize: 13),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.info, size: 20),
               suffixIcon: _search.isNotEmpty
@@ -205,7 +205,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 const SizedBox(width: 6),
                 _buildTypeChip('PRICE', 'Precio', Icons.attach_money),
                 const SizedBox(width: 8),
-                const SizedBox(
+                SizedBox(
                   height: 20,
                   child: VerticalDivider(width: 1, color: AppTheme.borderColor),
                 ),
@@ -353,7 +353,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                         if (group.promoCode.isNotEmpty)
                           Text(
                             group.promoCode,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textTertiary,
                               fontSize: 11,
                             ),
@@ -420,7 +420,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               // Footer info
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.inventory_2_outlined,
                     size: 14,
                     color: AppTheme.textTertiary,
@@ -428,14 +428,14 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   const SizedBox(width: 4),
                   Text(
                     '${group.items.length} producto(s)',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                     ),
                   ),
                   const Spacer(),
                   if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
-                    const Icon(
+                    Icon(
                       Icons.calendar_today,
                       size: 12,
                       color: AppTheme.textTertiary,
@@ -443,7 +443,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     const SizedBox(width: 4),
                     Text(
                       'Hasta ${group.dateTo}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textTertiary,
                         fontSize: 11,
                       ),
@@ -484,7 +484,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                         ),
                         label: Text(
                           '${item.code} · ${item.name}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 11,
                           ),
@@ -495,10 +495,10 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     if (group.items.length > 8)
                       Chip(
                         backgroundColor: AppTheme.raisedSurface,
-                        side: const BorderSide(color: AppTheme.borderColor),
+                        side: BorderSide(color: AppTheme.borderColor),
                         label: Text(
                           '+${group.items.length - 8} mas',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 11,
                           ),

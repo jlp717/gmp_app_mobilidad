@@ -238,7 +238,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             isMandatory
                 ? 'Actualización Obligatoria'
                 : 'Actualización Disponible',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontWeight: FontWeight.bold,
               fontSize: 20,
@@ -252,7 +252,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 (authState?.updateMessage.isNotEmpty ?? false)
                     ? authState!.updateMessage
                     : 'Hay una nueva versión de la app con mejoras críticas.',
-                style: const TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: AppTheme.textSecondary),
               ),
               if (isMandatory) ...[
                 const SizedBox(height: 16),
@@ -272,7 +272,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             if (!isMandatory)
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
+                child: Text(
                   'MÁS TARDE',
                   style: TextStyle(color: AppTheme.textSecondary),
                 ),
@@ -808,7 +808,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 child: Center(
                   child: Text(
                     user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -817,7 +817,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ),
               ),
               const SizedBox(height: 2),
-              const Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
+              Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
             ],
           ),
         ),
@@ -906,14 +906,14 @@ class _MainShellState extends ConsumerState<MainShell> {
               child: AppVersionBadge(),
             ),
             const SizedBox(height: 8),
-            const Divider(color: AppTheme.borderColor),
+            Divider(color: AppTheme.borderColor),
             ListTile(
               leading: const Icon(
                 Icons.notifications_active_outlined,
                 color: AppTheme.info,
                 size: 20,
               ),
-              title: const Text(
+              title: Text(
                 'Avisos',
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
               ),
@@ -1025,7 +1025,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                               ),
                             ),
 
-                            const Divider(
+                            Divider(
                               height: 1,
                               color: AppTheme.borderColor,
                             ),
@@ -1074,7 +1074,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: AppTheme.borderColor),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.chevron_right_rounded,
                           color: AppTheme.textSecondary,
                           size: 16,
@@ -1153,7 +1153,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
           itemBuilder: (context) => [
             if (availableModes.contains('COMERCIAL'))
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'VENTAS',
                 child: Row(
                   children: [
@@ -1167,7 +1167,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ),
               ),
             if (availableModes.contains('REPARTIDOR'))
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'REPARTO',
                 child: Row(
                   children: [
@@ -1185,7 +1185,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ),
               ),
             if (availableModes.contains('ALMACEN'))
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'ALMACEN',
                 child: Row(
                   children: [
@@ -1240,7 +1240,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                         softWrap: false,
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.arrow_drop_down,
                       color: AppTheme.textSecondary,
                       size: 18,
@@ -1390,7 +1390,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           child: Center(
             child: Text(
               user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -1403,7 +1403,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           width: 72,
           child: Text(
             user.name.length > 16 ? user.name.substring(0, 16) : user.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               color: AppTheme.textSecondary,
               fontWeight: FontWeight.w500,
@@ -1585,7 +1585,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           color: AppTheme.softPanel,
           border: Border.all(color: AppTheme.borderColor),
         ),
-        child: const Column(
+        child: Column(
           children: [
             Icon(Icons.wifi, color: AppTheme.textSecondary, size: 20),
             SizedBox(height: 4),
@@ -1620,7 +1620,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           color: AppTheme.softPanel,
           border: Border.all(color: AppTheme.borderColor),
         ),
-        child: const Column(
+        child: Column(
           children: [
             Icon(
               Icons.notifications_active_outlined,
@@ -1665,7 +1665,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             const SizedBox(height: 4),
             Text(
               _isNavExpanded ? 'Ocultar' : '',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 9,
                 color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
@@ -1694,7 +1694,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         children: [
           Row(
             children: [
-              const Row(
+              Row(
                 children: [
                   Icon(Icons.visibility, color: AppTheme.info, size: 16),
                   SizedBox(width: 8),
@@ -1732,7 +1732,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                       : DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _selectedRepartidor,
-                            hint: const Text(
+                            hint: Text(
                               'Seleccionar Repartidor',
                               style: TextStyle(color: AppTheme.textSecondary),
                             ),
@@ -1742,7 +1742,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                               Icons.keyboard_arrow_down,
                               color: AppTheme.info,
                             ),
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
                             ),
@@ -1780,7 +1780,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                     size: 16,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Lista de repartidores no disponible.',
                       style: TextStyle(
@@ -1833,7 +1833,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 14,
                 ),
@@ -2306,7 +2306,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                         ),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Cancelar',
                       style: TextStyle(
                         color: AppTheme.textSecondary,

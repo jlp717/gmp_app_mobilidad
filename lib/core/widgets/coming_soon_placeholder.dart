@@ -111,7 +111,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
               // Subtitle
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   color: AppTheme.textSecondary,
                   height: 1.6,

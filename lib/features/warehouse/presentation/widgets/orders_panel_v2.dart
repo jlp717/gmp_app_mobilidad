@@ -200,7 +200,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         child: TextField(
           onChanged: (v) =>
               setState(() => _searchQuery = v.toLowerCase().trim()),
-          style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+          style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           decoration: InputDecoration(
             hintText: 'Buscar artículo, cliente, pedido...',
             hintStyle: TextStyle(
@@ -293,7 +293,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
         title: const Text('Confirmar'),
         content: Text(message),
@@ -363,7 +363,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Row(
         children: [
-          const Icon(Icons.sort, size: 14, color: AppTheme.textTertiary),
+          Icon(Icons.sort, size: 14, color: AppTheme.textTertiary),
           const SizedBox(width: 4),
           Expanded(
             child: DropdownButton<BoxSortMode>(
@@ -371,7 +371,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               isDense: true,
               isExpanded: true,
               dropdownColor: AppTheme.raisedSurface,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textSecondary,
               ),
@@ -573,7 +573,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           ),
           title: Text(
             box.label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: AppTheme.textSecondary,
             ),
@@ -581,14 +581,14 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           ),
           subtitle: Text(
             '${box.weight.toStringAsFixed(1)} kg  |  ${box.clientCode}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               color: AppTheme.textTertiary,
             ),
           ),
           trailing: Text(
             '#${box.orderNumber}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               color: AppTheme.textTertiary,
             ),
@@ -820,7 +820,7 @@ class _ClientRow extends StatelessWidget {
                 children: [
                   Text(
                     summary.clientCode,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -829,7 +829,7 @@ class _ClientRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${summary.boxCount} cajas  |  ${summary.totalWeight.toStringAsFixed(1)} kg',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 10,
                     ),
@@ -845,7 +845,7 @@ class _ClientRow extends StatelessWidget {
                 children: [
                   Text(
                     '${weightPct.toStringAsFixed(0)}%',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -945,7 +945,7 @@ class _OrderRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '$clientCode  |  $boxCount cajas  |  ${totalWeight.toStringAsFixed(1)} kg',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textTertiary,
                         fontSize: 10,
                       ),

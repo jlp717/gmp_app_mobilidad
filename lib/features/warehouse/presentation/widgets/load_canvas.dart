@@ -299,7 +299,7 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
 
             // Loading overlay while Three.js initializes
             if (!_sceneReady || planner.truck == null)
-              const ColoredBox(
+              ColoredBox(
                 color: AppTheme.inkSurface,
                 child: Center(
                   child: Column(

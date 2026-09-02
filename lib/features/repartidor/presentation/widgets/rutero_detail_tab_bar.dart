@@ -233,7 +233,7 @@ InputDecoration ruteroErrorInputDecoration({
         ? errorBorder
         : OutlineInputBorder(
             borderRadius: radius,
-            borderSide: const BorderSide(color: AppTheme.borderColor),
+            borderSide: BorderSide(color: AppTheme.borderColor),
           ),
     focusedBorder: hasError
         ? errorBorder

@@ -211,7 +211,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
           ),
           InkWell(
             onTap: _loadAlerts,
-            child: const Icon(
+            child: Icon(
               Icons.refresh_rounded,
               size: 16,
               color: AppTheme.textTertiary,
@@ -501,7 +501,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                   // Refresh + expand
                   InkWell(
                     onTap: _loadAlerts,
-                    child: const Icon(
+                    child: Icon(
                       Icons.refresh_rounded,
                       size: 16,
                       color: AppTheme.textTertiary,
@@ -511,7 +511,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                   AnimatedRotation(
                     turns: _expanded ? 0.0 : -0.25,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(
+                    child: Icon(
                       Icons.expand_more_rounded,
                       size: 18,
                       color: AppTheme.textTertiary,
@@ -698,7 +698,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                   summary,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
@@ -802,7 +802,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         children: [
           Text(
             '$label ',
-            style: const TextStyle(fontSize: 10, color: AppTheme.textTertiary),
+            style: TextStyle(fontSize: 10, color: AppTheme.textTertiary),
           ),
           Text(
             value,
@@ -1035,7 +1035,7 @@ class _CollapsibleDetailState extends State<_CollapsibleDetail> {
                     children: [
                       Text(
                         widget.detail,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           height: 1.4,
                           color: AppTheme.textSecondary,

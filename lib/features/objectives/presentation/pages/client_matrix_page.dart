@@ -151,7 +151,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
             Text(widget.clientName, style: const TextStyle(fontSize: 16)),
             Text(
               'Matriz $_selectedYear',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppTheme.textSecondary,
               ),
@@ -304,7 +304,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                               ),
                                               Text(
                                                 details['code'].toString(),
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 10,
                                                   color: AppTheme.textSecondary,
                                                 ),
@@ -333,7 +333,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                                   .isNotEmpty)
                                                 Text(
                                                   details['ref'].toString(),
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     fontSize: 10,
                                                     color:
                                                         AppTheme.textSecondary,
@@ -379,7 +379,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                                           'units']!
                                                       .toStringAsFixed(0)
                                                   : '-',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 11,
                                                 color: AppTheme.textSecondary,
                                               ),

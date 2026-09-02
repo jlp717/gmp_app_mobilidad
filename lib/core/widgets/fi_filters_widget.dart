@@ -651,7 +651,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           DropdownMenuItem<String?>(
             child: Text(
               hasOptions ? 'Todos' : (loading ? 'Cargando...' : 'Sin opciones'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textTertiary,
                 fontStyle: FontStyle.italic,

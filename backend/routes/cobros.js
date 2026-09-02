@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
+const { DEBT_VIEW } = require('../services/debt-view-contract');
 const logger = require('../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
@@ -150,7 +151,7 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             '  FROM ' + APP_SCHEMA + '.COBROS C',
             ' WHERE EXISTS (',
             '   SELECT 1',
-            '     FROM DSEDAC.CVC CVC',
+            '     FROM ' + DEBT_VIEW + ' CVC',
             '    WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)',
             '      AND CVC.IMPORTEPENDIENTE <> 0',
             '      AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> \'S\')',
@@ -177,7 +178,7 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             '  FROM ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
             ' WHERE EXISTS (',
             '   SELECT 1',
-            '     FROM DSEDAC.CVC CVC',
+            '     FROM ' + DEBT_VIEW + ' CVC',
             '    WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)',
             '      AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)',
             '      AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))',
@@ -510,7 +511,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
                 TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
                 TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO
-            FROM DSEDAC.CVC C
+            FROM ${DEBT_VIEW} C
             WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
               AND C.IMPORTEPENDIENTE > 0.01
               AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
@@ -756,7 +757,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
             const rows = await queryWithParams(`
                 SELECT COALESCE(SUM(C.IMPORTEPENDIENTE), 0) AS TOTAL_PENDIENTE,
                        COUNT(*) AS NUM_DOCS
-                FROM DSEDAC.CVC C
+                FROM ${DEBT_VIEW} C
                 WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
                   AND C.IMPORTEPENDIENTE > 0.01
                   AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
@@ -1138,7 +1139,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                  SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                      <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-            FROM DSEDAC.CVC CVC
+            FROM ${DEBT_VIEW} CVC
             WHERE CVC.IMPORTEPENDIENTE <> 0
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${emptyClientFilter}
@@ -1154,10 +1155,9 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                  SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                      <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO,
-                 TRIM(MIN(CLI.NOMBREALTERNATIVO)) AS NOMBRE_ALT,
-                 TRIM(MIN(CLI.NOMBRECLIENTE)) AS NOMBRE_CLI
-            FROM DSEDAC.CVC CVC
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+                 TRIM(MIN(CVC.NOMBREALTERNATIVO)) AS NOMBRE_ALT,
+                 TRIM(MIN(CVC.NOMBRECLIENTE)) AS NOMBRE_CLI
+            FROM ${DEBT_VIEW} CVC
             WHERE CVC.IMPORTEPENDIENTE <> 0
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${emptyClientFilter}

@@ -352,7 +352,7 @@ class _LiquidacionSectionHeading extends StatelessWidget {
         Expanded(
           child: Text(
             label.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w800,
               fontSize: 12,
@@ -363,7 +363,7 @@ class _LiquidacionSectionHeading extends StatelessWidget {
         if (trailing != null)
           Text(
             trailing!,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -399,7 +399,7 @@ class LiquidacionCobrosTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cobros.isEmpty) {
-      return const RepartidorExecutivePanel(
+      return RepartidorExecutivePanel(
         accentColor: AppColors.textSecondary,
         child: Text(
           'Sin cobros en el periodo.',
@@ -422,7 +422,7 @@ class LiquidacionCobrosTable extends StatelessWidget {
               fontWeight: FontWeight.w700,
               fontSize: 10,
             ),
-            dataTextStyle: const TextStyle(
+            dataTextStyle: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 10,
             ),
@@ -667,7 +667,7 @@ class _IngresoBancoField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Ingreso en Banco',
             style: TextStyle(
               color: AppColors.textPrimary,
@@ -681,7 +681,7 @@ class _IngresoBancoField extends StatelessWidget {
             enabled: enabled,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textAlign: TextAlign.right,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w800,
               fontSize: 17,
@@ -695,11 +695,11 @@ class _IngresoBancoField extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppColors.borderColor),
+                borderSide: BorderSide(color: AppColors.borderColor),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppColors.borderColor),
+                borderSide: BorderSide(color: AppColors.borderColor),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -760,7 +760,7 @@ class _LiquidacionCuadreBanner extends StatelessWidget {
                 Text(
                   'A ingresar ${formatLiquidacionMoney(totalAIngresar)} · '
                   'Banco ${formatLiquidacionMoney(ingresoBanco)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
                   ),
@@ -796,7 +796,7 @@ class _LiquidacionQuickActions extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Movimientos del día',
             style: TextStyle(
               color: AppColors.textPrimary,
@@ -864,7 +864,7 @@ class _ActionChip extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
@@ -905,14 +905,14 @@ class _LiquidacionClosedCard extends StatelessWidget {
                   result.isReplay
                       ? 'Liquidación ya cerrada (reintento seguro)'
                       : 'Liquidación cerrada correctamente',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 Text(
                   'Ref. ${result.marker}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
                   ),
@@ -961,7 +961,7 @@ class _LiquidacionCloseBar extends StatelessWidget {
         16,
         MediaQuery.paddingOf(context).bottom + 12,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.raisedSurface,
         border: Border(top: BorderSide(color: AppColors.borderColor)),
       ),

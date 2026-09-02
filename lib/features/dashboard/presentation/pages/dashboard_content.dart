@@ -2218,7 +2218,7 @@ class _FiFilterDialogContentState extends State<_FiFilterDialogContent> {
           children: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Cancelar',
                 style: TextStyle(color: AppTheme.textTertiary),
               ),

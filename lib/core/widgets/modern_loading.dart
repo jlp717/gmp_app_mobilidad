@@ -54,7 +54,7 @@ class ModernLoading extends StatelessWidget {
             const SizedBox(height: 18),
             Text(
               message!,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

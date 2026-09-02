@@ -101,7 +101,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading && _data == null) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Center(child: ModernLoading(message: 'Analizando evolución...')),
       );
@@ -153,7 +153,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
               ),
               const SizedBox(height: 12),
               if (data.topProducts.isEmpty)
-                const RepartidorExecutivePanel(
+                RepartidorExecutivePanel(
                   padding: EdgeInsets.all(20),
                   child: Center(
                     child: Text(
@@ -191,7 +191,7 @@ class _EvolutionHeader extends StatelessWidget {
         : 'Actualizado ${DateFormat('HH:mm').format(lastUpdated!)}';
     return Row(
       children: [
-        const Expanded(
+        Expanded(
           child: Text(
             'Evolución de cobros',
             style: TextStyle(
@@ -203,7 +203,7 @@ class _EvolutionHeader extends StatelessWidget {
         ),
         Text(
           freshness,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
         ),
         IconButton(
           tooltip: 'Actualizar',
@@ -276,7 +276,7 @@ class _EvolutionChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Evolución mensual',
               style: TextStyle(
                 color: AppTheme.textPrimary,
@@ -303,7 +303,7 @@ class _EvolutionChart extends StatelessWidget {
                           }
                           return Text(
                             evolution[index].monthLabel,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               color: AppTheme.textSecondary,
                             ),
@@ -382,7 +382,7 @@ class _ErrorContent extends StatelessWidget {
       children: [
         const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
         const SizedBox(height: 12),
-        Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
+        Text(message, style: TextStyle(color: AppTheme.textSecondary)),
         const SizedBox(height: 12),
         ElevatedButton(onPressed: onRetry, child: const Text('Reintentar')),
       ],
@@ -395,7 +395,7 @@ class _EvolutionEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const RepartidorExecutivePanel(
+    return RepartidorExecutivePanel(
       padding: EdgeInsets.all(24),
       child: Center(
         child: Text(
@@ -435,7 +435,7 @@ class _SummaryCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
@@ -455,7 +455,7 @@ class _SummaryCard extends StatelessWidget {
           if (subtitle != null)
             Text(
               subtitle!,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 10,
               ),
@@ -498,7 +498,7 @@ class _ProductTile extends StatelessWidget {
           product.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 14,
@@ -506,7 +506,7 @@ class _ProductTile extends StatelessWidget {
         ),
         subtitle: Text(
           'Cód: ${product.code} • $units uds',
-          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
         ),
         trailing: Text(
           CurrencyFormatter.formatWhole(product.totalSales),

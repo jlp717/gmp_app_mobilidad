@@ -1030,7 +1030,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
 
   Widget _buildLinesTable() {
     if (_lines.isEmpty) {
-      return const Card(
+      return Card(
         color: AppTheme.raisedSurface,
         child: Padding(
           padding: EdgeInsets.all(24),

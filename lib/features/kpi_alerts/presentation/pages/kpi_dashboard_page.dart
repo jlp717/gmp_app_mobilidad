@@ -287,7 +287,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             child: Text(
               label,
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
           ),
         ],
@@ -636,7 +636,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           // Summary
           Text(
             summary,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
 
           // Detail (if exists)

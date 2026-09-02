@@ -542,7 +542,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 child: Row(
                   children: [
                     const SizedBox(width: 8),
-                    const Icon(
+                    Icon(
                       Icons.person_outline,
                       size: 14,
                       color: AppTheme.textSecondary,
@@ -551,11 +551,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     Expanded(
                       child: TextField(
                         controller: _searchClientController,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textPrimary,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Cliente...',
                           hintStyle: TextStyle(
                             fontSize: 11,
@@ -607,7 +607,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 child: Row(
                   children: [
                     const SizedBox(width: 8),
-                    const Icon(
+                    Icon(
                       Icons.description_outlined,
                       size: 14,
                       color: AppTheme.textSecondary,
@@ -616,11 +616,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     Expanded(
                       child: TextField(
                         controller: _searchAlbaranController,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textPrimary,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Nº Alb/Fac...',
                           hintStyle: TextStyle(
                             fontSize: 11,
@@ -711,7 +711,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     size: 18,
                   ),
                   dropdownColor: AppTheme.raisedSurface,
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: 'default',
                       child: Text(
@@ -827,7 +827,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   Widget _buildLoadingState() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -924,7 +924,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'No hay entregas para este día',
               style: TextStyle(
                 color: AppTheme.textSecondary,
@@ -933,7 +933,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Selecciona otro día en el calendario\no usa el buscador',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -1022,7 +1022,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               child: Text(
                 'Nota para ${albaran.nombreCliente}',
                 style:
-                    const TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 16),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1032,7 +1032,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           controller: controller,
           maxLines: 3,
           autofocus: true,
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
             hintText: 'Añadir nota...',
             hintStyle:
@@ -1041,7 +1041,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             fillColor: AppTheme.softPanel,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.borderColor),
+              borderSide: BorderSide(color: AppTheme.borderColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -1052,7 +1052,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),

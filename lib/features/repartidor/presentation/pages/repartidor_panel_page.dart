@@ -216,7 +216,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       ),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
-        border: const Border(bottom: BorderSide(color: AppTheme.borderColor)),
+        border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
         boxShadow: AppTheme.elevation1,
       ),
       child: Row(
@@ -249,7 +249,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'RESUMEN DEL PERIODO',
                   style: TextStyle(
                     fontSize: 10,
@@ -409,7 +409,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const ListTile(
+      child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: Icon(Icons.inbox_outlined, color: AppTheme.textSecondary),
         title: Text('Sin datos para este periodo'),
@@ -623,7 +623,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppTheme.borderColor),
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             'Sin datos de entregas para este período',
             style: TextStyle(color: AppTheme.textSecondary),
@@ -689,7 +689,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                         FittedBox(
                           child: Text(
                             '${total.toInt()}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 8,
                               color: AppTheme.textSecondary,
                             ),
@@ -719,7 +719,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                         FittedBox(
                           child: Text(
                             '${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 8,
                               color: AppTheme.textSecondary,
                             ),
@@ -745,7 +745,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                 ),
               ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 'Total',
                 style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
               ),
@@ -759,7 +759,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                 ),
               ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 'Entregados',
                 style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
               ),
@@ -819,8 +819,8 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    decoration: const BoxDecoration(color: AppTheme.softPanel),
-                    child: const Row(
+                    decoration: BoxDecoration(color: AppTheme.softPanel),
+                    child: Row(
                       children: [
                         SizedBox(
                           width: 50,
@@ -918,7 +918,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                             width: 50,
                             child: Text(
                               '${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textPrimary,
                                 fontWeight: FontWeight.w600,
@@ -929,7 +929,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                             child: Text(
                               '$total',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textPrimary,
                               ),
@@ -975,7 +975,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                             child: Text(
                               CurrencyFormatter.format(amount),
                               textAlign: TextAlign.right,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textPrimary,
                               ),

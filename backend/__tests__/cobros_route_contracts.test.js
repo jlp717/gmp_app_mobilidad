@@ -61,7 +61,7 @@ describe('legacy cobros route DB2 contracts', () => {
   test('GET /:cliente/pendientes reads real CVC long-column layout', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
         return [{
           SERIE_DOCUMENTO: 'M',
           NUMERO_DOCUMENTO: 123,
@@ -99,7 +99,7 @@ describe('legacy cobros route DB2 contracts', () => {
       fechaVencimiento: '2026-06-30T00:00:00.000Z',
     });
 
-    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+DSEDAC\.CVC\s+C/i.test(sql))[0];
+    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql))[0];
     expect(cvcSql).toContain('CODIGOCLIENTEALBARAN');
     expect(cvcSql).toContain('IMPORTEPENDIENTE');
     expect(cvcSql).not.toMatch(/CVIMCO|CVIMVT|CVCDCL/i);
@@ -108,7 +108,7 @@ describe('legacy cobros route DB2 contracts', () => {
   test('GET /:cliente/pendientes maps UI document aliases and filters on CVC vencimiento', async () => {
     mockQueryWithParams.mockImplementation(async (sql, params) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
         expect(params).toEqual(['C001', 'COB', 20260601, 20260630]);
         return [];
       }
@@ -120,7 +120,7 @@ describe('legacy cobros route DB2 contracts', () => {
       .query({ tipoDocumento: 'FAC', fechaDesde: '2026-06-01', fechaHasta: '2026-06-30' });
 
     expect(res.status).toBe(200);
-    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+DSEDAC\.CVC\s+C/i.test(sql))[0];
+    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql))[0];
     expect(cvcSql).toMatch(/TRIM\(C\.TIPODOCUMENTO\)\s+IN\s+\(\?\)/i);
     expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*>=\s*\?/i);
     expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*<=\s*\?/i);
@@ -129,7 +129,7 @@ describe('legacy cobros route DB2 contracts', () => {
   test('GET /:cliente/estado sums real CVC pending amount without CV aliases', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) return [{ TOTAL_PENDIENTE: 75, NUM_DOCS: 2 }];
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) return [{ TOTAL_PENDIENTE: 75, NUM_DOCS: 2 }];
       if (/FROM\s+JAVIER\.COBROS/i.test(sql)) return [{ TOTAL_APP: 10 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 5 }];
       if (/FROM\s+DSEDAC\.CLI/i.test(sql)) return [{ LIMITECREDITO: 1000 }];
@@ -142,7 +142,7 @@ describe('legacy cobros route DB2 contracts', () => {
     expect(res.body.estadoCliente.totalPendiente).toBe(60);
     expect(res.body.estadoCliente.limiteCredito).toBe(1000);
 
-    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+DSEDAC\.CVC\s+C/i.test(sql))[0];
+    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql))[0];
     expect(cvcSql).toContain('CODIGOCLIENTEALBARAN');
     expect(cvcSql).toContain('IMPORTEPENDIENTE');
     expect(cvcSql).not.toMatch(/CVIMCO|CVIMVT|CVCDCL/i);
@@ -153,7 +153,7 @@ describe('legacy cobros route DB2 contracts', () => {
       if (/OFFSET\s+50\s+ROWS/i.test(sql)) {
         return [{ CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00', NOMBRE_ALT: 'Cliente Uno', NOMBRE_CLI: 'Cliente Uno' }];
       }
-      if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) {
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i.test(sql)) {
         return [{ CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' }];
       }
       return [];
@@ -299,7 +299,7 @@ describe('legacy cobros route DB2 contracts', () => {
   test('GET /:cliente/pendientes flags cobradoPorRepartidor for CTR and REPARTIDOR_COBROS', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
         return [
           {
             SERIE_DOCUMENTO: 'M',
@@ -428,7 +428,7 @@ describe('legacy cobros vendor-scope fallback without clientCodes', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCachedQuery).not.toHaveBeenCalled();
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE/i.test(sql))).toBe(false);
   });
 
   test('GET /:cliente/pendientes blocks PEDIDOS_CAB fallback for out-of-scope client', async () => {
@@ -468,7 +468,7 @@ describe('legacy cobros vendor-scope fallback without clientCodes', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCachedQuery).not.toHaveBeenCalled();
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE/i.test(sql))).toBe(false);
   });
 
   test('Db2CobrosRepository ensureCobrosTable rejects COBROS_TABLE_UNAVAILABLE without CREATE TABLE', async () => {
@@ -490,7 +490,7 @@ describe('legacy cobros vendor-scope fallback without clientCodes', () => {
     let cvcParams = [];
     mockQuery.mockResolvedValue([]);
     mockQueryWithParams.mockImplementation(async (sql, params) => {
-      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
         cvcSql = sql;
         cvcParams = params;
       }

@@ -170,7 +170,7 @@ class _RepartidorLiquidacionDiariaPageState
               accentColor: AppColors.textSecondary,
               child: Text(
                 'Sin cobros en el periodo (${summary.cobrosCount}).',
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             )
           : _CobrosPreview(
@@ -785,7 +785,7 @@ class _LiquidacionLedgerPanel extends StatelessWidget {
           accentColor: AppColors.error,
           child: Column(
             children: [
-              const Text(
+              Text(
                 'No se pudo cargar el desglose. No registres movimientos hasta reintentar.',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
@@ -808,7 +808,7 @@ class _LiquidacionLedgerPanel extends StatelessWidget {
                 value.status == 'CLOSED'
                     ? 'Liquidación cerrada'
                     : 'Jornada abierta',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -823,7 +823,7 @@ class _LiquidacionLedgerPanel extends StatelessWidget {
               if (value.expenses.isEmpty &&
                   value.adjustments.isEmpty &&
                   value.bankDeposits.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 8),
                   child: Text(
                     'Aún no hay movimientos estructurados.',
@@ -848,12 +848,12 @@ class _LedgerTotal extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
             Text(
               _money(value),
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
@@ -887,7 +887,7 @@ class _ModernHeader extends StatelessWidget {
         16,
         16,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.raisedSurface,
         border: Border(
           bottom: BorderSide(color: AppColors.borderColor, width: 0.5),
@@ -907,7 +907,7 @@ class _ModernHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -924,7 +924,7 @@ class _ModernHeader extends StatelessWidget {
                   ),
                 Text(
                   DateFormat('EEEE, d MMMM yyyy', 'es_ES').format(date),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -964,7 +964,7 @@ class _SectionTitle extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -1002,7 +1002,7 @@ class _PaymentMethodCard extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
@@ -1018,7 +1018,7 @@ class _PaymentMethodCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'EUR',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
@@ -1062,7 +1062,7 @@ class _BalanceCard extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
@@ -1078,7 +1078,7 @@ class _BalanceCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'EUR',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
@@ -1129,14 +1129,14 @@ class _LiquidacionClosedState extends StatelessWidget {
         ),
         title: Text(
           '$status · ${result.status}',
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         subtitle: Text(
           '$outbox\nReferencia: ${result.marker}',
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: AppColors.textSecondary),
         ),
       ),
     );
@@ -1201,7 +1201,7 @@ class _CobrosPreview extends ConsumerWidget {
                               cobro.nombreCliente.isNotEmpty
                                   ? cobro.nombreCliente
                                   : cobro.codigoCliente,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 16,
@@ -1209,7 +1209,7 @@ class _CobrosPreview extends ConsumerWidget {
                             ),
                             Text(
                               'Cliente ${cobro.codigoCliente}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 12,
                               ),
@@ -1323,7 +1323,7 @@ class _CobrosPreview extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: AppColors.error.withValues(alpha: 0.28)),
           ),
-          title: const Text(
+          title: Text(
             'Anular cobro',
             style: TextStyle(color: AppColors.textPrimary),
           ),
@@ -1335,7 +1335,7 @@ class _CobrosPreview extends ConsumerWidget {
                 '¿Seguro que quieres anular el cobro de '
                 '${cobro.nombreCliente.isNotEmpty ? cobro.nombreCliente : cobro.codigoCliente}'
                 ' por ${cobro.importe.toStringAsFixed(2)} €?',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
                 ),
@@ -1345,7 +1345,7 @@ class _CobrosPreview extends ConsumerWidget {
                 controller: reasonCtrl,
                 autofocus: true,
                 maxLength: 200,
-                style: const TextStyle(color: AppColors.textPrimary),
+                style: TextStyle(color: AppColors.textPrimary),
                 decoration: const InputDecoration(
                   labelText: 'Motivo (obligatorio)',
                   hintText: 'Ej.: Cobro duplicado / error de importe',
@@ -1459,7 +1459,7 @@ class _CobrosPreview extends ConsumerWidget {
                                   : cobro.codigoCliente,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textPrimary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -1467,7 +1467,7 @@ class _CobrosPreview extends ConsumerWidget {
                             ),
                             Text(
                               cobro.codigoCliente,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 11,
                               ),
@@ -1484,7 +1484,7 @@ class _CobrosPreview extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right,
                         color: AppColors.textSecondary,
                         size: 18,
@@ -1523,7 +1523,7 @@ class _DetailRow extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             '$label:',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 13,
             ),
@@ -1566,7 +1566,7 @@ class _ModernSaveBar extends StatelessWidget {
         16,
         MediaQuery.of(context).padding.bottom + 12,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.raisedSurface,
         border:
             Border(top: BorderSide(color: AppColors.borderColor, width: 0.5)),
@@ -1627,7 +1627,7 @@ class _SelectSingleRepartidor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.inkSurface,
       body: Center(
         child: Text(
@@ -1661,7 +1661,7 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
@@ -1870,7 +1870,7 @@ class _ModernMoneyInput extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -1882,7 +1882,7 @@ class _ModernMoneyInput extends StatelessWidget {
             enabled: enabled,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textAlign: TextAlign.right,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 16,
@@ -1892,7 +1892,7 @@ class _ModernMoneyInput extends StatelessWidget {
               filled: true,
               fillColor: AppColors.softPanel,
               suffixText: 'EUR',
-              suffixStyle: const TextStyle(
+              suffixStyle: TextStyle(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w600,
               ),
@@ -1900,11 +1900,11 @@ class _ModernMoneyInput extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppColors.borderColor),
+                borderSide: BorderSide(color: AppColors.borderColor),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                borderSide: const BorderSide(color: AppColors.borderColor),
+                borderSide: BorderSide(color: AppColors.borderColor),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),

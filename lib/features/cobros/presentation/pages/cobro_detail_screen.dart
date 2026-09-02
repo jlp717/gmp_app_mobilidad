@@ -119,7 +119,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(
+          colorScheme: ColorScheme.dark(
             primary: AppTheme.info,
             surface: AppTheme.raisedSurface,
           ),
@@ -760,7 +760,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                                       AppTheme.success.withValues(alpha: 0.3),
                                 ),
                                 const SizedBox(height: 16),
-                                const Text(
+                                Text(
                                   'No hay cobros pendientes',
                                   style:
                                       TextStyle(color: AppTheme.textSecondary),
@@ -862,7 +862,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               ),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
@@ -898,7 +898,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         ),
         subtitle: Text(
           '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -955,7 +955,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ].join(' · '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
         ),
         trailing: Text(
           _currencyFormat.format(cobro.importe),

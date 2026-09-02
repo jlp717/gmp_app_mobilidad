@@ -54,7 +54,7 @@ class OrderStatusConfig {
   static OrderTheme getTheme(String? estado) {
     final key = canonicalDisplayStatus(estado);
     return themes[key] ??
-        const OrderTheme(
+        OrderTheme(
           primary: AppTheme.textSecondary,
           icon: Icons.help_outline,
           label: 'Desconocido',

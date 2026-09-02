@@ -23,7 +23,7 @@ class EntregaDetailSheet extends StatelessWidget {
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -138,7 +138,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
+                    Text(
                       'Total',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
@@ -162,7 +162,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 // Cerrar
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                  icon: Icon(Icons.close, color: AppTheme.textSecondary),
                 ),
               ],
             ),
@@ -423,7 +423,7 @@ class EntregaDetailSheet extends StatelessWidget {
               children: [
                 Text(
                   item.descripcion,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w500,
                     fontSize: 13,

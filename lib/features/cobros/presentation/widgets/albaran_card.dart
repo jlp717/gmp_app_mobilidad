@@ -215,7 +215,7 @@ class AlbaranCard extends StatelessWidget {
                     children: [
                       Text(
                         albaran.nombreCliente,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
                           fontSize: 15,

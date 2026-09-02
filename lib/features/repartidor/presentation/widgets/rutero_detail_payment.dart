@@ -90,7 +90,7 @@ class RuteroDetailPayment extends StatelessWidget {
       accentColor: _isUrgent ? AppTheme.error : AppTheme.success,
       child: Column(
         children: [
-          const Text(
+          Text(
             'SALDO COBRABLE',
             style: TextStyle(
               color: AppTheme.textSecondary,
@@ -174,7 +174,7 @@ class RuteroDetailPayment extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'MÉTODO DE PAGO',
           style: TextStyle(
             color: AppTheme.textSecondary,
@@ -309,7 +309,7 @@ class RuteroDetailPayment extends StatelessWidget {
                         : isPaid
                             ? 'Cobro preparado con $selectedPaymentMethod'
                             : 'Confirmar recepción del pago',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 11,
                     ),
@@ -348,7 +348,7 @@ class RuteroDetailPayment extends StatelessWidget {
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
         ],
-        style: const TextStyle(
+        style: TextStyle(
           color: AppTheme.textPrimary,
           fontWeight: FontWeight.bold,
         ),

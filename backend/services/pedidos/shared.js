@@ -1,0 +1,27 @@
+const impl = require('./index');
+
+module.exports = {
+    initPedidosTables: impl.initPedidosTables,
+    extractIdempotencyKeyFromRequest: impl.extractIdempotencyKeyFromRequest,
+    ensurePedidoIdempotencyKeyFromRequest: impl.ensurePedidoIdempotencyKeyFromRequest,
+    generatePedidoIdempotencyKey: impl.generatePedidoIdempotencyKey,
+    normalizePedidoIdempotencyKey: impl.normalizePedidoIdempotencyKey,
+    normalizePedidoSaleType: impl.normalizePedidoSaleType,
+    getPedidoSaleTypeLabel: impl.getPedidoSaleTypeLabel,
+    resolveIvaFromCodigo: impl.resolveIvaFromCodigo,
+    applyProductPriceView: impl.applyProductPriceView,
+    buildCreateOrderPayloadHash: impl.buildCreateOrderPayloadHash,
+    getPedidosConfirmationTarget: impl.getPedidosConfirmationTarget,
+    addOrderLine: impl.addOrderLine,
+    cancelOrder: impl.cancelOrder,
+    checkDraftAccumulation: impl.checkDraftAccumulation,
+    cloneOrder: impl.cloneOrder,
+    generateOrderPdf: impl.generateOrderPdf,
+    calculateLineImporte: impl.calculateLineImporte,
+    assertPrecioWithinClientTariff: impl.assertPrecioWithinClientTariff,
+    pedidosBreaker: impl.pedidosBreaker,
+    resolvePedidoTerminal: impl.resolvePedidoTerminal,
+    exportCommercialOrderToSystem: impl.exportCommercialOrderToSystem,
+    withSystemExportLock: impl.withSystemExportLock,
+    _private: impl._private,
+};

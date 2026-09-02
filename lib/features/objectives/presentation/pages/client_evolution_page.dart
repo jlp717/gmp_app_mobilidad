@@ -33,7 +33,7 @@ BoxDecoration _evolutionPanelDecoration({
     border: Border.all(color: accent.withValues(alpha: 0.20)),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.18),
+        color: AppTheme.textPrimary.withValues(alpha: 0.18),
         blurRadius: 18,
         offset: const Offset(0, 8),
       ),
@@ -350,7 +350,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                                 const SizedBox(height: 16),
                                 Text(
                                   'Error: $_error',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textSecondary,
                                   ),
                                 ),
@@ -419,7 +419,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                     Text(
                       '${visibleClients.length} sugeridos',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.42),
+                        color: AppTheme.textPrimary.withValues(alpha: 0.42),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -430,7 +430,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               TextField(
                 controller: _clientSearchController,
                 onChanged: _onClientSearchChanged,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   hintText: 'Buscar cliente, código, NIF o población...',
                   prefixIcon: const Icon(Icons.search),
@@ -459,12 +459,12 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                     borderSide:
-                        BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                        BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.08)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                     borderSide:
-                        BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                        BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.08)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -491,7 +491,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                     shrinkWrap: true,
                     itemCount: visibleClients.length,
                     separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: Colors.white12),
+                        Divider(height: 1, color: AppTheme.borderColor),
                     itemBuilder: (context, index) {
                       final client = visibleClients[index];
                       final code = _clientCode(client);
@@ -509,7 +509,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                           border: Border.all(
                             color: selected
                                 ? AppTheme.info.withValues(alpha: 0.34)
-                                : Colors.white.withValues(alpha: 0.06),
+                                : AppTheme.textPrimary.withValues(alpha: 0.06),
                           ),
                         ),
                         child: ListTile(
@@ -519,13 +519,13 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                               const EdgeInsets.symmetric(horizontal: 10),
                           title: Text(
                             name.isEmpty ? code : name,
-                            style: const TextStyle(color: Colors.white),
+                            style: TextStyle(color: AppTheme.textPrimary),
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             town.isEmpty ? code : '$code · $town',
                             style:
-                                const TextStyle(color: AppTheme.textSecondary),
+                                TextStyle(color: AppTheme.textSecondary),
                             overflow: TextOverflow.ellipsis,
                           ),
                           trailing: selected
@@ -533,9 +533,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                                   Icons.check_circle,
                                   color: AppTheme.info,
                                 )
-                              : const Icon(
+                              : Icon(
                                   Icons.chevron_right,
-                                  color: Colors.white24,
+                                  color: AppTheme.borderColor,
                                 ),
                           onTap: () => _selectClient(client),
                         ),
@@ -553,7 +553,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
 
   Widget _buildEvolutionContent() {
     if (_selectedClientCode == null) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -577,7 +577,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.show_chart_outlined,
               size: 48,
               color: AppTheme.textSecondary,
@@ -586,7 +586,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             Text(
               'No hay datos de evolución para $_selectedClientName ($_selectedClientCode)',
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 16),
               textAlign: TextAlign.center,
             ),
           ],
@@ -671,7 +671,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               'Evolución Mensual',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
             ),
             const SizedBox(height: 12),
@@ -687,7 +687,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                         show: true,
                         drawVerticalLine: false,
                         getDrawingHorizontalLine: (value) => FlLine(
-                          color: Colors.white.withValues(alpha: 0.06),
+                          color: AppTheme.textPrimary.withValues(alpha: 0.06),
                           strokeWidth: 1,
                         ),
                       ),
@@ -741,7 +741,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                       borderData: FlBorderData(
                         show: true,
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: AppTheme.textPrimary.withValues(alpha: 0.08),
                         ),
                       ),
                       minX: 0,
@@ -796,7 +796,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               'Productos Top',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
             ),
             const SizedBox(height: 12),
@@ -812,7 +812,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                         color: AppTheme.inkSurface.withValues(alpha: 0.24),
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.06),
+                          color: AppTheme.textPrimary.withValues(alpha: 0.06),
                         ),
                       ),
                       child: ListTile(
@@ -880,7 +880,7 @@ class _EvolutionMetric extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.50),
+              color: AppTheme.textPrimary.withValues(alpha: 0.50),
               fontSize: 10,
               fontWeight: FontWeight.w600,
             ),

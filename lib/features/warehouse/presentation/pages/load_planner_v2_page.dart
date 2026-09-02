@@ -260,7 +260,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                     ],
                   ).createShader(bounds);
                 },
-                child: const Icon(
+                child: Icon(
                   Icons.local_shipping_rounded,
                   size: 48,
                   color: AppTheme.textPrimary,
@@ -285,7 +285,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 width: 120,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: const LinearProgressIndicator(
+                  child: LinearProgressIndicator(
                     backgroundColor: AppTheme.softPanel,
                     color: AppTheme.info,
                     minHeight: 2,
@@ -516,7 +516,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Error al cargar el plan',
               style: TextStyle(
                 color: AppTheme.textPrimary,
@@ -527,7 +527,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
             const SizedBox(height: 8),
             Text(
               error,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 12,
               ),

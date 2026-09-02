@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -239,7 +240,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       });
 
     if (products.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No hay productos',
           style: TextStyle(color: AppTheme.textTertiary),
@@ -350,7 +351,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textTertiary),
             ),
@@ -427,7 +428,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               overflow: TextOverflow.ellipsis,
             ),
-            const Text(
+            Text(
               'Historial de Compras',
               style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
             ),
@@ -444,7 +445,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 color: _editableNotes != null &&
                         (_editableNotes!['text'] as String).isNotEmpty
                     ? AppTheme.warning
-                    : Colors.white,
+                    : AppTheme.textPrimary,
               ),
               onPressed: _openNotesDialog,
               tooltip: 'Observaciones',
@@ -493,8 +494,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               Expanded(
                                 child: Text(
                                   _editableNotes!['text'] as String,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -514,7 +515,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         child: _maxDepthLevel == 0
                             ? _buildFlatProductsList()
                             : (_fiHierarchy.isEmpty
-                                ? const Center(
+                                ? Center(
                                     child: Text(
                                       'Sin datos',
                                       style: TextStyle(
@@ -939,7 +940,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     const Spacer(),
                     Text(
                       '$products prod.',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 8,
                         color: AppTheme.textSecondary,
                       ),
@@ -951,15 +952,15 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   _formatCurrency(sales),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 Text(
                   '${_formatUnits(units)} uds',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9,
                     color: AppTheme.textSecondary,
                   ),
@@ -1003,7 +1004,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ),
           Text(
             label,
-            style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 8, color: AppTheme.textSecondary),
           ),
         ],
       ),
@@ -1028,7 +1029,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ),
         Text(
           label,
-          style: const TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+          style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
         ),
       ],
     );
@@ -1208,7 +1209,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               children: [
                 Text(
                   'Referencia $referenceYear',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9,
                     color: AppTheme.textSecondary,
                   ),
@@ -1238,12 +1239,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       height: height,
       padding: const EdgeInsets.only(bottom: 2),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.inkSurface,
         border: Border(bottom: BorderSide(color: AppTheme.info, width: 2)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black26,
+            color: AppTheme.textPrimary.withValues(alpha: 0.26),
             blurRadius: 4,
             offset: Offset(0, 2),
           ),
@@ -1332,7 +1333,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   final yUnits = _numValue(yData, 'units');
                   final rowColor = ySales.abs() < 0.01
                       ? AppTheme.textSecondary
-                      : Colors.white;
+                      : AppTheme.textPrimary;
 
                   return Padding(
                     padding: const EdgeInsets.only(top: 1),
@@ -1398,7 +1399,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Widget _buildFlatProductsFromNode(Map<String, dynamic> node) {
     final allProducts = _collectAllProducts(node);
     if (allProducts.isEmpty) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.all(8),
         child: Text(
           'Sin productos',
@@ -1455,7 +1456,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            const Text(
+            Text(
               'Grupos: ',
               style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
             ),
@@ -1585,7 +1586,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ),
                             Text(
                               '$childCount subcategorías',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 9,
                                 color: AppTheme.textSecondary,
                               ),
@@ -1707,7 +1708,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ),
                             Text(
                               '$childCount grupos',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 8,
                                 color: AppTheme.textSecondary,
                               ),
@@ -1830,7 +1831,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ),
                             Text(
                               '$childCount líneas',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 7,
                                 color: AppTheme.textSecondary,
                               ),
@@ -1954,7 +1955,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ),
                             Text(
                               '$productCount productos',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 7,
                                 color: AppTheme.textSecondary,
                               ),
@@ -2123,7 +2124,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   Color _monthlyTrendBg(double sales, double prevSales) {
     final color = _monthlyTrendColor(sales, prevSales);
-    if (color == AppTheme.textSecondary) return Colors.transparent;
+    if (color == AppTheme.textSecondary) return AppColors.transparent;
     return color.withValues(alpha: 0.12);
   }
 
@@ -2193,7 +2194,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     style: TextStyle(
                       fontSize: compact ? 9 : 10,
                       fontWeight: FontWeight.bold,
-                      color: hasSales ? Colors.white : AppTheme.textSecondary,
+                      color: hasSales ? AppTheme.textPrimary : AppTheme.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -2350,7 +2351,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   style: TextStyle(
                     fontSize: compact ? 9 : 10,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -2362,7 +2363,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     style: TextStyle(
                       fontSize: compact ? 9 : 10,
                       fontWeight: FontWeight.bold,
-                      color: isLost ? AppTheme.error : Colors.white,
+                      color: isLost ? AppTheme.error : AppTheme.textPrimary,
                     ),
                   ),
                 ),
@@ -2443,7 +2444,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       ),
       child: Column(
         children: [
-          const Row(
+          Row(
             children: [
               SizedBox(
                 width: 38,
@@ -2483,7 +2484,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             final units = _numValue(data, 'units');
             final sales = _numValue(data, 'sales');
             final rowColor =
-                sales.abs() < 0.01 ? AppTheme.textSecondary : Colors.white;
+                sales.abs() < 0.01 ? AppTheme.textSecondary : AppTheme.textPrimary;
 
             return Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -2569,7 +2570,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       ),
       child: Column(
         children: [
-          const Row(
+          Row(
             children: [
               SizedBox(
                 width: 38,
@@ -2632,7 +2633,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         '${_formatCurrency(avgCost)}/$unitLabel',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 9,
                           color: AppTheme.textSecondary,
                         ),
@@ -2830,7 +2831,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         const Spacer(),
                         // Ficha Técnica button
                         Material(
-                          color: Colors.transparent,
+                          color: AppColors.transparent,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(6),
                             onTap: () => _openFichaTecnica(
@@ -2989,7 +2990,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             subtitle: Text(
               '$pCount productos • ${subs.length} subfam.',
               style:
-                  const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+                  TextStyle(fontSize: 9, color: AppTheme.textSecondary),
             ),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -3005,7 +3006,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 ),
                 Text(
                   '${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9,
                     color: AppTheme.textSecondary,
                   ),
@@ -3256,7 +3257,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         const Spacer(),
                         // Ficha Técnica button
                         Material(
-                          color: Colors.transparent,
+                          color: AppColors.transparent,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(6),
                             onTap: () => _openFichaTecnica(
@@ -3330,7 +3331,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     children: [
                       Text(
                         'PVP/$unitLabel',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 8,
                           color: AppTheme.textSecondary,
                         ),
@@ -3349,7 +3350,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           if (prevYearAvgPrice > 0)
                             Text(
                               ' (${_formatCurrency(prevYearAvgPrice)})',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 8,
                                 color: AppTheme.textTertiary,
                               ),
@@ -3366,14 +3367,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       children: [
                         Text(
                           'Coste/$unitLabel',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 8,
                             color: AppTheme.textSecondary,
                           ),
                         ),
                         Text(
                           _formatCurrency(avgUnitCost),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             color: AppTheme.textPrimary,
                           ),
@@ -3388,7 +3389,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       children: [
                         Text(
                           'Margen/$unitLabel',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 8,
                             color: AppTheme.textSecondary,
                           ),
@@ -3412,7 +3413,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     children: [
                       Text(
                         unitLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 8,
                           color: AppTheme.textSecondary,
                         ),
@@ -3433,7 +3434,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           if (prevYearUnits > 0)
                             Text(
                               ' (${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 8,
                                 color: AppTheme.textTertiary,
                               ),
@@ -3463,7 +3464,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   children: [
                     Text(
                       'Total ${_selectedYears.length == 1 ? _selectedYears.first : "Periodo"}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 7,
                         color: AppTheme.textSecondary,
                       ),
@@ -3482,7 +3483,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         if (prevYearSales > 0)
                           Text(
                             ' (${_formatCurrency(prevYearSales)})',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 9,
                               color: AppTheme.textTertiary,
                             ),
@@ -3563,7 +3564,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
                 // Background & Border Colors
                 var bc = AppTheme.mutedPanel;
-                var bgColor = Colors.transparent;
+                var bgColor = AppColors.transparent;
                 var bWidth = 0.5;
                 if (s > 0) bc = AppTheme.textTertiary;
 
@@ -3588,7 +3589,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   width: 60,
                   margin: const EdgeInsets.only(right: 2),
                   decoration: BoxDecoration(
-                    color: s > 0 ? bgColor : Colors.transparent,
+                    color: s > 0 ? bgColor : AppColors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: bc, width: bWidth),
                   ),
@@ -3601,7 +3602,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         children: [
                           Text(
                             _mNames[m - 1],
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 8,
                               color: AppTheme.textTertiary,
                             ),
@@ -3619,13 +3620,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           else if (isLost)
                             Text(
                               '(${_formatCurrency(prevS)})',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 8,
-                                color: Colors.white38,
+                                color: AppTheme.textTertiary,
                               ),
                             )
                           else
-                            const Text(
+                            Text(
                               '-',
                               style: TextStyle(
                                 fontSize: 8,
@@ -3726,7 +3727,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     showDialog<void>(
       context: ctx,
       barrierDismissible: false,
-      builder: (_) => const AlertDialog(
+      builder: (_) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         content: Row(
           children: [
@@ -3763,7 +3764,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       navigator.push(
         MaterialPageRoute<void>(
           builder: (_) => Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: AppTheme.surfaceColor,
             appBar: AppBar(
               title: Text(
                 'Ficha Técnica - $productCode',

@@ -14,7 +14,9 @@ import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/theme_provider.dart';
 import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
@@ -43,7 +45,7 @@ void main() async {
   if (kReleaseMode) {
     ErrorWidget.builder = (FlutterErrorDetails details) {
       return Material(
-        color: const Color(0xFF1E1F25),
+        color: AppColors.darkCanvas,
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -53,17 +55,17 @@ void main() async {
                 Icon(
                   Icons.warning_amber_rounded,
                   size: 48,
-                  color: Colors.orange.shade300,
+                  color: AppColors.ochre,
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Se ha producido un error',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  style: TextStyle(color: AppColors.darkInk, fontSize: 16),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Vuelve atrás o reinicia la app',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  style: TextStyle(color: AppColors.darkMuted, fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -332,6 +334,13 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = ref.watch(
+      themeProvider.select((provider) => provider.themeMode),
+    );
+    AppColors.setBrightness(
+      themeMode == ThemeMode.dark ? Brightness.dark : Brightness.light,
+    );
+
     ref.listen(authProvider, (previous, next) {
       _authChangeSignal.value++;
       final authState = next.value;
@@ -363,7 +372,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

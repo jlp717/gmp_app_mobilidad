@@ -271,7 +271,7 @@ class AsyncOperationModal extends StatelessWidget {
           builder: (_, text, __) => Text(
             text,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 15,
               fontWeight: FontWeight.w500,
@@ -297,7 +297,7 @@ class AsyncOperationModal extends StatelessWidget {
           builder: (_, text, __) => Text(
             text,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 14,
             ),

@@ -387,7 +387,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.warning_amber_rounded,
@@ -400,12 +400,12 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         ),
         content: Text(
           'El precio (${PedidosFormatters.money(price, decimals: 3)}) es inferior al minimo (${PedidosFormatters.money(minPrice, decimals: 3)})',
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -604,7 +604,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                     s.almacenName.isNotEmpty
                                         ? s.almacenName
                                         : 'Almacen ${s.almacenCode}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: AppTheme.textSecondary,
                                       fontSize: 11,
                                     ),
@@ -612,7 +612,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 ),
                                 Text(
                                   _buildWarehouseStockText(s),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 11,
                                   ),
@@ -867,7 +867,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                       decimal: true,
                                     ),
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: AppTheme.textPrimary,
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -929,7 +929,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 decimal: true,
                               ),
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -1087,7 +1087,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             // Primary: price per selected unit
                             Text(
                               'Precio: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} €/$selectedLabel',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -1098,7 +1098,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             if (boxContent.isNotEmpty)
                               Text(
                                 '1 caja = $boxContent · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 11,
                                 ),
@@ -1106,7 +1106,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             if (boxContent.isEmpty && _selectedUnit != 'CAJAS')
                               Text(
                                 '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 11,
                                 ),
@@ -1176,7 +1176,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             decimal: true,
                           ),
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -1244,7 +1244,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   controller: _priceController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 16,
                   ),
@@ -1256,7 +1256,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       color: AppTheme.success,
                       fontSize: 16,
                     ),
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                     filled: true,
                     fillColor: AppTheme.softPanel,
                     border: OutlineInputBorder(
@@ -1264,7 +1264,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.borderColor),
+                      borderSide: BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -1498,7 +1498,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
           SnackBar(
             content: Text(
               'Se ha añadido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
               ),
@@ -1524,7 +1524,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
           SnackBar(
             content: Text(
               errorFromAdd,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.bold,
               ),

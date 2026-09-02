@@ -135,7 +135,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                   _isFactura
                       ? 'Factura ${albaran.numeroFactura}'
                       : 'Albarán ${albaran.numeroAlbaran}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
                   ),
@@ -167,27 +167,27 @@ class RuteroDetailCompleted extends StatelessWidget {
               padding: const EdgeInsets.only(left: 32, bottom: 4),
               child: Text(
                 'N. fiscal: ${albaran.nombreFiscal}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
                 ),
               ),
             ),
-          const Divider(color: AppTheme.borderColor, height: 20),
+          Divider(color: AppTheme.borderColor, height: 20),
           _InfoRow(
             icon: Icons.location_on,
             label: 'Dirección',
             value: '${albaran.direccion}, ${albaran.poblacion}',
           ),
           if (albaran.ordenPreparacion != null) ...[
-            const Divider(color: AppTheme.borderColor, height: 20),
+            Divider(color: AppTheme.borderColor, height: 20),
             _InfoRow(
               icon: Icons.inventory_2_outlined,
               label: 'Orden prep.',
               value: albaran.ordenPreparacion.toString(),
             ),
           ],
-          const Divider(color: AppTheme.borderColor, height: 20),
+          Divider(color: AppTheme.borderColor, height: 20),
           if (albaran.importeNeto > 0) ...[
             _InfoRow(
               icon: Icons.euro,
@@ -203,7 +203,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                   value: '${iva.iva.toStringAsFixed(2)} €',
                 ),
               ),
-            const Divider(color: AppTheme.borderColor, height: 20),
+            Divider(color: AppTheme.borderColor, height: 20),
             _InfoRow(
               icon: Icons.euro,
               label: 'Total',
@@ -216,14 +216,14 @@ class RuteroDetailCompleted extends StatelessWidget {
               value: '${albaran.importeTotal.toStringAsFixed(2)} €',
             ),
           ],
-          const Divider(color: AppTheme.borderColor, height: 20),
+          Divider(color: AppTheme.borderColor, height: 20),
           _InfoRow(
             icon: Icons.payment,
             label: 'Forma pago doc.',
             value: albaran.formaPagoDesc,
           ),
           if (albaran.hasAppCobro) ...[
-            const Divider(color: AppTheme.borderColor, height: 20),
+            Divider(color: AppTheme.borderColor, height: 20),
             _InfoRow(
               icon: Icons.payments_outlined,
               label: 'Cobrado en ruta',
@@ -251,7 +251,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                 ),
               ),
           ] else if (_isNoDelivery == false) ...[
-            const Divider(color: AppTheme.borderColor, height: 20),
+            Divider(color: AppTheme.borderColor, height: 20),
             const _InfoRow(
               icon: Icons.money_off_outlined,
               label: 'Cobrado en ruta',
@@ -260,7 +260,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           ],
           if (albaran.observaciones != null &&
               albaran.observaciones!.isNotEmpty) ...[
-            const Divider(color: AppTheme.borderColor, height: 20),
+            Divider(color: AppTheme.borderColor, height: 20),
             _InfoRow(
               icon: Icons.notes,
               label: 'Observaciones',
@@ -279,7 +279,7 @@ class RuteroDetailCompleted extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 10, top: 4),
         child: Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textSecondary,
             fontWeight: FontWeight.bold,
             fontSize: 12,
@@ -297,7 +297,7 @@ class RuteroDetailCompleted extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _sectionTitle('NOTA DE ENTREGA'),
-        const Text(
+        Text(
           'Comprobante de la entrega con firma y líneas confirmadas.',
           style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
         ),
@@ -348,7 +348,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           _sectionTitle(
             _isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
           ),
-          const Text(
+          Text(
             'Documento comercial ERP. Incluye la firma cuando está disponible.',
             style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
@@ -401,13 +401,13 @@ class _InfoRow extends StatelessWidget {
           width: Responsive.value(context, phone: 60, desktop: 80),
           child: Text(
             label,
-            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
           ),
         ),
       ],

@@ -164,7 +164,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
               onChanged: (value) => setState(() => _searchQuery = value),
               onSubmitted: widget.onSearchSubmitted,
               textInputAction: TextInputAction.search,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: const InputDecoration(
                 labelText: 'Buscar cliente, albarán o factura',
                 prefixIcon: Icon(Icons.search),
@@ -502,7 +502,7 @@ class _RepartidorVencimientosPageState
   @override
   Widget build(BuildContext context) {
     if (widget.repartidorId.isEmpty) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Center(
           child: Text(
@@ -513,7 +513,7 @@ class _RepartidorVencimientosPageState
       );
     }
     if (_isLoading && _items.isEmpty) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Center(child: CircularProgressIndicator()),
       );
@@ -530,7 +530,7 @@ class _RepartidorVencimientosPageState
                   _error!,
                   'No se pudieron cargar los cobros',
                 ),
-                style: const TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -631,7 +631,7 @@ class _RepartidorVencimientosPageState
                 children: [
                   Text(
                     item.cliente,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
@@ -645,7 +645,7 @@ class _RepartidorVencimientosPageState
                       Expanded(
                         child: Text(
                           item.documento,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                           ),
                         ),
@@ -655,7 +655,7 @@ class _RepartidorVencimientosPageState
                   const SizedBox(height: 8),
                   Text(
                     'Vence: ${_formatDueDate(item.fecha)}',
-                    style: const TextStyle(color: AppTheme.textSecondary),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -670,7 +670,7 @@ class _RepartidorVencimientosPageState
                     const SizedBox(height: 8),
                     Text(
                       item.notas!,
-                      style: const TextStyle(color: AppTheme.textTertiary),
+                      style: TextStyle(color: AppTheme.textTertiary),
                     ),
                   ],
                   if (canAbonar) ...[
@@ -835,7 +835,7 @@ class _RepartidorVencimientosPageState
                     color: AppTheme.info.withValues(alpha: 0.28),
                   ),
                 ),
-                title: const Text(
+                title: Text(
                   'Abonar vencimiento',
                   style: TextStyle(color: AppTheme.textPrimary),
                 ),
@@ -845,7 +845,7 @@ class _RepartidorVencimientosPageState
                   children: [
                     Text(
                       item.documento,
-                      style: const TextStyle(color: AppTheme.textSecondary),
+                      style: TextStyle(color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -854,7 +854,7 @@ class _RepartidorVencimientosPageState
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      style: const TextStyle(color: AppTheme.textPrimary),
+                      style: TextStyle(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
                         labelText:
                             'Importe (pendiente ${item.importePendiente.toStringAsFixed(2)} €)',
@@ -865,7 +865,7 @@ class _RepartidorVencimientosPageState
                     DropdownButtonFormField<String>(
                       initialValue: formaPago,
                       dropdownColor: AppTheme.raisedSurface,
-                      style: const TextStyle(color: AppTheme.textPrimary),
+                      style: TextStyle(color: AppTheme.textPrimary),
                       items: const [
                         DropdownMenuItem(
                           value: 'EFECTIVO',
@@ -901,7 +901,7 @@ class _RepartidorVencimientosPageState
                       maxLength: 60,
                       minLines: 2,
                       maxLines: 4,
-                      style: const TextStyle(color: AppTheme.textPrimary),
+                      style: TextStyle(color: AppTheme.textPrimary),
                       decoration: const InputDecoration(
                         labelText: 'Observaciones (opcional)',
                         prefixIcon: Icon(Icons.notes),
@@ -990,7 +990,7 @@ class _FinanceHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -999,7 +999,7 @@ class _FinanceHeader extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
                   ),
@@ -1141,7 +1141,7 @@ class _GroupHeader extends StatelessWidget {
           Expanded(
             child: Text(
               '$title ($count)',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
@@ -1200,7 +1200,7 @@ class _VencimientoRow extends StatelessWidget {
                     item.cliente,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1215,7 +1215,7 @@ class _VencimientoRow extends StatelessWidget {
                           '${item.documento} - '
                           '${_formatDueDate(item.fecha)}',
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 12,
                           ),
@@ -1227,7 +1227,7 @@ class _VencimientoRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       item.vendedor!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textTertiary,
                         fontSize: 11,
                       ),
@@ -1242,7 +1242,7 @@ class _VencimientoRow extends StatelessWidget {
               children: [
                 Text(
                   _money(item.importe),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w900,
                   ),
@@ -1319,7 +1319,7 @@ class _EmptyState extends StatelessWidget {
     return Center(
       child: Text(
         message,
-        style: const TextStyle(color: AppTheme.textSecondary),
+        style: TextStyle(color: AppTheme.textSecondary),
       ),
     );
   }

@@ -206,7 +206,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
             ),
           ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'Ver como:',
             style: TextStyle(
               fontSize: 12,
@@ -246,7 +246,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                           color: AppTheme.info,
                           size: 20,
                         ),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -256,7 +256,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                           widget.includeAllOption
                               ? _allOptionLabel
                               : 'Selecciona comercial',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
@@ -269,7 +269,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                               value: 'ALL',
                               child: Text(
                                 _allOptionLabel,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -285,7 +285,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                               value: code,
                               child: Text(
                                 displayName,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontSize: 12,
                                 ),

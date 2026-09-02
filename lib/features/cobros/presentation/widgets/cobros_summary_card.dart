@@ -62,7 +62,7 @@ class CobrosSummaryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Text(
+              Text(
                 'Resumen del día',
                 style: TextStyle(
                   color: AppTheme.textPrimary,

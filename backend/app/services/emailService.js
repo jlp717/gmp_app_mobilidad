@@ -6,24 +6,16 @@
 const nodemailer = require('nodemailer');
 const logger = require('../../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('../../services/smtpLogger');
+const { assertSecureSmtpConfig, buildSmtpConfig } = require('../../services/smtp-config');
 
-// Configuración SMTP - mail.mari-pepa.com:465 (SSL)
 const SMTP_CONFIG = {
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT) || 465,
-    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 8000,
-    socketTimeout: 15000,
-    tls: {
-        rejectUnauthorized: false
-    },
+    ...buildSmtpConfig({
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 15000,
+    }),
     logger: smtpLogger,
-    debug: isSmtpDebugEnabled()
+    debug: isSmtpDebugEnabled(),
 };
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
@@ -33,8 +25,13 @@ let transporterHealthy = false;
 
 function initializeTransporter() {
     if (!transporter) {
-        transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info('Email service initialized', { host: SMTP_CONFIG.host, port: SMTP_CONFIG.port });
+        const secureConfig = assertSecureSmtpConfig(SMTP_CONFIG);
+        transporter = nodemailer.createTransport(secureConfig);
+        logger.info('Email service initialized', {
+            host: secureConfig.host,
+            port: secureConfig.port,
+            tlsServername: secureConfig.tls.servername,
+        });
     }
     return transporter;
 }

@@ -4,19 +4,14 @@
 const nodemailer = require('nodemailer');
 const logger = require('../../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('../../services/smtpLogger');
+const { assertSecureSmtpConfig, buildSmtpConfig } = require('../../services/smtp-config');
 
 const SMTP_CONFIG = {
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '465', 10),
-  secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT || '465') === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 8000,
-  socketTimeout: 15000,
-  tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2' },
+  ...buildSmtpConfig({
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
+  }),
   logger: smtpLogger,
   debug: isSmtpDebugEnabled(),
 };
@@ -37,7 +32,7 @@ function invalidateTransporter() {
 
 function getTransporter() {
   if (!transporter) {
-    transporter = nodemailer.createTransport(SMTP_CONFIG);
+    transporter = nodemailer.createTransport(assertSecureSmtpConfig(SMTP_CONFIG));
   }
   return transporter;
 }

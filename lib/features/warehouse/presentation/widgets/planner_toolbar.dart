@@ -151,7 +151,7 @@ class PlannerToolbar extends StatelessWidget {
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
         title: const Row(
           children: [

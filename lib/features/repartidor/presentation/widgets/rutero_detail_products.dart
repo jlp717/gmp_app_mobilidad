@@ -168,7 +168,7 @@ class RuteroDetailProducts extends StatelessWidget {
   }
 
   Widget _buildLoading() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -218,7 +218,7 @@ class RuteroDetailProducts extends StatelessWidget {
             Text(
               '$itemsError',
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -244,7 +244,7 @@ class RuteroDetailProducts extends StatelessWidget {
             size: 64,
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No hay líneas de producto',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
           ),
@@ -284,7 +284,7 @@ class RuteroDetailProducts extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 '$checked de $total productos verificados',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w500,
                 ),
@@ -343,7 +343,7 @@ class RuteroDetailProducts extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(top: BorderSide(color: AppTheme.borderColor)),
       ),
@@ -500,7 +500,7 @@ class _ProductCard extends StatelessWidget {
           children: [
             Text(
               'Ref: ${linea.codigoArticulo}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 11,
               ),
@@ -640,7 +640,7 @@ class _ProductCard extends StatelessWidget {
   Widget _buildEditIcon() {
     return GestureDetector(
       onTap: onShowEditDialog,
-      child: const Icon(
+      child: Icon(
         Icons.edit_outlined,
         color: AppTheme.textTertiary,
         size: 18,

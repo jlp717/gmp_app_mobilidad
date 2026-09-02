@@ -47,7 +47,7 @@ class RuteroStopStatusBadges extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
               child: Text(label,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textPrimary, fontSize: 12))),
         ])),
       );

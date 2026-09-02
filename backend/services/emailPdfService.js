@@ -17,6 +17,7 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
+const { assertSecureSmtpConfig, buildSmtpConfig } = require('./smtp-config');
 
 function redactEmailForLog(value) {
     const email = String(value || '').trim();
@@ -29,29 +30,18 @@ function redactEmailForLog(value) {
 // CONFIGURACIÓN SMTP
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-// Primary SMTP config — prefer SMTP_PDF_* vars (explicit PDF config), fall back to SMTP_*
-const _smtpHost = process.env.SMTP_PDF_HOST || process.env.SMTP_HOST || 'mail.mari-pepa.com';
-const _smtpPort = parseInt(process.env.SMTP_PDF_PORT || process.env.SMTP_PORT) || 587;
-const _smtpSecure = (process.env.SMTP_PDF_SECURE || process.env.SMTP_SECURE) === 'true' || _smtpPort === 465;
-const _smtpUser = process.env.SMTP_PDF_USER || process.env.SMTP_USER || 'noreply@mari-pepa.com';
-const _smtpPass = process.env.SMTP_PDF_PASS || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
-const _allowInsecureSmtpTls = process.env.NODE_ENV === 'test'
-    && String(process.env.SMTP_PDF_ALLOW_INSECURE_TLS || '').trim().toLowerCase() === 'true';
-
 const SMTP_CONFIG = {
-    host: _smtpHost,
-    port: _smtpPort,
-    secure: _smtpSecure,
-    auth: {
-        user: _smtpUser,
-        pass: _smtpPass
-    },
-    connectionTimeout: parseInt(process.env.SMTP_PDF_CONNECTION_TIMEOUT) || 30000,
-    greetingTimeout: parseInt(process.env.SMTP_PDF_GREETING_TIMEOUT) || 25000,
-    socketTimeout: parseInt(process.env.SMTP_PDF_SOCKET_TIMEOUT) || 45000,
-    tls: {
-        rejectUnauthorized: !_allowInsecureSmtpTls
-    },
+    ...buildSmtpConfig({
+        hostEnv: ['SMTP_PDF_HOST', 'SMTP_HOST'],
+        portEnv: ['SMTP_PDF_PORT', 'SMTP_PORT'],
+        userEnv: ['SMTP_PDF_USER', 'SMTP_USER'],
+        passwordEnv: ['SMTP_PDF_PASS', 'SMTP_PASSWORD', 'SMTP_PASS'],
+        tlsServernameEnv: ['SMTP_PDF_TLS_SERVERNAME', 'SMTP_TLS_SERVERNAME'],
+        defaultPort: 587,
+        connectionTimeout: parseInt(process.env.SMTP_PDF_CONNECTION_TIMEOUT, 10) || 30000,
+        greetingTimeout: parseInt(process.env.SMTP_PDF_GREETING_TIMEOUT, 10) || 25000,
+        socketTimeout: parseInt(process.env.SMTP_PDF_SOCKET_TIMEOUT, 10) || 45000,
+    }),
     logger: smtpLogger,
     debug: isSmtpDebugEnabled()
 };
@@ -63,7 +53,13 @@ const SMTP_FALLBACK_PORTS = [587, 2525];
 const MAX_RETRIES = SMTP_FALLBACK_PORTS.length + 1; // Primary + fallbacks
 
 function buildFallbackConfig(port) {
-    return { ...SMTP_CONFIG, port, secure: port === 465, pool: false };
+    return assertSecureSmtpConfig({
+        ...SMTP_CONFIG,
+        port,
+        secure: port === 465,
+        requireTLS: port !== 465,
+        pool: false,
+    });
 }
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
@@ -209,10 +205,12 @@ function invalidateTransporter() {
 
 function getTransporter() {
     if (!transporter) {
-        transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info(`EmailPdfService: Transporter SMTP inicializado`, {
-            host: SMTP_CONFIG.host,
-            port: SMTP_CONFIG.port
+        const secureConfig = assertSecureSmtpConfig(SMTP_CONFIG);
+        transporter = nodemailer.createTransport(secureConfig);
+        logger.info('EmailPdfService: Transporter SMTP inicializado', {
+            host: secureConfig.host,
+            port: secureConfig.port,
+            tlsServername: secureConfig.tls.servername,
         });
     }
     return transporter;

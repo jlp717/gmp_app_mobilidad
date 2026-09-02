@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 
@@ -136,12 +137,12 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
   @override
   Widget build(BuildContext context) {
     if (widget.data.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text(
             'No hay datos para esta selección',
-            style: TextStyle(color: Colors.white30),
+            style: TextStyle(color: AppTheme.textTertiary),
           ),
         ),
       );
@@ -149,12 +150,12 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
 
     return Card(
       elevation: 0,
-      shadowColor: Colors.transparent,
+      shadowColor: AppColors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
         side: BorderSide(color: AppTheme.info.withValues(alpha: 0.16)),
       ),
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -303,8 +304,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             child: Text(
               CurrencyFormatter.format(totalSales),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
               ),
@@ -316,7 +317,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             child: Text(
               '${marginPct.toStringAsFixed(1)}%',
               textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
           ),
           // PEDIDOS column - total order count
@@ -359,8 +360,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       AppTheme.info,
       AppTheme.accentIndigo,
       AppTheme.success,
-      Colors.teal,
-      Colors.pink,
+      AppColors.teal,
+      AppColors.neonPink,
     ];
     final levelColor = levelColors[level % levelColors.length];
 
@@ -394,10 +395,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
           color: isSelected
               ? levelColor.withValues(alpha: 0.16)
               : (level > 0
-                  ? Colors.white.withValues(alpha: 0.025 * level)
-                  : Colors.white.withValues(alpha: 0.01)),
+                  ? AppTheme.textPrimary.withValues(alpha: 0.025 * level)
+                  : AppTheme.textPrimary.withValues(alpha: 0.01)),
           border: Border(
-            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+            bottom: BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.05)),
             left: BorderSide(
               color: levelColor.withValues(alpha: level == 0 ? 0.26 : 0.38),
               width: level == 0 ? 3 : 2,
@@ -417,7 +418,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                         ? Icons.keyboard_arrow_down
                         : Icons.keyboard_arrow_right,
                     size: 18,
-                    color: node.isExpanded ? levelColor : Colors.white38,
+                    color: node.isExpanded ? levelColor : AppTheme.textTertiary,
                   ),
                 ),
               )
@@ -440,7 +441,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                   Text(
                     node.name,
                     style: TextStyle(
-                      color: level == 0 ? Colors.white : Colors.white70,
+                      color: level == 0 ? AppTheme.textPrimary : AppTheme.textSecondary,
                       fontWeight:
                           level == 0 ? FontWeight.bold : FontWeight.normal,
                       fontSize: level == 0 ? 14 : 13,
@@ -467,7 +468,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                 CurrencyFormatter.format(node.sales),
                 textAlign: TextAlign.right,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontSize: level == 0 ? 13 : 12,
                   fontWeight: level == 0 ? FontWeight.bold : FontWeight.normal,
                 ),
@@ -496,7 +497,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                     displayOrders.toString(),
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                      color: hasChildren ? levelColor : Colors.white70,
+                      color: hasChildren ? levelColor : AppTheme.textSecondary,
                       fontSize: 12,
                       fontWeight:
                           hasChildren ? FontWeight.bold : FontWeight.normal,

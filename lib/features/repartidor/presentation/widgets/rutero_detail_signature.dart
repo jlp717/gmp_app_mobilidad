@@ -21,7 +21,7 @@ class RuteroDetailSignature extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Row(
+            Row(
               children: [
                 Icon(Icons.draw, color: AppTheme.info, size: 20),
                 SizedBox(width: 8),

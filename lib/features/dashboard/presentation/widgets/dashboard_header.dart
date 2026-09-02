@@ -55,7 +55,7 @@ class DashboardHeader extends StatelessWidget {
             child: Center(
               child: Text(
                 initials,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.inkSurface,
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -87,7 +87,7 @@ class DashboardHeader extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.access_time,
                       size: 13,
                       color: AppTheme.textTertiary,
@@ -116,7 +116,7 @@ class DashboardHeader extends StatelessWidget {
               ),
               child: Text(
                 user!.zone!,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,

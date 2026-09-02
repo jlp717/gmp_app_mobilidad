@@ -181,11 +181,11 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
               fillColor: AppTheme.raisedSurface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.borderColor),
+                borderSide: BorderSide(color: AppTheme.borderColor),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.borderColor),
+                borderSide: BorderSide(color: AppTheme.borderColor),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -288,7 +288,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
       margin: const EdgeInsets.only(bottom: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: AppTheme.borderColor, width: 0.5),
+        side: BorderSide(color: AppTheme.borderColor, width: 0.5),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),

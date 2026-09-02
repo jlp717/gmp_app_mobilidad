@@ -763,7 +763,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 13,
                 ),
@@ -790,10 +790,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             Text(
               'Sin clientes para ${_weekdayFullLabels[_selectedDay]}',
               style:
-                  const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+                  TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Prueba a cambiar de día o sincronizar',
               style: TextStyle(fontSize: 14, color: AppTheme.textTertiary),
             ),
@@ -898,7 +898,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
               textAlign: TextAlign.center,
               style:
-                  const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+                  TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 24),
             TextButton.icon(
@@ -929,7 +929,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             const SizedBox(height: 16),
             Text(
               'No se encontró ningún cliente para "$_searchQuery"',
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             TextButton(
@@ -1076,13 +1076,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Selecciona el número:',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
             if (phones.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No hay teléfonos guardados',
@@ -1147,7 +1147,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textTertiary),
             ),
@@ -1195,7 +1195,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textTertiary),
             ),
@@ -1281,13 +1281,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Selecciona el número:',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
             if (phones.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No hay teléfonos guardados',
@@ -1639,7 +1639,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         content: Row(
           children: [
@@ -1855,7 +1855,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
               width: double.infinity,
               color: AppTheme.raisedSurface,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: const Text(
+              child: Text(
                 'Arrastra para ordenar o usa las flechas. Usa el icono calendario para mover a otro día.\n'
                 '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
@@ -1865,7 +1865,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
             // List
             Expanded(
               child: _items.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -1900,7 +1900,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                             ),
                             leading: ReorderableDragStartListener(
                               index: index,
-                              child: const Padding(
+                              child: Padding(
                                 padding: EdgeInsets.all(12),
                                 child: Icon(
                                   Icons.drag_handle,
@@ -1917,7 +1917,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                             ),
                             subtitle: Text(
                               (item['code'] as String?) ?? '',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textTertiary,
                               ),

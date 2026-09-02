@@ -1,27 +1,19 @@
 const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
+const { assertSecureSmtpConfig, buildSmtpConfig } = require('./smtp-config');
 
-// SMTP Configuration
 const SMTP_CONFIG = {
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT) || 465,
-    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 8000,
-    socketTimeout: 15000,
-    tls: {
-        rejectUnauthorized: false
-    },
+    ...buildSmtpConfig({
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 15000,
+    }),
     logger: smtpLogger,
     debug: isSmtpDebugEnabled(),
     pool: true,
     maxConnections: 5,
-    maxMessages: 100
+    maxMessages: 100,
 };
 
 let transporter = null;
@@ -37,8 +29,13 @@ function invalidateTransporter() {
 
 function initEmailService() {
     if (!transporter) {
-        transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info(`Email service initialized for ${SMTP_CONFIG.auth.user}`);
+        const secureConfig = assertSecureSmtpConfig(SMTP_CONFIG);
+        transporter = nodemailer.createTransport(secureConfig);
+        logger.info('Email service initialized', {
+            host: secureConfig.host,
+            port: secureConfig.port,
+            tlsServername: secureConfig.tls.servername,
+        });
     }
 }
 

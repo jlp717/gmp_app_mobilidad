@@ -56,7 +56,7 @@ class ErrorStateWidget extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 14,
                 height: 1.5,

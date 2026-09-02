@@ -216,7 +216,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
                 final month = row['month']?.toString().padLeft(2, '0') ?? '';
                 return Text(
                   '$year-$month',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     color: AppTheme.textSecondary,
                   ),

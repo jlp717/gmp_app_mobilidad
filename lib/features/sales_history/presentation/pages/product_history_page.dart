@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -78,9 +79,9 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: ColorScheme.dark(
               primary: AppColors.primary,
-              onPrimary: Colors.white,
+              onPrimary: AppTheme.textPrimary,
               surface: AppColors.cardColor,
             ),
           ),
@@ -111,7 +112,14 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final historyState = ref.watch(salesHistoryProvider);
+    final isLoading =
+        ref.watch(salesHistoryProvider.select((state) => state.isLoading));
+    final summary =
+        ref.watch(salesHistoryProvider.select((state) => state.summary));
+    final error =
+        ref.watch(salesHistoryProvider.select((state) => state.error));
+    final items =
+        ref.watch(salesHistoryProvider.select((state) => state.items));
 
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
@@ -143,17 +151,17 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                       flex: 2,
                       child: TextField(
                         controller: _clientController,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: AppTheme.textPrimary),
                         decoration: InputDecoration(
                           hintText: 'Cód. Cliente (Opcional)',
-                          hintStyle: const TextStyle(color: Colors.white54),
+                          hintStyle: TextStyle(color: AppTheme.textTertiary),
                           filled: true,
                           fillColor: AppColors.backgroundColor,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           prefixIcon:
-                              const Icon(Icons.person, color: Colors.white54),
+                              Icon(Icons.person, color: AppTheme.textTertiary),
                         ),
                         onSubmitted: (val) => ref
                             .read(salesHistoryProvider.notifier)
@@ -165,17 +173,17 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                       flex: 3,
                       child: TextField(
                         controller: _searchController,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: AppTheme.textPrimary),
                         decoration: InputDecoration(
                           hintText: 'Buscar Producto / Ref / Lote',
-                          hintStyle: const TextStyle(color: Colors.white54),
+                          hintStyle: TextStyle(color: AppTheme.textTertiary),
                           filled: true,
                           fillColor: AppColors.backgroundColor,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           prefixIcon:
-                              const Icon(Icons.search, color: Colors.white54),
+                              Icon(Icons.search, color: AppTheme.textTertiary),
                         ),
                         onSubmitted: _onSearchSubmit,
                       ),
@@ -207,28 +215,28 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
           ),
 
           // Summary Header (Comparison)
-          if (!historyState.isLoading && historyState.summary != null)
-            _buildSummaryHeader(context, historyState.summary!),
+          if (!isLoading && summary != null)
+            _buildSummaryHeader(context, summary!),
 
           // Results – adaptive layout
           Expanded(
-            child: historyState.isLoading
+            child: isLoading
                 ? const SkeletonList(itemCount: 6, itemHeight: 60)
-                : historyState.error != null
-                    ? ErrorStateWidget(message: 'Error: ${historyState.error}')
-                    : historyState.items.isEmpty
-                        ? const Center(
+                : error != null
+                    ? ErrorStateWidget(message: 'Error: $error')
+                    : items.isEmpty
+                        ? Center(
                             child: Text(
                               'No hay datos',
-                              style: TextStyle(color: Colors.white54),
+                              style: TextStyle(color: AppColors.muted),
                             ),
                           )
                         : OrientationBuilder(
                             builder: (context, orientation) {
                               if (orientation == Orientation.portrait) {
-                                return _buildPortraitCards(historyState.items);
+                                return _buildPortraitCards(items);
                               } else {
-                                return _buildLandscapeTable(historyState.items);
+                                return _buildLandscapeTable(items);
                               }
                             },
                           ),
@@ -272,12 +280,12 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
           headingRowColor: WidgetStateProperty.all(AppColors.cardColor),
           dataRowColor: WidgetStateProperty.all(AppColors.backgroundColor),
           columnSpacing: 16,
-          columns: const [
+          columns: [
             DataColumn(
               label: Text(
                 'Foto',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -286,7 +294,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Ficha',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -295,7 +303,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Fecha',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -304,7 +312,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Cliente',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -313,7 +321,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Factura',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -322,7 +330,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Producto',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -331,7 +339,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Lote',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -340,7 +348,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Cant',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -349,7 +357,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Precio',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -358,7 +366,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
               label: Text(
                 'Total',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -392,13 +400,13 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 DataCell(
                   Text(
                     item.date,
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
                 DataCell(
                   Text(
                     item.clientCode,
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
                 DataCell(
@@ -414,13 +422,13 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                     children: [
                       Text(
                         item.productName,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: AppTheme.textPrimary),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         item.productCode,
-                        style: const TextStyle(
-                          color: Colors.white30,
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
                           fontSize: 10,
                         ),
                       ),
@@ -430,7 +438,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 DataCell(
                   Text(
                     item.lote + (item.ref.isNotEmpty ? ' / ${item.ref}' : ''),
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
                 DataCell(
@@ -442,14 +450,14 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 DataCell(
                   Text(
                     item.price,
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
                 DataCell(
                   Text(
                     item.total,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -478,7 +486,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
     showDialog<void>(
       context: ctx,
       barrierDismissible: false,
-      builder: (_) => const AlertDialog(
+      builder: (_) => AlertDialog(
         backgroundColor: AppColors.cardColor,
         content: Row(
           children: [
@@ -564,8 +572,8 @@ class _ProductCard extends StatelessWidget {
                   // Product name + code
                   Text(
                     item.productName,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -575,7 +583,7 @@ class _ProductCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     'Cód: ${item.productCode}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
                   ),
                   const SizedBox(height: 6),
                   // Info row: client, invoice, date
@@ -602,8 +610,8 @@ class _ProductCard extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
                         'Lote: ${item.lote}${item.ref.isNotEmpty ? ' / ${item.ref}' : ''}',
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
                           fontSize: 11,
                         ),
                       ),
@@ -620,19 +628,19 @@ class _ProductCard extends StatelessWidget {
                       _ValueTag(
                         label: 'Precio',
                         value: item.price,
-                        color: Colors.white70,
+                        color: AppTheme.textSecondary,
                       ),
                       const SizedBox(width: 8),
                       _ValueTag(
                         label: 'Total',
                         value: item.total,
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                         bold: true,
                       ),
                       const Spacer(),
                       // Ficha Técnica button
                       Material(
-                        color: Colors.transparent,
+                        color: AppColors.transparent,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(8),
                           onTap: () {
@@ -752,7 +760,7 @@ class _PdfViewerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
         title: Text(title, style: const TextStyle(fontSize: 14)),
         backgroundColor: AppColors.cardColor,
@@ -774,10 +782,10 @@ class _PdfViewerPage extends StatelessWidget {
 // HELPER WIDGETS
 // =============================================================================
 class _InfoChip extends StatelessWidget {
-  const _InfoChip({
+  _InfoChip({
     required this.icon,
     required this.label,
-    this.color = Colors.white54,
+    this.color = AppColors.muted,
   });
   final IconData icon;
   final String label;
@@ -813,7 +821,7 @@ class _ValueTag extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white30, fontSize: 9)),
+        Text(label, style: TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
         Text(
           value,
           style: TextStyle(

@@ -13,27 +13,29 @@ import 'package:gmp_app_mobilidad/features/commissions/data/commissions_service.
 import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/pdf_range_dialog.dart';
 
 BoxDecoration _commissionSurfaceDecoration({
-  Color color = AppTheme.raisedSurface,
-  Color borderColor = AppTheme.borderColor,
+  Color? color,
+  Color? borderColor,
   double borderAlpha = 1,
   double radius = AppTheme.radiusMd,
 }) {
-  final hasVisibleSurface = color != Colors.transparent;
+  final surfaceColor = color ?? AppTheme.raisedSurface;
+  final outlineColor = borderColor ?? AppTheme.borderColor;
+  final hasVisibleSurface = surfaceColor != Colors.transparent;
   return BoxDecoration(
-    color: color,
+    color: surfaceColor,
     gradient: hasVisibleSurface
         ? LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color,
+              surfaceColor,
               AppTheme.softPanel.withValues(alpha: 0.88),
-              borderColor.withValues(alpha: 0.035),
+              outlineColor.withValues(alpha: 0.035),
             ],
           )
         : null,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: borderColor.withValues(alpha: borderAlpha)),
+    border: Border.all(color: outlineColor.withValues(alpha: borderAlpha)),
     boxShadow: hasVisibleSurface
         ? [
             BoxShadow(
@@ -193,7 +195,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
         title: const Row(
           children: [
@@ -580,7 +582,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Historial de pagos',
             style: TextStyle(
               color: AppTheme.textSecondary,
@@ -600,7 +602,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 '${entry.key + 1}. ${CurrencyFormatter.format(amount)}'
                 '${fecha.isNotEmpty ? '  ($fecha)' : ''}'
                 '${obs.isNotEmpty ? '  - $obs' : ''}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textTertiary,
                   fontSize: 10,
                 ),
@@ -694,11 +696,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             backgroundColor: AppTheme.raisedSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              side: const BorderSide(color: AppTheme.borderColor),
+              side: BorderSide(color: AppTheme.borderColor),
             ),
             title: Text(
               'Pagar a $vendorName',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -712,7 +714,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   DropdownButtonFormField<int>(
                     initialValue: selectedMonth,
                     dropdownColor: AppTheme.raisedSurface,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
@@ -882,7 +884,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   TextField(
                     controller: amountController,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                     decoration: _payFieldDecoration(
                       labelText: useSetTotalMode
                           ? 'Total pagado del mes (\u20ac) *'
@@ -903,7 +905,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: observacionesController,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                     maxLines: 3,
                     maxLength: 500,
                     decoration: _payFieldDecoration(
@@ -932,7 +934,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: conceptController,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                     decoration: _payFieldDecoration(
                       labelText: 'Concepto (Opcional)',
                     ),
@@ -949,7 +951,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'Cancelar',
                   style: TextStyle(color: AppTheme.textTertiary),
                 ),
@@ -1037,7 +1039,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       : (hasPriorPayment
                           ? 'Completar pago'
                           : 'Revisar y Confirmar'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1082,9 +1084,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.warning_amber_rounded,
@@ -1109,14 +1111,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'Estas a punto de registrar un pago de comision:',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               _confirmRow('Comercial', vendorName),
               _confirmRow('Mes', '${_getMonthName(month)} / 2026'),
-              const Divider(color: AppTheme.borderColor, height: 16),
+              Divider(color: AppTheme.borderColor, height: 16),
               _confirmRow(
                 'Venta del mes',
                 CurrencyFormatter.format(ventaActual),
@@ -1132,7 +1134,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     ? AppTheme.success
                     : AppTheme.error,
               ),
-              const Divider(color: AppTheme.borderColor, height: 16),
+              Divider(color: AppTheme.borderColor, height: 16),
               _confirmRow(
                 'Comision generada',
                 CurrencyFormatter.format(generatedAmount),
@@ -1323,7 +1325,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             width: 150,
             child: Text(
               '$label:',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 12,
               ),
@@ -1350,7 +1352,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 13,
             color: AppTheme.textPrimary,
@@ -1359,7 +1361,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         const SizedBox(height: 4),
         Text(
           desc,
-          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
         ),
       ],
     );
@@ -1375,8 +1377,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   InputDecoration _payFieldDecoration({
     required String labelText,
     String? helperText,
-    Color labelColor = AppTheme.textSecondary,
-    Color helperColor = AppTheme.textTertiary,
+    Color? labelColor,
+    Color? helperColor,
     Color focusColor = AppTheme.info,
     FontWeight labelWeight = FontWeight.w600,
   }) {
@@ -1386,9 +1388,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       filled: true,
       fillColor: AppTheme.softPanel,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      labelStyle: TextStyle(color: labelColor, fontWeight: labelWeight),
-      helperStyle: TextStyle(color: helperColor, fontSize: 11),
-      counterStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+      labelStyle: TextStyle(
+        color: labelColor ?? AppTheme.textSecondary,
+        fontWeight: labelWeight,
+      ),
+      helperStyle: TextStyle(
+        color: helperColor ?? AppTheme.textTertiary,
+        fontSize: 11,
+      ),
+      counterStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
       enabledBorder: _payFieldBorder(AppTheme.borderColor),
       focusedBorder: _payFieldBorder(focusColor),
       errorBorder: _payFieldBorder(AppTheme.error),
@@ -1665,7 +1673,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                         color: AppTheme.textTertiary.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
+                      child: Text(
                         'PENDIENTE',
                         style: TextStyle(
                           fontSize: 8,
@@ -1711,7 +1719,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // ESTADO MES
             DataCell(
               isFuture
-                  ? const Text(
+                  ? Text(
                       '-',
                       style: TextStyle(color: AppTheme.textTertiary),
                     )
@@ -1799,7 +1807,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // ESTADO RITMO + % SOBRE
             DataCell(
               isFuture
-                  ? const Text(
+                  ? Text(
                       '-',
                       style: TextStyle(color: AppTheme.textTertiary),
                     )
@@ -1843,7 +1851,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // DIFERENCIA (Venta Real - Obj. Acumulado)
             DataCell(
               isFuture
-                  ? const Text(
+                  ? Text(
                       '-',
                       style: TextStyle(color: AppTheme.textTertiary),
                     )
@@ -1863,7 +1871,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // COMISIÓN PROVISIONAL
             DataCell(
               isFuture || isInformative
-                  ? const Text(
+                  ? Text(
                       '-',
                       style: TextStyle(color: AppTheme.textTertiary),
                     )
@@ -1899,7 +1907,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         )
-                      : const Text(
+                      : Text(
                           '-',
                           style: TextStyle(
                             color: AppTheme.textTertiary,
@@ -1930,7 +1938,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         )
-                      : const Text(
+                      : Text(
                           '-',
                           style: TextStyle(
                             color: AppTheme.textTertiary,
@@ -1961,7 +1969,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         )
-                      : const Text(
+                      : Text(
                           '-',
                           style: TextStyle(
                             color: AppTheme.textTertiary,
@@ -2000,7 +2008,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             ),
                           ),
                         )
-                      : const Text(
+                      : Text(
                           '-',
                           style: TextStyle(
                             color: AppTheme.textTertiary,
@@ -2193,7 +2201,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           forceShow: widget.forceShowVendorSelector,
                         ),
                       ] else
-                        const Text(
+                        Text(
                           'Comisiones 2026',
                           style: TextStyle(
                             color: AppTheme.textPrimary,
@@ -2202,7 +2210,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ),
                         ),
                       if (isInformative)
-                        const Text(
+                        Text(
                           'Modo Informativo (No Comisionable)',
                           style: TextStyle(
                             color: AppTheme.textTertiary,
@@ -2287,7 +2295,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     backgroundColor: AppTheme.softPanel,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                     ),
                   ),
                   onPressed: _showExplanationModal,
@@ -2355,7 +2363,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Expanded(
                     child: Text(
                       'Acumulado de su equipo — $aggregateLabel (suma mensual de 72, 73, 81 y 83).',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -2463,7 +2471,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                               ),
                             ],
                           ] else
-                            const Text(
+                            Text(
                               'Sin datos',
                               style: TextStyle(color: AppTheme.textTertiary),
                             ),
@@ -2569,7 +2577,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           ),
                           Text(
                             '(a día ${DateTime.now().day})',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 9,
                               color: AppTheme.textTertiary,
                             ),
@@ -2678,7 +2686,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                 !isInformative &&
                                 !((_data?['isExcluded'] as bool?) ??
                                     false) // ZERO TARGET WARNING (but NOT if excluded)
-                            ? const Center(
+                            ? Center(
                                 child: Padding(
                                   padding: EdgeInsets.all(32),
                                   child: Column(
@@ -2723,7 +2731,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                     border: TableBorder.all(
                                       color: AppTheme.borderColor,
                                     ),
-                                    columns: const [
+                                    columns: [
                                       DataColumn(
                                         label: Text(
                                           'MES',
@@ -2938,7 +2946,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           const SizedBox(width: 4),
           Text(
             '$range → $rate',
-            style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
           ),
         ],
       ),
@@ -2947,7 +2955,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   Widget _buildAllVendorsTable(List<dynamic> breakdown) {
     if (breakdown.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No hay datos disponibles',
           style: TextStyle(color: AppTheme.textSecondary),
@@ -3084,7 +3092,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 size: 22,
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Equipo Almeria - acumulado especial 80',
                   style: TextStyle(
@@ -3107,7 +3115,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           const SizedBox(height: 6),
           Text(
             'Propia 80: ${CurrencyFormatter.format(leaderOwnCommission)} | Especial acumulado: ${CurrencyFormatter.format(ytdTeamComm)}',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
           ConstrainedBox(
@@ -3128,12 +3136,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       AppTheme.softPanel,
                     ),
                     border: TableBorder.all(color: AppTheme.borderColor),
-                    headingTextStyle: const TextStyle(
+                    headingTextStyle: TextStyle(
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 11,
                     ),
-                    dataTextStyle: const TextStyle(
+                    dataTextStyle: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 11,
                     ),
@@ -3165,12 +3173,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   Widget _teamTableText(
     String value, {
-    Color color = AppTheme.textSecondary,
+    Color? color,
     FontWeight fontWeight = FontWeight.w500,
   }) {
     return Text(
       value,
-      style: TextStyle(color: color, fontSize: 11, fontWeight: fontWeight),
+      style: TextStyle(
+        color: color ?? AppTheme.textSecondary,
+        fontSize: 11,
+        fontWeight: fontWeight,
+      ),
     );
   }
 
@@ -3200,7 +3212,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(Icons.groups_rounded, color: AppTheme.success, size: 22),
               SizedBox(width: 8),
@@ -3219,7 +3231,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           const SizedBox(height: 6),
           Text(
             'Especial 80 sobre acumulado 80+${members.join(', ')} con umbral LY+10, sin IPC.',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 10),
           Text(
@@ -3501,7 +3513,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         ),
                       ),
                   ] else
-                    const Text(
+                    Text(
                       '0,00 €',
                       style: TextStyle(
                         color: AppTheme.textTertiary,
@@ -3515,7 +3527,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
           // EXPANDED CONTENT
           if (_isExpanded) ...[
-            const Divider(height: 1, color: AppTheme.borderColor),
+            Divider(height: 1, color: AppTheme.borderColor),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: _buildVendorDataTable(months, quarters, isExcluded),
@@ -3581,7 +3593,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
       headingRowHeight: 36,
       headingRowColor: WidgetStateProperty.all(AppTheme.softPanel),
       border: TableBorder.all(color: AppTheme.borderColor),
-      columns: const [
+      columns: [
         DataColumn(
           label: Text(
             'MES',
@@ -3829,7 +3841,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     color: AppTheme.textTertiary.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(3),
                   ),
-                  child: const Text(
+                  child: Text(
                     'PEND',
                     style: TextStyle(fontSize: 7, color: AppTheme.textTertiary),
                   ),
@@ -3879,7 +3891,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(
           isFuture
-              ? const Text(
+              ? Text(
                   '-',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
                 )
@@ -3933,7 +3945,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(
           isFuture
-              ? const Text(
+              ? Text(
                   '-',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 9),
                 )
@@ -3954,7 +3966,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(
           isFuture
-              ? const Text(
+              ? Text(
                   '-',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 9),
                 )
@@ -3973,7 +3985,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(
           isFuture
-              ? const Text(
+              ? Text(
                   '-',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 9),
                 )
@@ -4014,7 +4026,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         fontWeight: FontWeight.bold,
                       ),
                     )
-                  : const Text(
+                  : Text(
                       '-',
                       style:
                           TextStyle(color: AppTheme.textTertiary, fontSize: 9),
@@ -4043,7 +4055,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         fontWeight: FontWeight.bold,
                       ),
                     )
-                  : const Text(
+                  : Text(
                       '-',
                       style:
                           TextStyle(color: AppTheme.textTertiary, fontSize: 9),
@@ -4071,7 +4083,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         fontWeight: FontWeight.bold,
                       ),
                     )
-                  : const Text(
+                  : Text(
                       '-',
                       style:
                           TextStyle(color: AppTheme.textTertiary, fontSize: 9),
@@ -4108,7 +4120,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         ),
                       ),
                     )
-                  : const Text(
+                  : Text(
                       '-',
                       style:
                           TextStyle(color: AppTheme.textTertiary, fontSize: 9),

@@ -273,7 +273,7 @@ class _ClientInfoCard extends StatelessWidget {
                     if (client.city != null)
                       Text(
                         client.city!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 12,
                         ),

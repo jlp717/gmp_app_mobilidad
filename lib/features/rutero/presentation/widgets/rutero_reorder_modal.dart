@@ -186,9 +186,9 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente para mover...',
-                hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
                 prefixIcon:
-                    const Icon(Icons.search, color: AppTheme.textTertiary),
+                    Icon(Icons.search, color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.raisedSurface,
                 border: OutlineInputBorder(
@@ -197,7 +197,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                 ),
                 suffixIcon: isSearching
                     ? IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.clear,
                           color: AppTheme.textTertiary,
                         ),
@@ -291,10 +291,10 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         ),
         subtitle: Text(
           (client['code'] as String?) ?? '',
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         trailing: isReorderable
-            ? const Icon(Icons.drag_handle, color: AppTheme.textTertiary)
+            ? Icon(Icons.drag_handle, color: AppTheme.textTertiary)
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

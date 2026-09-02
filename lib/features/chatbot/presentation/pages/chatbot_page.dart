@@ -28,10 +28,10 @@ class ChatbotPage extends ConsumerStatefulWidget {
 
 class _ChatbotPageState extends ConsumerState<ChatbotPage>
     with SingleTickerProviderStateMixin {
-  static const _background = AppTheme.inkSurface;
-  static const _surface = AppTheme.raisedSurface;
-  static const _surfaceRaised = AppTheme.softPanel;
-  static const _line = AppTheme.borderColor;
+  static final _background = AppTheme.inkSurface;
+  static final _surface = AppTheme.raisedSurface;
+  static final _surfaceRaised = AppTheme.softPanel;
+  static final _line = AppTheme.borderColor;
   static const _mint = AppTheme.success;
   static const _cyan = AppTheme.info;
   static const _amber = AppTheme.accentAmber;
@@ -127,8 +127,11 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {
-            final chatState = ref.watch(chatbotProvider);
-            final sessions = chatState.sessions;
+            final sessions =
+                ref.watch(chatbotProvider.select((state) => state.sessions));
+            final activeSessionId = ref.watch(
+              chatbotProvider.select((state) => state.activeSessionId),
+            );
 
             return SafeArea(
               top: false,
@@ -136,7 +139,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.72,
                 ),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppTheme.raisedSurface,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
                 ),
@@ -222,7 +225,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           itemBuilder: (context, index) {
                             final session = sessions[index];
                             final isActive =
-                                session.id == chatState.activeSessionId;
+                                session.id == activeSessionId;
                             final sessionAge =
                                 _formatSessionAge(session.updatedAt);
                             final sessionMeta =
@@ -349,7 +352,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     final isJefe = (authState?.user?.isDirector ?? false) ||
         widget.vendedorCodes.length > 1;
 
-    final chatbotState = ref.watch(chatbotProvider);
+    final chatbotState = ref.watch(chatbotProvider.select((state) => (
+          state.isLoading,
+          state.error,
+        )));
+    final isLoading = chatbotState.$1;
+    final chatbotError = chatbotState.$2;
 
     return Scaffold(
       backgroundColor: _background,
@@ -359,16 +367,16 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
             title: isJefe ? 'Copiloto GMP (Supervisor)' : 'Copiloto GMP',
             subtitle: 'Datos comerciales, documentos y decisiones',
             lastSync: DateTime.now(),
-            isLoading: chatbotState.isLoading,
+            isLoading: isLoading,
             onSync: () => ref.read(chatbotProvider.notifier).clearChat(),
           ),
           Expanded(
             child: Container(
-              decoration: const BoxDecoration(color: _background),
+              decoration: BoxDecoration(color: _background),
               child: Column(
                 children: [
-                  _buildCommandCenter(chatbotState, isJefe),
-                  if (chatbotState.error != null) _buildErrorBanner(),
+                  _buildCommandCenter(isJefe),
+                  if (chatbotError != null) _buildErrorBanner(),
                   Expanded(child: _buildMessageList()),
                   _buildInputArea(),
                 ],
@@ -478,12 +486,17 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     );
   }
 
-  Widget _buildCommandCenter(ChatbotState chatState, bool isJefe) {
-    final documentCount = chatState.messages.fold<int>(
+  Widget _buildCommandCenter(bool isJefe) {
+    final messages =
+        ref.watch(chatbotProvider.select((state) => state.messages));
+    final sessionCount = ref.watch(
+      chatbotProvider.select((state) => state.sessions.length),
+    );
+    final documentCount = messages.fold<int>(
       0,
       (sum, message) => sum + message.metadata.documents.length,
     );
-    final answerCount = chatState.messages.where((m) => !m.isUser).length;
+    final answerCount = messages.where((m) => !m.isUser).length;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
@@ -576,7 +589,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
               _StatusPill(
                 icon: Icons.history,
                 label: 'Historial',
-                value: '${chatState.sessions.length}',
+                value: '$sessionCount',
                 accent: _cyan,
               ),
               _StatusPill(
@@ -860,18 +873,21 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
   }
 
   Widget _buildMessageList() {
-    final chatState = ref.watch(chatbotProvider);
+    final messages =
+        ref.watch(chatbotProvider.select((state) => state.messages));
+    final isLoading =
+        ref.watch(chatbotProvider.select((state) => state.isLoading));
 
-    if (chatState.messages.isEmpty) {
+    if (messages.isEmpty) {
       return _buildWelcomeScreen();
     }
 
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      itemCount: chatState.messages.length + (chatState.isLoading ? 1 : 0),
+      itemCount: messages.length + (isLoading ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == chatState.messages.length && chatState.isLoading) {
+        if (index == messages.length && isLoading) {
           return const ChatMessageBubble(
             message: '',
             isUser: false,
@@ -879,7 +895,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
           );
         }
 
-        final message = chatState.messages[index];
+        final message = messages[index];
         return ChatMessageBubble(
           message: message.content,
           isUser: message.isUser,
@@ -1069,7 +1085,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                         label: const Text('Historial'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
-                          side: const BorderSide(color: _line),
+                          side: BorderSide(color: _line),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1322,7 +1338,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
   }
 
   Widget _buildExampleQueries() {
-    final currentClientCode = ref.watch(chatbotProvider).currentClientCode;
+    final currentClientCode =
+        ref.watch(chatbotProvider.select((state) => state.currentClientCode));
     final examples = [
       (
         Icons.payments_outlined,
@@ -1384,7 +1401,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
   }
 
   Widget _buildInputArea() {
-    final chatState = ref.watch(chatbotProvider);
+    final isLoading =
+        ref.watch(chatbotProvider.select((state) => state.isLoading));
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
@@ -1469,7 +1487,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 Tooltip(
                   message: 'Nuevo chat',
                   child: IconButton(
-                    onPressed: chatState.isLoading
+                    onPressed: isLoading
                         ? null
                         : () => ref
                             .read(chatbotProvider.notifier)
@@ -1488,7 +1506,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 Tooltip(
                   message: 'Reintentar ultimo mensaje',
                   child: IconButton(
-                    onPressed: chatState.isLoading
+                    onPressed: isLoading
                         ? null
                         : () => ref
                             .read(chatbotProvider.notifier)
@@ -1516,7 +1534,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       color: _background.withValues(alpha: 0.72),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: chatState.isLoading
+                        color: isLoading
                             ? _amber.withValues(alpha: 0.42)
                             : _mint.withValues(alpha: 0.28),
                       ),
@@ -1530,10 +1548,10 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                         hintStyle: TextStyle(color: Colors.grey.shade500),
                         border: InputBorder.none,
                         prefixIcon: Icon(
-                          chatState.isLoading
+                          isLoading
                               ? Icons.hourglass_top_rounded
                               : Icons.manage_search,
-                          color: chatState.isLoading ? _amber : _mint,
+                          color: isLoading ? _amber : _mint,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -1552,20 +1570,20 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                   width: 54,
                   height: 54,
                   child: FilledButton(
-                    onPressed: chatState.isLoading ? null : _sendMessage,
+                    onPressed: isLoading ? null : _sendMessage,
                     style: FilledButton.styleFrom(
                       padding: EdgeInsets.zero,
                       backgroundColor:
-                          chatState.isLoading ? Colors.grey.shade800 : _mint,
+                          isLoading ? Colors.grey.shade800 : _mint,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: Icon(
-                      chatState.isLoading
+                      isLoading
                           ? Icons.hourglass_top
                           : Icons.send_rounded,
-                      color: chatState.isLoading
+                      color: isLoading
                           ? Colors.white70
                           : AppTheme.inkSurface,
                     ),

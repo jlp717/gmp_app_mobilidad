@@ -141,7 +141,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                         const Icon(Icons.chat, color: whatsAppGreen, size: 22),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Compartir por WhatsApp',
                       style: TextStyle(
@@ -152,7 +152,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close,
                       color: AppTheme.textSecondary,
                       size: 20,
@@ -162,7 +162,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                 ],
               ),
               const SizedBox(height: 8),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
                   'Se compartirá el PDF automáticamente. Seleccione WhatsApp en el menú que aparece.',
@@ -183,7 +183,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                   FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s\-\(\)]')),
                 ],
                 style:
-                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: '+34 612 345 678',
                   icon: Icons.phone,
@@ -199,7 +199,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                 controller: _messageController,
                 maxLines: 3,
                 style:
-                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Escriba un mensaje...',
                   icon: Icons.message_outlined,
@@ -252,7 +252,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         color: AppTheme.textSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w600,

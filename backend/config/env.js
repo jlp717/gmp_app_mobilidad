@@ -6,6 +6,7 @@
 
 const path = require('path');
 const { loadEnv } = require('./load-env');
+const { assertSecureSmtpConfig, buildSmtpConfig } = require('../services/smtp-config');
 
 loadEnv(path.resolve(__dirname, '..'));
 
@@ -105,13 +106,16 @@ const config = {
     loginWindow: getNumber('LOGIN_RATE_WINDOW', 900000),
   },
 
-  // Email
+  // Email. TLS mode is derived from the port; SMTP_SECURE cannot disable
+  // certificate verification. mail.mari-pepa.com is remapped to the certified
+  // SMTP identity by smtp-config.js.
   email: {
     host: process.env.SMTP_HOST || '',
     port: getNumber('SMTP_PORT', 465),
-    secure: getBoolean('SMTP_SECURE', true),
+    secure: getNumber('SMTP_PORT', 465) === 465,
+    tlsServername: process.env.SMTP_TLS_SERVERNAME || '',
     user: process.env.SMTP_USER || '',
-    password: process.env.SMTP_PASSWORD || '',
+    password: process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '',
     from: process.env.SMTP_FROM || 'noreply@example.com',
   },
 
@@ -141,7 +145,33 @@ const config = {
   },
 };
 
-// Validate critical configuration
+function validateSmtpConfiguration() {
+  const configurations = [
+    { name: 'SMTP', config: buildSmtpConfig() },
+    {
+      name: 'SMTP PDF',
+      config: buildSmtpConfig({
+        hostEnv: ['SMTP_PDF_HOST', 'SMTP_HOST'],
+        portEnv: ['SMTP_PDF_PORT', 'SMTP_PORT'],
+        userEnv: ['SMTP_PDF_USER', 'SMTP_USER'],
+        passwordEnv: ['SMTP_PDF_PASS', 'SMTP_PASSWORD', 'SMTP_PASS'],
+        tlsServernameEnv: ['SMTP_PDF_TLS_SERVERNAME', 'SMTP_TLS_SERVERNAME'],
+        defaultPort: 587,
+      }),
+    },
+  ];
+
+  for (const { name, config: smtpConfig } of configurations) {
+    try {
+      assertSecureSmtpConfig(smtpConfig);
+    } catch (error) {
+      throw new Error(`${name} configuration is invalid: ${error.message}`, {
+        cause: error,
+      });
+    }
+  }
+}
+
 function validateConfig() {
   if (config.isProduction) {
     if (!config.odbc.connectionString) {
@@ -153,10 +183,12 @@ function validateConfig() {
     if (!config.jwt.refreshSecret || config.jwt.refreshSecret.length < 32) {
       throw new Error('JWT_REFRESH_SECRET must be set and be at least 32 characters. Generate with: openssl rand -hex 32');
     }
+    validateSmtpConfiguration();
   }
 }
 
 module.exports = {
   config,
+  validateSmtpConfiguration,
   validateConfig,
 };

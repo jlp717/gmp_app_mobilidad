@@ -199,7 +199,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -229,7 +229,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               const SizedBox(height: 12),
               Text(
                 'Error: $_error',
-                style: const TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: AppTheme.textSecondary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -435,7 +435,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             width: 160,
             child: Text(
               r.label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
@@ -444,7 +444,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           Expanded(
             child: Text(
               r.value,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -521,7 +521,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       return _buildSection(
         title: 'Tarifas',
         icon: Icons.euro_outlined,
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.symmetric(vertical: 8),
           child: Text(
             'Sin tarifas disponibles',
@@ -565,7 +565,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 Expanded(
                   child: Text(
                     t.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 13,
                     ),
@@ -673,7 +673,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ],
             ),
           ),
-          const Divider(color: AppTheme.borderColor, height: 1),
+          Divider(color: AppTheme.borderColor, height: 1),
           ...stocks.map((s) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -685,7 +685,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       s.almacenName.isNotEmpty
                           ? s.almacenName
                           : 'Almacen ${s.almacenCode}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 13,
                       ),
@@ -694,7 +694,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   Expanded(
                     child: Text(
                       s.envases.toStringAsFixed(0),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                       ),
@@ -704,7 +704,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   Expanded(
                     child: Text(
                       s.unidades.toStringAsFixed(0),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                       ),
@@ -780,7 +780,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,

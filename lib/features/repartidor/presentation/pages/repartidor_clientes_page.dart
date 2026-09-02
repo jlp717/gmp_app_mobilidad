@@ -247,7 +247,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                             ? ListView(
                                 controller: _scrollController,
                                 physics: const AlwaysScrollableScrollPhysics(),
-                                children: const [
+                                children: [
                                   SizedBox(height: 100),
                                   Center(
                                     child: Icon(
@@ -326,7 +326,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         Responsive.padding(context, small: 12, large: 20),
         12,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
           bottom: BorderSide(color: AppTheme.borderColor),
@@ -393,7 +393,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       color: AppTheme.raisedSurface,
       child: TextField(
         controller: _searchController,
-        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+        style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: InputDecoration(
           hintText:
               'Nombre, alias, código, DNI, dirección, población o teléfono...',
@@ -402,10 +402,10 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
             fontSize: 13,
           ),
           prefixIcon:
-              const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+              Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.clear,
                     color: AppTheme.textSecondary,
                     size: 18,
@@ -446,13 +446,13 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
             ),
             child: Text(
               '${_filteredClients.length} resultados',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textSecondary,
               ),
             ),
           ),
-          const Text(
+          Text(
             'Ordenar:',
             style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
           ),
@@ -525,7 +525,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        side: const BorderSide(color: AppTheme.borderColor),
+        side: BorderSide(color: AppTheme.borderColor),
       ),
       child: InkWell(
         onTap: () => _navigateToHistory(client),
@@ -625,7 +625,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 color: AppTheme.textSecondary,
                 size: 20,

@@ -78,7 +78,7 @@ class EntregasHeader extends ConsumerWidget {
                         children: [
                           Text(
                             _formatFecha(state.fechaSeleccionada),
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 14,
                               decoration: TextDecoration.underline,
@@ -86,7 +86,7 @@ class EntregasHeader extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(
+                          Icon(
                             Icons.calendar_today,
                             color: AppTheme.textSecondary,
                             size: 14,
@@ -142,7 +142,7 @@ class EntregasHeader extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Progreso del día',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
@@ -151,7 +151,7 @@ class EntregasHeader extends ConsumerWidget {
                     ),
                     Text(
                       '$entregados de $total completados',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 12,
                       ),
@@ -199,7 +199,7 @@ class EntregasHeader extends ConsumerWidget {
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -207,7 +207,7 @@ class EntregasHeader extends ConsumerWidget {
             ),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 11,
               ),

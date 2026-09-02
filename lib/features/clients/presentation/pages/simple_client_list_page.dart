@@ -353,13 +353,13 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Selecciona el número:',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
             if (phones.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No hay teléfonos guardados',
@@ -424,7 +424,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -670,7 +670,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.people_outline,
               size: 64,
               color: AppTheme.textSecondary,
@@ -680,7 +680,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             const SizedBox(height: 8),
             Text(
               'Vendedor: ${widget.employeeCode}',
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -856,7 +856,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.sort, size: 20, color: AppTheme.textSecondary),
+            Icon(Icons.sort, size: 20, color: AppTheme.textSecondary),
             const SizedBox(width: 8),
             Expanded(
               child: DropdownButtonHideUnderline(
@@ -865,7 +865,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                   isExpanded: true,
                   dropdownColor: AppTheme.raisedSurface,
                   icon: const Icon(Icons.expand_more, size: 20),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -1035,7 +1035,7 @@ class _ClientCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.location_on,
                               size: 14,
                               color: AppTheme.textSecondary,
@@ -1060,7 +1060,7 @@ class _ClientCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.phone,
                                 size: 14,
                                 color: AppTheme.textSecondary,

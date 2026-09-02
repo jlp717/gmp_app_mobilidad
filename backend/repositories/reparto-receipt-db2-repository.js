@@ -295,7 +295,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
         throw new RepartoReceiptUnavailableError('La confirmacion no contiene un identificador');
       }
       const confirmationRows = await query(connection,
-        `SELECT * FROM ${tables.confirmation.confirmations} WHERE ID = ? FETCH FIRST 2 ROWS ONLY`,
+        `SELECT ${REQUIRED.confirmation.join(', ')} FROM ${tables.confirmation.confirmations} WHERE ID = ? FETCH FIRST 2 ROWS ONLY`,
         [confirmationId], signal);
       if (confirmationRows.length !== 1
           || String(value(confirmationRows[0], 'REPARTIDOR_ID') ?? '').trim() !== confirmationOwner) {
@@ -303,7 +303,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
       }
       const confirmation = confirmationRows[0];
       const lines = await query(connection,
-        `SELECT * FROM ${tables.confirmation.lines} WHERE CONFIRMACION_ID = ? ORDER BY LINEA_ID`,
+        `SELECT ${REQUIRED.lines.join(', ')} FROM ${tables.confirmation.lines} WHERE CONFIRMACION_ID = ? ORDER BY LINEA_ID`,
         [confirmationId], signal);
       const evidences = await query(connection,
         // Evidence retrieval starts from the persisted confirmation link. DISTINCT

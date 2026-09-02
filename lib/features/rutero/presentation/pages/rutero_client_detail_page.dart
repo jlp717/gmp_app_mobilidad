@@ -120,7 +120,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             Text(
               'Código: ${widget.clientCode}',
               style:
-                  const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -396,7 +396,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       children: [
         Text(
           label,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
         ),
         const SizedBox(height: 4),
         Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -579,7 +579,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             subtitle: (isClientNew && current > 0)
                 ? Text(
                     'Cliente nuevo en $_selectedYear',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppTheme.textSecondary,
                     ),
@@ -587,14 +587,14 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 : isMonthNew
                     ? Text(
                         'Sin ventas en ${_selectedYear - 1}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),
                       )
                     : Text(
                         'Anterior: ${month['lastYearFormatted']}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),
@@ -662,7 +662,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       ),
                       Text(
                         'Prom. mensual: ${y['monthlyAverageFormatted']}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),
@@ -672,7 +672,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 Text(
                   '${y['activeMonths']} meses activos',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppTheme.textSecondary,
                   ),
@@ -717,7 +717,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 Text(
                   '${freq['avgPurchasesPerMonth'] ?? 0} compras/mes promedio',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
                   ),
@@ -730,7 +730,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 4),
-          const Text('días', style: TextStyle(color: AppTheme.textSecondary)),
+          Text('días', style: TextStyle(color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -786,14 +786,14 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                           children: [
                             Text(
                               'Código: ${p['productCode']} | Lote: ${p['lote'] ?? '-'}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 color: AppTheme.textSecondary,
                               ),
                             ),
                             Text(
                               'Fecha: ${p['date']} | Factura: ${p['invoice'] ?? '-'}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 color: AppTheme.textSecondary,
                               ),
@@ -811,7 +811,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                             ),
                             Text(
                               '${p['quantity']} uds',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 color: AppTheme.textSecondary,
                               ),
@@ -889,14 +889,14 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       ),
                       Text(
                         'Código: ${p['code']}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),
                       ),
                       Text(
                         '${p['purchases']} compras | ${p['totalUnits']} unidades',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),

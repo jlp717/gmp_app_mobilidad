@@ -112,7 +112,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
         title: Row(
           children: [
@@ -129,7 +129,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Motivo de No Entrega',
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
@@ -144,7 +144,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
             Text(
               '${item.code} - ${item.description}',
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -167,7 +167,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                   borderSide: const BorderSide(color: AppTheme.error),
                 ),
               ),
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -187,7 +187,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               item.quantityDelivered = item.quantityOrdered;
               Navigator.of(ctx).pop();
             },
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -242,7 +242,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               color: AppTheme.textSecondary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Sin items para entregar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -352,7 +352,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                       const SizedBox(height: 4),
                       Text(
                         item.description,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w500,
@@ -383,7 +383,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                           color: statusColor,
                         ),
                       ),
-                      const Text(
+                      Text(
                         'uds',
                         style: TextStyle(
                           fontSize: 9,

@@ -1,19 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/notifications/local_notification_service.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_models.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_preferences.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/theme_provider.dart';
 
-class NotificationSettingsPage extends StatefulWidget {
+class NotificationSettingsPage extends ConsumerStatefulWidget {
   const NotificationSettingsPage({super.key});
 
   @override
-  State<NotificationSettingsPage> createState() =>
+  ConsumerState<NotificationSettingsPage> createState() =>
       _NotificationSettingsPageState();
 }
 
-class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
+class _NotificationSettingsPageState
+    extends ConsumerState<NotificationSettingsPage> {
   NotificationPreferences? _settings;
   bool _loading = true;
   bool _saving = false;
@@ -38,25 +43,40 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     bool refresh = true,
   }) async {
     setState(() => _saving = true);
-    final next = await action();
-    if (refresh) {
-      await NotificationOrchestrator.instance.refreshAll(
-        reason: 'settings_changed',
-      );
+    try {
+      final next = await action();
+      if (refresh) {
+        await NotificationOrchestrator.instance.refreshAll(
+          reason: 'settings_changed',
+        );
+      }
+      if (!mounted) return;
+      setState(() => _settings = next);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar el ajuste: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    if (!mounted) return;
-    setState(() {
-      _settings = next;
-      _saving = false;
-    });
   }
 
   Future<void> _requestPermission() async {
     setState(() => _saving = true);
-    await LocalNotificationService.instance.requestPermissionsIfNeeded();
-    await _load();
-    if (!mounted) return;
-    setState(() => _saving = false);
+    try {
+      await LocalNotificationService.instance.requestPermissionsIfNeeded();
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo solicitar el permiso: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -117,6 +137,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                _appearanceSection(),
                 const SizedBox(height: 12),
                 _section(
                   title: 'Pedidos',
@@ -227,7 +249,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: Text(
                           _snoozeSummary(settings),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 12,
                           ),
@@ -238,6 +260,70 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               ],
             ),
     );
+  }
+
+  Widget _appearanceSection() {
+    final isDarkMode = ref.watch(
+      themeProvider.select((provider) => provider.isDarkMode),
+    );
+    return _section(
+      title: 'Apariencia',
+      children: [
+        ListTile(
+          leading: Icon(
+            isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          title: const Text('Tema de la aplicación'),
+          subtitle: Text(isDarkMode ? 'Oscuro' : 'Claro'),
+          trailing: Semantics(
+            container: true,
+            button: true,
+            toggled: isDarkMode,
+            label: 'Selector de tema',
+            value: isDarkMode ? 'Oscuro' : 'Claro',
+            hint: 'Alterna entre modo claro y modo oscuro',
+            child: SegmentedButton<bool>(
+              key: const ValueKey<String>('theme-mode-selector'),
+              segments: const [
+                ButtonSegment<bool>(
+                  value: false,
+                  icon: Icon(Icons.light_mode_outlined),
+                  label: Text('Claro'),
+                ),
+                ButtonSegment<bool>(
+                  value: true,
+                  icon: Icon(Icons.dark_mode_outlined),
+                  label: Text('Oscuro'),
+                ),
+              ],
+              selected: {isDarkMode},
+              showSelectedIcon: false,
+              onSelectionChanged: _saving
+                  ? null
+                  : (selection) {
+                      if (selection.isEmpty) return;
+                      unawaited(_changeTheme(selection.first));
+                    },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _changeTheme(bool isDark) async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(themeProvider.notifier).setTheme(isDark);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar el tema: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Widget _section({
@@ -257,7 +343,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
@@ -292,7 +378,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       avatar: const Icon(Icons.pause_circle_outline_rounded, size: 18),
       onPressed: _saving ? null : onPressed,
       backgroundColor: AppTheme.softPanel,
-      side: const BorderSide(color: AppTheme.borderColor),
+      side: BorderSide(color: AppTheme.borderColor),
     );
   }
 

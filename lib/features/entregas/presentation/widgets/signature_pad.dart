@@ -52,7 +52,7 @@ class _SignaturePadState extends State<SignaturePad> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Pide al cliente que firme en el área de abajo',
             style: TextStyle(color: AppTheme.textSecondary),
           ),

@@ -1,3 +1,4 @@
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
 /// 🚀 FUTURISTIC THEME - Tema ultra-moderno con glassmorphism
@@ -20,38 +21,38 @@ class FuturisticTheme {
   // ============================================================================
   // COLORES NEÓN PRINCIPALES
   // ============================================================================
-
-  static const Color cyanNeon = Color(0xFF00F5FF);
-  static const Color magentaNeon = Color(0xFFFF00FF);
-  static const Color yellowNeon = Color(0xFFFFE600);
-  static const Color greenNeon = Color(0xFF00FF41);
-  static const Color redNeon = Color(0xFFFF073A);
-  static const Color orangeNeon = Color(0xFFFF6B00);
-  static const Color purpleNeon = Color(0xFF9D00FF);
-  static const Color blueNeon = Color(0xFF0066FF);
+  
+  static const Color cyanNeon = AppColors.legacyFF00F5FF;
+  static const Color magentaNeon = AppColors.legacyFFFF00FF;
+  static const Color yellowNeon = AppColors.legacyFFFFE600;
+  static const Color greenNeon = AppColors.legacyFF00FF41;
+  static const Color redNeon = AppColors.legacyFFFF073A;
+  static const Color orangeNeon = AppColors.legacyFFFF6B00;
+  static const Color purpleNeon = AppColors.legacyFF9D00FF;
+  static const Color blueNeon = AppColors.legacyFF0066FF;
 
   // ============================================================================
   // COLORES DE SUPERFICIE (DARK MODE)
   // ============================================================================
-
-  static const Color backgroundDark = Color(0xFF0A0E27);
-  static const Color surfaceDark = Color(0xFF1A1F3A);
-  static const Color surfaceLighter = Color(0xFF252B47);
-  static const Color cardDark = Color(0xFF1E2543);
+  
+  static const Color backgroundDark = AppColors.legacyFF0A0E27;
+  static const Color surfaceDark = AppColors.legacyFF1A1F3A;
+  static const Color surfaceLighter = AppColors.legacyFF252B47;
+  static const Color cardDark = AppColors.legacyFF1E2543;
 
   // ============================================================================
   // COLORES DE TEXTO (OPTIMIZADOS PARA DARK MODE)
   // ============================================================================
-
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB8C5D6);
-  static const Color textTertiary = Color(0xFF8A98AC);
-  static const Color textDisabled = Color(0xFF5A6376);
+  
+  static const Color textPrimary = AppColors.legacyFFFFFFFF;
+  static const Color textSecondary = AppColors.legacyFFB8C5D6;
+  static const Color textTertiary = AppColors.legacyFF8A98AC;
+  static const Color textDisabled = AppColors.legacyFF5A6376;
 
   // ============================================================================
   // GRADIENTES CYBERPUNK
   // ============================================================================
-
+  
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [cyanNeon, blueNeon],
     begin: Alignment.topLeft,
@@ -84,9 +85,9 @@ class FuturisticTheme {
 
   static const LinearGradient backgroundGradient = LinearGradient(
     colors: [
-      Color(0xFF0A0E27),
-      Color(0xFF1A1F3A),
-      Color(0xFF0F1329),
+      AppColors.legacyFF0A0E27,
+      AppColors.legacyFF1A1F3A,
+      AppColors.legacyFF0F1329,
     ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -95,8 +96,8 @@ class FuturisticTheme {
 
   static const LinearGradient cardGradient = LinearGradient(
     colors: [
-      Color(0xFF1E2543),
-      Color(0xFF252B47),
+      AppColors.legacyFF1E2543,
+      AppColors.legacyFF252B47,
     ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -105,84 +106,84 @@ class FuturisticTheme {
   // ============================================================================
   // SOMBRAS NEÓN
   // ============================================================================
-
+  
   static List<BoxShadow> get neonShadowCyan => [
-        BoxShadow(
-          color: cyanNeon.withValues(alpha: 0.3),
-          blurRadius: 20,
-          spreadRadius: 2,
-          offset: const Offset(0, 4),
-        ),
-        BoxShadow(
-          color: cyanNeon.withValues(alpha: 0.1),
-          blurRadius: 40,
-          spreadRadius: 4,
-          offset: const Offset(0, 8),
-        ),
-      ];
+    BoxShadow(
+      color: cyanNeon.withValues(alpha: 0.3),
+      blurRadius: 20,
+      spreadRadius: 2,
+      offset: const Offset(0, 4),
+    ),
+    BoxShadow(
+      color: cyanNeon.withValues(alpha: 0.1),
+      blurRadius: 40,
+      spreadRadius: 4,
+      offset: const Offset(0, 8),
+    ),
+  ];
 
   static List<BoxShadow> get neonShadowMagenta => [
-        BoxShadow(
-          color: magentaNeon.withValues(alpha: 0.3),
-          blurRadius: 20,
-          spreadRadius: 2,
-          offset: const Offset(0, 4),
-        ),
-        BoxShadow(
-          color: magentaNeon.withValues(alpha: 0.1),
-          blurRadius: 40,
-          spreadRadius: 4,
-          offset: const Offset(0, 8),
-        ),
-      ];
+    BoxShadow(
+      color: magentaNeon.withValues(alpha: 0.3),
+      blurRadius: 20,
+      spreadRadius: 2,
+      offset: const Offset(0, 4),
+    ),
+    BoxShadow(
+      color: magentaNeon.withValues(alpha: 0.1),
+      blurRadius: 40,
+      spreadRadius: 4,
+      offset: const Offset(0, 8),
+    ),
+  ];
 
   static List<BoxShadow> get glassShadow => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.2),
-          blurRadius: 15,
-          spreadRadius: 1,
-          offset: const Offset(0, 5),
-        ),
-        BoxShadow(
-          color: cyanNeon.withValues(alpha: 0.1),
-          blurRadius: 30,
-          offset: const Offset(0, 10),
-        ),
-      ];
+    BoxShadow(
+      color: AppColors.systemBlack.withValues(alpha: 0.2),
+      blurRadius: 15,
+      spreadRadius: 1,
+      offset: const Offset(0, 5),
+    ),
+    BoxShadow(
+      color: cyanNeon.withValues(alpha: 0.1),
+      blurRadius: 30,
+      offset: const Offset(0, 10),
+    ),
+  ];
 
   // ============================================================================
   // COLORES PARA MODO CLARO
   // ============================================================================
-
-  static const Color lightBackground = Color(0xFFF8FAFC);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightTextPrimary = Color(0xFF0F172A);
-  static const Color lightTextSecondary = Color(0xFF475569);
-  static const Color lightTextTertiary = Color(0xFF94A3B8);
+  
+  static const Color lightBackground = AppColors.legacyFFF8FAFC;
+  static const Color lightSurface = AppColors.legacyFFFFFFFF;
+  static const Color lightTextPrimary = AppColors.legacyFF0F172A;
+  static const Color lightTextSecondary = AppColors.legacyFF475569;
+  static const Color lightTextTertiary = AppColors.legacyFF94A3B8;
 
   // ============================================================================
   // THEME DATA COMPLETO
   // ============================================================================
-
+  
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-
+      
       // Colores base
       scaffoldBackgroundColor: lightBackground,
       primaryColor: cyanNeon,
-      colorScheme: const ColorScheme.light(
+      colorScheme:  ColorScheme.light(
         primary: cyanNeon,
         secondary: magentaNeon,
         tertiary: purpleNeon,
         error: redNeon,
-        onSecondary: Colors.white,
+        onSecondary: AppColors.themedWhite,
         onSurface: lightTextPrimary,
-        surfaceContainerHighest: Color(0xFFF1F5F9),
+        surfaceContainerHighest: AppColors.legacyFFF1F5F9,
         onSurfaceVariant: lightTextSecondary,
-        outline: Color(0xFFCBD5E1),
-        outlineVariant: Color(0xFFE2E8F0),
+        outline: AppColors.legacyFFCBD5E1,
+        outlineVariant: AppColors.legacyFFE2E8F0,
       ),
 
       // AppBar
@@ -190,7 +191,7 @@ class FuturisticTheme {
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         foregroundColor: lightTextPrimary,
         titleTextStyle: TextStyle(
           color: lightTextPrimary,
@@ -210,7 +211,7 @@ class FuturisticTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: const BorderSide(
-            color: Color(0xFFE2E8F0),
+            color: AppColors.legacyFFE2E8F0,
           ),
         ),
       ),
@@ -219,7 +220,7 @@ class FuturisticTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: cyanNeon,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.themedWhite,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(
@@ -228,7 +229,7 @@ class FuturisticTheme {
         ).copyWith(
           backgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.disabled)) {
-              return const Color(0xFFE2E8F0);
+              return AppColors.legacyFFE2E8F0;
             }
             return cyanNeon;
           }),
@@ -261,11 +262,11 @@ class FuturisticTheme {
         fillColor: lightSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: AppColors.legacyFFE2E8F0),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: AppColors.legacyFFE2E8F0),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -288,7 +289,7 @@ class FuturisticTheme {
       // Floating Action Button
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: cyanNeon,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.themedWhite,
         elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
@@ -301,7 +302,7 @@ class FuturisticTheme {
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: const BorderSide(color: AppColors.legacyFFE2E8F0),
         ),
       ),
 
@@ -315,10 +316,10 @@ class FuturisticTheme {
 
       // Chip
       chipTheme: ChipThemeData(
-        backgroundColor: const Color(0xFFF1F5F9),
+        backgroundColor: AppColors.legacyFFF1F5F9,
         selectedColor: cyanNeon.withValues(alpha: 0.2),
         labelStyle: const TextStyle(color: lightTextPrimary),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: const BorderSide(color: AppColors.legacyFFE2E8F0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -326,7 +327,7 @@ class FuturisticTheme {
 
       // Divider
       dividerTheme: const DividerThemeData(
-        color: Color(0xFFE2E8F0),
+        color: AppColors.legacyFFE2E8F0,
         thickness: 1,
         space: 1,
       ),
@@ -434,7 +435,7 @@ class FuturisticTheme {
           if (states.contains(WidgetState.selected)) {
             return cyanNeon.withValues(alpha: 0.5);
           }
-          return const Color(0xFFE2E8F0);
+          return AppColors.legacyFFE2E8F0;
         }),
       ),
 
@@ -444,10 +445,10 @@ class FuturisticTheme {
           if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
-          return Colors.transparent;
+          return AppColors.transparent;
         }),
-        checkColor: WidgetStateProperty.all(Colors.white),
-        side: const BorderSide(color: Color(0xFFCBD5E1), width: 2),
+        checkColor: WidgetStateProperty.all(AppColors.themedWhite),
+        side: const BorderSide(color: AppColors.legacyFFCBD5E1, width: 2),
       ),
 
       // Radio
@@ -463,18 +464,18 @@ class FuturisticTheme {
       // Slider
       sliderTheme: SliderThemeData(
         activeTrackColor: cyanNeon,
-        inactiveTrackColor: const Color(0xFFE2E8F0),
+        inactiveTrackColor: AppColors.legacyFFE2E8F0,
         thumbColor: cyanNeon,
         overlayColor: cyanNeon.withValues(alpha: 0.2),
       ),
     );
   }
-
+  
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-
+      
       // Colores base
       scaffoldBackgroundColor: backgroundDark,
       primaryColor: cyanNeon,
@@ -517,7 +518,7 @@ class FuturisticTheme {
       // Elevated Button
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
+          backgroundColor: AppColors.transparent,
           foregroundColor: textPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -586,7 +587,7 @@ class FuturisticTheme {
 
       // Floating Action Button
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         foregroundColor: textPrimary,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -743,7 +744,7 @@ class FuturisticTheme {
           if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
-          return Colors.transparent;
+          return AppColors.transparent;
         }),
         checkColor: WidgetStateProperty.all(backgroundDark),
         side: BorderSide(color: cyanNeon.withValues(alpha: 0.5), width: 2),

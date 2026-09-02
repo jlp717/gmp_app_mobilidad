@@ -336,7 +336,7 @@ class SalesSummaryHeader extends StatelessWidget {
         vertical: 8 * Responsive.landscapeScale(context),
       ),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [
             AppTheme.raisedSurface,
             AppTheme.raisedSurface,

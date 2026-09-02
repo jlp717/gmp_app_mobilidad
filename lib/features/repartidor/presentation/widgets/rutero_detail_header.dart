@@ -87,7 +87,7 @@ class RuteroDetailHeader extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 albaran.nombreCliente,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -103,7 +103,7 @@ class RuteroDetailHeader extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     albaran.nombreFiscal!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                     ),
@@ -114,7 +114,7 @@ class RuteroDetailHeader extends StatelessWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.location_on_outlined,
                     size: 14,
                     color: AppTheme.textSecondary,
@@ -123,7 +123,7 @@ class RuteroDetailHeader extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${albaran.direccion}, ${albaran.poblacion}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 13,
                       ),
@@ -249,11 +249,11 @@ class RuteroDetailHeader extends StatelessWidget {
       tooltip: 'Cerrar detalle',
       icon: Container(
         padding: const EdgeInsets.all(6),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppTheme.softPanel,
           shape: BoxShape.circle,
         ),
-        child: const Icon(
+        child: Icon(
           Icons.close,
           color: AppTheme.textSecondary,
           size: 18,

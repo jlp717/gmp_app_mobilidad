@@ -165,7 +165,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                       children: [
                         Text(
                           v.code,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -175,7 +175,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                         if (v.matricula.isNotEmpty)
                           Text(
                             v.matricula,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textTertiary,
                               fontSize: 11,
                             ),
@@ -185,7 +185,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                     if (v.description.isNotEmpty)
                       Text(
                         v.description,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 11,
                         ),
@@ -218,7 +218,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 ),
               ),
               // Edit indicator
-              const Icon(
+              Icon(
                 Icons.edit_rounded,
                 color: AppTheme.textTertiary,
                 size: 18,
@@ -244,7 +244,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
         ),
         Text(
           label,
-          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 8),
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 8),
         ),
       ],
     );
@@ -379,11 +379,11 @@ class _VehiclesPageState extends State<VehiclesPage> {
     return TextField(
       controller: c,
       keyboardType: TextInputType.number,
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         labelStyle:
-            const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            TextStyle(color: AppTheme.textSecondary, fontSize: 12),
         prefixIcon: Icon(icon, size: 18, color: AppTheme.textTertiary),
         filled: true,
         fillColor: AppTheme.softPanel,

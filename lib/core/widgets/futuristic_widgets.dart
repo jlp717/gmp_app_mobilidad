@@ -265,7 +265,7 @@ class DataVizCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w600,
@@ -286,7 +286,7 @@ class DataVizCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               subtitle!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppTheme.textSecondary,
                 letterSpacing: 0,
@@ -361,7 +361,7 @@ class HolographicProgressIndicator extends StatelessWidget {
                 if (label != null)
                   Text(
                     label!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondary,
                       letterSpacing: 0,
@@ -370,7 +370,7 @@ class HolographicProgressIndicator extends StatelessWidget {
                 if (percentage != null)
                   Text(
                     percentage!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondary,
                       fontWeight: FontWeight.w700,

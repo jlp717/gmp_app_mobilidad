@@ -152,7 +152,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: ColorScheme.dark(
               primary: AppTheme.info,
               onPrimary: AppTheme.textPrimary,
               surface: AppTheme.raisedSurface,
@@ -209,14 +209,14 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
             Text(
               _error!,
               style:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+                  TextStyle(color: AppTheme.textTertiary, fontSize: 13),
             ),
           ],
         ),
       );
     }
     if (_entries.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Sin historial de cargas',
           style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
@@ -286,7 +286,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
                 ),
                 Text(
                   '${_entries.length} cargas registradas',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
                   ),
@@ -363,7 +363,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
                     });
                     _loadHistory();
                   },
-                  child: const Icon(
+                  child: Icon(
                     Icons.close_rounded,
                     size: 16,
                     color: AppTheme.textTertiary,
@@ -630,7 +630,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
               size: 28,
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Sin desglose disponible',
               style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
             ),
@@ -822,7 +822,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
                 child: Text(
                   '${client['clientCode'] ?? ''} — '
                   '${client['clientName'] ?? ''}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,

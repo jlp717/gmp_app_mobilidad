@@ -101,7 +101,7 @@ class _RepartidorMonthlySummaryBarState
       );
     }
     if (_failed) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
@@ -161,7 +161,7 @@ class _RepartidorMonthlySummaryBarState
               const SizedBox(width: 6),
               Text(
                 'Acumulado de ${meses[data.period.month - 1]}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -238,7 +238,7 @@ class _RepartidorMonthlySummaryBarState
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textTertiary,
               fontSize: 10,
             ),

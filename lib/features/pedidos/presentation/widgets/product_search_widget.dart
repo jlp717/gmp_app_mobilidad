@@ -59,7 +59,14 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = ref.watch(pedidosProvider);
+    final onlyWithStock =
+        ref.watch(pedidosProvider.select((p) => p.onlyWithStock));
+    final selectedFamily =
+        ref.watch(pedidosProvider.select((p) => p.selectedFamily));
+    final selectedPrefamily =
+        ref.watch(pedidosProvider.select((p) => p.selectedPrefamily));
+    final families = ref.watch(pedidosProvider.select((p) => p.families));
+    final provider = ref.read(pedidosProvider);
     final pad = Responsive.contentPadding(context);
 
     // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si families crece mucho.
@@ -71,14 +78,14 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
           avatar: Icon(
             Icons.inventory_2_outlined,
             size: 14,
-            color: provider.onlyWithStock ? AppTheme.success : Colors.white54,
+            color: onlyWithStock ? AppTheme.success : AppTheme.textTertiary,
           ),
           label: const Text('Solo con stock'),
-          selected: provider.onlyWithStock,
+          selected: onlyWithStock,
           selectedColor: AppTheme.success.withValues(alpha: 0.24),
           backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
           labelStyle: TextStyle(
-            color: provider.onlyWithStock ? AppTheme.success : Colors.white70,
+            color: onlyWithStock ? AppTheme.success : AppTheme.textSecondary,
             fontSize: Responsive.fontSize(context, small: 11, large: 13),
           ),
           side: BorderSide(
@@ -89,7 +96,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
           onSelected: (_) {
-            provider.setStockFilter(!provider.onlyWithStock);
+            provider.setStockFilter(!onlyWithStock);
             provider.loadProducts(
               vendedorCodes: widget.vendedorCodes,
               search: _searchController.text.isEmpty
@@ -107,18 +114,18 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
           avatar: Icon(
             Icons.star,
             size: 14,
-            color: provider.selectedPrefamily == 'NESTLE'
+            color: selectedPrefamily == 'NESTLE'
                 ? AppTheme.accentAmber
-                : Colors.white54,
+                : AppTheme.textTertiary,
           ),
           label: const Text('Nestlé'),
-          selected: provider.selectedPrefamily == 'NESTLE',
+          selected: selectedPrefamily == 'NESTLE',
           selectedColor: AppTheme.accentAmber.withValues(alpha: 0.26),
           backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
           labelStyle: TextStyle(
-            color: provider.selectedPrefamily == 'NESTLE'
+            color: selectedPrefamily == 'NESTLE'
                 ? AppTheme.accentAmber
-                : Colors.white70,
+                : AppTheme.textSecondary,
             fontSize: Responsive.fontSize(
               context,
               small: 11,
@@ -127,7 +134,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
             fontWeight: FontWeight.w600,
           ),
           side: BorderSide(
-            color: provider.selectedPrefamily == 'NESTLE'
+            color: selectedPrefamily == 'NESTLE'
                 ? AppTheme.accentAmber
                 : AppTheme.activeRing.withValues(alpha: 0.14),
           ),
@@ -135,7 +142,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
           visualDensity: VisualDensity.compact,
           onSelected: (_) {
             final next =
-                provider.selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
+                selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
             provider.setPrefamilyFilter(next);
             provider.loadProducts(
               vendedorCodes: widget.vendedorCodes,
@@ -148,8 +155,8 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
         ),
       ),
       // Family chips
-      ...provider.families.map((family) {
-        final selected = provider.selectedFamily == family;
+      ...families.map((family) {
+        final selected = selectedFamily == family;
         return Padding(
           padding: const EdgeInsets.only(right: 8),
           child: FilterChip(
@@ -158,7 +165,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
             selectedColor: AppTheme.info.withValues(alpha: 0.24),
             backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
             labelStyle: TextStyle(
-              color: selected ? AppTheme.info : Colors.white70,
+              color: selected ? AppTheme.info : AppTheme.textSecondary,
               fontSize: Responsive.fontSize(context, small: 11, large: 13),
             ),
             side: BorderSide(
@@ -202,12 +209,12 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
               controller: _searchController,
               onChanged: _onSearchChanged,
               style: TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontSize: Responsive.fontSize(context, small: 14, large: 15),
               ),
               decoration: InputDecoration(
                 hintText: 'Buscar producto...',
-                hintStyle: const TextStyle(color: Colors.white38),
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
                 prefixIcon: const Icon(
                   Icons.manage_search_rounded,
                   color: AppTheme.activeRing,
@@ -215,9 +222,9 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                 ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.clear,
-                          color: Colors.white38,
+                          color: AppTheme.textTertiary,
                           size: 18,
                         ),
                         onPressed: () {

@@ -155,7 +155,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         children: [
           _buildDeliveryProgress(isSmall: true),
           const SizedBox(height: 8),
-          const Divider(color: AppTheme.borderColor),
+          Divider(color: AppTheme.borderColor),
           _buildMoneyMetrics(isSmall: true),
         ],
       );

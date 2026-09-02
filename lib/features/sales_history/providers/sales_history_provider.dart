@@ -163,13 +163,13 @@ final salesHistoryProvider =
 // ── Selectors ────────────────────────────────────────────────────────────────
 
 final salesHistoryItemsProvider = Provider<List<ProductHistoryItem>>((ref) {
-  return ref.watch(salesHistoryProvider).items;
+  return ref.watch(salesHistoryProvider.select((state) => state.items));
 });
 
 final salesHistorySummaryProvider = Provider<Map<String, dynamic>?>((ref) {
-  return ref.watch(salesHistoryProvider).summary;
+  return ref.watch(salesHistoryProvider.select((state) => state.summary));
 });
 
 final salesHistoryLoadingProvider = Provider<bool>((ref) {
-  return ref.watch(salesHistoryProvider).isLoading;
+  return ref.watch(salesHistoryProvider.select((state) => state.isLoading));
 });

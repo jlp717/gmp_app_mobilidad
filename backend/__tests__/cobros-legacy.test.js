@@ -60,7 +60,7 @@ function mockLegacyPendingSummaryDb({
 } = {}) {
   const portfolio = portfolioRows == null ? pageRows : portfolioRows;
   const routeSql = async (sql) => {
-    if (portfolioQueryError && /FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)) {
+    if (portfolioQueryError && /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)) {
       throw portfolioQueryError;
     }
     if (/WITH\s+PAGE_DOCS/i.test(sql)) {
@@ -71,7 +71,7 @@ function mockLegacyPendingSummaryDb({
     if (/FROM\s+JAVIER\.COBROS\s+C/i.test(sql) && /EXISTS/i.test(sql)) return portfolioCobros;
     if (/REPARTIDOR_COBROS\s+R/i.test(sql) && /EXISTS/i.test(sql)) return portfolioRepartidor;
     if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return pageRows;
-    if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) return portfolio;
+    if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i.test(sql)) return portfolio;
     return [];
   };
   mockQuery.mockImplementation(routeSql);
@@ -283,7 +283,7 @@ describe('legacy cobros route hardening', () => {
           NOMBRE_CLI: 'Cliente Tres',
         }];
       }
-      if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) {
+      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i.test(sql)) {
         return [{
           CLIENTE: 'C003',
           SERIE_DOCUMENTO: 'M',
@@ -347,7 +347,7 @@ describe('legacy cobros route hardening', () => {
     expect(res.body.grandTotalVencido).toBeCloseTo(50, 1);
     expect(res.body.clientCount).toBe(2);
     const portfolioSql = mockCachedQuery.mock.calls.find(([, sql]) => (
-      /FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)
+      /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)
     ))?.[1];
     expect(portfolioSql).toBeDefined();
     expect(portfolioSql).not.toMatch(/FETCH FIRST/i);
@@ -411,7 +411,7 @@ describe('legacy cobros vendor client scope when clientCodes absent', function()
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCachedQuery).not.toHaveBeenCalled();
     expect(mockQuery).not.toHaveBeenCalled();
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE/i.test(sql))).toBe(false);
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI|DSEDAC\.CLP|DSED\.LACLAE/i);
     expect(mockQueryWithParams.mock.calls[0][1]).toEqual(expect.arrayContaining(['C999']));
   });
@@ -453,7 +453,7 @@ describe('legacy cobros vendor client scope when clientCodes absent', function()
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCachedQuery).not.toHaveBeenCalled();
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE/i.test(sql))).toBe(false);
   });
 
   test('POST /:codigoCliente/registrar rejects COMERCIAL outside vendor client scope before writes', async function() {

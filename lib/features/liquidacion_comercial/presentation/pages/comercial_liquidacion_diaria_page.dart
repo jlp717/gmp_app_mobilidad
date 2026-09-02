@@ -386,7 +386,7 @@ class _HeroCopy extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '${_formatDate(date)} · $codeLabel',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -427,7 +427,7 @@ class _HeroTotal extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Total a ingresar',
             style: TextStyle(
               color: AppTheme.textSecondary,
@@ -549,7 +549,7 @@ class _MetricTileState extends State<_MetricTile> {
                     metric.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -858,7 +858,7 @@ class _SaveBar extends StatelessWidget {
                       savedAt ?? 'Registrado: ${_money(draft.registrado)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -932,7 +932,7 @@ class _PanelHeader extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                   height: 1.32,
@@ -961,7 +961,7 @@ class _BalanceRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -1063,7 +1063,7 @@ class _LiquidacionStatus {
   final Color color;
   final IconData icon;
 
-  static const _pending = _LiquidacionStatus._(
+  static final _pending = _LiquidacionStatus._(
     kind: LiquidacionStatusKind.pending,
     label: 'Pendiente',
     description: 'Aún no hay importes introducidos.',

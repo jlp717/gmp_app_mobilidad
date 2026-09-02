@@ -118,7 +118,7 @@ class WarehouseUi {
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -177,7 +177,7 @@ class WarehouseUi {
               ),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textTertiary,
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
@@ -227,28 +227,30 @@ class WarehouseUi {
 
   /// Generic tinted surface retained for existing warehouse widgets.
   static BoxDecoration surface({
-    Color color = AppTheme.raisedSurface,
-    Color borderColor = AppTheme.borderColor,
+    Color? color,
+    Color? borderColor,
     double borderAlpha = 1,
     double radius = AppTheme.radiusMd,
     List<BoxShadow>? boxShadow,
   }) {
+    final surfaceColor = color ?? AppTheme.raisedSurface;
+    final outlineColor = borderColor ?? AppTheme.borderColor;
     return BoxDecoration(
-      gradient: color == AppTheme.raisedSurface
+      gradient: surfaceColor == AppTheme.raisedSurface
           ? AppTheme.cardGradient
           : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                color.withValues(alpha: 0.20),
+                surfaceColor.withValues(alpha: 0.20),
                 AppTheme.raisedSurface,
-                color.withValues(alpha: 0.08),
+                surfaceColor.withValues(alpha: 0.08),
               ],
               stops: const [0.0, 0.58, 1.0],
             ),
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: borderColor.withValues(
+        color: outlineColor.withValues(
           alpha: (borderAlpha + 0.14).clamp(0, 1).toDouble(),
         ),
       ),

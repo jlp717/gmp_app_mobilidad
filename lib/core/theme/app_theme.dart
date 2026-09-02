@@ -24,23 +24,24 @@ class AppTheme {
   // COLOR PALETTE - legacy aliases retained for compatibility
   // ===========================================================================
 
-  static const Color darkBase = AppColors.darkBase;
-  static const Color darkSurface = AppColors.darkSurface;
-  static const Color darkCard = AppColors.darkCard;
-  static const Color borderColor = AppColors.borderColor;
-  static const Color inkSurface = AppColors.inkSurface;
-  static const Color raisedSurface = AppColors.raisedSurface;
-  static const Color softPanel = AppColors.softPanel;
-  static const Color mutedPanel = AppColors.mutedPanel;
-  static const Color surfaceCommand = AppColors.surfaceCommand;
-  static const Color surfaceOverlay = AppColors.surfaceOverlay;
-  static const Color surfaceGlass = AppColors.surfaceGlass;
+  static Color get darkBase => AppColors.themedCanvas;
+  static Color get darkSurface => AppColors.themedSurface;
+  static Color get darkCard => AppColors.themedPanel;
+  static Color get borderColor => AppColors.themedLine;
+  static Color get inkSurface => AppColors.themedInkSurface;
+  static Color get raisedSurface => AppColors.themedRaisedSurface;
+  static Color get softPanel => AppColors.themedSoftPanel;
+  static Color get mutedPanel => AppColors.themedMutedPanel;
+  static Color get surfaceCommand => AppColors.themedSurfaceCommand;
+  static Color get surfaceOverlay => AppColors.themedSurfaceOverlay;
+  static Color get surfaceGlass => AppColors.themedSurfaceGlass;
   static const Color activeRing = AppColors.activeRing;
   static const Color focusRing = AppColors.focusRing;
   static const Color selectionRail = AppColors.selectionRail;
   static const Color criticalRing = AppColors.criticalRing;
 
-  static const Color surfaceColor = AppColors.surfaceColor;
+  static Color get surfaceColor =>
+      AppColors.isDark ? AppColors.darkSurfaceLayer : AppColors.surface;
 
   static const Color neonBlue = AppColors.neonBlue;
   static const Color neonGreen = AppColors.neonGreen;
@@ -74,9 +75,9 @@ class AppTheme {
   static const Color cobrado = AppColors.cobrado;
   static const Color credito = AppColors.credito;
 
-  static const Color textPrimary = AppColors.textPrimary;
-  static const Color textSecondary = AppColors.textSecondary;
-  static const Color textTertiary = AppColors.textTertiary;
+  static Color get textPrimary => AppColors.themedPrimaryText;
+  static Color get textSecondary => AppColors.themedSecondaryText;
+  static Color get textTertiary => AppColors.themedTertiaryText;
 
   static const List<Color> chartColors = AppColors.chartColors;
 
@@ -87,23 +88,23 @@ class AppTheme {
   static const LinearGradient primaryGradient = AppColors.primaryGradient;
   static const LinearGradient holoGradient = AppColors.holoGradient;
   static const LinearGradient scannerGradient = AppColors.scannerGradient;
-  static const LinearGradient loginGradient = AppColors.loginGradient;
+  static LinearGradient get loginGradient => AppColors.themedLoginGradient;
   static const LinearGradient brandGradient = AppColors.brandGradient;
-  static const LinearGradient appShellGradient = AppColors.appShellGradient;
-  static const LinearGradient panelGradient = AppColors.panelGradient;
-  static const LinearGradient commandGradient = AppColors.commandGradient;
-  static const LinearGradient dataHeaderGradient = AppColors.dataHeaderGradient;
-
-  static LinearGradient get cardGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
+  static LinearGradient get appShellGradient =>
+      AppColors.themedAppShellGradient;
+  static LinearGradient get panelGradient => AppColors.themedPanelGradient;
+  static LinearGradient get commandGradient => AppColors.themedCommandGradient;
+  static LinearGradient get dataHeaderGradient => LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
         colors: [
-          Color(0xFF172636),
-          Color(0xFF0E1722),
-          Color(0xFF111F25),
+          AppColors.teal.withValues(alpha: 0.20),
+          AppColors.harbor.withValues(alpha: 0.14),
+          AppColors.aubergine.withValues(alpha: 0.08),
         ],
-        stops: [0.0, 0.64, 1.0],
       );
+
+  static LinearGradient get cardGradient => AppColors.themedCardGradient;
 
   static LinearGradient get urgentGradient => LinearGradient(
         colors: [
@@ -120,7 +121,7 @@ class AppTheme {
       );
 
   // Compatibility alias for code expecting `themeData`.
-  static ThemeData get themeData => darkTheme;
+  static ThemeData get themeData => AppColors.isDark ? darkTheme : lightTheme;
 
   // ===========================================================================
   // THEME DATA
@@ -134,7 +135,7 @@ class AppTheme {
         border: AppColors.darkLine,
         primaryText: AppColors.darkInk,
         secondaryText: AppColors.darkMuted,
-        tertiaryText: AppColors.textTertiary,
+        tertiaryText: AppColors.darkMuted,
         systemOverlayStyle: const SystemUiOverlayStyle(
           statusBarColor: AppColors.darkCanvas,
           statusBarIconBrightness: Brightness.light,
@@ -180,8 +181,10 @@ class AppTheme {
       error: AppColors.error,
       surface: surface,
     ).copyWith(
-      onPrimary: Colors.white,
-      onSecondary: Colors.white,
+      // Teal is intentionally bright; dark ink keeps buttons and selected
+      // calendar cells readable in both modes.
+      onPrimary: AppColors.ink,
+      onSecondary: isDark ? AppColors.darkInk : AppColors.ink,
       onSurface: primaryText,
       surfaceContainerHighest: panel,
       outline: border,
@@ -287,7 +290,7 @@ class AppTheme {
 
     final cardShadow = [
       BoxShadow(
-        color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.08),
+        color: AppColors.systemBlack.withValues(alpha: isDark ? 0.32 : 0.08),
         blurRadius: 18,
         offset: const Offset(0, 10),
       ),
@@ -304,8 +307,9 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: isDark ? AppColors.raisedSurface : surface,
         elevation: 0,
-        shadowColor: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
-        surfaceTintColor: Colors.transparent,
+        shadowColor:
+            AppColors.systemBlack.withValues(alpha: isDark ? 0.28 : 0.08),
+        surfaceTintColor: AppColors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLg),
           side: BorderSide(
@@ -323,8 +327,8 @@ class AppTheme {
         foregroundColor: primaryText,
         elevation: 0,
         scrolledUnderElevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
+        shadowColor: AppColors.transparent,
+        surfaceTintColor: AppColors.transparent,
         centerTitle: false,
         iconTheme: IconThemeData(color: secondaryText),
         actionsIconTheme: IconThemeData(color: secondaryText),
@@ -344,7 +348,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.teal,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.ink,
           disabledBackgroundColor: panel,
           disabledForegroundColor: tertiaryText,
           elevation: 0,
@@ -430,7 +434,7 @@ class AppTheme {
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.teal,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.ink,
         elevation: 3,
         focusElevation: 4,
         hoverElevation: 4,
@@ -441,28 +445,31 @@ class AppTheme {
       ),
       datePickerTheme: DatePickerThemeData(
         backgroundColor: surface,
-        headerBackgroundColor: AppColors.surfaceCommand,
-        headerForegroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
+        headerBackgroundColor:
+            isDark ? AppColors.surfaceCommand : AppColors.ink,
+        headerForegroundColor: AppColors.themedWhite,
+        surfaceTintColor: AppColors.transparent,
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return Colors.white;
+          if (states.contains(WidgetState.selected)) return AppColors.ink;
           if (states.contains(WidgetState.disabled)) return tertiaryText;
           return primaryText;
         }),
         dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return AppColors.teal;
-          return Colors.transparent;
+          return AppColors.transparent;
         }),
-        todayForegroundColor: WidgetStateProperty.all(AppColors.teal),
-        todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
+        todayForegroundColor: WidgetStateProperty.all(
+          isDark ? AppColors.teal : AppColors.harbor,
+        ),
+        todayBackgroundColor: WidgetStateProperty.all(AppColors.transparent),
         todayBorder: const BorderSide(color: AppColors.teal),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return Colors.white;
+          if (states.contains(WidgetState.selected)) return AppColors.ink;
           return primaryText;
         }),
         yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return AppColors.teal;
-          return Colors.transparent;
+          return AppColors.transparent;
         }),
         rangeSelectionBackgroundColor: AppColors.teal.withValues(alpha: 0.14),
         dividerColor: border,
@@ -477,8 +484,9 @@ class AppTheme {
           ),
         ),
         elevation: 12,
-        shadowColor: Colors.black.withValues(alpha: isDark ? 0.42 : 0.12),
-        surfaceTintColor: Colors.transparent,
+        shadowColor:
+            AppColors.systemBlack.withValues(alpha: isDark ? 0.42 : 0.12),
+        surfaceTintColor: AppColors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       ),
       bottomSheetTheme: BottomSheetThemeData(
@@ -493,16 +501,18 @@ class AppTheme {
           ),
         ),
         elevation: 10,
-        shadowColor: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
-        surfaceTintColor: Colors.transparent,
+        shadowColor:
+            AppColors.systemBlack.withValues(alpha: isDark ? 0.35 : 0.12),
+        surfaceTintColor: AppColors.transparent,
         modalElevation: 12,
-        modalBarrierColor: Colors.black.withValues(alpha: 0.58),
+        modalBarrierColor: AppColors.systemBlack.withValues(alpha: 0.58),
         dragHandleColor: tertiaryText,
         dragHandleSize: const Size(32, 4),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark ? AppColors.surfaceCommand : AppColors.ink,
-        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 13),
+        contentTextStyle:
+            const TextStyle(color: AppColors.systemWhite, fontSize: 13),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
         ),
@@ -532,7 +542,7 @@ class AppTheme {
       listTileTheme: ListTileThemeData(
         iconColor: secondaryText,
         textColor: primaryText,
-        tileColor: Colors.transparent,
+        tileColor: AppColors.transparent,
         selectedTileColor: AppColors.teal.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
@@ -540,7 +550,7 @@ class AppTheme {
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: isDark ? AppColors.surfaceOverlay : surface,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: AppColors.transparent,
         elevation: 10,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
@@ -564,10 +574,10 @@ class AppTheme {
           ),
         ),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: AppColors.teal,
-        linearTrackColor: AppColors.mutedPanel,
-        circularTrackColor: AppColors.mutedPanel,
+        linearTrackColor: panel,
+        circularTrackColor: panel,
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(
@@ -636,7 +646,7 @@ class AppTheme {
   // CUSTOM DECORATIONS
   // ===========================================================================
 
-  static BoxDecoration appBackground() => const BoxDecoration(
+  static BoxDecoration appBackground() => BoxDecoration(
         gradient: appShellGradient,
       );
 
@@ -652,7 +662,7 @@ class AppTheme {
       border: Border.all(color: accent.withValues(alpha: 0.26)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.34 * opacity),
+          color: AppColors.systemBlack.withValues(alpha: 0.34 * opacity),
           blurRadius: 24,
           offset: const Offset(0, 14),
         ),
@@ -740,7 +750,7 @@ class AppTheme {
             blurRadius: 22,
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.32),
+            color: AppColors.systemBlack.withValues(alpha: 0.32),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -773,7 +783,7 @@ class AppTheme {
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.32),
+          color: AppColors.systemBlack.withValues(alpha: 0.32),
           blurRadius: 22,
           offset: const Offset(0, 12),
         ),
@@ -824,7 +834,7 @@ class AppTheme {
 
   static List<BoxShadow> get elevation1 => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.22),
+          color: AppColors.systemBlack.withValues(alpha: 0.22),
           blurRadius: 12,
           offset: const Offset(0, 6),
         ),
@@ -832,7 +842,7 @@ class AppTheme {
 
   static List<BoxShadow> get elevation2 => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.28),
+          color: AppColors.systemBlack.withValues(alpha: 0.28),
           blurRadius: 18,
           offset: const Offset(0, 10),
         ),
@@ -840,7 +850,7 @@ class AppTheme {
 
   static List<BoxShadow> get elevation3 => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.34),
+          color: AppColors.systemBlack.withValues(alpha: 0.34),
           blurRadius: 28,
           offset: const Offset(0, 16),
         ),
@@ -848,7 +858,7 @@ class AppTheme {
 
   static List<BoxShadow> get heroShadow => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.42),
+          color: AppColors.systemBlack.withValues(alpha: 0.42),
           blurRadius: 36,
           offset: const Offset(0, 22),
         ),
@@ -876,46 +886,46 @@ class AppTheme {
   // TEXT HELPERS
   // ===========================================================================
 
-  static const TextStyle displayTitle = TextStyle(
-    color: textPrimary,
-    fontSize: 18,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0,
-  );
+  static TextStyle get displayTitle => TextStyle(
+        color: textPrimary,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
+      );
 
-  static const TextStyle headline = TextStyle(
-    color: textPrimary,
-    fontSize: 15,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0,
-  );
+  static TextStyle get headline => TextStyle(
+        color: textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
+      );
 
-  static const TextStyle bodyLabel = TextStyle(
-    color: textSecondary,
-    fontSize: 13,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-  );
+  static TextStyle get bodyLabel => TextStyle(
+        color: textSecondary,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0,
+      );
 
-  static const TextStyle captionText = TextStyle(
-    color: textTertiary,
-    fontSize: 11,
-    fontWeight: FontWeight.w500,
-    letterSpacing: 0,
-  );
+  static TextStyle get captionText => TextStyle(
+        color: textTertiary,
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0,
+      );
 
-  static const TextStyle metricValue = TextStyle(
-    color: textPrimary,
-    fontSize: 22,
-    fontWeight: FontWeight.w800,
-    letterSpacing: 0,
-    fontFeatures: [FontFeature.tabularFigures()],
-  );
+  static TextStyle get metricValue => TextStyle(
+        color: textPrimary,
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0,
+        fontFeatures: [FontFeature.tabularFigures()],
+      );
 
-  static const TextStyle metricLabel = TextStyle(
-    color: textTertiary,
-    fontSize: 10,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0,
-  );
+  static TextStyle get metricLabel => TextStyle(
+        color: textTertiary,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
+      );
 }

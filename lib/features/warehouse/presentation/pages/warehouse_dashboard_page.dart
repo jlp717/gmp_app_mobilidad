@@ -142,7 +142,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                 ),
                 Text(
                   '${_trucks.length} camiones · ${_trucks.fold<int>(0, (s, t) => s + t.orderCount)} pedidos',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
                   ),
@@ -200,7 +200,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           IconButton(
             tooltip: 'Día anterior',
             onPressed: () => _changeDate(-1),
-            icon: const Icon(
+            icon: Icon(
               Icons.chevron_left_rounded,
               color: AppTheme.textSecondary,
               size: 28,
@@ -218,7 +218,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                     lastDate: DateTime(2030),
                     builder: (ctx, child) => Theme(
                       data: ThemeData.dark().copyWith(
-                        colorScheme: const ColorScheme.dark(
+                        colorScheme: ColorScheme.dark(
                           primary: AppTheme.info,
                           surface: AppTheme.raisedSurface,
                         ),
@@ -244,7 +244,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                       const SizedBox(width: 8),
                       Text(
                         '$dayName ${_selectedDate.day} ${months[_selectedDate.month]} ${_selectedDate.year}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -281,7 +281,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           IconButton(
             tooltip: 'Día siguiente',
             onPressed: () => _changeDate(1),
-            icon: const Icon(
+            icon: Icon(
               Icons.chevron_right_rounded,
               color: AppTheme.textSecondary,
               size: 28,
@@ -372,7 +372,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                       children: [
                         Text(
                           truck.vehicleCode,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -380,7 +380,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                         ),
                         Text(
                           truck.matricula,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textTertiary,
                             fontSize: 11,
                           ),
@@ -397,7 +397,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                 truck.description.isNotEmpty
                     ? truck.description
                     : 'Sin descripción',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
@@ -515,7 +515,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
         ),
         Text(
           label,
-          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9),
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 9),
         ),
       ],
     );
@@ -562,7 +562,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9),
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 9),
         ),
       ],
     );
@@ -581,7 +581,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           const SizedBox(height: 12),
           Text(
             _error ?? 'Error desconocido',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
@@ -599,7 +599,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
   }
 
   Widget _buildEmpty() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

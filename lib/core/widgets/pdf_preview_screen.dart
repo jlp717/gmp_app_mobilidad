@@ -204,7 +204,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       appBar: AppBar(
         backgroundColor: AppTheme.raisedSurface,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: AppTheme.textPrimary),
+          icon: Icon(Icons.close, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -212,7 +212,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
           children: [
             Text(
               widget.title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -221,7 +221,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             if (_isReady && _totalPages > 0)
               Text(
                 'Página ${_currentPage + 1} de $_totalPages',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
@@ -257,7 +257,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             Text(
               _errorMessage!,
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -278,7 +278,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     }
 
     if (_tempPath == null) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

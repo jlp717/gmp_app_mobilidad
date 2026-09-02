@@ -1219,7 +1219,7 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: ColorScheme.dark(
               primary: AppTheme.info,
               surface: AppTheme.raisedSurface,
             ),

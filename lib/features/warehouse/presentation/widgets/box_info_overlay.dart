@@ -97,7 +97,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                         Expanded(
                           child: Text(
                             widget.box.label,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -117,7 +117,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                               color: AppTheme.softPanel,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.close_rounded,
                               size: 14,
                               color: AppTheme.textTertiary,
@@ -128,7 +128,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                     ),
                     const SizedBox(height: 10),
 
-                    const Divider(height: 1, color: AppTheme.borderColor),
+                    Divider(height: 1, color: AppTheme.borderColor),
                     const SizedBox(height: 10),
 
                     // Details

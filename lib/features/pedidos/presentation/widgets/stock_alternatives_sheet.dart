@@ -345,10 +345,10 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     return TextField(
       controller: _searchController,
       onChanged: _onSearchChanged,
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         hintText: 'Buscar productos con stock...',
-        hintStyle: const TextStyle(color: AppTheme.textTertiary),
+        hintStyle: TextStyle(color: AppTheme.textTertiary),
         prefixIcon: const Icon(Icons.search, color: AppTheme.info),
         suffixIcon: _isSearching
             ? const Padding(
@@ -365,7 +365,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             : _searchController.text.isNotEmpty
                 ? IconButton(
                     icon:
-                        const Icon(Icons.clear, color: AppTheme.textSecondary),
+                        Icon(Icons.clear, color: AppTheme.textSecondary),
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchResults = []);
@@ -380,7 +380,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.borderColor),
+          borderSide: BorderSide(color: AppTheme.borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -419,7 +419,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   widget.product.hasStock
                       ? 'Stock Insuficiente'
                       : 'Sin Stock Disponible',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -429,7 +429,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   widget.remainingQty != null
                       ? 'Por favor, añade ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)} más de estas alternativas:'
                       : 'Te sugerimos productos similares:',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
                   ),
@@ -439,7 +439,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
           ),
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+            icon: Icon(Icons.close, color: AppTheme.textSecondary),
           ),
         ],
       ),
@@ -527,7 +527,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
 
   Widget _buildContent(ScrollController? scrollController) {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -551,7 +551,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -562,7 +562,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     if (_showSearch) {
       if (_searchResults.isEmpty) {
         if (_searchController.text.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -582,7 +582,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
           );
         }
         if (_isSearching) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -596,7 +596,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             ),
           );
         }
-        return const Center(
+        return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -629,7 +629,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
 
     // Show alternatives when not searching
     if (_alternatives.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -709,7 +709,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'cajas',
                       style: TextStyle(
                         color: AppTheme.textTertiary,
@@ -726,7 +726,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -737,7 +737,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     const SizedBox(height: 2),
                     Text(
                       '$code${brand.isNotEmpty ? ' · $brand' : ''}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textTertiary,
                         fontSize: 11,
                       ),
@@ -798,7 +798,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                                   _getQty(code, stockEnv).truncateToDouble()
                               ? _getQty(code, stockEnv).toInt().toString()
                               : _getQty(code, stockEnv).toStringAsFixed(1),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -987,7 +987,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -998,7 +998,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     const SizedBox(height: 2),
                     Text(
                       '$code${brand.isNotEmpty ? ' · $brand' : ''}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textTertiary,
                         fontSize: 11,
                       ),
@@ -1080,7 +1080,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                         qty == qty.truncateToDouble()
                             ? qty.toInt().toString()
                             : qty.toStringAsFixed(1),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -1157,7 +1157,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                       ),
                       child: Text(
                         r,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 9,
                         ),

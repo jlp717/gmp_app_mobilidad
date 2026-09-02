@@ -169,10 +169,10 @@ class _FilterBarState extends State<FilterBar> {
     return TextField(
       controller: controller,
       onChanged: onChanged,
-      style: const TextStyle(color: Colors.white, fontSize: 13),
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54, fontSize: 12),
+        labelStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
         prefixIcon: Icon(icon, color: AppTheme.success, size: 18),
         filled: true,
         fillColor: AppTheme.inkSurface,

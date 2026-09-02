@@ -742,7 +742,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               children: [
                 IconButton(
                   onPressed: _goBackToClients,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.arrow_back,
                     color: AppTheme.textPrimary,
                   ),
@@ -921,7 +921,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -951,13 +951,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               hintStyle: TextStyle(
                 color: AppTheme.textSecondary.withValues(alpha: 0.5),
               ),
-              prefixIcon: const Icon(
+              prefixIcon: Icon(
                 Icons.search,
                 color: AppTheme.textSecondary,
               ),
               suffixIcon: _clientSearchInput.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.clear,
                         color: AppTheme.textSecondary,
                       ),
@@ -975,7 +975,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 borderSide: const BorderSide(color: AppTheme.accentIndigo),
               ),
             ),
-            style: const TextStyle(color: AppTheme.textPrimary),
+            style: TextStyle(color: AppTheme.textPrimary),
           ),
         ),
 
@@ -985,7 +985,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.people,
                   size: 14,
                   color: AppTheme.textSecondary,
@@ -995,7 +995,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   _clientSearchInput.isNotEmpty
                       ? '${clients.length} clientes encontrados'
                       : '${clients.length} clientes',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
                   ),
@@ -1034,7 +1034,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                                     .withValues(alpha: 0.5),
                               ),
                               const SizedBox(height: 16),
-                              const Text(
+                              Text(
                                 'No se encontraron clientes',
                                 style: TextStyle(color: AppTheme.textSecondary),
                               ),
@@ -1085,7 +1085,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             Text(
               _clientsLoadMoreError!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
             TextButton.icon(
               key: const ValueKey('history-clients-load-more-retry'),
@@ -1190,7 +1190,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   const SizedBox(height: 3),
                   Text(
                     client.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary,
@@ -1203,7 +1203,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     children: [
                       Text(
                         '${client.totalDocuments} docs',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),
@@ -1351,7 +1351,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       size: 16,
                       color: AppTheme.info,
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppTheme.textPrimary,
                     ),
@@ -1401,7 +1401,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       fontSize: 12,
                       color: AppTheme.textSecondary.withValues(alpha: 0.5),
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.tag,
                       size: 16,
                       color: AppTheme.textSecondary,
@@ -1412,7 +1412,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                               _docSearchController.clear();
                               setState(() {});
                             },
-                            child: const Icon(
+                            child: Icon(
                               Icons.clear,
                               size: 16,
                               color: AppTheme.textSecondary,
@@ -1433,7 +1433,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       ),
                     ),
                   ),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 12,
                   ),
@@ -1529,11 +1529,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     isDense: true,
                     isExpanded: true,
                     dropdownColor: AppTheme.raisedSurface,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppTheme.textPrimary,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem<_DocType?>(
                         child: Row(
                           children: [
@@ -1622,11 +1622,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     isDense: true,
                     isExpanded: true,
                     dropdownColor: AppTheme.raisedSurface,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppTheme.textPrimary,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem<_DeliveryStatus?>(
                         child: Row(
                           children: [
@@ -1911,7 +1911,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               _hasActiveFilters
                   ? 'No hay documentos con estos filtros'
                   : 'Sin documentos',
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
             if (_hasActiveFilters) ...[
               const SizedBox(height: 12),
@@ -2056,7 +2056,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                             doc.facturaNumber! > 0
                         ? 'F-${doc.facturaNumber}'
                         : '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
@@ -2104,7 +2104,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               const SizedBox(height: 5),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.inventory_2_outlined,
                     size: 12,
                     color: AppTheme.textSecondary,
@@ -2112,7 +2112,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   const SizedBox(width: 4),
                   Text(
                     'Orden de preparación ${doc.preparationOrderNumber}${doc.preparationOrderYear == null ? '' : ' · ${doc.preparationOrderYear}'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -2322,7 +2322,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           isFactura && doc.facturaNumber != null
                               ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
                               : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.bold,
                             color: AppTheme.textPrimary,
@@ -2332,7 +2332,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                           doc.hasValidDate
                               ? '${DateFormat('dd/MM/yyyy').format(doc.date!)} · ${CurrencyFormatter.format(doc.amount)}'
                               : 'Sin fecha · ${CurrencyFormatter.format(doc.amount)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             color: AppTheme.textSecondary,
                           ),
@@ -2361,7 +2361,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         ] else if (doc.status == _DeliveryStatus.delivered ||
                             doc.status == _DeliveryStatus.partial) ...[
                           const SizedBox(height: 4),
-                          const Text(
+                          Text(
                             'Sin cobro en ruta',
                             style: TextStyle(
                               fontSize: 12,
@@ -2380,7 +2380,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             // when the backend date cannot be parsed. This prevents silently
             // substituting a synthetic year in document keys.
             if (!doc.hasValidDate)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Text(
                   'Acciones no disponibles: el documento no tiene una fecha válida',
@@ -2706,7 +2706,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       color: AppTheme.textPrimary,
                     ),
@@ -2989,7 +2989,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
-        title: const Text(
+        title: Text(
           'Enviar por email',
           style: TextStyle(color: AppTheme.textPrimary),
         ),
@@ -2997,7 +2997,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           controller: controller,
           keyboardType: TextInputType.emailAddress,
           autofocus: true,
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
           decoration: const InputDecoration(
             labelText: 'Destinatario',
             hintText: 'cliente@empresa.com',
@@ -3746,7 +3746,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           : null,
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(
+          colorScheme: ColorScheme.dark(
             onPrimary: Colors.white,
             surface: AppTheme.raisedSurface,
           ),
@@ -4143,7 +4143,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
           Expanded(
             child: Text(
               'Firma - ${widget.docLabel}',
-              style: const TextStyle(fontSize: 16, color: AppTheme.textPrimary),
+              style: TextStyle(fontSize: 16, color: AppTheme.textPrimary),
             ),
           ),
         ],
@@ -4192,7 +4192,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                           ]
                               .where((part) => part != null && part.isNotEmpty)
                               .join(' '),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w600,
@@ -4201,7 +4201,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                       if (_dni != null && _dni!.isNotEmpty)
                         Text(
                           'DNI: $_dni',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textSecondary,
                           ),
@@ -4209,7 +4209,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                       if (_firmante != null && _firmante!.isNotEmpty)
                         Text(
                           'Firmante: $_firmante',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textSecondary,
                           ),
@@ -4256,7 +4256,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             const SizedBox(height: 8),
                             Text(
                               'Firmante: $_firmante',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontSize: 14,
                               ),
@@ -4265,7 +4265,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                               const SizedBox(height: 4),
                               Text(
                                 'DNI: $_dni',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontSize: 14,
                                 ),
@@ -4300,7 +4300,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.gesture,
                               size: 48,
                               color: AppTheme.textSecondary,
@@ -4308,7 +4308,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             const SizedBox(height: 12),
                             Text(
                               _error ?? 'No se encontró firma',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 13,
                               ),

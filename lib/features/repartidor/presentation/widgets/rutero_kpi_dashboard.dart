@@ -138,7 +138,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 12, // Reduced
@@ -146,7 +146,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 9, // Reduced
           ),
@@ -176,7 +176,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 9, // Reduced
           ),

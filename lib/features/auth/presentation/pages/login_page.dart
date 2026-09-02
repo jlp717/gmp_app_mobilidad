@@ -164,7 +164,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           content: Text(
             _errorMessage ??
                 'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: AppTheme.textPrimary),
           ),
           actions: [
             TextButton(
@@ -214,7 +214,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Widget _buildAnimatedBackground() {
-    return const ColoredBox(
+    return ColoredBox(
       color: AppTheme.inkSurface,
       child: SizedBox.expand(),
     );
@@ -270,7 +270,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       children: [
         _buildLogo(size: 80),
         const SizedBox(height: 40),
-        const Text(
+        Text(
           'GMP\nMobilidad',
           style: TextStyle(
             fontSize: 56,
@@ -281,7 +281,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'Ventas, reparto y almacén coordinados\npara trabajar con precisión en ruta',
           style: TextStyle(
             fontSize: 16,
@@ -309,7 +309,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       children: [
         _buildLogo(size: 64),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'GMP Movilidad',
           style: TextStyle(
             fontSize: 28,
@@ -319,7 +319,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Ventas, reparto y almacén',
           style: TextStyle(
             fontSize: 13,
@@ -357,7 +357,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               child: Icon(
                 Icons.analytics_rounded,
                 size: size * 0.45,
-                color: Colors.white,
+                color: AppTheme.textPrimary,
               ),
             ),
           ),
@@ -371,8 +371,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        color: Colors.white.withValues(alpha: 0.04),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: AppTheme.textPrimary.withValues(alpha: 0.04),
+        border: Border.all(color: AppTheme.textPrimary.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -383,7 +383,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.white.withValues(alpha: 0.6),
+              color: AppTheme.textPrimary.withValues(alpha: 0.6),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -402,14 +402,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         border: Border.all(
           color: _hasError
               ? AppTheme.error.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.06),
+              : AppTheme.textPrimary.withValues(alpha: 0.06),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
             color: _hasError
                 ? AppTheme.error.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.22),
+                : AppTheme.textPrimary.withValues(alpha: 0.22),
             blurRadius: 24,
             offset: const Offset(0, 14),
           ),
@@ -422,12 +422,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Header
-            const Text(
+            Text(
               'Bienvenido',
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 letterSpacing: 0,
               ),
             ),
@@ -436,7 +436,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               'Inicia sesión para continuar',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.white.withValues(alpha: 0.4),
+                color: AppTheme.textPrimary.withValues(alpha: 0.4),
               ),
             ),
 
@@ -545,7 +545,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ? Icons.visibility_off_rounded
                         : Icons.visibility_rounded,
                     size: 18,
-                    color: Colors.white.withValues(alpha: 0.3),
+                    color: AppTheme.textPrimary.withValues(alpha: 0.3),
                   ),
                 ),
               ),
@@ -569,7 +569,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         color: isLoading
-                            ? Colors.white.withValues(alpha: 0.08)
+                            ? AppTheme.textPrimary.withValues(alpha: 0.08)
                             : AppTheme.info,
                         boxShadow: isLoading
                             ? []
@@ -591,19 +591,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.5,
                                   valueColor: AlwaysStoppedAnimation(
-                                    Colors.white.withValues(alpha: 0.8),
+                                    AppTheme.textPrimary.withValues(alpha: 0.8),
                                   ),
                                 ),
                               )
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Iniciar Sesión',
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.white,
+                                      color: AppTheme.textPrimary,
                                       letterSpacing: 0,
                                     ),
                                   ),
@@ -613,9 +613,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     padding: EdgeInsets.only(
                                       left: _isButtonHovered ? 4 : 0,
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.arrow_forward_rounded,
-                                      color: Colors.white,
+                                      color: AppTheme.textPrimary,
                                       size: 18,
                                     ),
                                   ),
@@ -653,7 +653,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   'Conexión segura • GMP 2026',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.3),
+                    color: AppTheme.textPrimary.withValues(alpha: 0.3),
                     letterSpacing: 0,
                   ),
                 ),
@@ -688,7 +688,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             fontSize: 12,
             fontWeight: FontWeight.w500,
             color:
-                isFocused ? AppTheme.info : Colors.white.withValues(alpha: 0.4),
+                isFocused ? AppTheme.info : AppTheme.textPrimary.withValues(alpha: 0.4),
             letterSpacing: 0,
           ),
           child: Text(label),
@@ -702,10 +702,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             border: Border.all(
               color: isFocused
                   ? AppTheme.info.withValues(alpha: 0.5)
-                  : Colors.white.withValues(alpha: 0.06),
+                  : AppTheme.textPrimary.withValues(alpha: 0.06),
               width: isFocused ? 1.5 : 1,
             ),
-            color: Colors.white.withValues(alpha: isFocused ? 0.06 : 0.03),
+            color: AppTheme.textPrimary.withValues(alpha: isFocused ? 0.06 : 0.03),
             boxShadow: isFocused
                 ? [
                     BoxShadow(
@@ -723,16 +723,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             onChanged: onChanged,
             onFieldSubmitted: onSubmit,
             validator: validator,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
+            style: TextStyle(fontSize: 14, color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
+              hintStyle: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.2)),
               prefixIcon: Icon(
                 icon,
                 size: 18,
                 color: isFocused
                     ? AppTheme.info
-                    : Colors.white.withValues(alpha: 0.3),
+                    : AppTheme.textPrimary.withValues(alpha: 0.3),
               ),
               suffixIcon: suffix,
               filled: false,
@@ -753,7 +753,7 @@ class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.015)
+      ..color = AppTheme.textPrimary.withValues(alpha: 0.015)
       ..strokeWidth = 0.5;
 
     const spacing = 60.0;

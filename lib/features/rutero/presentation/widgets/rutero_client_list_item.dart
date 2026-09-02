@@ -345,7 +345,7 @@ class RuteroClientListItem extends StatelessWidget {
                 color: AppTheme.error,
               ),
             ),
-            const Text(
+            Text(
               'Este período (acumulativo de semanas)',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -492,7 +492,7 @@ class RuteroClientListItem extends StatelessWidget {
         if (address.isNotEmpty || city.isNotEmpty)
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.place,
                 size: 14,
                 color: AppTheme.textTertiary,
@@ -501,7 +501,7 @@ class RuteroClientListItem extends StatelessWidget {
               Expanded(
                 child: Text(
                   [address, city].where((s) => s.isNotEmpty).join(', '),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.textSecondary,
                   ),
@@ -535,7 +535,7 @@ class RuteroClientListItem extends StatelessWidget {
               : completedWeeks == 1
                   ? 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
                   : 'Sin semanas completadas:',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             color: AppTheme.textTertiary,
           ),
@@ -628,7 +628,7 @@ class RuteroClientListItem extends StatelessWidget {
                 ),
                 message:
                     'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
-                child: const Icon(
+                child: Icon(
                   Icons.info_outline,
                   size: 14,
                   color: AppTheme.textTertiary,

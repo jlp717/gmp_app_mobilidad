@@ -162,7 +162,7 @@ class _CircularGaugeCard extends StatelessWidget {
                       current.contains('.')
                           ? v.toStringAsFixed(1)
                           : v.toInt().toString(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -173,7 +173,7 @@ class _CircularGaugeCard extends StatelessWidget {
                   const SizedBox(width: 2),
                   Text(
                     unit,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 9,
                       fontWeight: FontWeight.w500,
@@ -385,7 +385,7 @@ class _BoxCountCard extends StatelessWidget {
             curve: Curves.easeOutCubic,
             builder: (_, v, __) => Text(
               '$v',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,

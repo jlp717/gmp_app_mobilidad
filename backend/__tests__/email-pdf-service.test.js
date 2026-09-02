@@ -11,6 +11,7 @@ describe('Email PDF Service', () => {
             SMTP_PDF_PORT: '587',
             SMTP_PDF_USER: 'noreply@test.local',
             SMTP_PDF_PASS: 'secret',
+            SMTP_PDF_TLS_SERVERNAME: 'smtp.test.local',
             SMTP_FROM: 'noreply@test.local'
         };
 
@@ -64,6 +65,10 @@ describe('Email PDF Service', () => {
             log: expect.any(Function)
         }));
         expect(smtpConfig.debug).toBe(false);
+        expect(smtpConfig.tls).toEqual(expect.objectContaining({
+            rejectUnauthorized: true,
+            servername: 'smtp.test.local',
+        }));
     });
 
     test('sends a PDF attachment with the requested recipient and filename', async () => {

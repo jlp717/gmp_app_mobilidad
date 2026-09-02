@@ -296,12 +296,12 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
                 children: [
                   Text(
                       '${remaining.length} paradas restantes · ${widget.ordered.length} en total',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.bold)),
                   Text(
                       '${km == null ? "Distancia sin calcular" : "~${km.toStringAsFixed(1)} km"} · ${minutes == null ? "Tiempo sin calcular" : "~$minutes min de conducción"}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 12)),
                   if (_nextIndex >= 0)
                     TextButton.icon(
@@ -315,7 +315,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
                   Text(
                       '1 → 2 → 3: orden de visita. Borde amarillo: siguiente. Línea orientativa, no trazado por carretera. '
                       '${widget.ordered.length - _geoPoints().length} sin ubicación: permanecen en la lista; faltan sus tramos.',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 11)),
                 ])));
   }
@@ -379,7 +379,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
                 _useFallback
                     ? 'Toca el número de una parada para ver sus datos'
                     : '$mappedStops/${widget.ordered.length} con ubicación · toca una parada',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -401,7 +401,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppTheme.borderColor),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
@@ -524,7 +524,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
       child: ExcludeSemantics(
           child: Transform.rotate(
               angle: angle,
-              child: const Icon(Icons.arrow_forward,
+              child: Icon(Icons.arrow_forward,
                   size: 26, color: AppTheme.inkSurface))),
     );
   }
@@ -622,7 +622,7 @@ class _StopDetailCard extends StatelessWidget {
                         albaran.nombreCliente,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -631,7 +631,7 @@ class _StopDetailCard extends StatelessWidget {
                       Text(
                         '${albaran.codigoCliente} · $_docTipo · $_docLabel'
                         '${albaran.esCTR ? ' · CTR' : ''}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 11,
                         ),
@@ -657,7 +657,7 @@ class _StopDetailCard extends StatelessWidget {
                 ].where((s) => s.isNotEmpty).join(' · '),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 11,
                 ),
@@ -736,7 +736,7 @@ class _StopDetailCard extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
@@ -744,7 +744,7 @@ class _StopDetailCard extends StatelessWidget {
               ),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,

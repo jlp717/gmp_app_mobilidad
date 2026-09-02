@@ -125,9 +125,9 @@ class _ArticlesPageState extends State<ArticlesPage> {
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
-        title: const Text(
+        title: Text(
           'RESETEAR TODAS las dimensiones',
           style: TextStyle(
             color: AppTheme.textPrimary,
@@ -141,7 +141,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
             Text(
               'Esto eliminara TODAS las dimensiones reales guardadas ($_withDimsCount articulos). '
               'Todos los articulos volveran a usar dimensiones estimadas automaticamente.',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
@@ -160,7 +160,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dCtx, false),
-            child: const Text(
+            child: Text(
               'CANCELAR',
               style: TextStyle(color: AppTheme.textTertiary),
             ),
@@ -225,7 +225,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                       ? Center(
                           child: Text(
                             _error!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textTertiary,
                             ),
                           ),
@@ -236,7 +236,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                                 _searchC.text.isEmpty
                                     ? 'Cargando articulos...'
                                     : 'Sin resultados',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textTertiary,
                                   fontSize: 13,
                                 ),
@@ -302,7 +302,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     letterSpacing: 0,
                   ),
                 ),
-                const Text(
+                Text(
                   'Dimensiones para el planificador 3D',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
@@ -395,7 +395,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 9,
           fontWeight: FontWeight.w600,
@@ -412,18 +412,18 @@ class _ArticlesPageState extends State<ArticlesPage> {
           TextField(
             controller: _searchC,
             onChanged: _onSearchChanged,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
             decoration: InputDecoration(
               hintText: 'Buscar por codigo o nombre...',
-              hintStyle: const TextStyle(color: AppTheme.textTertiary),
-              prefixIcon: const Icon(
+              hintStyle: TextStyle(color: AppTheme.textTertiary),
+              prefixIcon: Icon(
                 Icons.search_rounded,
                 color: AppTheme.textTertiary,
                 size: 20,
               ),
               suffixIcon: _searchC.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.clear_rounded,
                         size: 18,
                         color: AppTheme.textTertiary,
@@ -579,7 +579,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   children: [
                     Text(
                       a.name.isNotEmpty ? a.name : a.code,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -668,7 +668,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
         const SizedBox(width: 2),
         Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 10,
           ),
@@ -747,7 +747,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                 const SizedBox(height: 8),
                 Text(
                   a.name.isNotEmpty ? a.name : a.code,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -762,7 +762,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   children: [
                     Text(
                       '${a.weight.toStringAsFixed(2)} kg/ud',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 11,
                       ),
@@ -770,7 +770,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     const SizedBox(width: 12),
                     Text(
                       '${a.unitsPerBox} ud/caja',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 11,
                       ),
@@ -830,7 +830,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   ),
                 ),
                 if (!a.hasRealDimensions && a.estLargoCm != null)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 6),
                     child: Text(
                       'Introduce medidas reales verificadas con cinta metrica',
@@ -879,7 +879,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          title: const Text(
+                          title: Text(
                             'Confirmar dimensiones REALES',
                             style: TextStyle(
                               color: AppTheme.textPrimary,
@@ -892,7 +892,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                             children: [
                               Text(
                                 'Estas guardando ${largo.toStringAsFixed(0)} x ${ancho.toStringAsFixed(0)} x ${alto.toStringAsFixed(0)} cm como dimensiones REALES verificadas.',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 13,
                                 ),
@@ -911,7 +911,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(dCtx, false),
-                              child: const Text(
+                              child: Text(
                                 'CANCELAR',
                                 style: TextStyle(color: AppTheme.textTertiary),
                               ),
@@ -985,7 +985,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            title: const Text(
+                            title: Text(
                               'Eliminar dimensiones reales',
                               style: TextStyle(
                                 color: AppTheme.textPrimary,
@@ -993,7 +993,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            content: const Text(
+                            content: Text(
                               'Se eliminaran las dimensiones reales guardadas y el articulo volvera a usar dimensiones estimadas automaticamente.',
                               style: TextStyle(
                                 color: AppTheme.textSecondary,
@@ -1003,7 +1003,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(dCtx, false),
-                                child: const Text(
+                                child: Text(
                                   'CANCELAR',
                                   style: TextStyle(
                                     color: AppTheme.textTertiary,
@@ -1085,10 +1085,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
     return TextField(
       controller: c,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(
+        labelStyle: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 11,
         ),

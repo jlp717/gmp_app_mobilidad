@@ -570,7 +570,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       builder: (ctx, child) {
         return Theme(
           data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: ColorScheme.dark(
               primary: AppTheme.info,
               onPrimary: Colors.white,
               surface: AppTheme.raisedSurface,

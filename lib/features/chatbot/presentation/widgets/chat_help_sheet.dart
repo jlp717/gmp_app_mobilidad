@@ -128,7 +128,7 @@ class ChatHelpSheet extends StatelessWidget {
     final questions = _questions();
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.raisedSurface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: AppColors.borderColor)),

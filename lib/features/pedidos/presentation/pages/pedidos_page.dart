@@ -786,7 +786,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       ),
                       child: Text(
                         '$uniquePromoCodes',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -831,7 +831,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       ),
                     ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.save_outlined,
                       color: AppTheme.textSecondary,
                     ),
@@ -864,7 +864,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.drafts_outlined,
                       color: AppTheme.textSecondary,
                     ),
@@ -884,7 +884,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         ),
                         child: Text(
                           '$count',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -983,7 +983,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Widget _buildTabletLayout() {
-    final provider = ref.watch(pedidosProvider);
+    final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
+    final hasLines = ref.watch(pedidosProvider.select((p) => p.hasLines));
     return Padding(
       padding: const EdgeInsets.all(14),
       child: Row(
@@ -995,7 +996,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               clipBehavior: Clip.antiAlias,
               decoration: AppTheme.premiumPanel(
                 accentColor:
-                    provider.hasClient ? AppTheme.info : AppTheme.mutedPanel,
+                    hasClient ? AppTheme.info : AppTheme.mutedPanel,
               ),
               child: _buildCatalogPanel(),
             ),
@@ -1008,7 +1009,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               clipBehavior: Clip.antiAlias,
               decoration: AppTheme.premiumPanel(
                 accentColor:
-                    provider.hasLines ? AppTheme.success : AppTheme.accentAmber,
+                    hasLines ? AppTheme.success : AppTheme.accentAmber,
               ),
               child: OrderSummaryWidget(
                 vendedorCode: _activeOrderVendedorCode,
@@ -1061,7 +1062,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       PedidosFormatters.money(cartTotal),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
+      style: TextStyle(
         color: AppTheme.inkSurface,
         fontWeight: FontWeight.bold,
       ),
@@ -1175,12 +1176,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Widget _buildCatalogPanel() {
-    final provider = ref.watch(pedidosProvider);
-    if (!provider.hasClient) {
+    final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
+    final provider = ref.read(pedidosProvider);
+    if (!hasClient) {
       return Column(
         children: [
           _buildOrderHeader(provider),
-          const Expanded(
+          Expanded(
             child: Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 24),
@@ -1383,7 +1385,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Icon(
+                        Icon(
                           Icons.chevron_right,
                           color: AppTheme.textTertiary,
                           size: 18,
@@ -1518,7 +1520,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.inventory_2_outlined,
               color: AppTheme.textTertiary,
               size: 48,
@@ -1805,7 +1807,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   SnackBar(
                     content: Text(
                       err,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1872,9 +1874,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
-          const Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+          Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'Ordenar:',
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
@@ -1892,13 +1894,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 child: DropdownButton<String>(
                   value: _orderSortMode,
                   isExpanded: true,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.arrow_drop_down,
                     size: 16,
                     color: AppTheme.textSecondary,
                   ),
                   dropdownColor: AppTheme.softPanel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.textPrimary,
                   ),
@@ -1941,22 +1943,23 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // == TAB 3: Evolución (historial de compras del cliente) ==
 
   Widget _buildEvolucionTab() {
-    final provider = ref.watch(pedidosProvider);
-    final clientCode =
-        (provider.hasClient ? provider.clientCode : widget.initialClientCode)
-            ?.trim();
-    final clientName = provider.hasClient
-        ? (provider.clientName ?? 'Cliente')
+    final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
+    final clientCode = ref.watch(pedidosProvider.select((p) => p.clientCode));
+    final clientName = ref.watch(pedidosProvider.select((p) => p.clientName));
+    final resolvedCode =
+        (hasClient ? clientCode : widget.initialClientCode)?.trim();
+    final resolvedName = hasClient
+        ? (clientName ?? 'Cliente')
         : (widget.initialClientName ?? 'Cliente');
 
-    if (clientCode == null || clientCode.isEmpty) {
+    if (resolvedCode == null || resolvedCode.isEmpty) {
       return _buildEvolutionNoClientState();
     }
 
     return EnhancedClientMatrixPage(
-      key: ValueKey('client_purchase_history_$clientCode'),
-      clientCode: clientCode,
-      clientName: clientName,
+      key: ValueKey('client_purchase_history_$resolvedCode'),
+      clientCode: resolvedCode,
+      clientName: resolvedName,
       isJefeVentas: widget.isJefeVentas,
     );
   }
@@ -2000,8 +2003,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // == TAB 4: Devoluciones ==
 
   Widget _buildDevolucionesTab() {
-    final provider = ref.watch(pedidosProvider);
-    if (!provider.hasClient) {
+    final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
+    final clientCodeRaw =
+        ref.watch(pedidosProvider.select((p) => p.clientCode));
+    if (!hasClient) {
       return _buildClientRequiredState(
         title: 'Selecciona un cliente',
         message: 'Las devoluciones se consultan por cliente comercial.',
@@ -2009,7 +2014,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
 
-    final clientCode = provider.clientCode!.trim();
+    final clientCode = clientCodeRaw!.trim();
     final vendorCodes = _vendedorCodes;
 
     return FutureBuilder<Map<String, dynamic>>(
@@ -2051,7 +2056,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       color: AppTheme.textPrimary.withValues(alpha: 0.25),
                     ),
                     const SizedBox(height: 18),
-                    const Text(
+                    Text(
                       'Sin devoluciones recientes',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -2192,7 +2197,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         const SizedBox(height: 80),
         const Icon(Icons.error_outline, size: 56, color: AppTheme.error),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'No se pudieron cargar las devoluciones',
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -2273,7 +2278,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       children: [
         Text(
           label,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
         ),
         const SizedBox(height: 4),
         FittedBox(
@@ -2334,7 +2339,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       : productName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -2347,7 +2352,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     _formatReturnPeriod(item['year'], item['month']),
                     '${PedidosFormatters.number(units, decimals: 1)} uds',
                   ].join(' · '),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
                   ),
@@ -2399,15 +2404,18 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // == TAB 2: Mis Pedidos ==
 
   Widget _buildMisPedidosTab() {
-    final provider = ref.watch(pedidosProvider);
+    final provider = ref.read(pedidosProvider);
+    final orderStatusFilter = ref.watch(
+      pedidosProvider.select((p) => p.orderStatusFilter),
+    );
     return Column(
       children: [
         MisPedidosYoYBar(vendedorCodes: _vendedorCodes),
         OrderKpiDashboard(vendedorCodes: _vendedorCodes),
-        const Divider(color: AppTheme.borderColor, height: 1),
+        Divider(color: AppTheme.borderColor, height: 1),
         OrderFiltersBar(
           searchQuery: _orderSearch,
-          statusFilter: provider.orderStatusFilter,
+          statusFilter: orderStatusFilter,
           dateFrom: _orderDateFrom,
           dateTo: _orderDateTo,
           minAmount: _orderMinAmount,
@@ -2464,7 +2472,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ),
         // Rutero-style sort mode selector
         _buildOrderSortModeSelector(),
-        const Divider(color: AppTheme.borderColor, height: 1),
+        Divider(color: AppTheme.borderColor, height: 1),
         Expanded(
           child: RefreshIndicator(
             color: AppTheme.info,
@@ -2792,7 +2800,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.check_circle_outline, color: AppTheme.success, size: 22),
             SizedBox(width: 8),
@@ -2806,12 +2814,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           orderNumber.isEmpty
               ? 'El pedido se ha confirmado y Mis Pedidos se ha actualizado.'
               : 'Pedido #$orderNumber confirmado. Mis Pedidos se ha actualizado.',
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cerrar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -2874,7 +2882,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.check_circle_outline,
@@ -2890,12 +2898,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ),
         content: Text(
           '¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -2951,7 +2959,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
             SizedBox(width: 8),
@@ -2963,12 +2971,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ),
         content: Text(
           '¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),

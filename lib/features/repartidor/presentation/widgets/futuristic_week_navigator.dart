@@ -143,7 +143,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           }
         },
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppTheme.raisedSurface,
             border: Border(
               bottom: BorderSide(color: AppTheme.borderColor),
@@ -348,7 +348,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 color: AppTheme.info,
                 strokeWidth: 2,
               )
-            : const Text(
+            : Text(
                 'Sin datos de la semana',
                 style: TextStyle(color: AppTheme.textSecondary),
               ),
@@ -527,7 +527,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 color: AppTheme.info,
               ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 'PROGRESO SEMANAL',
                 style: TextStyle(
                   fontSize: 9,
@@ -625,7 +625,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
         title: Row(
           children: [
@@ -633,7 +633,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             const SizedBox(width: 12),
             Text(
               DateFormat('EEEE d', 'es_ES').format(date),
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -643,7 +643,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
         ),
         content: Text(
           statusText,
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(

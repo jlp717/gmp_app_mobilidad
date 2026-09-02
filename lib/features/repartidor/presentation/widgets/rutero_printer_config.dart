@@ -87,7 +87,7 @@ class RuteroPrinterConfig extends StatelessWidget {
                     child: Text(
                       '${printerName ?? "Impresora BT"} · '
                       '${ZebraPrintService.maskAddress(printerAddress!)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
                       ),
@@ -102,7 +102,7 @@ class RuteroPrinterConfig extends StatelessWidget {
                     printerProtocol == 'escpos'
                         ? 'Protocolo: ESC/POS'
                         : 'Protocolo: ZPL',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 11,
                     ),
@@ -172,7 +172,7 @@ class RuteroPrinterConfig extends StatelessWidget {
                         ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(color: AppTheme.borderColor),
+                          side: BorderSide(color: AppTheme.borderColor),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),

@@ -387,7 +387,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                           widget.albaran.nombreCliente.toUpperCase())
                     Text(
                       widget.albaran.nombreFiscal!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 10,
                       ),
@@ -434,7 +434,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         // Address
         Row(
           children: [
-            const Icon(
+            Icon(
               Icons.location_on_outlined,
               size: 14,
               color: AppTheme.textTertiary,

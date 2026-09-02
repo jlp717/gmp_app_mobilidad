@@ -341,7 +341,7 @@ class ExecutiveSearchField extends StatelessWidget {
         controller: controller,
         enabled: enabled,
         onChanged: onChanged,
-        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+        style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
         decoration: InputDecoration(
           hintText: hintText,
           prefixIcon: Icon(Icons.manage_search_rounded, color: accent),

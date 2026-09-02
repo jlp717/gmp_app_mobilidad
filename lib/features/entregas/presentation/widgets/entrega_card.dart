@@ -119,7 +119,7 @@ class EntregaCard extends StatelessWidget {
               // Info cliente
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.store,
                     size: 18,
                     color: AppTheme.textSecondary,
@@ -143,7 +143,7 @@ class EntregaCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.location_on,
                       size: 16,
                       color: AppTheme.textSecondary,
@@ -152,7 +152,7 @@ class EntregaCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         albaran.direccion,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 13,
                         ),
@@ -251,7 +251,7 @@ class EntregaCard extends StatelessWidget {
 
               // Indicador de toque
               const SizedBox(height: 8),
-              const Row(
+              Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(

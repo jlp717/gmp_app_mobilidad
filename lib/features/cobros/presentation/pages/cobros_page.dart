@@ -108,7 +108,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(
+          colorScheme: ColorScheme.dark(
             primary: AppTheme.info,
             surface: AppTheme.raisedSurface,
           ),
@@ -817,7 +817,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                           ? 'Todo al dia'
                           : 'Resumen de cobros no disponible')),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textSecondary,
@@ -1091,7 +1091,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     color: AppTheme.textSecondary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.remove_circle_outline,
                     color: AppTheme.textSecondary,
                     size: 20,

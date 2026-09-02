@@ -16,6 +16,10 @@ const {
   normalizeCvcTipoDocumentoFilter,
 } = require('../../../../utils/common');
 const { getClientCodesFromCache } = require('../../../../services/laclae');
+const {
+  DEBT_VIEW,
+  boundDebtFetchFirst,
+} = require('../../../../services/debt-view-contract');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
@@ -738,7 +742,7 @@ class Db2CobrosRepository extends CobrosRepository {
             TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
             TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
             TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO
-        FROM DSEDAC.CVC C
+        FROM ${DEBT_VIEW} C
         WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
           AND C.IMPORTEPENDIENTE > 0.01
           AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
@@ -1077,7 +1081,7 @@ class Db2CobrosRepository extends CobrosRepository {
       ? Math.floor(safeOffset / safeLimit) + 1
       : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
     const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
-    const clientFetchLimit = Math.min(10000, Math.max(5000, pageOffset + safeLimit));
+    const clientFetchLimit = boundDebtFetchFirst(pageOffset + safeLimit);
 
     // The mobile summary only needs client-level debt. The previous version
     // rebuilt every CVC document plus app-side document joins before paging,
@@ -1086,8 +1090,8 @@ class Db2CobrosRepository extends CobrosRepository {
       WITH CVC_CLIENTS AS (
         SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(
-                 NULLIF(MIN(TRIM(CLI.NOMBREALTERNATIVO)), ''),
-                 MIN(TRIM(CLI.NOMBRECLIENTE)),
+                 NULLIF(MIN(TRIM(CVC.NOMBREALTERNATIVO)), ''),
+                 MIN(TRIM(CVC.NOMBRECLIENTE)),
                  MIN(TRIM(CVC.CODIGOCLIENTEALBARAN))
                ) AS NOMBRE,
                COUNT(*) AS DOC_COUNT,
@@ -1095,9 +1099,7 @@ class Db2CobrosRepository extends CobrosRepository {
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-         FROM DSEDAC.CVC CVC
-         LEFT JOIN DSEDAC.CLI CLI
-           ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+         FROM ${DEBT_VIEW} CVC
          WHERE CVC.IMPORTEPENDIENTE > 0.01
            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
            ${docFilters.clause}
@@ -1243,7 +1245,7 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.COBROS C
          WHERE EXISTS (
            SELECT 1
-            FROM DSEDAC.CVC CVC
+            FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
               AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
@@ -1274,7 +1276,7 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
          WHERE EXISTS (
            SELECT 1
-             FROM DSEDAC.CVC CVC
+             FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
               AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)
               AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))
@@ -1312,7 +1314,7 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.COBROS C
          WHERE EXISTS (
            SELECT 1
-            FROM DSEDAC.CVC CVC
+            FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
               AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
@@ -1334,7 +1336,7 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
          WHERE EXISTS (
            SELECT 1
-            FROM DSEDAC.CVC CVC
+            FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
               AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
@@ -1781,13 +1783,13 @@ class Db2CobrosRepository extends CobrosRepository {
         'PENDIENTE' AS ESTADO,
         (
           SELECT COUNT(DISTINCT ${cvcReferenceSql('C2')})
-            FROM DSEDAC.CVC C2
+            FROM ${DEBT_VIEW} C2
            WHERE TRIM(C2.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGOCLIENTEALBARAN)
              AND ${cvcLegacyReferenceSql('C2')} = ${cvcLegacyReferenceSql('C')}
              AND C2.IMPORTEPENDIENTE > 0.01
              AND (C2.ANULADOSN IS NULL OR C2.ANULADOSN <> 'S')
         ) AS LEGACY_COLLISION_COUNT
-      FROM DSEDAC.CVC C
+      FROM ${DEBT_VIEW} C
       WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
         AND C.IMPORTEPENDIENTE > 0.01
         AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')

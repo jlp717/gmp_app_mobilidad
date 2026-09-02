@@ -159,7 +159,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close,
                       color: AppTheme.textSecondary,
                       size: 20,
@@ -179,7 +179,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
                 validator: _validateEmail,
                 autofocus: true,
                 style:
-                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'email@ejemplo.com',
                   icon: Icons.alternate_email,
@@ -193,7 +193,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
               TextFormField(
                 controller: _subjectController,
                 style:
-                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Asunto del email',
                   icon: Icons.subject,
@@ -208,7 +208,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
                 controller: _bodyController,
                 maxLines: 3,
                 style:
-                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Escriba un mensaje personalizado...',
                   icon: Icons.message_outlined,
@@ -260,7 +260,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         color: AppTheme.textSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w600,

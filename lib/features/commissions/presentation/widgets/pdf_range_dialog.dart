@@ -133,7 +133,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
         side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.84)),
       ),
-      title: const Row(
+      title: Row(
         children: [
           Icon(Icons.picture_as_pdf_rounded, color: AppTheme.success, size: 24),
           SizedBox(width: 8),
@@ -165,7 +165,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Tipo de informe',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
@@ -182,7 +182,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                         : (value) => setState(() => _pdfType = value!),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    title: const Text(
+                    title: Text(
                       'Comisiones',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
@@ -190,7 +190,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Objetivo, ventas LAC/B, comisiones y totales',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
@@ -207,7 +207,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                         : (value) => setState(() => _pdfType = value!),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    title: const Text(
+                    title: Text(
                       'Registro de pagos',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
@@ -215,7 +215,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Ventas LAC por cliente del comercial seleccionado',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
@@ -260,7 +260,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'Seleccionar meses',
                                   style: TextStyle(
                                     color: AppTheme.textSecondary,
@@ -270,7 +270,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                 const SizedBox(height: 2),
                                 Text(
                                   _getSelectedMonthsText(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
@@ -295,7 +295,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                   ),
                   // Dropdown expandido con checkboxes
                   if (_dropdownExpanded) ...[
-                    const Divider(color: AppTheme.borderColor, height: 1),
+                    Divider(color: AppTheme.borderColor, height: 1),
                     Container(
                       constraints: const BoxConstraints(maxHeight: 250),
                       child: SingleChildScrollView(
@@ -347,7 +347,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                 ],
                               ),
                             ),
-                            const Divider(
+                            Divider(
                               color: AppTheme.borderColor,
                               height: 1,
                             ),
@@ -372,7 +372,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                 ),
                                 subtitle: Text(
                                   _getMonthDescription(month),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 10,
                                   ),
@@ -441,7 +441,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.clear,
                         color: AppTheme.textSecondary,
                         size: 18,
@@ -476,7 +476,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                       _pdfType == 'payment_record'
                           ? 'El registro de pagos usa ventas LAC por cliente del comercial actual. Requiere un vendedor concreto (no ALL).'
                           : 'El PDF incluirá objetivo, ventas LAC, ventas B, comisiones y totales.\nSolo disponible para DIEGO.',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 11,
                       ),

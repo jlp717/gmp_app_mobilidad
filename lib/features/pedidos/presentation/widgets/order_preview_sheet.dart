@@ -282,7 +282,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 const SizedBox(height: 2),
                 Text(
                   'Código: ${provider.clientCode ?? '-'}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
                   ),
@@ -392,7 +392,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     const SizedBox(height: 2),
                     Text(
                       ruleLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
                       ),
@@ -430,7 +430,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Fecha reparto',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
@@ -517,7 +517,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       subtitle: truckSub,
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_ios_rounded,
                     color: AppTheme.textSecondary,
                     size: 14,
@@ -633,7 +633,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
                 ),
@@ -651,7 +651,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               if (subtitle.isNotEmpty)
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
                   ),
@@ -681,7 +681,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(width: 8),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -760,7 +760,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 const SizedBox(height: 2),
                 Text(
                   '$qty × ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
                   ),
@@ -849,7 +849,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           ],
 
           const SizedBox(height: 8),
-          const Divider(color: AppTheme.borderColor, height: 1),
+          Divider(color: AppTheme.borderColor, height: 1),
           const SizedBox(height: 8),
 
           // Base
@@ -865,13 +865,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           if (provider.isMarginVisible &&
               provider.estimatedBolsaImpact.hasImpact) ...[
             const SizedBox(height: 8),
-            const Divider(color: AppTheme.borderColor, height: 1),
+            Divider(color: AppTheme.borderColor, height: 1),
             const SizedBox(height: 8),
             _buildBolsaPreviewRows(provider),
           ],
 
           const SizedBox(height: 8),
-          const Divider(color: AppTheme.borderColor, height: 1),
+          Divider(color: AppTheme.borderColor, height: 1),
           const SizedBox(height: 12),
 
           // TOTAL
@@ -974,7 +974,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       children: [
         Text(
           label,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
         ),
         Text(
           value,
@@ -1011,7 +1011,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 children: [
                   Text(
                     'IVA $pct%',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                     ),
@@ -1061,7 +1061,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
+                      Text(
                         'Total a confirmar',
                         style: TextStyle(
                           color: AppTheme.textSecondary,

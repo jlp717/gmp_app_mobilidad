@@ -100,9 +100,9 @@ class RuteroFilterBar extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
-          const Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+          Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'Ordenar:',
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
@@ -122,13 +122,13 @@ class RuteroFilterBar extends StatelessWidget {
                 child: DropdownButton<String>(
                   value: sortMode,
                   isExpanded: true,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.arrow_drop_down,
                     size: 16,
                     color: AppTheme.textSecondary,
                   ),
                   dropdownColor: AppTheme.raisedSurface,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.textPrimary,
                   ),

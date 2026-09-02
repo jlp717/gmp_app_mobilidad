@@ -56,7 +56,7 @@ class DaySelectorDialog extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             clientName,
-            style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
           ),
           Text(
             'Código: $clientCode',
@@ -115,7 +115,7 @@ class DaySelectorDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(color: AppTheme.textTertiary),
           ),
@@ -161,7 +161,7 @@ class _DayOption extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                const Icon(
+                Icon(
                   Icons.arrow_forward_ios,
                   size: 16,
                   color: AppTheme.textTertiary,
@@ -255,7 +255,7 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
               children: [
                 Text(
                   'El ${_getDayLabel(widget.targetDay)} tiene $_totalClients cliente(s).',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
                   ),
@@ -295,7 +295,7 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(color: AppTheme.textTertiary),
           ),
@@ -390,7 +390,7 @@ class _PositionOption extends StatelessWidget {
                     ),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppTheme.textSecondary,
                       ),
@@ -499,7 +499,7 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(color: AppTheme.textTertiary),
           ),
@@ -601,7 +601,7 @@ class MoveConfirmationDialog extends StatelessWidget {
                           ),
                           Text(
                             clientCode,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 12,
                             ),
@@ -620,7 +620,7 @@ class MoveConfirmationDialog extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'DE',
                             style: TextStyle(
                               fontSize: 10,
@@ -656,7 +656,7 @@ class MoveConfirmationDialog extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'A',
                             style: TextStyle(
                               fontSize: 10,
@@ -689,7 +689,7 @@ class MoveConfirmationDialog extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'Se insertará ${_getPositionLabel(position)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
                   ),
@@ -712,7 +712,7 @@ class MoveConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(color: AppTheme.textTertiary),
           ),
@@ -779,7 +779,7 @@ class ReorderConfirmationDialog extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '$changesCount cliente(s) en la ruta',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 16),
           Container(
@@ -806,7 +806,7 @@ class ReorderConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(color: AppTheme.textTertiary),
           ),

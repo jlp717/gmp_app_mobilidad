@@ -846,7 +846,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 14),
             Text(
               'Guardando entrega…',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
@@ -855,7 +855,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Text(
               'No cierres ni edites la entrega hasta que termine.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -1076,7 +1076,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (noEntrega) ...[
-                  const RepartidorExecutivePanel(
+                  RepartidorExecutivePanel(
                     accentColor: AppTheme.warning,
                     padding: EdgeInsets.all(14),
                     child: Row(
@@ -1126,7 +1126,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         });
                       }
                     },
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                     decoration: ruteroErrorInputDecoration(
                       label: noEntrega
                           ? 'Observaciones / motivo de no entrega *'
@@ -1296,7 +1296,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 size: 20,
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'EVIDENCIAS FOTOGRÁFICAS',
                   style: TextStyle(
@@ -1308,7 +1308,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
               Text(
                 '${_evidencePhotos.length}/${RepartoEvidenceUploadService.maxPhotos}',
-                style: const TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: AppTheme.textSecondary),
               ),
             ],
           ),
@@ -1341,7 +1341,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 fit: BoxFit.cover,
                                 width: 104,
                                 height: 104,
-                                errorBuilder: (_, __, ___) => const ColoredBox(
+                                errorBuilder: (_, __, ___) => ColoredBox(
                                   color: AppTheme.softPanel,
                                   child: Icon(
                                     Icons.broken_image_outlined,
@@ -1385,7 +1385,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Las fotos se previsualizan aquí y se suben al confirmar.',
             style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
@@ -1451,7 +1451,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               RepartidorExecutiveIcon(
                 icon: Icons.person,
@@ -1471,7 +1471,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
           if (_recipientSuggestionApplied) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Datos del último destinatario de este cliente. Puedes editarlos si es otra persona.',
               style: TextStyle(
                 color: AppTheme.textSecondary,
@@ -1498,7 +1498,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   });
                 }
               },
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: ruteroErrorInputDecoration(
                 label: 'Nombre *',
                 prefixIcon: const Icon(Icons.person_outline, size: 20),
@@ -1524,7 +1524,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   });
                 }
               },
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: ruteroErrorInputDecoration(
                 label: 'Apellidos *',
                 prefixIcon: const Icon(Icons.person_outline, size: 20),
@@ -1550,7 +1550,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   });
                 }
               },
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: ruteroErrorInputDecoration(
                 label: 'DNI / NIF *',
                 prefixIcon: const Icon(Icons.badge_outlined, size: 20),
@@ -1595,7 +1595,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
                   RepartidorExecutiveIcon(
                     icon: Icons.draw,
@@ -1728,7 +1728,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Expanded(
               child: Text(
                 linea.descripcion,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 14,
                 ),
@@ -1744,7 +1744,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Text(
               'Cantidad original: ${_formatQuantity(linea.cantidadPedida)}'
               '${(linea.unit ?? '').trim().isEmpty ? '' : ' ${linea.unit}'}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 12,
               ),
@@ -1756,7 +1756,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   const TextInputType.numberWithOptions(decimal: true),
               autofocus: true,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -1787,7 +1787,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'CANCELAR',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -1837,7 +1837,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const AlertDialog(
+        builder: (_) => AlertDialog(
           backgroundColor: AppTheme.raisedSurface,
           content: Row(
             children: [
@@ -2471,7 +2471,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Expanded(
               child: Text(
                 noEntrega ? 'Registrar no entrega' : 'Confirmar Entrega',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
@@ -2488,7 +2488,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   ? 'Se registrará como no entregado sin cobro ni firma.'
                   : '¿Está seguro de confirmar esta entrega?',
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 16),
             Container(
@@ -2503,7 +2503,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 children: [
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.description,
                         size: 16,
                         color: AppTheme.textTertiary,
@@ -2513,7 +2513,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         _isFactura
                             ? 'Factura ${widget.albaran.numeroFactura}'
                             : 'Albarán ${widget.albaran.numeroAlbaran}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w500,
                         ),
@@ -2525,7 +2525,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.notes,
                           size: 16,
                           color: AppTheme.textTertiary,
@@ -2536,7 +2536,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                             _observacionesController.text.trim().isEmpty
                                 ? _incidenciaMotivoController.text.trim()
                                 : _observacionesController.text.trim(),
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 13,
                             ),
@@ -2548,7 +2548,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.person,
                           size: 16,
                           color: AppTheme.textTertiary,
@@ -2557,7 +2557,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         Expanded(
                           child: Text(
                             '${_nombreController.text} (${_dniController.text})',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 13,
                             ),
@@ -2595,7 +2595,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text(
+            child: Text(
               'CANCELAR',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -2887,7 +2887,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.warning_amber_rounded,
@@ -2905,7 +2905,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'Esta entrega ya fue confirmada anteriormente. No se pueden registrar duplicados.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
         ),
@@ -3082,7 +3082,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           side: BorderSide(color: AppTheme.info.withValues(alpha: 0.28)),
         ),
-        title: const Row(
+        title: Row(
           children: [
             RepartidorExecutiveIcon(
               icon: Icons.folder_shared_outlined,
@@ -3104,12 +3104,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   'Elige qué documento quieres ver o enviar. Son dos cosas distintas.',
                   style: TextStyle(color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'NOTA DE ENTREGA',
                   style: TextStyle(
                     color: AppTheme.textTertiary,
@@ -3172,7 +3172,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 if (showCommercialDocs) ...[
                   Text(
                     isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textTertiary,
                       fontWeight: FontWeight.bold,
                       fontSize: 11,
@@ -3218,7 +3218,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Seguir en la entrega',
               style: TextStyle(color: AppTheme.textTertiary),
             ),

@@ -184,7 +184,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                 if (widget.promoCode.isNotEmpty)
                   Text(
                     'Codigo: ${widget.promoCode}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                     ),
@@ -194,7 +194,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       'Vigencia: ${widget.dateFrom.isEmpty ? '-' : widget.dateFrom}  ->  ${widget.dateTo.isEmpty ? '-' : widget.dateTo}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 11,
                       ),
@@ -212,7 +212,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                           color: AppTheme.warning.withValues(alpha: 0.35),
                         ),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
                           Icon(Icons.lock, color: AppTheme.warning, size: 18),
                           SizedBox(width: 8),
@@ -254,7 +254,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                           const SizedBox(height: 4),
                           Text(
                             'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 11,
                             ),
@@ -269,7 +269,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     ] else ...[
                       Text(
                         'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 11,
                         ),
@@ -284,10 +284,10 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
             margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: TextField(
               onChanged: (v) => setState(() => _search = v.trim()),
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Buscar articulo en promocion...',
-                hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
                 prefixIcon: const Icon(
                   Icons.search,
                   color: AppTheme.info,
@@ -320,7 +320,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
           ),
           Expanded(
             child: _filteredItems.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'No hay articulos para los filtros actuales.',
                       style: TextStyle(color: AppTheme.textSecondary),
@@ -352,7 +352,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                           ),
                           title: Text(
                             item.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
@@ -366,7 +366,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                               const SizedBox(height: 4),
                               Text(
                                 item.code,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 11,
                                 ),
@@ -452,7 +452,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                       PedidosFormatters.number(
                                         _giftSelection[item.code] ?? 0,
                                       ),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: AppTheme.textPrimary,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -495,7 +495,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                       ? null
                       : _submitGiftSelection,
                   icon: _submittingGifts
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
@@ -547,7 +547,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
           children: [
             Text(
               'Comprado: ${PedidosFormatters.number(_purchasedQty, decimals: 2)}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -621,7 +621,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               const SizedBox(width: 4),
               Text(
                 'Faltan ${remaining.toStringAsFixed(0)} uds para desbloquear el regalo',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
                 ),

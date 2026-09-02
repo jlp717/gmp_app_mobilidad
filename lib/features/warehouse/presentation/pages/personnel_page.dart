@@ -58,9 +58,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
           backgroundColor: AppTheme.raisedSurface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            side: const BorderSide(color: AppTheme.borderColor),
+            side: BorderSide(color: AppTheme.borderColor),
           ),
-          title: const Text(
+          title: Text(
             'Nuevo Operario',
             style: TextStyle(
               color: AppTheme.textPrimary,
@@ -76,15 +76,15 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
                   dropdownColor: AppTheme.raisedSurface,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: 'Rol',
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                     filled: true,
                     fillColor: AppTheme.softPanel,
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.borderColor),
+                      borderSide: BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -122,7 +122,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
+              child: Text(
                 'Cancelar',
                 style: TextStyle(color: AppTheme.textTertiary),
               ),
@@ -172,16 +172,16 @@ class _PersonnelPageState extends State<PersonnelPage> {
   Widget _field(TextEditingController ctrl, String label, IconData icon) {
     return TextField(
       controller: ctrl,
-      style: const TextStyle(color: AppTheme.textPrimary),
+      style: TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppTheme.textSecondary),
+        labelStyle: TextStyle(color: AppTheme.textSecondary),
         prefixIcon: Icon(icon, color: AppTheme.accentIndigo, size: 20),
         filled: true,
         fillColor: AppTheme.softPanel,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.borderColor),
+          borderSide: BorderSide(color: AppTheme.borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -249,7 +249,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         ),
                         Text(
                           '${_personnel.length} operarios activos',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 12,
                           ),
@@ -304,7 +304,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
               child: _loading
                   ? const SkeletonList(itemCount: 4, itemHeight: 80)
                   : _personnel.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -377,7 +377,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                       Expanded(
                         child: Text(
                           person.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -394,7 +394,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                             color: AppTheme.softPanel,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
+                          child: Text(
                             'ERP',
                             style: TextStyle(
                               color: AppTheme.textTertiary,
@@ -428,7 +428,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                       ),
                       if (person.phone.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        const Icon(
+                        Icon(
                           Icons.phone_outlined,
                           color: AppTheme.textTertiary,
                           size: 12,
@@ -436,7 +436,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         const SizedBox(width: 4),
                         Text(
                           person.phone,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 11,
                           ),
@@ -444,7 +444,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                       ],
                       if (person.email.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        const Icon(
+                        Icon(
                           Icons.email_outlined,
                           color: AppTheme.textTertiary,
                           size: 12,
@@ -456,7 +456,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
               ),
             ),
             if (isCustom)
-              const Icon(
+              Icon(
                 Icons.more_vert_rounded,
                 color: AppTheme.textTertiary,
                 size: 18,
@@ -483,7 +483,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
           children: [
             Text(
               person.name,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -492,7 +492,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.edit_rounded, color: AppTheme.info),
-              title: const Text(
+              title: Text(
                 'Editar',
                 style: TextStyle(color: AppTheme.textPrimary),
               ),
@@ -534,9 +534,9 @@ class _PersonnelPageState extends State<PersonnelPage> {
           backgroundColor: AppTheme.raisedSurface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            side: const BorderSide(color: AppTheme.borderColor),
+            side: BorderSide(color: AppTheme.borderColor),
           ),
-          title: const Text(
+          title: Text(
             'Editar Operario',
             style: TextStyle(
               color: AppTheme.textPrimary,
@@ -552,15 +552,15 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
                   dropdownColor: AppTheme.raisedSurface,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: 'Rol',
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                     filled: true,
                     fillColor: AppTheme.softPanel,
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.borderColor),
+                      borderSide: BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -598,7 +598,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
+              child: Text(
                 'Cancelar',
                 style: TextStyle(color: AppTheme.textTertiary),
               ),
@@ -649,7 +649,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.borderColor),
+          side: BorderSide(color: AppTheme.borderColor),
         ),
         title: const Text(
           'Eliminar operario',
@@ -657,12 +657,12 @@ class _PersonnelPageState extends State<PersonnelPage> {
         ),
         content: Text(
           '¿Eliminar a ${person.name}?',
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
               style: TextStyle(color: AppTheme.textTertiary),
             ),

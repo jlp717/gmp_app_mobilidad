@@ -61,7 +61,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Título
-          const Row(
+          Row(
             children: [
               Icon(
                 Icons.tune_rounded,
@@ -93,7 +93,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
             ),
             child: TextField(
               controller: _searchController,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente...',
                 hintStyle: TextStyle(
@@ -115,7 +115,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
           const SizedBox(height: 16),
 
           // Estados
-          const Text(
+          Text(
             'Estado',
             style: TextStyle(
               color: AppTheme.textSecondary,

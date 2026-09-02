@@ -388,7 +388,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white54,
-                  side: const BorderSide(color: AppTheme.borderColor),
+                  side: BorderSide(color: AppTheme.borderColor),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

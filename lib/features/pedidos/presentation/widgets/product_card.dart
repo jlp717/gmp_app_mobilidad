@@ -152,7 +152,7 @@ class _ProductCardState extends State<ProductCard> {
                         ),
                         child: Text(
                           '$badgeQty${widget.cartQtySuffix}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.inkSurface,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
@@ -601,7 +601,7 @@ class _ProductCardState extends State<ProductCard> {
                 ),
               ],
               const SizedBox(width: 2),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 color: AppTheme.textTertiary,
                 size: 18,

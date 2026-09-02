@@ -210,7 +210,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         side: BorderSide(color: AppTheme.info.withValues(alpha: 0.28)),
       ),
-      title: const Row(
+      title: Row(
         children: [
           RepartidorExecutiveIcon(
             icon: Icons.print,
@@ -237,7 +237,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Text(
                     '$printerLabel · $_protocolLabel',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                     ),
@@ -252,7 +252,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Granja Mari Pepa S.L.',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
@@ -272,15 +272,15 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                     ),
                     Text(
                       'Fecha: ${widget.albaran.fecha}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 13,
                       ),
                     ),
-                    const Divider(color: AppTheme.textTertiary),
+                    Divider(color: AppTheme.textTertiary),
                     Text(
                       'Cliente: ${widget.albaran.nombreCliente}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                       ),
@@ -294,7 +294,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                                 Expanded(
                                   child: Text(
                                     item.descripcion,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: AppTheme.textSecondary,
                                       fontSize: 12,
                                     ),
@@ -306,7 +306,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                                   'x${_formatQuantity(item.cantidadPedida)}'
                                   '${(item.unit ?? '').trim().isEmpty ? '' : ' ${item.unit}'}  '
                                   '${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 12,
                                   ),
@@ -318,15 +318,15 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                     if (widget.items.length > 5)
                       Text(
                         '... +${widget.items.length - 5} más',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textTertiary,
                           fontSize: 11,
                         ),
                       ),
-                    const Divider(color: AppTheme.textTertiary),
+                    Divider(color: AppTheme.textTertiary),
                     Text(
                       'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -336,7 +336,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Observaciones (editable):',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               ),
@@ -347,7 +347,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: 'Añadir observaciones para el ticket...',
-                  hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                  hintStyle: TextStyle(color: AppTheme.textTertiary),
                   filled: true,
                   fillColor: AppTheme.softPanel,
                   border: OutlineInputBorder(
@@ -359,7 +359,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                     borderSide: const BorderSide(color: AppTheme.info),
                   ),
                 ),
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 14,
                 ),
@@ -389,7 +389,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
               ],
               if (_isPrinting) ...[
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Enviando a la impresora. Puede tardar unos 30 segundos '
                   'si está despertando. Si no responde, cancela y vuelve '
                   'a intentar.',
@@ -408,7 +408,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(
             _isPrinting ? 'Cancelar' : 'Omitir',
-            style: const TextStyle(color: AppTheme.textTertiary),
+            style: TextStyle(color: AppTheme.textTertiary),
           ),
         ),
         ElevatedButton.icon(

@@ -20,7 +20,7 @@ class DateRangePicker extends StatelessWidget {
         Icons.calendar_month,
         color: (startDate != null && endDate != null)
             ? AppTheme.success
-            : Colors.white70,
+            : AppTheme.textSecondary,
       ),
       tooltip: 'Seleccionar rango de fechas',
       onPressed: () => _showDateRangePicker(context),
@@ -36,9 +36,9 @@ class DateRangePicker extends StatelessWidget {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           backgroundColor: AppTheme.raisedSurface,
-          title: const Text(
+          title: Text(
             'Rango de Fechas',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: AppTheme.textPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -109,9 +109,9 @@ class DateRangePicker extends StatelessWidget {
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Cancelar',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: AppTheme.textTertiary),
               ),
             ),
             ElevatedButton(
@@ -137,7 +137,7 @@ class DateRangePicker extends StatelessWidget {
       label: Text(label, style: const TextStyle(fontSize: 11)),
       onPressed: onTap,
       backgroundColor: AppTheme.inkSurface,
-      labelStyle: const TextStyle(color: Colors.white70),
+      labelStyle: TextStyle(color: AppTheme.textSecondary),
     );
   }
 
@@ -157,7 +157,7 @@ class DateRangePicker extends StatelessWidget {
           builder: (context, child) {
             return Theme(
               data: ThemeData.dark().copyWith(
-                colorScheme: const ColorScheme.dark(
+                colorScheme: ColorScheme.dark(
                   primary: AppTheme.info,
                   surface: AppTheme.raisedSurface,
                 ),
@@ -173,14 +173,14 @@ class DateRangePicker extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         backgroundColor: AppTheme.inkSurface,
         side:
-            BorderSide(color: date != null ? AppTheme.success : Colors.white30),
+            BorderSide(color: date != null ? AppTheme.success : AppTheme.textTertiary),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
           ),
           const SizedBox(height: 4),
           Text(
@@ -188,7 +188,7 @@ class DateRangePicker extends StatelessWidget {
                 ? '${date.day}/${date.month}/${date.year}'
                 : '--/--/----',
             style: TextStyle(
-              color: date != null ? AppTheme.success : Colors.white30,
+              color: date != null ? AppTheme.success : AppTheme.textTertiary,
               fontSize: 12,
             ),
           ),

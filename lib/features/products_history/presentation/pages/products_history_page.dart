@@ -881,7 +881,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
 
   Widget _buildLinesTable() {
     if (_lines.isEmpty) {
-      return const Card(
+      return Card(
         color: AppTheme.raisedSurface,
         child: Padding(
           padding: EdgeInsets.all(24),

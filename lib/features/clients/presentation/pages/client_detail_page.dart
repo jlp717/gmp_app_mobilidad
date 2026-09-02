@@ -252,7 +252,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                           const SizedBox(height: 2),
                           Text(
                             'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 10,
                             ),
@@ -340,7 +340,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                     if (!Responsive.isLandscapeCompact(context))
                       Text(
                         'Cód: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textSecondary,
                         ),
@@ -348,7 +348,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                     else
                       Text(
                         'Cód: $code',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
                         ),
@@ -392,7 +392,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 Expanded(
                   child: Text(
                     [address, city].where((s) => s.isNotEmpty).join(', '),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
                     ),
@@ -586,7 +586,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Selecciona el nºmero:',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
@@ -728,7 +728,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Pagado',
                             style: TextStyle(
                               color: AppTheme.textSecondary,
@@ -757,7 +757,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                         children: [
                           Text(
                             'Pendiente ($pendingCount)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 12,
                             ),
@@ -838,7 +838,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                 final period = data[idx]['period'] as String? ?? '';
                 return Text(
                   period.length >= 7 ? period.substring(5) : period,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     color: AppTheme.textSecondary,
                   ),
@@ -1001,7 +1001,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                           const EdgeInsets.symmetric(horizontal: 12),
                       leading: Text(
                         date.length >= 10 ? date.substring(5) : date,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 12,
                         ),
@@ -1017,7 +1017,7 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                         children: [
                           Text(
                             '$boxes cj',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 11,
                             ),
@@ -1107,7 +1107,7 @@ class _SummaryCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 11,
                 ),
@@ -1127,7 +1127,7 @@ class _SummaryCard extends StatelessWidget {
           if (subtitle != null)
             Text(
               subtitle!,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 10,
               ),

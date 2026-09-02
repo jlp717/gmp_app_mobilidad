@@ -99,7 +99,7 @@ class OfflineStateWidget extends StatelessWidget {
               ExcludeSemantics(
                 child: Text(
                   message,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -113,7 +113,7 @@ class OfflineStateWidget extends StatelessWidget {
                 ExcludeSemantics(
                   child: Text(
                     detail!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 14,
                       height: 1.5,

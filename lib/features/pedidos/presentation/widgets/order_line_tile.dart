@@ -465,7 +465,9 @@ class OrderLineTile extends StatelessWidget {
                         Consumer(
                           builder: (ctx, ref, _) {
                             final visible =
-                                ref.watch(pedidosProvider).isMarginVisible;
+                                ref.watch(
+                                  pedidosProvider.select((p) => p.isMarginVisible),
+                                );
                             if (!visible) return const SizedBox.shrink();
                             return Padding(
                               padding: const EdgeInsets.only(top: 4),
@@ -487,7 +489,9 @@ class OrderLineTile extends StatelessWidget {
                 // Req #2: Margin indicator solo visible para JEFE_VENTAS/ADMIN.
                 Consumer(
                   builder: (ctx, ref, _) {
-                    final visible = ref.watch(pedidosProvider).isMarginVisible;
+                    final visible = ref.watch(
+                      pedidosProvider.select((p) => p.isMarginVisible),
+                    );
                     if (!visible) return const SizedBox.shrink();
                     return Container(
                       padding: const EdgeInsets.symmetric(

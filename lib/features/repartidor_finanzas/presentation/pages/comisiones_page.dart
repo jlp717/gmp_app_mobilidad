@@ -14,27 +14,29 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Visual surface aligned with comercial `CommissionsPage` cards.
 BoxDecoration _commissionSurfaceDecoration({
-  Color color = AppTheme.raisedSurface,
-  Color borderColor = AppTheme.borderColor,
+  Color? color,
+  Color? borderColor,
   double borderAlpha = 1,
   double radius = AppTheme.radiusMd,
 }) {
-  final hasVisibleSurface = color != Colors.transparent;
+  final surfaceColor = color ?? AppTheme.raisedSurface;
+  final outlineColor = borderColor ?? AppTheme.borderColor;
+  final hasVisibleSurface = surfaceColor != Colors.transparent;
   return BoxDecoration(
-    color: color,
+    color: surfaceColor,
     gradient: hasVisibleSurface
         ? LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color,
+              surfaceColor,
               AppTheme.softPanel.withValues(alpha: 0.88),
-              borderColor.withValues(alpha: 0.035),
+              outlineColor.withValues(alpha: 0.035),
             ],
           )
         : null,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: borderColor.withValues(alpha: borderAlpha)),
+    border: Border.all(color: outlineColor.withValues(alpha: borderAlpha)),
     boxShadow: hasVisibleSurface
         ? [
             BoxShadow(
@@ -236,7 +238,7 @@ class _RepartidorComisionesFinanzasPageState
   @override
   Widget build(BuildContext context) {
     if (widget.repartidorId.isEmpty) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppTheme.inkSurface,
         body: Center(
           child: Text(
@@ -280,7 +282,7 @@ class _RepartidorComisionesFinanzasPageState
                         _error!,
                         'No se pudo cargar el resumen',
                       ),
-                      style: const TextStyle(color: AppTheme.textSecondary),
+                      style: TextStyle(color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton(
@@ -300,7 +302,7 @@ class _RepartidorComisionesFinanzasPageState
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
+                      Text(
                         'No hay tramos de comisión configurados',
                         style: TextStyle(color: AppTheme.textSecondary),
                       ),
@@ -315,7 +317,7 @@ class _RepartidorComisionesFinanzasPageState
               ),
             )
           else if (_summary == null || _monthRows.isEmpty)
-            const Expanded(
+            Expanded(
               child: Center(
                 child: Text(
                   'No hay comisiones para el periodo seleccionado',
@@ -352,7 +354,7 @@ class _PeriodSelector extends StatelessWidget {
           onPressed: onPrevious,
           icon: const Icon(Icons.chevron_left),
         ),
-        const Text(
+        Text(
           'Cambiar periodo',
           style: TextStyle(color: AppTheme.textSecondary),
         ),
@@ -391,13 +393,13 @@ class _Header extends StatelessWidget {
               children: [
                 Text(
                   'Comisiones $period',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
                     color: AppTheme.textPrimary,
                   ),
                 ),
-                const Text(
+                Text(
                   'Seguimiento de cobros y entregas',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                 ),
@@ -639,7 +641,7 @@ class _Content extends StatelessWidget {
             headingRowColor: WidgetStateProperty.all(
               AppTheme.softPanel,
             ),
-            columns: const [
+            columns: [
               DataColumn(
                 label: Text(
                   'MES',
@@ -905,7 +907,7 @@ class _Card extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
               color: AppTheme.textPrimary,
@@ -914,7 +916,7 @@ class _Card extends StatelessWidget {
           if (subtitle != null)
             Text(
               subtitle!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 9,
                 color: AppTheme.textSecondary,
               ),

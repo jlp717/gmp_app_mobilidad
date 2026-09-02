@@ -123,7 +123,7 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
                           tracking.isActive
                               ? 'Seguimiento activo'
                               : 'Seguimiento de ruta',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w700,
                           ),
@@ -161,7 +161,7 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
                     ? 'La ubicación se registra mientras repartes. '
                         'Puedes seguir usando otras aplicaciones.'
                     : 'Registra tu avance y recibe avisos sobre la próxima parada.',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
@@ -170,7 +170,7 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
               if (tracking.nextStop != null)
                 _NextStopSummary(tracking: tracking)
               else
-                const Text(
+                Text(
                   'No quedan paradas pendientes en esta ruta.',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                 ),
@@ -263,7 +263,7 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
                       onChanged: busy ? null : notifier.setVoiceEnabled,
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.volume_up_outlined,
                     color: AppTheme.textSecondary,
                     size: 18,
@@ -271,7 +271,7 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
                 ],
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'La distancia es aproximada en línea recta. Para indicaciones '
                 'de giro, usa el botón Navegar de la parada.',
                 style: TextStyle(
@@ -331,7 +331,7 @@ class _NextStopSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Próxima parada',
                   style: TextStyle(
                     color: AppTheme.textTertiary,
@@ -342,7 +342,7 @@ class _NextStopSummary extends StatelessWidget {
                   stop.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
@@ -381,7 +381,7 @@ class _Metric extends StatelessWidget {
         const SizedBox(width: 3),
         Text(
           text,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
         ),
       ],
     );

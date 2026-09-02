@@ -629,7 +629,7 @@ class _RepartidorRuteroReorderModalState
               Expanded(
                 child: Text(
                   'Para cambiar el orden, usa el menú de cada parada y elige su posición. También puedes arrastrar el icono de líneas. Después pulsa Guardar. · $_dateYmd',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
                   ),
@@ -649,7 +649,7 @@ class _RepartidorRuteroReorderModalState
             alignment: Alignment.centerLeft,
             child: Text(
               'Ubicación disponible: $_gpsCoverage/${_ordered.length}. Las paradas sin ubicación siguen en la lista, pero no se dibujan en el mapa.',
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 11,
               ),
@@ -658,7 +658,7 @@ class _RepartidorRuteroReorderModalState
           ExpansionTile(
             title: const Text('Propuesta de ruta'),
             children: [
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Criterio de propuesta',
@@ -774,7 +774,7 @@ class _RepartidorRuteroReorderModalState
 
   Widget _buildList() {
     if (_ordered.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No hay albaranes para ordenar',
           style: TextStyle(color: AppTheme.textSecondary),
@@ -826,7 +826,7 @@ class _RepartidorRuteroReorderModalState
               a.nombreCliente,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
@@ -840,7 +840,7 @@ class _RepartidorRuteroReorderModalState
                   '${window != null ? ' · $window' : ''}'
                   '${closed ? ' · cerrado hoy' : ''}'
                   '${missingGps ? ' · sin ubicación' : ''}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
                   ),
@@ -881,7 +881,7 @@ class _RepartidorRuteroReorderModalState
               ReorderableDragStartListener(
                   index: index,
                   enabled: !_isSaving && !_isOptimizing && !_loadingOrder,
-                  child: const SizedBox(
+                  child: SizedBox(
                       width: 48,
                       height: 48,
                       child: Icon(Icons.drag_handle,
