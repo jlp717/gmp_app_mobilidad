@@ -86,7 +86,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
-        _loadInitialData();
+        _loadInitialData(false);
       }
     });
   }
@@ -1194,7 +1194,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   _buildFilters(context),
 
                   Expanded(
-                    child: _isLoading
+                    child: _isLoading && _facturas.isEmpty
                         // OPTIMIZATION: Use SkeletonList for perceived performance
                         ? const SkeletonList(itemCount: 8, itemHeight: 100)
                         : _error != null

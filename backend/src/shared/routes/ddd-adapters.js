@@ -193,7 +193,13 @@ async function withCache(cache, key, ttlMs, fetchFn, res, req) {
     return res.json(await fetchFn());
   }
 
-  const isAllQuery = String(req?.query?.vendedorCodes || '').toUpperCase() === 'ALL';
+  const allScope = String(
+    req?.query?.vendedorCodes ||
+    req?.query?.vendedorCode ||
+    req?.params?.vendedorCode ||
+    ''
+  ).toUpperCase();
+  const isAllQuery = allScope === 'ALL';
 
   if (isAllQuery) {
     const perfCacheKey = `ALL:${key}`;
@@ -2213,7 +2219,7 @@ function createCobrosRoutes() {
       res.set('Cache-Control', 'no-store');
       return res.json(await fetchFn());
     }
-    return withCache(cache, cacheKey, ttl, fetchFn, res);
+    return withCache(cache, cacheKey, ttl, fetchFn, res, req);
   };
 
   const sendCobrosError = (res, error) => {
@@ -2294,11 +2300,14 @@ function createCobrosRoutes() {
       const cacheKey = `ddd:cobros:estado:${clientAccess.clientCode}:${cobrosCacheScope(req)}:${scopeKey}`;
       await sendCobrosCached(req, res, cacheKey, TTL_MS.PENDIENTES, async () => {
         const clientCode = clientAccess.clientCode;
-        const pendientes = await repo.getPendientes(clientCode, cobrosContext(req, clientAccess.vendorCodes));
+        const [pendientes, creditLimit] = await Promise.all([
+          repo.getPendientes(clientCode, cobrosContext(req, clientAccess.vendorCodes)),
+          getCobrosCreditLimit(clientCode),
+        ]);
         const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
         const limiteCredito = Number.isFinite(parseFloat(pendientes?.resumen?.limiteCredito))
           ? parseFloat(pendientes.resumen.limiteCredito)
-          : await getCobrosCreditLimit(clientCode);
+          : creditLimit;
         return {
           success: true,
           estadoCliente: {

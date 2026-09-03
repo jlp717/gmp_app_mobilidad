@@ -113,3 +113,13 @@ Notas cross-tool: Cursor trata CLAUDE.md igual que AGENTS.md (siempre aplicados;
 ## 10. Memoria y correcciones
 
 Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero": captura la corrección en el ledger (`ledger_append(event=correction)`) antes de seguir; si es regla permanente, propón la línea para `.clinerules/` al final del turno (confirmación antes de editar reglas). `memory-bank/` es el vínculo entre sesiones; el espejo vivo de fases es el ledger.
+
+## Learned User Preferences
+
+- La rama de referencia de trabajo es `test`, no `main`.
+- El modo claro/oscuro debe aplicar el tema a filtros, tablas y matrices (no solo el chrome).
+
+## Learned Workspace Facts
+
+- Objetivos comerciales usan R1_T8CDVD (quién tiene el cliente); LCCDVD es quién vendió. Comisiones: sales=LCCDVD, baseline de objetivo=R1_T8CDVD.
+- Comercial 80 es líder de equipo (72/73/81/83); su objetivo personal no es la suma del equipo.

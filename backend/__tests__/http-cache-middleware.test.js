@@ -320,6 +320,32 @@ describe('HTTP cache auth safety', () => {
     expect(commercialNext).toHaveBeenCalledTimes(1);
     expect(commercialRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'MISS');
   });
+
+  test.each([
+    ['/api/cobros/pending-summary/01', 'cobros'],
+    ['/api/pedidos', 'pedidos'],
+    ['/api/facturas', 'facturas'],
+  ])('caches short-ttl commercial GETs for %s', (originalUrl) => {
+    const req = {
+      method: 'GET',
+      path: originalUrl,
+      originalUrl,
+      baseUrl: '/api',
+      query: {},
+      headers: {},
+      user: { id: '01', code: '01', role: 'COMERCIAL' },
+    };
+    const firstRes = makeRes();
+    cacheMiddleware(req, firstRes, jest.fn());
+    firstRes.json({ success: true, rows: [] });
+
+    const secondRes = makeRes();
+    const secondNext = jest.fn();
+    cacheMiddleware(req, secondRes, secondNext);
+
+    expect(secondNext).not.toHaveBeenCalled();
+    expect(secondRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+  });
 });
 
 describe('network optimizer cache headers', () => {

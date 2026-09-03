@@ -340,6 +340,15 @@ function cacheMiddleware(req, res, next) {
         if (path.includes('/rutero')) {
             return cached('rutero', 300)(req, res, next);
         }
+        if (path.includes('/cobros')) {
+            return cached('cobros', 30)(req, res, next);
+        }
+        if (path.includes('/pedidos')) {
+            return cached('pedidos', 30)(req, res, next);
+        }
+        if (path.includes('/facturas')) {
+            return cached('facturas', 30)(req, res, next);
+        }
     }
 
     next();
@@ -368,6 +377,15 @@ function invalidationMiddleware(req, res, next) {
         }
         if (path.includes('/rutero')) {
             invalidate('rutero:');
+        }
+        if (path.includes('/cobros')) {
+            invalidate('cobros:');
+        }
+        if (path.includes('/pedidos')) {
+            invalidate('pedidos:');
+        }
+        if (path.includes('/facturas')) {
+            invalidate('facturas:');
         }
     }
     next();

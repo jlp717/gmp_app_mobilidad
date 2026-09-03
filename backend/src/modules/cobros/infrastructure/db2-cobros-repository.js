@@ -750,9 +750,11 @@ class Db2CobrosRepository extends CobrosRepository {
           ${access.clause}
         ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC`;
 
-      const rows = await queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []);
-      const appCobrosByDoc = await this.getAppSideCobrosByDoc(clientCode);
-      const repartidorByDoc = await this.getAppSideRepartidorByDoc(clientCode);
+      const [rows, appCobrosByDoc, repartidorByDoc] = await Promise.all([
+        queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []),
+        this.getAppSideCobrosByDoc(clientCode),
+        this.getAppSideRepartidorByDoc(clientCode),
+      ]);
       const groupedRows = groupCvcRowsByDocument(rows);
       const adjustmentVendorCodes = normalizeVendorCodeList(
         context.adjustmentVendorCode

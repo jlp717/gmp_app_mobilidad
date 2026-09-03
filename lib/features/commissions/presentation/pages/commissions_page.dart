@@ -109,7 +109,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
-        _loadData();
+        _loadData(silent: true);
       }
     });
   }
@@ -130,8 +130,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     }
   }
 
-  Future<void> _loadData(
-      {bool forceRefresh = false, bool silent = false}) async {
+  Future<void> _loadData({
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
     final generation = ++_loadGeneration;
     if (_isCommissionsHiddenForUser()) {
       if (!mounted) return;
@@ -446,9 +448,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   void _patchPaymentsMap(Map<String, dynamic> target, int month, double delta) {
     final payments = _mutableMap(target['payments'] as Map?);
     final monthly = _mutableMap(payments['monthly'] as Map?);
-    final current = (monthly['$month'] as num?)?.toDouble() ??
-        (monthly[month] as num?)?.toDouble() ??
-        0;
+    final current = (monthly['$month'] as num?)?.toDouble() ?? 0;
     monthly['$month'] = current + delta;
     payments['monthly'] = monthly;
     payments['total'] = ((payments['total'] as num?)?.toDouble() ?? 0) + delta;

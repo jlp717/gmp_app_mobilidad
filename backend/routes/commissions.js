@@ -403,8 +403,10 @@ async function deleteMonthCommissionPayments(vendorCode, year, month) {
 }
 
 /**
- * Invalidate all commission route caches after payment mutations.
- * Keys are stored as gmp:route:comm:* via redisCache.get/set('route', key).
+ * Invalidate commission *summary/PDF* caches after payment mutations.
+ * Sales caches (LACLAE client-scope / DB2 fallback) stay warm: a payment
+ * does not change ventas, only paid totals. Nuking sales keys was forcing
+ * a 15s+ LACLAE rescan on the next ALL summary.
  */
 async function invalidateCommissionPaymentCaches(vendorCode, year) {
     const safeVendor = String(vendorCode || '').trim().replace(/[^a-zA-Z0-9]/g, '');
@@ -414,24 +416,76 @@ async function invalidateCommissionPaymentCaches(vendorCode, year) {
     const patterns = [
         'route:comm:summary:*',
         'route:comm:pdf:*',
-        `route:commissions:${COMMISSIONS_CACHE_VERSION}:*`,
-        'route:comm:*',
-        `route:commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:*`,
         `route:comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`,
+        `route:comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:*`,
+        `route:comm:summary:${COMMISSIONS_CACHE_VERSION}:TEAM80:*`,
     ];
 
     for (const variant of codeVariants) {
         patterns.push(`route:comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${variant}:*`);
-        patterns.push(`route:commissions:${COMMISSIONS_CACHE_VERSION}:sales-by-client-scope:${variant}:*`);
     }
     if (safeVendor && safeYear) {
         patterns.push(`route:comm:summary:${safeVendor}:${safeYear}`);
     }
 
-    const uniquePatterns = [...new Set(patterns)];
-    for (const pattern of uniquePatterns) {
-        await invalidateCachePattern(pattern);
+    await Promise.all([...new Set(patterns)].map((pattern) => invalidateCachePattern(pattern)));
+}
+
+function monthSnapshotFromVendorRecord(record, month) {
+    if (!record) return null;
+    const months = Array.isArray(record.months) ? record.months : [];
+    const monthData = months.find((item) => parseInt(item.month, 10) === month);
+    if (!monthData) return null;
+    const actual = roundMoney(monthData.actual);
+    const target = roundMoney(monthData.target);
+    const generated = roundMoney(
+        monthData.complianceCtx?.commission || monthData.commission || 0
+    );
+    return {
+        ventaComision: actual,
+        objetivoMes: target,
+        ventasSobreObjetivo: roundMoney(actual - target),
+        generatedAmount: generated,
+        source: 'cache',
+    };
+}
+
+function findVendorRecordInSummary(cached, vendedorCode) {
+    if (!cached || typeof cached !== 'object') return null;
+    const variants = new Set(getCodeVariants(vendedorCode));
+    const matches = (code) => {
+        const trimmed = String(code || '').trim();
+        if (!trimmed) return false;
+        return variants.has(trimmed) || getCodeVariants(trimmed).some((item) => variants.has(item));
+    };
+    if (matches(cached.vendor) || matches(cached.vendedorCode)) {
+        return cached;
     }
+    const breakdown = Array.isArray(cached.breakdown) ? cached.breakdown : [];
+    return breakdown.find((row) => matches(row?.vendedorCode) || matches(row?.vendor)) || null;
+}
+
+async function getCachedPaymentSnapshot(vendedorCode, year, month) {
+    const yearKey = String(year);
+    const variants = getCodeVariants(vendedorCode);
+    const keys = [];
+    for (const variant of variants) {
+        keys.push(`comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${variant}:${yearKey}`);
+    }
+    keys.push(
+        `comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:${yearKey}`,
+        `comm:summary:${COMMISSIONS_CACHE_VERSION}:TEAM80:${yearKey}`,
+    );
+
+    const lookups = await Promise.all(keys.map(async (key) => {
+        const cached = await redisCache.get('route', key);
+        if (!cached) return null;
+        const isSingleKey = String(key).includes(':SINGLE:');
+        const record = findVendorRecordInSummary(cached, vendedorCode)
+            || (isSingleKey && Array.isArray(cached.months) ? cached : null);
+        return monthSnapshotFromVendorRecord(record, month);
+    }));
+    return lookups.find((snapshot) => snapshot) || null;
 }
 
 /**
@@ -1744,11 +1798,86 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
     };
 }
 
+async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
+    const codeVariants = getCodeVariants(vendedorCode);
+    if (codeVariants.length === 0) return null;
+    const vendorPlaceholders = codeVariants.map(() => '?').join(',');
+    const salesVendorExpr = getCommissionActualVendorColumnExprForMonth(year, month, 'L');
+    const prevVendorExpr = getCommissionActualVendorColumnExprForMonth(year - 1, month, 'L');
+    const safeVendor = String(vendedorCode || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+    const safeUnpadded = safeVendor.replace(/^0+/, '') || safeVendor;
+
+    const [config, salesRows, prevRows, bSales, bSalesPrev, targetRows] = await Promise.all([
+        loadCommissionConfig(year),
+        queryWithParams(`
+            SELECT SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC = ?
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(${salesVendorExpr}) IN (${vendorPlaceholders})
+        `, [year, month, ...codeVariants], false),
+        queryWithParams(`
+            SELECT SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC = ?
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(${prevVendorExpr}) IN (${vendorPlaceholders})
+        `, [year - 1, month, ...codeVariants], false),
+        getBSales(vendedorCode, year),
+        getBSales(vendedorCode, year - 1),
+        safeVendor
+            ? queryWithParams(`
+                SELECT IMPORTE_BASE_COMISION, MES
+                FROM JAVIER.COMMERCIAL_TARGETS
+                WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
+                  AND ANIO = ?
+                  AND ACTIVO = 1
+                ORDER BY MES DESC
+            `, [safeVendor, safeUnpadded, year], false).catch(() => [])
+            : Promise.resolve([]),
+    ]);
+
+    const currentLac = parseFloat(salesRows?.[0]?.SALES) || 0;
+    const prevLac = parseFloat(prevRows?.[0]?.SALES) || 0;
+    const actual = roundMoney(currentLac + (bSales?.[month] || 0));
+    const prevSales = prevLac + (bSalesPrev?.[month] || 0);
+    const fixedTargets = (targetRows || []).map((row) => ({
+        mes: row.MES != null ? parseInt(row.MES, 10) : null,
+        importe: parseFloat(row.IMPORTE_BASE_COMISION) || 0,
+    }));
+    const targetInfo = resolveCommissionTarget({
+        month,
+        fixedTargets,
+        prevSales,
+        ipc: config.ipc,
+    });
+    const generated = roundMoney(calculateCommission(actual, targetInfo.target, config).commission || 0);
+    return {
+        ventaComision: actual,
+        objetivoMes: roundMoney(targetInfo.target),
+        ventasSobreObjetivo: roundMoney(actual - targetInfo.target),
+        generatedAmount: generated,
+        source: 'month',
+    };
+}
+
 async function getCurrentPaymentSnapshot(vendedorCode, year, month) {
     const safeYear = parseInt(year);
     const safeMonth = parseInt(month);
     if (!vendedorCode || !safeYear || !safeMonth || safeMonth < 1 || safeMonth > 12) {
         return null;
+    }
+
+    const cached = await getCachedPaymentSnapshot(vendedorCode, safeYear, safeMonth);
+    if (cached) return cached;
+
+    try {
+        const monthSnapshot = await getMonthPaymentSnapshotFromDb(vendedorCode, safeYear, safeMonth);
+        if (monthSnapshot) return monthSnapshot;
+    } catch (err) {
+        logger.warn(`[COMMISSIONS] Month snapshot failed for ${vendedorCode} ${safeYear}/${safeMonth}: ${err.message}`);
     }
 
     const config = await loadCommissionConfig(safeYear);
@@ -1765,7 +1894,8 @@ async function getCurrentPaymentSnapshot(vendedorCode, year, month) {
         ventaComision: actual,
         objetivoMes: target,
         ventasSobreObjetivo: roundMoney(actual - target),
-        generatedAmount: generated
+        generatedAmount: generated,
+        source: 'recalc',
     };
 }
 
@@ -2470,9 +2600,9 @@ router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) =
         let objetivoMesNum = parseFloat(objetivoMes) || 0;
         let ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
 
-        // Prefer the same backend calculation path as /summary for payment snapshots.
-        // This keeps the blue columns aligned with snapshots, B-sales, fixed targets,
-        // and the LCC/R1 monthly transition.
+        // Prefer Redis summary (same numbers the UI just showed). Fall back to
+        // the client snapshot already computed by /summary. Full-year LACLAE
+        // recalc is last resort — it was adding 15s+ per payment.
         if (safeMonthNum > 0) {
             const currentSnapshot = await getCurrentPaymentSnapshot(vendedorCode, safeYearNum, safeMonthNum);
             if (currentSnapshot) {
@@ -2480,7 +2610,7 @@ router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) =
                 objetivoMesNum = currentSnapshot.objetivoMes;
                 ventasSobreObjetivoNum = currentSnapshot.ventasSobreObjetivo;
                 generatedNum = currentSnapshot.generatedAmount;
-                logger.info(`[COMMISSIONS] Captured backend payment snapshot for ${vendedorCode} ${safeYearNum}/${safeMonthNum}: venta=${ventaComision.toFixed(2)} obj=${objetivoMesNum.toFixed(2)} comm=${generatedNum.toFixed(2)}`);
+                logger.info(`[COMMISSIONS] Captured ${currentSnapshot.source || 'backend'} payment snapshot for ${vendedorCode} ${safeYearNum}/${safeMonthNum}: venta=${ventaComision.toFixed(2)} obj=${objetivoMesNum.toFixed(2)} comm=${generatedNum.toFixed(2)}`);
             }
         }
 
@@ -2598,7 +2728,17 @@ router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) =
         logger.info(`[COMMISSIONS] Payment ${setTotalMode ? 'total corrected' : 'registered'} for ${vendedorCode}:${year}`);
         res.json({
             success: true,
-            message: setTotalMode ? 'Importe total del mes actualizado correctamente' : 'Pago registrado correctamente'
+            message: setTotalMode ? 'Importe total del mes actualizado correctamente' : 'Pago registrado correctamente',
+            payment: {
+                vendedorCode: safePayVendor,
+                year: safeYearNum,
+                month: safeMonthNum,
+                amount: setTotalMode ? roundMoney(amountNum) : roundMoney(amountNum),
+                setTotal: setTotalMode,
+                ventaComision: roundMoney(ventaComision),
+                objetivoMes: roundMoney(objetivoMesNum),
+                generatedAmount: roundMoney(generatedNum),
+            },
         });
     } catch (e) {
         logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
@@ -3255,6 +3395,8 @@ module.exports = {
     _private: {
         calculateVendorData,
         getCurrentPaymentSnapshot,
+        getCachedPaymentSnapshot,
+        getMonthPaymentSnapshotFromDb,
         getVendorPayments,
         invalidateCommissionPaymentCaches,
         loadCommissionConfig,

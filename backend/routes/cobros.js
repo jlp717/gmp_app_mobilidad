@@ -782,40 +782,38 @@ router.get('/:codigoCliente/estado', async (req, res) => {
             }
         }
 
-        // Align client state with /pendientes and /pending-summary by subtracting
-        // app-side collections that may not have propagated to ERP yet.
-        try {
-            const appRows = await queryWithParams(`
+        const [appRows, repRows, cliRows] = await Promise.all([
+            queryWithParams(`
                 SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_APP
                   FROM ${APP_SCHEMA}.COBROS
                  WHERE TRIM(CODIGO_CLIENTE) = ?
-            `, [codigoCliente], false);
-            const repRows = await queryWithParams(`
+            `, [codigoCliente], false).catch((adjustErr) => {
+                logger.warn('[COBROS] Error leyendo cobros app-side: ' + adjustErr.message);
+                return [];
+            }),
+            queryWithParams(`
                 SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
                   FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
                  WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-            `, [codigoCliente], false);
-            const totalApp = parseFloat(appRows?.[0]?.TOTAL_APP) || 0;
-            const totalRep = parseFloat(repRows?.[0]?.TOTAL_REP) || 0;
-            totalPendiente = Math.max(0, totalPendiente - totalApp - totalRep);
-            if (totalPendiente <= 0.01) {
-                totalPendiente = 0;
-                numPedidos = 0;
-            }
-        } catch (adjustErr) {
-            logger.warn('[COBROS] Error ajustando estado con cobros app-side: ' + adjustErr.message);
-        }
-
-        // Get credit limit from CLI
-        let limiteCredito = 0;
-        try {
-            const cliRows = await queryWithParams(`
+            `, [codigoCliente], false).catch((adjustErr) => {
+                logger.warn('[COBROS] Error leyendo cobros repartidor: ' + adjustErr.message);
+                return [];
+            }),
+            queryWithParams(`
                 SELECT LIMITECREDITO FROM DSEDAC.CLI
                 WHERE TRIM(CODIGOCLIENTE) = ?
                 FETCH FIRST 1 ROW ONLY
-            `, [codigoCliente], []);
-            limiteCredito = parseFloat(cliRows?.[0]?.LIMITECREDITO) || 0;
-        } catch (_) { /* no credit limit data */ }
+            `, [codigoCliente], []).catch(() => []),
+        ]);
+
+        const totalApp = parseFloat(appRows?.[0]?.TOTAL_APP) || 0;
+        const totalRep = parseFloat(repRows?.[0]?.TOTAL_REP) || 0;
+        totalPendiente = Math.max(0, totalPendiente - totalApp - totalRep);
+        if (totalPendiente <= 0.01) {
+            totalPendiente = 0;
+            numPedidos = 0;
+        }
+        const limiteCredito = parseFloat(cliRows?.[0]?.LIMITECREDITO) || 0;
 
         res.json({
             success: true,

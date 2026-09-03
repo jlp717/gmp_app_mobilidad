@@ -133,7 +133,10 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
     final fetchYear = year ?? currentState.selectedYear;
     final fetchMonth = month ?? currentState.selectedMonth;
 
-    state = const AsyncLoading();
+    final keepPrevious = currentState.hasData && !forceRefresh;
+    if (!keepPrevious) {
+      state = const AsyncLoading();
+    }
 
     try {
       final authState = ref.read(authProvider).value;
@@ -142,40 +145,47 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
         return;
       }
 
-      final vendedorCodes = authState!.vendedorCodes;
-      final codes = vendedorCodes.isEmpty ? 'ALL' : vendedorCodes.join(',');
+      final user = authState!.user!;
+      final codes = authState.vendedorCodes;
+      final vendorParam = (user.isJefeVentas || user.isDirector)
+          ? 'ALL'
+          : (codes.isEmpty ? user.code : codes.join(','));
 
       final queryParams = {
-        'vendedorCodes': codes,
+        'vendedorCodes': vendorParam,
         'year': fetchYear.toString(),
         'month': fetchMonth.toString(),
       };
 
-      // Parallel fetch — server Redis cache makes this fast
-      final results = await Future.wait<dynamic>([
+      // Two waves so JEFE ALL does not stampede the DB2 pool (max 5).
+      final firstWave = await Future.wait<dynamic>([
         _fetchMetrics(queryParams, forceRefresh: forceRefresh),
         _fetchRecentSales(queryParams, forceRefresh: forceRefresh),
+      ]);
+      state = AsyncValue.data(
+        currentState.copyWith(
+          metrics: firstWave[0] as DashboardMetrics?,
+          recentSales: firstWave[1] as List<RecentSale>,
+          selectedYear: fetchYear,
+          selectedMonth: fetchMonth,
+        ),
+      );
+
+      final secondWave = await Future.wait<dynamic>([
         _fetchSalesEvolution(queryParams, forceRefresh: forceRefresh),
         _fetchYoYComparison(queryParams, forceRefresh: forceRefresh),
         _fetchTopProducts(queryParams, forceRefresh: forceRefresh),
         _fetchTopClients(queryParams, forceRefresh: forceRefresh),
       ]);
 
-      final metrics = results[0] as DashboardMetrics?;
-      final recentSales = results[1] as List<RecentSale>;
-      final salesEvolution = results[2] as List<SalesEvolutionPoint>;
-      final yoyComparison = results[3] as YoYComparison?;
-      final topProducts = results[4] as List<TopProduct>;
-      final topClients = results[5] as List<TopClient>;
-
       state = AsyncValue.data(
-        DashboardState(
-          metrics: metrics,
-          recentSales: recentSales,
-          salesEvolution: salesEvolution,
-          yoyComparison: yoyComparison,
-          topProducts: topProducts,
-          topClients: topClients,
+        (_getCurrentState() ?? currentState).copyWith(
+          metrics: firstWave[0] as DashboardMetrics?,
+          recentSales: firstWave[1] as List<RecentSale>,
+          salesEvolution: secondWave[0] as List<SalesEvolutionPoint>,
+          yoyComparison: secondWave[1] as YoYComparison?,
+          topProducts: secondWave[2] as List<TopProduct>,
+          topClients: secondWave[3] as List<TopClient>,
           selectedYear: fetchYear,
           selectedMonth: fetchMonth,
         ),

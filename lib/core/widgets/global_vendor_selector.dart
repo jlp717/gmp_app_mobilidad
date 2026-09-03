@@ -154,10 +154,14 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
       return const SizedBox.shrink();
     }
 
-    ref.watch(authProvider.select((state) => (
+    ref.watch(
+      authProvider.select(
+        (state) => (
           state.value?.user?.code,
           state.value?.vendedorCodes.join(','),
-        )));
+        ),
+      ),
+    );
 
     final shouldLoadVendors = widget.isJefeVentas || widget.forceShow;
     if (shouldLoadVendors && _vendedores.isEmpty && !_isLoading) {

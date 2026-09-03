@@ -138,7 +138,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (previous != next) {
         _selectedVendedor = next;
-        _loadData();
+        _loadData(silent: true);
       }
     });
   }
@@ -180,13 +180,17 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     super.dispose();
   }
 
-  Future<void> _loadData({bool forceRefresh = false}) async {
+  Future<void> _loadData(
+      {bool forceRefresh = false, bool silent = false}) async {
     if (!mounted) return;
     final generation = ++_loadGeneration;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    final keepCurrent = silent && _yearlyData.isNotEmpty;
+    if (!keepCurrent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final activeVendedorCode = _activeVendedorCode;
@@ -302,6 +306,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     } catch (e) {
       debugPrint('Error loading objectives: $e');
       if (mounted && generation == _loadGeneration) {
+        if (keepCurrent) return;
         setState(() {
           _error = e.toString();
           _isLoading = false;
@@ -1127,7 +1132,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
         // Content
         Expanded(
-          child: _isLoading
+          child: _isLoading && _yearlyData.isEmpty
               ? const Padding(
                   padding: EdgeInsets.all(40),
                   child: ModernLoading(message: 'Calculando objetivos...'),

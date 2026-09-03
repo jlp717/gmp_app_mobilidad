@@ -141,7 +141,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
         _loadClients();
-        _loadPendingSummary(forceRefresh: true);
+        _loadPendingSummary();
       }
     });
   }
@@ -181,8 +181,12 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   Future<void> _loadPendingSummary({bool forceRefresh = false}) async {
     if (!mounted) return;
     final generation = ++_summaryLoadGeneration;
+    final keepCurrentList =
+        !forceRefresh && _provider.pendingSummary.isNotEmpty;
     setState(() {
-      _isLoadingSummary = true;
+      if (!keepCurrentList) {
+        _isLoadingSummary = true;
+      }
       _loadError = null;
     });
     final selectedVendor = ref.read(selectedVendorProvider);
@@ -306,7 +310,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 forceShow: widget.forceShowVendorSelector,
               ),
               // Loading state para pendingSummary
-              if (_isLoadingSummary)
+              if (_isLoadingSummary && cobros.pendingSummary.isEmpty)
                 const Expanded(
                   child: Center(child: CircularProgressIndicator()),
                 )
@@ -341,6 +345,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   ),
                 )
               else ...[
+                if (_isLoadingSummary)
+                  const LinearProgressIndicator(color: AppTheme.info),
                 _buildSummaryCard(cobros),
                 _buildSearchArea(),
                 _buildEstadoFilterChips(),

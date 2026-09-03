@@ -158,6 +158,9 @@ function defaultQueryMock(sql, params, paymentRows = existingMayPayments()) {
 describe('commission payment setTotal mode', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        const { redisCache } = require('../services/redis-cache');
+        redisCache.get.mockReset();
+        redisCache.get.mockResolvedValue(null);
     });
 
     test('setTotal replaces accumulated month payments with a single total', async () => {
@@ -306,5 +309,45 @@ describe('commission payment setTotal mode', () => {
         expect(patterns.some(pattern => pattern.startsWith('route:comm:pdf:'))).toBe(true);
         expect(patterns.some(pattern => pattern.includes('SINGLE:02:'))).toBe(true);
         expect(patterns.some(pattern => pattern === 'route:comm:summary:*')).toBe(true);
+        expect(patterns.some(pattern => String(pattern).includes('sales-by-client-scope'))).toBe(false);
+    });
+
+    test('pay uses cached month snapshot and does not query LACLAE', async () => {
+        const { redisCache } = require('../services/redis-cache');
+        redisCache.get.mockImplementation(async (_ns, key) => {
+            if (String(key).includes('SINGLE:02:') || String(key).includes('SINGLE:2:')) {
+                return {
+                    vendor: '02',
+                    months: [
+                        { month: 5, actual: 1000, target: 800, complianceCtx: { commission: 295.53 } },
+                    ],
+                };
+            }
+            return null;
+        });
+
+        const sqlCalls = [];
+        mockQueryWithParams.mockImplementation(async (sql, params) => {
+            sqlCalls.push({ sql, params });
+            return defaultQueryMock(sql, params);
+        });
+
+        const app = makeApp();
+        const response = await request(app)
+            .post('/pay')
+            .send({
+                vendedorCode: '02',
+                year: 2026,
+                month: 5,
+                amount: 295.53,
+                generatedAmount: 295.53,
+                ventaActual: 1000,
+                objetivoMes: 800,
+            });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(sqlCalls.some((call) => call.sql.includes('DSED.LACLAE'))).toBe(false);
+        expect(sqlCalls.filter((call) => call.sql.includes('INSERT INTO JAVIER.COMMISSION_PAYMENTS'))).toHaveLength(1);
     });
 });

@@ -1148,6 +1148,24 @@ describe('DDD cobros route contracts', () => {
     expect(res.body.pagination).toEqual({ limit: 100, page: 1, offset: 0, returnedDocuments: 1 });
   });
 
+  test('GET /pending-summary/ALL uses performance cache for JEFE', async () => {
+    const { performanceCache } = require('../src/core/infrastructure/cache/performance-cache');
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({
+      summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
+    })).get('/pending-summary/ALL');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['x-query-type']).toBe('ALL-OPTIMIZED');
+    expect(performanceCache.getOrFetch).toHaveBeenCalled();
+    const cacheKeys = performanceCache.getOrFetch.mock.calls.map((call) => call[0]);
+    expect(cacheKeys.some((key) => String(key).includes('pending-summary:ALL'))).toBe(true);
+  });
+
   test('GET /pending-summary/ALL clamps pagination and passes it to repository', async function () {
     mockCobrosRepo.getPendingSummary.mockResolvedValue({
       summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',

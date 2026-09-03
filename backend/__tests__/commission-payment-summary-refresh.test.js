@@ -89,6 +89,9 @@ const { _private } = require('../routes/commissions');
 describe('commission payment summary refresh', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        const { redisCache } = require('../services/redis-cache');
+        redisCache.get.mockReset();
+        redisCache.get.mockResolvedValue(null);
     });
 
     test('getVendorPayments returns corrected monthly total after setTotal insert', async () => {
@@ -116,7 +119,7 @@ describe('commission payment summary refresh', () => {
         expect(payments.total).toBe(295.53);
     });
 
-    test('invalidateCommissionPaymentCaches targets route namespace', async () => {
+    test('invalidateCommissionPaymentCaches targets summary/pdf without dropping sales caches', async () => {
         const { invalidateCachePattern } = require('../services/redis-cache');
         await _private.invalidateCommissionPaymentCaches('02', 2026);
 
@@ -125,8 +128,61 @@ describe('commission payment summary refresh', () => {
             'route:comm:summary:*',
             'route:comm:pdf:*',
             expect.stringMatching(/route:comm:summary:.*:SINGLE:02:\*/),
-            expect.stringMatching(/route:commissions:.*:sales-by-client-scope:02:\*/),
-            expect.stringMatching(/route:commissions:.*:sales-by-client-scope:\*/),
         ]));
+        expect(patterns.some((pattern) => pattern.includes('sales-by-client-scope'))).toBe(false);
+        expect(patterns).not.toContain('route:comm:*');
+        expect(patterns.some((pattern) => /route:commissions:.*:\*$/.test(pattern) && !pattern.includes('SINGLE'))).toBe(false);
+    });
+
+    test('getCurrentPaymentSnapshot prefers Redis summary and skips LACLAE', async () => {
+        const { redisCache } = require('../services/redis-cache');
+        redisCache.get.mockImplementation(async (_ns, key) => {
+            if (String(key).includes('SINGLE:02:') || String(key).includes('SINGLE:2:')) {
+                return {
+                    vendor: '02',
+                    months: [
+                        { month: 5, actual: 1200, target: 800, complianceCtx: { commission: 295.53 } },
+                    ],
+                };
+            }
+            return null;
+        });
+
+        const snapshot = await _private.getCurrentPaymentSnapshot('02', 2026, 5);
+
+        expect(snapshot).toMatchObject({
+            ventaComision: 1200,
+            objetivoMes: 800,
+            generatedAmount: 295.53,
+            source: 'cache',
+        });
+        expect(mockQueryWithParams).not.toHaveBeenCalled();
+    });
+
+    test('getCurrentPaymentSnapshot ignores client body and ALL aggregate months', async () => {
+        const { redisCache } = require('../services/redis-cache');
+        redisCache.get.mockImplementation(async (_ns, key) => {
+            if (String(key).includes(':ALL:') || String(key).includes(':TEAM80:')) {
+                return {
+                    months: [
+                        { month: 5, actual: 99999, target: 1, complianceCtx: { commission: 5000 } },
+                    ],
+                    breakdown: [],
+                };
+            }
+            return null;
+        });
+
+        const snapshot = await _private.getCurrentPaymentSnapshot('02', 2026, 5, {
+            clientSnapshot: {
+                ventaComision: 1,
+                objetivoMes: 1,
+                generatedAmount: 1,
+            },
+        });
+
+        expect(snapshot?.source).not.toBe('client');
+        expect(snapshot?.generatedAmount).not.toBe(5000);
+        expect(snapshot?.generatedAmount).not.toBe(1);
     });
 });
